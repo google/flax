@@ -14,6 +14,7 @@ install_requires = [
     'numpy',
     'jaxlib',
     'jax',
+    'tensorflow', # Only needed for tensorflow-datasets
     'tensorflow-datasets',
 ]
 
