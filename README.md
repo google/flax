@@ -58,6 +58,31 @@ class Linear(nn.Module):
     return jnp.dot(x, W)
 ```
 
+## CPU-only Installation
+
+You will need Python 3.5 or later.
+
+Now install `flax` from Github:
+
+```
+> pip install git+https://github.com/google-research/flax.git@prerelease
+```
+
+## GPU accelerated installation
+
+First install `jaxlib`; please follow the instructions in the
+[Jax readme](https://github.com/google/jax/blob/master/README.md).
+If they are not already installed, you will need to install
+[CUDA](https://developer.nvidia.com/cuda-downloads) and
+[CuDNN](https://developer.nvidia.com/cudnn) runtimes.
+
+Now install `flax` from Github:
+
+```
+> pip install git+https://github.com/google-research/flax.git@prerelease
+```
+
+
 ## Full end-to-end MNIST example
 
 **NOTE**: See [docs/annotated_mnist.md](docs/annotated_mnist.md) for a version
