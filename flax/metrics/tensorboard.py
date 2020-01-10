@@ -16,7 +16,7 @@
 """
 
 import io
-import struct
+from flax import struct
 import sys
 import time
 import warnings

@@ -72,7 +72,7 @@ import jax
 from jax import lax
 import jax.numpy as jnp
 
-from .nn import base
+from flax.nn import base
 
 import numpy as onp
 

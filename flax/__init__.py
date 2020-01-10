@@ -15,5 +15,5 @@
 """Flax API."""
 
 # Allow `import flax`; `flax.nn.[...]`, and the same for `flax.optim.[...]`
-from . import nn
+from flax import nn
 from . import optim
