@@ -31,7 +31,7 @@ Flax comes with:
 
 * Optimizers (`flax.optim`): SGD, Momentum, Adam, LARS
 
-* ...with replication (`optimizer.repicate()`): Multi-device training with any
+* ...with replication (`optimizer.replicate()`): Multi-device training with any
   optimizer
 
 * A ResNet ImageNet example, ready to be forked for your research.
