@@ -1,6 +1,6 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-**NOTE**: This is pre-release software and net yet ready for general use. If you want to use it, please get in touch
+**NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch
 with us at flax-dev@google.com.
 
 ## Background: JAX
@@ -47,7 +47,7 @@ TODO: Clarify the nuances in the statement above.
 
 For example you can define a learned linear transformation as follows:
 
-```
+```py
 from flax import nn
 import jax.numpy as jnp
 
