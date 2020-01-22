@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Transformer-based langauge models."""
+"""Transformer-based language models."""
 
 from flax import nn
 import jax.numpy as jnp
@@ -104,7 +104,7 @@ class AddPositionEmbs(nn.Module):
     Returns:
       output: `(bs, timesteps, in_dim)`
     """
-    assert inputs.ndim == 3, ('Number of dimention should be 3, but it is: %d' %
+    assert inputs.ndim == 3, ('Number of dimensions should be 3, but it is: %d' %
                               inputs.ndim)
     length = inputs.shape[1]
     pos_emb_shape = (1, max_len, inputs.shape[-1])

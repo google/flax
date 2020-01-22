@@ -48,7 +48,7 @@ def dot_product_attention(query,
   This is the core function for applying attention based on
   https://arxiv.org/abs/1706.03762. It calculates the attention weights given
   query and key and combines the values using the attention weights. This
-  function supports multi-dimentional inputs.
+  function supports multi-dimensional inputs.
 
 
   Args:

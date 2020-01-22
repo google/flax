@@ -32,7 +32,7 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     inputs: input data with dimensions (batch, window dims..., features).
     init: the initial value for the reduction
     reduce_fn: a reduce function of the form `(T, T) -> T`.
-    window_shape: a shape tuple definign the window to reduce over.
+    window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
         strides.
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -71,7 +71,7 @@ def max_pool(inputs, window_shape, strides=None, padding="VALID"):
 
   Args:
     inputs: input data with dimensions (batch, window dims..., features).
-    window_shape: a shape tuple definign the window to reduce over.
+    window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
         strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence

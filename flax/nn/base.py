@@ -914,7 +914,7 @@ class Collection:
 
     This functions should only be called with the apply function of a module.
     Args:
-      default: The default returned when nothing is stored (defualt: None)
+      default: The default returned when nothing is stored (default: None)
     Returns:
       The value previously stored in the collection.
     """
