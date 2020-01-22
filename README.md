@@ -232,14 +232,10 @@ to the framework, here are some specific things that would be great to have:
 
 #### Help build more HOWTOs
 
-- Batch Norm
-- Checkpointing
-- ...and many more
+(TODO: clarify list)
 
 #### Help build new end-to-end examples
 
-- Translation
-- CIFAR10 (in-progress)
 - Semantic Segmentation
 - GAN
 - VAE
