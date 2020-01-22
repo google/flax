@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""A utility for traversing immutable datastructure.
+"""A utility for traversing immutable datastructures.
 
 A Traversal can be used to iterate and update complex data structures.
 Traversals take in an object and return a subset of its contents.
@@ -26,7 +26,7 @@ For example, a Traversal could select an attribute of an object::
 
 More complex traversals can be constructed using composition.
 It is often useful to start from the identity traversal and use a method chain
-to construct the intented Traversal::
+to construct the intended Traversal::
 
 data = [{'foo': 1, 'bar': 2}, {'foo': 3, 'bar': 4}]
 traversal = traverse_util.t_identity.each()['foo']

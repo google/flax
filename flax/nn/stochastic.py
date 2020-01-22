@@ -54,7 +54,7 @@ def stochastic(rng):
 
 
 def is_stochastic():
-  """Returns true if a stocohastic scope is currently active."""
+  """Returns true if a stochastic scope is currently active."""
   return bool(_prng_stack)
 
 
@@ -84,9 +84,9 @@ def dropout(inputs, rate, deterministic=False, rng=None):
 
   Args:
     inputs: the inputs that should be randomly masked.
-    rate: the probablity of maksing out a value.
+    rate: the probablity of masking out a value.
     deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
-      masked, whereas if true, no mask is applied an the inputs are returned as
+      masked, whereas if true, no mask is applied and the inputs are returned as
       is.
     rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
       be used.
