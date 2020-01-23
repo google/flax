@@ -1,3 +1,5 @@
+# Lint as: python 3
+
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

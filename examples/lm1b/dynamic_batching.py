@@ -1,3 +1,5 @@
+# Lint as: python3
+
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """A general purpose dynamic batching utility.
 
 In particular, this can be used as part of a language model input pipeline.

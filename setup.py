@@ -12,24 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""setup.py for Flax."""
+
 import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = '0.0.1-alpha'
+version = "0.0.1-alpha"
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
-    README = open(os.path.join(here, 'README.md')).read()
+  README = open(os.path.join(here, "README.md")).read()
 except IOError:
-    README = ''
+  README = ""
 
 install_requires = [
-    'numpy',
-    'jaxlib',
-    'jax',
-    'tensorflow', # Only needed for tensorflow-datasets
-    'tensorflow-datasets',
+    "numpy",
+    "jaxlib",
+    "jax",
+    "tensorflow",  # Only needed for tensorflow-datasets
+    "tensorflow-datasets",
 ]
 
 tests_require = [
@@ -58,6 +60,6 @@ setup(
     zip_safe=False,
     install_requires=install_requires,
     extras_require={
-        'testing': tests_require,
+        "testing": tests_require,
         },
     )
