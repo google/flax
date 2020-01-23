@@ -1,7 +1,6 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-**NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch
-with us at flax-dev@google.com.
+**NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch with us at flax-dev@google.com.
 
 ## Background: JAX
 
@@ -56,6 +55,17 @@ class Linear(nn.Module):
     input_features = x.shape[-1]
     W = self.param('W', (input_features, num_features), kernel_init_fn)
     return jnp.dot(x, W)
+```
+
+You can also use `nn.module` as a function decorator to create a new module, as
+long as you don't need access to `self` for creating parameters directly:
+
+```py
+@nn.module
+def DenseLayer(x, features):
+  x = flax.nn.Dense(x, features)
+  x = flax.nn.relu(x)
+  return x
 ```
 
 ## CPU-only Installation
@@ -164,7 +174,7 @@ def train():
 
 * [ResNet on ImageNet](examples/imagenet)
 
-* [Language Modeling on LM1b](examples/lm1b)
+* [Language Modeling on LM1b](examples/lm1b) with a Transformer architecture
 
 ## HOWTOs
 
