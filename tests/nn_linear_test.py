@@ -189,15 +189,19 @@ class LinearTest(parameterized.TestCase):
 
   def test_embed(self):
     rng = random.PRNGKey(0)
-    x = jnp.arange(4)[None, ..., None]
-    dummy_embedding = jnp.broadcast_to(jnp.arange(4)[..., None], (4, 3))
+    x = jnp.arange(4)[None]
+    dummy_embedding = jnp.broadcast_to(
+        jnp.arange(4)[..., None], (4, 3)).astype(jnp.float32)
     embed_module = nn.Embed.partial(
         num_embeddings=4,
         features=3,
         embedding_init=lambda rng, shape: dummy_embedding,
     )
-    y, _ = embed_module.create(rng, x)
+    y, model = embed_module.create(rng, x)
     onp.testing.assert_allclose(y, dummy_embedding[None])
+
+    z = model.attend(jnp.ones((3,)))
+    onp.testing.assert_allclose(z, 3. * jnp.arange(4))
 
 
 if __name__ == '__main__':

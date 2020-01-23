@@ -72,14 +72,14 @@ class LSTMCell(RNNCellBase):
         c' = f * c + i * g \\
         h' = o * \tanh(c') \\
         \end{array}
-    where x is the input and h, is the output of the previous time step, and
-    c is the memory.
+    where x is the input, h is the output of the previous time step, and c is
+    the memory.
 
     Args:
       carry: the hidden state of the LSTM cell,
         initialized using `LSTMCell.initialize_carry`.
       inputs: an ndarray with the input for the current time step.
-        All dimmensions except the final are considered batch dimensions.
+        All dimensions except the final are considered batch dimensions.
       gate_fn: activation function used for gates (default: sigmoid)
       activation_fn: activation function used for output and memory update
         (default: tanh).
@@ -149,7 +149,7 @@ class GRUCell(RNNCellBase):
       carry: the hidden state of the LSTM cell,
         initialized using `GRUCell.initialize_carry`.
       inputs: an ndarray with the input for the current time step.
-        All dimmensions except the final are considered batch dimensions.
+        All dimensions except the final are considered batch dimensions.
       gate_fn: activation function used for gates (default: sigmoid)
       activation_fn: activation function used for output and memory update
         (default: tanh).

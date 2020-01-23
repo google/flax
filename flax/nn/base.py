@@ -17,10 +17,13 @@
 
 import abc
 import contextlib
+import functools
+import inspect
 from typing import Any
 
 from . import utils
 from flax import jax_utils
+from flax import serialization
 from flax import struct
 
 import jax
@@ -40,7 +43,7 @@ def _track_outputs(x):
 class ModuleFrame:
   """A ModuleFrame contains all the information needed to apply a Module."""
 
-  def __init__(self, module, mode, params=None, rng=None,
+  def __init__(self, module, mode, params=None, rng=None,  # pylint: disable=redefined-outer-name
                name=None, index=None, transparent=False):
     if params is None:
       params = {}
@@ -152,12 +155,124 @@ def _pop_identifiers(kwargs):
   return name, index
 
 
+def module_method(fn):
+  """"Decorates a function as a module method.
+
+  The `module_method` allows modules to have multiple methods that make use of
+  the modules parameters.
+
+  Example:
+  ```
+  class MyLinearModule(nn.Module):
+    def apply(self, x, features, kernel_init):
+      kernel = self.param('kernel', (x.shape[-1], features), kernel_init)
+      return jnp.dot(x, kernel)
+
+    @nn.module_method
+    def apply_transpose(self, x, **kwargs):
+      kernel = self.get_param('kernel')
+      return jnp.dot(x, kernel.transpose((1, 0)))
+  ```
+
+  A module method can be called on A Model instance directly:
+  ```
+  y, model = MyLinearModule.create(rng, x)
+  z = model.apply_transpose(y)
+  ```
+
+  Module methods can also be called on shared modules:
+  ```
+  class AutoEncoder(nn.module):
+    def apply(self, x, features):
+      linear_fn = MyLinearModule.shared(features=features)
+      h = linear_fn(x)
+      y = linear_fn.apply_transpose(h)
+      return y
+  ```
+
+  Args:
+    fn: the function to be decorated
+  Returns:
+    the decorated function
+  """
+  def wrapper(cls, *args, **kwargs):
+    """wraps fn such that it behaves as a module method."""
+    # TODO(flax-dev): dedup some of the logic here and in the Module constructor
+    if not _module_stack:
+      raise ValueError('A module method only be called inside another module.'
+                       ' It is also available as a method on a Model instance.')
+    new_module = cls.new_instance()
+    extended_kwargs = new_module._extend_kwargs(kwargs)  # pylint: disable=protected-access
+    if not extended_kwargs.get('_shared', False):
+      raise ValueError('A module method only be used on a shared module.')
+    name = _populate_name(extended_kwargs)
+    kwargs['name'] = name
+    parent = _module_stack[-1]
+    if parent.mode == 'init' and name not in parent.params:
+      parent.rng, rng = random.split(parent.rng)
+      y, params = new_module._init_module_method(  # pylint: disable=protected-access
+          functools.partial(fn, new_module), rng, args, kwargs)
+      parent.params[name] = params
+      return y
+    else:  # apply
+      if name not in parent.params:
+        raise ValueError(f'No module named {name} was created during'
+                         ' initialization.')
+      params = parent.params[name]
+      return new_module._apply_module_method(  # pylint: disable=protected-access
+          functools.partial(fn, new_module), params, args, kwargs)
+
+  wrapper.module_method = fn
+  return classmethod(wrapper)
+
+
+def _fn_parameters(fn):
+  return tuple(inspect.signature(fn).parameters.values())
+
+
+MODULE_CLASSMETHODS = [
+    'create', 'create_by_shape', 'init', 'init_by_shape', 'call', 'partial'
+]
+
+
 class _ModuleMeta(abc.ABCMeta):
   """Meta class for automatically setting the doc of Modules."""
 
   def __init__(cls, name, bases, attrs):
     super(_ModuleMeta, cls).__init__(name, bases, attrs)
-    cls.__doc__ = cls.apply.__doc__
+    apply_fn = cls.apply
+    apply_doc = apply_fn.__doc__
+    cls.__doc__ = apply_doc
+    apply_params = _fn_parameters(apply_fn)
+    cls.__signature__ = inspect.signature(cls).replace(
+        parameters=apply_params[1:])
+
+    if not bases:
+      return  # skip method signature overides for Module class.
+
+    def wrap_special_method(name):
+      """override the signature and docstring for one of Module's classmethods."""
+      orig_fn = getattr(Module, name)
+
+      @functools.wraps(orig_fn)
+      def wrapper(class_, *args, **kwargs):
+        super_fn = getattr(super(cls, class_), name)
+        return super_fn(*args, **kwargs)
+      wrapper.__doc__ = f'''{orig_fn.__doc__}
+
+      Apply docstring:
+
+      {apply_doc}
+      '''
+      base_params = tuple(x for x in _fn_parameters(orig_fn)
+                          if x.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD)
+      new_params = base_params + apply_params[1:]
+      wrapper.__signature__ = inspect.signature(orig_fn).replace(
+          parameters=new_params)
+      setattr(cls, name, classmethod(wrapper))
+
+    for name in MODULE_CLASSMETHODS:
+      wrap_special_method(name)
 
 
 class Module(metaclass=_ModuleMeta):
@@ -167,21 +282,21 @@ class Module(metaclass=_ModuleMeta):
     if not _module_stack:
       raise ValueError('A Module should only be instantiated directly inside'
                        ' another module.')
-    module = super(Module, cls).__new__(cls)
-    extended_kwargs = module._extend_kwargs(kwargs)  # pylint: disable=protected-access
+    new_module = super(Module, cls).__new__(cls)
+    extended_kwargs = new_module._extend_kwargs(kwargs)  # pylint: disable=protected-access
     name = _populate_name(extended_kwargs)
     kwargs['name'] = name
     parent = _module_stack[-1]
     if parent.mode == 'init' and name not in parent.params:
       parent.rng, rng = random.split(parent.rng)
-      y, params = module._init(rng, *args, **kwargs)  # pylint: disable=protected-access
+      y, params = new_module._init(rng, *args, **kwargs)  # pylint: disable=protected-access
       parent.params[name] = params
     else:  # apply
       if name not in parent.params:
         raise ValueError(f'No module named {name} was created during'
                          ' initialization.')
       params = parent.params[name]
-      y = module(params, *args, **kwargs)
+      y = new_module(params, *args, **kwargs)
     return y
 
   @abc.abstractmethod
@@ -311,16 +426,7 @@ class Module(metaclass=_ModuleMeta):
     return instance(params, *args, **kwargs)
 
   def __call__(self, params, *args, **kwargs):
-    params = self._pre_process_params(params)
-    kwargs = self._extend_kwargs(kwargs)
-    name, index = _pop_identifiers(kwargs)
-    frame = ModuleFrame(self, 'apply', params=params, name=name, index=index,
-                        transparent=self._is_transparent())
-
-    with _module_stack.frame(frame):
-      y = self.apply(*args, **kwargs)
-      _track_outputs(y)
-    return y
+    return self._apply_module_method(self.apply, params, args, kwargs)
 
   def param(self, name, shape, initializer):
     """Defines a parameter within the module's apply function.
@@ -331,7 +437,7 @@ class Module(metaclass=_ModuleMeta):
       initializer: An initializer function
                    taking an RNG and the shape as arguments.
     Returns:
-    The value of the parameter.
+      The value of the parameter.
     """
     frame = _top_frame('param')
     if frame.mode == 'init':
@@ -348,6 +454,19 @@ class Module(metaclass=_ModuleMeta):
           'Existing shape {} differs from requested shape {}'.format(
               param.shape, shape))
     return param
+
+  def get_param(self, name):
+    """Retrieves a parameter within the module's apply function.
+
+    Args:
+      name: The name of the parameter.
+    Returns:
+      The value of the parameter.
+    """
+    frame = _top_frame('param')
+    if name not in frame.params:
+      raise ValueError("Parameter with name '%s' does not exist." % name)
+    return frame.params[name]
 
   def is_initializing(self):
     _top_frame('is_initializing')
@@ -366,15 +485,65 @@ class Module(metaclass=_ModuleMeta):
     return False
 
   def _init(self, rng, *args, **kwargs):
+    return self._init_module_method(self.apply, rng, args, kwargs)
+
+  def _init_module_method(self, fn, rng, args, kwargs):
+    """Apply a function in a module initialization scope."""
     kwargs = self._extend_kwargs(kwargs)
     name, index = _pop_identifiers(kwargs)
     frame = ModuleFrame(self, 'init', rng=rng, name=name, index=index,
                         transparent=self._is_transparent())
     with _module_stack.frame(frame):
-      y = self.apply(*args, **kwargs)
+      y = fn(*args, **kwargs)
       _track_outputs(y)
     params = self._post_process_params(frame.params)
     return y, params
+
+  def _apply_module_method(self, fn, params, args, kwargs):
+    """Apply a function in a module scope."""
+    params = self._pre_process_params(params)
+    kwargs = self._extend_kwargs(kwargs)
+    name, index = _pop_identifiers(kwargs)
+    frame = ModuleFrame(self, 'apply', params=params, name=name, index=index,
+                        transparent=self._is_transparent())
+    with _module_stack.frame(frame):
+      y = fn(*args, **kwargs)
+      _track_outputs(y)
+    return y
+
+
+def module(fun):
+  """Convert a function into the apply method of a new Module.
+
+  This is convenient shortcut for writing higher level modules that don't need
+  access to `self` for creating parameters directly.
+
+  Example usage::
+
+    @nn.module
+    def DenseLayer(x, features):
+      x = flax.nn.Dense(x, features)
+      x = flax.nn.relu(x)
+      return x
+
+  This is exactly equivalent to defining the following `nn.Module` subclass::
+
+    class DenseLayer(nn.Module):
+      def apply(self, x, features):
+        x = flax.nn.Dense(x, features)
+        x = flax.nn.relu(x)
+        return x
+
+  Args:
+    fun: the function to convert.
+  Returns:
+    New Module subclass.
+  """
+  @functools.wraps(fun)
+  def apply(self, *args, **kwargs):
+    del self  # unused
+    return fun(*args, **kwargs)
+  return type(fun.__name__, (Module,), dict(apply=apply))
 
 
 class TransparentModule(Module):
@@ -508,6 +677,21 @@ class Model:
     module_instance = truncated_module_cls.new_instance()
     return self.replace(module=module_instance)
 
+  def __getattr__(self, name):
+    value = getattr(self.module, name)
+    if callable(value) and hasattr(value, '__func__'):
+      # class methods are bound methods so we must check the underlying function
+      # to verify that it defines a module method.
+      fn = value.__func__
+      if hasattr(fn, 'module_method'):
+        def wrapper(*args, **kwargs):
+          kwargs['_top_level'] = True
+          return self.module._apply_module_method(  # pylint: disable=protected-access
+              functools.partial(fn.module_method, self.module),
+              self.params, args, kwargs)
+        return wrapper
+    raise AttributeError(f'No attribute named "{name}".')
+
 
 class Collection:
   """A collection of tensors useful for tracking state.
@@ -633,3 +817,13 @@ jax.tree_util.register_pytree_node(Collection,
                                    _collection_from_iterable)
 
 
+def _collection_state_dict(collection):
+  return collection.as_dict()
+
+
+def _collection_from_state_dict(collection, state):
+  return Collection(state, shared=collection.shared)
+
+
+serialization.register_serialization_state(
+    Collection, _collection_state_dict, _collection_from_state_dict)

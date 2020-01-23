@@ -38,8 +38,8 @@ from tensorflow.compat.v1 import Summary
 from tensorflow.compat.v1 import SummaryMetadata
 from tensorflow.compat.v1.io import gfile
 
-from tensorflow.core.util import event_pb2
-from tensorflow.python.summary.writer.event_file_writer import EventFileWriter
+from tensorflow.core.util import event_pb2  # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.summary.writer.event_file_writer import EventFileWriter  # pylint: disable=g-direct-tensorflow-import
 
 
 class SummaryWriter(object):

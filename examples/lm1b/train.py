@@ -19,6 +19,7 @@ The data is loaded using tensorflow_datasets.
 """
 
 import functools
+import itertools
 import os
 import time
 from absl import app
@@ -53,7 +54,9 @@ flags.DEFINE_integer(
     'num_train_steps', default=500000, help=('Number of train steps.'))
 
 flags.DEFINE_integer(
-    'num_eval_steps', default=20, help=('Number of evaluation steps.'))
+    'num_eval_steps',
+    default=20,
+    help=('Number of evaluation steps. If -1 use the whole evaluation set.'))
 
 flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
 
@@ -71,6 +74,9 @@ flags.DEFINE_integer(
     'max_eval_target_length',
     default=2048,
     help=('maximum length of eval examples.'))
+
+flags.DEFINE_integer(
+    'random_seed', default=0, help=('Integer for PRNG random seed.'))
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2))
@@ -158,7 +164,7 @@ def compute_weighted_cross_entropy(logits, targets, weights=None):
    weights: None or array of shape [batch x length]
 
   Returns:
-    Scalar loss.
+    Tuple of scalar loss and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
     raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
@@ -170,7 +176,7 @@ def compute_weighted_cross_entropy(logits, targets, weights=None):
     loss = loss * weights
     normalizing_factor = weights.sum()
 
-  return loss.sum() / normalizing_factor
+  return loss.sum(), normalizing_factor
 
 
 def compute_weighted_accuracy(logits, targets, weights=None):
@@ -182,7 +188,7 @@ def compute_weighted_accuracy(logits, targets, weights=None):
    weights: None or array of shape [batch x length]
 
   Returns:
-    Scalar loss.
+    Tuple of scalar accuracy and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
     raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
@@ -193,48 +199,47 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     loss = loss * weights
     normalizing_factor = weights.sum()
 
-  return loss.sum() / normalizing_factor
+  return loss.sum(), normalizing_factor
 
 
 def compute_metrics(logits, labels, weights):
   """Compute summary metrics."""
-  loss = compute_weighted_cross_entropy(logits, labels, weights)
-  acc = compute_weighted_accuracy(logits, labels, weights)
+  loss, weight_sum = compute_weighted_cross_entropy(logits, labels, weights)
+  acc, _ = compute_weighted_accuracy(logits, labels, weights)
   metrics = {
       'loss': loss,
       'accuracy': acc,
-      'perplexity': jnp.clip(jnp.exp(loss), a_max=1.0e4),
+      'denominator': weight_sum,
   }
-  metrics = common_utils.pmean(metrics)
+  metrics = common_utils.psum(metrics)
   return metrics
 
 
-def train_step(optimizer, batch, learning_rate_fn, dropout_rng=None):
+def train_step(optimizer, inputs, learning_rate_fn, dropout_rng=None):
   """Perform a single training step."""
-  inputs, targets = batch
-  weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
+  weights = jnp.where(inputs > 0, 1, 0)
 
   def loss_fn(model):
-    """loss function used for training."""
+    """Loss function used for training."""
     with nn.stochastic(dropout_rng):
       logits = model(inputs, train=True)
-    loss = compute_weighted_cross_entropy(logits, targets, weights)
-    return loss, logits
+    loss, weight_sum = compute_weighted_cross_entropy(logits, inputs, weights)
+    mean_loss = loss / weight_sum
+    return mean_loss, logits
 
   step = optimizer.state.step
   lr = learning_rate_fn(step)
   new_optimizer, _, logits = optimizer.optimize(loss_fn, learning_rate=lr)
-  metrics = compute_metrics(logits, targets, weights)
+  metrics = compute_metrics(logits, inputs, weights)
   metrics['learning_rate'] = lr
 
   return new_optimizer, metrics
 
 
-def eval_step(model, batch):
-  inputs, targets = batch
-  weights = jnp.where(targets > 0, 1.0, 0.0)
+def eval_step(model, inputs):
+  weights = jnp.where(inputs > 0, 1, 0)
   logits = model(inputs, train=False)
-  return compute_metrics(logits, targets, weights)
+  return compute_metrics(logits, inputs, weights)
 
 
 def main(argv):
@@ -250,6 +255,7 @@ def main(argv):
   eval_freq = FLAGS.eval_frequency
   max_target_length = FLAGS.max_target_length
   max_eval_target_length = FLAGS.max_eval_target_length
+  random_seed = FLAGS.random_seed
 
   if jax.host_id() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
@@ -257,16 +263,12 @@ def main(argv):
     eval_summary_writer = tensorboard.SummaryWriter(
         os.path.join(FLAGS.model_dir, 'eval'))
 
-  rng = random.PRNGKey(0)
-  keys = random.split(rng, jax.local_device_count() + 1)
-  rng, dropout_rngs = keys[0], keys[1:]
-
   if batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
   device_batch_size = batch_size // jax.device_count()
 
   train_ds, eval_ds, info_ds = input_pipeline.get_lm1b_datasets(
-      n_devices=jax.device_count(),
+      n_devices=jax.local_device_count(),
       batch_size_per_device=device_batch_size,
       dynamic_batching=True,
       max_target_length=max_target_length,
@@ -287,7 +289,9 @@ def main(argv):
       'max_len': max(max_target_length, max_eval_target_length)
   }
 
-  model = create_model(rng, tuple(input_shape), transformer_lm_kwargs)
+  rng = random.PRNGKey(random_seed)
+  rng, init_rng = random.split(rng)
+  model = create_model(init_rng, tuple(input_shape), transformer_lm_kwargs)
   optimizer = create_optimizer(model, learning_rate)
   del model  # don't keep a copy of the initial model
   learning_rate_fn = create_learning_rate_scheduler(
@@ -301,16 +305,25 @@ def main(argv):
   metrics_all = []
   tick = time.time()
   for step, batch in zip(range(num_train_steps), train_iter):
-    batch = common_utils.shard(jax.tree_map(lambda x: x.numpy(), batch))
-    batch = batch[0]['text'], batch[1]
+    # pylint: disable=protected-access
+    batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))
+    # pylint: enable=protected-access
 
+    keys = random.split(rng, jax.local_device_count() + 1)
+    rng, dropout_rngs = keys[0], keys[1:]
     optimizer, metrics = p_train_step(
         optimizer, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
 
     if (step + 1) % eval_freq == 0:
       metrics_all = common_utils.get_metrics(metrics_all)
-      summary = jax.tree_map(lambda x: x.mean(), metrics_all)
+      lr = metrics_all.pop('learning_rate').mean()
+      metrics_sums = jax.tree_map(jnp.sum, metrics_all)
+      denominator = metrics_sums.pop('denominator')
+      summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
+      summary['learning_rate'] = lr
+      # Calculate (clipped) perplexity after averaging log-perplexities:
+      summary['perplexity'] = jnp.clip(jnp.exp(summary['loss']), a_max=1.0e4)
       logging.info('train in step: %d, loss: %.4f', step, summary['loss'])
       if jax.host_id() == 0:
         tock = time.time()
@@ -320,21 +333,34 @@ def main(argv):
         for key, val in summary.items():
           train_summary_writer.scalar(key, val, step)
         train_summary_writer.flush()
+      # reset metric accumulation for next evaluation cycle.
       metrics_all = []
 
       eval_metrics = []
       eval_iter = iter(eval_ds)
-      for _, eval_batch in zip(range(num_eval_steps), eval_iter):
+      if num_eval_steps == -1:
+        num_iter = itertools.repeat(1)
+      else:
+        num_iter = range(num_eval_steps)
+      for _, eval_batch in zip(num_iter, eval_iter):
+        # pylint: disable=protected-access
         eval_batch = common_utils.shard(
-            jax.tree_map(lambda x: x.numpy(), eval_batch))
-        eval_batch = eval_batch[0]['text'], eval_batch[1]
+            jax.tree_map(lambda x: x._numpy(), eval_batch))
+        # pylint: enable=protected-access
         metrics = p_eval_step(optimizer.target, eval_batch)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
-      summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
-      logging.info('eval in step: %d, loss: %.4f', step, summary['loss'])
+      eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
+      eval_denominator = eval_metrics_sums.pop('denominator')
+      eval_summary = jax.tree_map(
+          lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
+          eval_metrics_sums)
+      # Calculate (clipped) perplexity after averaging log-perplexities:
+      eval_summary['perplexity'] = jnp.clip(
+          jnp.exp(eval_summary['loss']), a_max=1.0e4)
+      logging.info('eval in step: %d, loss: %.4f', step, eval_summary['loss'])
       if jax.host_id() == 0:
-        for key, val in summary.items():
+        for key, val in eval_summary.items():
           eval_summary_writer.scalar(key, val, step)
         eval_summary_writer.flush()
 

@@ -32,7 +32,7 @@ class TrainTest(absltest.TestCase):
     optimizer = train.create_optimizer(model, 0.1, 0.9)
     optimizer, train_metrics = train.train_epoch(optimizer, train_ds, 128, 0,
                                                  input_rng)
-    self.assertLessEqual(train_metrics['loss'], 0.25)
+    self.assertLessEqual(train_metrics['loss'], 0.27)
     self.assertGreaterEqual(train_metrics['accuracy'], 0.92)
     loss, accuracy = train.eval_model(optimizer.target, test_ds)
     self.assertLessEqual(loss, 0.06)

@@ -27,24 +27,29 @@ class CallStack(object):
 
   def __init__(self):
     self._stack = threading.local()
-    self._stack.frames = []
+
+  @property
+  def _frames(self):
+    if not hasattr(self._stack, 'frames'):
+      self._stack.frames = []
+    return self._stack.frames
 
   @contextlib.contextmanager
   def frame(self, data=None):
     if data is None:
       data = {}
-    self._stack.frames.append(data)
+    self._frames.append(data)
     try:
       yield data
     finally:
-      self._stack.frames.pop(-1)
+      self._frames.pop(-1)
 
   def __iter__(self):
-    return iter(self._stack.frames)
+    return iter(self._frames)
 
   def __len__(self):
-    return len(self._stack.frames)
+    return len(self._frames)
 
   def __getitem__(self, key):
-    return self._stack.frames.__getitem__(key)
+    return self._frames.__getitem__(key)
 

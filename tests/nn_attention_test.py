@@ -141,7 +141,7 @@ class AttentionTest(parameterized.TestCase):
     for i in range(length):
       deps = get_receptive_field_1d(i)
       assert (deps[:i] == 1).all(), ('Receptive Field Error: Some of the '
-                                     'previouse postions are not reachable '
+                                     'previous postions are not reachable '
                                      'in autoregressive self-attention.')
       if i != length - 1:
         k = i + 1

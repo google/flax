@@ -26,6 +26,14 @@ def shard(xs):
       lambda x: x.reshape((local_device_count, -1) + x.shape[1:]), xs)
 
 
+def shard_prng_key(prng_key):
+  # PRNG keys can used at train time to drive stochastic modules
+  # e.g. DropOut. We would like a different PRNG key for each local
+  # device so that we end up with different random numbers on each one,
+  # hence we split our PRNG key and put the resulting keys into the batch
+  return jax.random.split(prng_key, num=jax.local_device_count())
+
+
 def onehot(labels, num_classes):
   x = (labels[..., None] == jnp.arange(num_classes)[None])
   return x.astype(jnp.float32)
@@ -34,6 +42,10 @@ def onehot(labels, num_classes):
 def pmean(tree, axis_name='batch'):
   num_devices = lax.psum(1., axis_name)
   return jax.tree_map(lambda x: lax.psum(x, axis_name) / num_devices, tree)
+
+
+def psum(tree, axis_name='batch'):
+  return jax.tree_map(lambda x: lax.psum(x, axis_name), tree)
 
 
 def stack_forest(forest):

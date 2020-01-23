@@ -14,8 +14,6 @@
 
 """Input pipeline for the lm1b dataset."""
 
-# TODO(avitalo): replace this input-pipeline with yours.
-
 from absl import logging
 import tensorflow.compat.v1 as tf
 import tensorflow_datasets as tfds
@@ -31,9 +29,7 @@ def train_and_eval_dataset(dataset_name,
   """Return train and evaluation datasets, feature info and supervised keys.
 
   Args:
-    dataset_name: a string, the name of the dataset; if it starts with 't2t_'
-      then we'll search T2T Problem registry for it, otherwise we assume it is a
-      dataset from TFDS and load it from there.
+    dataset_name: a string, the name of the TFDS dataset.
     data_dir: directory where the data is located.
     eval_holdout_size: float from 0 to <1; if >0 use this much of training data
       for evaluation (instead of looking for a pre-specified VALIDATION split).
@@ -80,153 +76,114 @@ def train_and_eval_dataset(dataset_name,
       shuffle_files=eval_shuffle_files)
   keys = None
   if info.supervised_keys:
-    keys = ([info.supervised_keys[0]], [info.supervised_keys[1]])
+    keys = (info.supervised_keys[0], info.supervised_keys[1])
   return train, valid, info.features, keys
 
 
-def _batch_fun(dataset,
-               training,
-               shapes,
-               n_devices,
-               batch_size_per_device=32,
-               batch_size=None,
-               eval_batch_size=32,
-               bucket_length=32,
-               buckets=None,
-               buckets_include_inputs_in_length=False,
-               max_eval_length=None):
+def bin_and_batch(dataset,
+                  training,
+                  n_devices,
+                  batch_size_per_device=32,
+                  batch_size=None,
+                  eval_batch_size=32,
+                  bucket_length=32,
+                  buckets=None,
+                  max_eval_length=None,
+                  drop_remainder=False):
   """Batching function."""
   # Batch size is batch_size_per_device * n_devices unless given directly.
   batch_size = batch_size or batch_size_per_device * n_devices
   # If bucketing is not specified, check if target shapes are variable.
   cur_batch_size = batch_size if training else eval_batch_size
-  # Make cur_batch_size divisible by n_devices.
-  cur_batch_size = max(cur_batch_size // n_devices, 1) * n_devices
+  if cur_batch_size % n_devices:
+    raise ValueError("Batch size %d isn't divided evenly by n_devices %d" %
+                     (cur_batch_size, n_devices))
   # Create heuristic buckets is none are specified.
   if buckets is None:
-    variable_target_shapes = False
-    target_shape = shapes[1]
-    for dim in target_shape:
-      if dim is None:
-        variable_target_shapes = True
-    logging.info(
-        "Heuristically setting bucketing to %s based on shapes "
-        "of target tensors.", variable_target_shapes)
-    if variable_target_shapes:
-      bucket_boundaries = [
-          bucket_length // 4, bucket_length // 2, bucket_length,
-          bucket_length * 2, bucket_length * 4, bucket_length * 8,
-          bucket_length * 16
-      ]
-      if not training:
-        max_eval_length = max_eval_length or bucket_length * 32
-        bucket_boundaries[-1] = max_eval_length
-      # We will pad to boundaries which pads to bucket_boundary - 1: add 1 here.
-      bucket_boundaries = [b + 1 for b in bucket_boundaries]
-      bucket_batch_sizes = [
-          cur_batch_size * 4, cur_batch_size * 2, cur_batch_size,
-          cur_batch_size // 2, cur_batch_size // 4, cur_batch_size // 8,
-          cur_batch_size // 16, 1
-      ]
-      if not training:
-        bucket_batch_sizes[-2] = cur_batch_size // max_eval_length
-      # Make batch sizes divisible by n_devices.
-      bucket_batch_sizes = [
-          max(b // n_devices, 1) * n_devices for b in bucket_batch_sizes
-      ]
-      buckets = (bucket_boundaries, bucket_batch_sizes)
+    logging.info("Heuristically bucketing based on shapes of examples.")
+    bucket_boundaries = [
+        bucket_length // 4, bucket_length // 2, bucket_length,
+        bucket_length * 2, bucket_length * 4, bucket_length * 8,
+        bucket_length * 16
+    ]
+    bucket_batch_sizes = [
+        cur_batch_size * 4, cur_batch_size * 2, cur_batch_size,
+        cur_batch_size // 2, cur_batch_size // 4, cur_batch_size // 8,
+        cur_batch_size // 16
+    ]
+    # allow for different evaluation max-length bucket and batchsize
+    if not training:
+      max_eval_length = max_eval_length or bucket_length * 32
+      bucket_boundaries[-1] = max_eval_length
+      bucket_batch_sizes[-1] = cur_batch_size // max_eval_length
+    # We will pad to boundaries which pads to bucket_boundary-1: add 1 here.
+    bucket_boundaries = [b + 1 for b in bucket_boundaries]
+    # Make batch sizes divisible by n_devices.
+    bucket_batch_sizes = [
+        max(b // n_devices, 1) * n_devices for b in bucket_batch_sizes
+    ]
+    buckets = (bucket_boundaries, bucket_batch_sizes)
 
-  if buckets:
-    logging.info("Bucketing with buckets %s.", str(buckets))
+  logging.info("Bucketing with buckets %s.", str(buckets))
 
-    def example_length(example_inputs, target):
-      """The length function used by bucket_by_sequence_length to bucket."""
-      other_length = 0
-      if buckets_include_inputs_in_length:
-        other_length = tf.shape(example_inputs["inputs"])[0]
-      return tf.maximum(tf.shape(target)[0], other_length)
+  def length_fn(sequence):
+    return tf.shape(sequence)[0]
 
-    boundaries, batch_sizes = buckets
-    dataset = dataset.apply(
-        tf.data.experimental.bucket_by_sequence_length(
-            example_length,
-            boundaries,
-            batch_sizes,
-            pad_to_bucket_boundary=True))
-  else:
-    dataset = dataset.padded_batch(cur_batch_size, shapes)
+  boundaries, batch_sizes = buckets
+  # bucket_by_sequence_length expects a final dummy 1 batch_size
+  batch_sizes.append(1)
+  dataset = dataset.apply(
+      tf.data.experimental.bucket_by_sequence_length(
+          length_fn,
+          boundaries,
+          batch_sizes,
+          pad_to_bucket_boundary=True,
+          drop_remainder=drop_remainder))
   return dataset
 
 
-def _lm1b_preprocess(dataset,
-                     training,
-                     max_target_length=512,
-                     max_eval_target_length=2048):
-  """Preprocessing for lm1b dataset.
-
-  Args:
-    dataset: tfds dataset.
-    training: bool, if training.
-    max_target_length: max train target length
-    max_eval_target_length: maximum eval target length
-
-  Returns:
-   Preprocessed dataset.
-  """
-
-  def target_right_length(target):
-    return tf.less(tf.shape(target["text"])[0], max_target_length + 1)
-
-  def eval_target_right_length(target):
-    return tf.less(tf.shape(target["text"])[0], max_eval_target_length + 1)
-
-  if max_target_length > 0 and training:
-    dataset = dataset.filter(target_right_length)
-  if max_eval_target_length > 0 and not training:
-    dataset = dataset.filter(eval_target_right_length)
-  return dataset
-
-
-def _shuffle_and_batch_lm1b_data(dataset,
-                                 target_names,
-                                 features_info,
-                                 training,
-                                 n_devices,
-                                 shuffle_buffer_size=1024,
-                                 max_target_length=512,
-                                 max_eval_target_length=2048,
-                                 batch_size_per_device=32,
-                                 buckets=None):
+def lm1b_preprocess(dataset,
+                    training,
+                    n_devices,
+                    shuffle_buffer_size=1024,
+                    max_target_length=512,
+                    max_eval_target_length=2048,
+                    batch_size_per_device=32,
+                    buckets=None,
+                    prefetch_size=tf.data.experimental.AUTOTUNE):
   """Shuffle and batch the given dataset."""
 
-  def append_targets(example):
-    """Append targets to the example dictionary. Needed for Keras."""
-    if len(target_names) == 1:
-      return (example, example[target_names[0]])
-    targets = {}
-    for name in target_names:
-      targets[name] = example[name]
-    return (example, targets)
+  # Filter dataset by training or evaluation length cutoffs.
+  def length_filter(max_len):
 
-  dataset = _lm1b_preprocess(
-      dataset,
-      training,
-      max_target_length=max_target_length,
-      max_eval_target_length=max_eval_target_length)
-  dataset = dataset.map(append_targets)
+    def filter_fn(source):
+      return tf.less(tf.shape(source)[0], max_len + 1)
+
+    return filter_fn
+
+  if max_target_length > 0 and training:
+    dataset = dataset.filter(length_filter(max_target_length))
+  if max_eval_target_length > 0 and not training:
+    dataset = dataset.filter(length_filter(max_eval_target_length))
+
+  # Shuffle and repeat training set.
   if training:
     dataset = dataset.shuffle(shuffle_buffer_size)
     dataset = dataset.repeat()
-  shapes = {k: features_info[k].shape for k in features_info}
-  shapes = (shapes, shapes[target_names[0]])
-  dataset = _batch_fun(
+
+  # Batch into padded, length-binned batches.
+  dataset = bin_and_batch(
       dataset,
       training,
-      shapes,
       n_devices,
       batch_size_per_device=batch_size_per_device,
       max_eval_length=max_eval_target_length,
-      buckets=buckets)
+      buckets=buckets,
+      drop_remainder=not training)
+
+  if prefetch_size:
+    dataset = dataset.prefetch(prefetch_size)
+
   return dataset
 
 
@@ -242,34 +199,42 @@ def get_lm1b_datasets(n_devices,
       train_shuffle_files=True,
       eval_shuffle_files=False)
 
+  # For sequence models, TFDS yields a (duplicated) feature dictionary
+  # we want to simplify things by mapping e.g.
+  # {key0: inputs_data, key1: targets_data} to just inputs_data
+  # for LM1B: key0 == key1 == text and inputs_data == targets_data
+  inputs_key, targets_key = keys
+  del targets_key
+  to_sequence_data = lambda x: x[inputs_key]
+  train_data = train_data.map(to_sequence_data)
+  eval_data = eval_data.map(to_sequence_data)
+
   if dynamic_batching:
     train_buckets = None
     eval_buckets = None
-
   else:
     # buckets should be (bucket_boundaries, bucket_batch_sizes)
     train_buckets = ([max_target_length + 1],
-                     [n_devices * batch_size_per_device, 1])
+                     [n_devices * batch_size_per_device])
     eval_buckets = ([max_eval_target_length + 1],
-                    [n_devices * batch_size_per_device, 1])
+                    [n_devices * batch_size_per_device])
 
-  _, target_names = keys[0], keys[1]
-  train_batches = _shuffle_and_batch_lm1b_data(
+  train_batches = lm1b_preprocess(
       train_data,
-      target_names,
-      features_info,
       training=True,
       n_devices=n_devices,
       batch_size_per_device=batch_size_per_device,
+      max_target_length=max_target_length,
+      max_eval_target_length=max_eval_target_length,
       buckets=train_buckets)
 
-  eval_batches = _shuffle_and_batch_lm1b_data(
+  eval_batches = lm1b_preprocess(
       eval_data,
-      target_names,
-      features_info,
       training=False,
       n_devices=n_devices,
+      max_target_length=max_target_length,
+      max_eval_target_length=max_eval_target_length,
       batch_size_per_device=batch_size_per_device,
       buckets=eval_buckets)
 
-  return train_batches.prefetch(2), eval_batches.prefetch(2), features_info
+  return train_batches, eval_batches, features_info

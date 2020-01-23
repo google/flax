@@ -17,8 +17,8 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
+from . import base
 from . import initializers
-from .base import Module
 
 from jax import lax
 
@@ -34,7 +34,7 @@ def _normalize_axes(axes, ndim):
   return tuple([ax if ax >= 0 else ndim + ax for ax in axes])
 
 
-class DenseGeneral(Module):
+class DenseGeneral(base.Module):
   """A linear transformation with flexible axes."""
 
   def apply(self,
@@ -43,6 +43,7 @@ class DenseGeneral(Module):
             axis=-1,
             batch_dims=(),
             bias=True,
+            dtype=jnp.float32,
             kernel_init=default_kernel_init,
             bias_init=initializers.zeros,
             precision=None):
@@ -54,6 +55,7 @@ class DenseGeneral(Module):
       axis: tuple with axes to apply the transformation on.
       batch_dims: tuple with batch axes.
       bias: whether to add a bias to the output (default: True).
+      dtype: the dtype of the computation (default: float32).
       kernel_init: initializer function for the weight matrix.
       bias_init: initializer function for the bias.
       precision: numerical precision of the computation see `jax.lax.Precision`
@@ -61,6 +63,8 @@ class DenseGeneral(Module):
     Returns:
       The transformed input.
     """
+    inputs = jnp.asarray(inputs, dtype)
+
     if not isinstance(features, Iterable):
       features = (features,)
     if not isinstance(axis, Iterable):
@@ -92,6 +96,7 @@ class DenseGeneral(Module):
     batch_shape = tuple([inputs.shape[ax] for ax in batch_dims])
     kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
     kernel = self.param('kernel', batch_shape + kernel_shape, kernel_init_wrap)
+    kernel = jnp.asarray(kernel, dtype)
 
     batch_ind = tuple(range(n_batch_dims))
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
@@ -114,11 +119,12 @@ class DenseGeneral(Module):
           set(range(inputs.ndim)) - set(axis) - set(batch_dims))
       for ax in expand_dims:
         bias = jnp.expand_dims(bias, ax)
+      bias = jnp.asarray(bias, dtype)
       out = out + bias
     return out
 
 
-class Dense(Module):
+class Dense(base.Module):
   """A linear transformation applied over the last dimmension of the input."""
 
   def apply(self,
@@ -150,7 +156,9 @@ class Dense(Module):
                         (((inputs.ndim - 1,), (0,)), ((), ())),
                         precision=precision)
     if bias:
-      y = y + self.param('bias', (features,), bias_init)
+      bias = self.param('bias', (features,), bias_init)
+      bias = jnp.asarray(bias, dtype)
+      y = y + bias
     return y
 
 
@@ -163,7 +171,7 @@ def _conv_dimension_numbers(input_shape):
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
 
-class Conv(Module):
+class Conv(base.Module):
   """Convolution Module wrapping lax.conv_general_dilated."""
 
   def apply(self,
@@ -233,7 +241,9 @@ class Conv(Module):
         precision=precision)
 
     if bias:
-      y = y + jnp.asarray(self.param('bias', (features,), bias_init), dtype)
+      bias = self.param('bias', (features,), bias_init)
+      bias = jnp.asarray(bias, dtype)
+      y = y + bias
     return y
 
 
@@ -241,7 +251,7 @@ default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
                                                    out_axis=0)
 
 
-class Embed(Module):
+class Embed(base.Module):
   """Embedding Module.
 
   A parameterized function from integers [0, n) to d-dimensional vectors.
@@ -268,8 +278,24 @@ class Embed(Module):
       raise ValueError('Input type must be an integer or unsigned integer.')
     embedding = self.param('embedding', (num_embeddings, features),
                            embedding_init)
-    dims = lax.GatherDimensionNumbers(
-        offset_dims=(inputs.ndim - 1,),
-        collapsed_slice_dims=(0,),
-        start_index_map=(0,))
-    return lax.gather(embedding, inputs, dims, (1, features))
+    return embedding[inputs]
+
+  @base.module_method
+  def attend(self, query, **unused_kwargs):
+    """Attend over the embedding using a query array.
+
+    Args:
+      query: array with last dimension equal the feature depth `features` of the
+        embedding.
+      **unused_kwargs: unused arguments passed from the apply method.
+
+    Returns:
+      An array with final dim `num_embeddings` corresponding to the batched
+      inner-product of the array of query vectors against each embedding.
+      Commonly used for weight-sharing between embeddings and logit transform
+      in NLP models.
+    """
+    del unused_kwargs
+    embedding = self.get_param('embedding')
+    return lax.dot_general(
+        query, embedding, (((query.ndim - 1,), (1,)), ((), ())))

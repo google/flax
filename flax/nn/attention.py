@@ -256,12 +256,16 @@ class SelfAttention(base.Module):
   """Multi-head self-attention."""
 
   def apply(self,
-            inputs,
+            inputs_q,
             num_heads,
+            inputs_kv=None,
             qkv_features=None,
             attention_axis=None,
             causal_mask=False,
             padding_mask=None,
+            key_padding_mask=None,
+            segmentation=None,
+            key_segmentation=None,
             cache=None,
             broadcast_dropout=True,
             dropout_rng=None,
@@ -277,16 +281,20 @@ class SelfAttention(base.Module):
     applies dot-product attention and project the results to an output vector.
 
     Args:
-      inputs: input data of shape `[bs, dim1, dim2, ..., dimN, features]`.
-      num_heads: number of attention heads. Features (i.e. inputs.shape[-1])
+      inputs_q: input data of shape `[bs, dim1, dim2, ..., dimN, features]`.
+      num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
+      inputs_kv: input data of shape `[bs, dim1, dim2, ..., dimN, features]`.
       qkv_features: dimension of the key, query, and value.
       attention_axis: axes over which the attention is applied ( 'None' means
         attention over all axes, but batch, heads, and features).
       causal_mask: boolean specifying whether to apply a causal mask on the
         attention weights. If True, the output at timestep `t` will not depend
         on inputs at timesteps strictly greater than `t`.
-      padding_mask: boolean specifying tokens that are pad token.
+      padding_mask: boolean specifying query tokens that are pad token.
+      key_padding_mask: boolean specifying key-value tokens that are pad token.
+      segmentation: segment indices for packed inputs_q data.
+      key_segmentation: segment indices for packed inputs_kv data.
       cache: an instance of `flax.nn.attention.Cache` used for efficient
         autoregressive decoding.
       broadcast_dropout: bool: use a broadcasted dropout along batch dims.
@@ -306,10 +314,13 @@ class SelfAttention(base.Module):
     assert causal_mask or not cache, (
         'Caching is only support for causal attention.')
 
-    if attention_axis is None:
-      attention_axis = tuple(range(1, inputs.ndim - 1))
+    if inputs_kv is None:
+      inputs_kv = inputs_q
 
-    features = inputs.shape[-1]
+    if attention_axis is None:
+      attention_axis = tuple(range(1, inputs_q.ndim - 1))
+
+    features = inputs_q.shape[-1]
     qkv_features = qkv_features or features
 
     assert qkv_features % num_heads == 0, (
@@ -323,10 +334,11 @@ class SelfAttention(base.Module):
         bias_init=bias_init,
         bias=bias,
         precision=precision)
-    # project inputs to multi-headed q/k/v
-    query, key, value = (dense(inputs, name='query'),
-                         dense(inputs, name='key'),
-                         dense(inputs, name='value'))
+    # project inputs_q to multi-headed q/k/v
+    # dimensions are then [bs, dims..., n_heads, n_features_per_head]
+    query, key, value = (dense(inputs_q, name='query'),
+                         dense(inputs_kv, name='key'),
+                         dense(inputs_kv, name='value'))
 
     if cache:
       assert isinstance(cache, Cache), 'cache must be an instance of Cache'
@@ -337,11 +349,11 @@ class SelfAttention(base.Module):
         expected_shape = list(cache_entry.key.shape[:-2])
         for attn_dim in attention_axis:
           expected_shape[attn_dim] = 1
-        expected_shape = tuple(expected_shape) + inputs.shape[-1:]
-        if expected_shape != inputs.shape:
+        expected_shape = tuple(expected_shape) + inputs_q.shape[-1:]
+        if expected_shape != inputs_q.shape:
           raise ValueError('Invalid shape provided, '
-                           'expeced shape %s instead got %s.'
-                           % (expected_shape, inputs.shape))
+                           'expected shape %s instead got %s.' %
+                           (expected_shape, inputs_q.shape))
 
         if not isinstance(cache_entry, _CacheEntry):
           raise ValueError('Cache is not initialized.')
@@ -363,6 +375,11 @@ class SelfAttention(base.Module):
                                           value=value)
         cache.store(cache_entry)
 
+        # TODO(levskaya): verify this is still needed in translation decoding.
+        key_padding_mask = jnp.broadcast_to(
+            (jnp.arange(cshape[1]) < cache_entry.i), cshape[:2])
+        key_padding_mask = key_padding_mask.astype(jnp.float32)[..., None]
+
     # create attention masks
     mask_components = []
 
@@ -371,29 +388,42 @@ class SelfAttention(base.Module):
         bias_pre_shape = (1,) * (key.ndim - 1)
         attn_shape = tuple(onp.take(key.shape, attention_axis))
         attn_size = onp.prod(attn_shape)
-
         ii = jnp.arange(attn_size, dtype=jnp.uint32)
         mask = ii < cache_entry.i
         mask_components.append(mask.reshape(bias_pre_shape + attn_shape))
       else:
         mask_components.append(_make_causal_mask(key, attention_axis))
 
-    # TODO(flax-dev): Can this be done using the Jax auto-mask transformation?
     if padding_mask is not None:
+      if key_padding_mask is None:
+        key_padding_mask = padding_mask
       padding_mask = make_padding_mask(
           padding_mask_query=padding_mask,
-          padding_mask_key=padding_mask,
+          padding_mask_key=key_padding_mask,
           query_shape=query.shape,
           key_shape=key.shape,
           attention_axis=attention_axis)
       mask_components.append(padding_mask)
+
+    if segmentation is not None:
+      if key_segmentation is None:
+        key_segmentation = segmentation
+      segmentation_mask = make_padding_mask(
+          padding_mask_query=segmentation,
+          padding_mask_key=key_segmentation,
+          query_shape=query.shape,
+          key_shape=key.shape,
+          attention_axis=attention_axis,
+          segmentation_mask=True)
+      mask_components.append(segmentation_mask)
+
     if mask_components:
       attention_mask = mask_components[0]
       for component in mask_components[1:]:
         attention_mask = jnp.logical_and(attention_mask, component)
 
       # attention mask in the form of attention bias
-      attention_bias = lax.select(attention_mask,
+      attention_bias = lax.select(attention_mask > 0,
                                   jnp.full(attention_mask.shape, 0.),
                                   jnp.full(attention_mask.shape, -1e10))
     else:
@@ -430,7 +460,8 @@ def make_padding_mask(padding_mask_query,
                       padding_mask_key,
                       query_shape,
                       key_shape,
-                      attention_axis=None):
+                      attention_axis=None,
+                      segmentation_mask=False):
   """Makes padding mask for attention weights.
 
   In case of 1d inputs (i.e., `[bs, len, features]`, the attention weights will
@@ -442,7 +473,8 @@ def make_padding_mask(padding_mask_query,
     query_shape: shape of the query
     key_shape: shape of the key, which is equal to the shape of value.
     attention_axis: axis over which attention is applied.
-
+    segmentation_mask: bool: if true use equality on cartesian product rather
+      than outer product for constructing segmentation masks.
   Returns:
     The padding mask for attention weights.
   """
@@ -468,7 +500,10 @@ def make_padding_mask(padding_mask_query,
   padding_mask_query = padding_mask_query[..., None]
   padding_mask_key = padding_mask_key[..., None]
   perm = (0,) + tuple(onp.flip(onp.arange(padding_mask_key.ndim)))[:-1]
-  mask = jnp.multiply(padding_mask_query, padding_mask_key.transpose(perm))
+  if segmentation_mask:
+    mask = jnp.equal(padding_mask_query, padding_mask_key.transpose(perm))
+  else:
+    mask = jnp.multiply(padding_mask_query, padding_mask_key.transpose(perm))
 
   mask = mask.reshape(mask_shape_final)
   mask = jax.lax.convert_element_type(mask, jnp.float32)

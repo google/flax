@@ -84,8 +84,9 @@ def dropout(inputs, rate, deterministic=False, rng=None):
   Args:
     inputs: the inputs that should be randomly masked.
     rate: the probablity of maksing out a value.
-    deterministic: if true, no mask is applied and the inputs are simply scaled
-      by `1 - rate`.
+    deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+      masked, whereas if true, no mask is applied an the inputs are returned as
+      is.
     rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
       be used.
   Returns:
@@ -96,9 +97,9 @@ def dropout(inputs, rate, deterministic=False, rng=None):
   keep_prob = 1. - rate
 
   if deterministic:
-    return inputs * keep_prob
+    return inputs
   else:
     if rng is None:
       rng = make_rng()
     mask = random.bernoulli(rng, p=keep_prob, shape=inputs.shape)
-    return lax.select(mask, inputs, jnp.zeros_like(inputs))
+    return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))

@@ -14,7 +14,7 @@
 
 """Tests for flax.nn."""
 
-
+import threading
 from absl.testing import absltest
 
 from flax import nn
@@ -151,6 +151,21 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       FaultyModule.create(random.PRNGKey(0), x)
 
+  def test_module_decorator(self):
+    @nn.module
+    def MyModule(x):  # pylint: disable=invalid-name
+      return DummyModule(x)
+
+    self.assertEqual(MyModule.__name__, 'MyModule')
+    self.assertTrue(issubclass(MyModule, nn.Module))
+
+    rng = random.PRNGKey(0)
+    x = jnp.array([1.])
+    y, params = MyModule.init(rng, x)
+    y2 = MyModule.call(params, x)
+    self.assertEqual(y, y2)
+    self.assertEqual(y, jnp.array([2.]))
+
   def test_partial_application(self):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
@@ -198,6 +213,27 @@ class ModuleTest(absltest.TestCase):
     model = model.truncate_at('/dummy_0')
     y = model(x)
     self.assertEqual(y, x + 1)
+
+  def test_call_module_method(self):
+    class MultiMethod(nn.Module):
+
+      def apply(self, x):
+        return x + self.param('bias', x.shape, initializers.ones)
+
+      @nn.module_method
+      def l2(self):
+        return jnp.sum(self.get_param('bias') ** 2)
+
+    class MultiMethodModel(nn.Module):
+
+      def apply(self, x):
+        layer = MultiMethod.shared()
+        layer(x)  # init
+        return layer.l2()
+
+    x = jnp.array([1., 2.])
+    y, _ = MultiMethodModel.create(random.PRNGKey(0), x)
+    self.assertEqual(y, 2.)
 
 
 class CollectionTest(absltest.TestCase):
@@ -267,6 +303,20 @@ class UtilsTest(absltest.TestCase):
       with stack.frame({'id': 2}):
         self.assertEqual(list(stack), [{'id': 1}, {'id': 2}])
       self.assertEqual(list(stack), [{'id': 1}])
+
+  def test_call_stack_multithreading(self):
+    stack = nn.utils.CallStack()
+    self.assertFalse(stack)
+    with stack.frame({'id': 1}):
+      self.assertEqual(stack[-1], {'id': 1})
+      def _main():
+        # Each thread should have its own stack.
+        self.assertFalse(stack)
+        with stack.frame({'id': 2}):
+          self.assertEqual(stack[-1], {'id': 2})
+      thread = threading.Thread(target=_main)
+      thread.start()
+      thread.join()
 
   def test_call_stack_error_path(self):
     stack = nn.utils.CallStack()
@@ -349,6 +399,23 @@ class NormalizationTest(absltest.TestCase):
     y_one_liner = ((x - x.mean(axis=-1, keepdims=True)) *
                    jax.lax.rsqrt(x.var(axis=-1, keepdims=True) + e))
     onp.testing.assert_allclose(y_one_liner, y, atol=1e-4)
+
+  def test_group_norm(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    e = 1e-5
+    x = random.normal(key1, (2, 5, 4, 4, 32))
+    y, _ = nn.GroupNorm.create(key2, x, num_groups=2,
+                               bias=True, scale=True, epsilon=e)
+    self.assertEqual(x.shape, y.shape)
+    self.assertIsInstance(y, type(x))
+
+    x_gr = x.reshape([2, 5, 4, 4, 2, 16])
+    y_test = ((x_gr - x_gr.mean(axis=[1, 2, 3, 5], keepdims=True)) *
+              jax.lax.rsqrt(x_gr.var(axis=[1, 2, 3, 5], keepdims=True) + e))
+    y_test = y_test.reshape([2, 5, 4, 4, 32])
+
+    onp.testing.assert_allclose(y_test, y, atol=1e-4)
 
 
 # TODO(flax-dev): add integration tests for RNN cells

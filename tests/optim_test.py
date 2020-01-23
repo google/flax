@@ -21,6 +21,8 @@ from flax import nn
 from flax import optim
 from flax import traverse_util
 
+import jax
+
 import numpy as onp
 
 
@@ -211,6 +213,28 @@ class AdamTest(absltest.TestCase):
     expected_new_params = onp.array([0.906085])
     onp.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
+
+
+class WeightNormTest(absltest.TestCase):
+
+  def test_momentum_with_weight_norm(self):
+    params = onp.ones((2, 2)) * 2.
+    optimizer_def = optim.WeightNorm(optim.Momentum(0.1))
+    state = optimizer_def.init_state(params)
+    self.assertEqual(jax.tree_map(onp.shape, state), optim.OptimizerState(
+        step=(),
+        param_states=optim._WeightNormParamState(
+            direction_state=optim._MomentumParamState(momentum=(2, 2)),
+            scale_state=optim._MomentumParamState(momentum=(1, 2)),
+            mult=(1, 2)
+        )
+    ))
+    grads = onp.ones((2, 2))
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    onp.testing.assert_allclose(new_params, onp.full_like(params, 1.9))
+    onp.testing.assert_allclose(new_state.param_states.mult, 1.9 * 2 ** 0.5)
+
 
 if __name__ == '__main__':
   absltest.main()

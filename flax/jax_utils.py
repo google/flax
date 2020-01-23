@@ -28,7 +28,7 @@ def _replicate(x, devices=None):
   if devices is None:
     devices = jax.local_devices()
   aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
-  buffers = [jax.device_put(x, device=d).device_buffer for d in devices]
+  buffers = [jax.interpreters.xla.device_put(x, device=d) for d in devices]
   return jax.pxla.ShardedDeviceArray(aval, buffers)
 
 
@@ -53,7 +53,7 @@ def unreplicate(tree):
 def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   """Lazily evaluate a function by using the shapes of the inputs.
 
-  This function is similair to `jax.eval_shape` with the key difference that
+  This function is similar to `jax.eval_shape` with the key difference that
   function outputs that can be computed without a concrete value of the
   inputs are returned as is instead of only the shape. See for example
   `module.create_by_shape` where this functionality is used to initialize a
