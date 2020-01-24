@@ -1,6 +1,6 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-**NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch with us at flax-dev@google.com.
+**NOTE**: This is pre-release software and not yet ready for general use. Expect breaking changes. If you want to use it, please get in touch with us at flax-dev@google.com.
 
 ## Background: JAX
 
