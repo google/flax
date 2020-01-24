@@ -1,6 +1,5 @@
 from absl import app
 from absl import flags
-from absl import logging
 
 import jax.numpy as jnp
 import numpy as np
@@ -82,12 +81,6 @@ def binary_cross_entropy(probs, labels):
     return - jnp.sum(labels * jnp.log(probs + EPS) + (1 - labels) * jnp.log(1 - probs + EPS))
 
 
-def random_normal(shape):
-    _, subkey = random.split(KEY)
-    eps = random.normal(subkey, shape)
-    return eps
-
-
 def compute_metrics(recon_x, x, mean, logvar):
     BCE = binary_cross_entropy(recon_x, x)
     KLD = kl_divergence(mean, logvar)
@@ -140,7 +133,7 @@ def main(argv):
         z = np.random.normal(size=(64, 20))
         metrics, comparison, sample = eval(optimizer.target, test_ds, z)
         save_image(comparison, 'results/reconstruction_' + str(epoch) + '.png', nrow=8)
-        save_image(sample, 'results/sample_'+ str(epoch) + '.png', nrow=8)
+        save_image(sample, 'results/sample_' + str(epoch) + '.png', nrow=8)
 
         print("eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}".format(
             epoch + 1, metrics['loss'], metrics['bce'], metrics['kld']
