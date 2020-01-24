@@ -1,0 +1,4 @@
+jax
+flask
+tensorflow
+Pillow
