@@ -1,3 +1,11 @@
+"""
+    This code is created with reference to torchvision/utils.py.
+
+    Modify: torch.tensor -> jax.numpy.DeviceArray
+
+    If you want to know about this file in detail, please visit the original code:
+        https://github.com/pytorch/vision/blob/master/torchvision/utils.py
+"""
 import math
 import numpy
 import jax
