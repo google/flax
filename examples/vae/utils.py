@@ -7,11 +7,11 @@
         https://github.com/pytorch/vision/blob/master/torchvision/utils.py
 """
 import math
-import numpy
 import jax
 import jax.numpy as np
 
 irange = range
+
 
 def make_grid(ndarray, nrow=8, padding=2,
               normalize=False, range=None, scale_each=False, pad_value=0.0):
@@ -37,14 +37,14 @@ def make_grid(ndarray, nrow=8, padding=2,
 
     # if list of tensors, convert to a 4D mini-batch ndarray
     if isinstance(ndarray, list):
-        ndarray = np.stack(ndarray, dim=0)
+        ndarray = np.stack(ndarray, 0)
 
     if ndarray.ndim == 2:  # single image H x W
-        ndarray = np.expamd_dims(ndarray, -1)
+        ndarray = np.expand_dims(ndarray, -1)
     if ndarray.ndim == 3:  # single image
         if ndarray.shape[-1] == 1:  # if single-channel, convert to 3-channel
             ndarray = np.concatenate((ndarray, ndarray, ndarray), -1)
-        ndarray = np.expamd_dims(ndarray, 0)
+        ndarray = np.expand_dims(ndarray, 0)
 
     if ndarray.ndim == 4 and ndarray.shape[-1] == 1:  # single-channel images
         ndarray = np.concatenate((ndarray, ndarray, ndarray), -1)

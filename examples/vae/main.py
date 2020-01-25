@@ -39,34 +39,33 @@ flags.DEFINE_integer(
 
 class Encoder(nn.Module):
     def apply(self, x):
-        x = nn.Dense(x, 400)
+        x = nn.Dense(x, 400, name='enc_fc1')
         x = jnn.relu(x)
-        mean_x = nn.Dense(x, 20)
-        logvar_x = nn.Dense(x, 20)
+        mean_x = nn.Dense(x, 20, name='enc_fc21')
+        logvar_x = nn.Dense(x, 20, name='enc_fc22')
         return mean_x, logvar_x
 
 
 class Decoder(nn.Module):
     def apply(self, z):
-        z = nn.Dense(z, 400)
+        z = nn.Dense(z, 400, name='dec_fc1')
         z = jnn.relu(z)
-        z = nn.Dense(z, 784)
+        z = nn.Dense(z, 784, name='dec_fc2')
         z = jnn.sigmoid(z)
         return z
 
 
 class VAE(nn.Module):
-    def apply(self, x, generate=None):
-        mean, logvar = Encoder(x)
+    def apply(self, x):
+        mean, logvar = Encoder(x, name='encoder')
         z = reparameterize(mean, logvar)
-        if generate is not None:
-            z = generate
-        recon_x = Decoder(z)
+        recon_x = Decoder(z, name='decoder')
         return recon_x, mean, logvar
 
     @nn.module_method
     def generate(self, z):
-        return Decoder(z)
+        params = self.get_param("decoder")
+        return Decoder.call(params, z)
 
 
 def reparameterize(mean, logvar):
@@ -114,7 +113,7 @@ def eval(model, eval_ds, z):
     comparison = jnp.concatenate([xs[:8].reshape(-1, 28, 28, 1),
                                   recon_xs[:8].reshape(-1, 28, 28, 1)])
 
-    generate_xs, _, _ = model(xs, generate=z)
+    generate_xs = model.generate(z)
     generate_xs = generate_xs.reshape(-1, 28, 28, 1)
 
     return compute_metrics(recon_xs, xs, mean, logvar), comparison, generate_xs
