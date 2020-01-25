@@ -64,6 +64,10 @@ class VAE(nn.Module):
         recon_x = Decoder(z)
         return recon_x, mean, logvar
 
+    @nn.module_method
+    def generate(self, z):
+        return Decoder(z)
+
 
 def reparameterize(mean, logvar):
     std = jnp.exp(0.5 * logvar)

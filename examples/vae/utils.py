@@ -11,6 +11,7 @@ import numpy
 import jax
 import jax.numpy as np
 
+irange = range
 
 def make_grid(ndarray, nrow=8, padding=2,
               normalize=False, range=None, scale_each=False, pad_value=0.0):
@@ -59,8 +60,8 @@ def make_grid(ndarray, nrow=8, padding=2,
     num_channels = ndarray.shape[3]
     grid = np.full((height * ymaps + padding, width * xmaps + padding, num_channels), pad_value).astype(np.float32)
     k = 0
-    for y in range(ymaps):
-        for x in range(xmaps):
+    for y in irange(ymaps):
+        for x in irange(xmaps):
             if k >= nmaps:
                 break
             grid = jax.ops.index_update(grid, jax.ops.index[y * height + padding: (y+1) * height, x * width + padding: (x+1) * width], ndarray[k])
