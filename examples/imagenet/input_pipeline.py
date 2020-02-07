@@ -207,6 +207,8 @@ def load_split(batch_size, train, dtype=tf.float32, image_size=IMAGE_SIZE):
   ds = tfds.load('imagenet2012:5.*.*', split=split, decoders={
       'image': tfds.decode.SkipDecoding(),
   })
+  ds.options().experimental_threading.private_threadpool_size = 48
+  ds.options().experimental_threading.max_intra_op_parallelism = 1
 
   ds = ds.cache()
 

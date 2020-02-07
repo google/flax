@@ -38,6 +38,40 @@ class OptimizerDefTest(absltest.TestCase):
     self.assertEqual(optimizer.state, expected_state)
     self.assertEqual(optimizer.target, params)
 
+  def test_compute_grad(self):
+    params = onp.ones(())
+    optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
+    optimizer = optimizer_def.create(params)
+    def loss_fn(x):
+      return 2. * x
+    loss, grad = optimizer.compute_gradients(loss_fn)
+    self.assertEqual(loss, 2.)
+    self.assertEqual(grad, 2.)
+
+    def loss_aux_fn(x):
+      return 3. * x, 4.
+    loss, aux, grad = optimizer.compute_gradients(loss_aux_fn)
+    self.assertEqual(loss, 3.)
+    self.assertEqual(grad, 3.)
+    self.assertEqual(aux, 4.)
+
+  def test_optimize(self):
+    params = onp.ones(())
+    optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
+    optimizer = optimizer_def.create(params)
+    def loss_fn(x):
+      return 2. * x
+    new_optimizer, loss = optimizer.optimize(loss_fn)
+    self.assertEqual(loss, 2.)
+    self.assertEqual(new_optimizer.target, 0.8)
+
+    def loss_aux_fn(x):
+      return 3. * x, 4.
+    new_optimizer, loss, aux = optimizer.optimize(loss_aux_fn)
+    self.assertEqual(loss, 3.)
+    self.assertEqual(new_optimizer.target, 0.7)
+    self.assertEqual(aux, 4.)
+
   def test_optimizer_with_focus(self):
     params = {'a': 0., 'b': 0.}
     opt_def = optim.GradientDescent(learning_rate=1.)

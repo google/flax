@@ -235,6 +235,43 @@ class ModuleTest(absltest.TestCase):
     y, _ = MultiMethodModel.create(random.PRNGKey(0), x)
     self.assertEqual(y, 2.)
 
+  def test_module_state(self):
+    class StatefulModule(nn.Module):
+
+      def apply(self, x, coll=None):
+        state = self.state('state', x.shape, nn.initializers.zeros,
+                           collection=coll)
+        state.value += x
+
+    x = jnp.array([1.,])
+    # no collection should raise an error
+    with self.assertRaises(ValueError):
+      StatefulModule.call({}, x)
+
+    # pass collection explicitly
+    with nn.Collection().mutate() as state:
+      self.assertEqual(state.as_dict(), {})
+      StatefulModule.init(random.PRNGKey(0), x, state)
+      self.assertEqual(state.as_dict(), {'/': {'state': x}})
+    self.assertEqual(state.as_dict(), {'/': {'state': x}})
+    with state.mutate() as new_state:
+      # assert new_state is a clone of state
+      self.assertEqual(new_state.as_dict(), state.as_dict())
+      StatefulModule.call({}, x, new_state)
+    self.assertEqual(new_state.as_dict(), {'/': {'state': x + x}})
+
+    # use stateful
+    with nn.stateful() as state:
+      self.assertEqual(state.as_dict(), {})
+      StatefulModule.init(random.PRNGKey(0), x)
+    self.assertEqual(state.as_dict(), {'/': {'state': x}})
+    with nn.stateful(state) as new_state:
+      # assert new_state is a clone of state
+      self.assertEqual(new_state.as_dict(), state.as_dict())
+      StatefulModule.call({}, x)
+      self.assertEqual(new_state.as_dict(), {'/': {'state': x + x}})
+    self.assertEqual(new_state.as_dict(), {'/': {'state': x + x}})
+
 
 class CollectionTest(absltest.TestCase):
 
@@ -381,11 +418,11 @@ class NormalizationTest(absltest.TestCase):
     onp.testing.assert_allclose(var, onp.array([1., 1.]), rtol=1e-4)
     with nn.stateful(state_0) as state:
       y = model(x)
-    ema_mean, ema_var = state.lookup('/')
+    ema = state.lookup('/')
     onp.testing.assert_allclose(
-        ema_mean, 0.1 * x.mean((0, 1), keepdims=True), atol=1e-4)
+        ema['mean'], 0.1 * x.mean((0, 1), keepdims=True), atol=1e-4)
     onp.testing.assert_allclose(
-        ema_var, 0.9 + 0.1 * x.var((0, 1), keepdims=True), rtol=1e-4)
+        ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=True), rtol=1e-4)
 
   def test_layer_norm(self):
     rng = random.PRNGKey(0)

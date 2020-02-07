@@ -211,6 +211,11 @@ class OptimizerDef:
     return opt_target, opt_state
 
 
+class _NoAux:
+  """Placeholder used to indicate a lack of auxilairy outputs."""
+  pass
+
+
 @struct.dataclass
 class Optimizer:
   """Wraps an optimizer with its hyper_params, state, and model parameters."""
@@ -240,32 +245,42 @@ class Optimizer:
     """Computes gradients of loss_fn.
 
     Args:
-      loss_fn: a function that receives the target and returns a tuple of the
-        loss and auxiliary outputs.
+      loss_fn: a function that receives the target and returns a loss or a
+        tuple of the loss and auxiliary outputs.
     Returns:
-      A tuple consisting of the loss, auxiliary outputs,
+      A tuple consisting of the loss, auxiliary outputs if any,
         and a list of gradients.
     """
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    def loss_wrapper(target):
+      loss_and_aux = loss_fn(target)
+      if isinstance(loss_and_aux, jnp.ndarray):
+        return loss_and_aux, _NoAux
+      else:
+        return loss_and_aux
+    grad_fn = jax.value_and_grad(loss_wrapper, has_aux=True)
     (loss, aux), grad = grad_fn(self.target)
-    return loss, aux, grad
+    if aux is _NoAux:
+      return loss, grad
+    else:
+      return loss, aux, grad
 
   def optimize(self, loss_fn, **hyper_param_overrides):
     """Optimizes the target with respect to a loss function.
 
     Args:
-      loss_fn: a function that receives the target and returns a tuple of the
-        loss and auxiliary outputs.
+      loss_fn:  function that receives the target and returns a loss or a
+        tuple of the loss and auxiliary outputs.
       **hyper_param_overrides: the hyper parameters passed to apply_gradient
         will overide the defaults specified in the `OptimizerDef`.
         Pass `hyper_params=...` to replace all hyper parameters.
     Returns:
       A tuple consisting of the new optimizer, the loss,
-        and the auxiliary outputs.
+        and the auxiliary outputs if any.
     """
-    loss, aux, grad = self.compute_gradients(loss_fn)
+    output_and_grad = self.compute_gradients(loss_fn)
+    grad = output_and_grad[-1]
     optimizer = self.apply_gradient(grad, **hyper_param_overrides)
-    return optimizer, loss, aux
+    return (optimizer,) + output_and_grad[:-1]
 
   def replicate(self, devices=None, axis_name='batch'):
     """Replicates an optimizer for data parallel training.

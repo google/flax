@@ -72,11 +72,15 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   # return the shape and dtype.
   output_traced = None
   master = None
-  def lazy_fn(*inputs):
+  def lazy_fn(*inputs):  # pylint: disable=missing-docstring
     nonlocal output_traced, master
     leaves = jax.tree_leaves(inputs)
     if leaves:
-      master = leaves[0].trace.master
+      # TODO(akolesnikov): revert this check after 10.02.20 (ICML deadline)
+      if hasattr(leaves[0], '_trace'):
+        master = leaves[0]._trace.master  # pylint: disable=protected-access
+      else:
+        master = leaves[0].trace.master  # pylint: disable=protected-access
     output = fn(*(inputs + args), **kwargs)
     output_traced = output
     return output
@@ -84,12 +88,19 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   input_structs = [jax.ShapeDtypeStruct(shape, dtype)
                    for shape, dtype in input_spec]
   output_shapes = jax.eval_shape(lazy_fn, *input_structs)
-  def merge_results(traced, shape):
+  def merge_results(traced, shape):  # pylint: disable=missing-docstring
     # Only return the shape when an output depends on any unknown inputs.
-    if isinstance(traced, jax.core.Tracer) and traced.trace.master == master:
-      return shape
-    else:
-      return traced
+    # pylint: disable=protected-access
+    if isinstance(traced, jax.core.Tracer):
+      # TODO(akolesnikov): revert this check after 10.02.20 (ICML deadline)
+      if hasattr(traced, '_trace'):
+        traced_master = traced._trace.master  # pylint: disable=protected-access
+      else:
+        traced_master = traced.trace.master  # pylint: disable=protected-access
+      if traced_master == master:
+        return shape
+    return traced
+    # pylint: enable=protected-access
   return jax.tree_multimap(merge_results, output_traced, output_shapes)
 
 

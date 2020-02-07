@@ -15,10 +15,11 @@
 # limitations under the License.
 """Tests for flax.struct."""
 
+import collections
+
 from typing import Any
 
 from absl.testing import absltest
-
 from flax import nn
 from flax import optim
 from flax import serialization
@@ -105,6 +106,65 @@ class SerializationTest(absltest.TestCase):
     restored_optimizer = serialization.from_state_dict(optimizer, state)
     optimizer_plus1 = jax.tree_map(lambda x: x + 1, optimizer)
     self.assertEqual(restored_optimizer, optimizer_plus1)
+
+  def test_numpy_serialization(self):
+    normal_dtypes = ['byte', 'b', 'ubyte', 'short',
+                     'h', 'ushort', 'i', 'uint', 'intp',
+                     'p', 'uintp', 'long', 'l', 'longlong',
+                     'q', 'ulonglong', 'half', 'e', 'f',
+                     'double', 'd', 'longdouble', 'g',
+                     'cfloat', 'cdouble', 'clongdouble', 'm',
+                     'bool8', 'b1', 'int64', 'i8', 'uint64', 'u8',
+                     'float16', 'f2', 'float32', 'f4', 'float64',
+                     'f8', 'float128', 'f16', 'complex64', 'c8',
+                     'complex128', 'c16', 'complex256', 'c32',
+                     'm8', 'int32', 'i4', 'uint32', 'u4', 'int16',
+                     'i2', 'uint16', 'u2', 'int8', 'i1', 'uint8',
+                     'u1', 'complex_', 'int0', 'uint0', 'single',
+                     'csingle', 'singlecomplex', 'float_', 'intc',
+                     'uintc', 'int_', 'longfloat', 'clongfloat',
+                     'longcomplex', 'bool_', 'int', 'float',
+                     'complex', 'bool']
+    onp.random.seed(0)
+    for dtype in normal_dtypes:
+      for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
+        arr = onp.random.uniform(-100, 100, size=shape).astype(dtype)
+        restored_arr = serialization.msgpack_restore(
+            serialization.msgpack_serialize(arr))
+        self.assertEqual(restored_arr.dtype, arr.dtype)
+        onp.testing.assert_array_equal(restored_arr, arr)
+
+  def test_complex_serialization(self):
+    for x in [1j, 1+2j]:
+      restored_x = serialization.msgpack_restore(
+          serialization.msgpack_serialize(x))
+      self.assertEqual(x, restored_x)
+
+  def test_namedtuple_serialization(self):
+    foo_class = collections.namedtuple('Foo', 'a b c')
+    x1 = foo_class(a=1, b=2, c=3)
+    x1_serialized = serialization.to_bytes(x1)
+    x2 = foo_class(a=0, b=0, c=0)
+    restored_x1 = serialization.from_bytes(x2, x1_serialized)
+    self.assertEqual(x1, restored_x1)
+
+  def test_model_serialization_to_bytes(self):
+    rng = random.PRNGKey(0)
+    model_def = nn.Dense.partial(features=1, kernel_init=nn.initializers.ones)
+    _, model = model_def.create_by_shape(rng, [((1, 1), jnp.float32)])
+    serialized_bytes = serialization.to_bytes(model)
+    restored_model = serialization.from_bytes(model, serialized_bytes)
+    self.assertEqual(restored_model.params, model.params)
+
+  def test_optimizer_serialization_to_bytes(self):
+    rng = random.PRNGKey(0)
+    model_def = nn.Dense.partial(features=1, kernel_init=nn.initializers.ones)
+    _, model = model_def.create_by_shape(rng, [((1, 1), jnp.float32)])
+    optim_def = optim.Momentum(learning_rate=1.)
+    optimizer = optim_def.create(model)
+    serialized_bytes = serialization.to_bytes(optimizer)
+    restored_optimizer = serialization.from_bytes(optimizer, serialized_bytes)
+    self.assertEqual(restored_optimizer, optimizer)
 
 
 if __name__ == '__main__':

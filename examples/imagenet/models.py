@@ -29,7 +29,8 @@ class ResidualBlock(nn.Module):
   def apply(self, x, filters, strides=(1, 1), train=True, dtype=jnp.float32):
     needs_projection = x.shape[-1] != filters * 4 or strides != (1, 1)
     batch_norm = nn.BatchNorm.partial(use_running_average=not train,
-                                      momentum=0.9, epsilon=1e-5)
+                                      momentum=0.9, epsilon=1e-5,
+                                      dtype=dtype)
     conv = nn.Conv.partial(bias=False, dtype=dtype)
 
     residual = x
@@ -65,6 +66,7 @@ class ResNet(nn.Module):
     x = nn.BatchNorm(x,
                      use_running_average=not train,
                      momentum=0.9, epsilon=1e-5,
+                     dtype=dtype,
                      name='init_bn')
     x = nn.max_pool(x, (3, 3), strides=(2, 2), padding='SAME')
     for i, block_size in enumerate(block_sizes):
@@ -72,7 +74,8 @@ class ResNet(nn.Module):
         strides = (2, 2) if i > 0 and j == 0 else (1, 1)
         x = ResidualBlock(x, num_filters * 2 ** i,
                           strides=strides,
-                          train=train)
+                          train=train,
+                          dtype=dtype)
     x = jnp.mean(x, axis=(1, 2))
     x = nn.Dense(x, num_classes)
     x = nn.log_softmax(x)

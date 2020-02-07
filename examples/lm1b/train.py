@@ -81,7 +81,7 @@ flags.DEFINE_integer(
 
 @functools.partial(jax.jit, static_argnums=(1, 2))
 def create_model(key, input_shape, model_kwargs):
-  model_def = models.TransformerLM.partial(train=False, **model_kwargs)
+  model_def = models.TransformerLM.partial(**model_kwargs)
   _, model = model_def.create_by_shape(key, [(input_shape, jnp.float32)])
   return model
 
@@ -219,6 +219,11 @@ def train_step(optimizer, inputs, learning_rate_fn, dropout_rng=None):
   """Perform a single training step."""
   weights = jnp.where(inputs > 0, 1, 0)
 
+  # We handle PRNG splitting inside the top pmap, rather
+  # than handling it outside in the training loop - doing the
+  # latter can add some stalls to the devices.
+  dropout_rng, new_dropout_rng = random.split(dropout_rng)
+
   def loss_fn(model):
     """Loss function used for training."""
     with nn.stochastic(dropout_rng):
@@ -233,7 +238,7 @@ def train_step(optimizer, inputs, learning_rate_fn, dropout_rng=None):
   metrics = compute_metrics(logits, inputs, weights)
   metrics['learning_rate'] = lr
 
-  return new_optimizer, metrics
+  return new_optimizer, metrics, new_dropout_rng
 
 
 def eval_step(model, inputs):
@@ -265,19 +270,16 @@ def main(argv):
 
   if batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
-  device_batch_size = batch_size // jax.device_count()
-
   train_ds, eval_ds, info_ds = input_pipeline.get_lm1b_datasets(
       n_devices=jax.local_device_count(),
-      batch_size_per_device=device_batch_size,
+      batch_size=batch_size,
       dynamic_batching=True,
       max_target_length=max_target_length,
       max_eval_target_length=max_eval_target_length)
   vocab_size = info_ds['text'].encoder.vocab_size
 
   train_iter = iter(train_ds)
-  bs = device_batch_size * jax.device_count()
-  input_shape = (bs, max_target_length)
+  input_shape = (batch_size, max_target_length)
 
   transformer_lm_kwargs = {
       'vocab_size': vocab_size,
@@ -291,7 +293,7 @@ def main(argv):
 
   rng = random.PRNGKey(random_seed)
   rng, init_rng = random.split(rng)
-  model = create_model(init_rng, tuple(input_shape), transformer_lm_kwargs)
+  model = create_model(init_rng, input_shape, transformer_lm_kwargs)
   optimizer = create_optimizer(model, learning_rate)
   del model  # don't keep a copy of the initial model
   learning_rate_fn = create_learning_rate_scheduler(
@@ -302,16 +304,15 @@ def main(argv):
       axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
+  # We init the first set of dropout PRNG keys, but update it afterwards inside
+  # the main pmap'd training update for performance.
+  dropout_rngs = random.split(rng, jax.local_device_count())
+
   metrics_all = []
   tick = time.time()
   for step, batch in zip(range(num_train_steps), train_iter):
-    # pylint: disable=protected-access
-    batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))
-    # pylint: enable=protected-access
-
-    keys = random.split(rng, jax.local_device_count() + 1)
-    rng, dropout_rngs = keys[0], keys[1:]
-    optimizer, metrics = p_train_step(
+    batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
+    optimizer, metrics, dropout_rngs = p_train_step(
         optimizer, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
 
