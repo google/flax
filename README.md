@@ -193,9 +193,9 @@ an exponential moving average of parameters over the course of training.
 Note that no special framework support was needed.
 
 ```py
---- a/mnist.py
-+++ b/mnist-polyak.py
-@@ -29,14 +29,17 @@ def compute_metrics(logits, labels):
+--- a/mnist.py	2020-02-11 18:31:29.908885934 +0900
++++ b/mnist-polyak.py	2020-02-11 18:45:38.328158991 +0900
+@@ -29,14 +29,17 @@
    return {'loss': loss, 'accuracy': accuracy}
 
  @jax.jit
@@ -215,7 +215,12 @@ Note that no special framework support was needed.
 
  @jax.jit
  def eval(model, eval_ds):
-@@ -59,9 +62,9 @@ def train():
+@@ -56,12 +59,14 @@
+   optimizer = flax.optim.Momentum(
+       learning_rate=0.1, beta=0.9).create(model)
+
++  params_ema = optimizer.target.params
++
    for epoch in range(10):
      for batch in tfds.as_numpy(train_ds):
        batch['image'] = batch['image'] / 255.0
