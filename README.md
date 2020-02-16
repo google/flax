@@ -219,7 +219,7 @@ Note that no special framework support was needed.
    optimizer = flax.optim.Momentum(
        learning_rate=0.1, beta=0.9).create(model)
 
-+  params_ema = optimizer.target.params
++  params_ema = model.params
 +
    for epoch in range(10):
      for batch in tfds.as_numpy(train_ds):
