@@ -126,7 +126,7 @@ class DenseGeneral(base.Module):
 
 
 class Dense(base.Module):
-  """A linear transformation applied over the last dimmension of the input."""
+  """A linear transformation applied over the last dimension of the input."""
 
   def apply(self,
             inputs,

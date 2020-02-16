@@ -35,6 +35,7 @@ import numpy as onp
 def dot_product_attention(query,
                           key,
                           value,
+                          dtype=jnp.float32,
                           bias=None,
                           axis=None,
                           broadcast_dropout=True,
@@ -57,6 +58,7 @@ def dot_product_attention(query,
       ..., dimN, num_heads, mem_channels]`.
     value: values to be used in attention with shape of `[batch_size, dim1,
       dim2,..., dimN, num_heads, value_channels]`.
+    dtype: the dtype of the computation (default: float32)
     bias: bias for the attention weights. This can be used for incorporating
       autoregressive mask, padding mask, proximity bias.
     axis: axises over which the attention is applied.
@@ -96,11 +98,12 @@ def dot_product_attention(query,
   v_perm = batch_dims + (n - 1,) + axis
   value = value.transpose(v_perm)
 
+  query = query / jnp.sqrt(depth).astype(dtype)
   batch_dims_t = tuple(range(len(batch_dims)))
   attn_weights = lax.dot_general(
       query,
       key, (((n - 1,), (n - 1,)), (batch_dims_t, batch_dims_t)),
-      precision=precision) / jnp.sqrt(depth)
+      precision=precision)
 
   # apply attention bias: masking, droput, proximity bias, ect.
   if bias is not None:
@@ -111,6 +114,7 @@ def dot_product_attention(query,
   attn_weights = lax.exp(
       attn_weights -
       jax.scipy.special.logsumexp(attn_weights, axis=norm_dims, keepdims=True))
+  attn_weights = attn_weights.astype(dtype)
 
   # apply dropout
   if not deterministic and dropout_rate > 0.:
@@ -124,7 +128,7 @@ def dot_product_attention(query,
       keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
     else:
       keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
-    multiplier = keep.astype(attn_weights.dtype) / keep_prob
+    multiplier = keep.astype(attn_weights.dtype) / keep_prob.astype(dtype)
     attn_weights = attn_weights * multiplier
 
   # compute the new values given the attention weights
@@ -259,6 +263,7 @@ class SelfAttention(base.Module):
   def apply(self,
             inputs_q,
             num_heads,
+            dtype=jnp.float32,
             inputs_kv=None,
             qkv_features=None,
             attention_axis=None,
@@ -285,6 +290,7 @@ class SelfAttention(base.Module):
       inputs_q: input data of shape `[bs, dim1, dim2, ..., dimN, features]`.
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
+      dtype: the dtype of the computation (default: float32)
       inputs_kv: input data of shape `[bs, dim1, dim2, ..., dimN, features]`.
       qkv_features: dimension of the key, query, and value.
       attention_axis: axes over which the attention is applied ( 'None' means
@@ -337,9 +343,9 @@ class SelfAttention(base.Module):
         precision=precision)
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [bs, dims..., n_heads, n_features_per_head]
-    query, key, value = (dense(inputs_q, name='query'),
-                         dense(inputs_kv, name='key'),
-                         dense(inputs_kv, name='value'))
+    query, key, value = (dense(inputs_q, dtype=dtype, name='query'),
+                         dense(inputs_kv, dtype=dtype, name='key'),
+                         dense(inputs_kv, dtype=dtype, name='value'))
 
     if cache:
       assert isinstance(cache, Cache), 'cache must be an instance of Cache'
@@ -424,9 +430,9 @@ class SelfAttention(base.Module):
         attention_mask = jnp.logical_and(attention_mask, component)
 
       # attention mask in the form of attention bias
-      attention_bias = lax.select(attention_mask > 0,
-                                  jnp.full(attention_mask.shape, 0.),
-                                  jnp.full(attention_mask.shape, -1e10))
+      attention_bias = lax.select(
+          attention_mask > 0, jnp.full(attention_mask.shape, 0.).astype(dtype),
+          jnp.full(attention_mask.shape, -1e10).astype(dtype))
     else:
       attention_bias = None
 
@@ -435,6 +441,7 @@ class SelfAttention(base.Module):
         query,
         key,
         value,
+        dtype=dtype,
         axis=attention_axis,
         bias=attention_bias,
         precision=precision,
@@ -451,6 +458,7 @@ class SelfAttention(base.Module):
         kernel_init=kernel_init,
         bias_init=bias_init,
         bias=bias,
+        dtype=dtype,
         precision=precision,
         name='out')
 

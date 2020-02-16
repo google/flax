@@ -38,6 +38,7 @@ class BatchNorm(base.Module):
             axis=-1,
             momentum=0.99,
             epsilon=1e-5,
+            dtype=jnp.float32,
             bias=True,
             scale=True,
             bias_init=initializers.zeros,
@@ -55,6 +56,7 @@ class BatchNorm(base.Module):
       momentum: decay rate for the exponential moving average of
         the batch statistics.
       epsilon: a small float added to variance to avoid dividing by zero.
+      dtype: the dtype of the computation (default: float32).
       bias:  if True, bias (beta) is added.
       scale: if True, multiply by scale (gamma).
         When the next layer is linear (also e.g. nn.relu), this can be disabled
@@ -67,18 +69,24 @@ class BatchNorm(base.Module):
     Returns:
       Normalized inputs (this same shape as inputs).
     """
-    if batch_stats is None and base.is_stateful():
-      batch_stats = base.get_state()
     axis = axis if isinstance(axis, tuple) else (axis,)
     axis = _absolute_dims(x.ndim, axis)
     feature_shape = tuple(d if i in axis else 1 for i, d in enumerate(x.shape))
     reduction_axis = tuple([i for i in range(x.ndim) if i not in axis])
+    if self.is_stateful() or batch_stats:
+      ra_mean = self.state('mean', feature_shape,
+                           initializers.zeros, collection=batch_stats)
+      ra_var = self.state('var', feature_shape,
+                          initializers.ones, collection=batch_stats)
+    else:
+      ra_mean = None
+      ra_var = None
 
     if use_running_average:
-      if batch_stats is None:
+      if ra_mean is None:
         raise ValueError('batch_stats should be provided if '
                          'use_running_averages is True')
-      mean, var = batch_stats.retrieve()
+      mean, var = ra_mean.value, ra_var.value
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=True)
       if axis_name is not None and not self.is_initializing():
@@ -90,23 +98,18 @@ class BatchNorm(base.Module):
         mean2 = lax.psum(mean2, axis_name=axis_name) / axis_size
       var = mean2 - lax.square(mean)
 
-      if batch_stats:
-        if self.is_initializing():
-          shape = mean.shape
-          batch_stats.store((jnp.zeros(shape), jnp.ones(shape)))
-        else:
-          ra_mean, ra_var = batch_stats.retrieve(default=(0, 0))
-          ra_mean = momentum * ra_mean + (1 - momentum) * mean
-          ra_var = momentum * ra_var + (1 - momentum) * var
-          batch_stats.store((ra_mean, ra_var))
+      if ra_mean and not self.is_initializing():
+        ra_mean.value = momentum * ra_mean.value + (1 - momentum) * mean
+        ra_var.value = momentum * ra_var.value + (1 - momentum) * var
 
     y = x - mean
     mul = lax.rsqrt(var + epsilon)
     if scale:
-      mul = mul * self.param('scale', feature_shape, scale_init)
+      mul = mul * jnp.asarray(self.param('scale', feature_shape, scale_init),
+                              dtype)
     y = y * mul
     if bias:
-      y = y + self.param('bias', feature_shape, bias_init)
+      y = y + jnp.asarray(self.param('bias', feature_shape, bias_init), dtype)
     return y
 
 
@@ -119,6 +122,7 @@ class LayerNorm(base.Module):
   def apply(self,
             x,
             epsilon=1e-6,
+            dtype=jnp.float32,
             bias=True,
             scale=True,
             bias_init=initializers.zeros,
@@ -133,6 +137,7 @@ class LayerNorm(base.Module):
     Args:
       x: the inputs
       epsilon: A small float added to variance to avoid dividing by zero.
+      dtype: the dtype of the computation (default: float32).
       bias:  If True, bias (beta) is added.
       scale: If True, multiply by scale (gamma). When the next layer is linear
         (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -146,13 +151,15 @@ class LayerNorm(base.Module):
     """
     features = x.shape[-1]
     mean = jnp.mean(x, axis=-1, keepdims=True)
-    var = jnp.mean(jnp.square(x - mean), axis=-1, keepdims=True)
+    mean2 = jnp.mean(lax.square(x), axis=-1, keepdims=True)
+    var = mean2 - lax.square(mean)
     mul = lax.rsqrt(var + epsilon)
     if scale:
-      mul = mul * self.param('scale', (features,), scale_init)
+      mul = mul * jnp.asarray(self.param('scale', (features,), scale_init),
+                              dtype)
     y = (x - mean) * mul
     if bias:
-      y = y + self.param('bias', (features,), bias_init)
+      y = y + jnp.asarray(self.param('bias', (features,), bias_init), dtype)
     return y
 
 
@@ -207,7 +214,7 @@ class GroupNorm(base.Module):
       if channels % group_size != 0:
         raise ValueError('Number of channels ({}) is not multiple of the '
                          'group size ({}).'.format(channels, group_size))
-      num_groups = channels // num_groups
+      num_groups = channels // group_size
 
     input_shape = x.shape
     group_shape = x.shape[:-1] + (num_groups, x.shape[-1] // num_groups)

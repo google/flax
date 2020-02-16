@@ -212,7 +212,7 @@ class TransformerLM(nn.Module):
             qkv_dim=512,
             mlp_dim=2048,
             max_len=2048,
-            train=True,
+            train=False,
             dropout_rate=0.1,
             attention_dropout_rate=0.1):
     """Applies Transformer model on the inputs.

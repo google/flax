@@ -344,59 +344,62 @@ class Module(metaclass=_ModuleMeta):
     return PartialModule
 
   @classmethod
-  def create(cls, rng, *args, **kwargs):
+  def create(cls, rng, *args, name=None, **kwargs):
     """Create a module instance by evaluating the model.
 
     Use create_by_shape instead to initialize without doing computation.
     Initializer functions can depend both on the shape and the value of inputs.
+
     Args:
       rng: the random number generator used to initialize parameters.
       *args: arguments passed to the module's apply function
+      name: name of this module.
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       A pair consisting of the model output and an instance of Model
     """
     instance = cls.new_instance()
-    kwargs['_top_level'] = True
-    y, params = instance._init(rng, *args, **kwargs)  # pylint: disable=protected-access
+    y, params = instance._init(rng, *args, name=name, _top_level=True, **kwargs)  # pylint: disable=protected-access
     model = Model(instance, params)
     return y, model
 
   @classmethod
-  def create_by_shape(cls, rng, input_specs, *args, **kwargs):
+  def create_by_shape(cls, rng, input_specs, *args, name=None, **kwargs):
     """Create a module instance using only shape and dtype information.
 
     This method will initialize the model without computation.
     Initializer functions can depend on the shape but not the value of inputs.
+
     Args:
       rng: the random number generator used to initialize parameters.
       input_specs: an iterable of (shape, dtype) pairs specifying the inputs
       *args: other arguments passed to the module's apply function
+      name: name of this module.
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       A pair consisting of the model output and an instance of Model
     """
     def lazy_create(*inputs):
-      return cls.create(rng, *(inputs + args), **kwargs)
+      return cls.create(rng, *(inputs + args), name=name, **kwargs)
     return jax_utils.partial_eval_by_shape(lazy_create, input_specs)
 
   @classmethod
-  def init(cls, rng, *args, **kwargs):
+  def init(cls, rng, *args, name=None, **kwargs):
     """Initialize the module parameters.
 
     Args:
       rng: the random number generator used to initialize parameters.
       *args: arguments passed to the module's apply function
+      name: name of this module.
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       A pair consisting of the model output and the initialized parameters
     """
     instance = cls.new_instance()
-    kwargs['_top_level'] = True
-    return instance._init(rng, *args, **kwargs)  # pylint: disable=protected-access
+    return instance._init(rng, *args, name=name, _top_level=True, **kwargs)  # pylint: disable=protected-access
 
   @classmethod
-  def init_by_shape(cls, rng, input_specs, *args, **kwargs):
+  def init_by_shape(cls, rng, input_specs, *args, name=None, **kwargs):
     """Initialize the module parameters.
 
     This method will initialize the module parameters without computation.
@@ -406,14 +409,15 @@ class Module(metaclass=_ModuleMeta):
       rng: the random number generator used to initialize parameters.
       input_specs: an iterable of (shape, dtype) pairs specifying the inputs
       *args: arguments passed to the module's apply function
+      name: name of this module.
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       A pair consisting of the model output and the initialized parameters
     """
-    kwargs['_top_level'] = True
     def lazy_init(*inputs):
       instance = cls.new_instance()
-      return instance._init(rng, *(inputs + args), **kwargs)  # pylint: disable=protected-access
+      return instance._init(  # pylint: disable=protected-access
+          rng, *(inputs + args), name=name, _top_level=True, **kwargs)
     return jax_utils.partial_eval_by_shape(lazy_init, input_specs)
 
   @classmethod
@@ -468,6 +472,50 @@ class Module(metaclass=_ModuleMeta):
     if name not in frame.params:
       raise ValueError("Parameter with name '%s' does not exist." % name)
     return frame.params[name]
+
+  def state(self, name, shape=None, initializer=None, collection=None):
+    """Declare a state variable within the module's apply function.
+
+    A state variable has an attribute value which can be updated by simply
+      assigning a value to it. For example:
+    ```
+    class Example(nn.Module):
+      def apply(self, inputs, decay=0.9):
+        ema = self.state('ema', inputs.shape, initializers.zeros)
+        ema.value = decay * ema.value + (1 - decay) * inputs
+        return inputs
+    ```
+
+    By default Modules are stateless. See `flax.nn.stateful` to enable stateful
+    computations.
+
+    Args:
+      name: the name of the state variable.
+      shape: optional shape passed to the initializer (default: None)
+      initializer: optional initializer function
+        taking an RNG and the shape as arguments.
+      collection: optional `flax.nn.Collection` used to store the state.
+        By default the state collection passed to the `nn.stateful` context is
+        used.
+    Returns:
+      An instance of ModuleState.
+    """
+    _top_frame('state')
+    if collection is None:
+      collection = get_state()
+    state = ModuleState(collection, name)
+    # find the frames that are in init mode
+    init_frames = [f for f in _module_stack if f.mode == 'init']
+    if initializer is not None and init_frames:
+      # use the closest frame that is initializing to get an rng
+      init_frame = init_frames[-1]
+      init_frame.rng, key = random.split(init_frame.rng)
+      init_value = initializer(key, shape)
+      state.value = init_value
+    return state
+
+  def is_stateful(self):
+    return is_stateful()
 
   def is_initializing(self):
     _top_frame('is_initializing')
@@ -607,6 +655,40 @@ def capture_module_outputs():
   with Collection().mutate() as module_outputs:
     with _module_output_trackers.frame(module_outputs):
       yield module_outputs
+
+
+class ModuleState():
+  """Tracks a state variable.
+
+  ModuleState instances should not be created directly. See `Module.state` on
+  how to create state variables inside modules.
+  """
+
+  def __init__(self, collection, name):
+    self._collection = collection
+    self._name = name
+
+  def _get_state_dict(self):
+    state_dict = self._collection.retrieve(default={})
+    assert isinstance(state_dict, dict)
+    return state_dict
+
+  @property
+  def name(self):
+    return self._name
+
+  @property
+  def value(self):
+    state_dict = self._get_state_dict()
+    if self._name not in state_dict:
+      raise ValueError(f'No state variable named `{self._name}` exists.')
+    return state_dict[self._name]
+
+  @value.setter
+  def value(self, v):
+    state_dict = self._get_state_dict()
+    state_dict[self._name] = v
+    self._collection.store(state_dict)
 
 
 @contextlib.contextmanager

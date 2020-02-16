@@ -68,7 +68,6 @@ flags.DEFINE_bool(
     help=('If bfloat16 should be used instead of float32.'))
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2, 3))
 def create_model(key, batch_size, image_size, model_dtype):
   input_shape = (batch_size, image_size, image_size, 3)
   model_def = models.ResNet.partial(num_classes=1000, dtype=model_dtype)
@@ -166,6 +165,7 @@ def main(argv):
     raise app.UsageError('Too many command-line arguments.')
 
   tf.enable_v2_behavior()
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   if jax.host_id() == 0:
     summary_writer = tensorboard.SummaryWriter(FLAGS.model_dir)

@@ -34,8 +34,9 @@ def shard_prng_key(prng_key):
   return jax.random.split(prng_key, num=jax.local_device_count())
 
 
-def onehot(labels, num_classes):
+def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
   x = (labels[..., None] == jnp.arange(num_classes)[None])
+  x = lax.select(x, jnp.full(x.shape, on_value), jnp.full(x.shape, off_value))
   return x.astype(jnp.float32)
 
 
