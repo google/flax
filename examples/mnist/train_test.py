@@ -18,7 +18,7 @@
 
 from absl.testing import absltest
 
-from flax.examples.mnist import train
+import train
 from jax import random
 
 import numpy as onp

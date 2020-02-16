@@ -17,7 +17,7 @@
 """Tests for flax.examples.lm1b.input_pipeline."""
 
 from absl.testing import absltest
-from flax.examples.lm1b import dynamic_batching
+import dynamic_batching
 
 
 class InputPipelineTest(absltest.TestCase):

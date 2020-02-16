@@ -21,7 +21,7 @@ import os
 import shutil
 
 from absl.testing import absltest
-from flax.examples.utils import checkpoints
+from flax.utils import checkpoints
 from jax import test_util as jtu
 import numpy as np
 

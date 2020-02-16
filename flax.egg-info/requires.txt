@@ -1,0 +1,9 @@
+numpy
+jaxlib
+jax
+tensorflow
+tensorflow-datasets
+dataclasses
+msgpack
+
+[testing]
