@@ -25,6 +25,9 @@ import jax
 
 import numpy as onp
 
+# Parse absl flags test_srcdir and test_tmpdir.
+jax.config.parse_flags_with_absl()
+
 
 class OptimizerDefTest(absltest.TestCase):
 
@@ -44,13 +47,13 @@ class OptimizerDefTest(absltest.TestCase):
     optimizer = optimizer_def.create(params)
     def loss_fn(x):
       return 2. * x
-    loss, grad = optimizer.compute_gradients(loss_fn)
+    loss, grad = optimizer.compute_gradient(loss_fn)
     self.assertEqual(loss, 2.)
     self.assertEqual(grad, 2.)
 
     def loss_aux_fn(x):
       return 3. * x, 4.
-    loss, aux, grad = optimizer.compute_gradients(loss_aux_fn)
+    loss, aux, grad = optimizer.compute_gradient(loss_aux_fn)
     self.assertEqual(loss, 3.)
     self.assertEqual(grad, 3.)
     self.assertEqual(aux, 4.)

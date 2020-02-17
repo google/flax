@@ -19,13 +19,17 @@ import jax.numpy as jnp
 import numpy as np
 
 
-def shift_right(x):
+def shift_right(x, train=True):
   """Shift the input to the right by padding on axis 1."""
-  pad_widths = [(0, 0)] * len(x.shape)
-  pad_widths[1] = (1, 0)  # Padding on axis=1
-  padded = jnp.pad(
-      x, pad_widths, mode='constant', constant_values=x.dtype.type(0))
-  return padded[:, :-1]
+  if train:
+    pad_widths = [(0, 0)] * len(x.shape)
+    pad_widths[1] = (1, 0)  # Padding on axis=1
+    padded = jnp.pad(
+        x, pad_widths, mode='constant', constant_values=x.dtype.type(0))
+    return padded[:, :-1]
+  else:
+    # Do nothing in predict mode, as then the sequence length is 1.
+    return x
 
 
 class Embed(nn.Module):
@@ -195,59 +199,57 @@ class Transformer1DBlock(nn.Module):
     return x + y
 
 
-# TODO(levskaya): modify for 3 modes: train, eval and fast predict.
-class TransformerLM(nn.Module):
-  """Transformer Model for language modeling."""
+class Transformer(nn.Module):
+  """Transformer Model for sequence tagging."""
 
   def apply(self,
             inputs,
             vocab_size,
+            output_vocab_size,
             emb_dim=512,
             num_heads=8,
             num_layers=6,
             qkv_dim=512,
             mlp_dim=2048,
             max_len=2048,
-            train=False,
-            shift=True,
-            dropout_rate=0.1,
-            attention_dropout_rate=0.1):
+            train=True,
+            dropout_rate=0.2,
+            attention_dropout_rate=0.2):
     """Applies Transformer model on the inputs.
 
     Args:
       inputs: input data
-      vocab_size: size of the vocabulary
+      vocab_size: size of the input vocabulary
+      output_vocab_size: size of the output classes
       emb_dim: dimension of embedding
       num_heads: number of heads
       num_layers: number of layers
       qkv_dim: dimension of the query/key/value
       mlp_dim: dimension of the mlp on top of attention block
       max_len: maximum length.
-      train: bool: if model is training.
-      shift: bool: if we right-shift input - this is only disabled for
-        fast, looped single-token autoregressive decoding.
+      train: if it is training,
       dropout_rate: dropout rate
       attention_dropout_rate: dropout rate for attention weights
 
     Returns:
       output of a transformer decoder.
+
     """
     padding_mask = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)[..., None]
     assert inputs.ndim == 2  # (batch, len)
-    if shift:
-      x = shift_right(inputs)
-    x = x.astype('int32')
+
+    x = inputs.astype('int32')
     x = Embed(x, num_embeddings=vocab_size, features=emb_dim, name='embed')
+    x = nn.dropout(x, rate=dropout_rate, deterministic=not train)
     x = AddPositionEmbs(
         x, max_len=max_len, posemb_init=sinusoidal_init(max_len=max_len))
-    x = nn.dropout(x, rate=dropout_rate, deterministic=not train)
     for _ in range(num_layers):
       x = Transformer1DBlock(
           x,
           qkv_dim=qkv_dim,
           mlp_dim=mlp_dim,
           num_heads=num_heads,
-          causal_mask=True,
+          causal_mask=False,
           padding_mask=padding_mask,
           dropout_rate=dropout_rate,
           attention_dropout_rate=attention_dropout_rate,
@@ -256,7 +258,7 @@ class TransformerLM(nn.Module):
     x = nn.LayerNorm(x)
     logits = nn.Dense(
         x,
-        vocab_size,
+        output_vocab_size,
         kernel_init=nn.initializers.xavier_uniform(),
         bias_init=nn.initializers.normal(stddev=1e-6))
     return logits

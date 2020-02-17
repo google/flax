@@ -45,18 +45,17 @@ from absl import logging
 
 from flax import jax_utils
 from flax import optim
-from flax.examples.cifar10 import input_pipeline
-from flax.examples.cifar10.models import pyramidnet
-from flax.examples.cifar10.models import wideresnet
-from flax.examples.cifar10.models import wideresnet_shakeshake
-from flax.examples.utils import common_utils
-from flax.examples.utils import lr_schedule
+import input_pipeline
+from models import pyramidnet
+from models import wideresnet
+from models import wideresnet_shakeshake
 from flax.metrics import tensorboard
 import flax.nn
+from flax.training import common_utils
+from flax.training import lr_schedule
 
 import jax
 from jax import random
-
 import jax.nn
 import jax.numpy as jnp
 

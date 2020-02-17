@@ -426,6 +426,16 @@ class Module(metaclass=_ModuleMeta):
 
   @classmethod
   def call(cls, params, *args, **kwargs):
+    """Evaluate the module with the given parameters.
+
+    Args:
+      params: the parameters of the module. Typically, inital parameter values
+        are constructed using `Module.init` or `Module.init_by_shape`.
+      *args: arguments passed to the module's apply function
+      **kwargs: keyword arguments passed to the module's apply function
+    Returns:
+      The output of the module's apply function.
+    """
     instance = cls.new_instance()
     kwargs['_top_level'] = True
     return instance(params, *args, **kwargs)
@@ -695,6 +705,35 @@ class ModuleState():
 def stateful(state=None, mutable=True):
   """A context manager for stateful computations.
 
+  Module's that use the `Module.state` by default store state inside the
+  `Collection` specified by the (innermost) `nn.stateful` context manager.
+
+  Typically stateful is used in 3 different modes:
+  1. During init no existing state is available and the stateful context creates
+     a new state collection.
+  2. During training the state is passed to `nn.stateful` and the new state
+     is returned which will contain the updated state.
+  3. During evaluation the state is passed with `mutable=False` such that the
+     model can retrieve the state but is not allowed to mutate it.
+
+  Example:
+  ```
+  class MyModel(nn.Module):
+    def apply(self, x):
+      x = nn.Dense(x, 12)
+      x = nn.BatchNorm(x)
+      return x
+
+  with nn.stateful() as state:
+    _, model = MyModel.create(rng, x)
+
+  with nn.stateful(state) as new_state:
+    model(x2)
+
+  with nn.stateful(new_state, mutable=False):
+    evaluate_model(model)
+  ```
+
   Args:
     state: a `flax.nn.Collection` containing the current state.
       By default a new collection will be created.
@@ -714,7 +753,7 @@ def stateful(state=None, mutable=True):
 
 
 def is_stateful():
-  """Returns true if a stateful scope is currently active."""
+  """Returns true if a stateful scope is currently active (see `flax.nn.stateful`)."""
   return bool(_state_stack)
 
 

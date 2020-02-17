@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Language Modeling example.
+"""Sequence Tagging example.
 
-This script trains a Transformer on the lm1b dataset.
-The data is loaded using tensorflow_datasets.
+This script trains a Transformer on the Universal dependency dataset.
 """
 
 import functools
@@ -35,19 +34,19 @@ import jax
 from jax import random
 import jax.nn
 import jax.numpy as jnp
+import numpy as np
 import tensorflow.compat.v2 as tf
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string(
-    'model_dir', default=None, help=('Directory to store model data'))
+flags.DEFINE_string('model_dir', default='', help=('Directory for model data'))
 
 flags.DEFINE_integer(
-    'batch_size', default=2048, help=('Batch size for training.'))
+    'batch_size', default=32, help=('Batch size for training.'))
 
 flags.DEFINE_integer(
     'eval_frequency',
-    default=1000,
+    default=100,
     help=('Frequency of eval during training, e.g. every 1000 steps.'))
 
 flags.DEFINE_integer(
@@ -55,7 +54,7 @@ flags.DEFINE_integer(
 
 flags.DEFINE_integer(
     'num_eval_steps',
-    default=20,
+    default=-1,
     help=('Number of evaluation steps. If -1 use the whole evaluation set.'))
 
 flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
@@ -67,21 +66,34 @@ flags.DEFINE_float(
 
 flags.DEFINE_integer(
     'max_target_length',
-    default=512,
+    default=256,
     help=('maximum length of training examples.'))
-
 flags.DEFINE_integer(
     'max_eval_target_length',
-    default=2048,
+    default=256,
     help=('maximum length of eval examples.'))
 
 flags.DEFINE_integer(
     'random_seed', default=0, help=('Integer for PRNG random seed.'))
 
+# Please, download with following command line or select
+# other release at https://universaldependencies.org/#download.
+#
+# curl -# -o ud-treebanks-v2.0.tgz \
+#   https://lindat.mff.cuni.cz/repository/xmlui/bitstream/handle/11234/1-1976/ud-treebanks-v2.0.tgz
+# tar xzf ud-treebanks-v2.0.tgz
+# select the language, e.g. Ancient_Greek with acronym 'grc'
+# for instance 'train': ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-train.conllu
+# and for 'dev': ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-dev.conllu
+# and provide as flag.
+flags.DEFINE_string('train', default='', help=('path to training data.'))
+
+flags.DEFINE_string('dev', default='', help=('path to development data.'))
+
 
 @functools.partial(jax.jit, static_argnums=(1, 2))
 def create_model(key, input_shape, model_kwargs):
-  model_def = models.TransformerLM.partial(**model_kwargs)
+  model_def = models.Transformer.partial(train=False, **model_kwargs)
   _, model = model_def.create_by_shape(key, [(input_shape, jnp.float32)])
   return model
 
@@ -215,36 +227,48 @@ def compute_metrics(logits, labels, weights):
   return metrics
 
 
-def train_step(optimizer, inputs, learning_rate_fn, dropout_rng=None):
+def train_step(optimizer, batch, learning_rate_fn, dropout_rng=None):
   """Perform a single training step."""
-  weights = jnp.where(inputs > 0, 1, 0)
+  train_keys = ['inputs', 'targets']
+  (inputs, targets) = [batch.get(k, None) for k in train_keys]
 
-  # We handle PRNG splitting inside the top pmap, rather
-  # than handling it outside in the training loop - doing the
-  # latter can add some stalls to the devices.
+  weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
+
+  # It's very important to handle PRNG splitting inside the top pmap, rather
+  # than handling it outside in the training loop - doing the latter can add
+  # bad stalls to the input data transfer.
   dropout_rng, new_dropout_rng = random.split(dropout_rng)
 
   def loss_fn(model):
     """Loss function used for training."""
     with nn.stochastic(dropout_rng):
       logits = model(inputs, train=True)
-    loss, weight_sum = compute_weighted_cross_entropy(logits, inputs, weights)
+    loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights)
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
   step = optimizer.state.step
   lr = learning_rate_fn(step)
   new_optimizer, _, logits = optimizer.optimize(loss_fn, learning_rate=lr)
-  metrics = compute_metrics(logits, inputs, weights)
+  metrics = compute_metrics(logits, targets, weights)
   metrics['learning_rate'] = lr
 
   return new_optimizer, metrics, new_dropout_rng
 
 
-def eval_step(model, inputs):
-  weights = jnp.where(inputs > 0, 1, 0)
+def eval_step(model, batch):
+  """Calculate evaluation metrics on a batch."""
+  inputs, targets = batch['inputs'], batch['targets']
+  weights = jnp.where(targets > 0, 1.0, 0.0)
   logits = model(inputs, train=False)
-  return compute_metrics(logits, inputs, weights)
+  return compute_metrics(logits, targets, weights)
+
+
+def pad_examples(x, desired_batch_size):
+  """Expand batch to desired size by zeros with the shape of last slice."""
+  batch_pad = desired_batch_size - x.shape[0]
+  # Padding with zeros to avoid that they get counted in compute_metrics.
+  return np.concatenate([x, np.tile(np.zeros_like(x[-1]), (batch_pad, 1))])
 
 
 def main(argv):
@@ -262,6 +286,11 @@ def main(argv):
   max_eval_target_length = FLAGS.max_eval_target_length
   random_seed = FLAGS.random_seed
 
+  if not FLAGS.dev:
+    raise app.UsageError('Please provide path to dev set.')
+  if not FLAGS.train:
+    raise app.UsageError('Please provide path to training set.')
+
   if jax.host_id() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
         os.path.join(FLAGS.model_dir, 'train'))
@@ -270,19 +299,37 @@ def main(argv):
 
   if batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
-  train_ds, eval_ds, info_ds = input_pipeline.get_lm1b_datasets(
-      n_devices=jax.local_device_count(),
+  device_batch_size = batch_size // jax.device_count()
+
+  # create the training and development dataset
+  vocabs = input_pipeline.create_vocabs(FLAGS.train)
+  attributes_input = [input_pipeline.CoNLLAttributes.FORM]
+  attributes_target = [input_pipeline.CoNLLAttributes.XPOS]
+  train_ds = input_pipeline.sentence_dataset_dict(
+      FLAGS.train,
+      vocabs,
+      attributes_input,
+      attributes_target,
       batch_size=batch_size,
-      dynamic_batching=True,
-      max_target_length=max_target_length,
-      max_eval_target_length=max_eval_target_length)
-  vocab_size = info_ds['text'].encoder.vocab_size
+      bucket_size=max_target_length)
 
+  eval_ds = input_pipeline.sentence_dataset_dict(
+      FLAGS.dev,
+      vocabs,
+      attributes_input,
+      attributes_target,
+      batch_size=batch_size,
+      bucket_size=max_target_length,
+      repeat=1)
   train_iter = iter(train_ds)
-  input_shape = (batch_size, max_target_length)
+  bs = device_batch_size * jax.device_count()
 
-  transformer_lm_kwargs = {
-      'vocab_size': vocab_size,
+  rng = random.PRNGKey(random_seed)
+  rng, init_rng = random.split(rng)
+  input_shape = (bs, max_target_length)
+  transformer_kwargs = {
+      'vocab_size': len(vocabs['forms']),
+      'output_vocab_size': len(vocabs['xpos']),
       'emb_dim': 512,
       'num_heads': 8,
       'num_layers': 6,
@@ -290,10 +337,8 @@ def main(argv):
       'mlp_dim': 2048,
       'max_len': max(max_target_length, max_eval_target_length)
   }
+  model = create_model(init_rng, tuple(input_shape), transformer_kwargs)
 
-  rng = random.PRNGKey(random_seed)
-  rng, init_rng = random.split(rng)
-  model = create_model(init_rng, input_shape, transformer_lm_kwargs)
   optimizer = create_optimizer(model, learning_rate)
   del model  # don't keep a copy of the initial model
   learning_rate_fn = create_learning_rate_scheduler(
@@ -312,6 +357,7 @@ def main(argv):
   tick = time.time()
   for step, batch in zip(range(num_train_steps), train_iter):
     batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
+
     optimizer, metrics, dropout_rngs = p_train_step(
         optimizer, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
@@ -344,10 +390,15 @@ def main(argv):
       else:
         num_iter = range(num_eval_steps)
       for _, eval_batch in zip(num_iter, eval_iter):
-        # pylint: disable=protected-access
-        eval_batch = common_utils.shard(
-            jax.tree_map(lambda x: x._numpy(), eval_batch))
-        # pylint: enable=protected-access
+        eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
+        # Handle final odd-sized batch by padding instead of dropping it.
+        cur_pred_batch_size = eval_batch['inputs'].shape[0]
+        if cur_pred_batch_size != batch_size:
+          logging.info('Uneven batch size %d.', cur_pred_batch_size)
+          eval_batch = jax.tree_map(
+              lambda x: pad_examples(x, batch_size), eval_batch)
+        eval_batch = common_utils.shard(eval_batch)
+
         metrics = p_eval_step(optimizer.target, eval_batch)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
@@ -356,10 +407,12 @@ def main(argv):
       eval_summary = jax.tree_map(
           lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
           eval_metrics_sums)
+
       # Calculate (clipped) perplexity after averaging log-perplexities:
       eval_summary['perplexity'] = jnp.clip(
           jnp.exp(eval_summary['loss']), a_max=1.0e4)
-      logging.info('eval in step: %d, loss: %.4f', step, eval_summary['loss'])
+      logging.info('eval in step: %d, loss: %.4f, accuracy: %.4f', step,
+                   eval_summary['loss'], eval_summary['accuracy'])
       if jax.host_id() == 0:
         for key, val in eval_summary.items():
           eval_summary_writer.scalar(key, val, step)

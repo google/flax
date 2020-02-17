@@ -13,10 +13,6 @@
 # limitations under the License.
 
 """Wide Resnet Model for CIFAR-10 image classification."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import google_type_annotations
-from __future__ import print_function
 
 from flax import nn
 import jax

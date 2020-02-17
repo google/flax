@@ -60,6 +60,7 @@ class ResNet(nn.Module):
       raise ValueError('Please provide a valid number of layers')
     block_sizes = _block_size_options[num_layers]
     x = nn.Conv(x, num_filters, (7, 7), (2, 2),
+                padding=[(3, 3), (3, 3)],
                 bias=False,
                 dtype=dtype,
                 name='init_conv')

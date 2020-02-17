@@ -63,6 +63,7 @@ distributed_train_step = jax.pmap(train_step, axis_name='batch')
 
 import abc
 from typing import Any
+import warnings
 
 from . import jax_utils
 from . import serialization
@@ -225,10 +226,10 @@ class Optimizer:
   target: Any
 
   def apply_gradient(self, grads, **hyper_param_overrides):
-    """Applies a list of gradients to the target.
+    """Applies a pytree of gradients to the target.
 
     Args:
-      grads: A list of gradients.
+      grads: A pytree of gradients.
       **hyper_param_overrides: the hyper parameters passed to apply_gradient
         will overide the defaults specified in the `OptimizerDef`.
         Pass `hyper_params=...` to replace all hyper parameters.
@@ -241,15 +242,15 @@ class Optimizer:
         hyper_params, self.target, self.state, grads)
     return self.replace(target=new_target, state=new_state)
 
-  def compute_gradients(self, loss_fn):
-    """Computes gradients of loss_fn.
+  def compute_gradient(self, loss_fn):
+    """Computes gradient of loss_fn.
 
     Args:
       loss_fn: a function that receives the target and returns a loss or a
         tuple of the loss and auxiliary outputs.
     Returns:
       A tuple consisting of the loss, auxiliary outputs if any,
-        and a list of gradients.
+        and a list of gradient.
     """
     def loss_wrapper(target):
       loss_and_aux = loss_fn(target)
@@ -263,9 +264,13 @@ class Optimizer:
       return loss, grad
     else:
       return loss, aux, grad
+  compute_gradients = compute_gradient
 
   def optimize(self, loss_fn, **hyper_param_overrides):
     """Optimizes the target with respect to a loss function.
+
+    DEPRECATION WARNING:
+    optimize is deprecated use compute_gradient and apply_gradient instead.
 
     Args:
       loss_fn:  function that receives the target and returns a loss or a
@@ -277,7 +282,11 @@ class Optimizer:
       A tuple consisting of the new optimizer, the loss,
         and the auxiliary outputs if any.
     """
-    output_and_grad = self.compute_gradients(loss_fn)
+    warnings.warn('optimize will be removed soon.'
+                  ' Use compute_gradient and apply_gradient instead.',
+                  DeprecationWarning)
+
+    output_and_grad = self.compute_gradient(loss_fn)
     grad = output_and_grad[-1]
     optimizer = self.apply_gradient(grad, **hyper_param_overrides)
     return (optimizer,) + output_and_grad[:-1]
@@ -336,7 +345,14 @@ serialization.register_serialization_state(
 
 
 class ReplicatedOptimizer(OptimizerDef):
-  """Data parallel optimizer."""
+  """Data parallel optimizer.
+
+  DEPRECATION WARNING:
+  ReplicatedOptimizer will be removed soon.
+  Use `jax_utils.replicate(optimizer)` and `jax_utils.pmean(grad)` to explicitly
+  control the replication of the the optimizer and the cross replica averaging
+  over gradients, respectively.
+  """
 
   def __init__(self, optimizer_def, devices=None, axis_name='batch'):
     super().__init__(optimizer_def.hyper_params)

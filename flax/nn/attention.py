@@ -128,7 +128,8 @@ def dot_product_attention(query,
       keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
     else:
       keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
-    multiplier = keep.astype(attn_weights.dtype) / keep_prob.astype(dtype)
+    multiplier = (keep.astype(attn_weights.dtype) /
+                  jnp.asarray(keep_prob, dtype=dtype))
     attn_weights = attn_weights * multiplier
 
   # compute the new values given the attention weights

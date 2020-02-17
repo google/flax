@@ -17,7 +17,12 @@
 """Tests for flax.examples.lm1b.input_pipeline."""
 
 from absl.testing import absltest
-from flax.examples.lm1b import dynamic_batching
+
+import dynamic_batching
+import jax
+
+# Parse absl flags test_srcdir and test_tmpdir.
+jax.config.parse_flags_with_absl()
 
 
 class InputPipelineTest(absltest.TestCase):
