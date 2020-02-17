@@ -1,0 +1,13 @@
+.. currentmodule:: flax
+
+Public API: flax package
+=======================
+
+Subpackages
+-----------
+
+.. toctree::
+    :maxdepth: 1
+
+    flax.nn
+    flax.optim

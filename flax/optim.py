@@ -21,43 +21,41 @@ initialization and gradient application logic.
 Creating an optimizer using the `create` method will result in an instance of
 the `Optimizer` class which encapsulates the optimization target and state.
 
-Example of constructing an optimizer for a model.
-```
-from flax import optim
-optimizer_def = optim.GradientDescent(learning_rate=0.1)
-optimizer = optimizer_def.create(model)
-```
+Example of constructing an optimizer for a model::
 
-The optimizer is then used in a training step as follows:
-```
-def train_step(optimizer, data):
-  def loss_fn(model):
-    y = model(data)
-    loss = ... # compute the loss
-    aux = ... # compute auxiliary outputs (eg. training metrics)
-    return loss, aux
-  new_optimizer, loss, aux = optimizer.optimize(loss_fn)
-  return new_optimizer, loss, aux
-```
+  from flax import optim
+  optimizer_def = optim.GradientDescent(learning_rate=0.1)
+  optimizer = optimizer_def.create(model)
 
-Distributed training only requires a few extra additions:
-```
-from flax import optim
-optimizer_def = optim.GradientDescent(learning_rate=0.1)
-optimizer = optimizer_def.create(model)
-optimizer = optimizer.replicate(axis_name='batch')
+The optimizer is then used in a training step as follows::
 
-def train_step(optimizer, data):
-  def loss_fn(model):
-    y = model(data)
-    loss = ... # compute the loss
-    aux = ... # compute auxiliary outputs (eg. training metrics)
-    return loss, aux
-  new_optimizer, loss, aux = optimizer.optimize(loss_fn)
-  return new_optimizer, loss, aux
+  def train_step(optimizer, data):
+    def loss_fn(model):
+      y = model(data)
+      loss = ... # compute the loss
+      aux = ... # compute auxiliary outputs (eg. training metrics)
+      return loss, aux
+    new_optimizer, loss, aux = optimizer.optimize(loss_fn)
+    return new_optimizer, loss, aux
 
-distributed_train_step = jax.pmap(train_step, axis_name='batch')
-```
+
+Distributed training only requires a few extra additions::
+
+  from flax import optim
+  optimizer_def = optim.GradientDescent(learning_rate=0.1)
+  optimizer = optimizer_def.create(model)
+  optimizer = optimizer.replicate(axis_name='batch')
+
+  def train_step(optimizer, data):
+    def loss_fn(model):
+      y = model(data)
+      loss = ... # compute the loss
+      aux = ... # compute auxiliary outputs (eg. training metrics)
+      return loss, aux
+    new_optimizer, loss, aux = optimizer.optimize(loss_fn)
+    return new_optimizer, loss, aux
+
+  distributed_train_step = jax.pmap(train_step, axis_name='batch')
 
 """
 
@@ -397,15 +395,15 @@ class MultiOptimizer(OptimizerDef):
     A MultiOptimizer is useful when seperate optimizer algorithms should be
     applied to various subsets of the model parameters.
 
-    Example:
-    ```
-    kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
-    biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
-    kernel_opt = optim.Momentum(learning_rate=0.01)
-    bias_opt = optim.Momentum(learning_rate=0.1)
-    opt_def = MultiOptimizer((kernels, kernel_opt), (biases, bias_opt))
-    optimizer = opt_def.create(model)
-    ```
+    Example::
+    
+      kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
+      biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
+      kernel_opt = optim.Momentum(learning_rate=0.01)
+      bias_opt = optim.Momentum(learning_rate=0.1)
+      opt_def = MultiOptimizer((kernels, kernel_opt), (biases, bias_opt))
+      optimizer = opt_def.create(model)
+
 
     Args:
       *traversals_and_optimizers: pairs of flax.traverse_util.Traversal and
