@@ -24,12 +24,12 @@ class PrefetchIterator:
   """Wraps an iterator to provide async prefetching.
 
   This class is particulary useful for making data loading using TensorFlow
-    more effficient. Currently, the numpy iterator in TensorFlow will not
-    automatically prefetch data in the background:
-  ```
-  tf_iter = dataset.as_numpy_iterator()  # only loads data while calling next
-  tf_iter = PrefetchIterator(tf_iter)  # prefetches data in the background
-  ```
+  more effficient. Currently, the numpy iterator in TensorFlow will not
+  automatically prefetch data in the background::
+
+    tf_iter = dataset.as_numpy_iterator()  # only loads data while calling next
+    tf_iter = PrefetchIterator(tf_iter)  # prefetches data in the background
+
   """
 
   def __init__(self, data_iter, buffer_size=1):

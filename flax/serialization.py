@@ -248,7 +248,7 @@ def msgpack_restore(encoded_pytree):
 
   Returns:
     Python tree of dict, list, tuple with python primitive
-      and array leaves.
+    and array leaves.
   """
   return msgpack.unpackb(
       encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False)

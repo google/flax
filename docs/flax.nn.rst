@@ -3,26 +3,21 @@ flax.nn package
 =================
 
 .. currentmodule:: flax.nn
-
-.. toctree::
-    :maxdepth: 1
-
-    flax.nn.initializers
-
 .. automodule:: flax.nn
 
 
 Module abstraction
 ------------------------
 
+.. autoclass:: Module
+   :members: create, create_by_shape, init, init_by_shape, partial, shared, apply, param, get_param, state, is_stateful, is_initializing
+
 .. autosummary::
   :toctree: _autosummary
 
-    Module
     Model
     Collection
     capture_module_outputs
-    module
     stateful
     get_state
     module_method
@@ -82,7 +77,7 @@ Activation functions
     swish
 
 
-Stochastic modules
+Stochastic functions
 ------------------------
 
 .. autosummary::
@@ -92,7 +87,6 @@ Stochastic modules
     stochastic
     is_stochastic
     dropout
-
 
 
 Attention primitives

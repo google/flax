@@ -18,30 +18,25 @@
 
 A Traversal can be used to iterate and update complex data structures.
 Traversals take in an object and return a subset of its contents.
-For example, a Traversal could select an attribute of an object:
+For example, a Traversal could select an attribute of an object::
 
-```
-x = Foo(foo=1)
-traverse_util.TraverseAttr('foo').iterate(x) # [1]
-```
+  x = Foo(foo=1)
+  traverse_util.TraverseAttr('foo').iterate(x) # [1]
+
 
 More complex traversals can be constructed using composition.
 It is often useful to start from the identity traversal and use a method chain
-to construct the intented Traversal:
+to construct the intented Traversal::
 
-```
 data = [{'foo': 1, 'bar': 2}, {'foo': 3, 'bar': 4}]
 traversal = traverse_util.t_identity.each()['foo']
 traversal.iterate(data) # [1, 3]
-```
 
-Traversals can also be used to make changes using the `update` method:
+Traversals can also be used to make changes using the `update` method::
 
-```
-data = {'foo': Foo(bar=2)}
-traversal = traverse_util.t_identity['foo'].bar
-traversal.update(lambda x: x + x, data) # {'foo': Foo(bar=4)}
-```
+  data = {'foo': Foo(bar=2)}
+  traversal = traverse_util.t_identity['foo'].bar
+  traversal.update(lambda x: x + x, data) # {'foo': Foo(bar=4)}
 
 Traversals never mutate the original data. Therefore, an update essentially
 returns a copy of the data including the provided updates.

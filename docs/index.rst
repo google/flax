@@ -11,9 +11,9 @@ Welcome to Flax's documentation!
    :caption: Guides:
 
    philosophy
-   contributing
-   annotated_mnist
    notebooks/flax_intro
+   annotated_mnist
+   contributing
 
 .. toctree::
    :maxdepth: 3

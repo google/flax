@@ -11,3 +11,6 @@ Subpackages
 
     flax.nn
     flax.optim
+    flax.serialization
+    flax.struct
+    flax.jax_utils
