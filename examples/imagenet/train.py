@@ -27,9 +27,9 @@ from absl import logging
 from flax import jax_utils
 from flax import nn
 from flax import optim
-from flax.examples.imagenet import input_pipeline
-from flax.examples.imagenet import models
-from flax.examples.utils import common_utils
+from . import input_pipeline
+from . import models
+from flax.utils import common_utils
 from flax.metrics import tensorboard
 
 import jax
