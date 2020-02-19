@@ -69,6 +69,7 @@ class BatchNorm(base.Module):
     Returns:
       Normalized inputs (this same shape as inputs).
     """
+    x = jnp.asarray(x, jnp.float32)
     axis = axis if isinstance(axis, tuple) else (axis,)
     axis = _absolute_dims(x.ndim, axis)
     feature_shape = tuple(d if i in axis else 1 for i, d in enumerate(x.shape))
@@ -105,12 +106,11 @@ class BatchNorm(base.Module):
     y = x - mean
     mul = lax.rsqrt(var + epsilon)
     if scale:
-      mul = mul * jnp.asarray(self.param('scale', feature_shape, scale_init),
-                              dtype)
+      mul = mul * self.param('scale', feature_shape, scale_init)
     y = y * mul
     if bias:
-      y = y + jnp.asarray(self.param('bias', feature_shape, bias_init), dtype)
-    return y
+      y = y + self.param('bias', feature_shape, bias_init)
+    return jnp.asarray(y, dtype)
 
 
 class LayerNorm(base.Module):
@@ -171,6 +171,7 @@ class GroupNorm(base.Module):
             num_groups=32,
             group_size=None,
             epsilon=1e-6,
+            dtype=jnp.float32,
             bias=True,
             scale=True,
             bias_init=initializers.zeros,
@@ -193,6 +194,7 @@ class GroupNorm(base.Module):
         proposed by the original group normalization paper.
       group_size: the number of channels in a group.
       epsilon: A small float added to variance to avoid dividing by zero.
+      dtype: the dtype of the computation (default: float32).
       bias:  If True, bias (beta) is added.
       scale: If True, multiply by scale (gamma). When the next layer is linear
         (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -204,6 +206,7 @@ class GroupNorm(base.Module):
       Normalized inputs (the same shape as inputs).
 
     """
+    x = jnp.asarray(x, jnp.float32)
     if ((num_groups is None and group_size is None) or
         (num_groups is not None and group_size is not None)):
       raise ValueError('Either `num_groups` or `group_size` should be '
@@ -238,4 +241,4 @@ class GroupNorm(base.Module):
     if bias:
       x = x + self.param('bias', feature_shape, bias_init)
 
-    return x
+    return x.astype(dtype)

@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for flax.examples.utils.checkpoints."""
+"""Tests for flax.training.checkpoints."""
 
 import contextlib
 import copy
@@ -21,9 +21,13 @@ import os
 import shutil
 
 from absl.testing import absltest
-from flax.examples.utils import checkpoints
+from flax.training import checkpoints
+import jax
 from jax import test_util as jtu
 import numpy as np
+
+# Parse absl flags test_srcdir and test_tmpdir.
+jax.config.parse_flags_with_absl()
 
 
 def shuffle(l):

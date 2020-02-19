@@ -13,13 +13,9 @@
 # limitations under the License.
 
 """PyramidNet with Shake-Drop."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import google_type_annotations
-from __future__ import print_function
 
 from flax import nn
-from flax.examples.cifar10.models import utils
+import utils
 import jax
 import jax.numpy as jnp
 

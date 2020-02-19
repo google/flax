@@ -18,10 +18,14 @@
 
 from absl.testing import absltest
 
-from flax.examples.mnist import train
+import train
+import jax
 from jax import random
 
 import numpy as onp
+
+# Parse absl flags test_srcdir and test_tmpdir.
+jax.config.parse_flags_with_absl()
 
 
 class TrainTest(absltest.TestCase):

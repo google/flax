@@ -27,18 +27,15 @@ from absl import logging
 
 from flax import jax_utils
 from flax import optim
-
-from flax.examples.utils import common_utils
-from flax.examples.utils import lr_schedule
-from flax.examples.wip.moco import imagenet_data_source
-from flax.examples.wip.moco import model_resnet
-
+import imagenet_data_source
+import model_resnet
 from flax.metrics import tensorboard
 import flax.nn
+from flax.training import common_utils
+from flax.training import lr_schedule
 
 import jax
 from jax import lax
-
 import jax.nn
 import jax.numpy as jnp
 

@@ -27,10 +27,10 @@ from absl import logging
 from flax import jax_utils
 from flax import nn
 from flax import optim
-from flax.examples.imagenet import input_pipeline
-from flax.examples.imagenet import models
-from flax.examples.utils import common_utils
+import input_pipeline
+import models
 from flax.metrics import tensorboard
+from flax.training import common_utils
 
 import jax
 from jax import random
@@ -64,8 +64,13 @@ flags.DEFINE_string(
     help=('Directory to store model data'))
 
 flags.DEFINE_bool(
-    'use_bfloat16', default=False,
-    help=('If bfloat16 should be used instead of float32.'))
+    'half_precision', default=False,
+    help=('If bfloat16/float16 should be used instead of float32.'))
+
+flags.DEFINE_float(
+    'loss_scaling', default=1.,
+    help=('Rescale the loss to avoid underflow when training with'
+          ' reduced precision'))
 
 
 def create_model(key, batch_size, image_size, model_dtype):
@@ -74,14 +79,6 @@ def create_model(key, batch_size, image_size, model_dtype):
   with nn.stateful() as init_state:
     _, model = model_def.create_by_shape(key, [(input_shape, model_dtype)])
   return model, init_state
-
-
-def create_optimizer(model, beta):
-  optimizer_def = optim.Momentum(beta=beta,
-                                 nesterov=True)
-  optimizer = optimizer_def.create(model)
-  optimizer = optimizer.replicate()
-  return optimizer
 
 
 def cross_entropy_loss(logits, labels):
@@ -132,14 +129,17 @@ def train_step(optimizer, state, batch, learning_rate_fn):
                      if x.ndim > 1])
     weight_penalty = weight_decay * 0.5 * weight_l2
     loss = loss + weight_penalty
-    return loss, (new_state, logits)
+    return loss * FLAGS.loss_scaling, (new_state, logits)
 
   step = optimizer.state.step
   lr = learning_rate_fn(step)
-  new_optimizer, _, (new_state, logits) = optimizer.optimize(
-      loss_fn, learning_rate=lr)
+  _, (new_state, logits), grad = optimizer.compute_gradient(loss_fn)
+
+  # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
+  grad = jax_utils.pmean(grad, axis_name='batch')
+  new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
-  metrics['learning_rate'] = lr
+  metrics['learning_rate'] = lr * FLAGS.loss_scaling
   return new_optimizer, new_state, metrics
 
 
@@ -180,8 +180,18 @@ def main(argv):
   local_batch_size = batch_size // jax.host_count()
   device_batch_size = batch_size // jax.device_count()
 
-  model_dtype = jnp.bfloat16 if FLAGS.use_bfloat16 else jnp.float32
-  input_dtype = tf.bfloat16 if FLAGS.use_bfloat16 else tf.float32
+  platform = jax.local_devices()[0].platform
+
+  if FLAGS.half_precision:
+    if platform == 'tpu':
+      model_dtype = jnp.bfloat16
+      input_dtype = tf.bfloat16
+    else:
+      model_dtype = jnp.float16
+      input_dtype = tf.float16
+  else:
+    model_dtype = jnp.float32
+    input_dtype = tf.float32
 
   train_ds = input_pipeline.load_split(local_batch_size,
                                        image_size=image_size,
@@ -193,7 +203,12 @@ def main(argv):
                                       train=False)
 
   train_iter = iter(train_ds)
+  train_iter = map(prepare_tf_data, train_iter)
+  train_iter = jax_utils.prefetch_to_device(train_iter, 2)
+
   eval_iter = iter(eval_ds)
+  eval_iter = map(prepare_tf_data, eval_iter)
+  eval_iter = jax_utils.prefetch_to_device(eval_iter, 2)
 
   num_epochs = FLAGS.num_epochs
   steps_per_epoch = input_pipeline.TRAIN_IMAGES // batch_size
@@ -201,11 +216,14 @@ def main(argv):
   num_steps = steps_per_epoch * num_epochs
 
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
+  base_learning_rate = base_learning_rate / FLAGS.loss_scaling
 
   model, state = create_model(rng, device_batch_size, image_size, model_dtype)
-  state = jax_utils.replicate(state)
-  optimizer = create_optimizer(model, FLAGS.momentum)
+  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(model)
   del model  # do not keep a copy of the initial model
+
+  optimizer, state = jax_utils.replicate((optimizer, state))
+
   learning_rate_fn = create_learning_rate_fn(
       base_learning_rate, steps_per_epoch, num_epochs)
 
@@ -217,7 +235,6 @@ def main(argv):
   epoch_metrics = []
   epoch = 1
   for step, batch in zip(range(num_steps), train_iter):
-    batch = prepare_tf_data(batch)
     optimizer, state, metrics = p_train_step(optimizer, state, batch)
     epoch_metrics.append(metrics)
     if (step + 1) % steps_per_epoch == 0:
@@ -235,7 +252,6 @@ def main(argv):
       eval_metrics = []
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
-        eval_batch = prepare_tf_data(eval_batch)
         metrics = p_eval_step(optimizer.target, state, eval_batch)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)

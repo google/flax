@@ -27,6 +27,9 @@ import jax.numpy as jnp
 
 import numpy as onp
 
+# Parse absl flags test_srcdir and test_tmpdir.
+jax.config.parse_flags_with_absl()
+
 
 class AttentionTest(parameterized.TestCase):
 
@@ -41,6 +44,22 @@ class AttentionTest(parameterized.TestCase):
         bias_init=initializers.zeros,
     )
     y, _ = sa_module.create(rng, x)
+    self.assertEqual(y.shape, x.shape)
+
+  def test_multihead_self_attention_w_dropout(self):
+    rng = random.PRNGKey(0)
+    x = jnp.ones((4, 2, 3, 5))
+    sa_module = nn.SelfAttention.partial(
+        num_heads=8,
+        attention_axis=(1, 2),
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        dropout_rate=0.1,
+    )
+    rng1, rng2 = random.split(rng)
+    with nn.stochastic(rng1):
+      y, _ = sa_module.create(rng2, x)
     self.assertEqual(y.shape, x.shape)
 
   def test_causal_mask_1d(self):
