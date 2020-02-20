@@ -215,7 +215,7 @@ Note that no special framework support was needed.
 
  @jax.jit
  def eval(model, eval_ds):
-@@ -59,12 +59,14 @@ def train():
+@@ -56,12 +59,14 @@
    optimizer = flax.optim.Momentum(
        learning_rate=0.1, beta=0.9).create(model)
 
