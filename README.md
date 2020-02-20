@@ -193,11 +193,11 @@ an exponential moving average of parameters over the course of training.
 Note that no special framework support was needed.
 
 ```py
---- a/mnist.py	2020-02-11 18:31:29.908885934 +0900
-+++ b/mnist-polyak.py	2020-02-11 18:45:38.328158991 +0900
+--- a/mnist.py
++++ b/mnist-polyak.py
 @@ -29,14 +29,17 @@
    return {'loss': loss, 'accuracy': accuracy}
-
+ 
  @jax.jit
 -def train_step(optimizer, batch):
 +def train_step(optimizer, params_ema, batch):
@@ -212,13 +212,13 @@ Note that no special framework support was needed.
 +    lambda p_ema, p: p_ema * 0.99 + p * 0.01,
 +    params_ema, optimizer.target.params)
 +  return optimizer, params_ema
-
+ 
  @jax.jit
  def eval(model, eval_ds):
 @@ -56,12 +59,14 @@
    optimizer = flax.optim.Momentum(
        learning_rate=0.1, beta=0.9).create(model)
-
+ 
 +  params_ema = model.params
 +
    for epoch in range(10):
@@ -226,7 +226,7 @@ Note that no special framework support was needed.
        batch['image'] = batch['image'] / 255.0
 -      optimizer = train_step(optimizer, batch)
 +      optimizer, params_ema = train_step(optimizer, params_ema, batch)
-
+ 
 -    metrics = eval(optimizer.target, test_ds)
 +    metrics = eval(optimizer.target.replace(params=params_ema), test_ds)
      print('eval epoch: %d, loss: %.4f, accuracy: %.2f'
