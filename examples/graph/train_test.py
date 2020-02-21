@@ -24,6 +24,8 @@ from jax import random
 from jax import test_util as jtu
 import jax.numpy as jnp
 
+from flax import nn
+
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
@@ -51,8 +53,9 @@ class TrainTest(jtu.JaxTestCase):
     sources_perm, targets_perm = jnp.where(adjacency_perm)
 
     # Create GNN.
-    _, model = GNN.create(
-        rng, node_x=node_feats, edge_x=None, sources=sources, targets=targets)
+    _, initial_params = GNN.init(random.PRNGKey(0),
+        node_x=node_feats, edge_x=None, sources=sources, targets=targets)
+    model = nn.Model(GNN, initial_params)
 
     # Feedforward both original and permuted graph.
     logits = model(node_feats, None, sources, targets)

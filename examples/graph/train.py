@@ -155,14 +155,13 @@ def eval_step(model, node_feats, sources, targets, node_labels):
 
 def train():
   """Run main training loop."""
-  rng = random.PRNGKey(0)
-
   # Get Zachary's karate club graph dataset.
   node_feats, node_labels, sources, targets = get_karate_club_data()
 
   # Create model and optimizer.
-  _, model = GNN.create(
-      rng, node_x=node_feats, edge_x=None, sources=sources, targets=targets)
+  _, initial_params = GNN.init(random.PRNGKey(0),
+      node_x=node_feats, edge_x=None, sources=sources, targets=targets)
+  model = nn.Model(GNN, initial_params)
   optimizer = optim.Adam(learning_rate=0.01).create(model)
 
   # Train for 20 iterations.

@@ -15,7 +15,7 @@
 """PyramidNet with Shake-Drop."""
 
 from flax import nn
-import utils
+import models.utils
 import jax
 import jax.numpy as jnp
 

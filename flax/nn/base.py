@@ -230,7 +230,7 @@ def _fn_parameters(fn):
 
 
 MODULE_CLASSMETHODS = [
-    'create', 'create_by_shape', 'init', 'init_by_shape', 'call', 'partial'
+    'init', 'init_by_shape', 'call', 'partial'
 ]
 
 
@@ -340,46 +340,6 @@ class Module(metaclass=_ModuleMeta):
     PartialModule.__name__ = class_.__name__
 
     return PartialModule
-
-  @classmethod
-  def create(cls, rng, *args, name=None, **kwargs):
-    """Create a module instance by evaluating the model.
-
-    Use create_by_shape instead to initialize without doing computation.
-    Initializer functions can depend both on the shape and the value of inputs.
-
-    Args:
-      rng: the random number generator used to initialize parameters.
-      *args: arguments passed to the module's apply function
-      name: name of this module.
-      **kwargs: keyword arguments passed to the module's apply function
-    Returns:
-      A pair consisting of the model output and an instance of Model
-    """
-    instance = cls.new_instance()
-    y, params = instance._init(rng, *args, name=name, _top_level=True, **kwargs)  # pylint: disable=protected-access
-    model = Model(instance, params)
-    return y, model
-
-  @classmethod
-  def create_by_shape(cls, rng, input_specs, *args, name=None, **kwargs):
-    """Create a module instance using only shape and dtype information.
-
-    This method will initialize the model without computation.
-    Initializer functions can depend on the shape but not the value of inputs.
-
-    Args:
-      rng: the random number generator used to initialize parameters.
-      input_specs: an iterable of (shape, dtype) pairs specifying the inputs
-      *args: other arguments passed to the module's apply function
-      name: name of this module.
-      **kwargs: keyword arguments passed to the module's apply function
-    Returns:
-      A pair consisting of the model output and an instance of Model
-    """
-    def lazy_create(*inputs):
-      return cls.create(rng, *(inputs + args), name=name, **kwargs)
-    return jax_utils.partial_eval_by_shape(lazy_create, input_specs)
 
   @classmethod
   def init(cls, rng, *args, name=None, **kwargs):
@@ -772,12 +732,12 @@ def _top_frame(call_name):
 class Model:
   """A Model contains the model paramaters, state and definition."""
 
-  module: Module = struct.field(pytree_node=False)
+  module: Any = struct.field(pytree_node=False)
   params: Any
 
   def __call__(self, *args, **kwargs):
     kwargs['_top_level'] = True
-    return self.module(self.params, *args, **kwargs)
+    return self.module.call(self.params, *args, **kwargs)
 
   def truncate_at(self, module_path):
     """Truncate the model by returning the outputs of the given sub-module.

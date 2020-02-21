@@ -80,17 +80,6 @@ class CNN(nn.Module):
     return x
 
 
-def create_model(key):
-  _, model = CNN.create_by_shape(key, [((1, 28, 28, 1), jnp.float32)])
-  return model
-
-
-def create_optimizer(model, learning_rate, beta):
-  optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
-  optimizer = optimizer_def.create(model)
-  return optimizer
-
-
 def onehot(labels, num_classes=10):
   x = (labels[..., None] == jnp.arange(num_classes)[None])
   return x.astype(jnp.float32)
@@ -117,7 +106,8 @@ def train_step(optimizer, batch):
     logits = model(batch['image'])
     loss = cross_entropy_loss(logits, batch['label'])
     return loss, logits
-  optimizer, _, logits = optimizer.optimize(loss_fn)
+  _, logits, grad = optimizer.compute_gradient(loss_fn)
+  optimizer = optimizer.apply_gradient(grad)
   metrics = compute_metrics(logits, batch['label'])
   return optimizer, metrics
 
@@ -168,16 +158,23 @@ def get_datasets():
   return train_ds, test_ds
 
 
+def create_optimizer(learning_rate, momentum):
+  _, initial_params = CNN.init_by_shape(
+      random.PRNGKey(0), [((1, 28, 28, 1), jnp.float32)])
+
+  model = nn.Model(CNN, initial_params)
+
+  optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=momentum)
+  optimizer = optimizer_def.create(model)
+
+  return optimizer
+
 def train(train_ds, test_ds):
   """Train MNIST to completion."""
-  rng = random.PRNGKey(0)
-
   batch_size = FLAGS.batch_size
   num_epochs = FLAGS.num_epochs
 
-  model = create_model(rng)
-  optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
-
+  optimizer = create_optimizer(FLAGS.learning_rate, FLAGS.momentum)
   input_rng = onp.random.RandomState(0)
 
   for epoch in range(1, num_epochs + 1):
