@@ -1,3 +1,4 @@
+# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,12 +25,14 @@ from absl import app
 from absl import flags
 from absl import logging
 
+import flax
 from flax import jax_utils
 from flax import nn
 from flax import optim
 import input_pipeline
 import models
 from flax.metrics import tensorboard
+from flax.training import checkpoints
 from flax.training import common_utils
 
 import jax
@@ -115,11 +118,11 @@ def create_learning_rate_fn(base_learing_rate, steps_per_epoch, num_epochs):
   return step_fn
 
 
-def train_step(optimizer, state, batch, learning_rate_fn):
+def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
   def loss_fn(model):
     """loss function used for training."""
-    with nn.stateful(state) as new_state:
+    with nn.stateful(state.model_state) as new_model_state:
       logits = model(batch['image'])
     loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_leaves(model.params)
@@ -129,35 +132,78 @@ def train_step(optimizer, state, batch, learning_rate_fn):
                      if x.ndim > 1])
     weight_penalty = weight_decay * 0.5 * weight_l2
     loss = loss + weight_penalty
-    return loss * FLAGS.loss_scaling, (new_state, logits)
+    return loss * FLAGS.loss_scaling, (new_model_state, logits)
 
-  step = optimizer.state.step
+  step = state.step
+  optimizer = state.optimizer
   lr = learning_rate_fn(step)
-  _, (new_state, logits), grad = optimizer.compute_gradient(loss_fn)
+  _, (new_model_state, logits), grad = optimizer.compute_gradient(loss_fn)
 
   # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
   grad = jax_utils.pmean(grad, axis_name='batch')
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr * FLAGS.loss_scaling
-  return new_optimizer, new_state, metrics
+
+  new_state = state.replace(
+      step=step + 1, optimizer=new_optimizer, model_state=new_model_state)
+  return new_state, metrics
 
 
-def eval_step(model, state, batch):
-  state = common_utils.pmean(state)
-  with nn.stateful(state, mutable=False):
+def eval_step(state, batch):
+  model = state.optimizer.target
+  with nn.stateful(state.model_state, mutable=False):
     logits = model(batch['image'], train=False)
   return compute_metrics(logits, batch['label'])
 
 
 def prepare_tf_data(xs):
+  """Convert a input batch from tf Tensors to numpy arrays."""
   local_device_count = jax.local_device_count()
   def _prepare(x):
     # Use _numpy() for zero-copy conversion between TF and NumPy.
     x = x._numpy()  # pylint: disable=protected-access
+
+    # reshape (host_batch_size, height, width, 3) to
+    # (local_devices, device_batch_size, height, width, 3)
     return x.reshape((local_device_count, -1) + x.shape[1:])
 
   return jax.tree_map(_prepare, xs)
+
+
+def create_input_iter(batch_size, image_size, dtype, train):
+  ds = input_pipeline.load_split(
+      batch_size, image_size=image_size, dtype=dtype, train=train)
+  it = map(prepare_tf_data, ds)
+  it = jax_utils.prefetch_to_device(it, 2)
+  return it
+
+
+# flax.struct.dataclass enables instances of this class to be passed into jax
+# transformations like tree_map and pmap.
+@flax.struct.dataclass
+class TrainState:
+  step: int
+  optimizer: optim.Optimizer
+  model_state: nn.Collection
+
+
+def restore_checkpoint(state):
+  return checkpoints.restore_checkpoint(FLAGS.model_dir, state)
+
+
+def save_checkpoint(state):
+  if jax.host_id() == 0:
+    # get train state from the first replica
+    state = jax.device_get(jax.tree_map(lambda x: x[0], state))
+    step = int(state.step)
+    checkpoints.save_checkpoint(FLAGS.model_dir, state, step, keep=3)
+
+
+def sync_batch_stats(state):
+  """Sync the batch statistics across replicas."""
+  return state.replace(
+      model_state=jax.pmap(common_utils.pmean, 'batch')(state.model_state))
 
 
 def main(argv):
@@ -165,6 +211,7 @@ def main(argv):
     raise app.UsageError('Too many command-line arguments.')
 
   tf.enable_v2_behavior()
+  # make sure tf does not allocate gpu memory
   tf.config.experimental.set_visible_devices([], 'GPU')
 
   if jax.host_id() == 0:
@@ -193,36 +240,29 @@ def main(argv):
     model_dtype = jnp.float32
     input_dtype = tf.float32
 
-  train_ds = input_pipeline.load_split(local_batch_size,
-                                       image_size=image_size,
-                                       dtype=input_dtype,
-                                       train=True)
-  eval_ds = input_pipeline.load_split(local_batch_size,
-                                      image_size=image_size,
-                                      dtype=input_dtype,
-                                      train=False)
-
-  train_iter = iter(train_ds)
-  train_iter = map(prepare_tf_data, train_iter)
-  train_iter = jax_utils.prefetch_to_device(train_iter, 2)
-
-  eval_iter = iter(eval_ds)
-  eval_iter = map(prepare_tf_data, eval_iter)
-  eval_iter = jax_utils.prefetch_to_device(eval_iter, 2)
+  train_iter = create_input_iter(
+      local_batch_size, image_size, input_dtype, train=True)
+  eval_iter = create_input_iter(
+      local_batch_size, image_size, input_dtype, train=False)
 
   num_epochs = FLAGS.num_epochs
   steps_per_epoch = input_pipeline.TRAIN_IMAGES // batch_size
   steps_per_eval = input_pipeline.EVAL_IMAGES // batch_size
+  steps_per_checkpoint = steps_per_epoch * 10
   num_steps = steps_per_epoch * num_epochs
 
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
   base_learning_rate = base_learning_rate / FLAGS.loss_scaling
 
-  model, state = create_model(rng, device_batch_size, image_size, model_dtype)
+  model, model_state = create_model(
+      rng, device_batch_size, image_size, model_dtype)
   optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(model)
-  del model  # do not keep a copy of the initial model
+  state = TrainState(step=0, optimizer=optimizer, model_state=model_state)
+  del model, model_state  # do not keep a copy of the initial model
 
-  optimizer, state = jax_utils.replicate((optimizer, state))
+  state = restore_checkpoint(state)
+  step_offset = int(state.step)  # step_offset > 0 if restarting from checkpoint
+  state = jax_utils.replicate(state)
 
   learning_rate_fn = create_learning_rate_fn(
       base_learning_rate, steps_per_epoch, num_epochs)
@@ -233,11 +273,11 @@ def main(argv):
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   epoch_metrics = []
-  epoch = 1
-  for step, batch in zip(range(num_steps), train_iter):
-    optimizer, state, metrics = p_train_step(optimizer, state, batch)
+  for step, batch in zip(range(step_offset, num_steps), train_iter):
+    state, metrics = p_train_step(state, batch)
     epoch_metrics.append(metrics)
     if (step + 1) % steps_per_epoch == 0:
+      epoch = step // steps_per_epoch
       epoch_metrics = common_utils.get_metrics(epoch_metrics)
       summary = jax.tree_map(lambda x: x.mean(), epoch_metrics)
       logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f',
@@ -250,9 +290,12 @@ def main(argv):
 
       epoch_metrics = []
       eval_metrics = []
+
+      # sync batch statistics across replicas
+      state = sync_batch_stats(state)
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
-        metrics = p_eval_step(optimizer.target, state, eval_batch)
+        metrics = p_eval_step(state, eval_batch)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
       summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
@@ -263,9 +306,12 @@ def main(argv):
           tag = 'eval_%s' % key
           summary_writer.scalar(tag, val.mean(), step)
         summary_writer.flush()
+    if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
+      state = sync_batch_stats(state)
+      save_checkpoint(state)
 
-      epoch += 1
-
+  # Wait until computations are done before exiting
+  jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
 
 if __name__ == '__main__':
   app.run(main)
