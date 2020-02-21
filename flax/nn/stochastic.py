@@ -62,12 +62,12 @@ def make_rng():
   """Create a new unique random number generator in a stochastic scope.
 
   In combination with `nn.stochastic()` this function is used to generate random
-  keys without manually passing around and splitting a random number generator.
-  ```
-  with nn.stochastic(rng):
-    x = random.normal(nn.make_rng(), shape)
-    x_drop = nn.dropout(x, 0.5)
-  ``
+  keys without manually passing around and splitting a random number generator::
+
+    with nn.stochastic(rng):
+      x = random.normal(nn.make_rng(), shape)
+      x_drop = nn.dropout(x, 0.5)
+
 
   Returns:
     A unique jax.random.PRNGKey.

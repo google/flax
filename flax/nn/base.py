@@ -157,39 +157,37 @@ def _pop_identifiers(kwargs):
 
 
 def module_method(fn):
-  """"Decorates a function as a module method.
+  """Decorates a function as a module method.
 
   The `module_method` allows modules to have multiple methods that make use of
   the modules parameters.
 
-  Example:
-  ```
-  class MyLinearModule(nn.Module):
-    def apply(self, x, features, kernel_init):
-      kernel = self.param('kernel', (x.shape[-1], features), kernel_init)
-      return jnp.dot(x, kernel)
+  Example::
 
-    @nn.module_method
-    def apply_transpose(self, x, **kwargs):
-      kernel = self.get_param('kernel')
-      return jnp.dot(x, kernel.transpose((1, 0)))
-  ```
+    class MyLinearModule(nn.Module):
+      def apply(self, x, features, kernel_init):
+        kernel = self.param('kernel', (x.shape[-1], features), kernel_init)
+        return jnp.dot(x, kernel)
 
-  A module method can be called on A Model instance directly:
-  ```
-  y, model = MyLinearModule.create(rng, x)
-  z = model.apply_transpose(y)
-  ```
+      @nn.module_method
+      def apply_transpose(self, x, **kwargs):
+        kernel = self.get_param('kernel')
+        return jnp.dot(x, kernel.transpose((1, 0)))
 
-  Module methods can also be called on shared modules:
-  ```
-  class AutoEncoder(nn.module):
-    def apply(self, x, features):
-      linear_fn = MyLinearModule.shared(features=features)
-      h = linear_fn(x)
-      y = linear_fn.apply_transpose(h)
-      return y
-  ```
+  A module method can be called on A Model instance directly::
+
+    y, model = MyLinearModule.create(rng, x)
+    z = model.apply_transpose(y)
+
+  Module methods can also be called on shared modules::
+
+    class AutoEncoder(nn.module):
+      def apply(self, x, features):
+        linear_fn = MyLinearModule.shared(features=features)
+        h = linear_fn(x)
+        y = linear_fn.apply_transpose(h)
+        return y
+
 
   Args:
     fn: the function to be decorated
@@ -487,14 +485,13 @@ class Module(metaclass=_ModuleMeta):
     """Declare a state variable within the module's apply function.
 
     A state variable has an attribute value which can be updated by simply
-      assigning a value to it. For example:
-    ```
-    class Example(nn.Module):
-      def apply(self, inputs, decay=0.9):
-        ema = self.state('ema', inputs.shape, initializers.zeros)
-        ema.value = decay * ema.value + (1 - decay) * inputs
-        return inputs
-    ```
+    assigning a value to it. For example::
+
+      class Example(nn.Module):
+        def apply(self, inputs, decay=0.9):
+          ema = self.state('ema', inputs.shape, initializers.zeros)
+          ema.value = decay * ema.value + (1 - decay) * inputs
+          return inputs
 
     By default Modules are stateless. See `flax.nn.stateful` to enable stateful
     computations.
@@ -709,6 +706,7 @@ def stateful(state=None, mutable=True):
   `Collection` specified by the (innermost) `nn.stateful` context manager.
 
   Typically stateful is used in 3 different modes:
+
   1. During init no existing state is available and the stateful context creates
      a new state collection.
   2. During training the state is passed to `nn.stateful` and the new state
@@ -716,23 +714,22 @@ def stateful(state=None, mutable=True):
   3. During evaluation the state is passed with `mutable=False` such that the
      model can retrieve the state but is not allowed to mutate it.
 
-  Example:
-  ```
-  class MyModel(nn.Module):
-    def apply(self, x):
-      x = nn.Dense(x, 12)
-      x = nn.BatchNorm(x)
-      return x
+  Example::
 
-  with nn.stateful() as state:
-    _, model = MyModel.create(rng, x)
+    class MyModel(nn.Module):
+      def apply(self, x):
+        x = nn.Dense(x, 12)
+        x = nn.BatchNorm(x)
+        return x
 
-  with nn.stateful(state) as new_state:
-    model(x2)
+    with nn.stateful() as state:
+      _, model = MyModel.create(rng, x)
 
-  with nn.stateful(new_state, mutable=False):
-    evaluate_model(model)
-  ```
+    with nn.stateful(state) as new_state:
+      model(x2)
+
+    with nn.stateful(new_state, mutable=False):
+      evaluate_model(model)
 
   Args:
     state: a `flax.nn.Collection` containing the current state.

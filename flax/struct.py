@@ -30,29 +30,29 @@ def dataclass(clz):
   Jax transformations such as `jax.jit` and `jax.grad` require objects that are
   immutable and can be mapped over using the `jax.tree_util` methods.
   The `dataclass` decorator makes it easy to define custom classes that can be
-  passed safely to Jax. For example:
-  ```
-  from flax import struct
-  @struct.dataclass
-  class Model():
-    params: Any
-    # use pytree_node=False to indicate an attribute should not be touched
-    # by Jax transformations.
-    apply_fn: FunctionType = struct.field(pytree_node=False)
+  passed safely to Jax. For example::
 
-    def __apply__(self, *args):
-      return self.apply_fn(*args)
+    from flax import struct
 
-  model = Model(params, apply_fn)
+    @struct.dataclass
+    class Model():
+      params: Any
+      # use pytree_node=False to indicate an attribute should not be touched
+      # by Jax transformations.
+      apply_fn: FunctionType = struct.field(pytree_node=False)
 
-  model.params = params_b  # Model is immutable. This will raise an error.
-  model_b = model.replace(params=params_b)  # Use the replace method instead.
+      def __apply__(self, *args):
+        return self.apply_fn(*args)
 
-  # This class can know be used safely in Jax to for example to compute
-  # gradients w.r.t. the parameters.
-  model = Model(params, apply_fn)
-  model_grad = jax.grad(some_loss_fn)(model)
-  ```
+    model = Model(params, apply_fn)
+
+    model.params = params_b  # Model is immutable. This will raise an error.
+    model_b = model.replace(params=params_b)  # Use the replace method instead.
+
+    # This class can know be used safely in Jax to for example to compute
+    # gradients w.r.t. the parameters.
+    model = Model(params, apply_fn)
+    model_grad = jax.grad(some_loss_fn)(model)
 
   Args:
     clz: the class that will be transformed by the decorator.

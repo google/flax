@@ -1,0 +1,11 @@
+sphinx
+sphinx_rtd_theme
+jax
+ipykernel
+nbsphinx
+recommonmark
+# The next packages are for notebooks
+matplotlib
+sklearn
+# Must install flax itself for notebook execution to work
+.

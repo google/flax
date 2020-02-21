@@ -4,3 +4,4 @@ jax
 # tensorflow is needed for tensorflow-datasets
 tensorflow
 tensorflow-datasets
+msgpack
