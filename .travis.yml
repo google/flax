@@ -20,6 +20,7 @@ before_install:
 install:
   - conda install --yes python=$TRAVIS_PYTHON_VERSION pip absl-py opt_einsum numpy scipy pytest-xdist pytest-benchmark
   - pip install jaxlib jax
+  - pip install tensorflow tensorflow-datasets
   - pip install -v .
 script:
   # make default temporary dir for absl tests
