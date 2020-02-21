@@ -6,11 +6,14 @@ flax.nn package
 .. automodule:: flax.nn
 
 
-Module abstraction
+Core: Module abstraction
 ------------------------
 
 .. autoclass:: Module
    :members: create, create_by_shape, init, init_by_shape, partial, shared, apply, param, get_param, state, is_stateful, is_initializing
+
+Core: Additional
+------------------------
 
 .. autosummary::
   :toctree: _autosummary
