@@ -30,8 +30,6 @@ install_requires = [
     "numpy",
     "jaxlib",
     "jax",
-    "tensorflow",  # Only needed for tensorflow-datasets
-    "tensorflow-datasets",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses",  # will only install on py3.6
     "msgpack",
