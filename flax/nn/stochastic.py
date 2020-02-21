@@ -67,7 +67,7 @@ def make_rng():
     with nn.stochastic(rng):
       x = random.normal(nn.make_rng(), shape)
       x_drop = nn.dropout(x, 0.5)
-  
+
 
   Returns:
     A unique jax.random.PRNGKey.

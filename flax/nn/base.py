@@ -180,14 +180,14 @@ def module_method(fn):
     z = model.apply_transpose(y)
 
   Module methods can also be called on shared modules::
-  
+
     class AutoEncoder(nn.module):
       def apply(self, x, features):
         linear_fn = MyLinearModule.shared(features=features)
         h = linear_fn(x)
         y = linear_fn.apply_transpose(h)
         return y
-  
+
 
   Args:
     fn: the function to be decorated

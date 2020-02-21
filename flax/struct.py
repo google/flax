@@ -33,7 +33,7 @@ def dataclass(clz):
   passed safely to Jax. For example::
 
     from flax import struct
-    
+
     @struct.dataclass
     class Model():
       params: Any

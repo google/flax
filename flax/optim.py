@@ -396,7 +396,7 @@ class MultiOptimizer(OptimizerDef):
     applied to various subsets of the model parameters.
 
     Example::
-    
+
       kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
       biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
       kernel_opt = optim.Momentum(learning_rate=0.01)

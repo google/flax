@@ -18,6 +18,5 @@ Welcome to Flax's documentation!
 .. toctree::
    :maxdepth: 3
    :caption: API reference:
-   
-   flax
 
+   flax

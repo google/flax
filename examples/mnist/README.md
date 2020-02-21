@@ -2,7 +2,7 @@
 
 Please run:
 
-``` 
+```
 > python train.py
 ```
 
