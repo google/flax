@@ -16,7 +16,7 @@ State dicts
 .. autofunction:: register_serialization_state
 
 
-Message pack
+Serialization with MessagePack
 ------------------------
 
 .. autofunction:: msgpack_serialize

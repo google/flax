@@ -16,7 +16,11 @@ Welcome to Flax's documentation!
    contributing
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 2
    :caption: API reference:
 
-   flax
+   flax.nn
+   flax.optim
+   flax.serialization
+   flax.struct
+   flax.jax_utils
