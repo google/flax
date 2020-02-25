@@ -1,3 +1,5 @@
+# Lint as: python3
+
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,3 +51,15 @@ class CallStack(object):
   def __getitem__(self, key):
     return self._frames.__getitem__(key)
 
+
+def classproperty(f):
+  """decorator that registers a function as a read-only property of the class."""
+
+  class _ClassProperty:
+
+    def __get__(self, _, cls):
+      # python will call the __get__ magic function whenever the property is
+      # read from the class.
+      return f(cls)
+
+  return _ClassProperty()

@@ -191,9 +191,9 @@ class ModuleTest(absltest.TestCase):
     with nn.capture_module_outputs() as activations:
       model(x)
     expected_activations = {
-        '/': x + 2,
-        '/dummy_0:0': x + 1,
-        '/dummy_1:0': x + 2,
+        '/': [x + 2],
+        '/dummy_0': [x + 1],
+        '/dummy_1': [x + 2],
     }
     self.assertEqual(activations.as_dict(), expected_activations)
 
@@ -204,9 +204,9 @@ class ModuleTest(absltest.TestCase):
     with nn.capture_module_outputs() as activations:
       model(x, inner_model)
     expected_activations = {
-        '/': x + 2,
-        '/dummy_0:0': x + 1,
-        '/inner_model:0': x + 2,
+        '/': [x + 2],
+        '/dummy_0': [x + 1],
+        '/inner_model': [x + 2],
     }
     self.assertEqual(activations.as_dict(), expected_activations)
 
@@ -215,7 +215,7 @@ class ModuleTest(absltest.TestCase):
     _, model = NestedModule.create(random.PRNGKey(0), x)
     model = model.truncate_at('/dummy_0')
     y = model(x)
-    self.assertEqual(y, x + 1)
+    self.assertEqual(y, [x + 1])
 
   def test_call_module_method(self):
     class MultiMethod(nn.Module):
@@ -284,29 +284,36 @@ class CollectionTest(absltest.TestCase):
     with nn.Collection().mutate() as activations:
       (_, y), model = CollectionModule.create(rng, x, activations)
       self.assertEqual(y, None)
-      _, y2 = model(x, activations)
+    with activations.mutate() as new_activations:
+      _, y2 = model(x, new_activations)
     self.assertEqual(y2, jnp.array([2.]))
 
   def test_collection_multiple_calls(self):
     rng = random.PRNGKey(0)
-    x = jnp.array([1.])
     with nn.Collection().mutate() as activations:
-      _, _ = LoopModule.create(rng, x, activations)
-    expected_state = {
-        '/dummy:0': jnp.array([2.]),
-        '/dummy:1': jnp.array([3.]),
-    }
-    self.assertEqual(activations.state, expected_state)
-
-  def test_collection_multiple_calls_shared(self):
-    rng = random.PRNGKey(0)
-    with nn.Collection(shared=True).mutate() as activations:
       x = jnp.array([1.])
       _, _ = LoopModule.create(rng, x, activations)
     expected_state = {
         '/dummy': jnp.array([3.]),
     }
     self.assertEqual(activations.state, expected_state)
+
+  def test_collection_multiple_roots(self):
+    rng = random.PRNGKey(0)
+    with nn.Collection().mutate() as activations:
+      x = jnp.array([1.])
+      LoopModule.create(rng, x, activations, name='a')
+      LoopModule.create(rng, x, activations, name='b')
+    expected_state = {
+        '/a/dummy': jnp.array([3.]),
+        '/b/dummy': jnp.array([3.]),
+    }
+    self.assertEqual(activations.state, expected_state)
+    with self.assertRaises(ValueError):
+      with nn.Collection().mutate() as activations:
+        x = jnp.array([1.])
+        LoopModule.create(rng, x, activations)
+        LoopModule.create(rng, x, activations)
 
   def test_mutable_collection_cannot_be_passed_to_jax(self):
     with nn.Collection().mutate() as collection:
@@ -317,19 +324,32 @@ class CollectionTest(absltest.TestCase):
 
   def test_collection_lookup(self):
     state = {
-        '/dummy:0/sub:0': 1,
-        '/dummy:1/sub:0': 2,
-        '/dummy:1/sub:1': 3,
+        '/dummy/sub': 1,
     }
     collection = nn.Collection(state=state)
-    root = nn.base.ModuleFrame(None, 'apply')
-    frame = nn.base.ModuleFrame(None, 'apply', name='dummy', index=1)
+    root = nn.base._ModuleFrame(None)
+    frame = nn.base._ModuleFrame('dummy', parent=root)
     with nn.base._module_stack.frame(root):
       with nn.base._module_stack.frame(frame):
-        self.assertEqual(collection.lookup('/dummy/sub', relative=False), 1)
-        self.assertEqual(collection.lookup('/dummy:1/sub', relative=False), 2)
-        self.assertEqual(collection.lookup('/sub', relative=True), 2)
-        self.assertEqual(collection.lookup('/sub:1', relative=True), 3)
+        self.assertEqual(collection['/dummy/sub'], 1)
+
+  def test_collection_inside_module(self):
+    class NestedCollection(nn.Module):
+
+      def apply(self, x):
+        with nn.Collection().mutate() as activations:
+          LoopModule(x, activations, name='a')
+          LoopModule(x, activations, name='b')
+        return activations
+
+    rng = random.PRNGKey(0)
+    x = jnp.array([1.])
+    activations, _ = NestedCollection.create(rng, x, name='nested')
+    expected_state = {
+        '/a/dummy': jnp.array([3.]),
+        '/b/dummy': jnp.array([3.]),
+    }
+    self.assertEqual(activations.as_dict(), expected_state)
 
 
 class UtilsTest(absltest.TestCase):
@@ -421,7 +441,7 @@ class NormalizationTest(absltest.TestCase):
     onp.testing.assert_allclose(var, onp.array([1., 1.]), rtol=1e-4)
     with nn.stateful(state_0) as state:
       y = model(x)
-    ema = state.lookup('/')
+    ema = state['/']
     onp.testing.assert_allclose(
         ema['mean'], 0.1 * x.mean((0, 1), keepdims=True), atol=1e-4)
     onp.testing.assert_allclose(

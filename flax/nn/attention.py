@@ -182,21 +182,8 @@ class Cache(base.Collection):
     return Cache(jax.tree_map(_init, self.state))
 
 
-def _iterate_cache(cache):
-  # pylint: disable=protected-access
-  if cache._mutable:
-    raise ValueError('A mutable cache should not be transformed by Jax.')
-  return (cache.state,), cache.shared
-
-
-def _cache_from_iterable(shared, state):
-  return Cache(state[0], shared=shared)
-
-
-# make sure a collection is traced.
-jax.tree_util.register_pytree_node(Cache,
-                                   _iterate_cache,
-                                   _cache_from_iterable)
+jax.tree_util.register_pytree_node(
+    Cache, base.iterate_collection, base.collection_from_iterable)
 
 
 def _scan_nd(body_fn, init, xs, n=1):

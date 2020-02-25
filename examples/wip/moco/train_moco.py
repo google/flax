@@ -27,8 +27,8 @@ from absl import logging
 
 from flax import jax_utils
 from flax import optim
-import imagenet_data_source
-import model_resnet
+from moco import imagenet_data_source
+from moco import model_resnet
 from flax.metrics import tensorboard
 import flax.nn
 from flax.training import common_utils

@@ -38,122 +38,59 @@ _state_stack = utils.CallStack()
 
 def _track_outputs(x):
   for module_output_tracker in _module_output_trackers:
-    module_output_tracker.store(x)
+    xs = module_output_tracker.retrieve(default=[])
+    xs.append(x)
+    module_output_tracker.store(xs)
 
 
-class ModuleFrame:
+class _ModuleFrame:
   """A ModuleFrame contains all the information needed to apply a Module."""
 
-  def __init__(self, module, mode, params=None, rng=None,  # pylint: disable=redefined-outer-name
-               name=None, index=None, transparent=False):
+  def __init__(self, name,
+               parent=None, params=None, rng=None,
+               transparent=False):
     if params is None:
       params = {}
-    self.module = module
-    self.mode = mode
+    self.parent = parent
     self.rng = rng
     self.params = params
+    self.shared = {}
     self.shared_names = set()
     self.name = name
-    self.name_counter = 0
-    self.index = index
-    self.index_counter = {}
     self.transparent = transparent
 
+    self._name_counter = 0
+
   @property
-  def identifier(self):
-    if self.name is None or self.index is None:
-      return None
-    return '{}:{}'.format(self.name, self.index)
+  def is_init(self):
+    return self.rng is not None
 
+  @property
+  def path(self):
+    """Path of the the module scope.
 
-def _path_from_frames(frames, include_index=True):
-  """Determine the path of a module based on the call stack."""
-  parts = []
-  prev_frame = None
-  for frame in frames:
-    if prev_frame and prev_frame.transparent:
-      prev_frame = frame
-      continue
-    prev_frame = frame
-    if frame.name is None:
-      continue
-    if include_index:
-      parts.append(frame.identifier)
-    else:
-      parts.append(frame.name)
-  return '/' + '/'.join(parts)
+    paths are similar to unix file names (eg. '/module/nested/dense')
 
+    Returns:
+      The path of this Module scope.
+    """
+    if self.parent is None:
+      if self.name is None:
+        return '/'
+      else:
+        return '/' + self.name
 
-def _populate_name(kwargs):
-  """Determine the name of a Module."""
-  name = kwargs.get('name', None)
-  top_level = kwargs.get('_top_level', False)
-  if _module_stack and not top_level:
-    parent = _module_stack[-1]
-    if name is None:
-      name = str(parent.name_counter)
-      parent.name_counter += 1
-  elif _module_stack and name is None:
-    name = '__nested_model__'
-  else:
-    assert top_level, 'Expected a top-level Module'
+    path = self.parent.path
+    if not self.parent.transparent:
+      if path[-1] != '/':
+        path += '/'
+      path += self.name
+    return path
 
-  if name is not None:
-    if not isinstance(name, str):
-      raise ValueError('Name must be a string.')
-    if '/' in name or ':' in name:
-      raise ValueError('Name should not contain slashes or colons.')
-
-  kwargs['name'] = name
-  kwargs['_top_level'] = top_level
-  return name
-
-
-def _populate_index(kwargs):
-  """Determine the index of a Module.
-
-  The index is used to track how many times a module with shared parameters is
-  invoked. This is used to detect name collisions and to make sure that
-  collections can be track data for each invocation seperatly.
-
-  Args:
-    kwargs: the keyword arguments of the module.
-  Returns:
-    The index of this module invocation.
-  """
-  name = kwargs['name']
-  top_level = kwargs['_top_level']
-  shared = kwargs.get('_shared', False)
-  index = kwargs.get('_index', None)
-  if _module_stack:
-    parent = _module_stack[-1]
-    if index is None:
-      if name not in parent.index_counter:
-        parent.index_counter[name] = 0
-      index = parent.index_counter[name]
-      parent.index_counter[name] += 1
-    if name in parent.shared_names and not shared:
-      raise ValueError(
-          f'a shared module named "{name}" already exists.')
-  else:
-    assert top_level, 'Expected a top-level Module'
-    index = 0
-  if index >= 1 and not shared and not top_level:
-    raise ValueError(
-        'use `Module.shared()` when parameter sharing is intended.')
-  kwargs['_index'] = index
-  kwargs['_shared'] = shared
-  return index
-
-
-def _pop_identifiers(kwargs):
-  name = _populate_name(kwargs)
-  index = _populate_index(kwargs)
-  kwargs.pop('name')
-  kwargs.pop('_index')
-  kwargs.pop('_shared')
-  kwargs.pop('_top_level')
-  return name, index
+  def create_name(self):
+    name = str(self._name_counter)
+    self._name_counter += 1
+    return name
 
 
 def module_method(fn):
@@ -194,35 +131,22 @@ def module_method(fn):
   Returns:
     the decorated function
   """
-  def wrapper(cls, *args, **kwargs):
-    """wraps fn such that it behaves as a module method."""
-    # TODO(flax-dev): dedup some of the logic here and in the Module constructor
-    if not _module_stack:
-      raise ValueError('A module method only be called inside another module.'
-                       ' It is also available as a method on a Model instance.')
-    new_module = cls.new_instance()
-    extended_kwargs = new_module._extend_kwargs(kwargs)  # pylint: disable=protected-access
-    if not extended_kwargs.get('_shared', False):
-      raise ValueError('A module method only be used on a shared module.')
-    name = _populate_name(extended_kwargs)
-    kwargs['name'] = name
-    parent = _module_stack[-1]
-    if parent.mode == 'init' and name not in parent.params:
-      parent.rng, rng = random.split(parent.rng)
-      y, params = new_module._init_module_method(  # pylint: disable=protected-access
-          functools.partial(fn, new_module), rng, args, kwargs)
-      parent.params[name] = params
-      return y
-    else:  # apply
-      if name not in parent.params:
-        raise ValueError(f'No module named {name} was created during'
-                         ' initialization.')
-      params = parent.params[name]
-      return new_module._apply_module_method(  # pylint: disable=protected-access
-          functools.partial(fn, new_module), params, args, kwargs)
 
-  wrapper.module_method = fn
-  return classmethod(wrapper)
+  cache = {}
+
+  # module method are just Module class instances.
+  # But we want it to inherit from the class such that we can call other methods
+  # of the module. We need a class property to find out which class the method
+  # is defined on.
+  def wrapper(cls):
+    if cls not in cache:
+      class ModuleMethod(cls):
+        apply = fn
+      ModuleMethod.__name__ = fn.__name__
+      cache[cls] = ModuleMethod
+    return cache[cls]
+
+  return utils.classproperty(wrapper)
 
 
 def _fn_parameters(fn):
@@ -277,25 +201,34 @@ class _ModuleMeta(abc.ABCMeta):
 class Module(metaclass=_ModuleMeta):
   """Functional modules."""
 
-  def __new__(cls, *args, **kwargs):
+  def __new__(cls, *args, name=None, **kwargs):
     if not _module_stack:
       raise ValueError('A Module should only be instantiated directly inside'
                        ' another module.')
-    new_module = super(Module, cls).__new__(cls)
-    extended_kwargs = new_module._extend_kwargs(kwargs)  # pylint: disable=protected-access
-    name = _populate_name(extended_kwargs)
-    kwargs['name'] = name
     parent = _module_stack[-1]
-    if parent.mode == 'init' and name not in parent.params:
+    apply_kwargs = cls._extend_kwargs(kwargs)
+    if name is None:
+      name = cls._default_name()
+    elif cls._is_shared():
+      raise ValueError('Cannot override the name of a shared module')
+    if name is None:  # also no default name
+      name = parent.create_name()
+    cls._check_name(name, parent)
+    if parent.is_init and name not in parent.params:
       parent.rng, rng = random.split(parent.rng)
-      y, params = new_module._init(rng, *args, **kwargs)  # pylint: disable=protected-access
+      params = {}
       parent.params[name] = params
     else:  # apply
       if name not in parent.params:
         raise ValueError(f'No module named {name} was created during'
                          ' initialization.')
       params = parent.params[name]
-      y = new_module(params, *args, **kwargs)
+      rng = None
+    frame = _ModuleFrame(name, parent=parent, rng=rng, params=params,
+                         transparent=cls._is_transparent())
+    with cls._with_instance(frame) as instance:
+      y = instance.apply(*args, **apply_kwargs)
+      _track_outputs(y)
     return y
 
   @abc.abstractmethod
@@ -303,36 +236,67 @@ class Module(metaclass=_ModuleMeta):
     pass
 
   @classmethod
-  def shared(class_, **kwargs):
-    """Partially applies a module and shared parameters for each call."""
-    name = _populate_name(kwargs)
-    if _module_stack:
-      frame = _module_stack[-1]
-      if name in frame.shared_names:
-        raise ValueError(
-            f'Another shared module named "{name}" already exists.')
-      if name in frame.index_counter:
-        raise ValueError(
-            f'Another module named "{name}" already exists.')
-      frame.shared_names.add(name)
+  def shared(class_, *, name=None, **kwargs):
+    """Partially applies a module and shared parameters for each call.
 
-    kwargs['_shared'] = True
-    return class_.partial(**kwargs)
+    Args:
+      name: name of this module.
+      **kwargs: keyword arguments that should be partially applied.
+    Returns:
+      A subclass of Module that shares parameters when called multiple times.
+    """
+    if not _module_stack:
+      raise ValueError(
+          'The shared module should be used during Module application')
+
+    parent = _module_stack[-1]
+    if name is None:
+      name = parent.create_name()
+    if name in parent.shared_names:
+      raise ValueError(f'Shared module named "{name}" already exists.')
+    parent.shared_names.add(name)
+
+    partial_module = class_.partial(**kwargs)
+
+    class SharedModule(partial_module):
+      """Wraps a module to enable shared parameters."""
+
+      @classmethod
+      def _default_name(cls):
+        return name
+
+      @classmethod
+      def _is_shared(cls):
+        return True
+    SharedModule.__name__ = class_.__name__
+
+    return SharedModule
 
   @classmethod
-  def partial(class_, **kwargs):
-    """Partially applies a module with the given arguments."""
+  def partial(class_, *, name=None, **kwargs):
+    """Partially applies a module with the given arguments.
 
-    shared = kwargs.get('_shared', False)
-    name = kwargs.get('name', None)
+    Unlike `functools.partial` this will return a subclass of Module.
+
+    Args:
+      name: the name used the module
+      **kwargs: the argument to be applied.
+    Returns:
+      A subclass of Module which partially applies the given keyword arguments.
+    """
 
     class PartialModule(class_):
       """Wraps a module with partial application."""
 
-      def _extend_kwargs(self, invoke_kwargs):
-        if shared and 'name' in invoke_kwargs and invoke_kwargs['name'] != name:
-          raise ValueError('Cannot override the name of a shared module.')
+      @classmethod
+      def _default_name(cls):
+        if name is not None:
+          return name
+        else:
+          return super()._default_name()
 
+      @classmethod
+      def _extend_kwargs(cls, invoke_kwargs):
         extended_kwargs = kwargs.copy()
         extended_kwargs.update(invoke_kwargs)
         return super()._extend_kwargs(extended_kwargs)
@@ -351,14 +315,13 @@ class Module(metaclass=_ModuleMeta):
     Args:
       rng: the random number generator used to initialize parameters.
       *args: arguments passed to the module's apply function
-      name: name of this module.
+      name: name of this module
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       A pair consisting of the model output and an instance of Model
     """
-    instance = cls.new_instance()
-    y, params = instance._init(rng, *args, name=name, _top_level=True, **kwargs)  # pylint: disable=protected-access
-    model = Model(instance, params)
+    y, params = cls.init(rng, *args, name=name, **kwargs)
+    model = Model(cls, params)
     return y, model
 
   @classmethod
@@ -377,9 +340,9 @@ class Module(metaclass=_ModuleMeta):
     Returns:
       A pair consisting of the model output and an instance of Model
     """
-    def lazy_create(*inputs):
-      return cls.create(rng, *(inputs + args), name=name, **kwargs)
-    return jax_utils.partial_eval_by_shape(lazy_create, input_specs)
+    y, params = cls.init_by_shape(rng, input_specs, *args, name=name, **kwargs)
+    model = Model(cls, params)
+    return y, model
 
   @classmethod
   def init(cls, rng, *args, name=None, **kwargs):
@@ -393,8 +356,20 @@ class Module(metaclass=_ModuleMeta):
     Returns:
       A pair consisting of the model output and the initialized parameters
     """
-    instance = cls.new_instance()
-    return instance._init(rng, *args, name=name, _top_level=True, **kwargs)  # pylint: disable=protected-access
+    kwargs = cls._extend_kwargs(kwargs)
+    if _module_stack:
+      parent = _module_stack[-1]
+    else:
+      parent = None
+    if name is None:
+      name = cls._default_name()
+
+    frame = _ModuleFrame(name, rng=rng, parent=parent,
+                         transparent=cls._is_transparent())
+    with cls._with_instance(frame) as instance:
+      y = instance.apply(*args, **kwargs)
+      _track_outputs(y)
+    return y, cls._post_process_params(frame.params)
 
   @classmethod
   def init_by_shape(cls, rng, input_specs, *args, name=None, **kwargs):
@@ -413,47 +388,50 @@ class Module(metaclass=_ModuleMeta):
       A pair consisting of the model output and the initialized parameters
     """
     def lazy_init(*inputs):
-      instance = cls.new_instance()
-      return instance._init(  # pylint: disable=protected-access
-          rng, *(inputs + args), name=name, _top_level=True, **kwargs)
+      return cls.init(rng, *(inputs + args), name=name, **kwargs)
     return jax_utils.partial_eval_by_shape(lazy_init, input_specs)
 
   @classmethod
-  def new_instance(cls):
-    return object.__new__(cls)
-
-  @classmethod
-  def call(cls, params, *args, **kwargs):
+  def call(cls, params, *args, name=None, **kwargs):
     """Evaluate the module with the given parameters.
 
     Args:
       params: the parameters of the module. Typically, inital parameter values
         are constructed using `Module.init` or `Module.init_by_shape`.
       *args: arguments passed to the module's apply function
+      name: name of this module.
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       The output of the module's apply function.
     """
-    instance = cls.new_instance()
-    kwargs['_top_level'] = True
-    return instance(params, *args, **kwargs)
-
-  def __call__(self, params, *args, **kwargs):
-    return self._apply_module_method(self.apply, params, args, kwargs)
+    params = cls._pre_process_params(params)
+    kwargs = cls._extend_kwargs(kwargs)
+    if _module_stack:
+      parent = _module_stack[-1]
+    else:
+      parent = None
+    if name is None:
+      name = cls._default_name()
+    frame = _ModuleFrame(name, params=params, parent=parent,
+                         transparent=cls._is_transparent())
+    with cls._with_instance(frame) as instance:
+      y = instance.apply(*args, **kwargs)
+      _track_outputs(y)
+    return y
 
   def param(self, name, shape, initializer):
     """Defines a parameter within the module's apply function.
 
     Args:
       name: The name of the parameter.
-      shape: The shape of the parameter.
+      shape: The shape of the parameter. If None the param be any type.
       initializer: An initializer function
                    taking an RNG and the shape as arguments.
     Returns:
       The value of the parameter.
     """
-    frame = _top_frame('param')
-    if frame.mode == 'init':
+    frame = self._frame
+    if frame.is_init:
       if name in frame.params:
         raise ValueError(
             "Name '%s' was already used for another parameter." % name)
@@ -476,7 +454,7 @@ class Module(metaclass=_ModuleMeta):
     Returns:
       The value of the parameter.
     """
-    frame = _top_frame('param')
+    frame = self._frame
     if name not in frame.params:
       raise ValueError("Parameter with name '%s' does not exist." % name)
     return frame.params[name]
@@ -512,7 +490,7 @@ class Module(metaclass=_ModuleMeta):
       collection = get_state()
     state = ModuleState(collection, name)
     # find the frames that are in init mode
-    init_frames = [f for f in _module_stack if f.mode == 'init']
+    init_frames = [f for f in _module_stack if f.is_init]
     if initializer is not None and init_frames:
       # use the closest frame that is initializing to get an rng
       init_frame = init_frames[-1]
@@ -526,46 +504,68 @@ class Module(metaclass=_ModuleMeta):
 
   def is_initializing(self):
     _top_frame('is_initializing')
-    return _module_stack[0].mode == 'init'
+    return self._frame.is_init
 
-  def _extend_kwargs(self, kwargs):
+  @classmethod
+  @contextlib.contextmanager
+  def _with_instance(cls, frame):
+    """Private constructor for Module.
+
+    A module instance is constructed using a scope and is tied to a _ModuleFrame
+    This way the methods on the Module instance can rely on the _ModuleFrame
+    being available.
+
+    Args:
+      frame: an instance of _ModuleFrame
+    Yields:
+      An instance of Module
+    """
+    instance = object.__new__(cls)
+    instance._frame = frame  # pylint: disable=protected-access
+    with _module_stack.frame(frame):
+      yield instance
+
+  @classmethod
+  def _check_name(cls, name, parent):
+    """Check whether the name of the module is valid within the parent scope."""
+    if name is not None:
+      if not isinstance(name, str):
+        raise ValueError('Name must be a string.')
+      if '/' in name or ':' in name:
+        raise ValueError('Name should not contain slashes or colons.')
+    shared = cls._is_shared()
+    if name in parent.shared:
+      # a module with this name already exists. Check validity of sharing
+      if shared != parent.shared[name]:
+        raise ValueError(f'The name "{name}" is used for both a shared'
+                         'and unshared module.')
+      if not parent.shared[name]:
+        raise ValueError('A module with named "{name}" already exists.')
+    parent.shared[name] = shared
+
+  @classmethod
+  def _extend_kwargs(cls, kwargs):
     return kwargs
 
-  def _pre_process_params(self, params):
+  @classmethod
+  def _pre_process_params(cls, params):
     return params
 
-  def _post_process_params(self, params):
+  @classmethod
+  def _post_process_params(cls, params):
     return params
 
-  def _is_transparent(self):
+  @classmethod
+  def _is_transparent(cls):
     return False
 
-  def _init(self, rng, *args, **kwargs):
-    return self._init_module_method(self.apply, rng, args, kwargs)
+  @classmethod
+  def _is_shared(cls):
+    return False
 
-  def _init_module_method(self, fn, rng, args, kwargs):
-    """Apply a function in a module initialization scope."""
-    kwargs = self._extend_kwargs(kwargs)
-    name, index = _pop_identifiers(kwargs)
-    frame = ModuleFrame(self, 'init', rng=rng, name=name, index=index,
-                        transparent=self._is_transparent())
-    with _module_stack.frame(frame):
-      y = fn(*args, **kwargs)
-      _track_outputs(y)
-    params = self._post_process_params(frame.params)
-    return y, params
-
-  def _apply_module_method(self, fn, params, args, kwargs):
-    """Apply a function in a module scope."""
-    params = self._pre_process_params(params)
-    kwargs = self._extend_kwargs(kwargs)
-    name, index = _pop_identifiers(kwargs)
-    frame = ModuleFrame(self, 'apply', params=params, name=name, index=index,
-                        transparent=self._is_transparent())
-    with _module_stack.frame(frame):
-      y = fn(*args, **kwargs)
-      _track_outputs(y)
-    return y
+  @classmethod
+  def _default_name(cls):
+    return None
 
 
 def module(fun):
@@ -602,13 +602,19 @@ def module(fun):
   return type(fun.__name__, (Module,), dict(apply=apply))
 
 
+# TODO(flax-dev) consider removing this...
 class TransparentModule(Module):
-  """Transparent module."""
+  """Transparent module.
 
-  def _pre_process_params(self, params):
+  A transparent module can only have one parameter named '0'.
+  """
+
+  @classmethod
+  def _pre_process_params(cls, params):
     return {'0': params}
 
-  def _post_process_params(self, params):
+  @classmethod
+  def _post_process_params(cls, params):
     entries = list(params.items())
     if len(entries) != 1:
       raise ValueError('Transparent modules should have exactly one child.')
@@ -617,7 +623,8 @@ class TransparentModule(Module):
       raise ValueError('Transparent module should contain an unnamed child.')
     return value
 
-  def _is_transparent(self):
+  @classmethod
+  def _is_transparent(cls):
     return True
 
 
@@ -643,12 +650,12 @@ class TruncatedModule(TransparentModule):
     """
     if wrapped_module is None or truncate_path is None:
       raise ValueError(
-          '`wrapped_module` and `trucate_path` are required keyword arguments')
+          '`wrapped_module` and `truncate_path` are required keyword arguments')
     with capture_module_outputs() as module_outputs:
       wrapped_module(*args, **kwargs)
 
     def lookup_output(path):
-      return module_outputs.lookup(path)
+      return module_outputs[path]
     return jax.tree_map(lookup_output, truncate_path)
 
 
@@ -776,8 +783,7 @@ class Model:
   params: Any
 
   def __call__(self, *args, **kwargs):
-    kwargs['_top_level'] = True
-    return self.module(self.params, *args, **kwargs)
+    return self.module.call(self.params, *args, **kwargs)
 
   def truncate_at(self, module_path):
     """Truncate the model by returning the outputs of the given sub-module.
@@ -792,23 +798,15 @@ class Model:
       replaced by the corresponding intermediate output.
     """
     truncated_module_cls = TruncatedModule.partial(
-        wrapped_module=type(self.module), truncate_path=module_path)
-    module_instance = truncated_module_cls.new_instance()
-    return self.replace(module=module_instance)
+        wrapped_module=self.module, truncate_path=module_path)
+    return self.replace(module=truncated_module_cls)
 
   def __getattr__(self, name):
     value = getattr(self.module, name)
-    if callable(value) and hasattr(value, '__func__'):
-      # class methods are bound methods so we must check the underlying function
-      # to verify that it defines a module method.
-      fn = value.__func__
-      if hasattr(fn, 'module_method'):
-        def wrapper(*args, **kwargs):
-          kwargs['_top_level'] = True
-          return self.module._apply_module_method(  # pylint: disable=protected-access
-              functools.partial(fn.module_method, self.module),
-              self.params, args, kwargs)
-        return wrapper
+    if issubclass(value, Module):
+      def wrapper(*args, **kwargs):
+        return value.call(self.params, *args, **kwargs)
+      return wrapper
     raise AttributeError(f'No attribute named "{name}".')
 
 
@@ -822,62 +820,29 @@ class Collection:
 
   Attributes:
     state: the initial state by default an empty collection is created.
-    shared: If true, a module with shared parameters
-            will also share its slot in the collection (default: False).
   """
 
-  def __init__(self, state=None, shared=False):
+  def __init__(self, state=None):
     if state is None:
       state = {}
     self.state = state
-    self.shared = shared
+    # the anchor is used to determine the prefix of the collection.
+    # this way we can create/nest collections inside modules.
+    self._anchor = len(_module_stack)
+
     self._mutable = False
+    self._root = None
 
-  def _path_prefix(self, relative):
-    if relative and len(_module_stack) > 1:
-      return _path_from_frames(_module_stack, include_index=not self.shared)
-    else:
-      return ''
-
-  def as_dict(self, relative=True):
+  def as_dict(self):
     """Returns a dictionary with module paths as keys and the stored values.
 
-    Args:
-      relative: whether the path should be relative to the module that is
-          currently applied (default: True). This argument only has an effect
-          within the apply function of a Module.
     Returns:
       The stored values as a dictionary.
     """
-    prefix = self._path_prefix(relative)
-    result = {}
-    for key, value in self.state.items():
-      if key.startswith(prefix):
-        relative_key = key[len(prefix):]
-        result[relative_key] = value
-    return result
+    return self.state.copy()
 
-  def lookup(self, path, relative=True):
-    """Lookup a single value stored in the collection.
-
-    Args:
-      path: the queried path (eg. '/module/sub_module/conv'). When a module is
-        called multiple times the call can be specified using a prefix colon
-        (eg. '/module/shared_module:1/conv').
-      relative: whether the path should be relative to the module that is
-        currently applied (default: True). This argument only has an effect
-        within the apply function of a Module.
-    Returns:
-      The value stored in the collection if any, otherwise None.
-    """
-    def colonize(part):
-      if not part or ':' in part:
-        return part
-      else:
-        return part + ':0'
-    prefix = self._path_prefix(relative)
-    path = prefix + '/'.join(map(colonize, path.split('/')))
-    return self.state.get(path, None)
+  def __getitem__(self, key):
+    return self.state[key]
 
   @contextlib.contextmanager
   def mutate(self):
@@ -899,7 +864,7 @@ class Collection:
       The value previously stored in the collection.
     """
     _top_frame('retrieve')
-    path = _path_from_frames(_module_stack, include_index=not self.shared)
+    path = self._current_path()
     return self.state.get(path, default)
 
   def store(self, value):
@@ -915,33 +880,74 @@ class Collection:
     if not self._mutable:
       raise ValueError('Collection is not mutable. Use the `mutate` method to'
                        'create a mutable copy.')
-    path = _path_from_frames(_module_stack, include_index=not self.shared)
+    assert len(_module_stack) > self._anchor
+
+    # the root of a Collection is the first module scope that gets created
+    # inside the mutate scope of the Collection. By allowing only one unique
+    # root scope we guarantee that state is not accidentally shared
+    # between different models. When a user specifies an explicit name we can
+    # distinguish models and a collection can have multiple roots.
+    root = _module_stack[self._anchor]
+    if self._root is None:
+      self._root = root
+    elif self._root is not root:
+      if self._root.name is None or root.name is None:
+        raise ValueError('When multiple top-level module calls use a Collection'
+                         ' each top-level module should have a name.')
+    path = self._current_path()
     old_value = self.state.get(path, None)
     self.state[path] = value
     return old_value
 
+  def _current_path(self):
+    """"The relative path from the currently active module scope to the root of the collection.
 
-def _iterate_collection(collection):
+    For example: If a collection is created in the path '/module/nested' and
+    something is stored by a module with the path '/module/nested/block/conv'
+    the key in the collection dict will be '/block/conv'.
+
+    Returns:
+      the relative path of the active module scope.
+    """
+    assert len(_module_stack) > self._anchor
+    path = _module_stack[-1].path
+    root = _module_stack[self._anchor]
+    if root.parent is not None and root.parent.path != '/':
+      prefix = root.parent.path
+      assert prefix == path[:len(prefix)]
+      return path[len(prefix):]
+    else:
+      return path
+
+
+def iterate_collection(collection):
+  # jax iterates through pytrees for each argument/return value of a functional
+  # transformations. When the collection is mutable we throw an error this way
+  # we avoid silent errors due to impurity of a traced function.
   if collection._mutable:  # pylint: disable=protected-access
     raise ValueError('A mutable collection should not be transformed by Jax.')
-  return (collection.state,), collection.shared
+  meta = (type(collection), collection._anchor)  # pylint: disable=protected-access
+  return (collection.state,), meta
 
 
-def _collection_from_iterable(shared, state):
-  return Collection(state[0], shared=shared)
+def collection_from_iterable(meta, state):
+  ty, anchor = meta
+  coll = ty(state[0])
+  coll._anchor = anchor  # pylint: disable=protected-access
+  return coll
 
 # make sure a collection is traced.
 jax.tree_util.register_pytree_node(Collection,
-                                   _iterate_collection,
-                                   _collection_from_iterable)
+                                   iterate_collection,
+                                   collection_from_iterable)
 
 
 def _collection_state_dict(collection):
   return collection.as_dict()
 
 
-def _collection_from_state_dict(collection, state):
-  return Collection(state, shared=collection.shared)
+def _collection_from_state_dict(_, state):
+  return Collection(state)
 
 
 serialization.register_serialization_state(

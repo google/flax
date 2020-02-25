@@ -15,7 +15,7 @@
 """Wide Resnet Model with shake-shake regularization."""
 
 from flax import nn
-import utils
+from models import utils
 import jax
 
 
