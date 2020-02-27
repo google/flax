@@ -23,8 +23,6 @@ install:
   - pip install tensorflow tensorflow-datasets
   - pip install -v .
 script:
-  # make default temporary dir for absl tests
-  - mkdir /tmp/absl_testing
   # run the main flax unit tests
   - pytest -n 1 tests -W ignore
   # we apply pytest within each example to avoid pytest's annoying test-filename collision.
