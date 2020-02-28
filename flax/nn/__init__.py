@@ -16,8 +16,9 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from .activation import (celu, elu, gelu, glu, log_sigmoid, log_softmax, relu,
-                         sigmoid, soft_sign, softmax, softplus, swish)
+from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
+                         log_softmax, relu, sigmoid, soft_sign, softmax,
+                         softplus, swish, tanh)
 from .attention import dot_product_attention, SelfAttention
 from .base import (Module, Model, Collection, capture_module_outputs,
                    module, stateful, get_state, module_method)

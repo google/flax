@@ -266,14 +266,14 @@ class Embed(base.Module):
     """Embeds the inputs along the last dimension.
 
     Args:
-      inputs: input data, the final dimension must be of size 1 all other
-        dimension are considered batch dimensions.
+      inputs: input data, all dimensions are considered batch dimensions.
       num_embeddings: number of embeddings.
-      features: Number of features for each embedding.
+      features: Number of feature dimensions for each embedding.
       embedding_init: embedding initializer.
 
     Returns:
-      Output which is embedded input data.
+      Output which is embedded input data.  The output shape follows the input,
+      with an additional `features` dimension appended.
     """
     if inputs.dtype not in [jnp.int32, jnp.int64, jnp.uint32, jnp.uint64]:
       raise ValueError('Input type must be an integer or unsigned integer.')
