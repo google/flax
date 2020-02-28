@@ -154,6 +154,38 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       FaultyModule.create(random.PRNGKey(0), x)
 
+  def test_shared_module_called_in_other_frame(self):
+    """Test that shared modules only appear once in parameters.
+
+    Concretely, create a shared submodule, then pass it in to
+    a child module and apply it there. Test that the parameters
+    are only stored once, in the frame where the shared module
+    was created.
+    """
+
+    class SubModule(nn.Module):
+
+      def apply(self):
+        self.param('param', (), initializers.zeros)
+
+    class UseSharedModule(nn.Module):
+
+      def apply(self, submodule):
+        submodule()
+
+    class TopLevel(nn.Module):
+
+      def apply(self):
+        submodule = SubModule.shared(name='shared')
+        submodule()
+        UseSharedModule(submodule, name='use_shared')
+
+    _, params = TopLevel.init(random.PRNGKey(0))
+    self.assertEqual({
+        'shared': {'param': jnp.zeros(())},
+        'use_shared': {},
+    }, params)
+
   def test_module_decorator(self):
     @nn.module
     def MyModule(x):  # pylint: disable=invalid-name
