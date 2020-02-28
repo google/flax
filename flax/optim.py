@@ -455,6 +455,11 @@ class MultiOptimizer(OptimizerDef):
     return hps
 
 
+def _sorted_items(x):
+  """Returns items of a dict ordered by keys."""
+  return sorted(x.items(), key=lambda x: x[0])
+
+
 class ModelParamTraversal(traverse_util.Traversal):
   """Select model parameters using a name filter."""
 
@@ -481,7 +486,7 @@ class ModelParamTraversal(traverse_util.Traversal):
       if self._filter_fn(path, x):
         yield x
     else:
-      for key, value in x.items():
+      for key, value in _sorted_items(x):
         yield from self._iterate(value, '{}/{}'.format(path, key))
 
   def _update(self, fn, x, path=''):
@@ -492,7 +497,7 @@ class ModelParamTraversal(traverse_util.Traversal):
         return x
     else:
       new_x = {}
-      for key, value in x.items():
+      for key, value in _sorted_items(x):
         new_x[key] = self._update(fn, value, '{}/{}'.format(path, key))
       return new_x
 
