@@ -6,13 +6,16 @@
 Welcome to Flax's documentation!
 ================================
 
+Getting Started
+---------------
+➤ :doc:`Interactive Flax Guide <notebooks/flax_intro>`
+
 .. toctree::
    :maxdepth: 1
-   :caption: Guides:
+   :caption: More
 
-   philosophy
-   notebooks/flax_intro
    annotated_mnist
+   philosophy
    contributing
 
 .. toctree::
@@ -24,3 +27,5 @@ Welcome to Flax's documentation!
    flax.serialization
    flax.struct
    flax.jax_utils
+
+
