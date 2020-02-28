@@ -44,7 +44,32 @@ def _track_outputs(x):
 
 
 class _ModuleFrame:
-  """A ModuleFrame contains all the information needed to apply a Module."""
+  """A ModuleFrame the context needed to init or apply a Module.
+
+  In particular, `self.params` is a dictionary where parameters are
+  stored (during module init) and read from (during module application).
+
+  When `module.init()` is first called, a new ModuleFrame is created with
+  an empty `params` dictionary. When `self.param` is called within that
+  module, a new key is added to track that parameter, with the computed
+  parameter's initial value.
+
+  When a module calls into a submodule, a new key is added, with a value
+  being an empty dictionary. Then that new dictionary is passed in as `params` 
+  on a new sub-ModuleFrame. That new sub-ModuleFrame keeps track of its parent
+  with the `parent` attribute.
+
+  When the whole init process is complete, the top-level ModuleFrame'
+  `params` are returned, which contain a nested dictionary of parameters.
+
+  During module application, a similer process happens but this time
+  the parameters are only read from.
+
+  Additional attributes on ModuleFrame track context needed to assist error
+  handling, shared parameters and transparent modules that are wrapped without
+  creating additional sub-parameters. TODO: Consider elaborating on this
+  last paragraph.
+  """
 
   def __init__(self, name,
                parent=None, params=None, rng=None,
@@ -205,7 +230,7 @@ class Module(metaclass=_ModuleMeta):
     if not _module_stack:
       raise ValueError('A Module should only be instantiated directly inside'
                        ' another module.')
-    parent = _module_stack[-1]
+    parent = cls._get_construction_frame()
     apply_kwargs = cls._extend_kwargs(kwargs)
     if name is None:
       name = cls._default_name()
@@ -268,9 +293,30 @@ class Module(metaclass=_ModuleMeta):
       @classmethod
       def _is_shared(cls):
         return True
+
+      @classmethod
+      def _get_construction_frame(cls):
+        return parent
+
     SharedModule.__name__ = class_.__name__
 
     return SharedModule
+
+  @classmethod
+  def _get_construction_frame(cls):
+    """Return the ModuleFrame where this module was constructed.
+
+    Modules can be shared across different parts of a parameter tree.
+    We need to ensure that the parameter object is the same in every instance
+    of the same shared module. We resolve this by deciding on a canonical
+    ModuleFrame (corresponding to a particular part of the top-level parameter
+    tree) where parameters are stored. Concretely, it is the
+    "construction frame" -- that is, the frame in which the module is first
+    defined. For non-shared modules, that's where it's called. For shared modules,
+    it's where `submodule.shared(...)` is called (which may or may not be the
+    frame in which it is used.)
+    """
+    return _module_stack[-1]
 
   @classmethod
   def partial(class_, *, name=None, **kwargs):
