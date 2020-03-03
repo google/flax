@@ -81,7 +81,7 @@ Now install `flax` from Github:
 ## GPU accelerated installation
 
 First install `jaxlib`; please follow the instructions in the
-[Jax readme](https://github.com/google/jax/blob/master/README.md).
+[JAX readme](https://github.com/google/jax/blob/master/README.md).
 If they are not already installed, you will need to install
 [CUDA](https://developer.nvidia.com/cuda-downloads) and
 [CuDNN](https://developer.nvidia.com/cudnn) runtimes.
