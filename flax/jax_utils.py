@@ -116,8 +116,8 @@ def prefetch_to_device(iterator, size, devices=None):
   """"Shard and prefetch batches on device.
 
   This utility takes an iterator and returns a new iterator which fills an on
-  device prefetch buffer. Eager prefetching can imporve the performance of
-  training loops significantly by overlaping compute and data transfer.
+  device prefetch buffer. Eager prefetching can improve the performance of
+  training loops significantly by overlapping compute and data transfer.
 
   Args:
     iterator: an iterator that yields a pytree of ndarrays where the first
