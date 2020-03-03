@@ -112,6 +112,14 @@ class _ModuleFrame:
       path += self.name
     return path
 
+  def is_child_of(self, frame):
+    if frame is self.parent:
+      return True
+    elif self.parent:
+      return self.parent.is_child_of(frame)
+    else:
+      return False
+
   def create_name(self):
     name = str(self._name_counter)
     self._name_counter += 1
@@ -883,7 +891,7 @@ class Collection:
     self.state = state
     # the anchor is used to determine the prefix of the collection.
     # this way we can create/nest collections inside modules.
-    self._anchor = len(_module_stack)
+    self._anchor = _module_stack[-1] if _module_stack else None
 
     self._mutable = False
     self._root = None
@@ -931,21 +939,23 @@ class Collection:
     Returns:
       The previous value stored in the collection or None.
     """
-    _top_frame('store')
+    frame = _top_frame('store')
     if not self._mutable:
       raise ValueError('Collection is not mutable. Use the `mutate` method to'
                        'create a mutable copy.')
-    assert len(_module_stack) > self._anchor
-
     # the root of a Collection is the first module scope that gets created
     # inside the mutate scope of the Collection. By allowing only one unique
     # root scope we guarantee that state is not accidentally shared
     # between different models. When a user specifies an explicit name we can
     # distinguish models and a collection can have multiple roots.
-    root = _module_stack[self._anchor]
+    assert frame.is_child_of(self._anchor)
+    root = frame
+    while root.parent is not self._anchor:
+      root = root.parent
+
     if self._root is None:
       self._root = root
-    elif self._root is not root:
+    elif self._root != root:
       if self._root.name is None or root.name is None:
         raise ValueError('When multiple top-level module calls use a Collection'
                          ' each top-level module should have a name.')
@@ -964,11 +974,11 @@ class Collection:
     Returns:
       the relative path of the active module scope.
     """
-    assert len(_module_stack) > self._anchor
+    frame = _module_stack[-1]
+    assert frame.is_child_of(self._anchor)
     path = _module_stack[-1].path
-    root = _module_stack[self._anchor]
-    if root.parent is not None and root.parent.path != '/':
-      prefix = root.parent.path
+    if self._anchor is not None and self._anchor.path != '/':
+      prefix = self._anchor.path
       assert prefix == path[:len(prefix)]
       return path[len(prefix):]
     else:
