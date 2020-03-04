@@ -18,6 +18,7 @@
 
 import contextlib
 import threading
+import jax
 
 
 class CallStack(object):
@@ -63,3 +64,21 @@ def classproperty(f):
       return f(cls)
 
   return _ClassProperty()
+
+
+def _masters():
+  stack = jax.core.trace_state.trace_stack
+  return stack.downward[::-1] + stack.upward
+
+
+def _current_trace():
+  tracers = _masters()
+  if tracers:
+    return tracers[-1]
+  return None
+
+
+def _tracer_of_value(x):
+  if hasattr(x, '_trace'):
+    return x._trace.master
+  return None

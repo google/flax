@@ -413,6 +413,28 @@ class CollectionTest(absltest.TestCase):
     with self.assertRaisesRegex(ValueError, pattern):
       test.init(random.PRNGKey(0))
 
+  def test_jax_transform_of_stateful_function(self):
+    test = self
+    class NestedTransform(nn.Module):
+
+      def apply(self, state, y):
+        def inner_fn(x):
+          # constants should be storable
+          state.store(1.)
+          # values in the same trace should be storable
+          state.store(y)
+          with test.assertRaises(ValueError):
+            # values depending on the vmap should not be storable
+            state.store(x)
+        jax.vmap(inner_fn)(jnp.ones((2,)))
+
+    def outer_fn(x):
+      with nn.Collection().mutate() as state:
+        NestedTransform.init(random.PRNGKey(0), state, x)
+
+    outer_fn(1.)
+    jax.jit(outer_fn)(1.)
+
 
 class UtilsTest(absltest.TestCase):
 
