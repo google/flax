@@ -42,11 +42,11 @@ def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
 
 def pmean(tree, axis_name='batch'):
   num_devices = lax.psum(1., axis_name)
-  return jax.tree_map(lambda x: lax.psum(x, axis_name) / num_devices, tree)
+  return jax.tree_map(lambda x: x / num_devices, lax.psum(tree, axis_name))
 
 
 def psum(tree, axis_name='batch'):
-  return jax.tree_map(lambda x: lax.psum(x, axis_name), tree)
+  return lax.psum(tree, axis_name)
 
 
 def stack_forest(forest):
