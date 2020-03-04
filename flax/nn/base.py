@@ -809,6 +809,12 @@ class Model:
       return wrapper
     raise AttributeError(f'No attribute named "{name}".')
 
+  def __hash__(self):
+    # Jax will call hash when model is passed to a function transform.
+    # the compiled function should not be shared among model instances because
+    # it closes over the specific parameters of this model instance.
+    return id(self)
+
 
 class Collection:
   """A collection of tensors useful for tracking state.
