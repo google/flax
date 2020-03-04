@@ -21,7 +21,11 @@ from absl.testing import absltest
 from flax import nn
 import train
 
+import jax
 from jax import random
+
+
+jax.config.parse_flags_with_absl()
 
 
 class TrainTest(absltest.TestCase):
