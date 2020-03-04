@@ -494,14 +494,14 @@ class RecurrentTest(absltest.TestCase):
     onp.testing.assert_allclose(y, carry[1])
     param_shapes = jax.tree_map(onp.shape, lstm.params)
     self.assertEqual(param_shapes, {
-        'ii': {'kernel': (3, 4), 'bias': (4,)},
-        'if': {'kernel': (3, 4), 'bias': (4,)},
-        'ig': {'kernel': (3, 4), 'bias': (4,)},
-        'io': {'kernel': (3, 4), 'bias': (4,)},
-        'hi': {'kernel': (4, 4)},
-        'hf': {'kernel': (4, 4)},
-        'hg': {'kernel': (4, 4)},
-        'ho': {'kernel': (4, 4)},
+        'ii': {'kernel': (3, 4)},
+        'if': {'kernel': (3, 4)},
+        'ig': {'kernel': (3, 4)},
+        'io': {'kernel': (3, 4)},
+        'hi': {'kernel': (4, 4), 'bias': (4,)},
+        'hf': {'kernel': (4, 4), 'bias': (4,)},
+        'hg': {'kernel': (4, 4), 'bias': (4,)},
+        'ho': {'kernel': (4, 4), 'bias': (4,)},
     })
 
   def test_gru(self):
