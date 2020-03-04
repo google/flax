@@ -229,6 +229,7 @@ def lm1b_preprocess(dataset,
 
 
 def get_lm1b_datasets(n_devices,
+                      data_dir=None,
                       batch_size=256,
                       dynamic_batching=True,
                       max_target_length=512,
@@ -244,6 +245,7 @@ def get_lm1b_datasets(n_devices,
 
   Args:
     n_devices: number of devices this dataset will be run on.
+    data_dir: str: path containing dataset.
     batch_size: int: target batch size, if using dynamic binning the actual
       batch sizes will be small fractions or multiples of this target.
     dynamic_batching: bool: whether to use dynamic length-binning to produce
@@ -265,7 +267,7 @@ def get_lm1b_datasets(n_devices,
 
   (train_data, eval_data, features_info, keys) = train_and_eval_dataset(
       "lm1b/subwords32k",
-      None,
+      data_dir,
       train_shuffle_files=True,
       eval_shuffle_files=False)
 
