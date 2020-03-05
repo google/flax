@@ -55,7 +55,7 @@ class _ModuleFrame:
   parameter's initial value.
 
   When a module calls into a submodule, a new key is added, with a value
-  being an empty dictionary. Then that new dictionary is passed in as `params` 
+  being an empty dictionary. Then that new dictionary is passed in as `params`
   on a new sub-ModuleFrame. That new sub-ModuleFrame keeps track of its parent
   with the `parent` attribute.
 
@@ -312,9 +312,12 @@ class Module(metaclass=_ModuleMeta):
     ModuleFrame (corresponding to a particular part of the top-level parameter
     tree) where parameters are stored. Concretely, it is the
     "construction frame" -- that is, the frame in which the module is first
-    defined. For non-shared modules, that's where it's called. For shared modules,
-    it's where `submodule.shared(...)` is called (which may or may not be the
-    frame in which it is used.)
+    defined. For non-shared modules, that's where it's called. For shared
+    modules, it's where `submodule.shared(...)` is called (which may or may
+    not be the frame in which it is used.)
+
+    Returns:
+      The ModuleFrame instance where this module was constructed.
     """
     return _module_stack[-1]
 
