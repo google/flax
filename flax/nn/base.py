@@ -967,9 +967,9 @@ class Collection:
     elif self._root != root:
       if self._root.name is None or root.name is None:
         # Example:
-        # with nn.Collection() as coll:
-        #   StatefulModule.call(params, coll)
-        #   StatefulModule.call(params2, coll)
+        # with nn.statefull(state) as new_state:
+        #   StatefulModule.call(params)
+        #   StatefulModule.call(params2)
         raise ValueError('When multiple top-level module calls use a Collection'
                          ' each top-level module should have a name.')
     path = self._current_path()
