@@ -113,6 +113,7 @@ class _ModuleFrame:
     return path
 
   def is_child_of(self, frame):
+    """Check whether this frame is a child of the given frame."""
     if frame is self.parent:
       return True
     elif self.parent:
@@ -948,7 +949,18 @@ class Collection:
     # root scope we guarantee that state is not accidentally shared
     # between different models. When a user specifies an explicit name we can
     # distinguish models and a collection can have multiple roots.
-    assert frame.is_child_of(self._anchor)
+    if frame is self._anchor:
+      # Example:
+      # with nn.Collection.mutate() as coll:
+      #   coll.store(1)
+      raise ValueError('State should be stored from within a module.'
+                       ' Consider using the value directly instead of'
+                       ' storing it in a Collection.')
+    if not frame.is_child_of(self._anchor):
+      # edge case where the Collection cannot capture the scope of a shared Module
+      # See test_collection_store_fails_if_out_of_scope in nn_test.py
+      raise ValueError('Trying to capture state outside the scope of this Collection.'
+                       ' Most likely due to passing around a shared Module.')
     root = frame
     while root.parent is not self._anchor:
       root = root.parent
