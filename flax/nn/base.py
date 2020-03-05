@@ -961,20 +961,40 @@ class Collection:
       # See test_collection_store_fails_if_out_of_scope in nn_test.py
       raise ValueError('Trying to capture state outside the scope of this Collection.'
                        ' Most likely due to passing around a shared Module.')
-    root = frame
-    while root.parent is not self._anchor:
-      root = root.parent
-
+    root = self._find_root(frame)
     if self._root is None:
       self._root = root
     elif self._root != root:
       if self._root.name is None or root.name is None:
+        # Example:
+        # with nn.Collection() as coll:
+        #   StatefulModule.call(params, coll)
+        #   StatefulModule.call(params2, coll)
         raise ValueError('When multiple top-level module calls use a Collection'
                          ' each top-level module should have a name.')
     path = self._current_path()
     old_value = self.state.get(path, None)
     self.state[path] = value
     return old_value
+
+  def _find_root(self, frame):
+    """Find the root frame with respect to the anchor.
+
+    The root frame is defined as the first child of anchor 
+    that is a parent of frame.
+    The root is used to verify that a Collection does not
+    have multiple unnamed roots.
+
+    Args:
+      - frame: the frame of which we want to know the root
+    Returns:
+      The root of the given frame.
+    """
+    assert frame.is_child_of(self._anchor)
+    root = frame
+    while root.parent is not self._anchor:
+      root = root.parent
+    return root
 
   def _current_path(self):
     """"The relative path from the currently active module scope to the root of the collection.
