@@ -1,3 +1,4 @@
+# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,65 +26,105 @@ import time
 from absl import app
 from absl import flags
 from absl import logging
+from flax import jax_utils
 from flax import nn
 from flax import optim
+import decode
 import input_pipeline
 import models
 from flax.metrics import tensorboard
+from flax.training import checkpoints
 from flax.training import common_utils
 import jax
 from jax import random
 import jax.nn
 import jax.numpy as jnp
+import numpy as np
 import tensorflow.compat.v2 as tf
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-    'model_dir', default=None, help=('Directory to store model data'))
+    'model_dir', default=None,
+    help='Directory to store model data')
+
+flags.DEFINE_string(
+    'data_dir', default=None,
+    help='Directory containing TFDS lm1b/subwords32k dataset.')
 
 flags.DEFINE_integer(
-    'batch_size', default=2048, help=('Batch size for training.'))
+    'batch_size', default=2048,
+    help='Batch size for training.')
 
 flags.DEFINE_integer(
-    'eval_frequency',
-    default=1000,
-    help=('Frequency of eval during training, e.g. every 1000 steps.'))
+    'eval_frequency', default=1000,
+    help='Frequency of eval during training, e.g. every 1000 steps.')
 
 flags.DEFINE_integer(
-    'num_train_steps', default=500000, help=('Number of train steps.'))
+    'num_train_steps', default=500000,
+    help='Number of training steps.')
 
 flags.DEFINE_integer(
-    'num_eval_steps',
-    default=20,
-    help=('Number of evaluation steps. If -1 use the whole evaluation set.'))
-
-flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
+    'num_eval_steps', default=20,
+    help='Number of evaluation steps. If -1 use the whole evaluation set.')
 
 flags.DEFINE_float(
-    'weight_decay',
-    default=1e-1,
-    help=('decay factor for AdamW style weight decay.'))
+    'learning_rate', default=0.05,
+    help='Learning rate.')
+
+flags.DEFINE_float(
+    'weight_decay', default=1e-1,
+    help='Decay factor for AdamW style weight decay.')
 
 flags.DEFINE_integer(
-    'max_target_length',
-    default=512,
-    help=('maximum length of training examples.'))
+    'max_target_length', default=512,
+    help='Maximum length of training examples.')
 
 flags.DEFINE_integer(
-    'max_eval_target_length',
-    default=2048,
-    help=('maximum length of eval examples.'))
+    'max_eval_target_length', default=2048,
+    help='Maximum length of eval examples.')
+
+flags.DEFINE_float(
+    'sampling_temperature', default=0.6,
+    help='Sampling temperature for language model inference.')
 
 flags.DEFINE_integer(
-    'random_seed', default=0, help=('Integer for PRNG random seed.'))
+    'sampling_top_k', default=20,
+    help='Top k cutoff for logit sampling, if 0 no top-k cutoff used.')
+
+flags.DEFINE_string(
+    'prompt', default='I love to ',
+    help='Prompt for language model sampling.')
+
+flags.DEFINE_integer(
+    'max_predict_token_length', default=50,
+    help='Maximum example text inference token length.')
+
+flags.DEFINE_bool(
+    'save_checkpoints', default=True,
+    help='Whether to save model checkpoints for debugging.')
+
+flags.DEFINE_bool(
+    'restore_checkpoints', default=True,
+    help='Whether to restore from existing model checkpoints.')
+
+flags.DEFINE_integer(
+    'checkpoint_freq', default=10000,
+    help='Whether to restore from existing model checkpoints.')
+
+flags.DEFINE_integer(
+    'random_seed', default=0,
+    help='Integer for PRNG random seed.')
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2))
 def create_model(key, input_shape, model_kwargs):
   model_def = models.TransformerLM.partial(**model_kwargs)
-  _, model = model_def.create_by_shape(key, [(input_shape, jnp.float32)])
-  return model
+  with nn.attention.Cache().mutate() as cache_def:
+    _, model = model_def.create_by_shape(key,
+                                         [(input_shape, jnp.float32)],
+                                         cache=cache_def)
+  return model, cache_def
 
 
 def create_optimizer(model, learning_rate):
@@ -247,6 +288,39 @@ def eval_step(model, inputs):
   return compute_metrics(logits, inputs, weights)
 
 
+def predict_step(inputs, model, cache, prng_key):
+  """Fast sampling of language model from prompt."""
+  prefix_len = inputs.shape[1]
+  pad_len = FLAGS.max_predict_token_length - prefix_len
+  padded_inputs = jnp.pad(inputs, jnp.array([[0, 0], [0, pad_len]]))
+
+  def tokens_ids_to_logits(ids, cache):
+    """Token slice to logits from decoder model."""
+    with cache.mutate() as new_cache:
+      logits = model(ids, shift=False, train=False, cache=new_cache)
+    # Remove singleton sequence-length dimension
+    # [batch, 1, vocab] --> [batch, vocab]
+    logits = logits.squeeze(axis=1)
+    return logits, new_cache
+
+  sampled_seqs = decode.temperature_sample(
+      padded_inputs,
+      cache,
+      tokens_ids_to_logits,
+      prng_key,
+      temperature=FLAGS.sampling_temperature,
+      topk=FLAGS.sampling_top_k,
+      eos_token=2**16)  # No EOS tokens used in default lm1b dataset encoding.
+
+  return sampled_seqs
+
+
+def tohost(x):
+  """Collect batches from all devices to host and flatten batch dimensions."""
+  n_device, n_batch, *remaining_dims = x.shape
+  return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
+
+
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
@@ -272,11 +346,13 @@ def main(argv):
     raise ValueError('Batch size must be divisible by the number of devices')
   train_ds, eval_ds, info_ds = input_pipeline.get_lm1b_datasets(
       n_devices=jax.local_device_count(),
+      data_dir=FLAGS.data_dir,
       batch_size=batch_size,
       dynamic_batching=True,
       max_target_length=max_target_length,
       max_eval_target_length=max_eval_target_length)
   vocab_size = info_ds['text'].encoder.vocab_size
+  encoder = info_ds['text'].encoder
 
   train_iter = iter(train_ds)
   input_shape = (batch_size, max_target_length)
@@ -292,31 +368,46 @@ def main(argv):
   }
 
   rng = random.PRNGKey(random_seed)
+  rng = jax.random.fold_in(rng, jax.host_id())
   rng, init_rng = random.split(rng)
-  model = create_model(init_rng, input_shape, transformer_lm_kwargs)
-  optimizer = create_optimizer(model, learning_rate)
-  del model  # don't keep a copy of the initial model
-  learning_rate_fn = create_learning_rate_scheduler(
-      base_learning_rate=learning_rate)
-
-  p_train_step = jax.pmap(
-      functools.partial(train_step, learning_rate_fn=learning_rate_fn),
-      axis_name='batch')
-  p_eval_step = jax.pmap(eval_step, axis_name='batch')
-
   # We init the first set of dropout PRNG keys, but update it afterwards inside
   # the main pmap'd training update for performance.
   dropout_rngs = random.split(rng, jax.local_device_count())
 
+  model, cache_def = create_model(init_rng, input_shape, transformer_lm_kwargs)
+  optimizer = create_optimizer(model, learning_rate)
+  del model  # don't keep a copy of the initial model
+  start_step = 0
+  if FLAGS.restore_checkpoints:
+    # Restore unreplicated optimizer + model state from last checkpoint.
+    optimizer = checkpoints.restore_checkpoint(FLAGS.model_dir, optimizer)
+    # Grab last step from the first of the optimizer replicas.
+    start_step = int(optimizer.state.step[0])
+
+  learning_rate_fn = create_learning_rate_scheduler(
+      base_learning_rate=learning_rate)
+  p_train_step = jax.pmap(
+      functools.partial(train_step, learning_rate_fn=learning_rate_fn),
+      axis_name='batch')
+  p_eval_step = jax.pmap(eval_step, axis_name='batch')
+  p_pred_step = jax.pmap(predict_step, axis_name='batch')
+
   metrics_all = []
   tick = time.time()
-  for step, batch in zip(range(num_train_steps), train_iter):
+  for step, batch in zip(range(start_step, num_train_steps), train_iter):
     batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
     optimizer, metrics, dropout_rngs = p_train_step(
         optimizer, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
 
-    if (step + 1) % eval_freq == 0:
+    # Save a Checkpoint
+    if ((step % FLAGS.checkpoint_freq == 0 and step > 0) or
+        step == num_train_steps - 1):
+      if jax.host_id() == 0 and FLAGS.save_checkpoints:
+        checkpoints.save_checkpoint(FLAGS.model_dir, optimizer, step)
+
+    # Periodic metric handling.
+    if step % eval_freq == 0 and step > 0:
       metrics_all = common_utils.get_metrics(metrics_all)
       lr = metrics_all.pop('learning_rate').mean()
       metrics_sums = jax.tree_map(jnp.sum, metrics_all)
@@ -337,6 +428,7 @@ def main(argv):
       # reset metric accumulation for next evaluation cycle.
       metrics_all = []
 
+      # Eval Metrics
       eval_metrics = []
       eval_iter = iter(eval_ds)
       if num_eval_steps == -1:
@@ -363,6 +455,23 @@ def main(argv):
       if jax.host_id() == 0:
         for key, val in eval_summary.items():
           eval_summary_writer.scalar(key, val, step)
+        eval_summary_writer.flush()
+
+      # Fast inference of prompt extension using trained LM.
+      rng, subrng = jax.random.split(rng)
+      pred_rngs = random.split(subrng, jax.local_device_count())
+      prompt = jnp.array(encoder.encode(FLAGS.prompt))
+      prompt = jax_utils.replicate(prompt)
+      prompt = jnp.reshape(prompt, (prompt.shape[0], 1, prompt.shape[1]))
+      cache = jax_utils.replicate(
+          cache_def.initialize_cache((1, FLAGS.max_predict_token_length)))
+      predicted = p_pred_step(prompt, optimizer.target, cache, pred_rngs)
+      predicted = tohost(predicted)
+      exemplars = ''
+      for n in range(predicted.shape[0]):
+        exemplars += encoder.decode(predicted[n]) + '\n\n'
+      if jax.host_id() == 0:
+        eval_summary_writer.text('samples', exemplars, step)
         eval_summary_writer.flush()
 
 

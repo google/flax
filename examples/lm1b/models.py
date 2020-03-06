@@ -1,3 +1,4 @@
+# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +16,7 @@
 """Transformer-based language models."""
 
 from flax import nn
+from jax import lax
 import jax.numpy as jnp
 import numpy as np
 
@@ -93,23 +95,42 @@ class AddPositionEmbs(nn.Module):
   def apply(self,
             inputs,
             max_len=2048,
-            posemb_init=nn.initializers.normal(stddev=1.0)):
+            posemb_init=nn.initializers.normal(stddev=1.0),
+            cache=None):
     """Applies AddPositionEmbs module.
 
     Args:
       inputs: input data
       max_len: maximum possible length for the input
       posemb_init: positional embedding initializer
+      cache: flax attention cache for fast decoding.
 
     Returns:
       output: `(bs, timesteps, in_dim)`
     """
-    assert inputs.ndim == 3, ('Number of dimensions should be 3, but it is: %d' %
-                              inputs.ndim)
+    assert inputs.ndim == 3, ('Number of dimensions should be 3,'
+                              ' but it is: %d' % inputs.ndim)
     length = inputs.shape[1]
     pos_emb_shape = (1, max_len, inputs.shape[-1])
     pos_embedding = self.param('pos_embedding', pos_emb_shape, posemb_init)
-    return inputs + pos_embedding[:, :length, :]
+    pe = pos_embedding[:, :length, :]
+    # We abuse the same attention Cache mechanism to run positional embeddings
+    # in fast predict mode. We could use state variables instead, but this
+    # simplifies invocation with a single top-level cache context manager.
+    # We only use the cache's position index for tracking decoding position.
+    if cache:
+      if self.is_initializing():
+        cache.store(lambda: (4, (1, 1)))
+      else:
+        cache_entry = cache.retrieve(None)
+        i = cache_entry.i
+        one = jnp.array(1, jnp.uint32)
+        cache_entry = cache_entry.replace(i=cache_entry.i + one)
+        cache.store(cache_entry)
+        _, _, df = pos_embedding.shape
+        pe = lax.dynamic_slice(pos_embedding, jnp.array((0, i, 0)),
+                               jnp.array((1, 1, df)))
+    return inputs + pe
 
 
 class MlpBlock(nn.Module):
@@ -146,7 +167,8 @@ class Transformer1DBlock(nn.Module):
             padding_mask=None,
             dropout_rate=0.1,
             attention_dropout_rate=0.1,
-            deterministic=False):
+            deterministic=False,
+            cache=None):
     """Applies Transformer1DBlock module.
 
     Args:
@@ -159,6 +181,7 @@ class Transformer1DBlock(nn.Module):
       dropout_rate: dropout rate
       attention_dropout_rate: dropout rate for attention weights
       deterministic: bool, deterministic or not (to apply dropout)
+      cache: flax autoregressive cache for fast decoding.
 
     Returns:
       output after transformer block.
@@ -180,7 +203,8 @@ class Transformer1DBlock(nn.Module):
         bias=False,
         broadcast_dropout=False,
         dropout_rate=attention_dropout_rate,
-        deterministic=deterministic)
+        deterministic=deterministic,
+        cache=cache)
     x = nn.dropout(x, rate=dropout_rate, deterministic=deterministic)
     x = x + inputs
 
@@ -195,7 +219,6 @@ class Transformer1DBlock(nn.Module):
     return x + y
 
 
-# TODO(levskaya): modify for 3 modes: train, eval and fast predict.
 class TransformerLM(nn.Module):
   """Transformer Model for language modeling."""
 
@@ -211,7 +234,8 @@ class TransformerLM(nn.Module):
             train=False,
             shift=True,
             dropout_rate=0.1,
-            attention_dropout_rate=0.1):
+            attention_dropout_rate=0.1,
+            cache=None):
     """Applies Transformer model on the inputs.
 
     Args:
@@ -228,18 +252,21 @@ class TransformerLM(nn.Module):
         fast, looped single-token autoregressive decoding.
       dropout_rate: dropout rate
       attention_dropout_rate: dropout rate for attention weights
+      cache: flax autoregressive cache for fast decoding.
 
     Returns:
       output of a transformer decoder.
     """
     padding_mask = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)[..., None]
     assert inputs.ndim == 2  # (batch, len)
+    x = inputs
     if shift:
-      x = shift_right(inputs)
+      x = shift_right(x)
     x = x.astype('int32')
     x = Embed(x, num_embeddings=vocab_size, features=emb_dim, name='embed')
     x = AddPositionEmbs(
-        x, max_len=max_len, posemb_init=sinusoidal_init(max_len=max_len))
+        x, max_len=max_len, posemb_init=sinusoidal_init(max_len=max_len),
+        cache=cache)
     x = nn.dropout(x, rate=dropout_rate, deterministic=not train)
     for _ in range(num_layers):
       x = Transformer1DBlock(
@@ -252,6 +279,7 @@ class TransformerLM(nn.Module):
           dropout_rate=dropout_rate,
           attention_dropout_rate=attention_dropout_rate,
           deterministic=not train,
+          cache=cache,
       )
     x = nn.LayerNorm(x)
     logits = nn.Dense(
