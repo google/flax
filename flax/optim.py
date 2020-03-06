@@ -16,7 +16,7 @@
 
 """Flax Optimizer api.
 
-Flax optimzers are defined using the OptimzerDef class which specifies the
+Flax optimizers are defined using the OptimizerDef class which specifies the
 initialization and gradient application logic.
 Creating an optimizer using the `create` method will result in an instance of
 the `Optimizer` class which encapsulates the optimization target and state.
@@ -152,7 +152,7 @@ class OptimizerDef:
 
     Args:
       **hyper_param_overrides: the hyper parameters updates
-        will overide the defaults specified in the `OptimizerDef`.
+        will override the defaults specified in the `OptimizerDef`.
         Pass `hyper_params=...` to replace all hyper parameters.
     Returns:
       The new hyper parameters.
@@ -229,7 +229,7 @@ class Optimizer:
     Args:
       grads: A pytree of gradients.
       **hyper_param_overrides: the hyper parameters passed to apply_gradient
-        will overide the defaults specified in the `OptimizerDef`.
+        will override the defaults specified in the `OptimizerDef`.
         Pass `hyper_params=...` to replace all hyper parameters.
     Returns:
       A new optimizer with the updated target and state.
@@ -274,7 +274,7 @@ class Optimizer:
       loss_fn:  function that receives the target and returns a loss or a
         tuple of the loss and auxiliary outputs.
       **hyper_param_overrides: the hyper parameters passed to apply_gradient
-        will overide the defaults specified in the `OptimizerDef`.
+        will override the defaults specified in the `OptimizerDef`.
         Pass `hyper_params=...` to replace all hyper parameters.
     Returns:
       A tuple consisting of the new optimizer, the loss,
@@ -392,7 +392,7 @@ class MultiOptimizer(OptimizerDef):
   def __init__(self, *traversals_and_optimizers):
     """Create a new MultiOptimizer.
 
-    A MultiOptimizer is useful when seperate optimizer algorithms should be
+    A MultiOptimizer is useful when separate optimizer algorithms should be
     applied to various subsets of the model parameters.
 
     Example::
@@ -444,7 +444,7 @@ class MultiOptimizer(OptimizerDef):
 
     Args:
       **hyper_param_overrides: the hyper parameters updates
-        will overide the defaults specified in the `OptimizerDef`.
+        will override the defaults specified in the `OptimizerDef`.
         Pass `hyper_params=...` to replace all hyper parameters.
     Returns:
       The new hyper parameters.

@@ -43,6 +43,7 @@ setup(
     version=version,
     description="Flax: A neural network library for JAX designed for flexibility",
     long_description="\n\n".join([README]),
+    long_description_content_type='text/markdown',
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

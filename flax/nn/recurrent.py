@@ -46,7 +46,7 @@ class RNNCellBase(base.Module):
       rng: random number generator passed to the init_fn.
       batch_dims: a tuple providing the shape of the batch dimensions.
       size: the size or number of features of the memory.
-      init_fn: initalizer function for the carry.
+      init_fn: initializer function for the carry.
     Returns:
       An initialized carry for the given RNN cell.
     """
@@ -117,7 +117,7 @@ class LSTMCell(RNNCellBase):
       rng: random number generator passed to the init_fn.
       batch_dims: a tuple providing the shape of the batch dimensions.
       size: the size or number of features of the memory.
-      init_fn: initalizer function for the carry.
+      init_fn: initializer function for the carry.
     Returns:
       An initialized carry for the given RNN cell.
     """
@@ -186,7 +186,7 @@ class GRUCell(RNNCellBase):
       rng: random number generator passed to the init_fn.
       batch_dims: a tuple providing the shape of the batch dimensions.
       size: the size or number of features of the memory.
-      init_fn: initalizer function for the carry.
+      init_fn: initializer function for the carry.
     Returns:
       An initialized carry for the given RNN cell.
     """
