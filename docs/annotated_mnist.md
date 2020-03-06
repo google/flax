@@ -33,7 +33,7 @@ Each call to `flax.nn.Conv` defines a learnable kernel.
 class CNN(flax.nn.Module):
   def apply(self, x):
     x = flax.nn.Conv(x, features=32, kernel_size=(3, 3))
-    x = jax.nn.relu(x)
+    x = flax.nn.relu(x)
     x = flax.nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
     x = flax.nn.Conv(x, features=64, kernel_size=(3, 3))
     x = flax.nn.relu(x)
