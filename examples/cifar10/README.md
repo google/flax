@@ -92,36 +92,36 @@ error. The Fast AutoAugment code repo reports 2.7% error
 The network architecture and training regime and be controlled via command
 line arguments:
 
-`--learning_rate` (default=0.1): set the initial learning rate
-`--momentum` (default=0.9): the momentum value used for SGD
-`--lr_schedule`: Choose the learning rate schedule:
-    `constant`: a constant learning rate
-    `stepped` (default): a stepped learning rate that
+- `--learning_rate` (default=0.1): set the initial learning rate
+- `--momentum` (default=0.9): the momentum value used for SGD
+- `--lr_schedule`: Choose the learning rate schedule:
+  -  `constant`: a constant learning rate
+  -  `stepped` (default): a stepped learning rate that
         changes the learning rate at specific points during training
-    `cosine`: anneal the learning rate with half a cosine wave
-`--lr_sched_steps` (default=`[[60, 0.2], [120, 0.04], [160, 0.008]]`):
+  -  `cosine`: anneal the learning rate with half a cosine wave
+- `--lr_sched_steps` (default=`[[60, 0.2], [120, 0.04], [160, 0.008]]`):
     Define the steps used for a stepped learning rate the steps are specified
     using Python syntax; e.g. to drop the LR by a factor of 0.1 at epochs 60,
     120 and 160 use:
     `--lr_sched_steps="[[60, 0.1], [120, 0.01], [160, 0.001]]"`
-`--num_epochs` (default=200): the number of epochs to train for
-`--l2_reg` (default=0.005): the amount of L2 regularization to apply
+- `--num_epochs` (default=200): the number of epochs to train for
+- `--l2_reg` (default=0.005): the amount of L2 regularization to apply
     (on all parameters)
-`--batch_size` (default=256): mini-batch size
-`--arch` (default=wrn26_10): network architecture
-    `wrn26_10`: Wide ResNet, 26 layers, 10x width
-    `wrn26_6_ss`: Wide ResNeXt, 26 2x96d with shake-shake regularization
-    `pyramid`: PyramidNet, pyramid alpha=200, 272 layers, ShakeDrop
+- `--batch_size` (default=256): mini-batch size
+- `--arch` (default=wrn26_10): network architecture
+  -  `wrn26_10`: Wide ResNet, 26 layers, 10x width
+  -  `wrn26_6_ss`: Wide ResNeXt, 26 2x96d with shake-shake regularization
+  -  `pyramid`: PyramidNet, pyramid alpha=200, 272 layers, ShakeDrop
         regularization
-`--wrn_dropout_rate` (default=0.3): DropOut rate used in Wide ResNet
+- `--wrn_dropout_rate` (default=0.3): DropOut rate used in Wide ResNet
     (on all residual blocks)
-`--rng` (default=0): Random seed used for network initialization and
+- `--rng` (default=0): Random seed used for network initialization and
     stochasticity during training
 
 
 ## Issues
 
-We apply L2 regularization to weights and biases, where as it is mostly *not*
+We apply L2 regularization to weights and biases, whereas it is mostly *not*
 applied to biases.
 
 
