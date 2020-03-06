@@ -4,7 +4,7 @@
 
 * Library code should be easy to read and understand.
 
-* Prefer duplicating code over a bad abstration.
+* Prefer duplicating code over a bad abstraction.
 
 * Generally, prefer duplicating code over adding options to functions.
 
