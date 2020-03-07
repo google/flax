@@ -97,13 +97,17 @@ def eval(model, eval_ds):
 def train():
 ```
 
-Load and shuffle MNIST.
+Load, convert dtypes, and shuffle MNIST.
 
 ```py
   train_ds = tfds.load('mnist', split=tfds.Split.TRAIN)
+  train_ds = train_ds.map(lambda x: {'image':tf.cast(x['image'], tf.float32),
+                                     'label':tf.cast(x['label'], tf.int32)})
   train_ds = train_ds.cache().shuffle(1000).batch(128)
   test_ds = tfds.as_numpy(tfds.load(
       'mnist', split=tfds.Split.TEST, batch_size=-1))
+  test_ds = {'image': test_ds['image'].astype(jnp.float32),
+             'label': test_ds['label'].astype(jnp.int32)}
 ```
 
 Create a new model, running all necessary initializers.
