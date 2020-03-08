@@ -1,0 +1,17 @@
+# https://github.com/ad-m/github-push-action
+name: Generate HOWTO branches
+on: push
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - name: Create local changes
+      run: ./howtos/scripts/generate_howto_branches_from_diffs.sh
+    # - name: Push changes
+    #   uses: ad-m/github-push-action@master
+    #   with:
+    #     github_token: ${{ secrets.GITHUB_TOKEN }}
+    #     branch: prerelease
