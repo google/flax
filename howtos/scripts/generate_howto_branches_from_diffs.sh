@@ -43,7 +43,7 @@ for howto in $howtos; do
     git branch -D $howto
   fi
   git checkout -b $howto
-  git apply "howtos/${howto}.diff"
+  git apply "${howto_diff_path}/${howto}.diff"
   git commit -am "Added howto branch ${howto}"
   git push
 done
