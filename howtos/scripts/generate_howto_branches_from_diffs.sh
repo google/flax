@@ -27,6 +27,13 @@ git branch --verbose
 
 git checkout prerelease
 
+# First delete all remote branches starting with "howto-"
+
+for b in $(git branch -r | grep origin/howto); do
+  branch=${b##*/}
+  git push origin --delete $branch
+done
+
 howto_diff_path="howtos/diffs"
 
 top_dir=$(git rev-parse --show-toplevel)
@@ -45,7 +52,7 @@ for howto in $howtos; do
   git checkout -b $howto
   git apply "${howto_diff_path}/${howto}.diff"
   git commit -am "Added howto branch ${howto}"
-  git push
+  git push -u origin $howto
 done
 
 
