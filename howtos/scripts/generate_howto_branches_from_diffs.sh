@@ -7,6 +7,15 @@ if [ -z "${GITHUB_TOKEN}" ]; then
     echo "error: GITHUB_TOKEN not found"
     exit 1
 fi
+if [ -z "${GITHUB_ACTOR}" ]; then
+    echo "error: GITHUB_ACTOR not found"
+    exit 1
+fi
+if [ -z "${GITHUB_REPOSITORY}" ]; then
+    echo "error: GITHUB_REPOSITORY not found"
+    exit 1
+fi
+
 
 # initialize git
 remote_repo="https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
