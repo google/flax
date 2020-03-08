@@ -14,6 +14,14 @@ git config http.sslVerify false
 git config user.name "Automated Publisher"
 git config user.email "actions@users.noreply.github.com"
 
+# HIER GEBLEVNE. THIS IS WEIRD.
+# CHECK HOW TO REMOVE BRANCHES. IF NOT POSSIBLE SEE HOW TO OVERRIDE THEM
+git remote add publisher "${remote_repo}"
+git show-ref # useful for debugging
+git branch --verbose
+git branch -a
+echo "Does this work?"
+
 # publish any new files
 # git checkout master
 # git add -A
