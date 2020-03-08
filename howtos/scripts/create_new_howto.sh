@@ -1,5 +1,9 @@
 #!/bin/sh
-# Creates a new diff howto from the current open files.
+#
+# Creates a new howto diff from all files that are currently edited and not
+# committed (untracked, tracked, staged). Also reverts all changes. Note the
+# changes can be recovered by simply applying the diff with 
+# `git apply <howto_diff>`.
 
 old_pwd=$(pwd)
 
@@ -14,15 +18,20 @@ Awesome, you are going to create a new FLAX HOWTO!
 More details about HOWTOs can be found here:
 https://github.com/marcvanzee/flax/blob/prerelease/howtos/README.md
 
-The following files are edited and tracked (untracked files are ommitted):
+The following files are edited/added:
 
 EOF
-git diff --name-only | awk '{print "- " $0}'
-git diff --staged --name-only | awk '{print "- " $0}'
+# Get respectively all untracked, unstaged, and stages files.
+# The awk command prepends all files with "-".
+(git ls-files --others --exclude-standard && \
+  git diff --name-only && \
+  git diff --staged --name-only) | awk '{print "- " $0}'
 
-echo ""
-echo "This operation will pack all changes in the files above into a diff "
-echo "file, and undo the changes in those files."
+cat << EOF
+
+WARNING: This operation will pack all changes in the files above into a diff 
+file, and undo the changes in those files.
+EOF
 read -p "Would you like to continue? " -r
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   echo "\nBailing out."
@@ -41,24 +50,25 @@ if test -f "${howto_path}"; then
     exit 1
 fi
 
-# Store the diff in a temporary location.
-tmp_path=$(mktemp)
-git diff > $tmp_path
-# Also add staged changes.
-git diff --staged >> $tmp_path
+# Add all untracked files. After this there are no untracked changes anymore.
+git add *
+# Create diff for both unstaged and staged changes.
+(git diff && git diff --staged) > $howto_path
 
-# Now undo all changes that are made.
-git restore --tracked <path>
-git restore <path>
-git clean -f -- howtos/howto-setupchange.diff
+# Revert all tracked changes (which are all files except the howto diff).
+git reset --hard
 
 # Make sure the diff is tracked.
 git add $howto_path
-echo "\nDone! Diff created in ${howto_path}"
-echo "The file has been added to your index automatically."
 
+cat << EOF
 
+Done! Diff created in ${howto_path}.
+The file has been staged, you should commit and push it yourself.
 
+NOTE: If you want to restore you changes, simply run:
 
+$ git apply ${howto_path}
+EOF
 
 cd $old_pwd
