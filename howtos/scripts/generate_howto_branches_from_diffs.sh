@@ -28,7 +28,6 @@ git branch --verbose
 git checkout prerelease
 
 # First delete all remote branches starting with "howto-"
-
 for b in $(git branch -r | grep origin/howto); do
   branch=${b##*/}
   git push origin --delete $branch
@@ -44,16 +43,13 @@ cd $top_dir
 
 echo "Applying HOWTO diffs to branches..\n"
 for howto in $howtos; do
-  echo $howto
-  if [[ -n $(git rev-parse --verify --quiet $howto) ]]; then
-    echo "  Branch ${howto} exists already: overriding with diff"
-    git branch -D $howto
-  fi
   git checkout -b $howto
-  git apply "${howto_diff_path}/${howto}.diff"
+  diff_file="${howto_diff_path}/${howto}.diff"
+  if [[ -n $(git apply --check "${diff_file}") ]]; then
+    echo "ERROR: Cannot apply ${howto}!"
+    exit 1
+  fi
+  git apply $diff_file
   git commit -am "Added howto branch ${howto}"
   git push -u origin $howto
 done
-
-
-
