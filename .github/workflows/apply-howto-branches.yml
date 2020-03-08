@@ -10,7 +10,8 @@ jobs:
     - uses: actions/checkout@master
     - name: Create local changes
       run: ./howtos/scripts/generate_howto_branches_from_diffs.sh
-      secrets: ["GITHUB_TOKEN"]
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     # - name: Push changes
     #   uses: ad-m/github-push-action@master
     #   with:
