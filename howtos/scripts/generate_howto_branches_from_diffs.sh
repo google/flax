@@ -28,7 +28,7 @@ git branch --verbose
 git checkout prerelease
 
 # First delete all remote branches starting with "howto-"
-branch -a
+git branch -a
 for b in $(git branch -r | grep origin/howto); do
   branch=${b##*/}
   git push origin --delete $branch
