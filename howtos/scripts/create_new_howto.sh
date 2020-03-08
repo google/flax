@@ -34,19 +34,19 @@ file, and undo the changes in those files.
 EOF
 read -p "Would you like to continue? " -r
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-  echo "\nBailing out."
+  printf "Bailing out."
   exit 1
 fi
 
-echo "\nPlease provide a name for the howto:\n"
+printf "\nPlease provide a name for the howto:\n"
 
 read -p "howto-" howto_name
 howto_name="howto-${howto_name}"
 howto_path="${howto_diff_path}/${howto_name}.diff"
 
 if test -f "${howto_path}"; then
-    echo "ERROR: howto exists already at ${howto_path}"
-    echo "Please provide another howto name!"
+    printf "ERROR: howto exists already at ${howto_path}"
+    printf "Please provide another howto name!"
     exit 1
 fi
 
@@ -56,7 +56,7 @@ git add *
 (git diff && git diff --staged) > $howto_path
 
 # Revert all tracked changes (which are all files except the howto diff).
-git reset --hard
+git reset --hard > /dev/null
 
 # Make sure the diff is tracked.
 git add $howto_path
