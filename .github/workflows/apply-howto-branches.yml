@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@master
+      with:
+        ref: prerelease
     - name: Create local changes
       run: ./howtos/scripts/generate_howto_branches_from_diffs.sh
       env:
