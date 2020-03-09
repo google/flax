@@ -968,8 +968,8 @@ class Collection:
       if self._root.name is None or root.name is None:
         # In the following examples, should the two calls to `StatefulModule` share state or not?
         # because it's ambiguous, we throw an error and require the user to explicitly separate state
-        # by giving each instance a separate name, or to explicitly (XXXXX??) in order to explicitly share
-        # state
+        # by giving each instance a separate name, or to explicitly pass the same name
+        # in order to share state.
         # with nn.statefull(state) as new_state:
         #   StatefulModule.call(params)
         #   StatefulModule.call(params2)
