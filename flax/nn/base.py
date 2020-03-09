@@ -126,9 +126,6 @@ class _ModuleFrame:
     self._name_counter += 1
     return name
 
-  def __eq__(self, other):
-    return self is other
-
 
 def module_method(fn):
   """Decorates a function as a module method.
