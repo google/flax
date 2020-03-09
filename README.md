@@ -1,5 +1,7 @@
 # Flax: A neural network library for JAX designed for flexibility
 
+The FLAX documentation can be found here: https://flax.readthedocs.io/en/latest/
+
 **NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch with us at flax-dev@google.com.
 
 ## Background: JAX
@@ -36,6 +38,9 @@ Flax comes with:
 * A ResNet ImageNet example, ready to be forked for your research.
 
 * ...more examples in the works
+
+**NOTE**: See [docs/annotated_mnist.md](docs/annotated_mnist.md) for an MNIST
+example with detailed annotations for each code block.
 
 ### Flax Modules
 
@@ -94,9 +99,6 @@ Now install `flax` from Github:
 
 
 ## Full end-to-end MNIST example
-
-**NOTE**: See [docs/annotated_mnist.md](docs/annotated_mnist.md) for a version
-with detailed annotations for each code block.
 
 ```py
 import jax
@@ -185,52 +187,122 @@ def train():
 HOWTOs are sample diffs showing how to change various things in your training
 code.
 
-Here are a few examples.
+Here is an example.
 
 
+### Ensemble learning
 
-### Polyak averaging
-
-This diff shows how to modify the MNIST example above to evaluate with
-an exponential moving average of parameters over the course of training.
-
-Note that no special framework support was needed.
+This howto changes the MNIST example from training a single CNNs to training an
+ensemble of CNNs, such that each CNN is trained on its own device. Each CNN
+reports the accuracy and loss. 
 
 ```py
---- a/mnist.py
-+++ b/mnist-polyak.py
-@@ -29,14 +29,17 @@ def compute_metrics(logits, labels):
-   return {'loss': loss, 'accuracy': accuracy}
-
- @jax.jit
--def train_step(optimizer, batch):
-+def train_step(optimizer, params_ema, batch):
+diff --git a/examples/mnist/train.py b/examples/mnist/train.py
+index e93321f..7ac4fe2 100644
+--- a/examples/mnist/train.py
++++ b/examples/mnist/train.py
+@@ -85,9 +86,11 @@ def create_model(key):
+   return model
+ 
+-def create_optimizer(model, learning_rate, beta):
+-  optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
+-  optimizer = optimizer_def.create(model)
++@jax.pmap
++def create_optimizers(rng):
++  optimizer_def = optim.Momentum(
++      learning_rate=FLAGS.learning_rate, beta=FLAGS.momentum)
++  optimizer = optimizer_def.create(create_model(rng))
+   return optimizer
+ 
+@@ -110,7 +113,7 @@ def compute_metrics(logits, labels):
+   return metrics
+ 
+-@jax.jit
++@functools.partial(jax.pmap)
+ def train_step(optimizer, batch):
+   """Train for a single step."""
    def loss_fn(model):
-     logits = model(batch['image'])
-     loss = jnp.mean(cross_entropy_loss(
-         logits, batch['label']))
-     return loss, logits
-   optimizer, _, _ = optimizer.optimize(loss_fn)
+@@ -122,13 +125,17 @@ def train_step(optimizer, batch):
+   return optimizer, metrics
+ 
+-@jax.jit
++@jax.pmap
+ def eval_step(model, batch):
+   logits = model(batch['image'])
+   return compute_metrics(logits, batch['label'])
+ 
+-def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
++def replicate(tree_obj, num_replicas):
++  return jax.tree_map(lambda x: onp.array([x] * num_replicas), tree_obj)
++
++
++def train_epoch(optimizers, train_ds, batch_size, epoch, rng, num_models):
+   """Train for a single epoch."""
+   train_ds_size = len(train_ds['image'])
+   steps_per_epoch = train_ds_size // batch_size
+@@ -139,25 +146,27 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+   batch_metrics = []
+   for perm in perms:
+     batch = {k: v[perm] for k, v in train_ds.items()}
+-    optimizer, metrics = train_step(optimizer, batch)
++    batch = replicate(batch, num_models)
++    optimizers, metrics = train_step(optimizers, batch)
+     batch_metrics.append(metrics)
+ 
+   # compute mean of metrics across each batch in epoch.
+   batch_metrics_np = jax.device_get(batch_metrics)
++  batch_metrics_np = jax.tree_multimap(lambda *xs: onp.array(xs),
++                                       *batch_metrics_np)
+   epoch_metrics_np = {
+-      k: onp.mean([metrics[k] for metrics in batch_metrics_np])
+-      for k in batch_metrics_np[0]}
+-
+-  logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
++      k: onp.mean(batch_metrics_np[k], axis=0) for k in batch_metrics_np
++  }
++  logging.info('train epoch: %d, loss: %s, accuracy: %s', epoch,
+                epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
+ 
+-  return optimizer, epoch_metrics_np
++  return optimizers, epoch_metrics_np
+ 
+ 
+-def eval_model(model, test_ds):
+-  metrics = eval_step(model, test_ds)
++def eval_model(models, test_ds):
++  metrics = eval_step(models, test_ds)
+   metrics = jax.device_get(metrics)
+-  summary = jax.tree_map(lambda x: x.item(), metrics)
++  summary = metrics
+   return summary['loss'], summary['accuracy']
+ 
+ 
+@@ -174,19 +183,20 @@ def train(train_ds, test_ds):
+ 
+   batch_size = FLAGS.batch_size
+   num_epochs = FLAGS.num_epochs
++  num_models = jax.device_count()
+ 
+-  model = create_model(rng)
+-  optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
++  optimizers = create_optimizers(random.split(rng, num_models))
+ 
+   input_rng = onp.random.RandomState(0)
++  test_ds = replicate(test_ds, num_models)
+ 
+   for epoch in range(1, num_epochs + 1):
+-    optimizer, _ = train_epoch(
+-        optimizer, train_ds, batch_size, epoch, input_rng)
+-    loss, accuracy = eval_model(optimizer.target, test_ds)
+-    logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
+-                 epoch, loss, accuracy * 100)
 -  return optimizer
-+  params_ema = jax.tree_multimap(
-+    lambda p_ema, p: p_ema * 0.99 + p * 0.01,
-+    params_ema, optimizer.target.params)
-+  return optimizer, params_ema
-
- @jax.jit
- def eval(model, eval_ds):
-@@ -59,9 +62,9 @@ def train():
-   for epoch in range(10):
-     for batch in tfds.as_numpy(train_ds):
-       batch['image'] = batch['image'] / 255.0
--      optimizer = train_step(optimizer, batch)
-+      optimizer, params_ema = train_step(optimizer, params_ema, batch)
-
--    metrics = eval(optimizer.target, test_ds)
-+    metrics = eval(optimizer.target.replace(params=params_ema), test_ds)
-     print('eval epoch: %d, loss: %.4f, accuracy: %.2f'
-          % (epoch+1,
-           metrics['loss'], metrics['accuracy'] * 100))
++    optimizers, _ = train_epoch(optimizers, train_ds, batch_size, epoch,
++                                input_rng, num_models)
++    loss, accuracy = eval_model(optimizers.target, test_ds)
++    logging.info('eval epoch: %d, loss: %s, accuracy: %s', epoch, loss,
++                 accuracy * 100)
++  return optimizers
 ```
 
 ## Getting involved
