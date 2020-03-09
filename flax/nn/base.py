@@ -112,6 +112,15 @@ class _ModuleFrame:
       path += self.name
     return path
 
+  def is_descendent_of(self, frame):
+    """Check whether this frame is a descendent of the given frame."""
+    if frame is self.parent:
+      return True
+    elif self.parent:
+      return self.parent.is_descendent_of(frame)
+    else:
+      return False
+
   def create_name(self):
     name = str(self._name_counter)
     self._name_counter += 1
@@ -883,7 +892,7 @@ class Collection:
     self.state = state
     # the anchor is used to determine the prefix of the collection.
     # this way we can create/nest collections inside modules.
-    self._anchor = len(_module_stack)
+    self._anchor = _module_stack[-1] if _module_stack else None
 
     self._mutable = False
     self._root = None
@@ -931,28 +940,64 @@ class Collection:
     Returns:
       The previous value stored in the collection or None.
     """
-    _top_frame('store')
+    frame = _top_frame('store')
     if not self._mutable:
       raise ValueError('Collection is not mutable. Use the `mutate` method to'
                        'create a mutable copy.')
-    assert len(_module_stack) > self._anchor
-
     # the root of a Collection is the first module scope that gets created
     # inside the mutate scope of the Collection. By allowing only one unique
     # root scope we guarantee that state is not accidentally shared
     # between different models. When a user specifies an explicit name we can
     # distinguish models and a collection can have multiple roots.
-    root = _module_stack[self._anchor]
+    if frame == self._anchor:
+      # Example:
+      # with nn.Collection.mutate() as coll:
+      #   coll.store(1)
+      raise ValueError('State should be stored from within a module.'
+                       ' Consider using the value directly instead of'
+                       ' storing it in a Collection.')
+    if not frame.is_descendent_of(self._anchor):
+      # edge case where the Collection cannot capture the scope of a shared Module
+      # See test_collection_store_fails_if_out_of_scope in nn_test.py
+      raise ValueError('Trying to capture state outside the scope of this Collection.'
+                       ' Most likely due to passing around a shared Module.')
+    root = self._find_root(frame)
     if self._root is None:
       self._root = root
-    elif self._root is not root:
+    elif self._root != root:
       if self._root.name is None or root.name is None:
+        # In the following examples, should the two calls to `StatefulModule` share state or not?
+        # because it's ambiguous, we throw an error and require the user to explicitly separate state
+        # by giving each instance a separate name, or to explicitly pass the same name
+        # in order to share state.
+        # with nn.statefull(state) as new_state:
+        #   StatefulModule.call(params)
+        #   StatefulModule.call(params2)
         raise ValueError('When multiple top-level module calls use a Collection'
                          ' each top-level module should have a name.')
     path = self._current_path()
     old_value = self.state.get(path, None)
     self.state[path] = value
     return old_value
+
+  def _find_root(self, frame):
+    """Find the root frame with respect to the anchor.
+
+    The root frame is defined as the child of anchor 
+    that is an ancestor of frame.
+    The root is used to verify that a Collection does not
+    have multiple unnamed roots.
+
+    Args:
+      - frame: the frame of which we want to know the root
+    Returns:
+      The root of the given frame.
+    """
+    assert frame.is_descendent_of(self._anchor)
+    root = frame
+    while root.parent != self._anchor:
+      root = root.parent
+    return root
 
   def _current_path(self):
     """"The relative path from the currently active module scope to the root of the collection.
@@ -964,16 +1009,15 @@ class Collection:
     Returns:
       the relative path of the active module scope.
     """
-    assert len(_module_stack) > self._anchor
+    frame = _module_stack[-1]
+    assert frame.is_descendent_of(self._anchor)
     path = _module_stack[-1].path
-    root = _module_stack[self._anchor]
-    if root.parent is not None and root.parent.path != '/':
-      prefix = root.parent.path
+    if self._anchor is not None and self._anchor.path != '/':
+      prefix = self._anchor.path
       assert prefix == path[:len(prefix)]
       return path[len(prefix):]
     else:
       return path
-
 
 def iterate_collection(collection):
   # jax iterates through pytrees for each argument/return value of a functional

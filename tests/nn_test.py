@@ -383,6 +383,36 @@ class CollectionTest(absltest.TestCase):
     }
     self.assertEqual(activations.as_dict(), expected_state)
 
+  def test_collection_store_fails_if_not_in_module(self):
+    @nn.module
+    def test():
+      with nn.Collection().mutate() as coll:
+        coll.store(1)
+    pattern = 'State should be stored from within a module'
+    with self.assertRaisesRegex(ValueError, pattern):
+      test.init(random.PRNGKey(0))
+
+  def test_collection_store_fails_if_out_of_scope(self):
+    @nn.module
+    def stateful_module(coll):
+      coll.store(1)
+
+    @nn.module
+    def test_inner(f):
+      with nn.Collection().mutate() as coll:
+        # this should fail because f is a shared module defined
+        # in the parent. Therefore we cannot capture in the scope
+        # of this Module.
+        f(coll)
+
+    @nn.module
+    def test():
+      f = stateful_module.shared()
+      test_inner(f)
+    pattern = 'Trying to capture state outside the scope'
+    with self.assertRaisesRegex(ValueError, pattern):
+      test.init(random.PRNGKey(0))
+
 
 class UtilsTest(absltest.TestCase):
 
