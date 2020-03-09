@@ -22,7 +22,7 @@ install:
   - pip install jaxlib jax
   - pip install tensorflow tensorflow-datasets
   - pip install -v .
-  - pip intsall docs/requirements.txt
+  - pip install -r docs/requirements.txt
 script:
   # build the docs
   - sphinx-build -M html docs docs/_build
