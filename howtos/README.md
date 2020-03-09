@@ -44,7 +44,7 @@ to HOWTOs. We explain these two cases below.
 ## Adding a new HOWTO
 
 In order to create a new HOWTO, you can simply make the desired changes local
-changes and run
+changes and run:
 
 ```
 ./howtos/script/pack_howto_diff.sh
