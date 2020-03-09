@@ -87,7 +87,7 @@ def create_model(key):
 
 def create_optimizer(model, learning_rate, beta):
   optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
-  optimizer = optimizer_new_def.create(model)
+  optimizer = optimizer_def.create(model)
   return optimizer
 
 
