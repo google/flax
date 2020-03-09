@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -ex
 
@@ -32,10 +32,7 @@ git fetch --no-tags --prune --depth=1 origin +refs/heads/*:refs/remotes/origin/*
 # git pull --rebase publisher master
 # git push publisher master
 
-git checkout prerelease
-
 # First delete all remote branches starting with "howto-"
-git branch -a
 for b in $(git branch -r | grep origin/howto); do
   branch=${b##*/}
   git push origin --delete $branch
@@ -60,4 +57,7 @@ for howto in $howtos; do
   git apply $diff_file
   git commit -am "Added howto branch ${howto}"
   git push -u origin $howto
+  # Make sure to checkout the master branch, otherwise the next diff branch
+  # will be branched off of the current diff branch.
+  git checkout prerelease
 done
