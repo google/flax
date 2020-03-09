@@ -22,7 +22,12 @@ install:
   - pip install jaxlib jax
   - pip install tensorflow tensorflow-datasets
   - pip install -v .
+  - pip install -r docs/requirements.txt
+  # pandoc is needed to build notebooks in docs
+  - conda install -c conda-forge pandoc
 script:
+  # build the docs
+  - sphinx-build -M html docs docs/_build
   # run the main flax unit tests
   - pytest -n 1 tests -W ignore
   # we apply pytest within each example to avoid pytest's annoying test-filename collision.
