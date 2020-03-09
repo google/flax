@@ -1,0 +1,17 @@
+name: Apply HOWTO diffs to branches
+on: 
+  push:
+    branches:
+      - prerelease
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+      with:
+        ref: prerelease
+    - name: Apply diffs to branches
+      run: ./howtos/scripts/apply_howto_diffs.sh
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
