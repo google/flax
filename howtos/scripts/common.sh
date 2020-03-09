@@ -1,7 +1,6 @@
 #!/bin/bash
 
-# Fail on any error and be verbose.
-set -ex
+set -e  # Stop on first error.
 
 old_pwd=$(pwd)
 

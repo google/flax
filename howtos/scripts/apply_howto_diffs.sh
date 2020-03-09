@@ -5,6 +5,8 @@
 
 . howtos/scripts/common.sh
 
+set -x  # Verbose output.
+
 # check values
 if [ -z "${GITHUB_TOKEN}" ]; then
     printf "error: GITHUB_TOKEN not found"

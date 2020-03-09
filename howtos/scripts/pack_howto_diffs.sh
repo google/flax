@@ -7,8 +7,6 @@
 
 . howtos/scripts/common.sh
 
-cd $top_dir
-
 cat << EOF
 Awesome, you are going to create a new FLAX HOWTO!
 
@@ -18,6 +16,7 @@ https://github.com/marcvanzee/flax/blob/prerelease/howtos/README.md
 The following files are edited/added:
 
 EOF
+
 # Get respectively all untracked, unstaged, and stages files.
 # The awk command prepends all files with "-".
 (git ls-files --others --exclude-standard && \
