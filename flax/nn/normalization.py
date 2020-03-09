@@ -43,7 +43,8 @@ class BatchNorm(base.Module):
             scale=True,
             bias_init=initializers.zeros,
             scale_init=initializers.ones,
-            axis_name=None):
+            axis_name=None,
+            replica_groups=None):
     """Normalizes the input using batch statistics.
 
     Args:
@@ -65,6 +66,8 @@ class BatchNorm(base.Module):
       scale_init: initializer for scale, by default, one.
       axis_name: the axis name used to combine batch statistics from multiple
         devices. See `jax.pmap` for a description of axis names (default: None).
+      replica_groups: the custom replica groups used to combine batch statistics
+        over smaller subsets of the overall pmap axis (default: None).
 
     Returns:
       Normalized inputs (this same shape as inputs).
@@ -91,12 +94,13 @@ class BatchNorm(base.Module):
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=True)
       if axis_name is not None and not self.is_initializing():
-        axis_size = lax.psum(1., axis_name=axis_name)
-        mean = lax.psum(mean, axis_name=axis_name) / axis_size
+        mean = lax.pmean(
+            mean, axis_name=axis_name, replica_groups=replica_groups)
 
       mean2 = jnp.mean(lax.square(x), axis=reduction_axis, keepdims=True)
       if axis_name is not None and not self.is_initializing():
-        mean2 = lax.psum(mean2, axis_name=axis_name) / axis_size
+        mean2 = lax.pmean(
+            mean2, axis_name=axis_name, replica_groups=replica_groups)
       var = mean2 - lax.square(mean)
 
       if ra_mean and not self.is_initializing():
