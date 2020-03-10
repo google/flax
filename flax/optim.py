@@ -36,7 +36,7 @@ The optimizer is then used in a training step as follows::
       aux = ... # compute auxiliary outputs (eg. training metrics)
       return loss, aux
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, logits), grad = grad_fn(optimizer.target)
+    (loss, aux), grad = grad_fn(optimizer.target)
     new_optimizer = optimizer.apply_gradient(grad)
     return new_optimizer, loss, aux
 
@@ -55,7 +55,7 @@ Distributed training only requires a few extra additions::
       aux = ... # compute auxiliary outputs (eg. training metrics)
       return loss, aux
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, logits), grad = grad_fn(optimizer.target)
+    (loss, aux), grad = grad_fn(optimizer.target)
     grad = jax.lax.pmean(grad, 'batch')
     new_optimizer = optimizer.apply_gradient(grad)
     return new_optimizer, loss, aux
