@@ -61,7 +61,7 @@ class VAE(nn.Module):
   @nn.module_method
   def generate(self, z):
     params = self.get_param('decoder')
-    return Decoder.call(params, z)
+    return nn.sigmoid(Decoder.call(params, z))
 
   @nn.module_method
   def generate_one_liner(self, z):
@@ -73,6 +73,7 @@ class VAE(nn.Module):
 
   def _created_decoder(self):
     return Decoder.shared(name='decoder')
+
 
 def reparameterize(mean, logvar):
   std = jnp.exp(0.5 * logvar)
