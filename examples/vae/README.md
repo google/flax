@@ -7,3 +7,11 @@ This code follows [pytorch/examples/vae](https://github.com/pytorch/examples/blo
 pip install -r requirements.txt
 python main.py
 ```
+
+## Examples;
+
+If you run the code by above command, you can get some generated images:
+
+![generated_mnist](https://github.com/makora9143/flax/exapmles/vae/example.png)
+
+Also, you can obtain ELBO of a test set as $107.0544 \pm 0.2496$ (5 times of trials)
