@@ -12,6 +12,6 @@ python main.py
 
 If you run the code by above command, you can get some generated images:
 
-![generated_mnist](https://github.com/makora9143/flax/exapmles/vae/example.png)
+![generated_mnist](https://github.com/makora9143/flax/blob/examples/vae/examples/vae/example.png)
 
 Also, you can obtain ELBO of a test set as $107.0544 \pm 0.2496$ (5 times of trials)
