@@ -2,7 +2,7 @@
 
 ## Thomas Kipf
 
-I am in the final stages of finishing my PhD in Machine Learning at the University of Amsterdam, where I worked on developing some of the first graph neural network models (e.g. graph convolutional networks) before joining the Brain Team in Google Research earlier this year. In the past five years, I have been using various frameworks such as Theano, TensorFlow, and PyTorch. More recently, I have become a big fan of JAX’s simplicity and speed, and thanks to FLAX we now have a flexible and lightweight library for building neural nets (and graph neural nets!) in the JAX ecosystem.
+I am in the final stages of finishing my PhD in Machine Learning at the University of Amsterdam, where I worked on developing some of the first graph neural network models (e.g. [graph convolutional networks](https://arxiv.org/abs/1609.02907)) before joining the Brain Team in Google Research earlier this year. In the past five years, I have been using various frameworks such as Theano, TensorFlow, and PyTorch. More recently, I have become a big fan of JAX’s simplicity and speed, and thanks to FLAX we now have a flexible and lightweight library for building neural nets (and graph neural nets!) in the JAX ecosystem.
 
 ## Luke Metz
 
