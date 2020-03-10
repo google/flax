@@ -67,7 +67,7 @@ def natural_sort(file_list, signed=True):
 def save_checkpoint(ckpt_dir,
                     target,
                     step,
-                    prefix='checkpoint',
+                    prefix='checkpoint_',
                     keep=1):
   """Save a checkpoint of the model.
 
@@ -87,7 +87,7 @@ def save_checkpoint(ckpt_dir,
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
   ckpt_tmp_path = os.path.join(ckpt_dir, 'checkpoint_tmp')
-  ckpt_path = os.path.join(ckpt_dir, f'{prefix}_{step}')
+  ckpt_path = os.path.join(ckpt_dir, f'{prefix}{step}')
   gfile.makedirs(os.path.dirname(ckpt_path))
   with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
     fp.write(serialization.to_bytes(target))
@@ -97,7 +97,7 @@ def save_checkpoint(ckpt_dir,
   logging.info('Saved checkpoint at %s', ckpt_path)
 
   # Remove old checkpoint files.
-  base_path = os.path.join(ckpt_dir, f'{prefix}_')
+  base_path = os.path.join(ckpt_dir, f'{prefix}')
   checkpoint_files = natural_sort(gfile.glob(base_path + '*'))
   if len(checkpoint_files) > keep:
     old_ckpts = checkpoint_files[:-keep]
@@ -108,7 +108,7 @@ def save_checkpoint(ckpt_dir,
   return ckpt_path
 
 
-def restore_checkpoint(ckpt_dir, target, prefix='checkpoint'):
+def restore_checkpoint(ckpt_dir, target, prefix='checkpoint_'):
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -126,7 +126,7 @@ def restore_checkpoint(ckpt_dir, target, prefix='checkpoint'):
     Restored `target` updated from checkpoint file or if no checkpoint
     files present returns the passed-in `target` unchanged.
   """
-  glob_path = os.path.join(ckpt_dir, f'{prefix}_*')
+  glob_path = os.path.join(ckpt_dir, f'{prefix}*')
   checkpoint_files = natural_sort(gfile.glob(glob_path))
   if not checkpoint_files:
     return target

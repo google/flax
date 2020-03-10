@@ -58,27 +58,27 @@ class CheckpointsTest(absltest.TestCase):
     test_object2 = {'a': np.array([4, 5, 6], np.int32),
                     'b': np.array([2, 2, 2], np.int32)}
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test')
+        tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object0)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0, prefix='test', keep=1)
+        tmp_dir, test_object1, 0, prefix='test_', keep=1)
     self.assertIn('test_0', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test')
+        tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object1)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 1, prefix='test', keep=1)
+        tmp_dir, test_object1, 1, prefix='test_', keep=1)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 2, prefix='test', keep=1)
+        tmp_dir, test_object2, 2, prefix='test_', keep=1)
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test')
+        tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object2)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 3, prefix='test', keep=2)
+        tmp_dir, test_object2, 3, prefix='test_', keep=2)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 4, prefix='test', keep=2)
+        tmp_dir, test_object1, 4, prefix='test_', keep=2)
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test')
+        tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object1)
 
   def test_save_restore_checkpoints_w_float_steps(self):
@@ -90,24 +90,24 @@ class CheckpointsTest(absltest.TestCase):
     test_object2 = {'a': np.array([4, 5, 6], np.int32),
                     'b': np.array([2, 2, 2], np.int32)}
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0.0, prefix='test', keep=1)
+        tmp_dir, test_object1, 0.0, prefix='test_', keep=1)
     self.assertIn('test_0.0', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test')
+        tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object1)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 2.0, prefix='test', keep=1)
+        tmp_dir, test_object1, 2.0, prefix='test_', keep=1)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 1.0, prefix='test', keep=1)
+        tmp_dir, test_object2, 1.0, prefix='test_', keep=1)
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test')
+        tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object1)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 3.0, prefix='test', keep=2)
+        tmp_dir, test_object2, 3.0, prefix='test_', keep=2)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, -1.0, prefix='test', keep=2)
+        tmp_dir, test_object1, -1.0, prefix='test_', keep=2)
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test')
+        tmp_dir, test_object0, prefix='test_')
     self.assertIn('test_3.0', os.listdir(tmp_dir))
     self.assertIn('test_2.0', os.listdir(tmp_dir))
     jtu.check_eq(new_object, test_object2)
