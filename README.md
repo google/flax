@@ -1,5 +1,7 @@
 # Flax: A neural network library for JAX designed for flexibility
 
+The FLAX documentation can be found here: https://flax.readthedocs.io/en/latest/
+
 **NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch with us at flax-dev@google.com.
 
 ## Background: JAX
@@ -36,6 +38,9 @@ Flax comes with:
 * A ResNet ImageNet example, ready to be forked for your research.
 
 * ...more examples in the works
+
+**NOTE**: See [docs/annotated_mnist.md](docs/annotated_mnist.md) for an MNIST
+example with detailed annotations for each code block.
 
 ### Flax Modules
 
@@ -94,9 +99,6 @@ Now install `flax` from Github:
 
 
 ## Full end-to-end MNIST example
-
-**NOTE**: See [docs/annotated_mnist.md](docs/annotated_mnist.md) for a version
-with detailed annotations for each code block.
 
 ```py
 import jax
@@ -180,58 +182,6 @@ def train():
 
 * [Language Modeling on LM1b](examples/lm1b) with a Transformer architecture
 
-## HOWTOs
-
-HOWTOs are sample diffs showing how to change various things in your training
-code.
-
-Here are a few examples.
-
-
-
-### Polyak averaging
-
-This diff shows how to modify the MNIST example above to evaluate with
-an exponential moving average of parameters over the course of training.
-
-Note that no special framework support was needed.
-
-```py
---- a/mnist.py
-+++ b/mnist-polyak.py
-@@ -29,14 +29,17 @@ def compute_metrics(logits, labels):
-   return {'loss': loss, 'accuracy': accuracy}
-
- @jax.jit
--def train_step(optimizer, batch):
-+def train_step(optimizer, params_ema, batch):
-   def loss_fn(model):
-     logits = model(batch['image'])
-     loss = jnp.mean(cross_entropy_loss(
-         logits, batch['label']))
-     return loss, logits
-   optimizer, _, _ = optimizer.optimize(loss_fn)
--  return optimizer
-+  params_ema = jax.tree_multimap(
-+    lambda p_ema, p: p_ema * 0.99 + p * 0.01,
-+    params_ema, optimizer.target.params)
-+  return optimizer, params_ema
-
- @jax.jit
- def eval(model, eval_ds):
-@@ -59,9 +62,9 @@ def train():
-   for epoch in range(10):
-     for batch in tfds.as_numpy(train_ds):
-       batch['image'] = batch['image'] / 255.0
--      optimizer = train_step(optimizer, batch)
-+      optimizer, params_ema = train_step(optimizer, params_ema, batch)
-
--    metrics = eval(optimizer.target, test_ds)
-+    metrics = eval(optimizer.target.replace(params=params_ema), test_ds)
-     print('eval epoch: %d, loss: %.4f, accuracy: %.2f'
-          % (epoch+1,
-           metrics['loss'], metrics['accuracy'] * 100))
-```
 
 ## Getting involved
 
