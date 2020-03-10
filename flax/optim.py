@@ -35,7 +35,9 @@ The optimizer is then used in a training step as follows::
       loss = ... # compute the loss
       aux = ... # compute auxiliary outputs (eg. training metrics)
       return loss, aux
-    new_optimizer, loss, aux = optimizer.optimize(loss_fn)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    (loss, logits), grad = grad_fn(optimizer.target)
+    new_optimizer = optimizer.apply_gradient(grad)
     return new_optimizer, loss, aux
 
 
@@ -44,7 +46,7 @@ Distributed training only requires a few extra additions::
   from flax import optim
   optimizer_def = optim.GradientDescent(learning_rate=0.1)
   optimizer = optimizer_def.create(model)
-  optimizer = optimizer.replicate(axis_name='batch')
+  optimizer = jax_utils.replicate(optimizer)
 
   def train_step(optimizer, data):
     def loss_fn(model):
@@ -52,7 +54,10 @@ Distributed training only requires a few extra additions::
       loss = ... # compute the loss
       aux = ... # compute auxiliary outputs (eg. training metrics)
       return loss, aux
-    new_optimizer, loss, aux = optimizer.optimize(loss_fn)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    (loss, logits), grad = grad_fn(optimizer.target)
+    grad = jax.lax.pmean(grad, 'batch')
+    new_optimizer = optimizer.apply_gradient(grad)
     return new_optimizer, loss, aux
 
   distributed_train_step = jax.pmap(train_step, axis_name='batch')

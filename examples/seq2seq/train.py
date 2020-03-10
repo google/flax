@@ -232,8 +232,9 @@ def train_step(optimizer, batch):
     logits = model(batch['query'], batch['answer'])
     loss = cross_entropy_loss(logits, batch['answer'])
     return loss, logits
-
-  optimizer, _, logits = optimizer.optimize(loss_fn)
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (_, logits), grad = grad_fn(optimizer.target)
+  optimizer = optimizer.apply_gradient(grad)
   metrics = compute_metrics(logits, batch['answer'])
   return optimizer, metrics
 
