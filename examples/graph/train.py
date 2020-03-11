@@ -142,7 +142,8 @@ def train_step(optimizer, node_feats, sources, targets):
     logits = model(node_feats, None, sources, targets)
     loss = semi_supervised_cross_entropy_loss(logits)
     return loss
-  optimizer, loss = optimizer.optimize(loss_fn)
+  loss, grad = jax.value_and_grad(loss_fn)(optimizer.target)
+  optimizer = optimizer.apply_gradient(grad)
   return optimizer, loss
 
 
