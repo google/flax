@@ -45,10 +45,10 @@ changes and run:
 ./howtos/script/pack_howto_diff.sh
 ```
 
-This will pack the changes you made into a diff file (the name can be set by the
-user when executing this script), and stage it for committing. It will also 
-revert all changes you made, but you can directly recover these changes simply
-by applying the diff:
+This will pack the changes you made into a diff file (you can set the name of
+the howto when executing this script), and stage it for committing. It will also
+revert all changes you made, but you can directly recover these changes by
+simply applying the diff:
 
 ```
 git apply <diff_file>
