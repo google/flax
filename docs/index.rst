@@ -12,6 +12,7 @@ Welcome to Flax's documentation!
 
    philosophy
    notebooks/flax_intro
+   howtos
    annotated_mnist
    contributing
 
