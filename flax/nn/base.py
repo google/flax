@@ -946,12 +946,15 @@ class Collection:
     if not self._mutable:
       raise ValueError('Collection is not mutable. Use the `mutate` method to'
                        ' create a mutable copy.')
+    # use the Jax TraceMaster to determine if a Collection is modified from
+    # inside a nested jax transformation.
     master = utils._tracer_of_value(value)
-    value_level = master.level if master else -1000
-    state_level = self._master.level if self._master else -1000
+    value_level = master.level if master else float('-inf')
+    state_level = self._master.level if self._master else float('-inf')
     if value_level > state_level:
       raise ValueError('Stateful operations are not allowed when the Collection'
                        ' is created outside of the current Jax transformation')
+
     # the root of a Collection is the first module scope that gets created
     # inside the mutate scope of the Collection. By allowing only one unique
     # root scope we guarantee that state is not accidentally shared
