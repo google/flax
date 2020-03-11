@@ -59,7 +59,6 @@ confidence=
 disable=apply-builtin,
         backtick,
         bad-option-value,
-        basestring-builtin,
         buffer-builtin,
         c-extension-no-member,
         cmp-builtin,
