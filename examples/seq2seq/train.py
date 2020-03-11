@@ -273,14 +273,14 @@ def train_model():
       batch = get_batch(FLAGS.batch_size)
       optimizer, metrics = train_step(optimizer, batch)
       if step % FLAGS.decode_frequency == 0:
-        batch_metrics = jax.device_get(metrics)
         logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
                      batch_metrics['loss'], batch_metrics['accuracy'] * 100)
         decode_batch(optimizer.target, 5)
+  return optimizer.target
 
 
 def main(_):
-  train_model()
+  _ = train_model()
 
 
 if __name__ == '__main__':
