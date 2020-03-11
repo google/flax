@@ -14,7 +14,7 @@ documentation through readthedocs.
 
 Currently the following HOWTOs are available:
 
-* [Ensembling](https://github.com/marcvanzee/flax/compare/prerelease..howto-ensembling?diff=split)
+* [Ensembling](https://github.com/google-research/flax/compare/prerelease..howto-ensembling?diff=split)
 
 ## How HOWTOs work
 
