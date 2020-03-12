@@ -77,8 +77,9 @@ def train_step(optimizer, batch):
     logits = model(batch['image'])
     loss = jnp.mean(cross_entropy_loss(
         logits, batch['label']))
-    return loss, logits
-  optimizer, _, _ = optimizer.optimize(loss_fn)
+    return loss
+  grad = jax.grad(loss_fn)(optimizer.target)
+  optimizer = optimizer.apply_gradient(grad)
   return optimizer
 ```
 

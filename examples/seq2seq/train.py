@@ -233,8 +233,9 @@ def train_step(optimizer, batch):
     logits = model(batch['query'], batch['answer'])
     loss = cross_entropy_loss(logits, batch['answer'])
     return loss, logits
-
-  optimizer, _, logits = optimizer.optimize(loss_fn)
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (_, logits), grad = grad_fn(optimizer.target)
+  optimizer = optimizer.apply_gradient(grad)
   metrics = compute_metrics(logits, batch['answer'])
   return optimizer, metrics
 
@@ -274,14 +275,14 @@ def train_model():
       batch = get_batch(FLAGS.batch_size)
       optimizer, metrics = train_step(optimizer, batch)
       if step % FLAGS.decode_frequency == 0:
-        batch_metrics = jax.device_get(metrics)
         logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
                      batch_metrics['loss'], batch_metrics['accuracy'] * 100)
         decode_batch(optimizer.target, 5)
+  return optimizer.target
 
 
 def main(_):
-  train_model()
+  _ = train_model()
 
 
 if __name__ == '__main__':

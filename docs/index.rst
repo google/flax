@@ -12,8 +12,10 @@ Welcome to Flax's documentation!
 
    philosophy
    notebooks/flax_intro
+   howtos
    annotated_mnist
    contributing
+   faq
 
 .. toctree::
    :maxdepth: 2

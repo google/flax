@@ -251,7 +251,10 @@ def train_step(optimizer, batch, learning_rate_fn, dropout_rng=None):
 
   step = optimizer.state.step
   lr = learning_rate_fn(step)
-  new_optimizer, _, logits = optimizer.optimize(loss_fn, learning_rate=lr)
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (_, logits), grad = grad_fn(optimizer.target)
+  grad = jax.lax.pmean(grad, 'batch')
+  new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, targets, weights)
   metrics['learning_rate'] = lr
 

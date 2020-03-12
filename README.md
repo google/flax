@@ -1,8 +1,11 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-The FLAX documentation can be found here: https://flax.readthedocs.io/en/latest/
+**NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch
+with us at flax-dev@google.com.
 
-**NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch with us at flax-dev@google.com.
+## Full Documentation
+
+**⟶ https://flax.readthedocs.io/**
 
 ## Background: JAX
 
@@ -31,9 +34,6 @@ Flax comes with:
 * Common layers (`flax.nn`): Dense, Conv, BatchNorm, Attention, ...
 
 * Optimizers (`flax.optim`): SGD, Momentum, Adam, LARS
-
-* ...with replication (`optimizer.replicate()`): Multi-device training with any
-  optimizer
 
 * A ResNet ImageNet example, ready to be forked for your research.
 
@@ -137,8 +137,9 @@ def train_step(optimizer, batch):
     logits = model(batch['image'])
     loss = jnp.mean(cross_entropy_loss(
         logits, batch['label']))
-    return loss, logits
-  optimizer, _, _ = optimizer.optimize(loss_fn)
+    return loss
+  grad = jax.grad(loss_fn)(optimizer.target)
+  optimizer = optimizer.apply_gradient(grad)
   return optimizer
 
 @jax.jit

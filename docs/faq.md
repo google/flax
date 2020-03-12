@@ -9,9 +9,9 @@ This FAQ is compiled from various questions asked on github issues, mailing list
 arguments both the input and additional parameters (e.g. size of some layer). 
 How to initialize and use a model? The MNIST example has a CNN with no 
 additional parameters, so initialization happens by only calling 
-`int_by_shape`.
+`init_by_shape`.
 
-**Answer:** You'll typically use a `int_by_shape` call to init models as it 
+**Answer:** You'll typically use a `init_by_shape` call to init models as it 
 doesn't perform any actual computation - it just traces all the shapes and inits 
 submodules.
 ---

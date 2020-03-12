@@ -127,7 +127,7 @@ def create_optimizer(model, learning_rate, beta):
                                  beta=beta,
                                  nesterov=True)
   optimizer = optimizer_def.create(model)
-  optimizer = optimizer.replicate()
+  optimizer = jax_utils.replicate(optimizer)
   return optimizer
 
 
@@ -169,8 +169,11 @@ def train_step(optimizer, state, batch, prng_key, learning_rate_fn, l2_reg):
 
   step = optimizer.state.step
   lr = learning_rate_fn(step)
-  new_optimizer, _, (new_state, logits) = optimizer.optimize(
-      loss_fn, learning_rate=lr)
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (_, (new_state, logits)), grad = grad_fn(optimizer.target)
+  grad = jax.lax.pmean(grad, 'batch')
+  new_optimizer = optimizer.apply_gradient(
+      grad, learning_rate=lr)
 
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr
