@@ -948,6 +948,10 @@ class Collection:
                        ' create a mutable copy.')
     # use the Jax TraceMaster to determine if a Collection is modified from
     # inside a nested jax transformation.
+    # In this case, we throw an error because transforming a stateful function
+    # is ill-defined (eg. what does vmap of BatchNorm do?).
+    # TODO(jheek): Add doc guide on combining jax transforms and state.
+    # TODO(jheek): Should some transformations be excempt from this error?
     master = utils._tracer_of_value(value)
     value_level = master.level if master else float('-inf')
     state_level = self._master.level if self._master else float('-inf')
