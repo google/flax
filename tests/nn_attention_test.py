@@ -57,8 +57,8 @@ class AttentionTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
     )
-    y, _ = sa_module.create(rng, x, kv)
-    self.assertEqual(y.shape, x.shape)
+    y, _ = sa_module.create(rng, q, kv)
+    self.assertEqual(y.shape, q.shape)
 
   def test_multihead_self_attention_w_dropout(self):
     rng = random.PRNGKey(0)
