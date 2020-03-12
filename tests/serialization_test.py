@@ -156,7 +156,7 @@ class SerializationTest(absltest.TestCase):
   def test_model_serialization_to_bytes(self):
     rng = random.PRNGKey(0)
     model_def = nn.Dense.partial(features=1, kernel_init=nn.initializers.ones)
-    _, initial_params = model_def.inti_by_shape(rng, [((1, 1), jnp.float32)])
+    _, initial_params = model_def.init_by_shape(rng, [((1, 1), jnp.float32)])
     model = nn.Model(model_def, initial_params)
     serialized_bytes = serialization.to_bytes(model)
     restored_model = serialization.from_bytes(model, serialized_bytes)

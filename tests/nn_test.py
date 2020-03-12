@@ -225,7 +225,7 @@ class ModuleTest(absltest.TestCase):
   def test_capture_module_outputs(self):
     x = jnp.array([1.])
     _, initial_params = NestedModule.init(random.PRNGKey(0), x)
-    model = nn.Model(NestedModel, initial_params)
+    model = nn.Model(NestedModule, initial_params)
     with nn.capture_module_outputs() as activations:
       model(x)
     expected_activations = {
@@ -253,7 +253,7 @@ class ModuleTest(absltest.TestCase):
   def test_truncated_module(self):
     x = jnp.array([1.])
     _, initial_params = NestedModule.init(random.PRNGKey(0), x)
-    model = nn.Model(NestedModel, initial_params)
+    model = nn.Model(NestedModule, initial_params)
     model = model.truncate_at('/dummy_0')
     y = model(x)
     self.assertEqual(y, [x + 1])
