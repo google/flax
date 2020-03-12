@@ -65,7 +65,7 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   This function is similar to `jax.eval_shape` with the key difference that
   function outputs that can be computed without a concrete value of the
   inputs are returned as is instead of only the shape. See for example
-  `module.create_by_shape` where this functionality is used to initialize a
+  `module.init_by_shape` where this functionality is used to initialize a
   model without using input data lr computation.
 
   Args:

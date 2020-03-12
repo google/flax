@@ -156,9 +156,10 @@ def train():
   test_ds = {'image': test_ds['image'].astype(jnp.float32),
              'label': test_ds['label'].astype(jnp.int32)}
 
-  _, model = CNN.create_by_shape(
+  _, initial_params = CNN.init_by_shape(
       jax.random.PRNGKey(0),
       [((1, 28, 28, 1), jnp.float32)])
+  model = nn.Model(CNN, initial_params)
 
   optimizer = flax.optim.Momentum(
       learning_rate=0.1, beta=0.9).create(model)

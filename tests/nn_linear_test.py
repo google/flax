@@ -42,7 +42,7 @@ class LinearTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
     )
-    y, _ = dense_module.create(rng, x)
+    y, _ = dense_module.init(rng, x)
     self.assertEqual(y.shape, (1, 4))
     onp.testing.assert_allclose(y, onp.full((1, 4), 4.))
 
@@ -54,7 +54,7 @@ class LinearTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
     )
-    y, _ = dense_module.create(rng, x)
+    y, _ = dense_module.init(rng, x)
     onp.testing.assert_allclose(y, onp.full((1, 2, 4), 4.))
 
   def test_dense_no_bias(self):
@@ -65,7 +65,7 @@ class LinearTest(parameterized.TestCase):
         bias=False,
         kernel_init=initializers.ones,
     )
-    y, _ = dense_module.create(rng, x)
+    y, _ = dense_module.init(rng, x)
     onp.testing.assert_allclose(y, onp.full((1, 4), 3.))
 
   def test_dense_is_dense_general(self):
@@ -75,13 +75,13 @@ class LinearTest(parameterized.TestCase):
         bias=True,
         bias_init=initializers.normal(),
     )
-    y1, _ = dense_module.create(random.PRNGKey(1), x)
+    y1, _ = dense_module.init(random.PRNGKey(1), x)
     dg_module = nn.DenseGeneral.partial(
         features=4,
         bias=True,
         bias_init=initializers.normal(),
     )
-    y2, _ = dg_module.create(random.PRNGKey(1), x)
+    y2, _ = dg_module.init(random.PRNGKey(1), x)
 
     onp.testing.assert_allclose(y1, y2)
 
@@ -95,7 +95,7 @@ class LinearTest(parameterized.TestCase):
           kernel_init=initializers.ones,
           bias_init=initializers.ones,
       )
-      dg_module.create(rng, x)
+      dg_module.init(rng, x)
 
   def test_dense_general_two_out(self):
     rng = random.PRNGKey(0)
@@ -105,7 +105,7 @@ class LinearTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
     )
-    y, _ = dg_module.create(rng, x)
+    y, _ = dg_module.init(rng, x)
     onp.testing.assert_allclose(y, onp.full((1, 2, 2), 4.))
 
   def test_dense_general_two_in(self):
@@ -117,7 +117,7 @@ class LinearTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
     )
-    y, _ = dg_module.create(rng, x)
+    y, _ = dg_module.init(rng, x)
     onp.testing.assert_allclose(y, onp.full((1, 3), 5.))
 
   def test_dense_general_batch_dim(self):
@@ -138,7 +138,7 @@ class LinearTest(parameterized.TestCase):
         bias_init=initializers.ones,
         kernel_init=counter_init,
     )
-    y, _ = dg_module.create(rng, x)
+    y, _ = dg_module.init(rng, x)
     target = onp.concatenate(
         [onp.full((1, 1, 7), 16.), onp.full((1, 1, 7), 31.)], axis=0)
     onp.testing.assert_allclose(y, target)
@@ -157,7 +157,8 @@ class LinearTest(parameterized.TestCase):
         bias_init=initializers.ones,
         kernel_init=initializers.normal(),
     )
-    y, dg_module = dg_module.create(rng, x)
+    y, initial_params = dg_module.init(rng, x)
+    dg_module = nn.Model(dg_module, initial_params)
     target = onp.einsum(einsum_expr, x, dg_module.params['kernel']) + 1.
     onp.testing.assert_allclose(y, target, atol=1e-6)
 
@@ -171,7 +172,8 @@ class LinearTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
     )
-    y, model = conv_module.create(rng, x)
+    y, initial_params = conv_module.init(rng, x)
+    model = nn.Model(conv_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
     onp.testing.assert_allclose(y, onp.full((1, 6, 4), 10.))
 
@@ -186,7 +188,8 @@ class LinearTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
     )
-    y, model = conv_module.create(rng, x)
+    y, initial_params = conv_module.init(rng, x)
+    model = nn.Model(conv_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 2, 4))
     onp.testing.assert_allclose(y, onp.full((1, 6, 4), 7.))
 
@@ -200,7 +203,8 @@ class LinearTest(parameterized.TestCase):
         features=3,
         embedding_init=lambda rng, shape: dummy_embedding,
     )
-    y, model = embed_module.create(rng, x)
+    y, initial_params = embed_module.init(rng, x)
+    model = nn.Model(embed_module, initial_params)
     onp.testing.assert_allclose(y, dummy_embedding[None])
 
     z = model.attend(jnp.ones((3,)))

@@ -170,9 +170,10 @@ class Seq2seq(nn.Module):
 def create_model():
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size()
-  _, model = Seq2seq.create_by_shape(
+  _, initial_params = Seq2seq.init_by_shape(
       nn.make_rng(), [((1, get_max_input_len(), vocab_size), jnp.float32),
                       ((1, get_max_output_len(), vocab_size), jnp.float32)])
+  model = nn.Model(Seq2seq, initial_params)
   return model
 
 

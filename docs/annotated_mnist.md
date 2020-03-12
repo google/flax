@@ -115,9 +115,10 @@ Create a new model, running all necessary initializers.
 The parameters are stored as nested dicts on `model.params`.
 
 ```py
-  _, model = CNN.create_by_shape(
-      jax.random.PRNGKey(0),
-      [((1, 28, 28, 1), jnp.float32)])
+   _, initial_params = CNN.init_by_shape(
+   jax.random.PRNGKey(0),
+    [((1, 28, 28, 1), jnp.float32)])
+   model = nn.Model(CNN, initial_params)
 ```
 
 Define an optimizer. At any particular optimzation step,
