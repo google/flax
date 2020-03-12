@@ -81,7 +81,7 @@ class CNN(nn.Module):
 
 
 def create_model(key):
-  _, initial_params = CNN.create_by_shape(key, [((1, 28, 28, 1), jnp.float32)])
+  _, initial_params = CNN.init_by_shape(key, [((1, 28, 28, 1), jnp.float32)])
   model = nn.Model(CNN, initial_params)
   return model
 

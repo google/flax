@@ -96,8 +96,7 @@ class ModuleTest(absltest.TestCase):
   def test_create_module(self):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
-    y, initial_params = DummyModule.init(rng, x)
-    model = nn.Model(DummyModule, initial_params)
+    y, model = DummyModule.create(rng, x)
     y2 = model(x)
     self.assertEqual(y, y2)
     self.assertEqual(y, jnp.array([2.]))
