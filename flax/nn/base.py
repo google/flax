@@ -21,6 +21,7 @@ import contextlib
 import functools
 import inspect
 from typing import Any
+import warnings
 
 from . import utils
 from flax import jax_utils
@@ -147,7 +148,8 @@ def module_method(fn):
 
   A module method can be called on A Model instance directly::
 
-    y, model = MyLinearModule.create(rng, x)
+    y, initial_params = MyLinearModule.init(rng, x)
+    model = nn.Model(MyLinearModule, initial_params)
     z = model.apply_transpose(y)
 
   Module methods can also be called on shared modules::
@@ -367,6 +369,11 @@ class Module(metaclass=_ModuleMeta):
   def create(cls, rng, *args, name=None, **kwargs):
     """Create a module instance by evaluating the model.
 
+    DEPRECATION WARNING:
+    `create()` is deprecated use `init()` to initialize parameters and
+    then explicitly create a `nn.Model` given the module and initialized
+    parameters.
+
     Use create_by_shape instead to initialize without doing computation.
     Initializer functions can depend both on the shape and the value of inputs.
 
@@ -378,6 +385,11 @@ class Module(metaclass=_ModuleMeta):
     Returns:
       A pair consisting of the model output and an instance of Model
     """
+    warnings.warn("`create()` will be removed soon."
+                  " Use `init()` to initialize parameters and then explicitly"
+                  " create a `nn.Model` given the module and initialized"
+                  " parameters.",
+                  DeprecationWarning)
     y, params = cls.init(rng, *args, name=name, **kwargs)
     model = Model(cls, params)
     return y, model
@@ -385,6 +397,12 @@ class Module(metaclass=_ModuleMeta):
   @classmethod
   def create_by_shape(cls, rng, input_specs, *args, name=None, **kwargs):
     """Create a module instance using only shape and dtype information.
+
+    DEPRECATION WARNING:
+    `create_by_shape()` is deprecated use `init_by_shape()` to initialize
+    parameters and then explicitly create a `nn.Model` given the module and
+    initialized parameters.
+
 
     This method will initialize the model without computation.
     Initializer functions can depend on the shape but not the value of inputs.
@@ -398,6 +416,12 @@ class Module(metaclass=_ModuleMeta):
     Returns:
       A pair consisting of the model output and an instance of Model
     """
+    warnings.warn("`create_by_shape()` will be removed soon."
+                  " Use `init_by_shape()` to initialize parameters and then"
+                  " explicitly create a `nn.Model` given the module and "
+                  " initialized parameters.",
+                  DeprecationWarning)
+
     y, params = cls.init_by_shape(rng, input_specs, *args, name=name, **kwargs)
     model = Model(cls, params)
     return y, model
@@ -788,7 +812,8 @@ def stateful(state=None, mutable=True):
         return x
 
     with nn.stateful() as state:
-      _, model = MyModel.create(rng, x)
+      _, initial_params = MyModel.init(rng, x)
+      model = nn.Model(MyModel, initial_params)
 
     with nn.stateful(state) as new_state:
       model(x2)

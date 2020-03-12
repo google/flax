@@ -43,7 +43,7 @@ class AttentionTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
     )
-    y, _ = sa_module.create(rng, x)
+    y, initial_params = sa_module.init(rng, x)
     self.assertEqual(y.shape, x.shape)
 
   def test_multihead_self_attention_w_dropout(self):
@@ -59,7 +59,7 @@ class AttentionTest(parameterized.TestCase):
     )
     rng1, rng2 = random.split(rng)
     with nn.stochastic(rng1):
-      y, _ = sa_module.create(rng2, x)
+      y, initial_params = sa_module.init(rng2, x)
     self.assertEqual(y.shape, x.shape)
 
   def test_causal_mask_1d(self):
@@ -111,8 +111,9 @@ class AttentionTest(parameterized.TestCase):
         precision=lax.Precision.HIGHEST)
 
     with nn.attention.Cache().mutate() as cache_def:
-      _, model = model_def.create_by_shape(
+      _, initial_params = model_def.init_by_shape(
           key2, [(inputs.shape, inputs.dtype)], cache=cache_def)
+    model = nn.Model(model_def, initial_params)
     y_ref = jax.jit(lambda f, x: f(x))(model, inputs)
 
     # feed the inputs sequentially to simulate decoding
@@ -154,8 +155,11 @@ class AttentionTest(parameterized.TestCase):
         num_heads=num_heads,
         causal_mask=True,
         kernel_init=jax.nn.initializers.ones)
-    _, model = model_def.create_by_shape(
+    _, initial_params = model_def.init_by_shape(
         rng1, [((1,) + (length, dim), jnp.float32)])
+    model = nn.Model(model_def, initial_params)
+
+
 
     for i in range(length):
       deps = get_receptive_field_1d(i)

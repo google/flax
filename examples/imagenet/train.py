@@ -80,7 +80,9 @@ def create_model(key, batch_size, image_size, model_dtype):
   input_shape = (batch_size, image_size, image_size, 3)
   model_def = models.ResNet.partial(num_classes=1000, dtype=model_dtype)
   with nn.stateful() as init_state:
-    _, model = model_def.create_by_shape(key, [(input_shape, model_dtype)])
+    _, initial_params = model_def.init_by_shape(
+        key, [(input_shape, model_dtype)])
+    model = nn.Model(model_def, initial_params)
   return model, init_state
 
 

@@ -24,6 +24,7 @@ import time
 from absl import app
 from absl import flags
 from absl import logging
+from flax import jax_utils
 from flax import nn
 from flax import optim
 import input_pipeline
@@ -94,7 +95,8 @@ flags.DEFINE_string('dev', default='', help=('path to development data.'))
 @functools.partial(jax.jit, static_argnums=(1, 2))
 def create_model(key, input_shape, model_kwargs):
   model_def = models.Transformer.partial(train=False, **model_kwargs)
-  _, model = model_def.create_by_shape(key, [(input_shape, jnp.float32)])
+  _, initial_params = model_def.init_by_shape(key, [(input_shape, jnp.float32)])
+  model = nn.Model(model_def, initial_params)
   return model
 
 

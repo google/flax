@@ -114,7 +114,8 @@ class ModuleTest(absltest.TestCase):
   def test_shared_module(self):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
-    _, model = LoopModule.create(rng, x)
+    _, initial_params = LoopModule.init(rng, x)
+    model = nn.Model(LoopModule, initial_params)
     y = model(x)
     self.assertEqual(y, jnp.array([3.]))
     self.assertEqual(model.params, {'dummy': {'bias': jnp.array([1.])}})
@@ -128,7 +129,7 @@ class ModuleTest(absltest.TestCase):
 
     x = jnp.array([1.])
     with self.assertRaises(ValueError):
-      FaultyModule.create(random.PRNGKey(0), x)
+      FaultyModule.init(random.PRNGKey(0), x)
 
   def test_sharing_name_collsion(self):
     class FaultyModule(nn.Module):
@@ -140,7 +141,7 @@ class ModuleTest(absltest.TestCase):
 
     x = jnp.array([1.])
     with self.assertRaises(ValueError):
-      FaultyModule.create(random.PRNGKey(0), x)
+      FaultyModule.init(random.PRNGKey(0), x)
 
   def test_sharing_name_on_apply(self):
     class FaultyModule(nn.Module):
@@ -152,7 +153,7 @@ class ModuleTest(absltest.TestCase):
 
     x = jnp.array([1.])
     with self.assertRaises(ValueError):
-      FaultyModule.create(random.PRNGKey(0), x)
+      FaultyModule.init(random.PRNGKey(0), x)
 
   def test_shared_module_called_in_other_frame(self):
     """Test that shared modules only appear once in parameters.
@@ -205,21 +206,25 @@ class ModuleTest(absltest.TestCase):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
     dummy_module = DummyModule.partial(x=x)  # partially apply the inputs
-    y, model = dummy_module.create(rng)
+    y, initial_params = dummy_module.init(rng)
+    model = nn.Model(dummy_module, initial_params)
     y2 = model()
     self.assertEqual(y.shape, y2.shape)
     self.assertEqual(y2, jnp.array([2.]))
 
   def test_nested_model(self):
     x = jnp.array([1.])
-    _, inner_model = DummyModule.create(random.PRNGKey(0), x)
-    _, model = NestedModel.create(random.PRNGKey(1), x, inner_model)
+    _, inner_initial_params = DummyModule.init(random.PRNGKey(0), x)
+    inner_model = nn.Model(DummyModule, inner_initial_params)
+    _, initial_params = NestedModel.init(random.PRNGKey(1), x, inner_model)
+    model = nn.Model(NestedModel, initial_params)
     y = model(x, inner_model)
     self.assertEqual(y, jnp.array([3.]))
 
   def test_capture_module_outputs(self):
     x = jnp.array([1.])
-    _, model = NestedModule.create(random.PRNGKey(0), x)
+    _, initial_params = NestedModule.init(random.PRNGKey(0), x)
+    model = nn.Model(NestedModule, initial_params)
     with nn.capture_module_outputs() as activations:
       model(x)
     expected_activations = {
@@ -231,8 +236,10 @@ class ModuleTest(absltest.TestCase):
 
   def test_nested_model_capture_outputs(self):
     x = jnp.array([1.])
-    _, inner_model = DummyModule.create(random.PRNGKey(0), x)
-    _, model = NestedModel.create(random.PRNGKey(1), x, inner_model)
+    _, inner_initial_params = DummyModule.init(random.PRNGKey(0), x)
+    inner_model = nn.Model(DummyModule, inner_initial_params)
+    _, initial_params = NestedModel.init(random.PRNGKey(1), x, inner_model)
+    model = nn.Model(NestedModel, initial_params)
     with nn.capture_module_outputs() as activations:
       model(x, inner_model)
     expected_activations = {
@@ -244,7 +251,8 @@ class ModuleTest(absltest.TestCase):
 
   def test_truncated_module(self):
     x = jnp.array([1.])
-    _, model = NestedModule.create(random.PRNGKey(0), x)
+    _, initial_params = NestedModule.init(random.PRNGKey(0), x)
+    model = nn.Model(NestedModule, initial_params)
     model = model.truncate_at('/dummy_0')
     y = model(x)
     self.assertEqual(y, [x + 1])
@@ -267,7 +275,7 @@ class ModuleTest(absltest.TestCase):
         return layer.l2()
 
     x = jnp.array([1., 2.])
-    y, _ = MultiMethodModel.create(random.PRNGKey(0), x)
+    y, _ = MultiMethodModel.init(random.PRNGKey(0), x)
     self.assertEqual(y, 2.)
 
   def test_module_state(self):
@@ -314,7 +322,8 @@ class CollectionTest(absltest.TestCase):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
     with nn.Collection().mutate() as activations:
-      (_, y), model = CollectionModule.create(rng, x, activations)
+      (_, y), initial_params = CollectionModule.init(rng, x, activations)
+      model = nn.Model(CollectionModule, initial_params)
       self.assertEqual(y, None)
     with activations.mutate() as new_activations:
       _, y2 = model(x, new_activations)
@@ -324,7 +333,7 @@ class CollectionTest(absltest.TestCase):
     rng = random.PRNGKey(0)
     with nn.Collection().mutate() as activations:
       x = jnp.array([1.])
-      _, _ = LoopModule.create(rng, x, activations)
+      _, _ = LoopModule.init(rng, x, activations)
     expected_state = {
         '/dummy': jnp.array([3.]),
     }
@@ -334,8 +343,8 @@ class CollectionTest(absltest.TestCase):
     rng = random.PRNGKey(0)
     with nn.Collection().mutate() as activations:
       x = jnp.array([1.])
-      LoopModule.create(rng, x, activations, name='a')
-      LoopModule.create(rng, x, activations, name='b')
+      LoopModule.init(rng, x, activations, name='a')
+      LoopModule.init(rng, x, activations, name='b')
     expected_state = {
         '/a/dummy': jnp.array([3.]),
         '/b/dummy': jnp.array([3.]),
@@ -344,8 +353,8 @@ class CollectionTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       with nn.Collection().mutate() as activations:
         x = jnp.array([1.])
-        LoopModule.create(rng, x, activations)
-        LoopModule.create(rng, x, activations)
+        LoopModule.init(rng, x, activations)
+        LoopModule.init(rng, x, activations)
 
   def test_mutable_collection_cannot_be_passed_to_jax(self):
     with nn.Collection().mutate() as collection:
@@ -376,7 +385,7 @@ class CollectionTest(absltest.TestCase):
 
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
-    activations, _ = NestedCollection.create(rng, x, name='nested')
+    activations, _ = NestedCollection.init(rng, x, name='nested')
     expected_state = {
         '/a/dummy': jnp.array([3.]),
         '/b/dummy': jnp.array([3.]),
@@ -496,7 +505,8 @@ class NormalizationTest(absltest.TestCase):
     x = random.normal(key1, (4, 3, 2))
     model_cls = nn.BatchNorm.partial(momentum=0.9)
     with nn.stateful() as state_0:
-      y, model = model_cls.create(key2, x)
+      y, initial_params = model_cls.init(key2, x)
+      model = nn.Model(model_cls, initial_params)
     mean = y.mean((0, 1))
     var = y.var((0, 1))
     onp.testing.assert_allclose(mean, onp.array([0., 0.]), atol=1e-4)
@@ -514,7 +524,7 @@ class NormalizationTest(absltest.TestCase):
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 3, 4))
-    y, _ = nn.LayerNorm.create(key2, x, bias=False, scale=False, epsilon=e)
+    y, _ = nn.LayerNorm.init(key2, x, bias=False, scale=False, epsilon=e)
     assert x.shape == y.shape
     input_type = type(x)
     assert  isinstance(y, input_type)
@@ -527,7 +537,7 @@ class NormalizationTest(absltest.TestCase):
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 5, 4, 4, 32))
-    y, _ = nn.GroupNorm.create(key2, x, num_groups=2,
+    y, _ = nn.GroupNorm.init(key2, x, num_groups=2,
                                bias=True, scale=True, epsilon=e)
     self.assertEqual(x.shape, y.shape)
     self.assertIsInstance(y, type(x))
@@ -550,7 +560,8 @@ class RecurrentTest(absltest.TestCase):
     c0, h0 = nn.LSTMCell.initialize_carry(rng, (2,), 4)
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
-    (carry, y), lstm = nn.LSTMCell.create(key2, (c0, h0), x)
+    (carry, y), initial_params = nn.LSTMCell.init(key2, (c0, h0), x)
+    lstm = nn.Model(nn.LSTMCell, initial_params)
     self.assertEqual(carry[0].shape, (2, 4))
     self.assertEqual(carry[1].shape, (2, 4))
     onp.testing.assert_allclose(y, carry[1])
@@ -572,7 +583,8 @@ class RecurrentTest(absltest.TestCase):
     x = random.normal(key1, (2, 3))
     carry0 = nn.GRUCell.initialize_carry(rng, (2,), 4)
     self.assertEqual(carry0.shape, (2, 4))
-    (carry, y), gru = nn.GRUCell.create(key2, carry0, x)
+    (carry, y), initial_params = nn.GRUCell.init(key2, carry0, x)
+    gru = nn.Model(nn.GRUCell, initial_params)
     self.assertEqual(carry.shape, (2, 4))
     onp.testing.assert_allclose(y, carry)
     param_shapes = jax.tree_map(onp.shape, gru.params)

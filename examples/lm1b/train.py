@@ -121,9 +121,10 @@ flags.DEFINE_integer(
 def create_model(key, input_shape, model_kwargs):
   model_def = models.TransformerLM.partial(**model_kwargs)
   with nn.attention.Cache().mutate() as cache_def:
-    _, model = model_def.create_by_shape(key,
+    _, initial_params = model_def.init_by_shape(key,
                                          [(input_shape, jnp.float32)],
                                          cache=cache_def)
+  model = nn.Model(model_def, initial_params)
   return model, cache_def
 
 

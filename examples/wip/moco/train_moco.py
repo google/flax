@@ -141,8 +141,9 @@ def create_model(key, batch_size, image_size, model_def):
   input_shape = (batch_size, image_size, image_size, 3)
   with flax.nn.stateful() as init_state:
     with flax.nn.stochastic(jax.random.PRNGKey(0)):
-      (_, _), model = model_def.create_by_shape(
+      (_, _), initial_params = model_def.init_by_shape(
           key, [(input_shape, jnp.float32)])
+      model = flax.nn.Model(model_def, initial_params)
   return model, init_state
 
 
@@ -151,8 +152,9 @@ def create_linear_classifier(key, batch_size, feature_size, num_classes):
   input_shape = (batch_size, feature_size)
   model_def = flax.nn.Dense.partial(features=num_classes)
   with flax.nn.stateful():
-    _, model = model_def.create_by_shape(
+    _, initial_params = model_def.init_by_shape(
         key, [(input_shape, jnp.float32)])
+    model = flax.nn.Model(model_def, initial_params)
   return model
 
 

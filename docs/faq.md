@@ -9,12 +9,11 @@ This FAQ is compiled from various questions asked on github issues, mailing list
 arguments both the input and additional parameters (e.g. size of some layer). 
 How to initialize and use a model? The MNIST example has a CNN with no 
 additional parameters, so initialization happens by only calling 
-`create_by_shape`, but there seem to be multiple ways to create/initialize a 
-network and it's not very clear when to use which one.
+`init_by_shape`.
 
-**Answer:** You'll typically use a `create_by_shape` call to init models as it 
+**Answer:** You'll typically use a `init_by_shape` call to init models as it 
 doesn't perform any actual computation - it just traces all the shapes and inits 
-any submodules.
+submodules.
 ---
 
 **Question: The Model abstraction is very lightweight, is it necessary?**

@@ -18,7 +18,8 @@
 
 THe RNNCell modules are designed to fit in with the scan function in JAX::
 
-  model = LSTMCell.create(rng_1, time_series[0])
+  _, initial_params = LSTMCell.init(rng_1, time_series[0])
+  model = nn.Model(LSTMCell, initial_params)
   carry = LSTMCell.initialize_carry(rng_2, (batch_size,), memory_size)
   carry, y = jax.lax.scan(model, carry, time_series)
 
