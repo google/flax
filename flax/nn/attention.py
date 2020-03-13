@@ -245,14 +245,14 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), keepdims=False):
   return c, ys
 
 
-class SelfAttention(base.Module):
-  """Multi-head self-attention."""
+class MultiHeadDotProductAttention(base.Module):
+  """Multi-head dot-product attention."""
 
   def apply(self,
             inputs_q,
+            inputs_kv,
             num_heads,
             dtype=jnp.float32,
-            inputs_kv=None,
             qkv_features=None,
             attention_axis=None,
             causal_mask=False,
@@ -269,17 +269,23 @@ class SelfAttention(base.Module):
             kernel_init=default_kernel_init,
             bias_init=initializers.zeros,
             bias=True):
-    """Applies Multi-head self-attention on the input data.
+    """Applies multi-head dot product attention on the input data.
 
-    It projects the inputs into multi-headed query, key, and value vectors,
+    Projects the inputs into multi-headed query, key, and value vectors,
     applies dot-product attention and project the results to an output vector.
 
+    This can be used for encoder-decoder attention by specifying both `inputs_q`
+    and `inputs_kv` orfor self-attention by only specifying `inputs_q` and
+    setting `inputs_kv` to None.
+
     Args:
-      inputs_q: input data of shape `[bs, dim1, dim2, ..., dimN, features]`.
+      inputs_q: input queries of shape `[bs, dim1, dim2, ..., dimN, features]`.
+      inputs_kv: key/values of shape `[bs, dim1, dim2, ..., dimN, features]`
+        or None for self-attention, inn which case key/values will be derived
+        from inputs_q.
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
       dtype: the dtype of the computation (default: float32)
-      inputs_kv: input data of shape `[bs, dim1, dim2, ..., dimN, features]`.
       qkv_features: dimension of the key, query, and value.
       attention_axis: axes over which the attention is applied ( 'None' means
         attention over all axes, but batch, heads, and features).
@@ -451,6 +457,11 @@ class SelfAttention(base.Module):
         name='out')
 
     return out
+
+
+# TODO(flax-dev): Consider refactoring MultiHeadDotProductAttention and moving
+# causal_mask and cache support into this class instead.
+SelfAttention = MultiHeadDotProductAttention.partial(inputs_kv=None)
 
 
 def make_padding_mask(padding_mask_query,
