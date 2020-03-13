@@ -273,7 +273,8 @@ class Optimizer:
     """Optimizes the target with respect to a loss function.
 
     DEPRECATION WARNING:
-    optimize is deprecated use compute_gradient and apply_gradient instead.
+    optimize() is deprecated.
+    Use jax.grad() or jax.value_and_grad() and apply_gradient() instead.
 
     Args:
       loss_fn:  function that receives the target and returns a loss or a
@@ -285,8 +286,9 @@ class Optimizer:
       A tuple consisting of the new optimizer, the loss,
         and the auxiliary outputs if any.
     """
-    warnings.warn('optimize will be removed soon.'
-                  ' Use compute_gradient and apply_gradient instead.',
+    warnings.warn('optimize() will be removed soon.'
+                  ' Use jax.grad() or jax.value_and_grad()'
+                  'and apply_gradient() instead.',
                   DeprecationWarning)
 
     output_and_grad = self.compute_gradient(loss_fn)
