@@ -116,7 +116,7 @@ class Encoder(nn.Module):
     batch_size = inputs.shape[0]
     carry = nn.LSTMCell.initialize_carry(nn.make_rng(), (batch_size,),
                                          hidden_size)
-    carry, _ = nn.attention.scan_in_dim(
+    carry, _ = jax_utils.scan_in_dim(
         nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
     return carry
 
@@ -127,7 +127,7 @@ class Decoder(nn.Module):
   def apply(self, carry, inputs):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
-    carry, outputs = nn.attention.scan_in_dim(
+    carry, outputs = jax_utils.scan_in_dim(
         nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
     x = nn.Dense(outputs, features=vocab_size, name='dense')
     x = nn.log_softmax(x)
