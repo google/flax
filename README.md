@@ -1,11 +1,21 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-**NOTE**: This is pre-release software and not yet ready for general use. If you want to use it, please get in touch
-with us at flax-dev@google.com.
+**NOTE**: This is alpha software, but we encourage trying it out.
+Changes will come to the API, but we'll use deprecation warnings when we can, and
+keep track of them our [Changelog](CHANGELOG.md).
 
-## Full Documentation
+A growing community of researchers at Google are happily using
+Flax daily for their research, and now we'd like to extend that support to the
+open source community. GitHub issues are encouraged for open converation, but
+in case you need to reach us directly, we're at flax-dev@google.com.
 
-**⟶ https://flax.readthedocs.io/**
+## Quickstart
+
+**⟶ [Full documentation and API reference](https://flax.readthedocs.io/)**
+
+**⟶ [Annotated full end-to-end MNIST example](docs/annotated_mnist.md)**
+
+**⟶ [The Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html)** -- a guided walkthrough of the parts of Flax
 
 ## Background: JAX
 
@@ -15,39 +25,60 @@ It allows for fast scientific computing and machine learning
 with the normal NumPy API
 (+ additional APIs for special accelerator ops when needed)
 
-JAX has some super powerful primitives, which you can compose arbitrarily:
+JAX comes with powerful primitives, which you can compose arbitrarily:
 
 * Autodiff (`jax.grad`): Efficient any-order gradients w.r.t any variables
 * JIT compilation (`jax.jit`): Trace any function ⟶ fused accelerator ops
 * Vectorization (`jax.vmap`): Automatically batch code written for individual samples
-* Parallelization (`jax.pmap`): Automatically parallelize code across multiple accelerators (including across hosts, e.g. for TPU pods)
+* Parallelization (`jax.pmap`): Automatically parallelize code across multiple accelerators (including across hosts, e.g. for large TPUs)
 
 ## What is Flax?
 
-Flax is a neural network library for
+Flax is a high-performance neural network library for
 JAX that is **designed for flexibility**:
 Try new forms of training by forking an example and by modifying the training
 loop, not by adding features to the framework.
 
-Flax comes with:
+Flax comes with everything you need to start your research, including:
 
-* Common layers (`flax.nn`): Dense, Conv, BatchNorm, Attention, ...
+* A module abstraction (`flax.nn.Module`) for parameterized functions such as neural network layers.
+
+* Common layers (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
 
 * Optimizers (`flax.optim`): SGD, Momentum, Adam, LARS
 
-* A ResNet ImageNet example, ready to be forked for your research.
+* Utilities and patterns: replicated training, serialization and checkpointing, metrics, prefetching on device
 
-* ...more examples in the works
+* Educational examples that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
 
-**NOTE**: See [docs/annotated_mnist.md](docs/annotated_mnist.md) for an MNIST
+* HOWTO guides -- diffs that add functionality to educational base exampless
+
+* Fast, tuned large-scale end-to-end examples: CIFAR10, ResNet ImageNet, Transformer LM1b
+
+### An annotated MNIST example
+
+See [docs/annotated_mnist.md](docs/annotated_mnist.md) for an MNIST
 example with detailed annotations for each code block.
 
 ### Flax Modules
 
-In its core, Flax is built around parameterised functions called Modules.
-These Modules override `apply` and can be used just like normal functions.
+The core of Flax is the Module abstraction. Modules allow you to write parameterized functions just as if you were writing a normal numpy function with JAX. The Module api allows you to declare parameters and use them directly with the JAX api’s.
 
-TODO: Clarify the nuances in the statement above.
+Modules are the one part of Flax with "magic" -- the magic is constrained, and enables a very ergonomic style,
+where modules are defined in a single function with minimal boilerplate.
+
+A few things to know about Modules:
+
+1. Create a new module by subclassing `flax.nn.Module` and implementing the `apply` method.
+
+2. Within `apply`, call `self.param(name, shape, init_func)` to register a new parameter and returns its initial value.
+
+3. Apply submodules by calling `MySubModule(...args...)` within `MyModule.apply`. Parameters of `MySubModule` are stored
+as a dictionary under the parameters `MyModule`. **NOTE:** this returns the *output* of `MySubModule`, not an instance. To get an access to an instance of `MySubModule` for re-use, use [`Module.partial`](https://flax.readthedocs.io/en/latest/flax.nn.html#flax.nn.Module.partial) or [`Module.shared`](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html#Parameter-sharing)
+
+4. `MyModule.init(rng, ...)` is a pure function that calls `apply` in "init mode" and returnes a nested Python dict of initialized parameter values
+
+5. `MyModule.call(params, ...)` is a pure function that calls `apply` in "call mode" and returnes the output of the module.
 
 For example you can define a learned linear transformation as follows:
 
@@ -72,6 +103,8 @@ def DenseLayer(x, features):
   x = flax.nn.relu(x)
   return x
 ```
+
+Read more about Flax Modules and the other parts of the Flax API in the [Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html#Flax-Modules)
 
 ## CPU-only Installation
 
