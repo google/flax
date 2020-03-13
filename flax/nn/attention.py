@@ -18,6 +18,8 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
+import warnings
+
 from .. import jax_utils
 from . import base
 from . import initializers
@@ -160,7 +162,10 @@ class _CacheEntry:
   i: onp.ndarray
 
 
-scan_in_dim = jax_utils.scan_in_dim
+def scan_in_dim(*args, **kwargs):
+  warnings.warn('scan_in_dim moved to flax.jax_utils',
+                DeprecationWarning)
+  return jax_utils.scan_in_dim(*args, **kwargs)
 
 
 class Cache(base.Collection):
