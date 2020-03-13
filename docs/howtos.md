@@ -15,6 +15,7 @@ documentation through readthedocs.
 Currently the following HOWTOs are available:
 
 * [Ensembling](https://github.com/google-research/flax/compare/prerelease..howto-ensembling?diff=split)
+* [Polyak Averaging](https://github.com/google-research/flax/compare/prerelease..howto-polyak-averaging?diff=split)
 
 ## How HOWTOs work
 
