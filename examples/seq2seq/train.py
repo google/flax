@@ -24,8 +24,10 @@ from absl import app
 from absl import flags
 from absl import logging
 
+from flax import jax_utils
 from flax import nn
 from flax import optim
+
 import jax
 from jax import random as jrandom
 import jax.numpy as jnp
