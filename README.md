@@ -27,10 +27,10 @@ with the normal NumPy API
 
 JAX comes with powerful primitives, which you can compose arbitrarily:
 
-* Autodiff (`jax.grad`): Efficient any-order gradients w.r.t any variables
-* JIT compilation (`jax.jit`): Trace any function ⟶ fused accelerator ops
-* Vectorization (`jax.vmap`): Automatically batch code written for individual samples
-* Parallelization (`jax.pmap`): Automatically parallelize code across multiple accelerators (including across hosts, e.g. for large TPUs)
+* Autodiff (`jax.grad`): Efficient any-order gradients w.r.t any variables.
+* JIT compilation (`jax.jit`): Trace any function ⟶ fused accelerator ops.
+* Vectorization (`jax.vmap`): Automatically batch code written for individual samples.
+* Parallelization (`jax.pmap`): Automatically parallelize code across multiple accelerators (including across hosts, e.g. for large TPUs).
 
 ## What is Flax?
 
@@ -43,17 +43,17 @@ Flax comes with everything you need to start your research, including:
 
 * A module abstraction (`flax.nn.Module`) for parameterized functions such as neural network layers.
 
-* Common layers (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
+* Common layers (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout.
 
-* Optimizers (`flax.optim`): SGD, Momentum, Adam, LARS
+* Optimizers (`flax.optim`): SGD, Momentum, Adam, LARS.
 
-* Utilities and patterns: replicated training, serialization and checkpointing, metrics, prefetching on device
+* Utilities and patterns: replicated training, serialization and checkpointing, metrics, prefetching on device.
 
-* Educational examples that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
+* Educational examples that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging.
 
-* HOWTO guides -- diffs that add functionality to educational base exampless
+* HOWTO guides -- diffs that add functionality to educational base examples.
 
-* Fast, tuned large-scale end-to-end examples: CIFAR10, ResNet ImageNet, Transformer LM1b
+* Fast, tuned large-scale end-to-end examples: CIFAR10, ResNet ImageNet, Transformer LM1b.
 
 ### An annotated MNIST example
 
@@ -74,9 +74,9 @@ A few things to know about Modules:
 2. Within `apply`, call `self.param(name, shape, init_func)` to register a new parameter and returns its initial value.
 
 3. Apply submodules by calling `MySubModule(...args...)` within `MyModule.apply`. Parameters of `MySubModule` are stored
-as a dictionary under the parameters `MyModule`. **NOTE:** this returns the *output* of `MySubModule`, not an instance. To get an access to an instance of `MySubModule` for re-use, use [`Module.partial`](https://flax.readthedocs.io/en/latest/flax.nn.html#flax.nn.Module.partial) or [`Module.shared`](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html#Parameter-sharing)
+as a dictionary under the parameters `MyModule`. **NOTE:** this returns the *output* of `MySubModule`, not an instance. To get an access to an instance of `MySubModule` for re-use, use [`Module.partial`](https://flax.readthedocs.io/en/latest/flax.nn.html#flax.nn.Module.partial) or [`Module.shared`](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html#Parameter-sharing).
 
-4. `MyModule.init(rng, ...)` is a pure function that calls `apply` in "init mode" and returnes a nested Python dict of initialized parameter values
+4. `MyModule.init(rng, ...)` is a pure function that calls `apply` in "init mode" and returnes a nested Python dict of initialized parameter values.
 
 5. `MyModule.call(params, ...)` is a pure function that calls `apply` in "call mode" and returnes the output of the module.
 
