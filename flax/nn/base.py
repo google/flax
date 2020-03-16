@@ -236,6 +236,7 @@ class _ModuleMeta(abc.ABCMeta):
 
 
 def _fold_in_str(rng, data):
+  """Fold a string into a jax.random.PRNGKey using its SHA-1 hash."""
   m = hashlib.sha1()
   m.update(data.encode('utf-8'))
   d = m.digest()
