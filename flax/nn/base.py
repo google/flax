@@ -920,6 +920,7 @@ class Collection:
     self._anchor = _module_stack[-1] if _module_stack else None
 
     self._mutable = False
+    self._master = None
     self._root = None
 
   def as_dict(self):
@@ -938,6 +939,7 @@ class Collection:
     # pylint: disable=protected-access
     new_col = jax.tree_map(lambda x: x, self)  # clone the collection
     new_col._mutable = True
+    new_col._master = utils._current_trace()
     try:
       yield new_col
     finally:
@@ -968,7 +970,20 @@ class Collection:
     frame = _top_frame('store')
     if not self._mutable:
       raise ValueError('Collection is not mutable. Use the `mutate` method to'
-                       'create a mutable copy.')
+                       ' create a mutable copy.')
+    # use the Jax TraceMaster to determine if a Collection is modified from
+    # inside a nested jax transformation.
+    # In this case, we throw an error because transforming a stateful function
+    # is ill-defined (eg. what does vmap of BatchNorm do?).
+    # TODO(jheek): Add doc guide on combining jax transforms and state.
+    # TODO(jheek): Should some transformations be excempt from this error?
+    master = utils._tracer_of_value(value)
+    value_level = master.level if master else float('-inf')
+    state_level = self._master.level if self._master else float('-inf')
+    if value_level > state_level:
+      raise ValueError('Stateful operations are not allowed when the Collection'
+                       ' is created outside of the current Jax transformation')
+
     # the root of a Collection is the first module scope that gets created
     # inside the mutate scope of the Collection. By allowing only one unique
     # root scope we guarantee that state is not accidentally shared
