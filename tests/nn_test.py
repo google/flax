@@ -315,6 +315,20 @@ class ModuleTest(absltest.TestCase):
       self.assertEqual(new_state.as_dict(), {'/': {'state': x + x}})
     self.assertEqual(new_state.as_dict(), {'/': {'state': x + x}})
 
+  def test_parameter_rng(self):
+    @nn.module
+    def model(x):
+      return nn.Dense(x, features=2, name='dummy',
+                      bias_init=nn.initializers.normal())
+    rng = random.PRNGKey(0)
+    _, params = model.init(rng, jnp.ones((1, 1)))
+    dense_rng = nn.base._fold_in_str(rng, 'dummy')
+    kernel_rng = nn.base._fold_in_str(dense_rng, 'kernel')
+    bias_rng = nn.base._fold_in_str(dense_rng, 'bias')
+    kernel = nn.linear.default_kernel_init(kernel_rng, (1, 2))
+    bias = nn.initializers.normal()(bias_rng, (2,))
+    onp.testing.assert_allclose(kernel, params['dummy']['kernel'])
+    onp.testing.assert_allclose(bias, params['dummy']['bias'])
 
 class CollectionTest(absltest.TestCase):
 
