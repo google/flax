@@ -16,9 +16,9 @@ Download via command line:
 ### Supported setups
 The model should run with other configurations and hardware, but explicitly tested on the following.
 
-| Hardware |  Batch size  | Learning rate | Steps/Second | Accuracy  |
-|:---:|:---:|:---:|---|:---:|:---:|---|
-| TITAN V  | 64  |  0.05 | 3.3  | 71.73% |
+| Hardware |  Batch size  | Learning rate | Steps/Second | Accuracy  | TensorBoard |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| TITAN V  | 64  |  0.05 | 3.3  | 71.73% | comming soon |
 
 ### Running 
 
