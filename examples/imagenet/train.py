@@ -20,6 +20,7 @@ The data is loaded using tensorflow_datasets.
 """
 
 import functools
+import time
 
 from absl import app
 from absl import flags
@@ -275,6 +276,7 @@ def main(argv):
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   epoch_metrics = []
+  t_loop_start = time.time()
   for step, batch in zip(range(step_offset, num_steps), train_iter):
     state, metrics = p_train_step(state, batch)
     epoch_metrics.append(metrics)
@@ -284,11 +286,14 @@ def main(argv):
       summary = jax.tree_map(lambda x: x.mean(), epoch_metrics)
       logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f',
                    epoch, summary['loss'], summary['accuracy'] * 100)
+      steps_per_sec = steps_per_epoch / (time.time() - t_loop_start)
+      t_loop_start = time.time()
       if jax.host_id() == 0:
         for key, vals in epoch_metrics.items():
           tag = 'train_%s' % key
           for i, val in enumerate(vals):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
+        summary_writer.scalar('steps per second', steps_per_sec, step)
 
       epoch_metrics = []
       eval_metrics = []
