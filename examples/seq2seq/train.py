@@ -276,7 +276,7 @@ def train_model():
       optimizer, metrics = train_step(optimizer, batch)
       if step % FLAGS.decode_frequency == 0:
         logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                     batch_metrics['loss'], batch_metrics['accuracy'] * 100)
+                     metrics['loss'], metrics['accuracy'] * 100)
         decode_batch(optimizer.target, 5)
   return optimizer.target
 
