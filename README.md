@@ -5,11 +5,12 @@ Changes will come to the API, but we'll use deprecation warnings when we can, an
 keep track of them our [Changelog](CHANGELOG.md).
 
 A growing community of researchers at Google are happily using
-Flax daily for their research, and now we'd like to extend that support to the
-open source community. GitHub issues are encouraged for open converation, but
-in case you need to reach us directly, we're at flax-dev@google.com.
+Flax for their daily research and contributing to it, and now we're
+expanding that to the open source community.
 
-## Quickstart
+[GitHub issues](http://github.com/google/flax/issues) are encouraged for open conversation, but
+in case you need to reach us directly, we're at flax-dev@google.com.
+ ## Quickstart
 
 **⟶ [Full documentation and API reference](https://flax.readthedocs.io/)**
 
@@ -37,11 +38,10 @@ JAX comes with powerful primitives, which you can compose arbitrarily:
 Flax is a high-performance neural network library for
 JAX that is **designed for flexibility**:
 Try new forms of training by forking an example and by modifying the training
-loop, not by adding features to the framework.
+loop, not by adding features to a framework.
 
-Flax comes with everything you need to start your research, including:
-
-* A module abstraction (`flax.nn.Module`) for parameterized functions such as neural network layers.
+Flax is being developed in close collaboration with the JAX team and 
+comes with everything you need to start your research, including:
 
 * Common layers (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
 
@@ -104,7 +104,7 @@ def DenseLayer(x, features):
   return x
 ```
 
-Read more about Flax Modules and the other parts of the Flax API in the [Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html#Flax-Modules)
+**⟶ Read more about Modules in the [Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html#Flax-Modules)**
 
 ## CPU-only Installation
 
@@ -131,85 +131,8 @@ Now install `flax` from Github:
 ```
 
 
-## Full end-to-end MNIST example
 
-```py
-import jax
-import flax
-import numpy as onp
-import jax.numpy as jnp
-import tensorflow_datasets as tfds
-
-class CNN(flax.nn.Module):
-  def apply(self, x):
-    x = flax.nn.Conv(x, features=32, kernel_size=(3, 3))
-    x = flax.nn.relu(x)
-    x = flax.nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = flax.nn.Conv(x, features=64, kernel_size=(3, 3))
-    x = flax.nn.relu(x)
-    x = flax.nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = x.reshape((x.shape[0], -1))
-    x = flax.nn.Dense(x, features=256)
-    x = flax.nn.relu(x)
-    x = flax.nn.Dense(x, features=10)
-    x = flax.nn.log_softmax(x)
-    return x
-
-@jax.vmap
-def cross_entropy_loss(logits, label):
-  return -logits[label]
-
-def compute_metrics(logits, labels):
-  loss = jnp.mean(cross_entropy_loss(logits, labels))
-  accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
-  return {'loss': loss, 'accuracy': accuracy}
-
-@jax.jit
-def train_step(optimizer, batch):
-  def loss_fn(model):
-    logits = model(batch['image'])
-    loss = jnp.mean(cross_entropy_loss(
-        logits, batch['label']))
-    return loss
-  grad = jax.grad(loss_fn)(optimizer.target)
-  optimizer = optimizer.apply_gradient(grad)
-  return optimizer
-
-@jax.jit
-def eval(model, eval_ds):
-  logits = model(eval_ds['image'] / 255.0)
-  return compute_metrics(logits, eval_ds['label'])
-
-def train():
-  train_ds = tfds.load('mnist', split=tfds.Split.TRAIN)
-  train_ds = train_ds.map(lambda x: {'image':tf.cast(x['image'], tf.float32),
-                                     'label':tf.cast(x['label'], tf.int32)})
-  train_ds = train_ds.cache().shuffle(1000).batch(128)
-  test_ds = tfds.as_numpy(tfds.load(
-      'mnist', split=tfds.Split.TEST, batch_size=-1))
-  test_ds = {'image': test_ds['image'].astype(jnp.float32),
-             'label': test_ds['label'].astype(jnp.int32)}
-
-  _, initial_params = CNN.init_by_shape(
-      jax.random.PRNGKey(0),
-      [((1, 28, 28, 1), jnp.float32)])
-  model = nn.Model(CNN, initial_params)
-
-  optimizer = flax.optim.Momentum(
-      learning_rate=0.1, beta=0.9).create(model)
-
-  for epoch in range(10):
-    for batch in tfds.as_numpy(train_ds):
-      batch['image'] = batch['image'] / 255.0
-      optimizer = train_step(optimizer, batch)
-
-    metrics = eval(optimizer.target, test_ds)
-    print('eval epoch: %d, loss: %.4f, accuracy: %.2f'
-         % (epoch+1,
-          metrics['loss'], metrics['accuracy'] * 100))
-```
-
-## More end-to-end examples
+## List of end-to-end examples
 
 **NOTE**: We are still testing these examples across all supported hardware configurations.
 
@@ -217,28 +140,7 @@ def train():
 
 * [Language Modeling on LM1b](examples/lm1b) with a Transformer architecture
 
-
-## Getting involved
-
-**Have questions? Want to learn more? Reach out to us at flax-dev@google.com**
-
-### Want to help?
-
-We're happy to work together, either remotely or in Amsterdam.
-
-In addition to general improvements
-to the framework, here are some specific things that would be great to have:
-
-#### Help build more HOWTOs
-
-(TODO: clarify list)
-
-#### Help build new end-to-end examples
-
-- Semantic Segmentation
-- GAN
-- VAE
-- ...and your proposal!
+* WIP: [WMT translation](https://github.com/google/flax/pull/61) with a Transformer architecture and on-device beam decoding
 
 # Note
 
