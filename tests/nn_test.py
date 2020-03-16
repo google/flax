@@ -93,23 +93,14 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
-  def test_create_module(self):
+  def test_init_by_shape_module(self):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
-    y, model = DummyModule.create(rng, x)
-    y2 = model(x)
-    self.assertEqual(y, y2)
-    self.assertEqual(y, jnp.array([2.]))
-    self.assertEqual(model.params, {'bias': jnp.array([1.])})
-
-  def test_create_by_shape_module(self):
-    rng = random.PRNGKey(0)
-    x = jnp.array([1.])
-    y, model = DummyModule.create_by_shape(rng, [(x.shape, x.dtype)])
-    y2 = model(x)
+    y, params = DummyModule.init_by_shape(rng, [(x.shape, x.dtype)])
+    y2 = DummyModule.call(params, x)
     self.assertEqual(y.shape, y2.shape)
     self.assertEqual(y2, jnp.array([2.]))
-    self.assertEqual(model.params, {'bias': jnp.array([1.])})
+    self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_shared_module(self):
     rng = random.PRNGKey(0)
