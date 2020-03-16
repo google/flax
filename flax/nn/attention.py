@@ -18,6 +18,9 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
+import warnings
+
+from .. import jax_utils
 from . import base
 from . import initializers
 from . import stochastic
@@ -159,6 +162,12 @@ class _CacheEntry:
   i: onp.ndarray
 
 
+def scan_in_dim(*args, **kwargs):
+  warnings.warn('scan_in_dim moved to flax.jax_utils',
+                DeprecationWarning)
+  return jax_utils.scan_in_dim(*args, **kwargs)
+
+
 class Cache(base.Collection):
   """Collect intermediate activations for efficient autoregressive decoding."""
 
@@ -184,65 +193,6 @@ class Cache(base.Collection):
 
 jax.tree_util.register_pytree_node(
     Cache, base.iterate_collection, base.collection_from_iterable)
-
-
-def _scan_nd(body_fn, init, xs, n=1):
-  """Utility for performing an n-dimensional `lax.scan`.
-
-  The n-d scan is simply recursive call of 1-d scan.
-  Args:
-    body_fn: the body of the loop of type (c, x) -> (c, y).
-    init: initial value for the carry.
-    xs: a pytree of tensors to scan over.
-    n: number of dimensions to scan over (default: 1)
-  Returns:
-    A tuple of the final carry and the values returned by the body.
-  """
-  if n == 1:
-    return lax.scan(body_fn, init, xs)
-  else:
-    def scan_body(c, x):
-      return _scan_nd(body_fn, c, x, n=n-1)
-    return lax.scan(scan_body, init, xs)
-
-
-def scan_in_dim(body_fn, init, xs, axis=(0,), keepdims=False):
-  """utility for doing a scan along arbitrary dimensions.
-
-  see `lax.scan` for details on how the scan operation works.
-  Args:
-    body_fn: the body of the loop of type (c, x) -> (c, y).
-    init: initial value for the carry.
-    xs: a pytree of tensors to scan over.
-    axis: the axis to scan over.
-    keepdims: keep the dimensions that are scanned over.
-  Returns:
-    A tuple of the final carry and the values returned by the body.
-  """
-  if not isinstance(axis, Iterable):
-    axis = (axis,)
-
-  def transpose_in(x):
-    perm = axis + tuple(onp.delete(onp.arange(x.ndim), axis))
-    return x.transpose(perm)
-  def transpose_out(x):
-    perm = axis + tuple(onp.delete(onp.arange(x.ndim), axis))
-    return x.transpose(_invert_perm(perm))
-
-  def body_wrapper(c, xs):
-    if keepdims:
-      xs = jax.tree_map(lambda x: x.reshape((1,) * len(axis) + x.shape), xs)
-      xs = jax.tree_map(transpose_out, xs)
-    c, ys = body_fn(c, xs)
-    if keepdims:
-      ys = jax.tree_map(transpose_in, ys)
-      ys = jax.tree_map(lambda x: x.reshape(x.shape[len(axis):]), ys)
-    return c, ys
-
-  xs = jax.tree_map(transpose_in, xs)
-  c, ys = _scan_nd(body_wrapper, init, xs, n=len(axis))
-  ys = jax.tree_map(transpose_out, ys)
-  return c, ys
 
 
 class MultiHeadDotProductAttention(base.Module):

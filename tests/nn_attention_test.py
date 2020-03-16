@@ -18,6 +18,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 from flax import nn
+from flax import jax_utils
 
 import jax
 from jax import lax
@@ -136,8 +137,8 @@ class AttentionTest(parameterized.TestCase):
       with cache.mutate() as new_cache:
         y = model(x, cache=new_cache)
       return new_cache, y
-    # attention.scan_in_dim supports scanning multiple dims
-    _, y = nn.attention.scan_in_dim(body_fn, cache0, inputs,
+    # scan_in_dim supports scanning multiple dims
+    _, y = jax_utils.scan_in_dim(body_fn, cache0, inputs,
                                     axis=attn_dims, keepdims=True)
 
     onp.testing.assert_allclose(y_ref, y, atol=1e-5)
