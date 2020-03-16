@@ -5,10 +5,10 @@ Changes will come to the API, but we'll use deprecation warnings when we can, an
 keep track of them our [Changelog](CHANGELOG.md).
 
 A growing community of researchers at Google are happily using
-for their daily research and contributing to it, and now we're
+Flax for their daily research and contributing to it, and now we're
 expanding that to the open source community.
 
-[GitHub issues](http://github.com/google/flax/issues) are encouraged for open converation, but
+[GitHub issues](http://github.com/google/flax/issues) are encouraged for open conversation, but
 in case you need to reach us directly, we're at flax-dev@google.com.
  ## Quickstart
 
