@@ -26,10 +26,10 @@ from absl import flags
 from absl import logging
 from flax import nn
 from flax import optim
-from flax.examples.nlp_seq import input_pipeline
-from flax.examples.nlp_seq import models
+import input_pipeline
+import models
 from flax.metrics import tensorboard
-from flax.training import common_utils
+from flax.training import common_utils  # from flax.training import common_utils
 import jax
 from jax import random
 import jax.nn
@@ -92,6 +92,7 @@ def create_optimizer(model, learning_rate):
       eps=1e-9,
       weight_decay=FLAGS.weight_decay)
   optimizer = optimizer_def.create(model)
+  optimizer = jax_utils.replicate(optimizer)
   optimizer = optimizer.replicate()
   return optimizer
 
