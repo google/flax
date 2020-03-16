@@ -37,6 +37,7 @@ from flax.training import checkpoints
 from flax.training import common_utils
 
 import jax
+from jax import lax
 from jax import random
 
 import jax.nn
@@ -99,7 +100,7 @@ def compute_metrics(logits, labels):
       'loss': loss,
       'accuracy': accuracy,
   }
-  metrics = common_utils.pmean(metrics)
+  metrics = lax.pmean(metrics, axis_name='batch')
   return metrics
 
 
@@ -143,7 +144,7 @@ def train_step(state, batch, learning_rate_fn):
   _, (new_model_state, logits), grad = optimizer.compute_gradient(loss_fn)
 
   # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
-  grad = jax_utils.pmean(grad, axis_name='batch')
+  grad = lax.pmean(grad, axis_name='batch')
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr * FLAGS.loss_scaling
@@ -205,8 +206,8 @@ def save_checkpoint(state):
 
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
-  return state.replace(
-      model_state=jax.pmap(common_utils.pmean, 'batch')(state.model_state))
+  avg = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
+  return state.replace(model_state=avg(state.model_state))
 
 
 def main(argv):
