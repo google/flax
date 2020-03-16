@@ -10,8 +10,7 @@ expanding that to the open source community.
 
 [GitHub issues](http://github.com/google/flax/issues) are encouraged for open converation, but
 in case you need to reach us directly, we're at flax-dev@google.com.
-
-## Quickstart
+ ## Quickstart
 
 **⟶ [Full documentation and API reference](https://flax.readthedocs.io/)**
 
@@ -43,8 +42,6 @@ loop, not by adding features to a framework.
 
 Flax is being developed in close collaboration with the JAX team and 
 comes with everything you need to start your research, including:
-
-* A module abstraction (`flax.nn.Module`) for parameterized functions such as neural network layers.
 
 * Common layers (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
 
@@ -143,6 +140,7 @@ Now install `flax` from Github:
 
 * [Language Modeling on LM1b](examples/lm1b) with a Transformer architecture
 
+* WIP: [WMT translation](https://github.com/google/flax/pull/61) with a Transformer architecture and on-device beam decoding
 
 # Note
 

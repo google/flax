@@ -14,7 +14,9 @@ documentation through readthedocs.
 
 Currently the following HOWTOs are available:
 
+* [Distributed (multi-device) training](https://github.com/google-research/flax/compare/prerelease..howto-distributed-training?diff=split)
 * [Ensembling](https://github.com/google-research/flax/compare/prerelease..howto-ensembling?diff=split)
+* [Polyak averaging](https://github.com/google-research/flax/compare/prerelease..howto-polyak-averaging?diff=split)
 
 ## How HOWTOs work
 
