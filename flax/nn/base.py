@@ -19,6 +19,7 @@
 import abc
 import contextlib
 import functools
+import hashlib
 import inspect
 from typing import Any
 import warnings
@@ -234,6 +235,15 @@ class _ModuleMeta(abc.ABCMeta):
       wrap_special_method(name)
 
 
+def _fold_in_str(rng, data):
+  """Fold a string into a jax.random.PRNGKey using its SHA-1 hash."""
+  m = hashlib.sha1()
+  m.update(data.encode('utf-8'))
+  d = m.digest()
+  hash_int = int.from_bytes(d[:4], byteorder='big')
+  return jax.random.fold_in(rng, hash_int)
+
+
 class Module(metaclass=_ModuleMeta):
   """Functional modules."""
 
@@ -251,7 +261,7 @@ class Module(metaclass=_ModuleMeta):
       name = parent.create_name()
     cls._check_name(name, parent)
     if parent.is_init and name not in parent.params:
-      parent.rng, rng = random.split(parent.rng)
+      rng = _fold_in_str(parent.rng, name)
       params = {}
       parent.params[name] = params
     else:  # apply
@@ -517,7 +527,7 @@ class Module(metaclass=_ModuleMeta):
       if name in frame.params:
         raise ValueError(
             "Name '%s' was already used for another parameter." % name)
-      frame.rng, key = random.split(frame.rng)
+      key = _fold_in_str(frame.rng, name)
       frame.params[name] = initializer(key, shape)
     if name not in frame.params:
       raise ValueError("Parameter with name '%s' does not exist." % name)
