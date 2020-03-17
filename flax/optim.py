@@ -354,7 +354,7 @@ class ReplicatedOptimizer(OptimizerDef):
 
   DEPRECATION WARNING:
   ReplicatedOptimizer will be removed soon.
-  Use `jax_utils.replicate(optimizer)` and `jax_utils.pmean(grad)` to explicitly
+  Use `jax_utils.replicate(optimizer)` and `lax.pmean(grad)` to explicitly
   control the replication of the the optimizer and the cross replica averaging
   over gradients, respectively.
   """

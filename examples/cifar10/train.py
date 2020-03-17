@@ -145,7 +145,7 @@ def compute_metrics(logits, labels):
       'loss': loss,
       'error_rate': error_rate,
   }
-  metrics = common_utils.pmean(metrics)
+  metrics = jax.lax.pmean(metrics, 'batch')
   return metrics
 
 
@@ -181,7 +181,7 @@ def train_step(optimizer, state, batch, prng_key, learning_rate_fn, l2_reg):
 
 
 def eval_step(model, state, batch):
-  state = common_utils.pmean(state)
+  state = jax.lax.pmean(state, 'batch')
   with flax.nn.stateful(state, mutable=False):
     logits = model(batch['image'], train=False)
   return compute_metrics(logits, batch['label'])

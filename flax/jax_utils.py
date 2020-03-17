@@ -19,6 +19,7 @@
 
 import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
+import warnings
 
 import numpy as onp
 
@@ -55,10 +56,9 @@ def unreplicate(tree):
 
 
 def pmean(xs, axis_name):
-  """Like `jax.lax.psum` but divides by the number of replicas."""
-  xs = lax.psum(xs, axis_name)
-  num_replicas = lax.psum(1, axis_name)  # this psum is free
-  return jax.tree_map(lambda x: x / num_replicas, xs)
+  warnings.warn('use jax.lax.pmean instead',
+                DeprecationWarning)
+  return lax.pmean(xs, axis_name)
 
 
 def partial_eval_by_shape(fn, input_spec, *args, **kwargs):

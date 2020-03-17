@@ -34,7 +34,7 @@ cat << EOF
 WARNING: This operation will pack all changes in the files above into a diff 
 file, and undo the changes in those files.
 EOF
-read -p "Would you like to continue? " -r
+read -p "Would you like to continue [Y/n]? " -r
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   printf "Bailing out."
   exit 1
@@ -49,7 +49,7 @@ howto_path="${howto_diff_path}/${howto_name}.diff"
 # Overwrite the existing diff 
 if test -f "${howto_path}";  then
   printf "Diff ${howto_path} exists already.\n"
-  read -p "Overwrite? " -r
+  read -p "Overwrite [Y/n]? " -r
   if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     printf "Bailing out."
     exit 1
