@@ -1,4 +1,0 @@
-numpy
-jaxlib
-jax
-msgpack
