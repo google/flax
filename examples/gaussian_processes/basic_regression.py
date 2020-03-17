@@ -144,7 +144,6 @@ def train(train_ds):
 
 def main(_):
     # GPs need higher prec. for cholesky decomps.
-    import matplotlib.pyplot as plt
     from jax.config import config
     config.update("jax_enable_x64", True)
 
