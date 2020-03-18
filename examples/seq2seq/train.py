@@ -132,7 +132,6 @@ class Decoder(nn.Module):
     carry, outputs = jax_utils.scan_in_dim(
         nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
     x = nn.Dense(outputs, features=vocab_size, name='dense')
-    x = nn.log_softmax(x)
     return carry, x
 
 
@@ -156,17 +155,19 @@ class Seq2seq(nn.Module):
       return x
 
     # No teacher forcing, feeding actual output back into the decoder.
-    output = np.zeros((max_output_len, batch_size, vocab_size))
+    next_inputs = jnp.zeros((batch_size, vocab_size))
+    output = []
     for i in range(max_output_len):
-      decoder_inputs = np.expand_dims(decoder_inputs, axis=1)
-      carry, decoder_inputs = decoder(carry, decoder_inputs)
-      decoder_inputs = decoder_inputs.squeeze()
-      # Set next inputs to {0,1} to ensure they are the same as in training.
-      decoder_inputs = np.array([
-          decoder_inputs[j] == max(decoder_inputs[j]) for j in range(batch_size)
-      ])
-      output[:, i] = decoder_inputs
-    return output
+      next_inputs = next_inputs[:, np.newaxis]
+      carry, decoder_outputs = decoder(carry, next_inputs, vocab_size)
+      decoder_outputs = decoder_outputs.squeeze()
+      output.append(decoder_outputs)
+      # Select the argmax as the next input.
+      next_inputs = jnp.equal(
+          decoder_outputs,
+          jnp.max(decoder_outputs, axis=-1)[:, None]
+      ).astype(jnp.float32)
+    return jnp.stack(output, axis=1)
 
 
 def create_model():
@@ -208,7 +209,7 @@ def get_batch(batch_size):
 
 def cross_entropy_loss(logits, labels):
   """Returns cross-entropy loss."""
-  return -jnp.mean(jnp.sum(logits * labels[:, 1:], axis=-1))
+  return -jnp.mean(jnp.sum(nn.log_softmax(logits) * labels[:, 1:], axis=-1))
 
 
 def compute_metrics(logits, labels):
