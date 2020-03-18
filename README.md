@@ -10,7 +10,8 @@ expanding that to the open source community.
 
 [GitHub issues](http://github.com/google/flax/issues) are encouraged for open conversation, but
 in case you need to reach us directly, we're at flax-dev@google.com.
- ## Quickstart
+
+## Quickstart
 
 **⟶ [Full documentation and API reference](https://flax.readthedocs.io/)**
 
