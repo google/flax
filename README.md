@@ -31,7 +31,7 @@ JAX comes with powerful primitives, which you can compose arbitrarily:
 * Autodiff (`jax.grad`): Efficient any-order gradients w.r.t any variables
 * JIT compilation (`jax.jit`): Trace any function ⟶ fused accelerator ops
 * Vectorization (`jax.vmap`): Automatically batch code written for individual samples
-* Parallelization (`jax.pmap`): Automatically parallelize code across multiple accelerators (including across hosts, e.g. for large TPUs)
+* Parallelization (`jax.pmap`): Automatically parallelize code across multiple accelerators (including across hosts, e.g. for TPU pods)
 
 ## What is Flax?
 
