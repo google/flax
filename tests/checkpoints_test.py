@@ -23,6 +23,7 @@ from flax.training import checkpoints
 import jax
 from jax import test_util as jtu
 import numpy as np
+from tensorflow.compat.v2.io import gfile
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -60,6 +61,8 @@ class CheckpointsTest(absltest.TestCase):
     new_object = checkpoints.restore_checkpoint(
         tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object0)
+    # Create leftover temporary checkpoint, which should be ignored.
+    gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 0, prefix='test_', keep=1)
     self.assertIn('test_0', os.listdir(tmp_dir))
@@ -89,6 +92,8 @@ class CheckpointsTest(absltest.TestCase):
                     'b': np.array([1, 1, 1], np.int32)}
     test_object2 = {'a': np.array([4, 5, 6], np.int32),
                     'b': np.array([2, 2, 2], np.int32)}
+    # Create leftover temporary checkpoint, which should be ignored.
+    gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 0.0, prefix='test_', keep=1)
     self.assertIn('test_0.0', os.listdir(tmp_dir))
