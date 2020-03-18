@@ -42,10 +42,9 @@ class TrainTest(absltest.TestCase):
     batch = train.get_batch(128)
     rng = random.PRNGKey(0)
 
-    with nn.stochastic(rng):
-      model = train.create_model()
-      optimizer = train.create_optimizer(model, 0.003)
-      optimizer, train_metrics = train.train_step(optimizer, batch)
+    model = train.create_model(rng)
+    optimizer = train.create_optimizer(model, 0.003)
+    optimizer, train_metrics = train.train_step(optimizer, batch)
 
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
