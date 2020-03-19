@@ -157,7 +157,7 @@ class Seq2seq(nn.Module):
     # No teacher forcing, feeding actual output back into the decoder.
     next_inputs = jnp.zeros((batch_size, vocab_size))
     output = []
-    for i in range(max_output_len):
+    for _ in range(max_output_len):
       next_inputs = next_inputs[:, np.newaxis]
       carry, decoder_outputs = decoder(carry, next_inputs, vocab_size)
       decoder_outputs = decoder_outputs.squeeze()
@@ -242,7 +242,6 @@ def train_step(optimizer, batch):
   metrics = compute_metrics(logits, batch['answer'])
   return optimizer, metrics
 
-
 def log_decode(question, inferred, golden):
   """Log the given question, inferred query, and correct query."""
   # Remove last token from inferred string and first token from golden.
@@ -252,14 +251,20 @@ def log_decode(question, inferred, golden):
   logging.info('DECODE: %s = %s %s', question, inferred, suffix)
 
 
-def decode_batch(model, batch_size):
+@jax.jit
+def decode(model, inputs):
   """Decode a batch."""
-  batch = get_batch(batch_size)
-  inputs, outputs = (batch['query'], batch['answer'])
   decoder_inputs = encode_onehot(np.array(['='])).squeeze()
-  decoder_inputs = np.tile(decoder_inputs, (batch_size, 1))
-  inferred = model(
-      inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
+  decoder_inputs = np.tile(decoder_inputs, (inputs.shape[0], 1))
+  return model(
+    inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
+
+
+def decode_batch(model, batch_size):
+  """Decode and log results for a batch."""
+  batch = get_batch(batch_size)
+  inputs, outputs = batch['query'], batch['answer']
+  inferred = decode(model, inputs)
   questions = decode_onehot(inputs)
   infers = decode_onehot(inferred)
   goldens = decode_onehot(outputs)
