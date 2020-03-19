@@ -18,13 +18,13 @@ Core: Additional
 .. autosummary::
   :toctree: _autosummary
 
+    module
     Model
     Collection
     capture_module_outputs
     stateful
     get_state
     module_method
-
 
 
 Linear modules
