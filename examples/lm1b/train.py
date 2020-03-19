@@ -385,8 +385,10 @@ def main(argv):
   if FLAGS.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
     optimizer = checkpoints.restore_checkpoint(FLAGS.model_dir, optimizer)
-    # Grab last step from the first of the optimizer replicas.
-    start_step = int(optimizer.state.step[0])
+    # Grab last step.
+    start_step = int(optimizer.state.step)
+    # Replicate optimizer.
+    optimizer = jax_utils.replicate(optimizer)
 
   learning_rate_fn = create_learning_rate_scheduler(
       base_learning_rate=learning_rate)
@@ -408,7 +410,9 @@ def main(argv):
     if ((step % FLAGS.checkpoint_freq == 0 and step > 0) or
         step == num_train_steps - 1):
       if jax.host_id() == 0 and FLAGS.save_checkpoints:
-        checkpoints.save_checkpoint(FLAGS.model_dir, optimizer, step)
+        # Save unreplicated optimizer + model state.
+        checkpoints.save_checkpoint(
+            FLAGS.model_dir, jax_utils.unreplicate(optimizer), step)
 
     # Periodic metric handling.
     if step % eval_freq == 0 and step > 0:
