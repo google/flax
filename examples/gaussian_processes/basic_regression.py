@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 from flax import nn
 from jax import random
-
+from jax import ops
 import scipy as oscipy
 
 from jax.tree_util import tree_flatten, tree_unflatten
@@ -16,13 +16,25 @@ import distributions
 
 FLAGS = flags.FLAGS
 
+flags.DEFINE_bool(
+    'plot', default=True,
+    help=('Plot the results.', ))
+
+
+def _diag_shift(mat, val):
+    """ Shifts the diagonal of mat by val. """
+    return ops.index_update(
+        mat,
+        jnp.diag_indices(mat),
+        jnp.diag(mat) + val)
+
 
 class KernelProvider(nn.Module):
-    """ Provides a Kernel -- to be used inside more functional Modules
+    """ Provides an RBF Kernel to be used inside more functional Modules
 
     The role of a kernel provider is to handle initialisation, and
     parameter storage of a particular kernel function. Allowing
-    kernels to be slotted into more complex models build using the Flax
+    kernels to be slotted into more complex models built using the Flax
     functional api.
     """
     def apply(self, x,
@@ -64,10 +76,53 @@ class ObservationModel(nn.Module):
             mean, jnp.linalg.cholesky(covariance))
 
 
-class MyModel(nn.Module):
+class GaussianProcessModel(nn.Module):
+    """ A Gaussian process is a stochastic process, concrete
+    instances return multivariate Gaussians. """
+    def apply(self, x, kernel, mean, jitter=1e-6):
+        """
+
+        Args:
+            x: Index points to evaluate the finite dimensional distribution at
+
+        Returns:
+            p: `MultivariateGaussianTriL` instance
+        """
+        mean = mean(x)
+        cov = kernel(x)
+        cov = _diag_shift(cov, jitter)
+        return distributions.MultivariateNormalTriL(
+            mean, jnp.linalg.cholesky(cov))
+
+
+class LinearConditionalGaussian(nn.Module):
+    def apply(self, p, lin_op, shift, output_noise_covariance):
+        """
+        If A = lin_op, b = shift, and S  output_noise_covariance
+            x ~ p(x) = N(x | m, K)
+            y | x ~ N(y | Ax + b, S)
+
+        then returns
+            p(y) = N(y | Am + b, S + A K A.T)
+        """
+        factor = lin_op @ p.scale
+        mean = lin_op @ p.mean + shift
+        cov = (output_noise_covariance
+               + factor @ factor.T)
+        return distributions.MultivariateNormalTriL(mean, cov)
+
+
+class GPModel(nn.Module):
     """ GP Regression with observation noise. """
     def apply(self, x):
         kern_fn = KernelProvider(x, name='rbf_kernel')
+
+        cov = kern_fn(x)
+        mean = nn.Dense(x, features=1)
+        pf = distributions.MultivariateNormalTriL(
+            mean[..., 0], jnp.linalg.cholesky(cov))
+
+
         mean_fn = lambda x: jnp.zeros(x.shape[:-1], x.dtype)
 
         gp = distributions.GaussianProcess(x,
@@ -112,11 +167,20 @@ def get_datasets():
 
 
 def train(train_ds):
+    """ Complete training of the GP-Model.
+
+    Args:
+        train_ds: Python `dict` with entries `index_points` and `y`.
+
+    Returns:
+        trained_model: A `GPModel` instance with trained hyper-parameters.
+
+    """
     rng = random.PRNGKey(0)
 
     # initialise the model
-    py, params = MyModel.init(rng, train_ds['index_points'])
-    model = nn.Model(MyModel, params)
+    py, params = GPModel.init(rng, train_ds['index_points'])
+    model = nn.Model(GPModel, params)
 
     # utility functions for packing and unpacking param dicts
     par_from_array, array_from_par = build_par_pack_and_unpack(model)
@@ -126,16 +190,19 @@ def train(train_ds):
         return -py.log_prob(train_ds['y'])
 
     # wrap loss fun for scipy.optimize
-    def loss_fun_closure(arr):
+    def wrapped_loss_fun(arr):
         params = par_from_array(arr)
         return loss_fun(model, params)
 
     @jax.jit
     def loss_and_grads(x):
-        return jax.value_and_grad(loss_fun_closure)(x)
+        return jax.value_and_grad(wrapped_loss_fun)(x)
 
-    init_value = array_from_par(params)
-    res = oscipy.optimize.minimize(loss_and_grads, init_value, jac=True)
+    res = oscipy.optimize.minimize(
+        loss_and_grads,
+        x0=array_from_par(params),
+        jac=True)
+
     logging.info('Optimisation message: {}'.format(res.message))
 
     trained_model = model.replace(params=par_from_array(res.x))
@@ -149,6 +216,12 @@ def main(_):
 
     train_ds = get_datasets()
     trained_model = train(train_ds)
+    print(trained_model)
+    if FLAGS.plot:
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots()
+        ax.plot(train_ds['index_points'], train_ds['y'], 'ks')
+        plt.show()
 
 
 if __name__ == '__main__':
