@@ -159,7 +159,7 @@ class Seq2seq(nn.Module):
     output = []
     for _ in range(max_output_len):
       next_inputs = next_inputs[:, np.newaxis]
-      carry, decoder_outputs = decoder(carry, next_inputs, vocab_size)
+      carry, decoder_outputs = decoder(carry, next_inputs)
       decoder_outputs = decoder_outputs.squeeze()
       output.append(decoder_outputs)
       # Select the argmax as the next input.
@@ -242,6 +242,7 @@ def train_step(optimizer, batch):
   metrics = compute_metrics(logits, batch['answer'])
   return optimizer, metrics
 
+
 def log_decode(question, inferred, golden):
   """Log the given question, inferred query, and correct query."""
   # Remove last token from inferred string and first token from golden.
@@ -257,7 +258,7 @@ def decode(model, inputs):
   decoder_inputs = encode_onehot(np.array(['='])).squeeze()
   decoder_inputs = np.tile(decoder_inputs, (inputs.shape[0], 1))
   return model(
-    inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
+      inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
 
 
 def decode_batch(model, batch_size):
