@@ -3,7 +3,6 @@
 ```py
 import jax
 import flax
-import tensorflow as tf
 ```
 
 Load vanilla NumPy for use on host.
@@ -21,6 +20,7 @@ import jax.numpy as jnp
 Flax can use any data loading pipeline. We use TF datasets.
 
 ```py
+import tensorflow as tf
 import tensorflow_datasets as tfds
 ```
 
@@ -103,8 +103,8 @@ Load, convert dtypes, and shuffle MNIST.
 
 ```py
   train_ds = tfds.load('mnist', split=tfds.Split.TRAIN)
-  train_ds = train_ds.map(lambda x: {'image':tf.cast(x['image'], tf.float32),
-                                     'label':tf.cast(x['label'], tf.int32)})
+  train_ds = train_ds.map(lambda x: {'image': tf.cast(x['image'], tf.float32),
+                                     'label': tf.cast(x['label'], tf.int32)})
   train_ds = train_ds.cache().shuffle(1000).batch(128)
   test_ds = tfds.as_numpy(tfds.load(
       'mnist', split=tfds.Split.TEST, batch_size=-1))
