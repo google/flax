@@ -254,9 +254,9 @@ def log_decode(question, inferred, golden):
 
 @jax.jit
 def decode(model, inputs):
-  """Decode a batch."""
-  decoder_inputs = encode_onehot(np.array(['='])).squeeze()
-  decoder_inputs = np.tile(decoder_inputs, (inputs.shape[0], 1))
+  """Decode inputs."""
+  decoder_inputs = encode_onehot(jnp.array(['='])).squeeze()
+  decoder_inputs = jnp.tile(decoder_inputs, (inputs.shape[0], 1))
   return model(
       inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
 
