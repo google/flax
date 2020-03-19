@@ -54,14 +54,20 @@ class CallStack(object):
 
 
 def classproperty(f):
-  """decorator that registers a function as a read-only property of the class."""
+  """decorator that registers a function as a read-only property of the class.
+  Args:
+    f: a function taking the class and an optional class instance
+      and returns the value of the property.
+  Returns:
+    The property.
+  """
 
   class _ClassProperty:
 
-    def __get__(self, _, cls):
+    def __get__(self, instance, cls):
       # python will call the __get__ magic function whenever the property is
       # read from the class.
-      return f(cls)
+      return f(cls, instance)
 
   return _ClassProperty()
 

@@ -252,7 +252,8 @@ class ModuleTest(absltest.TestCase):
     class MultiMethod(nn.Module):
 
       def apply(self, x):
-        return x + self.param('bias', x.shape, initializers.ones)
+        y = x + self.param('bias', x.shape, initializers.ones)
+        return y, self.l2()
 
       @nn.module_method
       def l2(self):
@@ -262,12 +263,13 @@ class ModuleTest(absltest.TestCase):
 
       def apply(self, x):
         layer = MultiMethod.shared()
-        layer(x)  # init
-        return layer.l2()
+        _, l2 = layer(x)  # init
+        return layer.l2(), l2
 
     x = jnp.array([1., 2.])
-    y, _ = MultiMethodModel.init(random.PRNGKey(0), x)
-    self.assertEqual(y, 2.)
+    (l2, l2_2), _ = MultiMethodModel.init(random.PRNGKey(0), x)
+    self.assertEqual(l2, 2.)
+    self.assertEqual(l2_2, 2.)
 
   def test_module_state(self):
     class StatefulModule(nn.Module):

@@ -137,21 +137,33 @@ def module_method(fn):
 
   Example::
 
-    class MyLinearModule(nn.Module):
-      def apply(self, x, features, kernel_init):
-        kernel = self.param('kernel', (x.shape[-1], features), kernel_init)
-        return jnp.dot(x, kernel)
+    class AutoEncoder(nn.Module):
+
+      def apply(self, x, **hparams):
+        encoder, decoder = self._create_modules(**hparams)
+
+        return decoder(encoder(x))
 
       @nn.module_method
-      def apply_transpose(self, x, **kwargs):
-        kernel = self.get_param('kernel')
-        return jnp.dot(x, kernel.transpose((1, 0)))
+      def encode(self, x, **hparams):
+        encoder, _ = self._create_modules(**hparams)
+        return encoder(x)
+
+      @nn.module_method
+      def decode(self, x, **hparams):
+        _, decoder = self._create_modules(**hparams)
+        return decoder(x)
+
+      def _create_modules(self, encoder_features, decoder_features):
+        encoder = nn.Dense.shared(features=encoder_features, name='encoder')
+        decoder = nn.Dense.shared(features=decoder_features, name='decoder')
+        return encoder, decoder
 
   A module method can be called on A Model instance directly::
 
-    y, initial_params = MyLinearModule.init(rng, x)
+    _, initial_params = MyLinearModule.init(rng, x)
     model = nn.Model(MyLinearModule, initial_params)
-    z = model.apply_transpose(y)
+    z = model.encode(x)
 
   Module methods can also be called on shared modules::
 
@@ -168,21 +180,24 @@ def module_method(fn):
   Returns:
     the decorated function
   """
-
   cache = {}
 
-  # module method are just Module class instances.
-  # But we want it to inherit from the class such that we can call other methods
-  # of the module. We need a class property to find out which class the method
-  # is defined on.
-  def wrapper(cls):
-    if cls not in cache:
-      class ModuleMethod(cls):
-        apply = fn
-      ModuleMethod.__name__ = fn.__name__
-      cache[cls] = ModuleMethod
-    return cache[cls]
-
+  def wrapper(cls, instance):
+    if instance is None:
+      # From the outside, module methods are Module class instances.
+      # But we want it to inherit from the class such that we can
+      # call other methods of the module. We need the class property
+      # to find out which class the method is defined on.
+      if cls not in cache:
+        class ModuleMethod(cls):
+          apply = fn
+        ModuleMethod.__name__ = fn.__name__
+        cache[cls] = ModuleMethod
+      return cache[cls]
+    else:
+      # Calling a module method in a class is
+      # just like calling an ordinary.
+      return functools.partial(fn, instance)
   return utils.classproperty(wrapper)
 
 
@@ -272,10 +287,7 @@ class Module(metaclass=_ModuleMeta):
       rng = None
     frame = _ModuleFrame(name, parent=parent, rng=rng, params=params,
                          transparent=cls._is_transparent())
-    with cls._with_instance(frame) as instance:
-      y = instance.apply(*args, **apply_kwargs)
-      _track_outputs(y)
-    return y
+    return cls._apply(frame, args, apply_kwargs)
 
   @abc.abstractmethod
   def apply(self, *args, **kwargs):
@@ -458,9 +470,7 @@ class Module(metaclass=_ModuleMeta):
 
     frame = _ModuleFrame(name, rng=_rng, parent=parent,
                          transparent=cls._is_transparent())
-    with cls._with_instance(frame) as instance:
-      y = instance.apply(*args, **kwargs)
-      _track_outputs(y)
+    y = cls._apply(frame, args, kwargs)
     return y, cls._post_process_params(frame.params)
 
   @classmethod
@@ -506,10 +516,7 @@ class Module(metaclass=_ModuleMeta):
       name = cls._default_name()
     frame = _ModuleFrame(name, params=params, parent=parent,
                          transparent=cls._is_transparent())
-    with cls._with_instance(frame) as instance:
-      y = instance.apply(*args, **kwargs)
-      _track_outputs(y)
-    return y
+    return cls._apply(frame, args, kwargs)
 
   def param(self, name, shape, initializer):
     """Defines a parameter within the module's apply function.
@@ -597,6 +604,22 @@ class Module(metaclass=_ModuleMeta):
   def is_initializing(self):
     _top_frame('is_initializing')
     return self._frame.is_init
+
+  @classmethod
+  def constructor_args(cls):
+    parameters = _fn_parameters(cls.__init__)[1:]
+    return [p.name for p in parameters]
+
+  @classmethod
+  def _apply(cls, frame, args, kwargs):
+    with cls._with_instance(frame) as instance:
+      init_argnames = cls.constructor_args()
+      init_kwargs = {k: v for k, v in kwargs.items() if k in init_argnames}
+      apply_kwargs = {k: v for k, v in kwargs.items() if k not in init_argnames}
+      instance.__init__(**init_kwargs)
+      y = instance.apply(*args, **apply_kwargs)
+      _track_outputs(y)
+    return y
 
   @classmethod
   @contextlib.contextmanager
