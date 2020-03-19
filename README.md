@@ -15,7 +15,7 @@ in case you need to reach us directly, we're at flax-dev@google.com.
 
 **⟶ [Full documentation and API reference](https://flax.readthedocs.io/)**
 
-**⟶ [Annotated full end-to-end MNIST example](docs/annotated_mnist.md)**
+**⟶ [Annotated full end-to-end MNIST example](https://flax.readthedocs.io/en/latest/annotated_mnist.html)**
 
 **⟶ [The Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html)** -- a guided walkthrough of the parts of Flax
 
