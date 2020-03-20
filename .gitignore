@@ -4,3 +4,5 @@
 .DS_Store
 docs/_autosummary
 docs/_build
+dist/
+build/
