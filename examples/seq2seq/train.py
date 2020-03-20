@@ -29,7 +29,6 @@ from flax import nn
 from flax import optim
 
 import jax
-from jax import random as jrandom
 import jax.numpy as jnp
 
 import numpy as np
@@ -116,7 +115,7 @@ class Encoder(nn.Module):
   def apply(self, inputs, hidden_size=512):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
-    carry = nn.LSTMCell.initialize_carry(nn.make_rng(), (batch_size,),
+    carry = nn.LSTMCell.initialize_carry(jax.random.PRNGKey(0), (batch_size,),
                                          hidden_size)
     carry, _ = jax_utils.scan_in_dim(
         nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
@@ -169,12 +168,12 @@ class Seq2seq(nn.Module):
     return output
 
 
-def create_model():
+def create_model(rng):
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size()
   _, initial_params = Seq2seq.init_by_shape(
-      nn.make_rng(), [((1, get_max_input_len(), vocab_size), jnp.float32),
-                      ((1, get_max_output_len(), vocab_size), jnp.float32)])
+      rng, [((1, get_max_input_len(), vocab_size), jnp.float32),
+            ((1, get_max_output_len(), vocab_size), jnp.float32)])
   model = nn.Model(Seq2seq, initial_params)
   return model
 
@@ -268,18 +267,17 @@ def decode_batch(model, batch_size):
 
 def train_model():
   """Train for a fixed number of steps and decode during training."""
-  rng = jrandom.PRNGKey(0)
+  rng = jax.random.PRNGKey(0)
 
-  with nn.stochastic(rng):
-    model = create_model()
-    optimizer = create_optimizer(model, FLAGS.learning_rate)
-    for step in range(FLAGS.num_train_steps):
-      batch = get_batch(FLAGS.batch_size)
-      optimizer, metrics = train_step(optimizer, batch)
-      if step % FLAGS.decode_frequency == 0:
-        logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                     metrics['loss'], metrics['accuracy'] * 100)
-        decode_batch(optimizer.target, 5)
+  model = create_model(rng)
+  optimizer = create_optimizer(model, FLAGS.learning_rate)
+  for step in range(FLAGS.num_train_steps):
+    batch = get_batch(FLAGS.batch_size)
+    optimizer, metrics = train_step(optimizer, batch)
+    if step % FLAGS.decode_frequency == 0:
+      logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
+                   metrics['loss'], metrics['accuracy'] * 100)
+      decode_batch(optimizer.target, 5)
   return optimizer.target
 
 
