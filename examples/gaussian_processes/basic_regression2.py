@@ -13,6 +13,8 @@ import scipy as oscipy
 import kernels
 import distributions
 
+from jax.config import config
+config.update("jax_enable_x64", True)
 
 FLAGS = flags.FLAGS
 
@@ -136,7 +138,7 @@ class MarginalObservationModel(nn.Module):
                        (), jax.nn.initializers.ones))
 
         covariance = pf.scale @ pf.scale.T
-        covariance = _diag_shift(covariance, obs_noise_scale)
+        covariance = _diag_shift(covariance, obs_noise_scale**2)
 
         return distributions.MultivariateNormalFull(
             pf.mean, covariance)
@@ -157,10 +159,10 @@ class GPModel(nn.Module):
         """
         kern_fun = RBFKernelProvider(x, name='kernel_fun')
         pf_x = GaussianProcessLayer(x, kern_fun, name='gp_layer')
-        linear_mean = nn.Dense(x, features=1, name='linear_mean',
-                               dtype=dtype)
-        pf_x = MeanShiftDistribution(
-            pf_x, linear_mean[..., 0], name='mean_shift')
+        #linear_mean = nn.Dense(x, features=1, name='linear_mean',
+        #                       dtype=dtype)
+        #pf_x = MeanShiftDistribution(
+        #    pf_x, linear_mean[..., 0], name='mean_shift')
 
         py_x = MarginalObservationModel(pf_x, name='observation_model')
         return py_x
@@ -191,7 +193,7 @@ def build_par_pack_and_unpack(model):
 def get_datasets(sim_key):
     """ Generate the datasets. """
     index_points = jnp.linspace(-3., 3., 15)[..., jnp.newaxis]
-    linear_trend = 0.33 + 1.5 * index_points[:, 0]
+    linear_trend = 0. #0.33 + .1 * index_points[:, 0]
     y = (linear_trend
          + jnp.sin(index_points[:, 0]*2)
          + .5 * random.normal(sim_key, index_points.shape[:-1]))
@@ -232,15 +234,13 @@ def train(train_ds):
     def loss_and_grads(x):
         return jax.value_and_grad(wrapped_loss_fun)(x)
 
-
-    print(model)
-    assert(False)
-
     res = oscipy.optimize.minimize(
         loss_and_grads,
         x0=array_from_par(params),
         jac=True,
         method='BFGS')
+
+    print(res)
 
     logging.info('Optimisation message: {}'.format(res.message))
 
@@ -249,25 +249,48 @@ def train(train_ds):
 
 
 def main(_):
-    # GPs need higher prec. for cholesky decomps.
-    from jax.config import config
-    config.update("jax_enable_x64", True)
-    ar = jnp.zeros([1], dtype=jnp.float64)
-    assert(False)
     train_ds = get_datasets(random.PRNGKey(123))
-
     trained_model = train(train_ds)
+    print(trained_model.params)
 
     if FLAGS.plot:
 
-        xx = train_ds['index_points']
-        py = trained_model.module.call(trained_model.params,
-                                       xx)
+        obs_noise_scale = jax.nn.softplus(
+            trained_model.params['observation_model']['observation_noise_scale'])
+
+        def learned_kernel_fn(x1, x2):
+            return RBFKernelProvider.call(
+                trained_model.params['kernel_fun'], x1)(x1, x2)
+
+        def learned_mean_fn(x):
+            return jnp.zeros(x.shape[:-1])
+            return nn.Dense.call(
+                trained_model.params['linear_mean'], x, features=1)[:, 0]
+
+        xx_new = jnp.linspace(-3., 3., 100)[:, None]
+
+        # prior GP model at learned model parameters
+        fitted_gp = distributions.GaussianProcess(
+            train_ds['index_points'],
+            learned_mean_fn,
+            learned_kernel_fn, 1e-4
+        )
+        posterior_gp = fitted_gp.posterior_gp(
+                train_ds['y'],
+                xx_new,
+                obs_noise_scale**2)
+
+        pred_f_mean = posterior_gp.mean_function(xx_new)
+        pred_f_var = jnp.diag(posterior_gp.kernel_function(xx_new, xx_new))
 
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
+        ax.fill_between(xx_new[:, 0],
+                        pred_f_mean - 2*jnp.sqrt(pred_f_var),
+                        pred_f_mean + 2*jnp.sqrt(pred_f_var), alpha=0.5)
+        ax.plot(xx_new, posterior_gp.mean_function(xx_new), '-')
         ax.plot(train_ds['index_points'], train_ds['y'], 'ks')
-        ax.plot(xx[:, 0], py.mean)
+
         plt.show()
 
 

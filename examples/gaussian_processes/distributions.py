@@ -1,25 +1,49 @@
 import jax.numpy as jnp
 import jax.scipy as jscipy
 import abc
-from jax import random
+from jax import ops, random
 from flax import struct
 from typing import Callable
 import kernels
 
 
-# multivariate normal utility function
-def base_conditional(
-        kmn: jnp.ndarray,
-        kmm: jnp.ndarray,
-        knn: jnp.ndarray,
-        f: jnp.ndarray,
-        *,
-        full_cov: bool = False):
-    """ For Gaussian distributions x ~ N(0, kmm)
-    and y|x = N(
+def multivariate_gaussian_kl(q, p):
+    """ KL-divergence between multivariate Gaussian distributions defined as
+
+        ∫ N(q.mean, q.scale) log{ N(q.mean, q.scale) / N (p.mean, p.scale) }.
+
+    Args:
+        q: `MultivariateNormal` object
+        p: `MultivariateNormal` object
+
+    Returns:
+        kl: Python `float` the KL-divergence between `q` and `p`.
     """
-    kmm_chol = jnp.linalg.cholesky(kmm)
-    return 1., 2.
+    m_diff = q.mean - p.mean
+    return .5*(2*jnp.log(jnp.diag(p.scale)).sum() - 2*jnp.log(jnp.diag(q.scale)).sum()
+               - q.mean.shape[-1]
+               + jnp.trace(jscipy.linalg.cho_solve((p.scale, True), q.scale) @ q.scale.T)
+               + jnp.sum(m_diff * jscipy.linalg.cho_solve((p.scale, True), m_diff)))
+
+
+def _diag_shift(mat, val):
+    """
+
+    Args:
+        mat: `array_like`, a square matrix of shape `[..., N, N]`
+        val: `array_like`, the value to be added to the diagonal
+          of mat.
+
+    Returns:
+        mat: `array_like` the original `mat` with the diagonal
+          indices updated.
+
+    """
+    return ops.index_update(
+        mat,
+        jnp.diag_indices(mat.shape[-1], len(mat.shape)),
+        jnp.diag(mat) + val)
+
 
 def linear_gaussian_conditional(
         y,
@@ -90,7 +114,14 @@ class MultivariateNormalFull(MultivariateNormal):
     covariance: jnp.ndarray
 
     def log_prob(self, x):
-        return jscipy.stats.multivariate_normal.logpdf(x, self.mean, self.covariance)
+        scale = jnp.linalg.cholesky(self.covariance)
+        dim = x.shape[-1]
+        dev = x - self.mean
+        maha = jnp.sum(dev *
+                       jscipy.linalg.cho_solve((scale, True), dev))
+        log_2_pi = jnp.log(2 * jnp.pi)
+        log_det_cov = 2 * jnp.sum(jnp.log(jnp.diag(scale)))
+        return -0.5 * (dim * log_2_pi + log_det_cov + maha)
 
     def sample(self, key, shape=()):
         return random.multivariate_normal(
@@ -106,7 +137,7 @@ class GaussianProcess:
 
     def marginal(self):
         kxx = self.kernel_function(self.index_points, self.index_points)
-        chol_kxx = jnp.linalg.cholesky(kxx)
+        chol_kxx = jnp.linalg.cholesky(_diag_shift(kxx, self.jitter))
         mean = self.mean_function(self.index_points)
         return MultivariateNormalTriL(mean, chol_kxx)
 
@@ -124,7 +155,8 @@ class GaussianProcess:
         def cond_mean_fn(x):
             return (self.mean_function(x_new)
                     + k_xnew_x @ jscipy.linalg.cho_solve(
-                        (marginal.scale, True), y - marginal.mean))
+                        (cond_kernel_fn.divisor_matrix_cholesky, True),
+                        y - marginal.mean))
 
         jitter = jitter if jitter else self.jitter
         return GaussianProcess(x_new,

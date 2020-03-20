@@ -32,6 +32,7 @@ class Kernel:
 
 def rbf_kernel_fun(x, x2, amplitude, lengthscale):
     """ Functional definition of an RBF kernel. """
+    #pwd_dists = (jnp.expand_dims(x, -2) - jnp.expand_dims(x2, -3)) / lengthscale
     pwd_dists = (x[..., None, :] - x2[..., None, :, :]) / lengthscale
     kernel_matrix = jnp.exp(-.5 * jnp.sum(pwd_dists ** 2, axis=-1))
     return amplitude**2 * kernel_matrix
@@ -46,9 +47,9 @@ class SchurComplementKernel(Kernel):
         k12 = self.kernel_fn(x1, x2)
         k1z = self.kernel_fn(x1, self.fixed_inputs)
         kz2 = self.kernel_fn(self.fixed_inputs, x2)
-
-        return k12 - k1z @ jscipy.linalg.cho_solve(
-            (self.divisor_matrix_cholesky, True), kz2)
+        return (k12
+                - k1z @ jscipy.linalg.cho_solve(
+                    (self.divisor_matrix_cholesky, True), kz2))
 
 
 class SchurComplementKernelProvider(nn.Module):
@@ -70,9 +71,32 @@ class SchurComplementKernelProvider(nn.Module):
         # compute the "divisor-matrix"
         divisor_matrix = base_kernel_fun(
             fixed_index_points, fixed_index_points)
+
         divisor_matrix_cholesky = jnp.linalg.cholesky(
             _diag_shift(divisor_matrix, diag_shift))
 
         return SchurComplementKernel(base_kernel_fun,
                                      fixed_index_points,
                                      divisor_matrix_cholesky)
+
+
+@struct.dataclass
+class VariationalKernel(Kernel):
+    fixed_inputs: jnp.ndarray
+    variational_scale: jnp.ndarray
+
+    def apply(self, x1, x2):
+        z = self.fixed_inputs
+        kxy = self.kernel_fn(x1, x2)
+        kxz = self.kernel_fn(x1, z)
+        kzy = self.kernel_fn(z, x2)
+        kzz = self.kernel_fn(z, z)
+        kzz_cholesky = jnp.linalg.cholesky(
+            kzz + 1e-6 * jnp.eye(z.shape[-2]))
+
+        kzz_chol_qu_scale = jscipy.linalg.cho_solve(
+            (kzz_cholesky, True), self.variational_scale)
+
+        return (kxy
+                - kxz @ jscipy.linalg.cho_solve((kzz_cholesky, True), kzy)
+                + kxz @ (kzz_chol_qu_scale @ kzz_chol_qu_scale.T) @ kzy)
