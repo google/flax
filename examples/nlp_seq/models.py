@@ -213,8 +213,8 @@ class Transformer(nn.Module):
             mlp_dim=2048,
             max_len=2048,
             train=True,
-            dropout_rate=0.2,
-            attention_dropout_rate=0.2):
+            dropout_rate=0.3,
+            attention_dropout_rate=0.3):
     """Applies Transformer model on the inputs.
 
     Args:

@@ -42,8 +42,10 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string('model_dir', default='', help=('Directory for model data'))
 
+flags.DEFINE_string('experiment', default='xpos', help=('Experiment name.'))
+
 flags.DEFINE_integer(
-    'batch_size', default=32, help=('Batch size for training.'))
+    'batch_size', default=64, help=('Batch size for training.'))
 
 flags.DEFINE_integer(
     'eval_frequency',
@@ -65,28 +67,12 @@ flags.DEFINE_float(
     default=1e-1,
     help=('decay factor for AdamW style weight decay.'))
 
-flags.DEFINE_integer(
-    'max_target_length',
-    default=256,
-    help=('maximum length of training examples.'))
-flags.DEFINE_integer(
-    'max_eval_target_length',
-    default=256,
-    help=('maximum length of eval examples.'))
+flags.DEFINE_integer('max_length', default=256,
+                     help=('maximum length of examples.'))
 
 flags.DEFINE_integer(
     'random_seed', default=0, help=('Integer for PRNG random seed.'))
 
-# Please, download with following command line or select
-# other release at https://universaldependencies.org/#download.
-#
-# curl -# -o ud-treebanks-v2.0.tgz \
-#   https://lindat.mff.cuni.cz/repository/xmlui/bitstream/handle/11234/1-1976/ud-treebanks-v2.0.tgz
-# tar xzf ud-treebanks-v2.0.tgz
-# select the language, e.g. Ancient_Greek with acronym 'grc'
-# for instance 'train': ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-train.conllu
-# and for 'dev': ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-dev.conllu
-# and provide as flag.
 flags.DEFINE_string('train', default='', help=('path to training data.'))
 
 flags.DEFINE_string('dev', default='', help=('path to development data.'))
@@ -225,7 +211,7 @@ def compute_metrics(logits, labels, weights):
       'accuracy': acc,
       'denominator': weight_sum,
   }
-  metrics = common_utils.psum(metrics)
+  metrics = np.sum(metrics, -1)
   return metrics
 
 
@@ -255,6 +241,7 @@ def train_step(optimizer, batch, learning_rate_fn, dropout_rng=None):
   (_, logits), grad = grad_fn(optimizer.target)
   grad = jax.lax.pmean(grad, 'batch')
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+
   metrics = compute_metrics(logits, targets, weights)
   metrics['learning_rate'] = lr
 
@@ -287,8 +274,7 @@ def main(argv):
   num_train_steps = FLAGS.num_train_steps
   num_eval_steps = FLAGS.num_eval_steps
   eval_freq = FLAGS.eval_frequency
-  max_target_length = FLAGS.max_target_length
-  max_eval_target_length = FLAGS.max_eval_target_length
+  max_length = FLAGS.max_length
   random_seed = FLAGS.random_seed
 
   if not FLAGS.dev:
@@ -296,11 +282,12 @@ def main(argv):
   if not FLAGS.train:
     raise app.UsageError('Please provide path to training set.')
 
+  parameter_path = os.path.join(FLAGS.model_dir, FLAGS.experiment + '.params')
   if jax.host_id() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, 'train'))
+        os.path.join(FLAGS.model_dir, FLAGS.experiment + '_train'))
     eval_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, 'eval'))
+        os.path.join(FLAGS.model_dir, FLAGS.experiment + '_eval'))
 
   if batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
@@ -316,7 +303,7 @@ def main(argv):
       attributes_input,
       attributes_target,
       batch_size=batch_size,
-      bucket_size=max_target_length)
+      bucket_size=max_length)
 
   eval_ds = input_pipeline.sentence_dataset_dict(
       FLAGS.dev,
@@ -324,14 +311,14 @@ def main(argv):
       attributes_input,
       attributes_target,
       batch_size=batch_size,
-      bucket_size=max_target_length,
+      bucket_size=max_length,
       repeat=1)
   train_iter = iter(train_ds)
   bs = device_batch_size * jax.device_count()
 
   rng = random.PRNGKey(random_seed)
   rng, init_rng = random.split(rng)
-  input_shape = (bs, max_target_length)
+  input_shape = (bs, max_length)
   transformer_kwargs = {
       'vocab_size': len(vocabs['forms']),
       'output_vocab_size': len(vocabs['xpos']),
@@ -340,7 +327,7 @@ def main(argv):
       'num_layers': 6,
       'qkv_dim': 512,
       'mlp_dim': 2048,
-      'max_len': max(max_target_length, max_eval_target_length)
+      'max_len': max_length,
   }
   model = create_model(init_rng, tuple(input_shape), transformer_kwargs)
 
@@ -360,6 +347,7 @@ def main(argv):
 
   metrics_all = []
   tick = time.time()
+  best_dev_score = 0
   for step, batch in zip(range(num_train_steps), train_iter):
     batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
 
@@ -418,6 +406,12 @@ def main(argv):
           jnp.exp(eval_summary['loss']), a_max=1.0e4)
       logging.info('eval in step: %d, loss: %.4f, accuracy: %.4f', step,
                    eval_summary['loss'], eval_summary['accuracy'])
+
+      if best_dev_score < eval_summary['accuracy']:
+        best_dev_score = eval_summary['accuracy']
+        # TODO: save model.
+      eval_summary['best_dev_score'] = best_dev_score
+      logging.info('best development model score %.4f', best_dev_score)
       if jax.host_id() == 0:
         for key, val in eval_summary.items():
           eval_summary_writer.scalar(key, val, step)
