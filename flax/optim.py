@@ -488,25 +488,21 @@ class ModelParamTraversal(traverse_util.Traversal):
           'ModelParamTraversal can only traverse a flax Model instance.')
 
   def _iterate(self, x, path=''):
-    if not isinstance(x, dict):
-      # x is a leaf
-      if self._filter_fn(path, x):
-        yield x
-    else:
-      for key, value in _sorted_items(x):
-        yield from self._iterate(value, '{}/{}'.format(path, key))
+    flat_dict = traverse_util.flatten_dict(x)
+    for key, value in _sorted_items(flat_dict):
+      path = '/' + '/'.join(key)
+      if self._filter_fn(path, value):
+        yield value
 
   def _update(self, fn, x, path=''):
-    if not isinstance(x, dict):
-      if self._filter_fn(path, x):
-        return fn(x)
-      else:
-        return x
-    else:
-      new_x = {}
-      for key, value in _sorted_items(x):
-        new_x[key] = self._update(fn, value, '{}/{}'.format(path, key))
-      return new_x
+    flat_dict = traverse_util.flatten_dict(x)
+    new_dict = {}
+    for key, value in flat_dict.items():
+      path = '/' + '/'.join(key)
+      if self._filter_fn(path, value):
+        value = fn(value)
+      new_dict[key] = value
+    return traverse_util.unflatten_dict(new_dict)
 
   def iterate(self, inputs):
     self._check_inputs(inputs)
