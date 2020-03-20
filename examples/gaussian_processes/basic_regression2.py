@@ -1,8 +1,12 @@
+from jax.config import config
+config.update("jax_enable_x64", True)
+
 from absl import app
 from absl import flags
 from absl import logging
 
 from flax import nn
+from typing import Callable
 
 import jax
 from jax import random, ops
@@ -12,9 +16,6 @@ import jax.numpy as jnp
 import scipy as oscipy
 import kernels
 import distributions
-
-from jax.config import config
-config.update("jax_enable_x64", True)
 
 FLAGS = flags.FLAGS
 
@@ -38,7 +39,7 @@ class MeanShiftDistribution(nn.Module):
 
         Args:
             p: `dataclass` with field `mean`
-            shift: `jnp.ndarray` shift vector, should broadcast with
+            shift: nd-array shift vector, should be broadcastable with
               p.mean
 
         Returns:
@@ -48,7 +49,7 @@ class MeanShiftDistribution(nn.Module):
         try:
             return p.replace(mean=p.mean + shift)
         except AttributeError:
-            AttributeError('{} must have a `mean` field.'.format(p))
+            raise AttributeError('{} must have a `mean` field.'.format(p))
 
 
 class GaussianProcessLayer(nn.Module):
@@ -59,16 +60,19 @@ class GaussianProcessLayer(nn.Module):
     parameterisations.
     """
     def apply(self,
-              index_points,
-              kernel_fun,
-              mean_fun=None,
-              jitter=1e-4):
+              index_points: jnp.ndarray,
+              kernel_fun: Callable,
+              mean_fun: Callable = None,
+              jitter: float =1e-4):
         """
 
         Args:
-            index_points:
-            kernel_fun:
-            mean_fun: Default: jnp.zeros
+            index_points: the nd-array of index points of the GP model
+            kernel_fun: callable kernel function.
+            mean_fun: callable mean function of the GP model.
+              (default: `None` is equivalent to lambda x: jnp.zeros(x.shape[:-1]))
+            jitter: float `jitter` term to add to the diagonal of the covariance
+              function before computing Cholesky decompositions.
 
         Returns:
             p: `distributions.MultivariateNormalTriL` object.
@@ -93,8 +97,8 @@ class RBFKernelProvider(nn.Module):
     built using the Flax functional api.
     """
     def apply(self, x,
-              amplitude_init=jax.nn.initializers.ones,
-              lengthscale_init=jax.nn.initializers.ones):
+              amplitude_init: Callable = jax.nn.initializers.ones,
+              lengthscale_init: Callable = jax.nn.initializers.ones):
         """
 
         Args:
@@ -159,10 +163,11 @@ class GPModel(nn.Module):
         """
         kern_fun = RBFKernelProvider(x, name='kernel_fun')
         pf_x = GaussianProcessLayer(x, kern_fun, name='gp_layer')
-        #linear_mean = nn.Dense(x, features=1, name='linear_mean',
-        #                       dtype=dtype)
-        #pf_x = MeanShiftDistribution(
-        #    pf_x, linear_mean[..., 0], name='mean_shift')
+        # uncomment to specify a mean function
+        # linear_mean = nn.Dense(x, features=1, name='linear_mean',
+        #                        dtype = dtype)
+        # pf_x = MeanShiftDistribution(
+        #     pf_x, linear_mean[..., 0], name='mean_shift')
 
         py_x = MarginalObservationModel(pf_x, name='observation_model')
         return py_x
@@ -192,10 +197,8 @@ def build_par_pack_and_unpack(model):
 
 def get_datasets(sim_key):
     """ Generate the datasets. """
-    index_points = jnp.linspace(-3., 3., 15)[..., jnp.newaxis]
-    linear_trend = 0. #0.33 + .1 * index_points[:, 0]
-    y = (linear_trend
-         + jnp.sin(index_points[:, 0]*2)
+    index_points = jnp.linspace(-3., 3., 25)[..., jnp.newaxis]
+    y = (jnp.sin(index_points[:, 0])
          + .5 * random.normal(sim_key, index_points.shape[:-1]))
     train_ds = {'index_points': index_points,
                 'y': y}
@@ -240,8 +243,6 @@ def train(train_ds):
         jac=True,
         method='BFGS')
 
-    print(res)
-
     logging.info('Optimisation message: {}'.format(res.message))
 
     trained_model = model.replace(params=par_from_array(res.x))
@@ -251,7 +252,6 @@ def train(train_ds):
 def main(_):
     train_ds = get_datasets(random.PRNGKey(123))
     trained_model = train(train_ds)
-    print(trained_model.params)
 
     if FLAGS.plot:
 
@@ -264,8 +264,7 @@ def main(_):
 
         def learned_mean_fn(x):
             return jnp.zeros(x.shape[:-1])
-            return nn.Dense.call(
-                trained_model.params['linear_mean'], x, features=1)[:, 0]
+            # return nn.Dense.call(trained_model.params['linear_mean'], x, features=1)[:, 0]
 
         xx_new = jnp.linspace(-3., 3., 100)[:, None]
 
