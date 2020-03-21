@@ -1,11 +1,10 @@
-import jax.numpy as jnp
 import jax
-from flax import struct
-from jax import random
-from flax import nn
-from distributions import MultivariateNormalTriL
+import jax.numpy as jnp
+from flax import nn, struct
+from typing import Callable
 
-import kernels
+import gaussian_processes
+from distributions import MultivariateNormalTriL
 
 
 @struct.dataclass
@@ -19,41 +18,35 @@ class InducingPointsVariable(InducingVariable):
     locations: jnp.ndarray
 
 
-class InducingPoints(nn.Module):
-    """ Inducing variables as points in the original input domain
-    """
+class InducingPointsProvider(nn.Module):
+    """ Handles parameterisation of an inducing points variable. """
     def apply(self,
               index_points: jnp.ndarray,
-              num_inducing_points: int =5,
-              dtype=jnp.float64) -> (jnp.ndarray, MultivariateNormalTriL):
+              kernel_fun: Callable,
+              inducing_locations_init: Callable,
+              num_inducing_points: int = 5,
+              dtype: jnp.dtype = jnp.float64) -> InducingPointsVariable:
         """
 
         Args:
-            index_points:
-            num_inducing_points:
-            dtype:
+            index_points: the nd-array of index points of the GP model.
+            kernel_fun: callable kernel function.
+            inducing_locations_init: initializer function for the inducing
+              variable locations.
+            num_inducing_points: total number of inducing points
+            dtype: the data-type of the computation (default: float64)
 
         Returns:
-            z: array_like of the inducing points locations of shape
-              `[num_inducing_points, n_features]`.
-            qu: `MultivariateNormalTriL` object giving the distribution
-              of the inducing variables at locations `z`.
+            inducing_var: inducing variables `inducing_variables.InducingPointsVariable`
+
         """
         n_features = index_points.shape[-1]
-        minval = jnp.min(index_points, axis=-2)
-        maxval = jnp.max(index_points, axis=-2)
-
-        z_init = lambda key, shape: random.uniform(
-            key,
-            shape=(num_inducing_points, n_features),
-            minval=jnp.atleast_2d(minval),
-            maxval=jnp.atleast_2d(maxval),
-            dtype=dtype)
 
         z = self.param('locations',
-                       (num_inducing_points, n_features), z_init)
+                       (num_inducing_points, n_features),
+                       inducing_locations_init)
 
-        qu_mean = self.param('mean', (num_inducing_points, n_features),
+        qu_mean = self.param('mean', (num_inducing_points,),
                              lambda key, shape: jax.nn.initializers.zeros(
                                  key, shape, dtype=dtype))
 
@@ -62,28 +55,14 @@ class InducingPoints(nn.Module):
             (num_inducing_points, num_inducing_points),
             lambda key, shape: jnp.eye(num_inducing_points, dtype=dtype))
 
-        return z, MultivariateNormalTriL(qu_mean, jnp.tril(qu_scale))
-
-
-class SVGPLayer(nn.Module):
-    def apply(self, x, kernel_fn, z, qz):
-        """
-
-        Args:
-            x: index_points
-            z: inducing_variables
-
-        Returns:
-
-        """
-        var_kern = kernels.VariationalKernel(
-            kernel_fn,
+        prior = gaussian_processes.GaussianProcess(
             z,
-            qz.scale)
+            lambda x: jnp.zeros(x.shape[:-1]),
+            kernel_fun,
+            1e-6).marginal()
 
-        return var_kern
-
-
-class MyModel(nn.Module):
-    def apply(self, x):
-        kern_fun = RBFKernelProvider()
+        return InducingPointsVariable(
+            variational_distribution=MultivariateNormalTriL(
+                qu_mean, jnp.tril(qu_scale)),
+            prior_distribution=prior,
+            locations=z)
