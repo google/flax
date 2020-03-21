@@ -1,6 +1,7 @@
 from typing import Callable
 import jax.numpy as jnp
 import jax.scipy as jscipy
+import jax
 from jax import ops
 from flax import nn
 from flax import struct
@@ -100,3 +101,40 @@ class VariationalKernel(Kernel):
         return (kxy
                 - kxz @ jscipy.linalg.cho_solve((kzz_cholesky, True), kzy)
                 + kxz @ (kzz_chol_qu_scale @ kzz_chol_qu_scale.T) @ kzy)
+
+
+class RBFKernelProvider(nn.Module):
+    """ Provides an RBF kernel function.
+
+    The role of a kernel provider is to handle initialisation, and
+    parameter storage of a particular kernel function. Allowing
+    functionally defined kernels to be slotted into more complex models
+    built using the Flax functional api.
+    """
+    def apply(self,
+              index_points: jnp.ndarray,
+              amplitude_init: Callable = jax.nn.initializers.ones,
+              length_scale_init: Callable = jax.nn.initializers.ones) -> Callable:
+        """
+
+        Args:
+            index_points: The nd-array of index points to the kernel. Only used for
+              feature shape finding.
+            amplitude_init: initializer function for the amplitude parameter.
+            length_scale_init: initializer function for the length-scale parameter.
+
+        Returns:
+            rbf_kernel_fun: Callable kernel function.
+        """
+        amplitude = jax.nn.softplus(
+            self.param('amplitude',
+                       (1,),
+                       amplitude_init)) + jnp.finfo(float).tiny
+
+        length_scale = jax.nn.softplus(
+            self.param('length_scale',
+                       (index_points.shape[-1],),
+                       length_scale_init)) + jnp.finfo(float).tiny
+
+        return Kernel(
+            lambda x_, y_: rbf_kernel_fun(x_, y_, amplitude, length_scale))

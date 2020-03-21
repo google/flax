@@ -1,5 +1,4 @@
-from jax.config import config
-config.update("jax_enable_x64", True)
+from jax.config import config; config.update("jax_enable_x64", True)
 
 from absl import app
 from absl import flags
@@ -10,10 +9,9 @@ import jax.numpy as jnp
 import jax.scipy as jscipy
 from flax import nn, optim
 from jax import random, ops
-from typing import Callable
+from typing import Callable, Union
 
-import matplotlib.pyplot as plt
-import inducing_variables
+import numpy as onp
 from inducing_variables import InducingPointsVariable
 import kernels
 import distributions
@@ -34,8 +32,13 @@ flags.DEFINE_integer(
     'num_epochs', default=1000,
     help=('Number of training epochs.'))
 
+flags.DEFINE_bool(
+    'plot', default=True,
+    help=('Plot the results.', ))
 
-def _diag_shift(mat: jnp.ndarray, val: jnp.ndarray) -> jnp.ndarray:
+
+def _diag_shift(mat: jnp.ndarray,
+                val: Union[float, jnp.ndarray]) -> jnp.ndarray:
     """ Shifts the diagonal of mat by val. """
     return ops.index_update(
         mat,
@@ -43,7 +46,7 @@ def _diag_shift(mat: jnp.ndarray, val: jnp.ndarray) -> jnp.ndarray:
         jnp.diag(mat) + val)
 
 
-class ObservationModel(nn.Module):
+class LikelihoodProvider(nn.Module):
     def apply(self,
               vgp: gaussian_processes.VariationalGaussianProcess) -> likelihoods.GaussianLogLik:
         """
@@ -52,7 +55,7 @@ class ObservationModel(nn.Module):
             vgp: variational Gaussian process regression model q(f).
 
         Returns:
-            ll: log-likelhood model with method `variational_expectations` to
+            ll: log-likelihood model with method `variational_expectations` to
               compute ∫ log p(y|f) q(f) df
         """
         obs_noise_scale = jax.nn.softplus(
@@ -65,45 +68,26 @@ class ObservationModel(nn.Module):
             variational_distribution.scale, obs_noise_scale)
 
 
-class RBFKernelProvider(nn.Module):
-    """ Provides an RBF kernel function.
-
-    The role of a kernel provider is to handle initialisation, and
-    parameter storage of a particular kernel function. Allowing
-    functionally defined kernels to be slotted into more complex models
-    built using the Flax functional api.
-    """
+class SVGPProvider(nn.Module):
     def apply(self,
-              x: jnp.ndarray,
-              amplitude_init: Callable = jax.nn.initializers.ones,
-              lengthscale_init: Callable = jax.nn.initializers.ones) -> Callable:
+              index_points,
+              mean_fn,
+              kernel_fn,
+              inducing_var,
+              jitter=1e-4):
         """
 
         Args:
-            x: The nd-array of index points to the kernel. Only used for
-              feature shape finding.
-            amplitude_init: initializer function for the amplitude parameter.
-            lengthscale_init: initializer function for the lengthscale parameter.
+            index_points: the nd-array of index points of the GP model.
+            mean_fn: callable mean function of the GP model.
+            kernel_fn: callable kernel function.
+            inducing_var: inducing variables `inducing_variables.InducingPointsVariable`.
+            jitter: float `jitter` term to add to the diagonal of the covariance
+              function before computing Cholesky decompositions.
 
         Returns:
-            rbf_kernel_fun: Callable kernel function.
+            svgp: A sparse Variational GP model.
         """
-        amplitude = jax.nn.softplus(
-            self.param('amplitude',
-                       (1,),
-                       amplitude_init)) + jnp.finfo(float).tiny
-
-        lengthscale = jax.nn.softplus(
-            self.param('lengthscale',
-                       (x.shape[-1],),
-                       lengthscale_init)) + jnp.finfo(float).tiny
-
-        return kernels.Kernel(
-            lambda x_, y_: kernels.rbf_kernel_fun(x_, y_, amplitude, lengthscale))
-
-
-class SVGPLayer(nn.Module):
-    def apply(self, x, mean_fn, kernel_fn, inducing_var, jitter=1e-4):
         qu = inducing_var.variational_distribution
         z = inducing_var.locations
 
@@ -121,12 +105,11 @@ class SVGPLayer(nn.Module):
                         (kzz_chol, True), dev))[..., 0]
 
         return gaussian_processes.VariationalGaussianProcess(
-            x, var_mean, var_kern, jitter, inducing_var)
+            index_points, var_mean, var_kern, jitter, inducing_var)
 
 
-class InducingPointsLayer(nn.Module):
+class InducingPointsProvider(nn.Module):
     """ Handles parameterisation of an inducing points variable. """
-
     def apply(self,
               index_points: jnp.ndarray,
               kernel_fun: Callable,
@@ -141,7 +124,7 @@ class InducingPointsLayer(nn.Module):
             inducing_locations_init: initializer function for the inducing
               variable locations.
             num_inducing_points: total number of inducing points
-            dtype: the dtype of the computation (default: float64)
+            dtype: the data-type of the computation (default: float64)
 
         Returns:
             inducing_var: inducing variables `inducing_variables.InducingPointsVariable`
@@ -162,13 +145,13 @@ class InducingPointsLayer(nn.Module):
             (num_inducing_points, num_inducing_points),
             lambda key, shape: jnp.eye(num_inducing_points, dtype=dtype))
 
-        prior = distributions.GaussianProcess(
+        prior = gaussian_processes.GaussianProcess(
             z,
             lambda x: jnp.zeros(x.shape[:-1]),
             kernel_fun,
             1e-6).marginal()
 
-        return inducing_variables.InducingPointsVariable(
+        return InducingPointsVariable(
             variational_distribution=distributions.MultivariateNormalTriL(
                 qu_mean, jnp.tril(qu_scale)),
             prior_distribution=prior,
@@ -189,19 +172,19 @@ class SVGPModel(nn.Module):
             vgp: the variational GP q(f) = ∫p(f|u)q(u)du where
               `q(u) == inducing_var.variational_distribution`.
         """
-        kern_fun = RBFKernelProvider(x, name='kernel_fun')
-        inducing_var = InducingPointsLayer(
+        kern_fun = kernels.RBFKernelProvider(x, name='kernel_fun')
+        inducing_var = InducingPointsProvider(
             x,
             kern_fun,
             inducing_locations_init=inducing_locations_init,
             name='inducing_var')
 
-        vgp = SVGPLayer(x,
-                        lambda x_: jnp.zeros(x_.shape[:-1]),
-                        kern_fun,
-                        inducing_var, name='vgp')
+        vgp = SVGPProvider(x,
+                           lambda x_: jnp.zeros(x_.shape[:-1]),
+                           kern_fun,
+                           inducing_var, name='vgp')
 
-        ell = ObservationModel(vgp, name='ell')
+        ell = LikelihoodProvider(vgp, name='ell')
 
         return ell, vgp
 
@@ -273,9 +256,6 @@ def train(train_ds):
         optimizer, metrics = train_epoch(
             optimizer, train_ds, epoch)
 
-        # logging.info('eval epoch: %d, loss: %.4f',
-        #             epoch, metrics['loss'])
-
     return optimizer
 
 
@@ -294,28 +274,34 @@ def main(_):
 
     optimizer = train(train_ds)
 
-    model = optimizer.target
+    if FLAGS.plot:
+        import matplotlib.pyplot as plt
+        model = optimizer.target
 
-    def inducing_loc_init(key, shape):
-        return random.uniform(key, shape, minval=-3., maxval=3.)
+        def inducing_loc_init(key, shape):
+            return random.uniform(key, shape, minval=-3., maxval=3.)
 
-    xx_pred = jnp.linspace(-3., 5.)[:, None]
+        xx_pred = jnp.linspace(-3., 5.)[:, None]
 
-    _, vgp = model(xx_pred, inducing_loc_init)
+        _, vgp = model(xx_pred, inducing_loc_init)
 
-    pred_m = vgp.mean_function(xx_pred)
-    pred_v = jnp.diag(vgp.kernel_function(xx_pred, xx_pred))
+        pred_m = vgp.mean_function(xx_pred)
+        pred_v = jnp.diag(vgp.kernel_function(xx_pred, xx_pred))
 
-    fig, ax = plt.subplots()
-    ax.plot(model.params['inducing_var']['locations'][:, 0],
-            model.params['inducing_var']['mean'], '+')
-    ax.fill_between(
-        xx_pred[:, 0],
-        pred_m - 2 * jnp.sqrt(pred_v),
-        pred_m + 2 * jnp.sqrt(pred_v), alpha=0.5)
-    ax.plot(train_ds['index_points'][:, 0], train_ds['y'], 'ks')
+        fig, ax = plt.subplots(figsize=(6, 4))
 
-    plt.show()
+        ax.fill_between(
+            xx_pred[:, 0],
+            pred_m - 2 * jnp.sqrt(pred_v),
+            pred_m + 2 * jnp.sqrt(pred_v), alpha=0.5)
+        ax.plot(xx_pred[:, 0], pred_m, '-',
+                label=r'$\mathbb{E}_{f \sim q(f)}[f(x)]$')
+        ax.plot(model.params['inducing_var']['locations'][:, 0],
+                model.params['inducing_var']['mean'], '+',
+                label=r'$E_{u \sim q(u)}[u]$')
+        ax.plot(train_ds['index_points'][:, 0], train_ds['y'], 'ks', label='observations')
+        ax.legend()
+        plt.show()
 
 
 if __name__ == '__main__':

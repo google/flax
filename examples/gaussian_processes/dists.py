@@ -24,6 +24,9 @@ class MultivariateNormalDiag(MultivariateNormal):
         jscipy.stats.norm.logpdf(
             x, loc=self.mean, scale=self.scale_diag))
 
+    def sample(self, key, shape=()):
+        return random.normal(key, shape=shape) * self.scale_diag + self.mean
+
 
 @struct.dataclass
 class MultivariateNormalTriL(MultivariateNormal):

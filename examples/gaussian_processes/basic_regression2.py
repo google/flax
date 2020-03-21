@@ -88,54 +88,18 @@ class GaussianProcessLayer(nn.Module):
             mean, jnp.linalg.cholesky(cov))
 
 
-class RBFKernelProvider(nn.Module):
-    """ Provides an RBF Kernel to be used inside more functional Modules
-
-    The role of a kernel provider is to handle initialisation, and
-    parameter storage of a particular kernel function. Allowing
-    functionally defined kernels to be slotted into more complex models
-    built using the Flax functional api.
-    """
-    def apply(self, x,
-              amplitude_init: Callable = jax.nn.initializers.ones,
-              lengthscale_init: Callable = jax.nn.initializers.ones):
-        """
-
-        Args:
-            x:
-            amplitude_init:
-            lengthscale_init:
-
-        Returns:
-
-        """
-        amplitude = jax.nn.softplus(
-            self.param('amplitude',
-                       (1,),
-                       amplitude_init)) + jnp.finfo(float).tiny
-
-        lengthscale = jax.nn.softplus(
-            self.param('lengthscale',
-                       (x.shape[-1],),
-                       lengthscale_init)) + jnp.finfo(float).tiny
-
-        return kernels.Kernel(
-            lambda x, y: kernels.rbf_kernel_fun(x, y, amplitude, lengthscale))
-
-
 class MarginalObservationModel(nn.Module):
-    """ p(y|x, {hyper par}) = ∫p(y, f | x),
-    where f(x) ~ GP() """
-    def apply(self, pf):
+    """ The observation model p(y|x, {hyper par}) = ∫p(y,f|x)df where f(x) ~ GP(m(x), k(x, x')). """
+    def apply(self, pf: distributions.MultivariateNormalTriL) -> distributions.MultivariateNormalFull:
         """ Applys the marginal observation model of the conditional
-        y | f ~ prod N(yi | fi, obs_noise_scale**2) when f ~ pf
 
         Args:
-            pf: `distribution.MultivariateNormal` object.
+            pf: distribution of the latent GP to be marginalised over,
+              a `distribution.MultivariateNormal` object.
 
         Returns:
-            py: `distributions.MultivariateNormal` object, the
-              marginalised distribution of f.
+            py: the marginalised distribution of the observations, a
+              `distributions.MultivariateNormal` object.
         """
         obs_noise_scale = jax.nn.softplus(
             self.param('observation_noise_scale',
@@ -156,12 +120,12 @@ class GPModel(nn.Module):
 
         Args:
             x: Index points of the observations.
-            dtype:
+            dtype: the data-type of the computation (default: float64)
 
         Returns:
             py_x: Distribution of the observations at the index points.
         """
-        kern_fun = RBFKernelProvider(x, name='kernel_fun')
+        kern_fun = kernels.RBFKernelProvider(x, name='kernel_fun')
         pf_x = GaussianProcessLayer(x, kern_fun, name='gp_layer')
         # uncomment to specify a mean function
         # linear_mean = nn.Dense(x, features=1, name='linear_mean',
@@ -195,13 +159,12 @@ def build_par_pack_and_unpack(model):
     return par_from_array, array_from_par
 
 
-def get_datasets(sim_key):
+def get_datasets(sim_key: random.PRNGKey, true_obs_noise_scale: float =0.5) -> dict:
     """ Generate the datasets. """
     index_points = jnp.linspace(-3., 3., 25)[..., jnp.newaxis]
     y = (jnp.sin(index_points[:, 0])
-         + .5 * random.normal(sim_key, index_points.shape[:-1]))
-    train_ds = {'index_points': index_points,
-                'y': y}
+         + true_obs_noise_scale * random.normal(sim_key, index_points.shape[:-1]))
+    train_ds = {'index_points': index_points, 'y': y}
     return train_ds
 
 
@@ -224,7 +187,8 @@ def train(train_ds):
     # utility functions for packing and unpacking param dicts
     par_from_array, array_from_par = build_par_pack_and_unpack(model)
 
-    def loss_fun(model, params):
+    @jax.jit
+    def loss_fun(model: GPModel, params: dict) -> float:
         py = model.module.call(params, train_ds['index_points'])
         return -py.log_prob(train_ds['y'])
 
@@ -254,12 +218,13 @@ def main(_):
     trained_model = train(train_ds)
 
     if FLAGS.plot:
+        import matplotlib.pyplot as plt
 
         obs_noise_scale = jax.nn.softplus(
             trained_model.params['observation_model']['observation_noise_scale'])
 
         def learned_kernel_fn(x1, x2):
-            return RBFKernelProvider.call(
+            return kernels.RBFKernelProvider.call(
                 trained_model.params['kernel_fun'], x1)(x1, x2)
 
         def learned_mean_fn(x):
@@ -282,7 +247,6 @@ def main(_):
         pred_f_mean = posterior_gp.mean_function(xx_new)
         pred_f_var = jnp.diag(posterior_gp.kernel_function(xx_new, xx_new))
 
-        import matplotlib.pyplot as plt
         fig, ax = plt.subplots()
         ax.fill_between(xx_new[:, 0],
                         pred_f_mean - 2*jnp.sqrt(pred_f_var),
