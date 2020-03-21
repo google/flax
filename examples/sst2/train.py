@@ -34,7 +34,9 @@ from absl import flags
 from absl import logging
 
 import flax
+import flax.training.checkpoints
 from flax import nn
+
 import flax.examples.sst2.input_pipeline as input_pipeline
 import flax.examples.sst2.model as sst2_model
 
@@ -87,9 +89,9 @@ def binary_cross_entropy_loss(logit, label):
 
 
 @jax.jit
-def train_step(optimizer, inputs, labels):
+def train_step(optimizer, inputs, lengths, labels):
   def loss_fn(model):
-    logits = model(inputs)
+    logits = model(inputs, lengths)
     loss = jnp.mean(binary_cross_entropy_loss(logits, labels))
     return loss, logits
   loss, _, grad = optimizer.compute_gradient(loss_fn)
@@ -107,8 +109,8 @@ def get_num_correct(logits, labels):
 
 
 @jax.jit
-def eval_step(model: nn.Module, inputs, labels):
-  logits = model(inputs, train=False)
+def eval_step(model: nn.Module, inputs, lengths, labels):
+  logits = model(inputs, lengths, train=False)
   loss = jnp.sum(binary_cross_entropy_loss(logits, labels))
   num_correct = get_num_correct(logits, labels)
   return loss, num_correct
@@ -121,9 +123,9 @@ def evaluate(model: nn.Module, eval_ds: tf.data.Dataset):
   total_correct = 0
 
   for ex in tfds.as_numpy(eval_ds):
-    inputs, labels = ex['sentence'], ex['label']
+    inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
     count = count + inputs.shape[0]
-    loss, num_correct = eval_step(model, inputs, labels)
+    loss, num_correct = eval_step(model, inputs, lengths, labels)
     total_loss += loss
     total_correct += num_correct
 
@@ -135,14 +137,15 @@ def evaluate(model: nn.Module, eval_ds: tf.data.Dataset):
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2, 3))
-def create_model(rng, input_shape, embeddings, model_kwargs):
+def create_model(rng, batch_size, embeddings, model_kwargs):
   """Instantiate a new model."""
   with nn.stochastic(rng):
     emb_init = functools.partial(sst2_model.pretrained_init,
                                  embeddings=embeddings)
     model_def = sst2_model.LSTMClassifier.partial(
         emb_init=emb_init, **model_kwargs)
-    _, initial_params = model_def.init_by_shape(rng, [(input_shape, jnp.int32)])
+    _, initial_params = model_def.init_by_shape(
+        rng, [((batch_size, 55), jnp.int32), ((batch_size,), jnp.int32)])
     model = nn.Model(model_def, initial_params)
     return model
 
@@ -180,8 +183,8 @@ def train(
 
       # Train for one epoch.
       for ex in tfds.as_numpy(data_source.train_batches):
-        inputs, labels = ex['sentence'], ex['label']
-        optimizer, loss = train_step(optimizer, inputs, labels)
+        inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
+        optimizer, loss = train_step(optimizer, inputs, lengths, labels)
         train_metrics['loss'] += loss * inputs.shape[0]
         train_metrics['total'] += inputs.shape[0]
 
@@ -216,16 +219,16 @@ def main(argv):
 
   # Prepare data.
   sst2_data_source = input_pipeline.SST2DataSource(
-      train_batch_size=FLAGS.batch_size,
-      eval_batch_size=FLAGS.batch_size,
+      batch_size=FLAGS.batch_size,
       glove_path=FLAGS.glove_path,
       glove_dim=FLAGS.glove_dim,
       shuffle_seed=FLAGS.seed)
 
   # Create model.
   model = create_model(
-      jax.random.PRNGKey(FLAGS.seed), (FLAGS.batch_size, 1),
-      sst2_data_source.pretrained_embeddings,
+      jax.random.PRNGKey(FLAGS.seed),
+      FLAGS.batch_size,
+      sst2_data_source.embeddings,
       dict(vocab_size=sst2_data_source.vocab_size,
            dropout=FLAGS.dropout))
 

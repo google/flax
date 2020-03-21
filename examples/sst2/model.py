@@ -36,7 +36,7 @@ class Embedding(nn.Module):
   """Embedding Module."""
 
   def apply(self,
-            inputs,
+            inputs: jnp.ndarray,
             num_embeddings: int,
             features: int,
             emb_init: Callable[..., np.ndarray] = nn.initializers.normal(
@@ -50,15 +50,16 @@ class LSTMEncoder(nn.Module):
   """LSTM encoder. Turns a sequence of vectors into a vector."""
 
   def apply(self,
-            inputs,
+            inputs: jnp.ndarray,
+            lengths: jnp.ndarray,
             hidden_size: int = 256):
     # inputs.shape = <float32>[batch_size, seq_length, emb_size].
     batch_size = inputs.shape[0]
     carry = nn.LSTMCell.initialize_carry(nn.make_rng(), (batch_size,),
                                          hidden_size)
-    carry, _ = nn.attention.scan_in_dim(
+    _, outputs = nn.attention.scan_in_dim(
         nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
-    return carry
+    return outputs[jnp.arange(batch_size), jnp.maximum(0, lengths-1), :]
 
 
 class MLP(nn.Module):
@@ -84,7 +85,8 @@ class LSTMClassifier(nn.Module):
   """LSTM classifier."""
 
   def apply(self,
-            inputs: np.ndarray,
+            inputs: jnp.ndarray,
+            lengths: jnp.ndarray,
             vocab_size: int = 0,
             embedding_size: int = 300,
             hidden_size: int = 256,
@@ -102,7 +104,8 @@ class LSTMClassifier(nn.Module):
 
     # pylint: disable=unpacking-non-sequence
     # Encode the sequence of embedding using an LSTM.
-    _, hidden = LSTMEncoder(embed, hidden_size=hidden_size, name='encoder')
+    hidden = LSTMEncoder(embed, lengths, hidden_size=hidden_size,
+                         name='encoder')
     if train:
       hidden = nn.dropout(hidden, rate=dropout)
 

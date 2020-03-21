@@ -123,17 +123,18 @@ def get_batches(
       seed=seed,
       reshuffle_each_iteration=True).padded_batch(
           batch_size,
-          padded_shapes={'idx': [], 'sentence': [-1], 'label': [1]},
+          padded_shapes={
+              'idx': [], 'sentence': [-1], 'label': [1], 'length':[]},
           drop_remainder=True).prefetch(autotune)
 
   valid_batches = valid_ds.padded_batch(
       batch_size,
-      padded_shapes={'idx': [], 'sentence': [-1], 'label': [1]},
+      padded_shapes={'idx': [], 'sentence': [-1], 'label': [1], 'length':[]},
       drop_remainder=False).prefetch(autotune)
 
   test_batches = test_ds.padded_batch(
       batch_size,
-      padded_shapes={'idx': [], 'sentence': [-1], 'label': [1]},
+      padded_shapes={'idx': [], 'sentence': [-1], 'label': [1], 'length':[]},
       drop_remainder=False).prefetch(autotune)
 
   return train_batches, valid_batches, test_batches
@@ -193,6 +194,7 @@ class SST2DataSource(object):
       example['sentence'] = tf_wrap_sequence(tf_encode(tf_tokenize(
           example['sentence'])))
       example['label'] = [example['label']]
+      example['length'] = tf.shape(example['sentence'])[0]
       return example
 
     # Pre-process all datasets.
