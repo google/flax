@@ -2,17 +2,16 @@ from typing import Callable
 import jax.numpy as jnp
 import jax.scipy as jscipy
 import jax
-from jax import ops
 from flax import nn
 from flax import struct
+from utils import _diag_shift
 
 
-def _diag_shift(mat, val):
-    """ Shifts the diagonal of mat by val. """
-    return ops.index_update(
-        mat,
-        jnp.diag_indices(mat.shape[-1], len(mat.shape)),
-        jnp.diag(mat) + val)
+def rbf_kernel_fun(x, x2, amplitude, lengthscale):
+    """ Functional definition of an RBF kernel. """
+    pwd_dists = (x[..., jnp.newaxis, :] - x2[..., jnp.newaxis, :, :]) / lengthscale
+    kernel_matrix = jnp.exp(-.5 * jnp.sum(pwd_dists ** 2, axis=-1))
+    return amplitude**2 * kernel_matrix
 
 
 @struct.dataclass
@@ -29,14 +28,6 @@ class Kernel:
     def __call__(self, x, x2=None):
         x2 = x if x2 is None else x2
         return self.apply(x, x2)
-
-
-def rbf_kernel_fun(x, x2, amplitude, lengthscale):
-    """ Functional definition of an RBF kernel. """
-    #pwd_dists = (jnp.expand_dims(x, -2) - jnp.expand_dims(x2, -3)) / lengthscale
-    pwd_dists = (x[..., None, :] - x2[..., None, :, :]) / lengthscale
-    kernel_matrix = jnp.exp(-.5 * jnp.sum(pwd_dists ** 2, axis=-1))
-    return amplitude**2 * kernel_matrix
 
 
 @struct.dataclass

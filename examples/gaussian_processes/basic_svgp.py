@@ -11,7 +11,6 @@ from flax import nn, optim
 from jax import random, ops
 from typing import Callable, Union
 
-import numpy as onp
 from inducing_variables import InducingPointsVariable
 import kernels
 import distributions
