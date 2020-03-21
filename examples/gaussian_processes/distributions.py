@@ -85,6 +85,20 @@ class MultivariateNormal:
 
 
 @struct.dataclass
+class MultivariateNormalDiag(MultivariateNormal):
+    mean: jnp.ndarray
+    scale_diag: jnp.ndarray
+
+    def log_prob(self, x):
+        return jnp.sum(
+        jscipy.stats.norm.logpdf(
+            x, loc=self.mean, scale=self.scale_diag))
+
+    def sample(self, key, shape=()):
+        return random.normal(key, shape=shape) * self.scale_diag + self.mean
+
+
+@struct.dataclass
 class MultivariateNormalTriL(MultivariateNormal):
     mean: jnp.ndarray
     scale: jnp.ndarray
@@ -101,7 +115,8 @@ class MultivariateNormalTriL(MultivariateNormal):
     def sample(self, key, shape=()):
         full_shape = shape + self.mean.shape
         std_normals = random.normal(key, full_shape)
-        return jnp.tensordot(std_normals, self.scale, [-1, 1]) + self.mean
+        return self.mean
+        #return jnp.tensordot(std_normals, self.scale, [-1, 1]) + self.mean
 
     @property
     def covariance(self):

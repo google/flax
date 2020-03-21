@@ -23,8 +23,8 @@ class InducingPointsProvider(nn.Module):
     def apply(self,
               index_points: jnp.ndarray,
               kernel_fun: Callable,
+              num_inducing_points: int,
               inducing_locations_init: Union[Callable, None] = None,
-              num_inducing_points: int = 5,
               fixed_locations: bool = False,
               dtype: jnp.dtype = jnp.float64) -> InducingPointsVariable:
         """
@@ -32,10 +32,10 @@ class InducingPointsProvider(nn.Module):
         Args:
             index_points: the nd-array of index points of the GP model.
             kernel_fun: callable kernel function.
+            num_inducing_points: total number of inducing points.
             inducing_locations_init: initializer function for the inducing
               variable locations.
-            num_inducing_points: total number of inducing points.
-            fixed_locations: boolean specifying whether to opimise the inducing
+            fixed_locations: boolean specifying whether to optimise the inducing
               point locations (default True).
             dtype: the data-type of the computation (default: float64)
 
@@ -45,12 +45,12 @@ class InducingPointsProvider(nn.Module):
         """
         n_features = index_points.shape[-1]
         z_shape = (num_inducing_points, n_features)
-
         if inducing_locations_init is None:
-            inducing_locations_init = lambda key, shape : random.normal(key, z_shape)
+            inducing_locations_init = lambda key, shape: random.normal(key, z_shape)
 
         if fixed_locations:
-            z = inducing_locations_init(None, z_shape)
+            _default_key = random.PRNGKey(0)
+            z = inducing_locations_init(_default_key, z_shape)
         else:
             z = self.param('locations',
                            (num_inducing_points, n_features),
@@ -63,7 +63,7 @@ class InducingPointsProvider(nn.Module):
             'scale',
             (num_inducing_points, num_inducing_points),
             lambda key, shape: jnp.eye(num_inducing_points, dtype=dtype))
-        print(z)
+
         prior = GaussianProcess(
             z,
             lambda x_: jnp.zeros(x_.shape[:-1]),

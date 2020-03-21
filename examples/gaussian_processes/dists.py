@@ -47,8 +47,9 @@ class MultivariateNormalTriL(MultivariateNormal):
         return -0.5 * (dim * log_2_pi + log_det_cov + maha)
 
     def sample(self, key, shape=()):
-        return random.multivariate_normal(
-            key, self.mean, self.covariance, shape)
+        full_shape = shape + self.mean.shape
+        std_normals = random.normal(key, full_shape)
+        return self.mean + jnp.tensordot(std_normals, self.scale, [-1, 1])
 
 
 class MyModel(nn.Module):

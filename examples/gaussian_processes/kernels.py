@@ -76,6 +76,7 @@ class SchurComplementKernelProvider(nn.Module):
 class VariationalKernel(Kernel):
     fixed_inputs: jnp.ndarray
     variational_scale: jnp.ndarray
+    jitter: float = 1.0e-4
 
     def apply(self, x1, x2):
         z = self.fixed_inputs
@@ -84,7 +85,7 @@ class VariationalKernel(Kernel):
         kzy = self.kernel_fn(z, x2)
         kzz = self.kernel_fn(z, z)
         kzz_cholesky = jnp.linalg.cholesky(
-            kzz + 1e-6 * jnp.eye(z.shape[-2]))
+            kzz + self.jitter * jnp.eye(z.shape[-2]))
 
         kzz_chol_qu_scale = jscipy.linalg.cho_solve(
             (kzz_cholesky, True), self.variational_scale)

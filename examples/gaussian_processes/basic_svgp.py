@@ -69,46 +69,6 @@ class LikelihoodProvider(nn.Module):
             variational_distribution.scale, obs_noise_scale)
 
 
-class SVGPProvider(nn.Module):
-    def apply(self,
-              index_points,
-              mean_fn,
-              kernel_fn,
-              inducing_var,
-              jitter=1e-4):
-        """
-
-        Args:
-            index_points: the nd-array of index points of the GP model.
-            mean_fn: callable mean function of the GP model.
-            kernel_fn: callable kernel function.
-            inducing_var: inducing variables `inducing_variables.InducingPointsVariable`.
-            jitter: float `jitter` term to add to the diagonal of the covariance
-              function before computing Cholesky decompositions.
-
-        Returns:
-            svgp: A sparse Variational GP model.
-        """
-        qu = inducing_var.variational_distribution
-        z = inducing_var.locations
-
-        var_kern = kernels.VariationalKernel(
-            kernel_fn, z, qu.scale)
-
-        def var_mean(x_):
-            kzz_chol = jnp.linalg.cholesky(
-                _diag_shift(kernel_fn(z, z), jitter))
-
-            kxz = kernel_fn(x_, z)
-            dev = (qu.mean - mean_fn(z))[..., None]
-            return (mean_fn(x_)[..., None]
-                    + kxz @ jscipy.linalg.cho_solve(
-                        (kzz_chol, True), dev))[..., 0]
-
-        return gaussian_processes.VariationalGaussianProcess(
-            index_points, var_mean, var_kern, jitter, inducing_var)
-
-
 class SVGPModel(nn.Module):
     def apply(self, x, inducing_locations_init, **kwargs):
         """
@@ -128,6 +88,7 @@ class SVGPModel(nn.Module):
         inducing_var = inducing_variables.InducingPointsProvider(
             x,
             kern_fun,
+            num_inducing_points=5,
             inducing_locations_init=inducing_locations_init,
             name='inducing_var')
 

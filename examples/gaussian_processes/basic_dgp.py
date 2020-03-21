@@ -7,56 +7,65 @@ from absl import logging
 import jax
 import jax.numpy as jnp
 from flax import nn, optim
-from jax import random, ops
+from jax import random
 
 import kernels
-import likelihoods
+import distributions
 import gaussian_processes
 import inducing_variables
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.0001,
-    help=('The learning rate for the momentum optimizer.'))
+    'learning_rate', default=0.001,
+    help=('The learning rate for the adam optimizer.'))
 
 flags.DEFINE_integer(
-    'num_epochs', default=10000,
+    'num_epochs', default=50000,
     help=('Number of training epochs.'))
 
 flags.DEFINE_bool(
     'plot', default=True,
     help=('Plot the results.',))
 
+flags.DEFINE_integer(
+    'num_inducing_points', default=10,
+    help=('Number of training epochs.'))
+
 
 class LikelihoodProvider(nn.Module):
     def apply(self,
-              vgp: gaussian_processes.VariationalGaussianProcess) -> likelihoods.GaussianLogLik:
+              x: jnp.ndarray) -> distributions.MultivariateNormal:
         """
 
         Args:
-            vgp: variational Gaussian process regression model q(f).
+            x: nd-array
 
         Returns:
-            ll: log-likelihood model with method `variational_expectations` to
-              compute ∫ log p(y|f) q(f) df
+            ll:
+
         """
         obs_noise_scale = jax.nn.softplus(
             self.param('observation_noise_scale',
-                       (),
-                       jax.nn.initializers.ones))
-        obs_noise_scale = 0.1
-        variational_distribution = vgp.marginal()
-        return likelihoods.GaussianLogLik(
-            variational_distribution.mean,
-            variational_distribution.scale, obs_noise_scale)
+                       (1, ),
+                       lambda key, shape: 1.0e-2*jnp.ones([1])))
+        return distributions.MultivariateNormalDiag(
+            mean=x[..., 0], scale_diag=jnp.ones(x.shape[:-1])*obs_noise_scale)
 
 
 class DeepGPModel(nn.Module):
-    def apply(self, x, **kwargs):
+    def apply(self, x, sample_key, **kwargs):
+        """
 
+        Args:
+            x:
+            key: random number generator for stochastic inference.
+            **kwargs:
+
+        Returns:
+
+        """
         vgps = {}
-
         for layer in range(1, 3):
 
             if layer == 1:
@@ -72,62 +81,65 @@ class DeepGPModel(nn.Module):
                 x,
                 kern_fn,
                 name='inducing_var_{}'.format(layer),
-                num_inducing_points=7,
+                num_inducing_points=FLAGS.num_inducing_points,
+                fixed_locations=True,
                 **kwargs.get('inducing_var_{}_kwargs'.format(layer), {}))
 
             vgp = gaussian_processes.SVGPProvider(
-                x, mean_fn, kern_fn, inducing_var, name='vgp_{}'.format(layer))
+                x, mean_fn, kern_fn,
+                inducing_var,
+                name='vgp_{}'.format(layer))
 
-            #pz_zprev = vgp.marginal()
-            #x = pz_zprev.sample(nn.make_rng())[:, None]
-            x = vgp.mean_function(x)[..., None]
-
+            # version of the repam. trick with dampened scale
+            pz_zprev = vgp.marginal()
+            full_shape = () + pz_zprev.mean.shape
+            std_normals = random.normal(sample_key, full_shape)
+            x = (pz_zprev.mean +
+                 jnp.tensordot(std_normals, pz_zprev.scale, [-1, 1]))[..., None]
             vgps[layer] = vgp
 
-        ell = LikelihoodProvider(vgp, name='ell')
+        loglik = LikelihoodProvider(x, name='ell')
 
-        return ell, vgps
+        return loglik, vgps
 
 
 def create_model(key, input_shape):
 
     def inducing_loc_init(key, shape):
-        return jnp.linspace(-1.5, 1.5, 7)[:, None]
+        return jnp.linspace(-1.5, 1.5, FLAGS.num_inducing_points)[:, None]
 
     kwargs = {}
     for i in range(1, 3):
         kwargs['kernel_fun_{}_kwargs'.format(i)] = {
-            'amplitude_init': lambda key, shape: jnp.ones(shape),
-            'length_scale_init': lambda key, shape: .1 * jnp.ones(shape)}
+            'amplitude_init': lambda key, shape: 1. *jnp.ones(shape),
+            'length_scale_init': lambda key, shape: 1. * jnp.ones(shape)}
         kwargs['inducing_var_{}_kwargs'.format(i)] = {
-            #'num_inducing_points': 7,
-            'fixed_locations': False,
+            #'fixed_locations': True,
             'inducing_locations_init': inducing_loc_init}
-
 
     with nn.stochastic(key):
         _, params = DeepGPModel.init_by_shape(
             key,
             [(input_shape, jnp.float64), ],
+            nn.make_rng(),
             **kwargs)
 
         return nn.Model(DeepGPModel, params)
 
 
-def create_optimizer(model, learning_rate, beta):
-    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
+def create_optimizer(model, learning_rate, beta1):
+    optimizer_def = optim.Adam(learning_rate=learning_rate, beta1=beta1)
     optimizer = optimizer_def.create(model)
     return optimizer
 
 
 @jax.jit
-def train_step(optimizer, batch):
+def train_step(optimizer, batch, sample_key):
     """Train for a single step."""
-
     def loss_fn(model):
-        ell, vgps = model(batch['index_points'])
+        ell, vgps = model(batch['index_points'], sample_key)
         prior_kl = jnp.sum([item.prior_kl() for _, item in vgps.items()])
-        return -ell.variational_expectation(batch['y']) + prior_kl
+        return -ell.log_prob(batch['y']) + prior_kl
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=False)
     loss, grad = grad_fn(optimizer.target)
@@ -137,9 +149,10 @@ def train_step(optimizer, batch):
     return optimizer, metrics
 
 
-def train_epoch(optimizer, train_ds, epoch):
+def train_epoch(optimizer, train_ds, epoch, sample_key):
     """Train for a single epoch."""
-    optimizer, batch_metrics = train_step(optimizer, train_ds)
+
+    optimizer, batch_metrics = train_step(optimizer, train_ds, sample_key)
     # compute mean of metrics across each batch in epoch.
     batch_metrics_np = jax.device_get(batch_metrics)
     epoch_metrics_np = batch_metrics_np
@@ -155,17 +168,20 @@ def train_epoch(optimizer, train_ds, epoch):
 
 
 def train(train_ds):
-    rng = random.PRNGKey(0)
+    rng = random.PRNGKey(1)
 
     num_epochs = FLAGS.num_epochs
 
     with nn.stochastic(rng):
         model = create_model(rng, (15, 1))
-        optimizer = create_optimizer(model, FLAGS.learning_rate, 0.33)
+        optimizer = create_optimizer(model, FLAGS.learning_rate, 0.9)
+
+        sample_key = nn.make_rng()
 
         for epoch in range(1, num_epochs + 1):
+            _, sample_key = random.split(sample_key)
             optimizer, metrics = train_epoch(
-                optimizer, train_ds, epoch)
+                optimizer, train_ds, epoch, sample_key)
 
     return optimizer
 
@@ -179,7 +195,7 @@ def step_fun(x):
 
 def get_datasets():
     rng = random.PRNGKey(123)
-    index_points = jnp.linspace(-1.5, 1.5, 15)
+    index_points = jnp.linspace(-1.5, 1.5, 25)
     y = (jnp.array([step_fun(x) for x in index_points])
          + 0.1*random.normal(rng, index_points.shape))
     train_ds = {'index_points': index_points[..., None], 'y': y}
@@ -195,20 +211,24 @@ def main(_):
         import matplotlib.pyplot as plt
 
         model = optimizer.target
+        for key, item in model.params.items():
+            print(item)
 
         xx_pred = jnp.linspace(-1.5, 1.5)[:, None]
 
         fig, ax = plt.subplots()
 
         with nn.stochastic(random.PRNGKey(123)):
-            y, vgps = model(xx_pred)
-        vgp = vgps[2]
+            ll, vgps = model(train_ds['index_points'], nn.make_rng())
 
-        pred_m = vgp.mean_function(xx_pred)
-        pred_v = jnp.diag(vgp.kernel_function(xx_pred, xx_pred))
+        #vgp = vgps[2]
+        #pred_m = vgp.mean_function(xx_pred)
+        #pred_v = jnp.diag(vgp.kernel_function(xx_pred, xx_pred))
 
-        ax.plot(xx_pred[:, 0], pred_m, '-')
-
+        #ax.plot(xx_pred[:, 0], pred_m, '-')
+        #ax.plot(model.params['inducing_var_2']['locations'][:, 0],
+        #        model.params['inducing_var_2']['mean'], '^')
+        ax.plot(train_ds['index_points'][:, 0], ll.mean, 'o-')
         ax.step(xx_pred, [step_fun(x) for x in xx_pred], 'k--')
         ax.plot(train_ds['index_points'][:, 0], train_ds['y'], 'ks')
         plt.show()
