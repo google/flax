@@ -26,17 +26,6 @@ import numpy as np
 # pylint: disable=arguments-differ
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2))
-def create_model(prng_key, batch_size, model_def):
-  input_shape = (batch_size, 1)
-  with flax.nn.stateful() as init_state:
-    with flax.nn.stochastic(jax.random.PRNGKey(0)):
-      _, initial_params = model_def.init_by_shape(
-          prng_key, [(input_shape, jnp.int32)])
-      model = flax.nn.Model(model_def, initial_params)
-  return model, init_state
-
-
 def pretrained_init(_, shape, embeddings: np.ndarray = None, dtype=np.float32):
   assert embeddings.shape == shape, \
       'The pretrained embeddings do not have the expected shape.'
