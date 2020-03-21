@@ -54,7 +54,6 @@ class VAE(nn.Module):
   def apply(self, x):
     mean, logvar = Encoder(x, name='encoder')
     z = reparameterize(mean, logvar)
-    # recon_x = Decoder(z, name='decoder')
     recon_x = self._created_decoder()(z)
     return recon_x, mean, logvar
 
@@ -127,12 +126,13 @@ def eval(model, eval_ds, z):
 
 
 def main(argv):
-  KEY = random.PRNGKey(0)
+  key = random.PRNGKey(0)
   train_ds = tfds.load('mnist', split=tfds.Split.TRAIN)
   train_ds = train_ds.cache().shuffle(1000).batch(FLAGS.batch_size)
   test_ds = tfds.as_numpy(tfds.load('mnist', split=tfds.Split.TEST, batch_size=-1))
 
-  _, vae = VAE.create_by_shape(KEY, [((1, 784), jnp.float32)])
+  _, params = VAE.init_by_shape(key, [((1, 784), jnp.float32)])
+  vae = nn.Model(VAE, params)
 
   optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(vae)
 

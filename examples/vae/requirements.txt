@@ -1,4 +1,4 @@
 jax
-flask
+flax
 tensorflow
-Pillow
+pillow
