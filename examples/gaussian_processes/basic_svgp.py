@@ -1,4 +1,6 @@
-from jax.config import config; config.update("jax_enable_x64", True)
+from jax.config import config;
+
+config.update("jax_enable_x64", True)
 
 from absl import app
 from absl import flags
@@ -33,7 +35,7 @@ flags.DEFINE_integer(
 
 flags.DEFINE_bool(
     'plot', default=True,
-    help=('Plot the results.', ))
+    help=('Plot the results.',))
 
 
 def _diag_shift(mat: jnp.ndarray,
@@ -128,10 +130,10 @@ class SVGPModel(nn.Module):
             inducing_locations_init=inducing_locations_init,
             name='inducing_var')
 
-        vgp = SVGPProvider(x,
-                           lambda x_: jnp.zeros(x_.shape[:-1]),
-                           kern_fun,
-                           inducing_var, name='vgp')
+        vgp = gaussian_processes.SVGPProvider(x,
+                                              lambda x_: jnp.zeros(x_.shape[:-1]),
+                                              kern_fun,
+                                              inducing_var, name='vgp')
 
         ell = LikelihoodProvider(vgp, name='ell')
 

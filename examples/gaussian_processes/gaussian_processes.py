@@ -1,6 +1,6 @@
 import jax.numpy as jnp
 import jax.scipy as jscipy
-from flax import struct
+from flax import struct, nn
 import dists
 from utils import _diag_shift, multivariate_gaussian_kl
 from typing import Any, Callable
@@ -56,3 +56,43 @@ class VariationalGaussianProcess(GaussianProcess):
         qu = self.inducing_variable.variational_distribution
         pu = self.inducing_variable.prior_distribution
         return multivariate_gaussian_kl(qu, pu)
+
+
+class SVGPProvider(nn.Module):
+    def apply(self,
+              index_points,
+              mean_fn,
+              kernel_fn,
+              inducing_var,
+              jitter=1e-4):
+        """
+
+        Args:
+            index_points: the nd-array of index points of the GP model.
+            mean_fn: callable mean function of the GP model.
+            kernel_fn: callable kernel function.
+            inducing_var: inducing variables `inducing_variables.InducingPointsVariable`.
+            jitter: float `jitter` term to add to the diagonal of the covariance
+              function before computing Cholesky decompositions.
+
+        Returns:
+            svgp: A sparse Variational GP model.
+        """
+        qu = inducing_var.variational_distribution
+        z = inducing_var.locations
+
+        var_kern = kernels.VariationalKernel(
+            kernel_fn, z, qu.scale)
+
+        def var_mean(x_):
+            kzz_chol = jnp.linalg.cholesky(
+                _diag_shift(kernel_fn(z, z), jitter))
+
+            kxz = kernel_fn(x_, z)
+            dev = (qu.mean - mean_fn(z))[..., None]
+            return (mean_fn(x_)[..., None]
+                    + kxz @ jscipy.linalg.cho_solve(
+                        (kzz_chol, True), dev))[..., 0]
+
+        return VariationalGaussianProcess(
+            index_points, var_mean, var_kern, jitter, inducing_var)
