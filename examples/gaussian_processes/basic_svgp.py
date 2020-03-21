@@ -12,6 +12,7 @@ from jax import random, ops
 from typing import Callable, Union
 
 import kernels
+import distributions
 import inducing_variables
 import gaussian_processes
 import likelihoods
@@ -64,6 +65,55 @@ class LikelihoodProvider(nn.Module):
         return likelihoods.GaussianLogLik(
             variational_distribution.mean,
             variational_distribution.scale, obs_noise_scale)
+
+class InducingPointsProvider(nn.Module):
+    """ Handles parameterisation of an inducing points variable. """
+    def apply(self,
+              index_points: jnp.ndarray,
+              kernel_fun: Callable,
+              inducing_locations_init: Callable,
+              num_inducing_points: int = 5,
+              dtype: jnp.dtype = jnp.float64) -> inducing_variables.InducingPointsVariable:
+        """
+
+        Args:
+            index_points: the nd-array of index points of the GP model.
+            kernel_fun: callable kernel function.
+            inducing_locations_init: initializer function for the inducing
+              variable locations.
+            num_inducing_points: total number of inducing points
+            dtype: the data-type of the computation (default: float64)
+
+        Returns:
+            inducing_var: inducing variables `inducing_variables.InducingPointsVariable`
+
+        """
+        n_features = index_points.shape[-1]
+
+        z = self.param('locations',
+                       (num_inducing_points, n_features),
+                       inducing_locations_init)
+
+        qu_mean = self.param('mean', (num_inducing_points,),
+                             lambda key, shape: jax.nn.initializers.zeros(
+                                 key, shape, dtype=dtype))
+
+        qu_scale = self.param(
+            'scale',
+            (num_inducing_points, num_inducing_points),
+            lambda key, shape: jnp.eye(num_inducing_points, dtype=dtype))
+
+        prior = gaussian_processes.GaussianProcess(
+            z,
+            lambda x: jnp.zeros(x.shape[:-1]),
+            kernel_fun,
+            1e-6).marginal()
+
+        return inducing_variables.InducingPointsVariable(
+            variational_distribution=distributions.MultivariateNormalTriL(
+                qu_mean, jnp.tril(qu_scale)),
+            prior_distribution=prior,
+            locations=z)
 
 
 class SVGPProvider(nn.Module):
@@ -121,7 +171,7 @@ class SVGPModel(nn.Module):
               `q(u) == inducing_var.variational_distribution`.
         """
         kern_fun = kernels.RBFKernelProvider(x, name='kernel_fun')
-        inducing_var = inducing_variables.InducingPointsProvider(
+        inducing_var = InducingPointsProvider(
             x,
             kern_fun,
             inducing_locations_init=inducing_locations_init,
