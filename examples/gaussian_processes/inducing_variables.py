@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from flax import nn, struct
+from flax import struct
 from distributions import MultivariateNormalTriL
 
 

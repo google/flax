@@ -1,5 +1,4 @@
-from jax.config import config
-config.update("jax_enable_x64", True)
+from jax.config import config; config.update("jax_enable_x64", True)
 
 from absl import app
 from absl import flags
@@ -9,27 +8,21 @@ from flax import nn
 from typing import Callable
 
 import jax
-from jax import random, ops
+from jax import random
 from jax.tree_util import tree_flatten, tree_unflatten
 import jax.numpy as jnp
 
 import scipy as oscipy
 import kernels
 import distributions
+import gaussian_processes
+from utils import _diag_shift
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_bool(
     'plot', default=True,
     help=('Plot the results.', ))
-
-
-def _diag_shift(mat, val):
-    """ Shifts the diagonal of mat by val. """
-    return ops.index_update(
-        mat,
-        jnp.diag_indices(mat.shape[-1], len(mat.shape)),
-        jnp.diag(mat) + val)
 
 
 class MeanShiftDistribution(nn.Module):
@@ -115,11 +108,11 @@ class MarginalObservationModel(nn.Module):
 class GPModel(nn.Module):
     """ Model for i.i.d noise observations from a GP with
     RBF kernel. """
-    def apply(self, x, dtype=jnp.float64):
+    def apply(self, x, dtype=jnp.float64) -> distributions.MultivariateNormalFull:
         """
 
         Args:
-            x: Index points of the observations.
+            x: the nd-array of index points of the GP model.
             dtype: the data-type of the computation (default: float64)
 
         Returns:
@@ -234,7 +227,7 @@ def main(_):
         xx_new = jnp.linspace(-3., 3., 100)[:, None]
 
         # prior GP model at learned model parameters
-        fitted_gp = distributions.GaussianProcess(
+        fitted_gp = gaussian_processes.GaussianProcess(
             train_ds['index_points'],
             learned_mean_fn,
             learned_kernel_fn, 1e-4

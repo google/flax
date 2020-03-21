@@ -66,6 +66,7 @@ class LikelihoodProvider(nn.Module):
             variational_distribution.mean,
             variational_distribution.scale, obs_noise_scale)
 
+
 class InducingPointsProvider(nn.Module):
     """ Handles parameterisation of an inducing points variable. """
     def apply(self,
