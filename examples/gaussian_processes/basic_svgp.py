@@ -110,7 +110,7 @@ class SVGPProvider(nn.Module):
 
 
 class SVGPModel(nn.Module):
-    def apply(self, x, inducing_locations_init):
+    def apply(self, x, inducing_locations_init, **kwargs):
         """
 
         Args:
@@ -123,7 +123,8 @@ class SVGPModel(nn.Module):
             vgp: the variational GP q(f) = ∫p(f|u)q(u)du where
               `q(u) == inducing_var.variational_distribution`.
         """
-        kern_fun = kernels.RBFKernelProvider(x, name='kernel_fun')
+        kern_fun = kernels.RBFKernelProvider(
+            x, name='kernel_fun', **kwargs.get('kernel_fun_kwargs', {}))
         inducing_var = inducing_variables.InducingPointsProvider(
             x,
             kern_fun,
@@ -144,10 +145,17 @@ def create_model(key, input_shape):
     def inducing_loc_init(key, shape):
         return random.uniform(key, shape, minval=-3., maxval=3.)
 
+    # pass initializers as kwargs
+    kernel_fun_kwargs = {
+        'amplitude_init': lambda key, shape: jnp.ones(shape),
+        'length_scale_init': lambda key, shape: .5 * jnp.ones(shape)}
+    kwargs = {'kernel_fun_kwargs': kernel_fun_kwargs}
+
     _, params = SVGPModel.init_by_shape(
         key,
         [(input_shape, jnp.float64), ],
-        inducing_locations_init=inducing_loc_init)
+        inducing_locations_init=inducing_loc_init,
+        **kwargs)
 
     return nn.Model(SVGPModel, params)
 

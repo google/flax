@@ -12,10 +12,21 @@ from jax import random, ops
 import kernels
 import likelihoods
 import gaussian_processes
-from basic_svgp import (InducingPointsProvider,
-                        SVGPProvider,)
+import inducing_variables
 
 FLAGS = flags.FLAGS
+
+flags.DEFINE_float(
+    'learning_rate', default=0.0001,
+    help=('The learning rate for the momentum optimizer.'))
+
+flags.DEFINE_integer(
+    'num_epochs', default=10000,
+    help=('Number of training epochs.'))
+
+flags.DEFINE_bool(
+    'plot', default=True,
+    help=('Plot the results.',))
 
 
 class LikelihoodProvider(nn.Module):
@@ -42,7 +53,7 @@ class LikelihoodProvider(nn.Module):
 
 
 class DeepGPModel(nn.Module):
-    def apply(self, x, inducing_locations_init):
+    def apply(self, x, **kwargs):
 
         vgps = {}
 
@@ -54,10 +65,17 @@ class DeepGPModel(nn.Module):
                 mean_fn = lambda x_: x_[..., 0]
 
             kern_fn = kernels.RBFKernelProvider(
-                x, name='kernel_fun_{}'.format(layer))
-            inducing_var = InducingPointsProvider(
-                x, kern_fn, inducing_locations_init=inducing_locations_init, name='inducing_var_{}'.format(layer))
-            vgp = SVGPProvider(
+                x, name='kernel_fun_{}'.format(layer),
+                **kwargs.get('kernel_fun_{}_kwargs'.format(layer), {}))
+
+            inducing_var = inducing_variables.InducingPointsProvider(
+                x,
+                kern_fn,
+                name='inducing_var_{}'.format(layer),
+                num_inducing_points=7,
+                **kwargs.get('inducing_var_{}_kwargs'.format(layer), {}))
+
+            vgp = gaussian_processes.SVGPProvider(
                 x, mean_fn, kern_fn, inducing_var, name='vgp_{}'.format(layer))
 
             #pz_zprev = vgp.marginal()
@@ -72,14 +90,26 @@ class DeepGPModel(nn.Module):
 
 
 def create_model(key, input_shape):
+
     def inducing_loc_init(key, shape):
-        return random.uniform(key, shape, minval=-1., maxval=1.)
+        return jnp.linspace(-1.5, 1.5, 7)[:, None]
+
+    kwargs = {}
+    for i in range(1, 3):
+        kwargs['kernel_fun_{}_kwargs'.format(i)] = {
+            'amplitude_init': lambda key, shape: jnp.ones(shape),
+            'length_scale_init': lambda key, shape: .1 * jnp.ones(shape)}
+        kwargs['inducing_var_{}_kwargs'.format(i)] = {
+            #'num_inducing_points': 7,
+            'fixed_locations': False,
+            'inducing_locations_init': inducing_loc_init}
+
 
     with nn.stochastic(key):
         _, params = DeepGPModel.init_by_shape(
             key,
             [(input_shape, jnp.float64), ],
-            inducing_locations_init=inducing_loc_init)
+            **kwargs)
 
         return nn.Model(DeepGPModel, params)
 
@@ -94,11 +124,8 @@ def create_optimizer(model, learning_rate, beta):
 def train_step(optimizer, batch):
     """Train for a single step."""
 
-    def inducing_loc_init(key, shape):
-        return random.uniform(key, shape, minval=-3., maxval=3.)
-
     def loss_fn(model):
-        ell, vgps = model(batch['index_points'], inducing_loc_init)
+        ell, vgps = model(batch['index_points'])
         prior_kl = jnp.sum([item.prior_kl() for _, item in vgps.items()])
         return -ell.variational_expectation(batch['y']) + prior_kl
 
@@ -130,13 +157,11 @@ def train_epoch(optimizer, train_ds, epoch):
 def train(train_ds):
     rng = random.PRNGKey(0)
 
-    num_epochs = 5000 #FLAGS.num_epochs
+    num_epochs = FLAGS.num_epochs
 
     with nn.stochastic(rng):
         model = create_model(rng, (15, 1))
-        optimizer = create_optimizer(model, 0.0001, 0.33)
-
-                                     #FLAGS.learning_rate, FLAGS.momentum)
+        optimizer = create_optimizer(model, FLAGS.learning_rate, 0.33)
 
         for epoch in range(1, num_epochs + 1):
             optimizer, metrics = train_epoch(
@@ -154,7 +179,7 @@ def step_fun(x):
 
 def get_datasets():
     rng = random.PRNGKey(123)
-    index_points = jnp.linspace(-1., 1., 15)
+    index_points = jnp.linspace(-1.5, 1.5, 15)
     y = (jnp.array([step_fun(x) for x in index_points])
          + 0.1*random.normal(rng, index_points.shape))
     train_ds = {'index_points': index_points[..., None], 'y': y}
@@ -171,15 +196,12 @@ def main(_):
 
         model = optimizer.target
 
-        xx_pred = jnp.linspace(-1., 1.)[:, None]
-
-        def inducing_loc_init(key, shape):
-            return random.uniform(key, shape, minval=-3., maxval=3.)
+        xx_pred = jnp.linspace(-1.5, 1.5)[:, None]
 
         fig, ax = plt.subplots()
 
         with nn.stochastic(random.PRNGKey(123)):
-            _, vgps = model(xx_pred, inducing_loc_init)
+            y, vgps = model(xx_pred)
         vgp = vgps[2]
 
         pred_m = vgp.mean_function(xx_pred)
