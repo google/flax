@@ -2,9 +2,8 @@ import jax.numpy as jnp
 import jax.scipy as jscipy
 from flax import struct
 import dists
-from inducing_variables import InducingVariable
 from utils import _diag_shift, multivariate_gaussian_kl
-from typing import Callable
+from typing import Any, Callable
 import kernels
 
 
@@ -47,7 +46,11 @@ class GaussianProcess:
 
 @struct.dataclass
 class VariationalGaussianProcess(GaussianProcess):
-    inducing_variable: InducingVariable
+    """ ToDo(dan): ugly `Any` typing to avoid circular dependency with GP
+          inside of inducing_variables. Ideally break this by lifting
+          variational GPs into their own module.
+    """
+    inducing_variable: Any
 
     def prior_kl(self):
         qu = self.inducing_variable.variational_distribution
