@@ -30,7 +30,7 @@ flags.DEFINE_bool(
 
 flags.DEFINE_integer(
     'num_inducing_points', default=10,
-    help=('Number of training epochs.'))
+    help=('Number of inducing points epochs.'))
 
 
 class LikelihoodProvider(nn.Module):
@@ -66,39 +66,33 @@ class DeepGPModel(nn.Module):
 
         """
         vgps = {}
+
+        mf = lambda x_: jnp.zeros(x_.shape[:-1])  # initial mean_fun
         for layer in range(1, 3):
-
-            if layer == 1:
-                mean_fn = lambda x_: jnp.zeros(x_.shape[:-1])
-            else:
-                mean_fn = lambda x_: x_[..., 0]
-
-            kern_fn = kernels.RBFKernelProvider(
+            kf = kernels.RBFKernelProvider(
                 x, name='kernel_fun_{}'.format(layer),
                 **kwargs.get('kernel_fun_{}_kwargs'.format(layer), {}))
 
             inducing_var = inducing_variables.InducingPointsProvider(
                 x,
-                kern_fn,
+                kf,
                 name='inducing_var_{}'.format(layer),
                 num_inducing_points=FLAGS.num_inducing_points,
                 fixed_locations=True,
                 **kwargs.get('inducing_var_{}_kwargs'.format(layer), {}))
 
             vgp = gaussian_processes.SVGPProvider(
-                x, mean_fn, kern_fn,
+                x, mf, kf,
                 inducing_var,
                 name='vgp_{}'.format(layer))
 
-            # version of the repam. trick with dampened scale
-            pz_zprev = vgp.marginal()
-            full_shape = () + pz_zprev.mean.shape
-            std_normals = random.normal(sample_key, full_shape)
-            x = (pz_zprev.mean +
-                 jnp.tensordot(std_normals, pz_zprev.scale, [-1, 1]))[..., None]
+            # version of the reparam. trick with dampened scale
+            x = vgp.marginal().sample(sample_key)[..., None]
             vgps[layer] = vgp
 
-        loglik = LikelihoodProvider(x, name='ell')
+            mf = lambda x_: x_[..., 0]  # mean_fun for later layers.
+
+        loglik = LikelihoodProvider(x, name='loglik')
 
         return loglik, vgps
 
@@ -217,18 +211,13 @@ def main(_):
         xx_pred = jnp.linspace(-1.5, 1.5)[:, None]
 
         fig, ax = plt.subplots()
+        key = random.PRNGKey(123)
+        with nn.stochastic(key):
+            for nt in range(10):
+                key, subkey = random.split(key)
+                ll, vgps = model(train_ds['index_points'], nn.make_rng())
+                ax.plot(train_ds['index_points'][:, 0], ll.mean, 'C0-', alpha=0.2)
 
-        with nn.stochastic(random.PRNGKey(123)):
-            ll, vgps = model(train_ds['index_points'], nn.make_rng())
-
-        #vgp = vgps[2]
-        #pred_m = vgp.mean_function(xx_pred)
-        #pred_v = jnp.diag(vgp.kernel_function(xx_pred, xx_pred))
-
-        #ax.plot(xx_pred[:, 0], pred_m, '-')
-        #ax.plot(model.params['inducing_var_2']['locations'][:, 0],
-        #        model.params['inducing_var_2']['mean'], '^')
-        ax.plot(train_ds['index_points'][:, 0], ll.mean, 'o-')
         ax.step(xx_pred, [step_fun(x) for x in xx_pred], 'k--')
         ax.plot(train_ds['index_points'][:, 0], train_ds['y'], 'ks')
         plt.show()
