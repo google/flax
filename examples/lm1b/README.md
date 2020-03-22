@@ -10,7 +10,7 @@ This example uses linear learning rate warmup and inverse square root learning r
 The model should run with other configurations and hardware, but explicitely tested on the following.
 
 | Hardware | Batch size | Training time | Perplexity  | TensorBoard.dev |
-|---|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 8 x Nvidia V100 (16GB)  | 2048  |  1d 4h 32m  | 33.24 | [2020-03-14](https://tensorboard.dev/experiment/gG67xEXDTLywlagjVHQetw/) |
 
 ### How to run
