@@ -1,17 +1,18 @@
 #!/bin/bash
 #
-# Creates a new howto diff from all files that are currently edited and not
-# committed (untracked, tracked, staged). Also reverts all changes. Note the
-# changes can be recovered by simply applying the diff with 
-# `git apply <howto_diff>`.
+# Creates a new howto diff from all files in examples/ that are
+# currently edited and not committed (untracked, tracked,
+# staged). Also reverts all these changes. Note the changes can be
+# recovered by simply applying the diff with `git apply <howto_diff>`.
 
 # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
 # We avoid -x since it is not very useful to be verbose in this case.
-set -euo
+set -euo pipefail
 
 old_pwd=$(pwd)
 top_dir=$(git rev-parse --show-toplevel)
 howto_diff_path="${top_dir}/howtos/diffs"
+examples_dir="${top_dir}/examples"
 
 cat << EOF
 Awesome, you are going to create a new FLAX HOWTO!
@@ -25,9 +26,9 @@ EOF
 
 # Get respectively all untracked, unstaged, and stages files.
 # The awk command prepends all files with "-".
-(git ls-files --others --exclude-standard && \
-  git diff --name-only && \
-  git diff --staged --name-only) | awk '{print "- " $0}'
+(git ls-files --others --exclude-standard -- "$examples_dir" && \
+  git diff --name-only -- "$examples_dir" && \
+  git diff --staged --name-only -- "$examples_dir") | awk '{print "- " $0}'
 
 cat << EOF
 
@@ -61,10 +62,10 @@ git add *
 # Create diff for both unstaged and staged changes. Add the diff to a temporal
 # location to ensure it won't be remove when we clean the changes.
 tmp_path=$(mktemp)
-(git diff && git diff --staged) > $tmp_path
+(git diff -- "$examples_dir" && git diff --staged -- "$examples_dir") > $tmp_path
 
 # Revert all tracked changes (which are all edited files).
-git reset --hard > /dev/null
+git checkout HEAD -- "$examples_dir" > /dev/null
 
 # Add the diff file to the correct location and track it.
 mv $tmp_path $howto_path && git add $howto_path
