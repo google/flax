@@ -39,7 +39,7 @@ import tensorflow.compat.v2 as tf
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('model_dir', default='', help=('Directory for model data'))
+flags.DEFINE_string('model_dir', default='', help=('Directory for model data.'))
 
 flags.DEFINE_integer(
     'batch_size', default=32, help=('Batch size for training.'))
@@ -62,16 +62,16 @@ flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
 flags.DEFINE_float(
     'weight_decay',
     default=1e-1,
-    help=('decay factor for AdamW style weight decay.'))
+    help=('Decay factor for AdamW style weight decay.'))
 
 flags.DEFINE_integer(
     'max_target_length',
     default=256,
-    help=('maximum length of training examples.'))
+    help=('Maximum length of training examples.'))
 flags.DEFINE_integer(
     'max_eval_target_length',
     default=256,
-    help=('maximum length of eval examples.'))
+    help=('Maximum length of eval examples.'))
 
 flags.DEFINE_integer(
     'random_seed', default=0, help=('Integer for PRNG random seed.'))
@@ -86,9 +86,9 @@ flags.DEFINE_integer(
 # for instance 'train': ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-train.conllu
 # and for 'dev': ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-dev.conllu
 # and provide as flag.
-flags.DEFINE_string('train', default='', help=('path to training data.'))
+flags.DEFINE_string('train', default='', help=('Path to training data.'))
 
-flags.DEFINE_string('dev', default='', help=('path to development data.'))
+flags.DEFINE_string('dev', default='', help=('Path to development data.'))
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2))

@@ -1,15 +1,24 @@
+## ImageNet classification
+Trains a ResNet50 model (He *et al.*, 2015) for the ImageNet classification task (Russakovsky *et al.*, 2015).
 
+This example uses linear learning rate warmup and cosine learning rate schedule.
 
-# How to run
+### Requirements
+* TensorFlow dataset `imagenet2012:5.*.*`
+* `≈180GB` of RAM if you want to cache the dataset in memory for faster IO
 
-```
-python train.py --batch_size=[batch_size] --model_dir=[model_dir]
-```
+### Supported setups
+The model should run with other configurations and hardware, but explicitely tested on the following.
 
+| Hardware | Batch size | Training time | Top-1 accuracy  | TensorBoard.dev |
+|---|---|---|---|---|---|---|
+| 8 x Nvidia V100 (16GB)  | 512  |  13h 25m  | 76.63% | [2020-03-12](https://tensorboard.dev/experiment/jrvtbnlETgai0joLBXhASw/) |
+| 8 x Nvidia V100 (16GB), mixed precision  | 2048  | 6h 4m | 76.39% | [2020-03-11](https://tensorboard.dev/experiment/F5rM1GGQRpKNX207i30qGQ/) |
 
-# Using mixed precision training on NVIDIA V100 GPUs
+### How to run
 
-```
-python train.py --loss_scaling=256. --half_precision=True \
-    --batch_size=[256*num_gpus] --model_dir=[model_dir]
-```
+#### 8 x Nvidia V100 (16GB)
+`python train.py --batch_size=512 --cache=True --model_dir=./imagenet_fp32_bs512`
+
+#### 8 x Nvidia V100 (16GB), mixed precision
+`python train.py --batch_size=2048 --cache=True --model_dir=./imagenet_fp16_bs2048 --precision=float16 --loss_scale=256.`

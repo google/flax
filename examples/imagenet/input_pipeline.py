@@ -177,7 +177,7 @@ def preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   return image
 
 
-def load_split(batch_size, train, dtype=tf.float32, image_size=IMAGE_SIZE):
+def load_split(batch_size, train, dtype=tf.float32, image_size=IMAGE_SIZE, cache=False):
   """Creates a split from the ImageNet dataset using TensorFlow Datasets.
 
   Args:
@@ -185,6 +185,7 @@ def load_split(batch_size, train, dtype=tf.float32, image_size=IMAGE_SIZE):
     train: Whether to load the train or evaluation split.
     dtype: data type of the image.
     image_size: The target size of the images.
+    cache: Whether to cache the dataset.
   Returns:
     A `tf.data.Dataset`.
   """
@@ -210,7 +211,8 @@ def load_split(batch_size, train, dtype=tf.float32, image_size=IMAGE_SIZE):
   ds.options().experimental_threading.private_threadpool_size = 48
   ds.options().experimental_threading.max_intra_op_parallelism = 1
 
-  ds = ds.cache()
+  if cache:
+    ds = ds.cache()
 
   if train:
     ds = ds.repeat()
