@@ -12,25 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Social graph example.
-
-This script trains a simple graph neural network (GNN) for semi-supervised
-node classification on Zachary's karate club (Wayne W. Zachary, "An Information
-Flow Model for Conflict and Fission in Small Groups," Journal of Anthropological
-Research, 1977).
-
-Zachary's karate club is often used as a "hello world" example for network
-analysis. The graph describes the social network of members of a university
-karate club, where an undirected edge is present if two members interact
-frequently outside of club activities. The club famously split into two parts
-due to a conflict between the president of the club (John A.) and the part-time
-karate instructor (Mr. Hi).
-
-This example is adapted from https://arxiv.org/abs/1609.02907 (Appendix A). We
-classify nodes based on the student-teacher assignment (John A. or Mr. Hi) in
-a semi-supervised setting. During training, only the labels for John A.'s and
-Mr. Hi's node are provided, while all other club members are unlabeled.
-"""
+"""Social graph example."""
 
 from absl import app
 

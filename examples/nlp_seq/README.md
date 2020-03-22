@@ -9,12 +9,12 @@ From|ADP the|DT AP|PROPN comes|VBZ this|DT story|NN :|:
 ### Requirements
 * Universal Dependency data sets:  https://universaldependencies.org/#download.
 
-Download via command line: 
+    Download via command line: 
 
-```
-curl -# -o ud-treebanks-v2.0.tgz https://lindat.mff.cuni.cz/repository/xmlui/bitstream/handle/11234/1-1976/ud-treebanks-v2.0.tgz
-tar xzf ud-treebanks-v2.0.tgz
-```
+    ```
+    curl -# -o ud-treebanks-v2.0.tgz https://lindat.mff.cuni.cz/repository/xmlui/bitstream/handle/11234/1-1976/ud-treebanks-v2.0.tgz
+    tar xzf ud-treebanks-v2.0.tgz
+    ```
 
 ### Supported setups
 The model should run with other configurations and hardware, but explicitly tested on the following.

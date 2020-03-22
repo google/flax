@@ -13,11 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""seq2seq addition example.
-
-This script trains a simple LSTM on a sequence-to-sequence addition task using
-an encoder-decoder architecture. The data is generated on the fly.
-"""
+"""seq2seq addition example."""
 
 import random
 from absl import app

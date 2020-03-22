@@ -60,13 +60,17 @@ flags.DEFINE_integer(
     'batch_size', default=128,
     help=('Batch size for training.'))
 
+flags.DEFINE_bool(
+    'cache', default=False,
+    help=('If True, cache the dataset.'))
+
 flags.DEFINE_integer(
     'num_epochs', default=90,
     help=('Number of training epochs.'))
 
 flags.DEFINE_string(
     'model_dir', default=None,
-    help=('Directory to store model data'))
+    help=('Directory to store model data.'))
 
 flags.DEFINE_bool(
     'half_precision', default=False,
@@ -175,9 +179,9 @@ def prepare_tf_data(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def create_input_iter(batch_size, image_size, dtype, train):
+def create_input_iter(batch_size, image_size, dtype, train, cache):
   ds = input_pipeline.load_split(
-      batch_size, image_size=image_size, dtype=dtype, train=train)
+      batch_size, image_size=image_size, dtype=dtype, train=train, cache=cache)
   it = map(prepare_tf_data, ds)
   it = jax_utils.prefetch_to_device(it, 2)
   return it
@@ -245,9 +249,9 @@ def main(argv):
     input_dtype = tf.float32
 
   train_iter = create_input_iter(
-      local_batch_size, image_size, input_dtype, train=True)
+      local_batch_size, image_size, input_dtype, train=True, cache=FLAGS.cache)
   eval_iter = create_input_iter(
-      local_batch_size, image_size, input_dtype, train=False)
+      local_batch_size, image_size, input_dtype, train=False, cache=FLAGS.cache)
 
   num_epochs = FLAGS.num_epochs
   steps_per_epoch = input_pipeline.TRAIN_IMAGES // batch_size
