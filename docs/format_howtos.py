@@ -13,6 +13,7 @@ from pygments.lexers import PythonLexer
 import os
 
 def main():
+  os.makedirs('_formatted_howtos', exist_ok=True)
   for diff_filename in os.listdir(os.path.join('..', 'howtos', 'diffs')):
     format_howto(os.path.join('..', 'howtos', 'diffs', diff_filename),
            os.path.join('_formatted_howtos', diff_filename + '.html'))
