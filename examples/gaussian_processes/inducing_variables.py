@@ -83,7 +83,7 @@ class InducingPointsProvider(nn.Module):
                     z,
                     lambda x_: jnp.zeros(x_.shape[:-1]),
                     kernel_fun,
-                    1.0e-4).marginal()
+                    jitter).marginal()
 
         return InducingPointsVariable(
             variational_distribution=MultivariateNormalTriL(

@@ -17,7 +17,7 @@ import inducing_variables
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.05,
+    'learning_rate', default=0.01,
     help=('The learning rate for the adam optimizer.'))
 
 flags.DEFINE_integer(
@@ -206,7 +206,7 @@ def main(_):
     if FLAGS.plot:
         import matplotlib.pyplot as plt
 
-        xx_pred = jnp.linspace(-1.5, 1.5, 51)[:, None]
+        xx_pred = jnp.linspace(-1.5, 1.5)[:, None]
 
         num_samples = 100
         subkeys = random.split(random.PRNGKey(123), num=num_samples)

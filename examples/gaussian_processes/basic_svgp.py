@@ -84,7 +84,8 @@ class SVGPModel(nn.Module):
         vgp = gaussian_processes.SVGPProvider(x,
                                               lambda x_: jnp.zeros(x_.shape[:-1]),
                                               kern_fun,
-                                              inducing_var, name='vgp')
+                                              inducing_var,
+                                              name='vgp')
 
         ell = LikelihoodProvider(vgp, name='ell')
 
