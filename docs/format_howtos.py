@@ -42,7 +42,7 @@ def format_howto(input_file, output_file):
       return source
 
   # Run `diff` through the normal pygments Python syntax
-  # highlighter.  Get back an array of HTML lines
+  # highlighter. Get back an array of HTML lines.
   colored_diff = (
     pygments.highlight('\n'.join(diff), PythonLexer(), RawHtmlFormatter())
   ).splitlines()
