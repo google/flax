@@ -1,0 +1,8 @@
+numpy
+jaxlib
+jax
+matplotlib
+dataclasses
+msgpack
+
+[testing]
