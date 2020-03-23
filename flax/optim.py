@@ -487,30 +487,24 @@ class ModelParamTraversal(traverse_util.Traversal):
       raise ValueError(
           'ModelParamTraversal can only traverse a flax Model instance.')
 
-  def _iterate(self, x, path=''):
-    flat_dict = traverse_util.flatten_dict(x)
+  def iterate(self, inputs):
+    self._check_inputs(inputs)
+    flat_dict = traverse_util.flatten_dict(inputs.params)
     for key, value in _sorted_items(flat_dict):
       path = '/' + '/'.join(key)
       if self._filter_fn(path, value):
         yield value
 
-  def _update(self, fn, x, path=''):
-    flat_dict = traverse_util.flatten_dict(x)
+  def update(self, fn, inputs):
+    self._check_inputs(inputs)
+    flat_dict = traverse_util.flatten_dict(inputs.params)
     new_dict = {}
-    for key, value in flat_dict.items():
+    for key, value in _sorted_items(flat_dict):
       path = '/' + '/'.join(key)
       if self._filter_fn(path, value):
         value = fn(value)
       new_dict[key] = value
-    return traverse_util.unflatten_dict(new_dict)
-
-  def iterate(self, inputs):
-    self._check_inputs(inputs)
-    yield from self._iterate(inputs.params)
-
-  def update(self, fn, inputs):
-    self._check_inputs(inputs)
-    new_params = self._update(fn, inputs.params)
+    new_params = traverse_util.unflatten_dict(new_dict)
     return inputs.replace(params=new_params)
 
 
