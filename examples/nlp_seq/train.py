@@ -40,7 +40,7 @@ import tensorflow.compat.v2 as tf
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('model_dir', default='', help=('Directory for model data'))
+flags.DEFINE_string('model_dir', default='', help=('Directory for model data.'))
 
 flags.DEFINE_string('experiment', default='xpos', help=('Experiment name.'))
 
@@ -65,17 +65,17 @@ flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
 flags.DEFINE_float(
     'weight_decay',
     default=1e-1,
-    help=('decay factor for AdamW style weight decay.'))
+    help=('Decay factor for AdamW style weight decay.'))
 
 flags.DEFINE_integer('max_length', default=256,
-                     help=('maximum length of examples.'))
+                     help=('Maximum length of examples.'))
 
 flags.DEFINE_integer(
     'random_seed', default=0, help=('Integer for PRNG random seed.'))
 
-flags.DEFINE_string('train', default='', help=('path to training data.'))
+flags.DEFINE_string('train', default='', help=('Path to training data.'))
 
-flags.DEFINE_string('dev', default='', help=('path to development data.'))
+flags.DEFINE_string('dev', default='', help=('Path to development data.'))
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2))
