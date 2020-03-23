@@ -36,7 +36,7 @@ def format_howto(input_file, output_file):
         diff[lineno-1].rstrip(' \n') == ''
        )]
 
-  # Don't do any special formatting
+  # Don't do any special formatting.
   class RawHtmlFormatter(pygments.formatters.HtmlFormatter):
     def wrap(self, source, outfile):
       return source
