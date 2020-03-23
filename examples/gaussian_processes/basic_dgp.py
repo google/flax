@@ -21,7 +21,7 @@ flags.DEFINE_float(
     help=('The learning rate for the adam optimizer.'))
 
 flags.DEFINE_integer(
-    'num_epochs', default=50000,
+    'num_epochs', default=1000,
     help=('Number of training epochs.'))
 
 flags.DEFINE_bool(
@@ -59,11 +59,12 @@ class DeepGPModel(nn.Module):
 
         Args:
             x:
-            key: random number generator for stochastic inference.
-            **kwargs:
+            sample_key: random number generator for stochastic inference.
+            **kwargs: additional kwargs passed to layers.
 
         Returns:
-
+            loglik: The output observation model.
+            vgps: Intermediate variational GP outputs for each layer
         """
         vgps = {}
 
@@ -78,7 +79,6 @@ class DeepGPModel(nn.Module):
                 kf,
                 name='inducing_var_{}'.format(layer),
                 num_inducing_points=FLAGS.num_inducing_points,
-                fixed_locations=True,
                 **kwargs.get('inducing_var_{}_kwargs'.format(layer), {}))
 
             vgp = gaussian_processes.SVGPProvider(
@@ -87,7 +87,7 @@ class DeepGPModel(nn.Module):
                 name='vgp_{}'.format(layer))
 
             # version of the reparam. trick with dampened scale
-            x = vgp.marginal().sample(sample_key, shape=(17, ))[..., None]
+            x = vgp.marginal().sample(sample_key)[..., None]
             vgps[layer] = vgp
 
             mf = lambda x_: x_[..., 0]  # mean_fun for later layers.
@@ -111,14 +111,16 @@ def create_model(key, input_shape):
             'fixed_locations': True,
             'inducing_locations_init': inducing_loc_init}
 
+    model_def = DeepGPModel.partial(**kwargs)
+
     with nn.stochastic(key):
-        _, params = DeepGPModel.init_by_shape(
+        _, params = model_def.init_by_shape(
             key,
             [(input_shape, jnp.float64), ],
             nn.make_rng(),
             **kwargs)
 
-        return nn.Model(DeepGPModel, params)
+        return nn.Model(model_def, params)
 
 
 def create_optimizer(model, learning_rate, beta1):
@@ -204,21 +206,27 @@ def main(_):
     if FLAGS.plot:
         import matplotlib.pyplot as plt
 
-        model = optimizer.target
-        #for key, item in model.params.items():
-        #    print(item)
+        xx_pred = jnp.linspace(-1.5, 1.5, 51)[:, None]
 
-        xx_pred = jnp.linspace(-1.5, 1.5)[:, None]
+        num_samples = 100
+        subkeys = random.split(random.PRNGKey(123), num=num_samples)
+
+        def sample(skey):
+            ll, vgps = optimizer.target(xx_pred, skey)
+            return ll.mean
+
+        samples = jax.vmap(sample)(subkeys)
+        pred_m = jnp.mean(samples, axis=0)
+        pred_sd = jnp.std(samples, axis=0)
 
         fig, ax = plt.subplots()
-        key = random.PRNGKey(123)
-        with nn.stochastic(key):
-            for nt in range(10):
-                key, subkey = random.split(key)
-                ll, vgps = model(train_ds['index_points'], nn.make_rng())
-                ax.plot(train_ds['index_points'][:, 0], ll.mean, 'C0-', alpha=0.2)
 
-        ax.step(xx_pred, [step_fun(x) for x in xx_pred], 'k--')
+        ax.plot(xx_pred[:, 0], pred_m, 'C0-')
+        ax.fill_between(xx_pred[:, 0],
+                        pred_m - 2 * pred_sd,
+                        pred_m + 2 * pred_sd, alpha=0.5)
+
+        ax.step(xx_pred[:, 0], [step_fun(x) for x in xx_pred], 'k--', alpha=0.7)
         ax.plot(train_ds['index_points'][:, 0], train_ds['y'], 'ks')
         plt.show()
 

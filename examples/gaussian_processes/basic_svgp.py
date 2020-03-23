@@ -15,7 +15,7 @@ import kernels
 import inducing_variables
 import gaussian_processes
 import likelihoods
-from utils import _diag_shift
+
 
 FLAGS = flags.FLAGS
 
