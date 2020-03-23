@@ -53,6 +53,8 @@ def flatten_dict(xs):
   """Flatten a nested dictionary.
 
   The nested keys are flattened to a tuple.
+  See `unflatten_dict` on how to restore the
+  nested dictionary structure.
 
   Example::
 
@@ -64,11 +66,15 @@ def flatten_dict(xs):
     #   ('bar', 'a'): 2,
     # }
 
+  Note that empty dictionaries are ignored and
+  will not be restored by `unflatten_dict`.
+
   Args:
     xs: a nested dictionary
   Returns:
     The flattened dictionary.
   """
+  assert isinstance(xs, dict), 'input is not a dict'
   def _flatten(xs, prefix):
     if not isinstance(xs, dict):
       return {prefix: xs}
@@ -103,6 +109,7 @@ def unflatten_dict(xs):
   Returns:
     The nested dictionary.
   """
+  assert isinstance(xs, dict), 'input is not a dict'
   result = {}
   for path, value in xs.items():
     cursor = result
