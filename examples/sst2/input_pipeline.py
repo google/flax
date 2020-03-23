@@ -135,7 +135,7 @@ def get_glove_embeddings(
   # Save vocab and embeddings to cache_dir.
   if cache_dir is not None:
     if not os.path.exists(cache_dir):
-      os.makedir(cache_dir)
+      os.mkdir(cache_dir)
     save_vocab(vocab, os.path.join(cache_dir, 'vocab.txt'))
     save_embed(embed, os.path.join(cache_dir, 'embed.npz'))
 
