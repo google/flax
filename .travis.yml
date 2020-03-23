@@ -27,6 +27,7 @@ install:
   - conda install -c conda-forge pandoc
 script:
   # build the docs
+  - (cd docs && python format_howtos.py)
   - sphinx-build -M html docs docs/_build
   # run the main flax unit tests
   - pytest -n 1 tests -W ignore
