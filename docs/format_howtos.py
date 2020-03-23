@@ -51,7 +51,7 @@ def format_howto(input_file, output_file):
   # output HTML file, that can be inline included into any .rst
   # file.
   with open(output_file, 'w') as out_file:
-    # Add the relevant DIVs that Sphinx adds around code blocks
+    # Add the relevant DIVs that Sphinx adds around code blocks.
     print('<div class="highlight-default notranslate"><div class="highlight">',
         file=out_file)
     print('<pre class="code">', file=out_file)
