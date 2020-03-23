@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 from flax import struct, nn
 from jax import random
-from distributions import MultivariateNormalTriL
+from distributions import MultivariateNormalDiag, MultivariateNormalTriL
 from gaussian_processes import GaussianProcess
 from typing import Union, Callable
 
@@ -16,6 +16,7 @@ class InducingVariable:
 @struct.dataclass
 class InducingPointsVariable(InducingVariable):
     locations: jnp.ndarray
+    whiten: bool = False
 
 
 class InducingPointsProvider(nn.Module):
@@ -26,6 +27,7 @@ class InducingPointsProvider(nn.Module):
               num_inducing_points: int,
               inducing_locations_init: Union[Callable, None] = None,
               fixed_locations: bool = False,
+              whiten: bool = False,
               dtype: jnp.dtype = jnp.float64) -> InducingPointsVariable:
         """
 
@@ -37,6 +39,8 @@ class InducingPointsProvider(nn.Module):
               variable locations.
             fixed_locations: boolean specifying whether to optimise the inducing
               point locations (default True).
+            whiten: boolean specifying whether to apply the whitening transformation.
+              (default False)
             dtype: the data-type of the computation (default: float64)
 
         Returns:
@@ -55,6 +59,7 @@ class InducingPointsProvider(nn.Module):
             z = self.param('locations',
                            (num_inducing_points, n_features),
                            inducing_locations_init)
+
         qu_mean = self.param('mean', (num_inducing_points,),
                              lambda key, shape: jax.nn.initializers.zeros(
                                  key, z_shape[0], dtype=dtype))
@@ -64,14 +69,21 @@ class InducingPointsProvider(nn.Module):
             (num_inducing_points, num_inducing_points),
             lambda key, shape: jnp.eye(num_inducing_points, dtype=dtype))
 
-        prior = GaussianProcess(
-            z,
-            lambda x_: jnp.zeros(x_.shape[:-1]),
-            kernel_fun,
-            1e-6).marginal()
+        if whiten:
+            prior = MultivariateNormalDiag(
+                mean=jnp.zeros(index_points.shape[-1]),
+                scale_diag=jnp.ones(index_points.shape[-2]))
+
+        else:
+            prior = GaussianProcess(
+                    z,
+                    lambda x_: jnp.zeros(x_.shape[:-1]),
+                    kernel_fun,
+                    1e-6).marginal()
 
         return InducingPointsVariable(
             variational_distribution=MultivariateNormalTriL(
                 qu_mean, jnp.tril(qu_scale)),
             prior_distribution=prior,
-            locations=z)
+            locations=z,
+            whiten=whiten)

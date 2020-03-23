@@ -17,7 +17,7 @@ import inducing_variables
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.001,
+    'learning_rate', default=0.01,
     help=('The learning rate for the adam optimizer.'))
 
 flags.DEFINE_integer(
@@ -79,6 +79,7 @@ class DeepGPModel(nn.Module):
                 kf,
                 name='inducing_var_{}'.format(layer),
                 num_inducing_points=FLAGS.num_inducing_points,
+                whiten=True,
                 **kwargs.get('inducing_var_{}_kwargs'.format(layer), {}))
 
             vgp = gaussian_processes.SVGPProvider(

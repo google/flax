@@ -53,9 +53,18 @@ class VariationalGaussianProcess(GaussianProcess):
     inducing_variable: Any
 
     def prior_kl(self):
+        if self.inducing_variable.whiten:
+            return self.prior_kl_whiten()
+        else:
+            qu = self.inducing_variable.variational_distribution
+            pu = self.inducing_variable.prior_distribution
+            return multivariate_gaussian_kl(qu, pu)
+
+    def prior_kl_whiten(self):
         qu = self.inducing_variable.variational_distribution
-        pu = self.inducing_variable.prior_distribution
-        return multivariate_gaussian_kl(qu, pu)
+        log_det = 2*jnp.sum(jnp.log(jnp.diag(qu.scale)))
+        dim = qu.mean.shape[-1]
+        return -.5*(log_det + 0.5*dim - jnp.sum(qu.mean**2) - jnp.sum(qu.scale**2))
 
 
 class SVGPProvider(nn.Module):
@@ -78,18 +87,28 @@ class SVGPProvider(nn.Module):
         Returns:
             svgp: A sparse Variational GP model.
         """
+        z = inducing_var.locations
         qu = inducing_var.variational_distribution
+        qu_mean = qu.mean
+        qu_scale = qu.scale
+
+        # cholesky of the base kernel function applied at the inducing point
+        # locations.
+        kzz_chol = jnp.linalg.cholesky(
+            _diag_shift(kernel_fn(z, z), jitter))
+
+        if inducing_var.whiten:
+            qu_mean = kzz_chol @ qu_mean
+            qu_scale = kzz_chol @ qu_scale
+
         z = inducing_var.locations
 
         var_kern = kernels.VariationalKernel(
-            kernel_fn, z, qu.scale)
+            kernel_fn, z, qu_scale)
 
         def var_mean(x_):
-            kzz_chol = jnp.linalg.cholesky(
-                _diag_shift(kernel_fn(z, z), jitter))
-
             kxz = kernel_fn(x_, z)
-            dev = (qu.mean - mean_fn(z))[..., None]
+            dev = (qu_mean - mean_fn(z))[..., None]
             return (mean_fn(x_)[..., None]
                     + kxz @ jscipy.linalg.cho_solve(
                         (kzz_chol, True), dev))[..., 0]
