@@ -115,8 +115,7 @@ class MultivariateNormalTriL(MultivariateNormal):
     def sample(self, key, shape=()):
         full_shape = shape + self.mean.shape
         std_normals = random.normal(key, full_shape)
-        return self.mean
-        #return jnp.tensordot(std_normals, self.scale, [-1, 1]) + self.mean
+        return jnp.tensordot(std_normals, self.scale, [-1, 1]) + self.mean
 
     @property
     def covariance(self):

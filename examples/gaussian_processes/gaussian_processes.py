@@ -1,10 +1,11 @@
 import jax.numpy as jnp
 import jax.scipy as jscipy
 from flax import struct, nn
-import dists
+
 from utils import _diag_shift, multivariate_gaussian_kl
 from typing import Any, Callable
 import kernels
+import distributions
 
 
 @struct.dataclass
@@ -18,7 +19,7 @@ class GaussianProcess:
         kxx = self.kernel_function(self.index_points, self.index_points)
         chol_kxx = jnp.linalg.cholesky(_diag_shift(kxx, self.jitter))
         mean = self.mean_function(self.index_points)
-        return dists.MultivariateNormalTriL(mean, chol_kxx)
+        return distributions.MultivariateNormalTriL(mean, chol_kxx)
 
     def posterior_gp(self, y, x_new, observation_noise_variance, jitter=None):
         """ Returns a new GP conditional on y. """

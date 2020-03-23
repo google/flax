@@ -32,7 +32,7 @@ flags.DEFINE_integer(
     help=('Number of training epochs.'))
 
 flags.DEFINE_bool(
-    'plot', default=True,
+    'plot', default=False,
     help=('Plot the results.',))
 
 
@@ -137,13 +137,8 @@ def train_step(optimizer, batch):
 
 def train_epoch(optimizer, train_ds, epoch):
     """Train for a single epoch."""
-    optimizer, batch_metrics = train_step(optimizer, train_ds)
-    # compute mean of metrics across each batch ina epoch.
-    batch_metrics_np = jax.device_get(batch_metrics)
-    epoch_metrics_np = batch_metrics_np
-    # epoch_metrics_np = {
-    #    k: onp.mean([metrics[k] for metrics in batch_metrics_np])
-    #    for k in batch_metrics_np[0]}
+    optimizer, epoch_metrics = train_step(optimizer, train_ds)
+    epoch_metrics_np = jax.device_get(epoch_metrics)
 
     logging.info('train epoch: %d, loss: %.4f',
                  epoch,
