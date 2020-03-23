@@ -50,7 +50,7 @@ import tensorflow_datasets as tfds
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.0003,
+    'learning_rate', default=0.0005,
     help=('The learning rate for the Adam optimizer.'))
 
 flags.DEFINE_integer(
@@ -136,20 +136,6 @@ def evaluate(model: nn.Module, eval_ds: tf.data.Dataset):
   return metrics
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2, 3))
-def create_model(rng, batch_size, embeddings, model_kwargs):
-  """Instantiate a new model."""
-  with nn.stochastic(rng):
-    emb_init = functools.partial(sst2_model.pretrained_init,
-                                 embeddings=embeddings)
-    model_def = sst2_model.LSTMClassifier.partial(
-        emb_init=emb_init, **model_kwargs)
-    _, initial_params = model_def.init_by_shape(
-        rng, [((batch_size, 55), jnp.int32), ((batch_size,), jnp.int32)])
-    model = nn.Model(model_def, initial_params)
-    return model
-
-
 def log(stats, epoch, train_metrics, valid_metrics):
   """Logs performance for an epoch."""
   train_loss = train_metrics['loss'] / train_metrics['total']
@@ -210,26 +196,28 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  assert FLAGS.model_dir is not None, \
-      'Please provide a model_dir to save checkpoints.'
+  flags.mark_flag_as_required('model_dir')
   if not os.path.exists(FLAGS.model_dir):
     os.makedirs(FLAGS.model_dir)
 
   tf.enable_v2_behavior()
 
   # Prepare data.
-  sst2_data_source = input_pipeline.SST2DataSource(
+  data_source = input_pipeline.SST2DataSource(
       batch_size=FLAGS.batch_size,
       glove_path=FLAGS.glove_path,
       glove_dim=FLAGS.glove_dim,
+      cache_dir=FLAGS.model_dir,
       shuffle_seed=FLAGS.seed)
 
-  # Create model.
-  model = create_model(
+  # Create model
+  emb_init = functools.partial(
+      sst2_model.pretrained_init, embed=data_source.embed)
+  model = sst2_model.create_model(
       jax.random.PRNGKey(FLAGS.seed),
       FLAGS.batch_size,
-      sst2_data_source.embeddings,
-      dict(vocab_size=sst2_data_source.vocab_size,
+      dict(vocab_size=data_source.vocab_size,
+           emb_init=emb_init,
            dropout=FLAGS.dropout))
 
   # Train the model.
@@ -239,12 +227,12 @@ def main(argv):
       num_epochs=FLAGS.num_epochs,
       seed=FLAGS.seed,
       model_dir=FLAGS.model_dir,
-      data_source=sst2_data_source)
+      data_source=data_source)
 
-  # Let's evaluate again to make sure we really got the best model.
+  # Evaluate the best model.
   rng = jax.random.PRNGKey(FLAGS.seed)
   with nn.stochastic(rng):
-    metrics = evaluate(best_model, sst2_data_source.valid_batches)
+    metrics = evaluate(best_model, data_source.valid_batches)
     logging.info('Best validation accuracy: %.2f', metrics['acc'])
 
 

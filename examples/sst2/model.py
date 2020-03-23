@@ -15,21 +15,46 @@
 """LSTM classifier model for SST-2."""
 
 import functools
-from typing import Any, Callable
+from typing import Any, Callable, Text
 
 import flax
 from flax import nn
 import jax
 import jax.numpy as jnp
+from jax import lax
+
 import numpy as np
 
 # pylint: disable=arguments-differ
 
 
-def pretrained_init(_, shape, embeddings: np.ndarray = None, dtype=np.float32):
-  assert embeddings.shape == shape, \
+@functools.partial(jax.jit, static_argnums=(1, 2))
+def create_model(rng, batch_size, model_kwargs):
+  """Instantiate a new model."""
+  with nn.stochastic(rng):
+    model_def = LSTMClassifier.partial(**model_kwargs)
+    _, initial_params = model_def.init_by_shape(
+        rng, [((batch_size, 55), jnp.int32), ((batch_size,), jnp.int32)])
+    model = nn.Model(model_def, initial_params)
+    return model
+
+
+def load_model(model_dir: Text, vocab_size: int, batch_size: int):
+  """Load a model from checkpoint."""
+  model = create_model(jax.random.PRNGKey(0), batch_size,
+                       dict(vocab_size=vocab_size))
+  with nn.stochastic(jax.random.PRNGKey(0)):
+    optimizer = flax.optim.Adam(learning_rate=0.001).create(model)
+    optimizer = flax.training.checkpoints.restore_checkpoint(
+        model_dir, optimizer)
+  model = optimizer.target
+  return model
+
+
+def pretrained_init(_, shape, embed: np.ndarray = None, dtype=np.float32):
+  assert embed.shape == shape, \
       'The pretrained embeddings do not have the expected shape.'
-  return embeddings.astype(dtype)
+  return embed.astype(dtype)
 
 
 class Embedding(nn.Module):
@@ -40,10 +65,14 @@ class Embedding(nn.Module):
             num_embeddings: int,
             features: int,
             emb_init: Callable[..., np.ndarray] = nn.initializers.normal(
-                stddev=0.1)):
+                stddev=0.1),
+            frozen: bool = True):
     # inputs.shape = <int64>[batch_size, seq_length]
     embedding = self.param('embedding', (num_embeddings, features), emb_init)
-    return jnp.take(embedding, inputs, axis=0)
+    embed = jnp.take(embedding, inputs, axis=0)
+    if frozen:  # Keep the embeddings fixed at initial (pretrained) values.
+      embed = lax.stop_gradient(embed)
+    return embed
 
 
 class LSTMEncoder(nn.Module):
@@ -92,7 +121,7 @@ class LSTMClassifier(nn.Module):
             hidden_size: int = 256,
             output_size: int = 1,
             dropout: float = 0.5,
-            emb_init: Callable[..., Any] = None,
+            emb_init: Callable[..., Any] = nn.initializers.normal(stddev=0.1),
             train: bool = True):
     """Encodes the input sequence and makes a prediction using an MLP."""
     # inputs.shape = <int64>[batch_size, seq_length]

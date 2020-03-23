@@ -16,6 +16,7 @@
 
 import collections
 from typing import Dict, List, Set, Text, Tuple
+import os
 
 from absl import logging
 
@@ -33,13 +34,55 @@ class OrderedCounter(collections.Counter, collections.OrderedDict):
   pass
 
 
+def get_tokens(datasets: List[tf.data.Dataset]) -> Set[Text]:
+  """Returns a set with all unique tokens in the given datasets."""
+  counter = OrderedCounter()
+  for ds in datasets:  # Data set already tokenized here.
+    for example in tfds.as_numpy(ds):
+      tokens = whitespace_tokenize(example['sentence'].strip())
+      counter.update(tokens)
+  sst_tokens = set(counter.keys())
+  logging.info('Number of unique tokens: %d', len(sst_tokens))
+  return sst_tokens
+
+
+def save_vocab(vocab, path):
+  """Saves a vocabulary to disk."""
+  with open(path, mode='wb') as f:
+    for token in vocab:
+      f.write(token + b'\n')
+  logging.info('Saved vocab to: %s', path)
+
+
+def load_vocab(path):
+  """Loads a vocabulary from disk."""
+  vocab = collections.OrderedDict()
+  with open(path, mode='rb') as f:
+    for i, token in enumerate(f):
+      vocab[token.rstrip(b'\n')] = i
+  return vocab
+
+
+def save_embed(embed, path):
+  """Save word embeddings to disk."""
+  assert path.endswith('.npz'), 'Path must end with .npz'
+  np.savez(path, embed=embed)
+  logging.info('Saved embed to: %s', path)
+
+
+def load_embed(path):
+  """Load word embeddings from disk."""
+  return np.load(path)['embed']
+
+
 # pylint: disable=dangerous-default-value
 def get_glove_embeddings(
-    sst_tokens: List[Text],
+    datasets: List[tf.data.Dataset],
     glove_path: Text,
     glove_dim: int,
     specials: List[Text] = [b'<pad>', b'<unk>', b'<s>', b'</s>'],
-    seed: int = 42
+    seed: int = 42,
+    cache_dir: Text = None,
 ) -> Tuple[Dict[Text, int], np.ndarray]:
   """Filter Glove vectors to only use tokens that are in SST-2.
 
@@ -53,15 +96,20 @@ def get_glove_embeddings(
   dimension.
 
   Args:
-    sst_tokens: A list of tokens.
+    datasets: A list of datasets to extract tokens from. We will only use
+        embeddings for tokens in these datasets.
     glove_path: Path to GloVe word vectors.
     glove_dim: The size of the word vectors.
     specials: A list of special tokens (starting the vocabulary).
     seed: A seed to use to initialize the special token vectors.
+    cache_dir: Directory to save/load the vocab and embeddings to/from.
+      If it is empty, the vocab and embeddings will be saved.
+      If both vocab and embeddings are found, they will be loaded.
 
   Returns:
     A tuple with the vocabulary (token -> ID) and the word embedding matrix.
   """
+  sst_tokens = get_tokens(datasets)
   vectors = []
   vocab = collections.OrderedDict()
   np.random.seed(seed)
@@ -72,6 +120,7 @@ def get_glove_embeddings(
     vocab[token] = len(vocab)
   vectors[0] = np.zeros_like(vectors[0])  # Zeros for padding.
 
+  # Extract the embeddings for our set of tokens (discard the rest).
   with open(glove_path, mode='rb') as f:
     for line in f:
       parts = line.strip().rsplit(maxsplit=glove_dim)
@@ -81,24 +130,21 @@ def get_glove_embeddings(
         vectors.append(vector)
         vocab[token] = len(vocab)
 
-  return vocab, np.array(vectors)
+  embed = np.array(vectors)
+
+  # Save vocab and embeddings to cache_dir.
+  if cache_dir is not None:
+    if not os.path.exists(cache_dir):
+      os.makedir(cache_dir)
+    save_vocab(vocab, os.path.join(cache_dir, 'vocab.txt'))
+    save_embed(embed, os.path.join(cache_dir, 'embed.npz'))
+
+  return vocab, embed
 
 
 def whitespace_tokenize(s: Text):
   """Splits ab input into tokens by whitspace."""
   return s.split()
-
-
-def get_tokens(datasets: List[tf.data.Dataset]) -> Set[Text]:
-  """Returns a set with all unique tokens in the given datasets."""
-  counter = OrderedCounter()
-  for ds in datasets:  # Data set already tokenized here.
-    for example in tfds.as_numpy(ds):
-      tokens = whitespace_tokenize(example['sentence'].strip())
-      counter.update(tokens)
-  sst_tokens = set(counter.keys())
-  logging.info('Number of unique tokens: %d', len(sst_tokens))
-  return sst_tokens
 
 
 def get_batches(
@@ -148,20 +194,32 @@ class SST2DataSource(object):
       batch_size: int,
       glove_path: Text = None,
       glove_dim: int = 300,
+      cache_dir: Text = None,
+      vocab_path: Text = None,
+      embed_path: Text = None,
       shuffle_seed: int = 1
   ):
-    assert glove_path is not None, 'Please set glove_path.'
-
     # Load SST-2 from TF datasets.
     data = tfds.load('glue/sst2')
 
     # Print an example.
     logging.info('Data sample: %s', next(tfds.as_numpy(data['train'].skip(4))))
 
-    sst_tokens = get_tokens([data['train'], data['validation'], data['test']])
+    # Load vocabulary from disk if provided.
+    if vocab_path is not None and os.path.exists(vocab_path):
+      vocab = load_vocab(vocab_path)
 
-     # Get a vocabulary and a corresponding Glove word embedding matrix.
-    vocab, embeddings = get_glove_embeddings(sst_tokens, glove_path, glove_dim)
+    # Load embeddings from disk if provided.
+    if embed_path is not None and os.path.exists(embed_path):
+      embed = load_embed(embed_path)
+    else:
+      embed = None
+
+    # Get a vocabulary and a corresponding Glove word embedding matrix.
+    if vocab_path is None and embed_path is None:
+      datasets = (data['train'], data['validation'], data['test'])
+      vocab, embed = get_glove_embeddings(
+          datasets, glove_path, glove_dim, cache_dir=cache_dir)
 
     unk_idx = vocab[b'<unk>']
     bos_idx = vocab[b'<s>']
@@ -208,6 +266,6 @@ class SST2DataSource(object):
         batch_size=batch_size, seed=shuffle_seed)
 
     self.vocab = vocab
+    self.embed = embed
     self.vocab_size = len(vocab)
-    self.embeddings = embeddings
 
