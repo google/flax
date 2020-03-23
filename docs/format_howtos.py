@@ -10,6 +10,7 @@ import pygments
 import pygments.formatters
 from pygments.lexers import PythonLexer
 
+import re
 import os
 
 def main():
@@ -29,11 +30,17 @@ def format_howto(input_file, output_file):
   # index 51d2fde..a9d7dcb 100644
   diff = diff[2:]
 
-  # Remove more than one empty line in a row
+  # Remove double newlines of diff context from `diff` (which is a
+  # list of lines).
+
+  # Diff lines start with a charater in {'+', '-', ' '} designating
+  # insert, remove or context.  Create a regexp that matches empty
+  # lines that are either of these three types.
+  empty_line_regexp = re.compile('[+\\- ]\n')
   diff = [diff[lineno] for lineno in range(len(diff))
       if lineno == 0 or not (
-        diff[lineno].rstrip(' \n') == '' and
-        diff[lineno-1].rstrip(' \n') == ''
+        empty_line_regexp.match(diff[lineno]) and
+        empty_line_regexp.match(diff[lineno-1])
        )]
 
   # Don't do any special formatting.
