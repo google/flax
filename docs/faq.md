@@ -23,8 +23,8 @@ it just traces all the shapes and inits submodules.
 **Context:** Why not having a separate function for defining `params` and a pair 
 of `init`/`apply` methods?
 
-**Answer:** Modules have an `init` and `call` function that can be used if you
-need use them. So you can do things like `Dense.call(params, X, ...)`. `Model` just
+**Answer:** Modules have an `init` and `call` function that can be used if needed.
+So you can do things like `Dense.call(params, X, ...)`. `Model` just
 wraps parameters and the `apply` function together in a way that's JAX-aware,
 so you can just pass a model instance into JAX-transformed functions
 without thinking about `static_argnums`.
@@ -236,6 +236,6 @@ precision in cases like batchnorm.
 
 **Answer:** They have static shapes. A model is created from an initial shape, 
 and it is not directly possible to change this. (This is a limitation of XLA
-and thus of JAX)
+and thus of JAX.)
 
 --- 
