@@ -149,7 +149,7 @@ def prefetch_to_device(iterator, size, devices=None):
     try:
       xs = queue.popleft()
     except IndexError:
-      raise StopIteration
+      return
     try:
       queue.append(jax.tree_map(_prefetch, next(iterator)))
     except StopIteration:

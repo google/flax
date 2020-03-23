@@ -1,15 +1,15 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-**NOTE**: This is alpha software, but we encourage trying it out.
-Changes will come to the API, but we'll use deprecation warnings when we can, and
-keep track of them our [Changelog](CHANGELOG.md).
+**NOTE**: Flax is being actively improved and has a growing community
+of researchers and engineers at Google who happily use Flax for their
+daily research. Flax is "early release" but now is a good time to
+start using it. We want to smooth out any rough edges so please report
+any issues, questions or concerns as
+[GitHub issues](https://github.com/google/flax/issues). Expect changes to the
+API, but we'll use deprecation warnings when we can, and keep
+track of them in our [Changelog](CHANGELOG.md).
 
-A growing community of researchers at Google are happily using
-Flax for their daily research and contributing to it, and now we're
-expanding that to the open source community.
-
-[GitHub issues](http://github.com/google/flax/issues) are encouraged for open conversation, but
-in case you need to reach us directly, we're at flax-dev@google.com.
+In case you need to reach us directly, we're at flax-dev@google.com.
 
 ## Quickstart
 
@@ -17,7 +17,7 @@ in case you need to reach us directly, we're at flax-dev@google.com.
 
 **⟶ [Annotated full end-to-end MNIST example](https://flax.readthedocs.io/en/latest/annotated_mnist.html)**
 
-**⟶ [The Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html)** -- a guided walkthrough of the parts of Flax
+**⟶ [The Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_guided_tour.html)** -- a guided walkthrough of the parts of Flax
 
 ## Background: JAX
 

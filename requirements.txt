@@ -1,0 +1,4 @@
+numpy>=1.12
+jaxlib>=0.1.41
+jax>=0.1.59
+msgpack

@@ -145,6 +145,25 @@ class TraversalTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       traversal.set([3, 4, 5], x)  # too many values
 
+  def test_flatten_dict(self):
+    xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
+    flat_xs = traverse_util.flatten_dict(xs)
+    self.assertEqual(flat_xs, {
+      ('foo',): 1,
+      ('bar', 'a'): 2,
+    })
+
+  def test_unflatten_dict(self):
+    flat_xs = {
+      ('foo',): 1,
+      ('bar', 'a'): 2,
+    }
+    xs = traverse_util.unflatten_dict(flat_xs)
+    self.assertEqual(xs, {
+      'foo': 1,
+      'bar': {'a': 2}
+    })
+
 
 if __name__ == '__main__':
   absltest.main()
