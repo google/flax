@@ -15,7 +15,7 @@ multiple devices.
 
 Note that these HOWTOs do not require special library support, they just
 demonstate how assembling the JAX and Flax primitives in different ways
-allow you to achieve various training loop modifications.
+allow you to make various training loop modifications.
 
 Currently the following HOWTOs are available:
 
