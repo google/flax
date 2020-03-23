@@ -28,6 +28,7 @@ class InducingPointsProvider(nn.Module):
               inducing_locations_init: Union[Callable, None] = None,
               fixed_locations: bool = False,
               whiten: bool = False,
+              jitter: float = 1e-4,
               dtype: jnp.dtype = jnp.float64) -> InducingPointsVariable:
         """
 
@@ -41,6 +42,9 @@ class InducingPointsProvider(nn.Module):
               point locations (default True).
             whiten: boolean specifying whether to apply the whitening transformation.
               (default False)
+            jitter: float `jitter` term to add to the diagonal of the covariance
+              function of the GP prior of the inducing variable, only used if no
+              whitening transform applied.
             dtype: the data-type of the computation (default: float64)
 
         Returns:
@@ -79,7 +83,7 @@ class InducingPointsProvider(nn.Module):
                     z,
                     lambda x_: jnp.zeros(x_.shape[:-1]),
                     kernel_fun,
-                    1e-6).marginal()
+                    1.0e-4).marginal()
 
         return InducingPointsVariable(
             variational_distribution=MultivariateNormalTriL(

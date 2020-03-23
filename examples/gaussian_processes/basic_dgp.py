@@ -17,7 +17,7 @@ import inducing_variables
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.01,
+    'learning_rate', default=0.05,
     help=('The learning rate for the adam optimizer.'))
 
 flags.DEFINE_integer(
