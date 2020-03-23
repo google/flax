@@ -5,7 +5,7 @@ from absl import flags
 from absl import logging
 
 from flax import nn
-from typing import Callable
+from typing import Callable, Tuple
 
 import jax
 from jax import random
@@ -21,7 +21,7 @@ from utils import _diag_shift
 FLAGS = flags.FLAGS
 
 flags.DEFINE_bool(
-    'plot', default=True,
+    'plot', default=False,
     help=('Plot the results.', ))
 
 
@@ -46,23 +46,19 @@ class MeanShiftDistribution(nn.Module):
 
 
 class GaussianProcessLayer(nn.Module):
-    """ Given index points the role is to provide
-    finite dimensional distributions.
-
-    This implementation handles very little with regards to
-    parameterisations.
+    """ Provides a Gaussian process.
     """
     def apply(self,
               index_points: jnp.ndarray,
-              kernel_fun: Callable,
-              mean_fun: Callable = None,
+              kernel_fn: Callable,
+              mean_fn: Callable = None,
               jitter: float =1e-4):
         """
 
         Args:
             index_points: the nd-array of index points of the GP model
-            kernel_fun: callable kernel function.
-            mean_fun: callable mean function of the GP model.
+            kernel_fn: callable kernel function.
+            mean_fn: callable mean function of the GP model.
               (default: `None` is equivalent to lambda x: jnp.zeros(x.shape[:-1]))
             jitter: float `jitter` term to add to the diagonal of the covariance
               function before computing Cholesky decompositions.
@@ -70,15 +66,10 @@ class GaussianProcessLayer(nn.Module):
         Returns:
             p: `distributions.MultivariateNormalTriL` object.
         """
-        if mean_fun is None:
-            mean_fun = lambda x: jnp.zeros(x.shape[:-1], dtype=index_points.dtype)
+        if mean_fn is None:
+            mean_fn = lambda x: jnp.zeros(x.shape[:-1], dtype=index_points.dtype)
 
-        mean = mean_fun(index_points)
-        cov = kernel_fun(index_points)
-        cov = _diag_shift(cov, jitter)
-
-        return distributions.MultivariateNormalTriL(
-            mean, jnp.linalg.cholesky(cov))
+        return gaussian_processes.GaussianProcess(index_points, mean_fn, kernel_fn, jitter)
 
 
 class MarginalObservationModel(nn.Module):
@@ -118,15 +109,10 @@ class GPModel(nn.Module):
         Returns:
             py_x: Distribution of the observations at the index points.
         """
-        kern_fun = kernels.RBFKernelProvider(x, name='kernel_fun')
-        pf_x = GaussianProcessLayer(x, kern_fun, name='gp_layer')
-        # uncomment to specify a mean function
-        # linear_mean = nn.Dense(x, features=1, name='linear_mean',
-        #                        dtype = dtype)
-        # pf_x = MeanShiftDistribution(
-        #     pf_x, linear_mean[..., 0], name='mean_shift')
-
-        py_x = MarginalObservationModel(pf_x, name='observation_model')
+        kern_fn = kernels.RBFKernelProvider(x, name='kernel_fun')
+        mean_fn = lambda x: nn.Dense(x, features=1, name='linear_mean')[..., 0]
+        gp_x = GaussianProcessLayer(x, kern_fn, mean_fn, name='gp_layer')
+        py_x = MarginalObservationModel(gp_x.marginal(), name='observation_model')
         return py_x
 
 
@@ -152,13 +138,19 @@ def build_par_pack_and_unpack(model):
     return par_from_array, array_from_par
 
 
-def get_datasets(sim_key: random.PRNGKey, true_obs_noise_scale: float =0.5) -> dict:
+def get_datasets(sim_key: random.PRNGKey, true_obs_noise_scale: float =0.5) -> Tuple[dict, dict]:
     """ Generate the datasets. """
     index_points = jnp.linspace(-3., 3., 25)[..., jnp.newaxis]
-    y = (jnp.sin(index_points[:, 0])
+    y = (-0.5 + .33 * index_points[:, 0] +
+         + jnp.sin(index_points[:, 0])
          + true_obs_noise_scale * random.normal(sim_key, index_points.shape[:-1]))
+
+    test_index_points = jnp.linspace(-3., 3., 100)[:, jnp.newaxis]
+
     train_ds = {'index_points': index_points, 'y': y}
-    return train_ds
+    test_ds = {'index_points': test_index_points,
+               'y': -0.5 + .33 * test_index_points[:, 0] + jnp.sin(test_index_points[:, 0])}
+    return train_ds, test_ds
 
 
 def train(train_ds):
@@ -207,9 +199,8 @@ def train(train_ds):
 
 
 def main(_):
-    train_ds = get_datasets(random.PRNGKey(123))
+    train_ds, test_ds = get_datasets(random.PRNGKey(123))
     trained_model = train(train_ds)
-
     if FLAGS.plot:
         import matplotlib.pyplot as plt
 
@@ -221,10 +212,7 @@ def main(_):
                 trained_model.params['kernel_fun'], x1)(x1, x2)
 
         def learned_mean_fn(x):
-            return jnp.zeros(x.shape[:-1])
-            # return nn.Dense.call(trained_model.params['linear_mean'], x, features=1)[:, 0]
-
-        xx_new = jnp.linspace(-3., 3., 100)[:, None]
+            return nn.Dense.call(trained_model.params['linear_mean'], x, features=1)[:, 0]
 
         # prior GP model at learned model parameters
         fitted_gp = gaussian_processes.GaussianProcess(
@@ -234,17 +222,19 @@ def main(_):
         )
         posterior_gp = fitted_gp.posterior_gp(
                 train_ds['y'],
-                xx_new,
+                test_ds['index_points'],
                 obs_noise_scale**2)
 
-        pred_f_mean = posterior_gp.mean_function(xx_new)
-        pred_f_var = jnp.diag(posterior_gp.kernel_function(xx_new, xx_new))
+        pred_f_mean = posterior_gp.mean_function(test_ds['index_points'])
+        pred_f_var = jnp.diag(
+            posterior_gp.kernel_function(test_ds['index_points'], test_ds['index_points']))
 
         fig, ax = plt.subplots()
-        ax.fill_between(xx_new[:, 0],
+        ax.fill_between(test_ds['index_points'][:, 0],
                         pred_f_mean - 2*jnp.sqrt(pred_f_var),
                         pred_f_mean + 2*jnp.sqrt(pred_f_var), alpha=0.5)
-        ax.plot(xx_new, posterior_gp.mean_function(xx_new), '-')
+
+        ax.plot(test_ds['index_points'][:, 0], posterior_gp.mean_function(test_ds['index_points']), '-')
         ax.plot(train_ds['index_points'], train_ds['y'], 'ks')
 
         plt.show()

@@ -25,7 +25,7 @@ flags.DEFINE_integer(
     help=('Number of training epochs.'))
 
 flags.DEFINE_bool(
-    'plot', default=True,
+    'plot', default=False,
     help=('Plot the results.',))
 
 flags.DEFINE_integer(
@@ -87,7 +87,7 @@ class DeepGPModel(nn.Module):
                 name='vgp_{}'.format(layer))
 
             # version of the reparam. trick with dampened scale
-            x = vgp.marginal().sample(sample_key)[..., None]
+            x = vgp.marginal().sample(sample_key, shape=(17, ))[..., None]
             vgps[layer] = vgp
 
             mf = lambda x_: x_[..., 0]  # mean_fun for later layers.
@@ -108,7 +108,7 @@ def create_model(key, input_shape):
             'amplitude_init': lambda key, shape: 1. *jnp.ones(shape),
             'length_scale_init': lambda key, shape: 1. * jnp.ones(shape)}
         kwargs['inducing_var_{}_kwargs'.format(i)] = {
-            #'fixed_locations': True,
+            'fixed_locations': True,
             'inducing_locations_init': inducing_loc_init}
 
     with nn.stochastic(key):
@@ -205,8 +205,8 @@ def main(_):
         import matplotlib.pyplot as plt
 
         model = optimizer.target
-        for key, item in model.params.items():
-            print(item)
+        #for key, item in model.params.items():
+        #    print(item)
 
         xx_pred = jnp.linspace(-1.5, 1.5)[:, None]
 

@@ -5,7 +5,7 @@ Demonstrates using distribution type objects inside NN-Layers
 For a simple example of GP regression
 inside of a `flax.nn.Model` run
 
-```
+```shell script
 > python basic_gp.py
 ```
 
@@ -19,7 +19,7 @@ process run, and to plot the resulting fit
 Finally to fit a Deep GP to a step-function run
 
 ```shell script
-> python basic_dgp --num_epochs=50000
+> python basic_dgp.py --num_epochs=50000
 ```
 
 The additional files

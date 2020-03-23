@@ -8,16 +8,14 @@ from absl import logging
 
 import jax
 import jax.numpy as jnp
-import jax.scipy as jscipy
 from flax import nn, optim
-from jax import random, ops
-from typing import Callable, Union
+from jax import random
 
 import kernels
-import distributions
 import inducing_variables
 import gaussian_processes
 import likelihoods
+from utils import _diag_shift
 
 FLAGS = flags.FLAGS
 
@@ -36,15 +34,6 @@ flags.DEFINE_integer(
 flags.DEFINE_bool(
     'plot', default=True,
     help=('Plot the results.',))
-
-
-def _diag_shift(mat: jnp.ndarray,
-                val: Union[float, jnp.ndarray]) -> jnp.ndarray:
-    """ Shifts the diagonal of mat by val. """
-    return ops.index_update(
-        mat,
-        jnp.diag_indices(mat.shape[-1], len(mat.shape)),
-        jnp.diag(mat) + val)
 
 
 class LikelihoodProvider(nn.Module):
@@ -130,7 +119,6 @@ def create_optimizer(model, learning_rate, beta):
 @jax.jit
 def train_step(optimizer, batch):
     """Train for a single step."""
-
     def inducing_loc_init(key, shape):
         return random.uniform(key, shape, minval=-3., maxval=3.)
 
@@ -143,14 +131,13 @@ def train_step(optimizer, batch):
     loss, grad = grad_fn(optimizer.target)
     optimizer = optimizer.apply_gradient(grad)
     metrics = {'loss': loss}
-    # metrics = compute_metrics(logits, batch['label'])
     return optimizer, metrics
 
 
 def train_epoch(optimizer, train_ds, epoch):
     """Train for a single epoch."""
     optimizer, batch_metrics = train_step(optimizer, train_ds)
-    # compute mean of metrics across each batch in epoch.
+    # compute mean of metrics across each batch ina epoch.
     batch_metrics_np = jax.device_get(batch_metrics)
     epoch_metrics_np = batch_metrics_np
     # epoch_metrics_np = {
