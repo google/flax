@@ -86,7 +86,6 @@ class DeepGPModel(nn.Module):
                 inducing_var,
                 name='vgp_{}'.format(layer))
 
-            # version of the reparam. trick with dampened scale
             x = vgp.marginal().sample(sample_key)[..., None]
             vgps[layer] = vgp
 
@@ -105,10 +104,10 @@ def create_model(key, input_shape):
     kwargs = {}
     for i in range(1, 3):
         kwargs['kernel_fun_{}_kwargs'.format(i)] = {
-            'amplitude_init': lambda key, shape: 1. *jnp.ones(shape),
+            'amplitude_init': lambda key, shape: 1. * jnp.ones(shape),
             'length_scale_init': lambda key, shape: 1. * jnp.ones(shape)}
         kwargs['inducing_var_{}_kwargs'.format(i)] = {
-            'fixed_locations': True,
+            'fixed_locations': False,
             'inducing_locations_init': inducing_loc_init}
 
     model_def = DeepGPModel.partial(**kwargs)
