@@ -120,7 +120,9 @@ def train_step(optimizer, batch):
     kld_loss = kl_divergence(mean, logvar)
     loss = jnp.mean(bce_loss + kld_loss)
     return loss, recon_x
-  optimizer, _, _ = optimizer.optimize(loss_fn)
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  _, grad = grad_fn(optimizer.target)
+  optimizer = optimizer.apply_gradient(grad)
   return optimizer
 
 
