@@ -53,7 +53,6 @@ The workflow script for the Github action can be found at
 TODO: This is still in progress. Currently conflicts are resolved by
 checking whether the Github action fails, and if so, manually making
 the required fixes.
-</div>
 
 ## Modifying an existing HOWTO
 
