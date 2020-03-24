@@ -112,7 +112,7 @@ def save_checkpoint(ckpt_dir,
   return ckpt_path
 
 
-def restore_checkpoint(ckpt_dir, target, prefix='checkpoint_'):
+def restore_checkpoint(ckpt_dir, target, step=None, prefix='checkpoint_'):
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -124,19 +124,26 @@ def restore_checkpoint(ckpt_dir, target, prefix='checkpoint_'):
   Args:
     ckpt_dir: str: directory of checkpoints to restore from.
     target: matching object to rebuild via deserialized state-dict.
+    step: int: step number to load or None to load latest.
     prefix: str: name prefix of checkpoint files.
 
   Returns:
-    Restored `target` updated from checkpoint file or if no checkpoint
-    files present returns the passed-in `target` unchanged.
+    Restored `target` updated from checkpoint file, or if no step specified and
+    no checkpoint files present, returns the passed-in `target` unchanged.
   """
-  glob_path = os.path.join(ckpt_dir, f'{prefix}*')
-  checkpoint_files = natural_sort(gfile.glob(glob_path))
-  ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
-  checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
-  if not checkpoint_files:
-    return target
-  last_checkpoint = checkpoint_files[-1]
-  logging.info('Restoring checkpoint from %s', last_checkpoint)
-  with gfile.GFile(last_checkpoint, 'rb') as fp:
+  if step:
+    ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
+    if not gfile.exists(ckpt_path):
+      raise ValueError(f'No matching checkpoint not found: {ckpt_path}')
+  else:
+    glob_path = os.path.join(ckpt_dir, f'{prefix}*')
+    checkpoint_files = natural_sort(gfile.glob(glob_path))
+    ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
+    checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
+    if not checkpoint_files:
+      return target
+    ckpt_path = checkpoint_files[-1]
+
+  logging.info('Restoring checkpoint from %s', ckpt_path)
+  with gfile.GFile(ckpt_path, 'rb') as fp:
     return serialization.from_bytes(target, fp.read())
