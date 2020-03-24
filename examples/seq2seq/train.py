@@ -56,21 +56,32 @@ flags.DEFINE_integer(
 class CharacterTable(object):
   """Encode/decodes between strings and integer representations."""
 
+  @property
+  def eos_id(self):
+    return 0
+
+  @property
+  def pad_id(self):
+    return 1
+
   def __init__(self, chars):
     self._chars = sorted(set(chars))
-    self._char_indices = dict((ch, idx) for idx, ch in enumerate(self._chars))
-    self._indices_char = dict((idx, ch) for idx, ch in enumerate(self._chars))
+    self._char_indices = dict(
+        (ch, idx + 2) for idx, ch in enumerate(self._chars))
+    self._indices_char = dict(
+        (idx + 2, ch) for idx, ch in enumerate(self._chars))
 
   def encode(self, inputs):
     """Encode from string to list of integers."""
-    return np.array([self._char_indices[char] for char in inputs])
+    return np.array(
+        [self._char_indices[char] for char in inputs] + [self.eos_id])
 
   def decode(self, inputs):
     """Decode from list of integers to string."""
     return ''.join(self._indices_char[elem] for elem in inputs)
 
   def vocab_size(self):
-    return len(self._chars)
+    return len(self._chars) + 2
 
 
 # We use a global CharacterTable so we don't have pass it around everywhere.
@@ -87,16 +98,21 @@ def get_max_output_len():
   return FLAGS.max_len_query_digit + 2  # includes start token '='.
 
 
-def encode_onehot(batch_inputs):
+@jax.jit
+def encode_onehot(batch_inputs, max_len):
   """One-hot encode a string input."""
 
+  @jax.vmap
   def encode_inputs(inputs):
     inputs = CTABLE.encode(inputs)
+    if len(inputs) > max_len:
+      raise ValueError(f'Sequence too long: {len(inputs)}')
+    inputs = np.pad(inputs, [(0, 0), (0, max_len-len(inputs))], mode='constant')
     one_hot = np.zeros((inputs.size, CTABLE.vocab_size()))
     one_hot[np.arange(inputs.size), inputs] = 1
     return one_hot
 
-  return np.array(list(map(encode_inputs, batch_inputs)))
+  return encode_inputs(batch_inputs)
 
 
 def decode_onehot(batch_inputs):
@@ -110,9 +126,9 @@ def get_sequence_lengths(sequence_batch, eos_id=1):
   eos_row = sequence_batch[:, :, eos_id]
   eos_idx = jnp.argmax(eos_row == eos_id, axis=-1)  # returns first occurence
   return jnp.where(
-    eos_row[jnp.arange(eos_row.shape[0]), eos_idx] == eos_id,
-    eos_idx + 1,
-    sequence_batch.shape[1]  # if there is no EOS, use full length
+      eos_row[jnp.arange(eos_row.shape[0]), eos_idx] == eos_id,
+      eos_idx + 1,
+      sequence_batch.shape[1]  # if there is no EOS, use full length
   )
 
 
@@ -166,8 +182,6 @@ class Seq2seq(nn.Module):
     Args:
       encoder_inputs: padded batch of input sequences to encode, shaped
         `[batch_size, max(encoder_input_lengths), vocab_size]`.
-      encoder_input_lengths: array of input sequence lengths, shaped
-        `[batch_size]`.
       decoder_inputs: padded batch of expected decoded sequences for teacher
         forcing, shaped `[batch_size, max(decoder_inputs_length), vocab_size]`.
       eos_id: int, the token signalling when the end of a sequence is reached.
@@ -185,11 +199,11 @@ class Seq2seq(nn.Module):
 
   @nn.module_method
   def sample(self,
-            encoder_inputs,
-            max_output_len,
-            sample_temperature=1.0,
-            eos_id=1,
-            hidden_size=512):
+             encoder_inputs,
+             max_output_len,
+             sample_temperature=1.0,
+             eos_id=1,
+             hidden_size=512):
     """Run the seq2seq model with sampling.
 
     Args:
@@ -222,19 +236,21 @@ class Seq2seq(nn.Module):
       return (decoder_carry, next_inputs), next_inputs
 
     init_carry = (
-        init_decoder_state, # carry
-        jnp.zeros((batch_size, vocab_size), dtype=np.float32), # next_inputs
+        init_decoder_state,  # decoder_carry
+        jnp.zeros((batch_size, vocab_size), dtype=np.float32),  # next_inputs
     )
     predictions = jax_utils.scan_in_dim(
         decode_step_fn, init_carry, xs=[None]*max_output_len, axis=1)
     return predictions
 
-def create_model(rng):
+
+def create_model():
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size()
   _, initial_params = Seq2seq.init_by_shape(
-      rng, [((1, get_max_input_len(), vocab_size), jnp.float32),
-            ((1, get_max_output_len(), vocab_size), jnp.float32)])
+      nn.make_rng(),
+      [((1, get_max_input_len(), vocab_size), jnp.float32),
+       ((1, get_max_output_len(), vocab_size), jnp.float32)])
   model = nn.Model(Seq2seq, initial_params)
   return model
 
@@ -251,18 +267,19 @@ def get_examples(num_examples):
   for _ in range(num_examples):
     max_digit = pow(10, FLAGS.max_len_query_digit) - 1
     key = tuple(sorted((random.randint(0, 99), random.randint(0, max_digit))))
-    inputs = '{}+{}'.format(key[0], key[1]).ljust(get_max_input_len())
+    inputs = '{}+{}'.format(key[0], key[1])
     # Preprend output by the decoder's start token.
-    outputs = '=' + str(key[0] + key[1]).ljust(get_max_output_len() - 1)
+    outputs = '=' + str(key[0] + key[1])
     yield (inputs, outputs)
 
 
 def get_batch(batch_size):
   """Returns a batch of example of size @batch_size."""
   inputs, outputs = zip(*get_examples(batch_size))
+
   return {
-      'query': encode_onehot(np.array(inputs)),
-      'answer': encode_onehot(np.array(outputs))
+      'query': encode_onehot(np.array(inputs), max_len=get_max_input_len()),
+      'answer': encode_onehot(np.array(outputs), max_len=get_max_output_len())
   }
 
 
@@ -287,7 +304,7 @@ def compute_metrics(logits, labels):
 
 
 @jax.jit
-def train_step(optimizer, batch):
+def train_step(optimizer, batch, rng):
   """Train one step."""
 
   def loss_fn(model):
@@ -295,7 +312,8 @@ def train_step(optimizer, batch):
     logits = model(batch['query'], batch['answer'])
     loss = cross_entropy_loss(logits, batch['answer'])
     return loss, logits
-  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  with nn.stochastic(rng):
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
   metrics = compute_metrics(logits, batch['answer'])
@@ -314,7 +332,8 @@ def log_decode(question, inferred, golden):
 @jax.jit
 def decode(model, inputs):
   """Decode inputs."""
-  decoder_inputs = encode_onehot(np.array(['='])).squeeze()
+  decoder_inputs = encode_onehot(
+      np.array(['=']), max_len=get_max_input_len()).squeeze()
   decoder_inputs = jnp.tile(decoder_inputs, (inputs.shape[0], 1))
   return model(
       inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
@@ -335,17 +354,17 @@ def decode_batch(model, batch_size):
 def train_model():
   """Train for a fixed number of steps and decode during training."""
   rng = jax.random.PRNGKey(0)
-
-  model = create_model(rng)
-  optimizer = create_optimizer(model, FLAGS.learning_rate)
-  for step in range(FLAGS.num_train_steps):
-    batch = get_batch(FLAGS.batch_size)
-    optimizer, metrics = train_step(optimizer, batch)
-    if step % FLAGS.decode_frequency == 0:
-      logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                   metrics['loss'], metrics['accuracy'] * 100)
-      decode_batch(optimizer.target, 5)
-  return optimizer.target
+  with nn.stochastic(rng):
+    model = create_model()
+    optimizer = create_optimizer(model, FLAGS.learning_rate)
+    for step in range(FLAGS.num_train_steps):
+      batch = get_batch(FLAGS.batch_size)
+      optimizer, metrics = train_step(optimizer, batch, nn.make_rng())
+      if step % FLAGS.decode_frequency == 0:
+        logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
+                     metrics['loss'], metrics['accuracy'] * 100)
+        decode_batch(optimizer.target, 5)
+    return optimizer.target
 
 
 def main(_):
