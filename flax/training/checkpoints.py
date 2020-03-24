@@ -134,7 +134,7 @@ def restore_checkpoint(ckpt_dir, target, step=None, prefix='checkpoint_'):
   if step:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):
-      raise ValueError(f'No matching checkpoint not found: {ckpt_path}')
+      raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
     glob_path = os.path.join(ckpt_dir, f'{prefix}*')
     checkpoint_files = natural_sort(gfile.glob(glob_path))
