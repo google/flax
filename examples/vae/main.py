@@ -121,7 +121,7 @@ def train_step(optimizer, batch):
     loss = jnp.mean(bce_loss + kld_loss)
     return loss, recon_x
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, _), grad = grad_fn(optimizer.target)
+  _, grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
   return optimizer
 
