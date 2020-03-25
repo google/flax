@@ -57,12 +57,16 @@ class CharacterTable(object):
   """Encode/decodes between strings and integer representations."""
 
   @property
-  def eos_id(self):
+  def pad_id(self):
     return 0
 
   @property
-  def pad_id(self):
+  def eos_id(self):
     return 1
+
+  @property
+  def vocab_size(self):
+    return len(self._chars) + 2
 
   def __init__(self, chars):
     self._chars = sorted(set(chars))
@@ -70,6 +74,7 @@ class CharacterTable(object):
         (ch, idx + 2) for idx, ch in enumerate(self._chars))
     self._indices_char = dict(
         (idx + 2, ch) for idx, ch in enumerate(self._chars))
+    self._indices_char[self.pad_id] = '_'
 
   def encode(self, inputs):
     """Encode from string to list of integers."""
@@ -78,10 +83,12 @@ class CharacterTable(object):
 
   def decode(self, inputs):
     """Decode from list of integers to string."""
-    return ''.join(self._indices_char[elem] for elem in inputs)
-
-  def vocab_size(self):
-    return len(self._chars) + 2
+    chars = []
+    for elem in inputs:
+      if elem == self.eos_id:
+        break
+      chars.append(self._indices_char[elem])
+    return ''.join(chars)
 
 
 # We use a global CharacterTable so we don't have pass it around everywhere.
@@ -90,29 +97,30 @@ CTABLE = CharacterTable('0123456789+= ')
 
 def get_max_input_len():
   """Returns the max length of an input sequence."""
-  return FLAGS.max_len_query_digit * 2 + 1
+  return FLAGS.max_len_query_digit * 2 + 2  # includes EOS
 
 
 def get_max_output_len():
   """Returns the max length of an output sequence."""
-  return FLAGS.max_len_query_digit + 2  # includes start token '='.
+  return FLAGS.max_len_query_digit + 3  # includes start token '=' and EOS.
 
 
-@jax.jit
+def onehot(labels, vocab_size):
+  return jnp.array(
+      labels[:, np.newaxis] == jnp.arange(vocab_size), dtype=jnp.float32)
+
+
 def encode_onehot(batch_inputs, max_len):
   """One-hot encode a string input."""
 
-  @jax.vmap
-  def encode_inputs(inputs):
-    inputs = CTABLE.encode(inputs)
-    if len(inputs) > max_len:
-      raise ValueError(f'Sequence too long: {len(inputs)}')
-    inputs = np.pad(inputs, [(0, 0), (0, max_len-len(inputs))], mode='constant')
-    one_hot = np.zeros((inputs.size, CTABLE.vocab_size()))
-    one_hot[np.arange(inputs.size), inputs] = 1
-    return one_hot
+  def encode_str(s):
+    tokens = CTABLE.encode(s)
+    if len(tokens) > max_len:
+      raise ValueError(f'Sequence too long ({len(tokens)}>{max_len}): \'{s}\'')
+    tokens = np.pad(tokens, [(0, max_len-len(tokens))], mode='constant')
+    return onehot(tokens, CTABLE.vocab_size)
 
-  return encode_inputs(batch_inputs)
+  return np.array([encode_str(inp) for inp in batch_inputs])
 
 
 def decode_onehot(batch_inputs):
@@ -124,12 +132,17 @@ def decode_onehot(batch_inputs):
 def get_sequence_lengths(sequence_batch, eos_id=1):
   """Returns the length of each onehot sequence, including the EOS token."""
   eos_row = sequence_batch[:, :, eos_id]
-  eos_idx = jnp.argmax(eos_row == eos_id, axis=-1)  # returns first occurence
+  eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurence
   return jnp.where(
-      eos_row[jnp.arange(eos_row.shape[0]), eos_idx] == eos_id,
+      eos_row[jnp.arange(eos_row.shape[0]), eos_idx],
       eos_idx + 1,
       sequence_batch.shape[1]  # if there is no EOS, use full length
   )
+
+
+def mask_sequences(sequence_batch, lengths):
+  return sequence_batch * (
+      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1]))
 
 
 class Encoder(nn.Module):
@@ -139,16 +152,26 @@ class Encoder(nn.Module):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
     lengths = get_sequence_lengths(inputs, eos_id=eos_id)
-    carry = nn.LSTMCell.initialize_carry(
+
+    lstm = nn.LSTMCell.partial(name='lstm')
+    init_lstm_state = nn.LSTMCell.initialize_carry(
         nn.make_rng(),
         (batch_size,),
         hidden_size)
-    _, outputs = jax_utils.scan_in_dim(
-        nn.LSTMCell.partial(name='lstm'),
-        carry,
-        inputs,
+
+    def encode(carry, x):
+      i, state = carry
+      new_state, y = lstm(state, x)
+      *carried_state, = jnp.where(
+          (i < lengths)[np.newaxis, :, np.newaxis], new_state, state)
+      return (i+1, tuple(carried_state)), y
+
+    (_, final_state), _ = jax_utils.scan_in_dim(
+        encode,
+        init=(0, init_lstm_state),
+        xs=inputs,
         axis=1)
-    return outputs[jnp.arange(batch_size), jnp.maximum(0, lengths-1), :]
+    return final_state
 
 
 class Decoder(nn.Module):
@@ -187,19 +210,22 @@ class Seq2seq(nn.Module):
       eos_id: int, the token signalling when the end of a sequence is reached.
       hidden_size: int, the number of hidden dimensions in the encoder and
         decoder LSTMs.
+    Returns:
+      Array of decoded logits.
     """
     encoder, decoder = self._create_modules(eos_id, hidden_size)
 
     # Encode inputs
-    carry = encoder(encoder_inputs)
+    init_decoder_state = encoder(encoder_inputs)
     # Decode with teacher forcing.
-    _, x = decoder(carry, decoder_inputs[:, :-1])
+    _, logits = decoder(init_decoder_state, decoder_inputs[:, :-1])
 
-    return x
+    return logits
 
   @nn.module_method
   def sample(self,
              encoder_inputs,
+             init_decoder_input,
              max_output_len,
              sample_temperature=1.0,
              eos_id=1,
@@ -209,12 +235,19 @@ class Seq2seq(nn.Module):
     Args:
       encoder_inputs: padded batch of input sequences to encode, shaped
         `[batch_size, max(encoder_input_lengths), vocab_size]`.
+      init_decoder_input: initial input to decoder, shaped
+        `[batch_size, vocab_size]`.
       max_output_len: int, maximum number of steps to decode. If None, decoding
         will continue until all sequences reach EOS.
+      sample_temperature: float, value to divide logits by before computing
+        softmax distribution for sampling.
+      eos_id: int, the token signalling when the end of a sequence is reached.
       hidden_size: int, the number of hidden dimensions in the encoder and
         decoder LSTMs.
+    Returns:
+      Array of predicted tokens.
     """
-    batch_size, _, vocab_size = encoder_inputs.shape
+    _, _, vocab_size = encoder_inputs.shape
     encoder, decoder = self._create_modules(eos_id, hidden_size)
 
     # Encode inputs
@@ -225,7 +258,6 @@ class Seq2seq(nn.Module):
       decoder_carry, next_inputs = carry
       decoder_carry, decoder_outputs = decoder(
           decoder_carry, next_inputs[:, np.newaxis])
-      decoder_outputs = decoder_outputs.squeeze()
       predicted_tokens = jax.random.categorical(
           nn.make_rng(), decoder_outputs / sample_temperature)
       # Onehot encode predictions.
@@ -237,16 +269,16 @@ class Seq2seq(nn.Module):
 
     init_carry = (
         init_decoder_state,  # decoder_carry
-        jnp.zeros((batch_size, vocab_size), dtype=np.float32),  # next_inputs
+        init_decoder_input,  # next_inputs
     )
-    predictions = jax_utils.scan_in_dim(
-        decode_step_fn, init_carry, xs=[None]*max_output_len, axis=1)
-    return predictions
+    _, predictions = jax.lax.scan(
+        decode_step_fn, init_carry, xs=None, length=max_output_len)
+    return predictions.transpose((1, 0, 2))
 
 
 def create_model():
   """Creates a seq2seq model."""
-  vocab_size = CTABLE.vocab_size()
+  vocab_size = CTABLE.vocab_size
   _, initial_params = Seq2seq.init_by_shape(
       nn.make_rng(),
       [((1, get_max_input_len(), vocab_size), jnp.float32),
@@ -278,24 +310,29 @@ def get_batch(batch_size):
   inputs, outputs = zip(*get_examples(batch_size))
 
   return {
-      'query': encode_onehot(np.array(inputs), max_len=get_max_input_len()),
-      'answer': encode_onehot(np.array(outputs), max_len=get_max_output_len())
+      'query': encode_onehot(inputs, max_len=get_max_input_len()),
+      'answer': encode_onehot(outputs, max_len=get_max_output_len())
   }
 
 
-def cross_entropy_loss(logits, labels):
+def cross_entropy_loss(logits, labels, lengths):
   """Returns cross-entropy loss."""
-  return -jnp.mean(jnp.sum(nn.log_softmax(logits) * labels[:, 1:], axis=-1))
+  xe = jnp.sum(nn.log_softmax(logits) * labels, axis=-1)
+  masked_xe = jnp.mean(mask_sequences(xe, lengths))
+  return -masked_xe
 
 
 def compute_metrics(logits, labels):
   """Computes metrics and returns them."""
-  loss = cross_entropy_loss(logits, labels)
+  lengths = get_sequence_lengths(labels)
+  loss = cross_entropy_loss(logits, labels, lengths)
   # Computes sequence accuracy, which is the same as the accuracy during
   # inference, since teacher forcing is irrelevant when all output are correct.
-  labels = labels[:, 1:]  # Remove start token from labels.
-  accuracy = jnp.mean(
-      jnp.all(jnp.argmax(logits, -1) == jnp.argmax(labels, -1), axis=1))
+  token_accuracy = jnp.argmax(logits, -1) == jnp.argmax(labels, -1)
+  sequence_accuracy = (
+      jnp.sum(mask_sequences(token_accuracy, lengths), axis=-1) == lengths
+  )
+  accuracy = jnp.mean(sequence_accuracy)
   metrics = {
       'loss': loss,
       'accuracy': accuracy,
@@ -310,20 +347,19 @@ def train_step(optimizer, batch, rng):
   def loss_fn(model):
     """Compute cross-entropy loss."""
     logits = model(batch['query'], batch['answer'])
-    loss = cross_entropy_loss(logits, batch['answer'])
+    labels = batch['answer'][:, 1:]  # remove '=' start token
+    loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
     return loss, logits
   with nn.stochastic(rng):
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
-  metrics = compute_metrics(logits, batch['answer'])
+  metrics = compute_metrics(logits, batch['answer'][:, 1:])
   return optimizer, metrics
 
 
 def log_decode(question, inferred, golden):
   """Log the given question, inferred query, and correct query."""
-  # Remove last token from inferred string and first token from golden.
-  inferred, golden = inferred[:-1], golden[1:]
   suffix = '(CORRECT)' if inferred == golden else (f'(INCORRECT) '
                                                    f'correct={golden}')
   logging.info('DECODE: %s = %s %s', question, inferred, suffix)
@@ -332,17 +368,16 @@ def log_decode(question, inferred, golden):
 @jax.jit
 def decode(model, inputs):
   """Decode inputs."""
-  decoder_inputs = encode_onehot(
-      np.array(['=']), max_len=get_max_input_len()).squeeze()
-  decoder_inputs = jnp.tile(decoder_inputs, (inputs.shape[0], 1))
-  return model(
-      inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
+  init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
+  init_decoder_inputs = jnp.tile(init_decoder_input, (inputs.shape[0], 1))
+  return model.sample(
+      inputs, init_decoder_inputs, max_output_len=get_max_output_len())
 
 
 def decode_batch(model, batch_size):
   """Decode and log results for a batch."""
   batch = get_batch(batch_size)
-  inputs, outputs = batch['query'], batch['answer']
+  inputs, outputs = batch['query'], batch['answer'][:, 1:]
   inferred = decode(model, inputs)
   questions = decode_onehot(inputs)
   infers = decode_onehot(inferred)
