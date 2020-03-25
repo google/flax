@@ -131,7 +131,7 @@ def decode_onehot(batch_inputs):
 
 
 def get_sequence_lengths(sequence_batch, eos_id=1):
-  """Returns the length of each onehot sequence, including the EOS token."""
+  """Returns the length of each one-hot sequence, including the EOS token."""
   eos_row = sequence_batch[:, :, eos_id]
   eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurence
   return jnp.where(
@@ -261,7 +261,7 @@ class Seq2seq(nn.Module):
           decoder_carry, next_inputs[:, np.newaxis])
       predicted_tokens = jax.random.categorical(
           nn.make_rng(), decoder_outputs / sample_temperature)
-      # Onehot encode predictions.
+      # One-hot encode predictions.
       next_inputs = jnp.array(
           predicted_tokens == jnp.arange(vocab_size),
           dtype=jnp.float32)
