@@ -58,7 +58,7 @@ if test -f "${howto_path}";  then
 fi
 
 # Add all untracked files. After this there are no untracked changes anymore.
-git add *
+git add .
 # Create diff for both unstaged and staged changes. Add the diff to a temporal
 # location to ensure it won't be remove when we clean the changes.
 tmp_path=$(mktemp)
