@@ -19,14 +19,12 @@
 import functools
 
 from absl.testing import absltest
-
-from flax import nn
-from flax.examples.seq2seq import train
-
 import jax
 from jax import random
-
 import numpy as np
+
+from flax import nn
+import train
 
 jax.config.parse_flags_with_absl()
 
