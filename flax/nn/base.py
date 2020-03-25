@@ -139,25 +139,23 @@ def module_method(fn):
 
     class AutoEncoder(nn.Module):
 
-      def apply(self, x, **hparams):
-        encoder, decoder = self._create_modules(**hparams)
+      def __init__(self, encoder_features, decoder_features):
+        self.encoder = nn.Dense.shared(features=encoder_features, name='encoder')
+        self.decoder = nn.Dense.shared(features=decoder_features, name='decoder')
 
-        return decoder(encoder(x))
+      def apply(self, x):
+        z = self.encode(x)
+        return self.decode(z)
 
       @nn.module_method
-      def encode(self, x, **hparams):
+      def encode(self, x):
         encoder, _ = self._create_modules(**hparams)
-        return encoder(x)
+        return self.encoder(x)
 
       @nn.module_method
-      def decode(self, x, **hparams):
+      def decode(self, x):
         _, decoder = self._create_modules(**hparams)
-        return decoder(x)
-
-      def _create_modules(self, encoder_features, decoder_features):
-        encoder = nn.Dense.shared(features=encoder_features, name='encoder')
-        decoder = nn.Dense.shared(features=decoder_features, name='decoder')
-        return encoder, decoder
+        return self.decoder(x)
 
   A module method can be called on A Model instance directly::
 
@@ -216,6 +214,8 @@ class _ModuleMeta(abc.ABCMeta):
   def __init__(cls, name, bases, attrs):
     super(_ModuleMeta, cls).__init__(name, bases, attrs)
     apply_fn = cls.apply
+    init_fn = cls.__init__
+    init_doc = init_fn.__doc__
     apply_doc = apply_fn.__doc__
     cls.__doc__ = apply_doc
     apply_params = _fn_parameters(apply_fn)
@@ -233,12 +233,14 @@ class _ModuleMeta(abc.ABCMeta):
       def wrapper(class_, *args, **kwargs):
         super_fn = getattr(super(cls, class_), name)
         return super_fn(*args, **kwargs)
-      wrapper.__doc__ = f'''{orig_fn.__doc__}
-
-      Apply docstring:
-
-      {apply_doc}
-      '''
+      doc_str = orig_fn.__doc__
+      if apply_doc:
+        doc_str += '\n\nApply documention:\n\n'
+        doc_str += apply_doc
+      if init_doc:
+        doc_str += '\n\nInit documentation:\n\n'
+        doc_str += init_doc
+      wrapper.__doc__ = doc_str
       base_params = tuple(x for x in _fn_parameters(orig_fn)
                           if x.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD)
       new_params = base_params + apply_params[1:]
@@ -261,6 +263,9 @@ def _fold_in_str(rng, data):
 
 class Module(metaclass=_ModuleMeta):
   """Functional modules."""
+
+  def __init__(self):
+    pass
 
   def __new__(cls, *args, name=None, **kwargs):
     if not _module_stack:
@@ -608,6 +613,13 @@ class Module(metaclass=_ModuleMeta):
   @classmethod
   def constructor_args(cls):
     parameters = _fn_parameters(cls.__init__)[1:]
+    for param in parameters:
+      allowed_types = (
+          inspect.Parameter.KEYWORD_ONLY,
+          inspect.Parameter.POSITIONAL_OR_KEYWORD,
+      )
+      if param.kind not in allowed_types:
+        raise ValueError('__init__ should only define keyword arguments.')
     return [p.name for p in parameters]
 
   @classmethod
