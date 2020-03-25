@@ -105,9 +105,10 @@ def get_max_output_len():
   return FLAGS.max_len_query_digit + 3  # includes start token '=' and EOS.
 
 
-def onehot(labels, vocab_size):
+def onehot(sequence, vocab_size):
+  """One-hot encode a single sequence of integers."""
   return jnp.array(
-      labels[:, np.newaxis] == jnp.arange(vocab_size), dtype=jnp.float32)
+      sequence[:, np.newaxis] == jnp.arange(vocab_size), dtype=jnp.float32)
 
 
 def encode_onehot(batch_inputs, max_len):
