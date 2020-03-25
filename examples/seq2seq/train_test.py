@@ -110,5 +110,6 @@ class TrainTest(absltest.TestCase):
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
 
+
 if __name__ == '__main__':
   absltest.main()
