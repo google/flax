@@ -179,13 +179,32 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
   """LSTM decoder."""
 
-  def apply(self, carry, inputs):
+  def apply(self, init_state, inputs, teacher_force=False,
+            sample_temperature=1.0):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
-    carry, outputs = jax_utils.scan_in_dim(
-        nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
-    x = nn.Dense(outputs, features=vocab_size, name='dense')
-    return carry, x
+    lstm_cell = nn.LSTMCell.partial(name='lstm')
+    projection = nn.Dense.partial(features=vocab_size, name='projection')
+
+    def decode_step_fn(carry, x):
+      lstm_state, last_prediction = carry
+      if not teacher_force:
+        x = last_prediction
+      lstm_state, y = lstm_cell(lstm_state, x)
+      logits = projection(y)
+      predicted_tokens = jax.random.categorical(
+          nn.make_rng(), logits / sample_temperature)
+      prediction = onehot(predicted_tokens, vocab_size)
+      return (lstm_state, prediction), (logits, prediction)
+
+    init_carry = (
+        init_state,  # lstm_state
+        inputs[:, 0],  # last output
+    )
+
+    _, (logits, predictions) = jax_utils.scan_in_dim(
+        decode_step_fn, init_carry, xs=inputs, axis=1)
+    return logits, predictions
 
 
 class Seq2seq(nn.Module):
@@ -200,6 +219,8 @@ class Seq2seq(nn.Module):
   def apply(self,
             encoder_inputs,
             decoder_inputs,
+            teacher_force=True,
+            sample_temperature=1.0,
             eos_id=1,
             hidden_size=512):
     """Run the seq2seq model with teacher forcing.
@@ -209,6 +230,15 @@ class Seq2seq(nn.Module):
         `[batch_size, max(encoder_input_lengths), vocab_size]`.
       decoder_inputs: padded batch of expected decoded sequences for teacher
         forcing, shaped `[batch_size, max(decoder_inputs_length), vocab_size]`.
+        When sampling (i.e., `teacher_force = False`), the initial time step is
+        forced into the model and samples are used for the following inputs. The
+        second dimension of this tensor determines how many steps will be
+        decoded, regradless of the value of `teacher_force`.
+      teacher_force: bool, whether to use `decoder_inputs` as input to the
+        decoder at every step. If False, only the first input is used, followed
+        by samples taken from the previous output logits.
+      sample_temperature: float, a value to dvide the logits by before taking
+        their softmax and sampling during non-teacher forced decoding.
       eos_id: int, the token signalling when the end of a sequence is reached.
       hidden_size: int, the number of hidden dimensions in the encoder and
         decoder LSTMs.
@@ -219,63 +249,12 @@ class Seq2seq(nn.Module):
 
     # Encode inputs
     init_decoder_state = encoder(encoder_inputs)
-    # Decode with teacher forcing.
-    _, logits = decoder(init_decoder_state, decoder_inputs[:, :-1])
+    # Decode outputs.
+    logits, predictions = decoder(
+        init_decoder_state, decoder_inputs[:, :-1],
+        teacher_force=teacher_force, sample_temperature=sample_temperature)
 
-    return logits
-
-  @nn.module_method
-  def sample(self,
-             encoder_inputs,
-             init_decoder_input,
-             max_output_len,
-             sample_temperature=1.0,
-             eos_id=1,
-             hidden_size=512):
-    """Run the seq2seq model with sampling.
-
-    Args:
-      encoder_inputs: padded batch of input sequences to encode, shaped
-        `[batch_size, max(encoder_input_lengths), vocab_size]`.
-      init_decoder_input: initial input to decoder, shaped
-        `[batch_size, vocab_size]`.
-      max_output_len: int, maximum number of steps to decode. If None, decoding
-        will continue until all sequences reach EOS.
-      sample_temperature: float, value to divide logits by before computing
-        softmax distribution for sampling.
-      eos_id: int, the token signalling when the end of a sequence is reached.
-      hidden_size: int, the number of hidden dimensions in the encoder and
-        decoder LSTMs.
-    Returns:
-      Array of predicted tokens.
-    """
-    _, _, vocab_size = encoder_inputs.shape
-    encoder, decoder = self._create_modules(eos_id, hidden_size)
-
-    # Encode inputs
-    init_decoder_state = encoder(encoder_inputs)
-
-    # Use autoregressive decoding, sampling predictions at each step.
-    def decode_step_fn(carry, unused_x):
-      decoder_carry, next_inputs = carry
-      decoder_carry, decoder_outputs = decoder(
-          decoder_carry, next_inputs[:, np.newaxis])
-      predicted_tokens = jax.random.categorical(
-          nn.make_rng(), decoder_outputs / sample_temperature)
-      # One-hot encode predictions.
-      next_inputs = jnp.array(
-          predicted_tokens == jnp.arange(vocab_size),
-          dtype=jnp.float32)
-
-      return (decoder_carry, next_inputs), next_inputs
-
-    init_carry = (
-        init_decoder_state,  # decoder_carry
-        init_decoder_input,  # next_inputs
-    )
-    _, predictions = jax.lax.scan(
-        decode_step_fn, init_carry, xs=None, length=max_output_len)
-    return predictions.transpose((1, 0, 2))
+    return logits, predictions
 
 
 def create_model():
@@ -348,7 +327,7 @@ def train_step(optimizer, batch, rng):
 
   def loss_fn(model):
     """Compute cross-entropy loss."""
-    logits = model(batch['query'], batch['answer'])
+    logits, _ = model(batch['query'], batch['answer'])
     labels = batch['answer'][:, 1:]  # remove '=' start token
     loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
     return loss, logits
@@ -371,9 +350,10 @@ def log_decode(question, inferred, golden):
 def decode(model, inputs):
   """Decode inputs."""
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
-  init_decoder_inputs = jnp.tile(init_decoder_input, (inputs.shape[0], 1))
-  return model.sample(
-      inputs, init_decoder_inputs, max_output_len=get_max_output_len())
+  init_decoder_inputs = jnp.tile(init_decoder_input,
+                                 (inputs.shape[0], get_max_output_len(), 1))
+  _, predictions = model(inputs, init_decoder_inputs, teacher_force=False)
+  return predictions
 
 
 def decode_batch(model, batch_size):
