@@ -668,7 +668,10 @@ class _LARSParamState:
 
 
 class LARS(OptimizerDef):
-  """Layerwise adaptive rate scaling (LARS) optimizer."""
+  """Layerwise adaptive rate scaling (LARS) optimizer.
+  
+  See https://arxiv.org/abs/1708.03888
+  """
 
   def __init__(self, learning_rate=None, beta=0.9, weight_decay=0,
                trust_coefficient=0.001, eps=0, nesterov=False):
@@ -734,7 +737,10 @@ class _LAMBParamState:
 
 
 class LAMB(OptimizerDef):
-  """Layerwise adaptive moments for batch (LAMB) optimizer."""
+  """Layerwise adaptive moments for batch (LAMB) optimizer.
+  
+  See https://arxiv.org/abs/1904.00962
+  """
 
   def __init__(self, learning_rate=None, beta1=0.9, beta2=0.999, weight_decay=0,
                eps=1e-6):
