@@ -83,6 +83,12 @@ class CheckpointsTest(absltest.TestCase):
     new_object = checkpoints.restore_checkpoint(
         tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object1)
+    new_object = checkpoints.restore_checkpoint(
+        tmp_dir, test_object0, step=3, prefix='test_')
+    jtu.check_eq(new_object, test_object2)
+    with self.assertRaises(ValueError):
+      checkpoints.restore_checkpoint(
+          tmp_dir, test_object0, step=5, prefix='test_')
 
   def test_save_restore_checkpoints_w_float_steps(self):
     tmp_dir = self.create_tempdir().full_path
