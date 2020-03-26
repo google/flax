@@ -10,4 +10,7 @@ the environments used by contributors and maintainers.
 2. Install the `Remote - Containers` extension within VSCode.
 3. Copy the `.devcontainer` folder to the root of your workspace folder.
 4. Make sure the source code of flax is checked out in `flax/`.
-5. Re-open the folder workspace using the devcontainer extension.
+5. Re-open the folder workspace using the remote containers extension.
+   VSCode should recommend this action in a popup. Alternatively,
+   use the green button in the bottom left container to control the
+   remote extension.
