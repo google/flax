@@ -30,7 +30,7 @@ def multinomial(rng, logits):
     logits: array with unnormalized log-probabilities in last axis.
 
   Returns:
-    array with sampled categories in last axis.
+    Array with sampled categories in last axis.
   """
   probs = jax.nn.softmax(logits)
   cum_probs = jnp.cumsum(probs, axis=-1)

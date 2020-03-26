@@ -46,7 +46,7 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
     'model_dir', default=None,
-    help='Directory to store model data')
+    help='Directory to store model data.')
 
 flags.DEFINE_string(
     'data_dir', default=None,
@@ -74,7 +74,7 @@ flags.DEFINE_float(
 
 flags.DEFINE_float(
     'weight_decay', default=1e-1,
-    help='Decay factor for AdamW style weight decay.')
+    help='Decay factor for AdamW-style weight decay.')
 
 flags.DEFINE_integer(
     'max_target_length', default=512,
@@ -90,7 +90,7 @@ flags.DEFINE_float(
 
 flags.DEFINE_integer(
     'sampling_top_k', default=20,
-    help='Top k cutoff for logit sampling, if 0 no top-k cutoff used.')
+    help='Top k cutoff for logit sampling. If 0 then no top-k cutoff is used.')
 
 flags.DEFINE_string(
     'prompt', default='I love to ',
@@ -147,7 +147,7 @@ def create_learning_rate_scheduler(
     decay_factor=0.5,
     steps_per_decay=20000,
     steps_per_cycle=100000):
-  """creates learning rate schedule.
+  """Creates learning rate schedule.
 
   Interprets factors in the factors string which can consist of:
   * constant: interpreted as the constant value,
@@ -165,7 +165,7 @@ def create_learning_rate_scheduler(
     steps_per_cycle: Steps per cycle when using cosine decay.
 
   Returns:
-    a function learning_rate(step): float -> {'learning_rate': float}, the
+    A function learning_rate(step): float -> {'learning_rate': float}, the
     step-dependent lr.
   """
   factors = [n.strip() for n in factors.split('*')]
@@ -380,7 +380,7 @@ def main(argv):
 
   model, cache_def = create_model(init_rng, input_shape, transformer_lm_kwargs)
   optimizer = create_optimizer(model, learning_rate)
-  del model  # don't keep a copy of the initial model
+  del model  # Don't keep a copy of the initial model.
   start_step = 0
   if FLAGS.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
@@ -433,7 +433,7 @@ def main(argv):
         for key, val in summary.items():
           train_summary_writer.scalar(key, val, step)
         train_summary_writer.flush()
-      # reset metric accumulation for next evaluation cycle.
+      # Reset metric accumulation for next evaluation cycle.
       metrics_all = []
 
       # Eval Metrics
