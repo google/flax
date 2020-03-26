@@ -4,7 +4,7 @@ Trains a Transformer-based model (Vaswani *et al.*, 2017) on the One Billion Wor
 This example uses linear learning rate warmup and inverse square root learning rate schedule.
 
 ### Requirements
-* TensorFlow dataset `lm1b/subwords32k` will be downloaded and prepared automatically, if necessary
+* TensorFlow dataset `lm1b/subwords32k` will be downloaded and prepared automatically, if necessary.
 
 ### Supported setups
 The model should run with other configurations and hardware, but explicitely tested on the following.
