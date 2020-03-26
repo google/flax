@@ -233,13 +233,13 @@ class Seq2seq(nn.Module):
         When sampling (i.e., `teacher_force = False`), the initial time step is
         forced into the model and samples are used for the following inputs. The
         second dimension of this tensor determines how many steps will be
-        decoded, regradless of the value of `teacher_force`.
+        decoded, regardless of the value of `teacher_force`.
       teacher_force: bool, whether to use `decoder_inputs` as input to the
         decoder at every step. If False, only the first input is used, followed
         by samples taken from the previous output logits.
-      sample_temperature: float, a value to dvide the logits by before taking
+      sample_temperature: float, a value to divide the logits by before taking
         their softmax and sampling during non-teacher forced decoding.
-      eos_id: int, the token signalling when the end of a sequence is reached.
+      eos_id: int, the token signaling when the end of a sequence is reached.
       hidden_size: int, the number of hidden dimensions in the encoder and
         decoder LSTMs.
     Returns:
