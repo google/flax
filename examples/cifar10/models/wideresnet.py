@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Wide Resnet Model for CIFAR-10 image classification."""
+"""Wide ResNet model for CIFAR-10 image classification."""
 
 from flax import nn
 import jax

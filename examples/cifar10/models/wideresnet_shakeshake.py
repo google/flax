@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Wide Resnet Model with shake-shake regularization."""
+"""Wide ResNet model with shake-shake regularization."""
 
 from flax import nn
 from models import utils
