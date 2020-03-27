@@ -18,7 +18,7 @@ cat << EOF
 Awesome, you are going to create a new FLAX HOWTO!
 
 More details about HOWTOs can be found here:
-https://github.com/marcvanzee/flax/blob/prerelease/howtos/README.md
+https://github.com/google/flax/blob/master/howtos/README.md
 
 The following files are edited/added:
 

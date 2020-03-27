@@ -2,7 +2,7 @@ name: Apply HOWTO diffs to branches
 on: 
   push:
     branches:
-      - prerelease
+      - master
 
 jobs:
   build:
@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@master
       with:
-        ref: prerelease
+        ref: master
     - name: Apply diffs to branches
       run: ./howtos/scripts/apply_howto_diffs.sh
       env:

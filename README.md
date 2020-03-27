@@ -111,10 +111,10 @@ def DenseLayer(x, features):
 
 You will need Python 3.5 or later.
 
-Now install `flax` from Github:
+Now install `flax` from PyPi:
 
 ```
-> pip install git+https://github.com/google-research/flax.git@prerelease
+> pip install flax
 ```
 
 ## GPU accelerated installation
@@ -125,10 +125,10 @@ If they are not already installed, you will need to install
 [CUDA](https://developer.nvidia.com/cuda-downloads) and
 [CuDNN](https://developer.nvidia.com/cudnn) runtimes.
 
-Now install `flax` from Github:
+Now install `flax` from PyPi:
 
 ```
-> pip install git+https://github.com/google-research/flax.git@prerelease
+> pip install flax
 ```
 
 
