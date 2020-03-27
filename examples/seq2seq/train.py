@@ -132,6 +132,7 @@ def decode_onehot(batch_inputs):
 
 def get_sequence_lengths(sequence_batch, eos_id=1):
   """Returns the length of each one-hot sequence, including the EOS token."""
+    # sequence_batch.shape = (batch_size, seq_length, vocab_size)
   eos_row = sequence_batch[:, :, eos_id]
   eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurence
   return jnp.where(
