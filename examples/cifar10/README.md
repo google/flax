@@ -17,12 +17,15 @@ The model should run with other configurations and hardware, but explicitly test
 
 #### Wide ResNet: 26 layers, 6x width, Shake-Shake regularization (Gastaldi, 2017)
 | Hardware | Epochs | Learning rate | Training time | Error rate | TensorBoard.dev |
+| --- | --- | --- | --- | --- | --- |
 | 1 x Nvidia V100 (16GB) | 200 | Piece-wise constant | 3h 38m | 3.43% | [2020-03-22](https://tensorboard.dev/experiment/dJc9e4k1R5mC0DPVZyYrpg/) |
 | 8 x Nvidia V100 (16GB) | 200 | Piece-wise constant | 54m | 3.39% | [2020-03-26](https://tensorboard.dev/experiment/l2CPAqpnTlCjjZKbnuOomg/) |
 | 1 x Nvidia V100 (16GB) | 1800 | Cosine | 1d 9h 25m | 2.97% | [2020-03-22](https://tensorboard.dev/experiment/aXyhYX2oSxKH5lIlj4Ao5g/) |
 | 8 x Nvidia V100 (16GB) | 1800 | Cosine | 8h 5m | 2.82% | [2020-03-26](https://tensorboard.dev/experiment/kq303ri1RHygWxb5YrLp1Q/) |
 
 #### PyramidNet, Shake-drop regularization (Han *et al.*, 2017; Yamada *et al.*, 2018)
+| Hardware | Epochs | Learning rate | Training time | Error rate | TensorBoard.dev |
+| --- | --- | --- | --- | --- | --- |
 | 8 x Nvidia V100 (16GB) | 300 | Piece-wise constant | 6h 41m | 3.25% | [2020-03-24](https://tensorboard.dev/experiment/OpZLDnVjRhmJKXq62RoaUQ/) |
 | 8 x Nvidia V100 (16GB) | 1800 | Cosine | 1d 16h 27m | 2.75% | [2020-03-24](https://tensorboard.dev/experiment/MNyJ2ixAROmFlVnbUxp29w/) |
 
