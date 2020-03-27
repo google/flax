@@ -1,4 +1,4 @@
-# FLAX Examples
+# Flax Examples
 
 This folder contains a collection of examples of implementations of various architectures in machine learning.
 In collecting these examples, we try to cover all key areas in machine learning, without having too much duplication.
