@@ -150,29 +150,34 @@ def mask_sequences(sequence_batch, lengths):
 
 
 class Encoder(nn.Module):
-  """LSTM encoder, returning final state."""
+  """LSTM encoder, returning state after EOS is input."""
 
   def apply(self, inputs, eos_id=1, hidden_size=512):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
-    lengths = get_sequence_lengths(inputs, eos_id=eos_id)
 
-    lstm = nn.LSTMCell.partial(name='lstm')
+    lstm_cell = nn.LSTMCell.partial(name='lstm')
     init_lstm_state = nn.LSTMCell.initialize_carry(
         nn.make_rng(),
         (batch_size,),
         hidden_size)
 
-    def encode(carry, x):
-      i, state = carry
-      new_state, y = lstm(state, x)
-      *carried_state, = jnp.where(
-          (i < lengths)[np.newaxis, :, np.newaxis], new_state, state)
-      return (i+1, tuple(carried_state)), y
+    def encode_step_fn(carry, x):
+      lstm_state, is_eos = carry
+      new_lstm_state, y = lstm_cell(lstm_state, x)
+      # Pass forward the previous state if EOS has already been reached.
+      def select_carried_state(new_state, old_state):
+        return jnp.where(is_eos[:, np.newaxis], old_state, new_state)
+      # LSTM state is a tuple (c, h).
+      carried_lstm_state = tuple(
+          select_carried_state(*s) for s in zip(new_lstm_state, lstm_state))
+      # Update `is_eos`.
+      is_eos = jnp.logical_or(is_eos, x[:, eos_id])
+      return (carried_lstm_state, is_eos), y
 
-    (_, final_state), _ = jax_utils.scan_in_dim(
-        encode,
-        init=(0, init_lstm_state),
+    (final_state, _), _ = jax_utils.scan_in_dim(
+        encode_step_fn,
+        init=(init_lstm_state, jnp.zeros(batch_size, dtype=np.bool)),
         xs=inputs,
         axis=1)
     return final_state
@@ -197,13 +202,11 @@ class Decoder(nn.Module):
       prediction = onehot(predicted_tokens, vocab_size)
       return (lstm_state, prediction), (logits, prediction)
 
-    init_carry = (
-        init_state,  # lstm_state
-        inputs[:, 0],  # last output
-    )
-
     _, (logits, predictions) = jax_utils.scan_in_dim(
-        decode_step_fn, init_carry, xs=inputs, axis=1)
+        decode_step_fn,
+        init=(init_state, inputs[:, 0]),  # lstm_state, last_prediction
+        xs=inputs,
+        axis=1)
     return logits, predictions
 
 
