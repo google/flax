@@ -43,8 +43,8 @@ fi
 
 printf "\nPlease provide a name for the howto:\n"
 
-read -p "howto-" howto_name
-howto_name="howto-${howto_name}"
+read -p "howto/" howto_name
+howto_name="${howto_name}"
 howto_path="${howto_diff_path}/${howto_name}.diff"
 
 # Overwrite the existing diff 
