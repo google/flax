@@ -36,6 +36,8 @@ install_requires = [
 ]
 
 tests_require = [
+    "pytest",
+    "tensorflow_datasets",
 ]
 
 setup(
