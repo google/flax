@@ -72,6 +72,13 @@ def _masters():
   return stack.downward[::-1] + stack.upward
 
 
+def _trace_level(master):
+  """Returns the level of the trace of -infinity if it is None."""
+  if master:
+    return master.level
+  return float('-inf')
+
+
 def _current_trace():
   """Returns the innermost Jax tracer."""
   tracers = _masters()

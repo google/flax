@@ -34,8 +34,17 @@ class _PRNGFrame:
   def __init__(self, rng):
     self.base_rng = rng
     self.counter = 0
+    self.level = utils._trace_level(utils._current_trace())
 
   def make_rng(self):
+    # when calling make_rng within a jax transformations
+    # the rng could be implicitly reused (eg. in jit, vmap, scan, ...).
+    # We raise an error to avoid silent errors.
+    level = utils._trace_level(utils._current_trace())
+    if level > self.level:
+      raise ValueError('stochastic operations are not allowed when the'
+                       ' stochastic context is created outside of the'
+                       ' current Jax transformation')
     self.counter += 1
     return random.fold_in(self.base_rng, self.counter)
 
