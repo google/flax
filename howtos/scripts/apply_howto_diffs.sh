@@ -20,14 +20,14 @@ git config user.email "actions@users.noreply.github.com"
 # Fetch all branches.
 git fetch --all
 
-# Delete all remote branches starting with "howto-". This ensures we clean up
+# Delete all remote branches starting with "howto/". This ensures we clean up
 # HOWTO branches for which the diff files have been deleted.
-for b in $(git branch -r | grep origin/howto); do
-  branch=${b##*/}  # Strip "origin/" prefix.
+# The sed command strips the 'origin/' prefix.
+for b in $(git branch -r | grep origin/howto/ | sed 's/origin\///'); do
   git push origin --delete $branch
 done
 
-# Get names of howto's from diff files.
+# Get names of howtos from diff files.
 cd $howto_diff_path
 howtos=$(ls *.diff | sed -e 's/.diff//')
 cd $top_dir
@@ -35,15 +35,16 @@ cd $top_dir
 printf "Applying HOWTO diffs to branches..\n"
 
 for howto in $howtos; do
-  git checkout -b $howto
+  howto_branch="howto/${howto}"
+  git checkout -b $howto_branch
   diff_file="${howto_diff_path}/${howto}.diff"
   if [[ -n $(git apply --check "${diff_file}") ]]; then
-    printf "\nERROR: Cannot apply ${howto}! ==> PLEASE FIX HOWTO\n"
+    printf "\nERROR: Cannot apply howto ${howto}! ==> PLEASE FIX HOWTO\n"
     exit 1
   fi
   git apply $diff_file
-  git commit -am "Added howto branch ${howto}"
-  git push -u origin $howto
+  git commit -am "Added howto branch ${howto_branch}"
+  git push -u origin $howto_branch
   # Make sure to checkout the master branch, otherwise the next diff branch
   # will be branched off of the current diff branch.
   git checkout $master_branch
