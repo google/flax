@@ -130,7 +130,7 @@ def decode_onehot(batch_inputs):
   return np.array(list(map(decode_inputs, batch_inputs)))
 
 
-def get_sequence_lengths(sequence_batch, eos_id=1):
+def get_sequence_lengths(sequence_batch, eos_id=CTABLE.eos_id):
   """Returns the length of each one-hot sequence, including the EOS token."""
     # sequence_batch.shape = (batch_size, seq_length, vocab_size)
   eos_row = sequence_batch[:, :, eos_id]
@@ -180,8 +180,7 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
   """LSTM decoder."""
 
-  def apply(self, init_state, inputs, teacher_force=False,
-            sample_temperature=1.0):
+  def apply(self, init_state, inputs, teacher_force=False):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
     lstm_cell = nn.LSTMCell.partial(name='lstm')
@@ -193,8 +192,7 @@ class Decoder(nn.Module):
         x = last_prediction
       lstm_state, y = lstm_cell(lstm_state, x)
       logits = projection(y)
-      predicted_tokens = jax.random.categorical(
-          nn.make_rng(), logits / sample_temperature)
+      predicted_tokens = jax.random.categorical(nn.make_rng(), logits)
       prediction = onehot(predicted_tokens, vocab_size)
       return (lstm_state, prediction), (logits, prediction)
 
@@ -221,7 +219,6 @@ class Seq2seq(nn.Module):
             encoder_inputs,
             decoder_inputs,
             teacher_force=True,
-            sample_temperature=1.0,
             eos_id=1,
             hidden_size=512):
     """Run the seq2seq model with teacher forcing.
@@ -238,8 +235,6 @@ class Seq2seq(nn.Module):
       teacher_force: bool, whether to use `decoder_inputs` as input to the
         decoder at every step. If False, only the first input is used, followed
         by samples taken from the previous output logits.
-      sample_temperature: float, a value to divide the logits by before taking
-        their softmax and sampling during non-teacher forced decoding.
       eos_id: int, the token signaling when the end of a sequence is reached.
       hidden_size: int, the number of hidden dimensions in the encoder and
         decoder LSTMs.
@@ -252,17 +247,18 @@ class Seq2seq(nn.Module):
     init_decoder_state = encoder(encoder_inputs)
     # Decode outputs.
     logits, predictions = decoder(
-        init_decoder_state, decoder_inputs[:, :-1],
-        teacher_force=teacher_force, sample_temperature=sample_temperature)
+        init_decoder_state,
+        decoder_inputs[:, :-1],
+        teacher_force=teacher_force)
 
     return logits, predictions
 
 
-def create_model():
+def create_model(rng):
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size
-  _, initial_params = Seq2seq.init_by_shape(
-      nn.make_rng(),
+  _, initial_params = Seq2seq.partial(eos_id=CTABLE.eos_id).init_by_shape(
+      rng,
       [((1, get_max_input_len(), vocab_size), jnp.float32),
        ((1, get_max_output_len(), vocab_size), jnp.float32)])
   model = nn.Model(Seq2seq, initial_params)
@@ -373,7 +369,7 @@ def train_model():
   """Train for a fixed number of steps and decode during training."""
   rng = jax.random.PRNGKey(0)
   with nn.stochastic(rng):
-    model = create_model()
+    model = create_model(nn.make_rng())
     optimizer = create_optimizer(model, FLAGS.learning_rate)
     for step in range(FLAGS.num_train_steps):
       batch = get_batch(FLAGS.batch_size)
