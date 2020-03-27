@@ -279,6 +279,22 @@ class Module(metaclass=_ModuleMeta):
 
   @abc.abstractmethod
   def apply(self, *args, **kwargs):
+    """Override to implement how a module is initialized and called.
+
+    Within `apply`, you can generally do two things:
+
+    * Call `self.param(name, shape, initializer)` to declare
+      parameters for this module.
+
+    * Call `MySubModule(...)` to instantiate and apply submodules.
+
+    `apply` isn't expected to be a pure function, due to the inlined
+    parameter declarations. But you can access the logic in `apply`
+    via two purely functional paths: `init` or `init_by_shape` call
+    `apply` in "init mode", returning a nested dictionary of
+    initialized parameters. And `call(params, ...)` calls `apply` in
+    "call mode", taking in a nested dictionary of parameters.
+    """
     pass
 
   @classmethod

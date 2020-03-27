@@ -10,7 +10,7 @@ Core: Module abstraction
 ------------------------
 
 .. autoclass:: Module
-   :members: init, init_by_shape, partial, shared, apply, param, get_param, state, is_stateful, is_initializing
+   :members: init, init_by_shape, call, partial, shared, apply, param, get_param, state, is_stateful, is_initializing
 
 Core: Additional
 ------------------------
