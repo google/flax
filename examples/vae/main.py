@@ -32,18 +32,18 @@ from utils import save_image
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-  'learning_rate', default=1e-3,
-  help=('The leanring rate for the Adam optimizer')
+    'learning_rate', default=1e-3,
+    help=('The leanring rate for the Adam optimizer')
 )
 
 flags.DEFINE_integer(
-  'batch_size', default=128,
-  help=('Batch size for training')
+    'batch_size', default=128,
+    help=('Batch size for training')
 )
 
 flags.DEFINE_integer(
-  'num_epochs', default=10,
-  help=('Number of training epochs')
+    'num_epochs', default=10,
+    help=('Number of training epochs')
 )
 
 
