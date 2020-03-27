@@ -100,7 +100,7 @@ class TrainTest(absltest.TestCase):
     rng = random.PRNGKey(0)
 
     with nn.stochastic(rng):
-      model = train.create_model()
+      model = train.create_model(nn.make_rng())
       optimizer = train.create_optimizer(model, 0.003)
       optimizer, train_metrics = train.train_step(
           optimizer, batch, nn.make_rng())

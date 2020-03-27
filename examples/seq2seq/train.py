@@ -132,9 +132,10 @@ def decode_onehot(batch_inputs):
 
 def get_sequence_lengths(sequence_batch, eos_id=CTABLE.eos_id):
   """Returns the length of each one-hot sequence, including the EOS token."""
-    # sequence_batch.shape = (batch_size, seq_length, vocab_size)
+  # sequence_batch.shape = (batch_size, seq_length, vocab_size)
   eos_row = sequence_batch[:, :, eos_id]
   eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurence
+  # `eos_idx` is 0 if EOS is not present, so we use full length in that case.
   return jnp.where(
       eos_row[jnp.arange(eos_row.shape[0]), eos_idx],
       eos_idx + 1,
@@ -321,18 +322,18 @@ def compute_metrics(logits, labels):
 @jax.jit
 def train_step(optimizer, batch, rng):
   """Train one step."""
+  labels = batch['answer'][:, 1:]  # remove '=' start token
 
   def loss_fn(model):
     """Compute cross-entropy loss."""
     logits, _ = model(batch['query'], batch['answer'])
-    labels = batch['answer'][:, 1:]  # remove '=' start token
     loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
     return loss, logits
   with nn.stochastic(rng):
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
-  metrics = compute_metrics(logits, batch['answer'][:, 1:])
+  metrics = compute_metrics(logits, labels)
   return optimizer, metrics
 
 
