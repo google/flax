@@ -204,6 +204,7 @@ class MultiHeadDotProductAttention(base.Module):
             num_heads,
             dtype=jnp.float32,
             qkv_features=None,
+            out_features=None,
             attention_axis=None,
             causal_mask=False,
             padding_mask=None,
@@ -237,6 +238,7 @@ class MultiHeadDotProductAttention(base.Module):
         should be divisible by the number of heads.
       dtype: the dtype of the computation (default: float32)
       qkv_features: dimension of the key, query, and value.
+      out_features: dimension of the last projection
       attention_axis: axes over which the attention is applied ( 'None' means
         attention over all axes, but batch, heads, and features).
       causal_mask: boolean specifying whether to apply a causal mask on the
@@ -271,8 +273,8 @@ class MultiHeadDotProductAttention(base.Module):
     if attention_axis is None:
       attention_axis = tuple(range(1, inputs_q.ndim - 1))
 
-    features = inputs_q.shape[-1]
-    qkv_features = qkv_features or features
+    features = out_features or inputs_q.shape[-1]
+    qkv_features = qkv_features or inputs_q.shape[-1]
 
     assert qkv_features % num_heads == 0, (
         'Memory dimension must be divisible by number of heads.')
