@@ -45,17 +45,17 @@ loop, not by adding features to a framework.
 Flax is being developed in close collaboration with the JAX team and 
 comes with everything you need to start your research, including:
 
-* Common layers (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
+* **Common layers** (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
 
-* Optimizers (`flax.optim`): SGD, Momentum, Adam, LARS
+* **Optimizers** (`flax.optim`): SGD, Momentum, Adam, LARS
 
-* Utilities and patterns: replicated training, serialization and checkpointing, metrics, prefetching on device
+* **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device
 
-* Educational examples that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
+* **Educational examples** that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
 
-* HOWTO guides -- diffs that add functionality to educational base exampless
+* **HOWTO guides** -- diffs that add functionality to educational base exampless
 
-* Fast, tuned large-scale end-to-end examples: CIFAR10, ResNet ImageNet, Transformer LM1b
+* **Fast, tuned large-scale end-to-end examples**: CIFAR10, ResNet on ImageNet, Transformer LM1b
 
 ## Try Flax now by forking one of our starter examples
 
