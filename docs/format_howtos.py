@@ -14,6 +14,7 @@ import re
 import os
 
 def main():
+  print("Formatting HOWTOs into HTML files in _formatted_howtos/")
   os.makedirs('_formatted_howtos', exist_ok=True)
   for diff_filename in os.listdir(os.path.join('..', 'howtos', 'diffs')):
     format_howto(os.path.join('..', 'howtos', 'diffs', diff_filename),
