@@ -53,7 +53,7 @@ comes with everything you need to start your research, including:
 
 * Educational examples that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
 
-* [HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html) -- diffs that add functionality to educational base exampless
+* HOWTO guides -- diffs that add functionality to educational base exampless
 
 * Fast, tuned large-scale end-to-end examples: CIFAR10, ResNet ImageNet, Transformer LM1b
 
