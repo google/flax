@@ -72,6 +72,7 @@ class BatchNorm(base.Module):
     x = jnp.asarray(x, jnp.float32)
     axis = axis if isinstance(axis, tuple) else (axis,)
     axis = _absolute_dims(x.ndim, axis)
+    feature_shape = tuple(d if i in axis else 1 for i, d in enumerate(x.shape))
     reduced_feature_shape = tuple(d for i, d in enumerate(x.shape) if i in axis)
     reduction_axis = tuple(i for i in range(x.ndim) if i not in axis)
     if self.is_stateful() or batch_stats:
