@@ -83,19 +83,24 @@ def format_howto(input_file, output_file):
       if line == '':
         continue
 
-      if line.startswith('<span class="o">@@'):
+      if re.match(r'^<span class=".*">@@', line):
+        # chunk breaker, replace with grey [...]
         print('<span style="background-color: rgba(128, 128, 128, 0.3)">[...]</span>',
             file=out_file)
-      elif line.startswith('<span class="o">+'):
+      elif re.match(r'^<span class=".*">+', line):
+        # inserted line
         print('<span style="background-color: rgba(0, 255, 0, 0.3)">' + line + '</span>',
             file=out_file)
-      elif line.startswith('<span class="o">-'):
+      elif re.match(r'^<span class=".*">-', line):
+        # removed line
         print('<span style="background-color: rgba(255, 0, 0, 0.3)">' + line + '</span>',
             file=out_file)
       else:
+        # context
         print(line, file=out_file)
 
     print('</pre></div></div>', file=out_file)
 
 
-main() 
+if __name__ == 'main':
+  main()
