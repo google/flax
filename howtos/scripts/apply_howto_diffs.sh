@@ -24,7 +24,7 @@ git fetch --all
 # HOWTO branches for which the diff files have been deleted.
 # The sed command strips the 'origin/' prefix.
 for b in $(git branch -r | grep origin/howto/ | sed 's/origin\///'); do
-  git push origin --delete $branch
+  git push origin --delete $b
 done
 
 # Get names of howtos from diff files.
