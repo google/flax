@@ -73,11 +73,12 @@ class BatchNorm(base.Module):
     axis = axis if isinstance(axis, tuple) else (axis,)
     axis = _absolute_dims(x.ndim, axis)
     feature_shape = tuple(d if i in axis else 1 for i, d in enumerate(x.shape))
-    reduction_axis = tuple([i for i in range(x.ndim) if i not in axis])
+    reduced_feature_shape = tuple(d for i, d in enumerate(x.shape) if i in axis)
+    reduction_axis = tuple(i for i in range(x.ndim) if i not in axis)
     if self.is_stateful() or batch_stats:
-      ra_mean = self.state('mean', feature_shape,
+      ra_mean = self.state('mean', reduced_feature_shape,
                            initializers.zeros, collection=batch_stats)
-      ra_var = self.state('var', feature_shape,
+      ra_var = self.state('var', reduced_feature_shape,
                           initializers.ones, collection=batch_stats)
     else:
       ra_mean = None
@@ -89,27 +90,28 @@ class BatchNorm(base.Module):
                          'use_running_averages is True')
       mean, var = ra_mean.value, ra_var.value
     else:
-      mean = jnp.mean(x, axis=reduction_axis, keepdims=True)
+      mean = jnp.mean(x, axis=reduction_axis, keepdims=False)
       if axis_name is not None and not self.is_initializing():
-        axis_size = lax.psum(1., axis_name=axis_name)
-        mean = lax.psum(mean, axis_name=axis_name) / axis_size
+        mean = lax.pmean(mean, axis_name=axis_name)
 
-      mean2 = jnp.mean(lax.square(x), axis=reduction_axis, keepdims=True)
+      mean2 = jnp.mean(lax.square(x), axis=reduction_axis, keepdims=False)
       if axis_name is not None and not self.is_initializing():
-        mean2 = lax.psum(mean2, axis_name=axis_name) / axis_size
+        mean2 = lax.pmean(mean2, axis_name=axis_name)
       var = mean2 - lax.square(mean)
 
       if ra_mean and not self.is_initializing():
         ra_mean.value = momentum * ra_mean.value + (1 - momentum) * mean
         ra_var.value = momentum * ra_var.value + (1 - momentum) * var
 
-    y = x - mean
+    y = x - mean.reshape(feature_shape)
     mul = lax.rsqrt(var + epsilon)
     if scale:
-      mul = mul * self.param('scale', feature_shape, scale_init)
+      mul = mul * self.param(
+          'scale', reduced_feature_shape, scale_init).reshape(feature_shape)
     y = y * mul
     if bias:
-      y = y + self.param('bias', feature_shape, bias_init)
+      y = y + self.param(
+          'bias', reduced_feature_shape, bias_init).reshape(feature_shape)
     return jnp.asarray(y, dtype)
 
 
