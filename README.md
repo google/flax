@@ -62,7 +62,7 @@ comes with everything you need to start your research, including:
 ### Image Classification
 ⟶ [MNIST](examples/mnist) (also see [annotated version](https://flax.readthedocs.io/en/latest/annotated_mnist.html))
 
-⟶ [CIFAR-10](examples/cifar) (Wide ResNet w/ and w/o Shake-Shake, PyramidNet w/ShakeDrop)
+⟶ [CIFAR-10](examples/cifar10) (Wide ResNet w/ and w/o Shake-Shake, PyramidNet w/ShakeDrop)
 
 ⟶ [ResNet50 on ImageNet](examples/imagenet)
 
