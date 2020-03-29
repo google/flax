@@ -87,7 +87,7 @@ def format_howto(input_file, output_file):
         # chunk breaker, replace with grey [...]
         print('<span style="background-color: rgba(128, 128, 128, 0.3)">[...]</span>',
             file=out_file)
-      elif re.match(r'^<span class=".*">+', line):
+      elif re.match(r'^<span class=".*">\+', line):
         # inserted line
         print('<span style="background-color: rgba(0, 255, 0, 0.3)">' + line + '</span>',
             file=out_file)
