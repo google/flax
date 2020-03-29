@@ -18,7 +18,7 @@ cat << EOF
 Awesome, you are going to create a new FLAX HOWTO!
 
 More details about HOWTOs can be found here:
-https://github.com/marcvanzee/flax/blob/prerelease/howtos/README.md
+https://github.com/google/flax/blob/master/howtos/README.md
 
 The following files are edited/added:
 
@@ -43,8 +43,8 @@ fi
 
 printf "\nPlease provide a name for the howto:\n"
 
-read -p "howto-" howto_name
-howto_name="howto-${howto_name}"
+read -p "howto/" howto_name
+howto_name="${howto_name}"
 howto_path="${howto_diff_path}/${howto_name}.diff"
 
 # Overwrite the existing diff 

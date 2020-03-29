@@ -22,28 +22,28 @@ Currently the following HOWTOs are available:
 Multi-device data-parallel training
 -----------------------------------
 
-⟶ `View as a side-by-side diff <https://github.com/google-research/flax/compare/prerelease..howto-distributed-training?diff=split>`_
+⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/distributed-training?diff=split>`_
 
 .. raw:: html
-   :file: _formatted_howtos/howto-distributed-training.diff.html
+   :file: _formatted_howtos/distributed-training.diff.html
 
 
 Ensembling on multiple devices
 ------------------------------
 
-⟶ `View as a side-by-side diff <https://github.com/google-research/flax/compare/prerelease..howto-ensembling?diff=split>`_
+⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/ensembling?diff=split>`_
 
 .. raw:: html
-   :file: _formatted_howtos/howto-ensembling.diff.html
+   :file: _formatted_howtos/ensembling.diff.html
 
 
 Polyak averaging
 ----------------
 
-⟶ `View as a side-by-side diff <https://github.com/google-research/flax/compare/prerelease..howto-polyak-averaging?diff=split>`_
+⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/polyak-averaging?diff=split>`_
 
 .. raw:: html
-   :file: _formatted_howtos/howto-polyak-averaging.diff.html
+   :file: _formatted_howtos/polyak-averaging.diff.html
 
 
 How do HOWTOs work?

@@ -639,6 +639,11 @@ class StochasticTest(absltest.TestCase):
     self.assertTrue(onp.all(r1 == random.fold_in(rng, 1)))
     self.assertTrue(onp.all(r2 == random.fold_in(rng, 2)))
 
+  def test_make_rng_in_jax_transform_check(self):
+    with nn.stochastic(random.PRNGKey(0)):
+      with self.assertRaises(ValueError):
+        jax.jit(nn.make_rng)()
+
 
 if __name__ == '__main__':
   absltest.main()
