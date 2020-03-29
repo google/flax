@@ -37,12 +37,16 @@ All models were trained with a global batch size of `256`.
 
 #### Wide ResNet: 26 layers, 6x width, Shake-shake regularization
 `python train.py --arch=wrn26_6_ss --model_dir=./cifar10_wrn26_6_ss_bs=256_lr=0.1`
+
 or
+
 `python train.py --arch=wrn26_6_ss --lr_schedule=cosine --num_epochs=1800 --model_dir=./cifar10_wrn26_6_ss_bs=256_lr=cosine_epochs=1800`
 
 #### PyramidNet, Shake-drop regularization
 `python train.py --arch=pyramid --lr_sched_steps="[[150,0.1],[225,0.01]]" --num_epochs=300 --l2_reg=0.0001 --model_dir=./cifar10_pyramid_bs=256_lr=0.1_l2=0.0001_epoch=300`
+
 or
+
 `python train.py --arch=pyramid --lr_sched_steps=cosine --num_epochs=1800 --l2_reg=0.0001 --model_dir=./cifar10_pyramid_bs=256_lr=cosine_l2=0.0001_epochs=1800`
 
 ## Known issues
