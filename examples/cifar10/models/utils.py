@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shake-shake and ShakeDrop functions."""
+"""Shake-shake and shake-drop functions."""
 
 import flax.nn
 import jax

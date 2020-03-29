@@ -12,29 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CIFAR-10 example.
-
-This script trains a classifier on the CIFAR-10 dataset.
-
-One of the following models can be used:
-- Wide ResNet, 26 layers, 2x width factor
-- Wide ResNet, 26 layers, 10x width factor
-- Wide ResNet, 26 layers, 6x width factor with shake-shake regularization
-- PyramidNet with Shake-Drop regularization
-
-The data is loaded using tensorflow_datasets.
-
-References used:
-
-Shake-shake author's implementation:
-https://github.com/xgastaldi/shake-shake
-
-PyTorch implementation of shake-shake:
-https://github.com/owruby/shake-shake_pytorch
-
-Fast AutoAugment that uses a number of different models:
-https://github.com/kakaobrain/fast-autoaugment
-"""
+"""CIFAR-10 example."""
 
 import ast
 import functools

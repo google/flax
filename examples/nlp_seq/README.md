@@ -19,13 +19,13 @@ From|ADP the|DT AP|PROPN comes|VBZ this|DT story|NN :|:
 ### Supported setups
 The model should run with other configurations and hardware, but explicitly tested on the following.
 
-| Hardware |  Batch size  | Learning rate | Steps/Second | Accuracy  | TensorBoard |
+| Hardware |  Batch size  | Learning rate | Training time | Accuracy  | TensorBoard.dev |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| TITAN V  | 64  |  0.05 | 3.3  | 71.73% | comming soon |
+| Nvidia V100 (16GB) | 64  |  0.05 |  1d 11h 11m  | 72.20% | [2020-03-22](https://tensorboard.dev/experiment/IyswaKpRQbOpk0AfLwBu3A/) |
 
 ### Running 
 ```
 python train.py --batch_size=64 --model_dir=model_dir \
-    --dev=ud-treebanks-conll2017/UD_Ancient_Greek/grc-ud-dev.conll \
-    --train=ud-treebanks-conll2017/UD_Ancient_Greek/grc-ud-train.conllu
+    --dev=ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-dev.conllu \
+    --train=ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-train.conllu
 ```
