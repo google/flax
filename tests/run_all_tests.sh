@@ -1,3 +1,5 @@
+#!/bin/bash
+
 pytest -n 4 tests -W ignore
 
 # we apply pytest within each example to avoid pytest's annoying test-filename collision.
