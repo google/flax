@@ -3,23 +3,36 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Flax's documentation!
-================================
+Flax documentation
+==================
+
+Flax is a neural network library for JAX that is designed for flexibility.
 
 .. toctree::
    :maxdepth: 1
-   :caption: Guides:
+   :caption: Quickstart
+
+   README and brief introduction <https://github.com/google/flax/tree/master>
+   notebooks/flax_guided_tour
+   annotated_mnist
+
+.. toctree::
+   :maxdepth: 2
+   :caption: HOWTOs
+
+   howtos
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Additional material
 
    philosophy
-   notebooks/flax_intro
-   howtos
-   annotated_mnist
    contributing
    faq
 
 .. toctree::
    :maxdepth: 2
-   :caption: API reference:
+   :caption: API reference
 
    flax.nn
    flax.optim

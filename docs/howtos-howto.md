@@ -1,20 +1,8 @@
-# FLAX HOWTOs
+# HOWTOs HOWTO
 
-FLAX HOWTOs explain how to implement standard techiques in FLAX. For instance,
-the HOWTO for ensembling learning demonstrates what changes should be made to
-the standard MNIST example in order to train an ensemble of models. As such, 
-HOWTOs are simply "diffs".
-
-## List of HOWTOs
-
-In essence, a HOWTO is a set of changes that are applied to the FLAX master 
-branch on Github. HOWTOs are currently simply diff views between HOWTO branches 
-and the master branch. Soon, they will be merged with the rest of our 
-documentation through readthedocs.
-
-Currently the following HOWTOs are available:
-
-* [Ensembling](https://github.com/google-research/flax/compare/prerelease..howto-ensembling?diff=split)
+This document explains how the Flax HOWTO system works: How to submit
+new HOWTOs, modify existing ones, and fix HOWTOs when base examples
+change.
 
 ## How HOWTOs work
 
@@ -62,14 +50,15 @@ The workflow script for the Github action can be found at
 
 ## Resolving a conflict with an existing HOWTO
 
-> :warning: TODO: This is still in progress. Currently conflicts are resolved by
-            checking whether the Github action fails, and if so, manually making
-            the required fixes.
+TODO: This is still in progress. Currently conflicts are resolved by
+checking whether the Github action fails, and if so, manually making
+the required fixes.
 
-## Modifying an exiting HOWTO
+## Modifying an existing HOWTO
 
-> :warning: TODO: Write this out. The summary is: apply a diff locally, make the
-            changes, pack the diff again and commit. It would be good to show 
-            this with an example. Note editing this diff is not a good idea 
-            since it is extremely error-prone.
+TODO: Write this out. The summary is: apply a diff locally, make the
+changes, pack the diff again and commit. It would be good to show 
+this with an example. Note editing this diff is not a good idea 
+since it is extremely error-prone.
+
 

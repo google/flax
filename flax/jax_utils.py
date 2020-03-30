@@ -19,6 +19,9 @@
 
 import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
+import warnings
+
+import numpy as onp
 
 import jax
 from jax import lax
@@ -53,10 +56,9 @@ def unreplicate(tree):
 
 
 def pmean(xs, axis_name):
-  """Like `jax.lax.psum` but divides by the number of replicas."""
-  xs = lax.psum(xs, axis_name)
-  num_replicas = lax.psum(1, axis_name)  # this psum is free
-  return jax.tree_map(lambda x: x / num_replicas, xs)
+  warnings.warn('use jax.lax.pmean instead',
+                DeprecationWarning)
+  return lax.pmean(xs, axis_name)
 
 
 def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
@@ -147,9 +149,75 @@ def prefetch_to_device(iterator, size, devices=None):
     try:
       xs = queue.popleft()
     except IndexError:
-      raise StopIteration
+      return
     try:
       queue.append(jax.tree_map(_prefetch, next(iterator)))
     except StopIteration:
       pass
     yield xs
+
+
+def _scan_nd(body_fn, init, xs, n=1):
+  """Utility for performing an n-dimensional `lax.scan`.
+
+  The n-d scan is simply recursive call of 1-d scan.
+  Args:
+    body_fn: the body of the loop of type (c, x) -> (c, y).
+    init: initial value for the carry.
+    xs: a pytree of tensors to scan over.
+    n: number of dimensions to scan over (default: 1)
+  Returns:
+    A tuple of the final carry and the values returned by the body.
+  """
+  if n == 1:
+    return lax.scan(body_fn, init, xs)
+  else:
+    def scan_body(c, x):
+      return _scan_nd(body_fn, c, x, n=n-1)
+    return lax.scan(scan_body, init, xs)
+
+
+def _invert_perm(perm):
+  perm_inv = [0] * len(perm)
+  for i, j in enumerate(perm):
+    perm_inv[j] = i
+  return tuple(perm_inv)
+
+
+def scan_in_dim(body_fn, init, xs, axis=(0,), keepdims=False):
+  """utility for doing a scan along arbitrary dimensions.
+
+  see `lax.scan` for details on how the scan operation works.
+  Args:
+    body_fn: the body of the loop of type (c, x) -> (c, y).
+    init: initial value for the carry.
+    xs: a pytree of tensors to scan over.
+    axis: the axis to scan over.
+    keepdims: keep the dimensions that are scanned over.
+  Returns:
+    A tuple of the final carry and the values returned by the body.
+  """
+  if not isinstance(axis, Iterable):
+    axis = (axis,)
+
+  def transpose_in(x):
+    perm = axis + tuple(onp.delete(onp.arange(x.ndim), axis))
+    return x.transpose(perm)
+  def transpose_out(x):
+    perm = axis + tuple(onp.delete(onp.arange(x.ndim), axis))
+    return x.transpose(_invert_perm(perm))
+
+  def body_wrapper(c, xs):
+    if keepdims:
+      xs = jax.tree_map(lambda x: x.reshape((1,) * len(axis) + x.shape), xs)
+      xs = jax.tree_map(transpose_out, xs)
+    c, ys = body_fn(c, xs)
+    if keepdims:
+      ys = jax.tree_map(transpose_in, ys)
+      ys = jax.tree_map(lambda x: x.reshape(x.shape[len(axis):]), ys)
+    return c, ys
+
+  xs = jax.tree_map(transpose_in, xs)
+  c, ys = _scan_nd(body_wrapper, init, xs, n=len(axis))
+  ys = jax.tree_map(transpose_out, ys)
+  return c, ys

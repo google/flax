@@ -271,9 +271,9 @@ def get_lm1b_datasets(n_devices,
       train_shuffle_files=True,
       eval_shuffle_files=False)
 
-  # For sequence models, TFDS yields a (duplicated) feature dictionary
-  # we want to simplify things by mapping e.g.
-  # {key0: inputs_data, key1: targets_data} to just inputs_data
+  # For sequence models, TFDS yields a (duplicated) feature dictionary.
+  # We want to simplify things by mapping e.g.
+  # {key0: inputs_data, key1: targets_data} to just inputs_data.
   # for LM1B: key0 == key1 == text and inputs_data == targets_data
   inputs_key, targets_key = keys
   del targets_key

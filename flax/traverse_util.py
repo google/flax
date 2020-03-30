@@ -49,6 +49,78 @@ import dataclasses
 import jax
 
 
+def flatten_dict(xs):
+  """Flatten a nested dictionary.
+
+  The nested keys are flattened to a tuple.
+  See `unflatten_dict` on how to restore the
+  nested dictionary structure.
+
+  Example::
+
+    xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
+    flat_xs = flatten_dict(xs)
+    print(flat_xs)
+    # {
+    #   ('foo',): 1,
+    #   ('bar', 'a'): 2,
+    # }
+
+  Note that empty dictionaries are ignored and
+  will not be restored by `unflatten_dict`.
+
+  Args:
+    xs: a nested dictionary
+  Returns:
+    The flattened dictionary.
+  """
+  assert isinstance(xs, dict), 'input is not a dict'
+  def _flatten(xs, prefix):
+    if not isinstance(xs, dict):
+      return {prefix: xs}
+    result = {}
+    for key, value in xs.items():
+      path = prefix + (key,)
+      result.update(_flatten(value, path))
+    return result
+  return _flatten(xs, ())
+
+
+def unflatten_dict(xs):
+  """Unflatten a dictionary.
+
+  See `flatten_dict`
+
+  Example::
+
+    flat_xs = {
+      ('foo',): 1,
+      ('bar', 'a'): 2,
+    }
+    xs = unflatten_dict(flat_xs)
+    print(xs)
+    # {
+    #   'foo': 1
+    #   'bar': {'a': 2}
+    # }
+
+  Args:
+    xs: a flattened dictionary
+  Returns:
+    The nested dictionary.
+  """
+  assert isinstance(xs, dict), 'input is not a dict'
+  result = {}
+  for path, value in xs.items():
+    cursor = result
+    for key in path[:-1]:
+      if key not in cursor:
+        cursor[key] = {}
+      cursor = cursor[key]
+    cursor[path[-1]] = value
+  return result
+
+
 class Traversal(object):
   """Base class for all traversals."""
 

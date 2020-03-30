@@ -18,7 +18,7 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = "0.0.1-alpha"
+version = "0.1.0rc2"
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
@@ -27,15 +27,18 @@ except IOError:
   README = ""
 
 install_requires = [
-    "numpy",
-    "jaxlib",
-    "jax",
+    "numpy>=1.12",
+    "jaxlib>=0.1.41",
+    "jax>=0.1.59",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses",  # will only install on py3.6
     "msgpack",
 ]
 
 tests_require = [
+    "pytest",
+    "pytest-xdist",
+    "tensorflow_datasets",
 ]
 
 setup(
@@ -55,7 +58,7 @@ setup(
     keywords="",
     author="Flax team",
     author_email="flax-dev@google.com",
-    url="https://github.com/google-research/flax",
+    url="https://github.com/google/flax",
     license="Apache",
     packages=find_packages(),
     include_package_data=False,

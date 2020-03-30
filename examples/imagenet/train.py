@@ -20,6 +20,7 @@ The data is loaded using tensorflow_datasets.
 """
 
 import functools
+import time
 
 from absl import app
 from absl import flags
@@ -36,6 +37,7 @@ from flax.training import checkpoints
 from flax.training import common_utils
 
 import jax
+from jax import lax
 from jax import random
 
 import jax.nn
@@ -58,13 +60,17 @@ flags.DEFINE_integer(
     'batch_size', default=128,
     help=('Batch size for training.'))
 
+flags.DEFINE_bool(
+    'cache', default=False,
+    help=('If True, cache the dataset.'))
+
 flags.DEFINE_integer(
     'num_epochs', default=90,
     help=('Number of training epochs.'))
 
 flags.DEFINE_string(
     'model_dir', default=None,
-    help=('Directory to store model data'))
+    help=('Directory to store model data.'))
 
 flags.DEFINE_bool(
     'half_precision', default=False,
@@ -98,7 +104,7 @@ def compute_metrics(logits, labels):
       'loss': loss,
       'accuracy': accuracy,
   }
-  metrics = common_utils.pmean(metrics)
+  metrics = lax.pmean(metrics, axis_name='batch')
   return metrics
 
 
@@ -142,7 +148,7 @@ def train_step(state, batch, learning_rate_fn):
   _, (new_model_state, logits), grad = optimizer.compute_gradient(loss_fn)
 
   # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
-  grad = jax_utils.pmean(grad, axis_name='batch')
+  grad = lax.pmean(grad, axis_name='batch')
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr * FLAGS.loss_scaling
@@ -173,9 +179,9 @@ def prepare_tf_data(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def create_input_iter(batch_size, image_size, dtype, train):
+def create_input_iter(batch_size, image_size, dtype, train, cache):
   ds = input_pipeline.load_split(
-      batch_size, image_size=image_size, dtype=dtype, train=train)
+      batch_size, image_size=image_size, dtype=dtype, train=train, cache=cache)
   it = map(prepare_tf_data, ds)
   it = jax_utils.prefetch_to_device(it, 2)
   return it
@@ -204,8 +210,8 @@ def save_checkpoint(state):
 
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
-  return state.replace(
-      model_state=jax.pmap(common_utils.pmean, 'batch')(state.model_state))
+  avg = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
+  return state.replace(model_state=avg(state.model_state))
 
 
 def main(argv):
@@ -243,9 +249,9 @@ def main(argv):
     input_dtype = tf.float32
 
   train_iter = create_input_iter(
-      local_batch_size, image_size, input_dtype, train=True)
+      local_batch_size, image_size, input_dtype, train=True, cache=FLAGS.cache)
   eval_iter = create_input_iter(
-      local_batch_size, image_size, input_dtype, train=False)
+      local_batch_size, image_size, input_dtype, train=False, cache=FLAGS.cache)
 
   num_epochs = FLAGS.num_epochs
   steps_per_epoch = input_pipeline.TRAIN_IMAGES // batch_size
@@ -275,6 +281,7 @@ def main(argv):
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   epoch_metrics = []
+  t_loop_start = time.time()
   for step, batch in zip(range(step_offset, num_steps), train_iter):
     state, metrics = p_train_step(state, batch)
     epoch_metrics.append(metrics)
@@ -284,11 +291,14 @@ def main(argv):
       summary = jax.tree_map(lambda x: x.mean(), epoch_metrics)
       logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f',
                    epoch, summary['loss'], summary['accuracy'] * 100)
+      steps_per_sec = steps_per_epoch / (time.time() - t_loop_start)
+      t_loop_start = time.time()
       if jax.host_id() == 0:
         for key, vals in epoch_metrics.items():
           tag = 'train_%s' % key
           for i, val in enumerate(vals):
             summary_writer.scalar(tag, val, step - len(vals) + i + 1)
+        summary_writer.scalar('steps per second', steps_per_sec, step)
 
       epoch_metrics = []
       eval_metrics = []

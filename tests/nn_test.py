@@ -93,23 +93,14 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
-  def test_create_module(self):
+  def test_init_by_shape_module(self):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
-    y, model = DummyModule.create(rng, x)
-    y2 = model(x)
-    self.assertEqual(y, y2)
-    self.assertEqual(y, jnp.array([2.]))
-    self.assertEqual(model.params, {'bias': jnp.array([1.])})
-
-  def test_create_by_shape_module(self):
-    rng = random.PRNGKey(0)
-    x = jnp.array([1.])
-    y, model = DummyModule.create_by_shape(rng, [(x.shape, x.dtype)])
-    y2 = model(x)
+    y, params = DummyModule.init_by_shape(rng, [(x.shape, x.dtype)])
+    y2 = DummyModule.call(params, x)
     self.assertEqual(y.shape, y2.shape)
     self.assertEqual(y2, jnp.array([2.]))
-    self.assertEqual(model.params, {'bias': jnp.array([1.])})
+    self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_shared_module(self):
     rng = random.PRNGKey(0)
@@ -315,6 +306,20 @@ class ModuleTest(absltest.TestCase):
       self.assertEqual(new_state.as_dict(), {'/': {'state': x + x}})
     self.assertEqual(new_state.as_dict(), {'/': {'state': x + x}})
 
+  def test_parameter_rng(self):
+    @nn.module
+    def model(x):
+      return nn.Dense(x, features=2, name='dummy',
+                      bias_init=nn.initializers.normal())
+    rng = random.PRNGKey(0)
+    _, params = model.init(rng, jnp.ones((1, 1)))
+    dense_rng = nn.base._fold_in_str(rng, 'dummy')
+    kernel_rng = nn.base._fold_in_str(dense_rng, 'kernel')
+    bias_rng = nn.base._fold_in_str(dense_rng, 'bias')
+    kernel = nn.linear.default_kernel_init(kernel_rng, (1, 2))
+    bias = nn.initializers.normal()(bias_rng, (2,))
+    onp.testing.assert_allclose(kernel, params['dummy']['kernel'])
+    onp.testing.assert_allclose(bias, params['dummy']['bias'])
 
 class CollectionTest(absltest.TestCase):
 
@@ -421,6 +426,28 @@ class CollectionTest(absltest.TestCase):
     pattern = 'Trying to capture state outside the scope'
     with self.assertRaisesRegex(ValueError, pattern):
       test.init(random.PRNGKey(0))
+
+  def test_jax_transform_of_stateful_function(self):
+    test = self
+    class NestedTransform(nn.Module):
+
+      def apply(self, state, y):
+        def inner_fn(x):
+          # constants should be storable
+          state.store(1.)
+          # values in the same trace should be storable
+          state.store(y)
+          with test.assertRaises(ValueError):
+            # values depending on the vmap should not be storable
+            state.store(x)
+        jax.vmap(inner_fn)(jnp.ones((2,)))
+
+    def outer_fn(x):
+      with nn.Collection().mutate() as state:
+        NestedTransform.init(random.PRNGKey(0), state, x)
+
+    outer_fn(1.)
+    jax.jit(outer_fn)(1.)
 
 
 class UtilsTest(absltest.TestCase):
@@ -611,6 +638,11 @@ class StochasticTest(absltest.TestCase):
       r2 = nn.make_rng()
     self.assertTrue(onp.all(r1 == random.fold_in(rng, 1)))
     self.assertTrue(onp.all(r2 == random.fold_in(rng, 2)))
+
+  def test_make_rng_in_jax_transform_check(self):
+    with nn.stochastic(random.PRNGKey(0)):
+      with self.assertRaises(ValueError):
+        jax.jit(nn.make_rng)()
 
 
 if __name__ == '__main__':

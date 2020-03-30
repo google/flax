@@ -20,6 +20,7 @@ import jax.numpy as jnp
 Flax can use any data loading pipeline. We use TF datasets.
 
 ```py
+import tensorflow as tf
 import tensorflow_datasets as tfds
 ```
 
@@ -102,8 +103,8 @@ Load, convert dtypes, and shuffle MNIST.
 
 ```py
   train_ds = tfds.load('mnist', split=tfds.Split.TRAIN)
-  train_ds = train_ds.map(lambda x: {'image':tf.cast(x['image'], tf.float32),
-                                     'label':tf.cast(x['label'], tf.int32)})
+  train_ds = train_ds.map(lambda x: {'image': tf.cast(x['image'], tf.float32),
+                                     'label': tf.cast(x['label'], tf.int32)})
   train_ds = train_ds.cache().shuffle(1000).batch(128)
   test_ds = tfds.as_numpy(tfds.load(
       'mnist', split=tfds.Split.TEST, batch_size=-1))
@@ -116,10 +117,10 @@ Create a new model, running all necessary initializers.
 The parameters are stored as nested dicts on `model.params`.
 
 ```py
-   _, initial_params = CNN.init_by_shape(
-   jax.random.PRNGKey(0),
-    [((1, 28, 28, 1), jnp.float32)])
-   model = nn.Model(CNN, initial_params)
+  _, initial_params = CNN.init_by_shape(
+  jax.random.PRNGKey(0),
+   [((1, 28, 28, 1), jnp.float32)])
+  model = flax.nn.Model(CNN, initial_params)
 ```
 
 Define an optimizer. At any particular optimzation step,

@@ -13,21 +13,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""seq2seq addition example.
-
-This script trains a simple LSTM on a sequence-to-sequence addition task using
-an encoder-decoder architecture. The data is generated on the fly.
-"""
+"""seq2seq addition example."""
 
 import random
 from absl import app
 from absl import flags
 from absl import logging
 
+from flax import jax_utils
 from flax import nn
 from flax import optim
+
 import jax
-from jax import random as jrandom
 import jax.numpy as jnp
 
 import numpy as np
@@ -114,9 +111,9 @@ class Encoder(nn.Module):
   def apply(self, inputs, hidden_size=512):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
-    carry = nn.LSTMCell.initialize_carry(nn.make_rng(), (batch_size,),
+    carry = nn.LSTMCell.initialize_carry(jax.random.PRNGKey(0), (batch_size,),
                                          hidden_size)
-    carry, _ = nn.attention.scan_in_dim(
+    carry, _ = jax_utils.scan_in_dim(
         nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
     return carry
 
@@ -127,10 +124,9 @@ class Decoder(nn.Module):
   def apply(self, carry, inputs):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
-    carry, outputs = nn.attention.scan_in_dim(
+    carry, outputs = jax_utils.scan_in_dim(
         nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
     x = nn.Dense(outputs, features=vocab_size, name='dense')
-    x = nn.log_softmax(x)
     return carry, x
 
 
@@ -154,25 +150,27 @@ class Seq2seq(nn.Module):
       return x
 
     # No teacher forcing, feeding actual output back into the decoder.
-    output = np.zeros((max_output_len, batch_size, vocab_size))
-    for i in range(max_output_len):
-      decoder_inputs = np.expand_dims(decoder_inputs, axis=1)
-      carry, decoder_inputs = decoder(carry, decoder_inputs)
-      decoder_inputs = decoder_inputs.squeeze()
-      # Set next inputs to {0,1} to ensure they are the same as in training.
-      decoder_inputs = np.array([
-          decoder_inputs[j] == max(decoder_inputs[j]) for j in range(batch_size)
-      ])
-      output[:, i] = decoder_inputs
-    return output
+    next_inputs = jnp.zeros((batch_size, vocab_size))
+    output = []
+    for _ in range(max_output_len):
+      next_inputs = next_inputs[:, np.newaxis]
+      carry, decoder_outputs = decoder(carry, next_inputs)
+      decoder_outputs = decoder_outputs.squeeze()
+      output.append(decoder_outputs)
+      # Select the argmax as the next input.
+      next_inputs = jnp.equal(
+          decoder_outputs,
+          jnp.max(decoder_outputs, axis=-1)[:, None]
+      ).astype(jnp.float32)
+    return jnp.stack(output, axis=1)
 
 
-def create_model():
+def create_model(rng):
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size()
   _, initial_params = Seq2seq.init_by_shape(
-      nn.make_rng(), [((1, get_max_input_len(), vocab_size), jnp.float32),
-                      ((1, get_max_output_len(), vocab_size), jnp.float32)])
+      rng, [((1, get_max_input_len(), vocab_size), jnp.float32),
+            ((1, get_max_output_len(), vocab_size), jnp.float32)])
   model = nn.Model(Seq2seq, initial_params)
   return model
 
@@ -206,7 +204,7 @@ def get_batch(batch_size):
 
 def cross_entropy_loss(logits, labels):
   """Returns cross-entropy loss."""
-  return -jnp.mean(jnp.sum(logits * labels[:, 1:], axis=-1))
+  return -jnp.mean(jnp.sum(nn.log_softmax(logits) * labels[:, 1:], axis=-1))
 
 
 def compute_metrics(logits, labels):
@@ -249,14 +247,20 @@ def log_decode(question, inferred, golden):
   logging.info('DECODE: %s = %s %s', question, inferred, suffix)
 
 
-def decode_batch(model, batch_size):
-  """Decode a batch."""
-  batch = get_batch(batch_size)
-  inputs, outputs = (batch['query'], batch['answer'])
+@jax.jit
+def decode(model, inputs):
+  """Decode inputs."""
   decoder_inputs = encode_onehot(np.array(['='])).squeeze()
-  decoder_inputs = np.tile(decoder_inputs, (batch_size, 1))
-  inferred = model(
+  decoder_inputs = jnp.tile(decoder_inputs, (inputs.shape[0], 1))
+  return model(
       inputs, decoder_inputs, train=False, max_output_len=get_max_output_len())
+
+
+def decode_batch(model, batch_size):
+  """Decode and log results for a batch."""
+  batch = get_batch(batch_size)
+  inputs, outputs = batch['query'], batch['answer']
+  inferred = decode(model, inputs)
   questions = decode_onehot(inputs)
   infers = decode_onehot(inferred)
   goldens = decode_onehot(outputs)
@@ -266,18 +270,17 @@ def decode_batch(model, batch_size):
 
 def train_model():
   """Train for a fixed number of steps and decode during training."""
-  rng = jrandom.PRNGKey(0)
+  rng = jax.random.PRNGKey(0)
 
-  with nn.stochastic(rng):
-    model = create_model()
-    optimizer = create_optimizer(model, FLAGS.learning_rate)
-    for step in range(FLAGS.num_train_steps):
-      batch = get_batch(FLAGS.batch_size)
-      optimizer, metrics = train_step(optimizer, batch)
-      if step % FLAGS.decode_frequency == 0:
-        logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                     batch_metrics['loss'], batch_metrics['accuracy'] * 100)
-        decode_batch(optimizer.target, 5)
+  model = create_model(rng)
+  optimizer = create_optimizer(model, FLAGS.learning_rate)
+  for step in range(FLAGS.num_train_steps):
+    batch = get_batch(FLAGS.batch_size)
+    optimizer, metrics = train_step(optimizer, batch)
+    if step % FLAGS.decode_frequency == 0:
+      logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
+                   metrics['loss'], metrics['accuracy'] * 100)
+      decode_batch(optimizer.target, 5)
   return optimizer.target
 
 

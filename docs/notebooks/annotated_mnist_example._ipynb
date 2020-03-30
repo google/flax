@@ -275,19 +275,14 @@
         }
       },
       "source": [
-        "!pip install git+https://github.com/google-research/flax.git@prerelease"
+        "!pip install flax"
       ],
       "execution_count": 1,
       "outputs": [
         {
           "output_type": "stream",
           "text": [
-            "Collecting git+https://github.com/google-research/flax.git@prerelease\n",
-            "  Cloning https://github.com/google-research/flax.git (to revision prerelease) to /tmp/pip-req-build-tk28ygok\n",
-            "  Running command git clone -q https://github.com/google-research/flax.git /tmp/pip-req-build-tk28ygok\n",
-            "  Running command git checkout -b prerelease --track origin/prerelease\n",
-            "  Switched to a new branch 'prerelease'\n",
-            "  Branch 'prerelease' set up to track remote branch 'prerelease' from 'origin'.\n",
+            "Collecting flax\n",
             "Requirement already satisfied: numpy in /usr/local/lib/python3.6/dist-packages (from flax==0.0.1a0) (1.17.5)\n",
             "Requirement already satisfied: jaxlib in /usr/local/lib/python3.6/dist-packages (from flax==0.0.1a0) (0.1.38)\n",
             "Requirement already satisfied: jax in /usr/local/lib/python3.6/dist-packages (from flax==0.0.1a0) (0.1.58)\n",
@@ -746,3 +741,4 @@
     }
   ]
 }
+

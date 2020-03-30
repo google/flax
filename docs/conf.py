@@ -13,6 +13,7 @@
 # limitations under the License.
 """Configuration file for the Sphinx documentation builder."""
 
+
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
@@ -30,6 +31,12 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
+
+
+# Hacky but decent pre-process step: Format HOWTOs into color-coded
+# and syntax highlighted HTML files.
+from docs import format_howtos
+format_howtos.main()
 
 
 # -- Project information -----------------------------------------------------
