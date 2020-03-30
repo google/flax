@@ -8,10 +8,14 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## Examples;
+## Examples
 
 If you run the code by above command, you can get some generated images:
 
-![generated_mnist](./example.png)
+![generated_mnist](./sample.png)
 
-Also, you can obtain ELBO of a test set as `107.0544 ± 0.2496` (5 times of trials)
+and reconstructions of test set digitis:
+
+![reconstruction_mnist](./reconstruction.png)
+
+The test set ELBO after 10 epochs should be around `106`.
