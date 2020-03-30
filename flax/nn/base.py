@@ -1033,7 +1033,7 @@ class Collection:
   def _find_root(self, frame):
     """Find the root frame with respect to the anchor.
 
-    The root frame is defined as the child of anchor 
+    The root frame is defined as the child of anchor
     that is an ancestor of frame.
     The root is used to verify that a Collection does not
     have multiple unnamed roots.
