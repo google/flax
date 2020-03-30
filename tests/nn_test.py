@@ -542,9 +542,9 @@ class NormalizationTest(absltest.TestCase):
       y = model(x)
     ema = state['/']
     onp.testing.assert_allclose(
-        ema['mean'], 0.1 * x.mean((0, 1), keepdims=True), atol=1e-4)
+        ema['mean'], 0.1 * x.mean((0, 1), keepdims=False), atol=1e-4)
     onp.testing.assert_allclose(
-        ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=True), rtol=1e-4)
+        ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=False), rtol=1e-4)
 
   def test_layer_norm(self):
     rng = random.PRNGKey(0)
