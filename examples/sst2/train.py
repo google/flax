@@ -45,12 +45,13 @@ import jax.numpy as jnp
 
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
+import tensorflow.io.gfile as gfile
 
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.0005,
+    'learning_rate', default=0.0002,
     help=('The learning rate for the Adam optimizer.'))
 
 flags.DEFINE_integer(
@@ -65,65 +66,144 @@ flags.DEFINE_float(
     'dropout', default=0.5,
     help=('Dropout rate'))
 
-flags.DEFINE_integer(
-    'seed', default=0,
-    help=('Random seed for network initialization.'))
+flags.DEFINE_float(
+    'emb_dropout', default=0.5,
+    help=('Embedding dropout rate'))
+
+flags.DEFINE_float(
+    'word_dropout_rate', default=0.1,
+    help=('Word dropout rate. Replaces input words with <unk>.'))
 
 flags.DEFINE_string(
     'model_dir', default=None,
     help=('Directory to store model data'))
 
-flags.DEFINE_string(
-    'glove_path', default=None,
-    help=('Path to GloVe 840B 300D word embeddings file.'))
+flags.DEFINE_integer(
+    'hidden_size', default=256,
+    help=('Hidden size for the LSTM and MLP.'))
 
 flags.DEFINE_integer(
-    'glove_dim', default=300,
-    help=('Dimensionality of the GloVe embeddings.'))
+    'embedding_size', default=256,
+    help=('Size of the word embeddings.'))
+
+flags.DEFINE_integer(
+    'max_seq_len', default=55,
+    help=('Maximum sequence length in the dataset.'))
+
+flags.DEFINE_integer(
+    'min_freq', default=5,
+    help=('Minimum frequency for training set words to be in the vocabulary.'))
+
+flags.DEFINE_float(
+    'l2_reg', default=1e-5,
+    help=('L2 regularization weight'))
+
+flags.DEFINE_integer(
+    'seed', default=0,
+    help=('Random seed for network initialization.'))
 
 
 @jax.vmap
-def binary_cross_entropy_loss(logit, label):
-  """Numerically stable binary cross entropy loss."""
+def binary_cross_entropy_loss(logit: jnp.ndarray, label: jnp.ndarray):
+  """Numerically stable binary cross entropy loss.
+
+  This function is vmapped, so it is written for a single example, but can
+  handle a batch of examples.
+
+  Args:
+    logit: The output logits.
+    label: The correct labels.
+
+  Returns:
+    The binary cross entropy loss for each given logit.
+  """
   return label * nn.softplus(-logit) + (1 - label) * nn.softplus(logit)
 
 
 @jax.jit
-def train_step(optimizer, inputs, lengths, labels):
+def train_step(optimizer: Any, inputs: jnp.ndarray, lengths: jnp.ndarray,
+               labels: jnp.ndarray, rng: Any, l2_reg: float):
+  """Single optimized training step.
+
+  Args:
+    optimizer: The optimizer to use to update the weights.
+    inputs: A batch of inputs. <int64>[batch_size, seq_len]
+    lengths: The lengths of the sequences in the batch. <int64>[batch_size]
+    labels: The labels of the sequences in the batch. <int64>[batch_size, 1]
+    rng: Random number generator for dropout.
+    l2_reg: L2 regularization weight.
+
+  Returns:
+    optimizer: The optimizer in its new state.
+    loss: The loss for this step.
+  """
+  rng, new_rng = jax.random.split(rng)
   def loss_fn(model):
-    logits = model(inputs, lengths)
+    with nn.stochastic(rng):
+      logits = model(inputs, lengths, train=True)
     loss = jnp.mean(binary_cross_entropy_loss(logits, labels))
+
+    # L2 regularization
+    l2_params = jax.tree_leaves(model.params['lstm_classifier'])
+    l2_weight = jnp.sum([jnp.sum(p ** 2) for p in l2_params])
+    l2_penalty = l2_reg * l2_weight
+
+    loss = loss + l2_penalty
     return loss, logits
+
   loss, _, grad = optimizer.compute_gradient(loss_fn)
   optimizer = optimizer.apply_gradient(grad)
-  return optimizer, loss
+  return optimizer, loss, new_rng
 
 
-def get_predictions(logits):
+def get_predictions(logits: jnp.ndarray) -> jnp.ndarray:
+  """Returns predictions given a batch of logits."""
   outputs = jax.nn.sigmoid(logits)
   return (outputs > 0.5).astype(jnp.int32)
 
 
-def get_num_correct(logits, labels):
+def get_num_correct(logits: jnp.ndarray, labels: jnp.ndarray) -> jnp.ndarray:
+  """Returns the number of correct predictions."""
   return jnp.sum(get_predictions(logits) == labels)
 
 
 @jax.jit
-def eval_step(model: nn.Module, inputs, lengths, labels):
+def eval_step(model: nn.Module, inputs: jnp.ndarray, lengths: jnp.ndarray,
+              labels: jnp.ndarray):
+  """A single evaluation step.
+
+  Args:
+    model: The model to be used for this evaluation step.
+    inputs: A batch of inputs. <int64>[batch_size, seq_len]
+    lengths: The lengths of the sequences in the batch. <int64>[batch_size]
+    labels: The labels of the sequences in the batch. <int64>[batch_size, 1]
+
+  Returns:
+    loss: The summed loss on this batch.
+    num_correct: The number of correct predictions in this batch.
+  """
   logits = model(inputs, lengths, train=False)
   loss = jnp.sum(binary_cross_entropy_loss(logits, labels))
   num_correct = get_num_correct(logits, labels)
   return loss, num_correct
 
 
-def evaluate(model: nn.Module, eval_ds: tf.data.Dataset):
-  """Evaluates the model on a dataset."""
+def evaluate(model: nn.Model, eval_ds: tf.data.Dataset):
+  """Evaluates the model on a dataset.
+
+  Args:
+    model: A model to be evaluated.
+    eval_ds: A dataset to be used for the evaluation. Typically valid or test.
+
+  Returns:
+    A dict with the evaluation results.
+  """
   count = 0
   total_loss = 0.
   total_correct = 0
 
   for ex in tfds.as_numpy(eval_ds):
-    inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
+    inputs, lengths, labels = ex['text'], ex['length'], ex['label']
     count = count + inputs.shape[0]
     loss, num_correct = eval_step(model, inputs, lengths, labels)
     total_loss += loss
@@ -137,11 +217,17 @@ def evaluate(model: nn.Module, eval_ds: tf.data.Dataset):
 
 
 def log(stats, epoch, train_metrics, valid_metrics):
-  """Logs performance for an epoch."""
+  """Logs performance for an epoch.
+
+  Args:
+    stats: A dictionary to be updated with the logged statistics.
+    epoch: The epoch number.
+    train_metrics: A dict with the training metrics for this epoch.
+    valid_metrics: A dict with the validation metrics for this epoch.
+  """
   train_loss = train_metrics['loss'] / train_metrics['total']
-  logging.info('Epoch %02d train loss %.4f valid loss %.4f acc %.2f',
-               epoch + 1, train_loss,
-               valid_metrics['loss'], valid_metrics['acc'])
+  logging.info('Epoch %02d train loss %.4f valid loss %.4f acc %.2f', epoch + 1,
+               train_loss, valid_metrics['loss'], valid_metrics['acc'])
 
   # Remember the metrics for later plotting.
   stats['train_loss'].append(train_loss.item())
@@ -150,46 +236,65 @@ def log(stats, epoch, train_metrics, valid_metrics):
 
 
 def train(
-    model,
-    learning_rate: float = 0.0003,
-    num_epochs: int = 20,
-    seed: int = 0,
+    model: nn.Model,
+    learning_rate: float = None,
+    num_epochs: int = None,
+    seed: int = None,
     model_dir: Text = None,
     data_source: Any = None,
+    batch_size: int = None,
+    checkpoints_to_keep: int = None,
+    l2_reg: float = None,
 ) -> Tuple[Dict[Text, Any], nn.Model]:
-  """Training loop."""
+  """Training loop.
+
+  Args:
+    model: An initialized model to be trained.
+    learning_rate: The learning rate.
+    num_epochs: Train for this many epochs.
+    seed: Seed for shuffling.
+    model_dir: Directory to save best model.
+    data_source: The data source with pre-processed data examples.
+    batch_size: The batch size to use for training and validation data.
+    l2_reg: L2 regularization weight.
+
+  Returns:
+    A dict with training statistics and the best model.
+  """
   rng = jax.random.PRNGKey(seed)
-  with nn.stochastic(rng):
-    optimizer = flax.optim.Adam(learning_rate=learning_rate).create(model)
-    stats = collections.defaultdict(list)
-    best_score = 0.
+  optimizer = flax.optim.Adam(learning_rate=learning_rate).create(model)
+  stats = collections.defaultdict(list)
+  best_score = 0.
+  train_batches = get_shuffled_batches(data_source.train_dataset, 
+                                       batch_size=batch_size, seed=seed)
+  valid_batches = get_batches(data_source.valid_dataset, batch_size=batch_size)  
 
-    for epoch in range(num_epochs):
-      train_metrics = collections.defaultdict(float)
+  for epoch in range(num_epochs):
+    train_metrics = collections.defaultdict(float)
 
-      # Train for one epoch.
-      for ex in tfds.as_numpy(data_source.train_batches):
-        inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
-        optimizer, loss = train_step(optimizer, inputs, lengths, labels)
-        train_metrics['loss'] += loss * inputs.shape[0]
-        train_metrics['total'] += inputs.shape[0]
+    # Train for one epoch.
+    for ex in tfds.as_numpy(train_batches):
+      inputs, lengths, labels = ex['text'], ex['length'], ex['label']
+      optimizer, loss, rng = train_step(optimizer, inputs, lengths, labels, rng, 
+                                        l2_reg)
+      train_metrics['loss'] += loss * inputs.shape[0]
+      train_metrics['total'] += inputs.shape[0]
 
-      # Evaluate on validation data. optimizer.target is the updated model.
-      valid_metrics = evaluate(optimizer.target, data_source.valid_batches)
-      log(stats, epoch, train_metrics, valid_metrics)
+    # Evaluate on validation data. optimizer.target is the updated model.
+    valid_metrics = evaluate(optimizer.target, valid_batches)
+    log(stats, epoch, train_metrics, valid_metrics)
 
-      # Save a checkpoint if this is the best model so far.
-      if valid_metrics['acc'] > best_score:
-        best_score = valid_metrics['acc']
-        flax.training.checkpoints.save_checkpoint(
-            model_dir, optimizer, epoch + 1)
+    # Save a checkpoint if this is the best model so far.
+    if valid_metrics['acc'] > best_score:
+      best_score = valid_metrics['acc']
+      flax.training.checkpoints.save_checkpoint(
+          model_dir, optimizer.target, epoch + 1, keep=checkpoints_to_keep)
 
-    # Done training. Restore best model.
-    logging.info('Training done! Best validation accuracy: %.2f', best_score)
-    optimizer = flax.training.checkpoints.restore_checkpoint(
-        model_dir, optimizer)
+  # Done training. Restore best model.
+  logging.info('Training done! Best validation accuracy: %.2f', best_score)
+  best_model = flax.training.checkpoints.restore_checkpoint(model_dir, model)
 
-  return stats, optimizer.target
+  return stats, best_model
 
 
 def main(argv):
@@ -197,43 +302,49 @@ def main(argv):
     raise app.UsageError('Too many command-line arguments.')
 
   flags.mark_flag_as_required('model_dir')
-  if not os.path.exists(FLAGS.model_dir):
-    os.makedirs(FLAGS.model_dir)
+  if not gfile.Exists(FLAGS.model_dir):
+    gfile.makedirs(FLAGS.model_dir)
 
   tf.enable_v2_behavior()
 
   # Prepare data.
   data_source = input_pipeline.SST2DataSource(
       batch_size=FLAGS.batch_size,
-      glove_path=FLAGS.glove_path,
-      glove_dim=FLAGS.glove_dim,
-      cache_dir=FLAGS.model_dir,
+      min_freq=FLAGS.min_freq,
       shuffle_seed=FLAGS.seed)
 
-  # Create model
-  emb_init = functools.partial(
-      sst2_model.pretrained_init, embed=data_source.embed)
-  model = sst2_model.create_model(
-      jax.random.PRNGKey(FLAGS.seed),
+  # Create model.
+  model = create_model(
+      FLAGS.seed,
       FLAGS.batch_size,
-      dict(vocab_size=data_source.vocab_size,
-           emb_init=emb_init,
-           dropout=FLAGS.dropout))
+      FLAGS.max_seq_len,
+      dict(
+          vocab_size=data_source.vocab_size,
+          embedding_size=FLAGS.embedding_size,
+          hidden_size=FLAGS.hidden_size,
+          output_size=1,
+          unk_idx=data_source.unk_idx,
+          dropout=FLAGS.dropout,
+          emb_dropout=FLAGS.emb_dropout,
+          word_dropout_rate=FLAGS.word_dropout_rate))
 
   # Train the model.
-  train_stats, best_model = train(
-      model,
-      learning_rate=FLAGS.learning_rate,
-      num_epochs=FLAGS.num_epochs,
-      seed=FLAGS.seed,
-      model_dir=FLAGS.model_dir,
-      data_source=data_source)
+  train_stats, model = train(
+		model,
+		learning_rate=FLAGS.learning_rate,
+		num_epochs=FLAGS.num_epochs,
+		seed=FLAGS.seed,
+		model_dir=FLAGS.model_dir,
+		data_source=data_source,
+		batch_size=FLAGS.batch_size,
+		checkpoints_to_keep=FLAGS.checkpoints_to_keep,
+		l2_reg=FLAGS.l2_reg)
 
   # Evaluate the best model.
-  rng = jax.random.PRNGKey(FLAGS.seed)
-  with nn.stochastic(rng):
-    metrics = evaluate(best_model, data_source.valid_batches)
-    logging.info('Best validation accuracy: %.2f', metrics['acc'])
+  valid_batches = data_source.get_batches(data_source.valid_dataset,
+      batch_size=FLAGS.batch_size)
+  metrics = evaluate(model, valid_batches)
+  logging.info('Best validation accuracy: %.2f', metrics['acc'])
 
 
 if __name__ == '__main__':

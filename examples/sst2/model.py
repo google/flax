@@ -25,36 +25,12 @@ from jax import lax
 
 import numpy as np
 
-# pylint: disable=arguments-differ
 
-
-@functools.partial(jax.jit, static_argnums=(1, 2))
-def create_model(rng, batch_size, model_kwargs):
-  """Instantiate a new model."""
-  with nn.stochastic(rng):
-    model_def = LSTMClassifier.partial(**model_kwargs)
-    _, initial_params = model_def.init_by_shape(
-        rng, [((batch_size, 55), jnp.int32), ((batch_size,), jnp.int32)])
-    model = nn.Model(model_def, initial_params)
-    return model
-
-
-def load_model(model_dir: Text, vocab_size: int, batch_size: int):
-  """Load a model from checkpoint."""
-  model = create_model(jax.random.PRNGKey(0), batch_size,
-                       dict(vocab_size=vocab_size))
-  with nn.stochastic(jax.random.PRNGKey(0)):
-    optimizer = flax.optim.Adam(learning_rate=0.001).create(model)
-    optimizer = flax.training.checkpoints.restore_checkpoint(
-        model_dir, optimizer)
-  model = optimizer.target
-  return model
-
-
-def pretrained_init(_, shape, embed: np.ndarray = None, dtype=np.float32):
-  assert embed.shape == shape, \
-      'The pretrained embeddings do not have the expected shape.'
-  return embed.astype(dtype)
+def word_dropout(inputs: jnp.ndarray, rate: float = None, unk_idx: int = None):
+  """Replaces a fraction (rate) of inputs with <unk>."""
+  assert unk_idx is not None, 'Please provide unk_idx to word_dropout.'
+  mask = jax.random.bernoulli(nn.make_rng(), p=rate, shape=inputs.shape)
+  return jnp.where(mask, jnp.array([unk_idx]), inputs)
 
 
 class Embedding(nn.Module):
@@ -64,9 +40,9 @@ class Embedding(nn.Module):
             inputs: jnp.ndarray,
             num_embeddings: int,
             features: int,
-            emb_init: Callable[..., np.ndarray] = nn.initializers.normal(
-                stddev=0.1),
-            frozen: bool = True):
+            emb_init: Callable[...,
+                               np.ndarray] = nn.initializers.normal(stddev=0.1),
+            frozen: bool = False):
     # inputs.shape = <int64>[batch_size, seq_length]
     embedding = self.param('embedding', (num_embeddings, features), emb_init)
     embed = jnp.take(embedding, inputs, axis=0)
@@ -75,32 +51,33 @@ class Embedding(nn.Module):
     return embed
 
 
-class LSTMEncoder(nn.Module):
+class LSTM(nn.Module):
   """LSTM encoder. Turns a sequence of vectors into a vector."""
 
   def apply(self,
             inputs: jnp.ndarray,
             lengths: jnp.ndarray,
-            hidden_size: int = 256):
+            hidden_size: int = None):
     # inputs.shape = <float32>[batch_size, seq_length, emb_size].
+    # lengths.shape = <int64>[batch_size,]
     batch_size = inputs.shape[0]
-    carry = nn.LSTMCell.initialize_carry(nn.make_rng(), (batch_size,),
-                                         hidden_size)
-    _, outputs = nn.attention.scan_in_dim(
-        nn.LSTMCell.partial(name='lstm'), carry, inputs, axis=1)
-    return outputs[jnp.arange(batch_size), jnp.maximum(0, lengths-1), :]
+    carry = nn.LSTMCell.initialize_carry(
+        jax.random.PRNGKey(0), (batch_size,), hidden_size)
+    _, outputs = flax.jax_utils.scan_in_dim(
+        nn.LSTMCell.partial(name='lstm_cell'), carry, inputs, axis=1)
+    return outputs[jnp.arange(batch_size), jnp.maximum(0, lengths - 1), :]
 
 
 class MLP(nn.Module):
   """A 2-layer MLP."""
 
   def apply(self,
-            inputs: np.ndarray,
-            hidden_size: int = 256,
-            output_size: int = 1,
+            inputs: jnp.ndarray,
+            hidden_size: int = None,
+            output_size: int = None,
             output_bias: bool = False,
-            dropout: float = 0.25,
-            train: bool = True):
+            dropout: float = None,
+            train: bool = None):
     # inputs.shape = <float32>[batch_size, seq_length, hidden_size]
     hidden = nn.Dense(inputs, hidden_size, name='hidden')
     hidden = nn.tanh(hidden)
@@ -114,32 +91,67 @@ class LSTMClassifier(nn.Module):
   """LSTM classifier."""
 
   def apply(self,
-            inputs: jnp.ndarray,
+            embed: jnp.ndarray,
             lengths: jnp.ndarray,
-            vocab_size: int = 0,
-            embedding_size: int = 300,
-            hidden_size: int = 256,
-            output_size: int = 1,
-            dropout: float = 0.5,
-            emb_init: Callable[..., Any] = nn.initializers.normal(stddev=0.1),
-            train: bool = True):
+            embedding_size: int = None,
+            hidden_size: int = None,
+            output_size: int = None,
+            dropout: float = None,
+            emb_dropout: float = None,
+            train: bool = None,
+            emb_init: Callable[..., Any] = nn.initializers.normal(stddev=0.1)):
     """Encodes the input sequence and makes a prediction using an MLP."""
-    # inputs.shape = <int64>[batch_size, seq_length]
-    # Embed the inputs. Shape: <float32>[batch_size, seq_length, emb_size]
-    embed = Embedding(inputs, vocab_size, embedding_size, emb_init=emb_init,
-                      name='embed')
+    # embed <float32>[batch_size, seq_length, embedding_size]
+    # lengths <int64>[batch_size]
     if train:
-      embed = nn.dropout(embed, rate=dropout)
+      embed = nn.dropout(embed, rate=emb_dropout)
 
-    # pylint: disable=unpacking-non-sequence
     # Encode the sequence of embedding using an LSTM.
-    hidden = LSTMEncoder(embed, lengths, hidden_size=hidden_size,
-                         name='encoder')
+    hidden = LSTM(embed, lengths, hidden_size=hidden_size, name='lstm')
     if train:
       hidden = nn.dropout(hidden, rate=dropout)
 
     # Predict the class using an MLP.
-    logits = MLP(hidden, hidden_size=hidden_size, output_size=output_size,
-                 output_bias=False, dropout=dropout, name='mlp', train=train)
+    logits = MLP(
+        hidden,
+        hidden_size=hidden_size,
+        output_size=output_size,
+        output_bias=False,
+        dropout=dropout,
+        name='mlp',
+        train=train)
+    return logits
+
+
+class TextClassifier(nn.Module):
+  """Full classification model."""
+
+  def apply(self,
+            inputs: jnp.ndarray,
+            lengths: jnp.ndarray,
+            unk_idx: int = 1,
+            vocab_size: int = None,
+            embedding_size: int = None,
+            word_dropout_rate: float = None,
+            freeze_embeddings: bool = None,
+            train: bool = False,
+            emb_init: Callable[..., Any] = nn.initializers.normal(stddev=0.1),
+            **kwargs):
+    # Apply word dropout.
+    if train:
+      inputs = word_dropout(inputs, rate=word_dropout_rate, unk_idx=unk_idx)
+
+    # Embed the inputs.
+    embed = Embedding(
+        inputs,
+        vocab_size,
+        embedding_size,
+        emb_init=emb_init,
+        frozen=freeze_embeddings,
+        name='embed')
+
+    # Encode with LSTM and classify.
+    logits = LSTMClassifier(
+        embed, lengths, train=train, name='lstm_classifier', **kwargs)
     return logits
 

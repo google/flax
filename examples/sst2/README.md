@@ -3,7 +3,7 @@
 ## Sentiment analysis in a nutshell
 
 The task is to classify an input example (e.g., a sentence) into a sentiment (here: positive or negative).
-We will use the SST-2 dataset as used in the GLUE benchmark.
+We will use the [SST-2](https://www.tensorflow.org/datasets/catalog/glue) dataset as used in the GLUE benchmark.
 
 An example from the data set:
 ```python
@@ -13,10 +13,11 @@ An example from the data set:
 }
 ```
 
-In this example we will build and train a **text classifier** on this data set. 
+In this example we will build and train a **text classifier** on this data set.
 
 Each sentence is mapped to a sequence of integers using a vocabulary.
-The vocabulary is just a dictionary that maps each word that occurs in SST-2 to a unique ID.  That looks like this for the above sentence:
+The vocabulary is just a dictionary that maps each word that occurs in SST-2 to a unique ID.
+It looks as follows for the above sentence:
 
 ```python
 {
@@ -42,28 +43,30 @@ Our model consists of word embeddings, an LSTM encoder, and an MLP classifier.
 This      movie      was      great
 ```
 
-We will use pre-trained [GloVe word embeddings](https://nlp.stanford.edu/projects/glove/) to map each word ID to a 300-dimensional word embedding vector.
-The LSTM reads in the sentence word by word (that is, embedding by embedding), updating its hidden state at each time step.
+The LSTM reads in the sentence word by word (that is, word embedding by word embedding), updating its hidden state at each time step.
 The MLP takes the final hidden state from the LSTM as input and outputs a scalar prediction. After taking a sigmoid, we treat `output > 0.5` as a positive classification, and `output <= 0.5` as negative.
 
-
-## Historic note on SST-2
+### Historic note on SST-2
 This dataset consisted of annotated *trees* originally, with sentiment labels (very negative to very positive) at every node of the tree.  There are only 6920 training trees with non-neutral root labels, and to make more use of the  dataset the yields of sub-trees were also included in the training set. (Exactly how that was done seems to be unknown at this point.) So that means that the training data contains a lot of overlapping phrases!
+
+## Requirements
+* TensorFlow dataset `glue/sst` will be downloaded and prepared
+  automatically, if necessary.
+
+## Supported Setups
+
+The model should run with other configurations and hardware, but explicitely
+tested on the following.
+
+| Hardware | Batch size | Training time | Valid Accuracy  |
+| --- | --- | --- | --- | --- |
+| 1 x JellyDonut TPUv2  | 64  |  3m  | 85.09 |
+
 
 ## Instructions
 
-1. Download and unzip the pre-trained word embeddings:
+Train the model as follows:
 
 ```sh
-wget http://nlp.stanford.edu/data/glove.840B.300d.zip
-unzip glove.840B.300d.zip
+python train.py --model_dir=./sst2_model
 ```
-
-2. Train the model as follows. The SST-2 data is downloaded from TFDS and cached
-   on the first run.
-
-```sh
-python3 train.py --glove-path glove.840B.300d.txt
-```
-
-
