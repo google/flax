@@ -15,7 +15,7 @@
 """LSTM classifier model for SST-2."""
 
 import functools
-from typing import Any, Callable, Text
+from typing import Any, Callable, Dict, Text
 
 import flax
 from flax import nn
@@ -24,6 +24,21 @@ import jax.numpy as jnp
 from jax import lax
 
 import numpy as np
+
+# pylint: disable=arguments-differ,too-many-arguments
+
+
+@functools.partial(jax.jit, static_argnums=(0, 1, 2, 3))
+def create_model(seed: int, batch_size: int, max_len: int,
+                 model_kwargs: Dict[Text, Any]):
+  """Instantiates a new model."""
+  model_def = TextClassifier.partial(train=False, **model_kwargs)
+  _, initial_params = model_def.init_by_shape(
+      jax.random.PRNGKey(seed),
+      [((batch_size, max_len), jnp.int32),
+       ((batch_size,), jnp.int32)])
+  model = nn.Model(model_def, initial_params)
+  return model
 
 
 def word_dropout(inputs: jnp.ndarray, rate: float = None, unk_idx: int = None):
@@ -93,13 +108,11 @@ class LSTMClassifier(nn.Module):
   def apply(self,
             embed: jnp.ndarray,
             lengths: jnp.ndarray,
-            embedding_size: int = None,
             hidden_size: int = None,
             output_size: int = None,
             dropout: float = None,
             emb_dropout: float = None,
-            train: bool = None,
-            emb_init: Callable[..., Any] = nn.initializers.normal(stddev=0.1)):
+            train: bool = None):
     """Encodes the input sequence and makes a prediction using an MLP."""
     # embed <float32>[batch_size, seq_length, embedding_size]
     # lengths <int64>[batch_size]
@@ -154,4 +167,3 @@ class TextClassifier(nn.Module):
     logits = LSTMClassifier(
         embed, lengths, train=train, name='lstm_classifier', **kwargs)
     return logits
-

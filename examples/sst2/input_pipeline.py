@@ -14,9 +14,9 @@
 
 """SST-2 input pipeline."""
 
+# pylint: disable=too-many-arguments,import-error,too-many-instance-attributes,too-many-locals
 import collections
-from typing import Dict, List, Set, Text, Tuple
-import os
+from typing import Dict, Sequence, Text
 
 from absl import logging
 
@@ -24,20 +24,18 @@ import numpy as np
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
-
 def build_vocab(datasets: Sequence[tf.data.Dataset],
                 special_tokens: Sequence[Text] = (b'<pad>', b'<unk>', b'<s>', b'</s>'),
-                min_freq: int = 0
-) -> Dict[Text, int]:
+                min_freq: int = 0) -> Dict[Text, int]:
   """Returns a vocabulary of tokens with optional minimum frequency."""
   # Count the tokens in the datasets.
-  counter = Counter()
+  counter = collections.Counter()
   for dataset in datasets:
     for example in tfds.as_numpy(dataset):
-      counter.update(whitespace_tokenize(example['text']))
+      counter.update(whitespace_tokenize(example['sentence']))
 
   # Add special tokens to the start of vocab.
-  vocab = OrderedDict()
+  vocab = collections.OrderedDict()
   for token in special_tokens:
     vocab[token] = len(vocab)
 
@@ -51,9 +49,9 @@ def build_vocab(datasets: Sequence[tf.data.Dataset],
   return vocab
 
 
-def whitespace_tokenize(s: Text) -> Sequence[Text]:
+def whitespace_tokenize(text: Text) -> Sequence[Text]:
   """Splits an input into tokens by whitespace."""
-  return s.strip().split()
+  return text.strip().split()
 
 
 def get_shuffled_batches(dataset: tf.data.Dataset,
@@ -86,7 +84,8 @@ def get_shuffled_batches(dataset: tf.data.Dataset,
       num_examples, seed=seed, reshuffle_each_iteration=True).padded_batch(
           batch_size,
           padded_shapes={
-              'text': [-1],
+              'idx': [],
+              'sentence': [-1],
               'label': [1],
               'length': []
           },
@@ -99,30 +98,24 @@ def get_batches(dataset: tf.data.Dataset,
   return dataset.padded_batch(
       batch_size,
       padded_shapes={
-          'text': [-1],
+          'idx': [],
+          'sentence': [-1],
           'label': [1],
           'length': []
       },
       drop_remainder=False).prefetch(tf.data.experimental.AUTOTUNE)
 
 
-class SST2DataSource(object):
+class SST2DataSource:
   """Provides SST-2 data as pre-processed batches, a vocab, and embeddings."""
+  # pylint: disable=too-few-public-methods
 
-  def __init__(self,
-               batch_size: int = None,
-               train_path: Text = None,
-               valid_path: Text = None,
-               test_path: Text = None,
-               min_freq: int = 0,
-               seed: int = 0,
-               **kwargs):
-    del kwargs
-
+  def __init__(self, min_freq: int = 0):
     # Load datasets.
-    train_raw = open_as_tf_dataset(train_path)
-    valid_raw = open_as_tf_dataset(valid_path)
-    test_raw = open_as_tf_dataset(test_path)
+    data = tfds.load('glue/sst2')
+    train_raw = data['train']
+    valid_raw = data['validation']
+    test_raw = data['test']
 
     # Print an example.
     logging.info('Data sample: %s', next(tfds.as_numpy(train_raw.skip(4))))
@@ -158,10 +151,10 @@ class SST2DataSource(object):
       return tf.concat(([bos_idx], tf.concat((sequence, [eos_idx]), 0)), 0)
 
     def preprocess_example(example: Dict[Text, tf.Tensor]):
-      example['text'] = tf_wrap_sequence(
-          tf_encode(tf_tokenize(example['text'])))
+      example['sentence'] = tf_wrap_sequence(
+          tf_encode(tf_tokenize(example['sentence'])))
       example['label'] = [example['label']]
-      example['length'] = tf.shape(example['text'])[0]
+      example['length'] = tf.shape(example['sentence'])[0]
       return example
 
     self.preprocess_fn = preprocess_example
@@ -177,7 +170,6 @@ class SST2DataSource(object):
     self.vocab = vocab
     self.vocab_size = len(vocab)
 
+    self.unk_idx = unk_idx
     self.bos_idx = bos_idx
     self.eos_idx = eos_idx
-    self.unk_idx = unk_idx
-

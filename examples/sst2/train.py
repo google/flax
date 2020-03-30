@@ -23,10 +23,9 @@ The data is loaded using tensorflow_datasets.
 
 For more detailed information, see README.
 """
+# pylint: disable=import-error,too-many-locals,too-many-arguments
 
 import collections
-import functools
-import os
 from typing import Any, Dict, Text, Tuple
 
 from absl import app
@@ -37,15 +36,15 @@ import flax
 import flax.training.checkpoints
 from flax import nn
 
-import flax.examples.sst2.input_pipeline as input_pipeline
-import flax.examples.sst2.model as sst2_model
-
 import jax
 import jax.numpy as jnp
 
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
-import tensorflow.io.gfile as gfile
+from tensorflow.compat.v2.io import gfile
+
+import input_pipeline
+import model as sst2_model
 
 
 FLAGS = flags.FLAGS
@@ -101,6 +100,10 @@ flags.DEFINE_float(
 flags.DEFINE_integer(
     'seed', default=0,
     help=('Random seed for network initialization.'))
+
+flags.DEFINE_integer(
+    'checkpoints_to_keep', default=1,
+    help=('How many checkpoints to keep. Default: 1 (keep best model only)'))
 
 
 @jax.vmap
@@ -203,7 +206,7 @@ def evaluate(model: nn.Model, eval_ds: tf.data.Dataset):
   total_correct = 0
 
   for ex in tfds.as_numpy(eval_ds):
-    inputs, lengths, labels = ex['text'], ex['length'], ex['label']
+    inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
     count = count + inputs.shape[0]
     loss, num_correct = eval_step(model, inputs, lengths, labels)
     total_loss += loss
@@ -233,7 +236,6 @@ def log(stats, epoch, train_metrics, valid_metrics):
   stats['train_loss'].append(train_loss.item())
   for metric, value in valid_metrics.items():
     stats['valid_' + metric].append(value)
-
 
 def train(
     model: nn.Model,
@@ -265,17 +267,18 @@ def train(
   optimizer = flax.optim.Adam(learning_rate=learning_rate).create(model)
   stats = collections.defaultdict(list)
   best_score = 0.
-  train_batches = get_shuffled_batches(data_source.train_dataset, 
-                                       batch_size=batch_size, seed=seed)
-  valid_batches = get_batches(data_source.valid_dataset, batch_size=batch_size)  
+  train_batches = input_pipeline.get_shuffled_batches(
+      data_source.train_dataset, batch_size=batch_size, seed=seed)
+  valid_batches = input_pipeline.get_batches(
+      data_source.valid_dataset, batch_size=batch_size)
 
   for epoch in range(num_epochs):
     train_metrics = collections.defaultdict(float)
 
     # Train for one epoch.
     for ex in tfds.as_numpy(train_batches):
-      inputs, lengths, labels = ex['text'], ex['length'], ex['label']
-      optimizer, loss, rng = train_step(optimizer, inputs, lengths, labels, rng, 
+      inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
+      optimizer, loss, rng = train_step(optimizer, inputs, lengths, labels, rng,
                                         l2_reg)
       train_metrics['loss'] += loss * inputs.shape[0]
       train_metrics['total'] += inputs.shape[0]
@@ -298,23 +301,21 @@ def train(
 
 
 def main(argv):
+  """Main function."""
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
   flags.mark_flag_as_required('model_dir')
-  if not gfile.Exists(FLAGS.model_dir):
+  if not gfile.exists(FLAGS.model_dir):
     gfile.makedirs(FLAGS.model_dir)
 
   tf.enable_v2_behavior()
 
   # Prepare data.
-  data_source = input_pipeline.SST2DataSource(
-      batch_size=FLAGS.batch_size,
-      min_freq=FLAGS.min_freq,
-      shuffle_seed=FLAGS.seed)
+  data_source = input_pipeline.SST2DataSource(min_freq=FLAGS.min_freq)
 
   # Create model.
-  model = create_model(
+  model = sst2_model.create_model(
       FLAGS.seed,
       FLAGS.batch_size,
       FLAGS.max_seq_len,
@@ -330,23 +331,22 @@ def main(argv):
 
   # Train the model.
   train_stats, model = train(
-		model,
-		learning_rate=FLAGS.learning_rate,
-		num_epochs=FLAGS.num_epochs,
-		seed=FLAGS.seed,
-		model_dir=FLAGS.model_dir,
-		data_source=data_source,
-		batch_size=FLAGS.batch_size,
-		checkpoints_to_keep=FLAGS.checkpoints_to_keep,
-		l2_reg=FLAGS.l2_reg)
+      model,
+      learning_rate=FLAGS.learning_rate,
+      num_epochs=FLAGS.num_epochs,
+      seed=FLAGS.seed,
+      model_dir=FLAGS.model_dir,
+      data_source=data_source,
+      batch_size=FLAGS.batch_size,
+      checkpoints_to_keep=FLAGS.checkpoints_to_keep,
+      l2_reg=FLAGS.l2_reg)
 
   # Evaluate the best model.
-  valid_batches = data_source.get_batches(data_source.valid_dataset,
-      batch_size=FLAGS.batch_size)
+  valid_batches = input_pipeline.get_batches(
+      data_source.valid_dataset, batch_size=FLAGS.batch_size)
   metrics = evaluate(model, valid_batches)
   logging.info('Best validation accuracy: %.2f', metrics['acc'])
 
 
 if __name__ == '__main__':
   app.run(main)
-
