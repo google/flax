@@ -36,6 +36,9 @@ install_requires = [
 ]
 
 tests_require = [
+    "pytest",
+    "pytest-xdist",
+    "tensorflow_datasets",
 ]
 
 setup(
@@ -55,7 +58,7 @@ setup(
     keywords="",
     author="Flax team",
     author_email="flax-dev@google.com",
-    url="https://github.com/google-research/flax",
+    url="https://github.com/google/flax",
     license="Apache",
     packages=find_packages(),
     include_package_data=False,

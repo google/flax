@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""CIFAR-10 input pipeline.
-"""
+"""CIFAR-10 input pipeline."""
 
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
