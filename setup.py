@@ -22,7 +22,7 @@ version = "0.1.0rc2"
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
-  README = open(os.path.join(here, "README.md")).read()
+  README = open(os.path.join(here, "README.md"), encoding='utf-8').read()
 except IOError:
   README = ""
 
