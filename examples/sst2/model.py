@@ -41,9 +41,12 @@ def create_model(seed: int, batch_size: int, max_len: int,
   return model
 
 
-def word_dropout(inputs: jnp.ndarray, rate: float = None, unk_idx: int = None):
+def word_dropout(inputs: jnp.ndarray, rate: float, unk_idx: int, 
+        deterministic: bool = False):
   """Replaces a fraction (rate) of inputs with <unk>."""
-  assert unk_idx is not None, 'Please provide unk_idx to word_dropout.'
+  if deterministic or rate == 0.:
+    return inputs
+
   mask = jax.random.bernoulli(nn.make_rng(), p=rate, shape=inputs.shape)
   return jnp.where(mask, jnp.array([unk_idx]), inputs)
 

@@ -305,7 +305,7 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  flags.mark_flag_as_required('model_dir')
+  assert FLAGS.model_dir is not None, 'Please provide model_dir.'
   if not gfile.exists(FLAGS.model_dir):
     gfile.makedirs(FLAGS.model_dir)
 
