@@ -181,8 +181,8 @@ class Conv(base.Module):
             kernel_size,
             strides=None,
             padding='SAME',
-            lhs_dilation=None,
-            rhs_dilation=None,
+            input_dilation=None,
+            kernel_dilation=None,
             feature_group_count=1,
             bias=True,
             dtype=jnp.float32,
@@ -200,12 +200,14 @@ class Conv(base.Module):
       padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
         of `n` `(low, high)` integer pairs that give the padding to apply before
         and after each spatial dimension.
-      lhs_dilation: `None`, or a sequence of `n` integers, giving the
-        dilation factor to apply in each spatial dimension of `lhs`.
-        LHS dilation is also known as transposed convolution.
-      rhs_dilation: `None`, or a sequence of `n` integers, giving the
-        dilation factor to apply in each spatial dimension of `rhs`.
-        RHS dilation is also known as atrous convolution.
+      input_dilation: `None`, or a sequence of `n` integers, giving the
+        dilation factor to apply in each spatial dimension of `inputs`.
+        Convolution with input dilation `d` is equivalent to transposed
+        convolution with stride `d`.
+      kernel_dilation: `None`, or a sequence of `n` integers, giving the
+        dilation factor to apply in each spatial dimension of the convolution
+        kernel. Convolution with kernel dilation is also known as 'atrous
+        convolution'.
       feature_group_count: integer, default 1. If specified divides the input
         features into groups.
       bias: whether to add a bias to the output (default: True).
@@ -235,8 +237,8 @@ class Conv(base.Module):
         kernel,
         strides,
         padding,
-        lhs_dilation=lhs_dilation,
-        rhs_dilation=rhs_dilation,
+        lhs_dilation=input_dilation,
+        rhs_dilation=kernel_dilation,
         dimension_numbers=dimension_numbers,
         feature_group_count=feature_group_count,
         precision=precision)
@@ -247,6 +249,69 @@ class Conv(base.Module):
       y = y + bias
     return y
 
+
+class ConvTranspose(base.Module):
+  """Transposed convolution Module wrapping lax.conv_transpose."""
+
+  def apply(self,
+            inputs,
+            features,
+            kernel_size,
+            strides=None,
+            padding='SAME',
+            kernel_dilation=None,
+            bias=True,
+            dtype=jnp.float32,
+            precision=None,
+            kernel_init=default_kernel_init,
+            bias_init=initializers.zeros):
+    """Applies a transposed convolution to the inputs. Behaviour mirrors that of
+    `jax.lax.conv_transpose`.
+
+    Args:
+      inputs: input data with dimensions (batch, spatial_dims..., features).
+      features: number of convolution filters.
+      kernel_size: shape of the convolutional kernel.
+      strides: a sequence of `n` integers, representing the inter-window
+        strides.
+      padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
+        of `n` `(low, high)` integer pairs that give the padding to apply before
+        and after each spatial dimension.
+      kernel_dilation: `None`, or a sequence of `n` integers, giving the
+        dilation factor to apply in each spatial dimension of the convolution
+        kernel. Convolution with kernel dilation is also known as 'atrous
+        convolution'.
+      bias: whether to add a bias to the output (default: True).
+      dtype: the dtype of the computation (default: float32).
+      precision: numerical precision of the computation see `jax.lax.Precision`
+        for details.
+      kernel_init: initializer for the convolutional kernel.
+      bias_init: initializer for the bias.
+    Returns:
+      The convolved data.
+    """
+    inputs = jnp.asarray(inputs, dtype)
+    strides = strides or (1,) * (inputs.ndim - 2)
+
+    in_features = inputs.shape[-1]
+    kernel_shape = kernel_size + (in_features, features)
+    kernel = self.param('kernel', kernel_shape, kernel_init)
+    kernel = jnp.asarray(kernel, dtype)
+
+    dimension_numbers = _conv_dimension_numbers(inputs.shape)
+    y = lax.conv_transpose(
+        inputs,
+        kernel,
+        strides,
+        padding,
+        rhs_dilation=kernel_dilation,
+        precision=precision)
+
+    if bias:
+      bias = self.param('bias', (features,), bias_init)
+      bias = jnp.asarray(bias, dtype)
+      y = y + bias
+    return y
 
 default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
                                                    out_axis=0)
