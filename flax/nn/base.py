@@ -258,7 +258,7 @@ class Module(metaclass=_ModuleMeta):
     elif cls._is_shared():
       raise ValueError('Cannot override the name of a shared module')
     if name is None:  # also no default name
-      name = parent.create_name()
+      name = cls.__name__ + '_' + parent.create_name()
     cls._check_name(name, parent)
     if parent.is_init and name not in parent.params:
       rng = _fold_in_str(parent.rng, name)
@@ -744,7 +744,7 @@ class TruncatedModule(TransparentModule):
       raise ValueError(
           '`wrapped_module` and `truncate_path` are required keyword arguments')
     with capture_module_outputs() as module_outputs:
-      wrapped_module(*args, **kwargs)
+      wrapped_module(*args, **kwargs, name='0')
 
     def lookup_output(path):
       return module_outputs[path]
