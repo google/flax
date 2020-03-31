@@ -50,7 +50,7 @@ import model as sst2_model
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.0002,
+    'learning_rate', default=0.0005,
     help=('The learning rate for the Adam optimizer.'))
 
 flags.DEFINE_integer(
@@ -94,7 +94,7 @@ flags.DEFINE_integer(
     help=('Minimum frequency for training set words to be in the vocabulary.'))
 
 flags.DEFINE_float(
-    'l2_reg', default=1e-5,
+    'l2_reg', default=1e-6,
     help=('L2 regularization weight'))
 
 flags.DEFINE_integer(
@@ -209,12 +209,12 @@ def evaluate(model: nn.Model, eval_ds: tf.data.Dataset):
     inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
     count = count + inputs.shape[0]
     loss, num_correct = eval_step(model, inputs, lengths, labels)
-    total_loss += loss
-    total_correct += num_correct
+    total_loss += loss.item()
+    total_correct += num_correct.item()
 
   loss = total_loss / count
   accuracy = 100. * total_correct / count
-  metrics = dict(loss=loss.item(), acc=accuracy.item())
+  metrics = dict(loss=loss, acc=accuracy)
 
   return metrics
 
