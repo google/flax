@@ -28,7 +28,6 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jaxlib>=0.1.41",
     "jax>=0.1.59",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses",  # will only install on py3.6
