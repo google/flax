@@ -25,6 +25,11 @@ import jax
 
 import numpy as onp
 
+from flax.optim.adam import _AdamHyperParams, _AdamParamState
+from flax.optim.sgd import _GradientDescentHyperParams
+from flax.optim.momentum import _MomentumHyperParams, _MomentumParamState
+from flax.optim.weight_norm import _WeightNormParamState
+
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
@@ -36,7 +41,7 @@ class OptimizerDefTest(absltest.TestCase):
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
     optimizer = optimizer_def.create(params)
     expected_state = optim.OptimizerState(
-        0, optim._MomentumParamState(onp.zeros((1,))))
+        0, _MomentumParamState(onp.zeros((1,))))
     self.assertEqual(optimizer.optimizer_def, optimizer_def)
     self.assertEqual(optimizer.state, expected_state)
     self.assertEqual(optimizer.target, params)
@@ -127,8 +132,8 @@ class MultiOptimizerTest(absltest.TestCase):
     optimizer_def = optim.MultiOptimizer((t_a, opt_a), (t_b, opt_b))
     state = optimizer_def.init_state(params)
     expected_hyper_params = [
-        optim._GradientDescentHyperParams(1.),
-        optim._GradientDescentHyperParams(10.)
+        _GradientDescentHyperParams(1.),
+        _GradientDescentHyperParams(10.)
     ]
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = [optim.OptimizerState(0, [()])] * 2
@@ -154,7 +159,7 @@ class GradientDescentTest(absltest.TestCase):
     params = onp.zeros((1,))
     optimizer_def = optim.GradientDescent(learning_rate=0.1)
     state = optimizer_def.init_state(params)
-    expected_hyper_params = optim._GradientDescentHyperParams(0.1)
+    expected_hyper_params = _GradientDescentHyperParams(0.1)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(0, ())
     self.assertEqual(state, expected_state)
@@ -178,22 +183,22 @@ class MomentumTest(absltest.TestCase):
     params = onp.zeros((1,))
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
     state = optimizer_def.init_state(params)
-    expected_hyper_params = optim._MomentumHyperParams(0.1, 0.2, 0, False)
+    expected_hyper_params = _MomentumHyperParams(0.1, 0.2, 0, False)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, optim._MomentumParamState(onp.zeros((1,))))
+        0, _MomentumParamState(onp.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
     params = onp.ones((1,))
     state = optim.OptimizerState(
-        0, optim._MomentumParamState(onp.array([1.])))
+        0, _MomentumParamState(onp.array([1.])))
     grads = onp.array([3.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        1, optim._MomentumParamState(onp.array([3.2])))
+        1, _MomentumParamState(onp.array([3.2])))
     expected_new_params = onp.array([1. - 0.32])
     self.assertEqual(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
@@ -210,10 +215,10 @@ class AdamTest(absltest.TestCase):
                                weight_decay=0.0)
     state = optimizer_def.init_state(params)
 
-    expected_hyper_params = optim._AdamHyperParams(0.1, 0.2, 0.9, 0.01, 0.0)
+    expected_hyper_params = _AdamHyperParams(0.1, 0.2, 0.9, 0.01, 0.0)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, optim._AdamParamState(onp.zeros((1,)), onp.zeros((1,))))
+        0, _AdamParamState(onp.zeros((1,)), onp.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
@@ -224,12 +229,12 @@ class AdamTest(absltest.TestCase):
                                weight_decay=0.0)
     params = onp.array([1.])
     state = optim.OptimizerState(
-        1, optim._AdamParamState(onp.array([0.1]), onp.array([0.9])))
+        1, _AdamParamState(onp.array([0.1]), onp.array([0.9])))
     grads = onp.array([4.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        2, optim._AdamParamState(onp.array([3.22]), onp.array([2.41])))
+        2, _AdamParamState(onp.array([3.22]), onp.array([2.41])))
     expected_new_params = onp.array([0.906085])
     onp.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
@@ -243,9 +248,9 @@ class WeightNormTest(absltest.TestCase):
     state = optimizer_def.init_state(params)
     self.assertEqual(jax.tree_map(onp.shape, state), optim.OptimizerState(
         step=(),
-        param_states=optim._WeightNormParamState(
-            direction_state=optim._MomentumParamState(momentum=(2, 2)),
-            scale_state=optim._MomentumParamState(momentum=(1, 2)),
+        param_states=_WeightNormParamState(
+            direction_state=_MomentumParamState(momentum=(2, 2)),
+            scale_state=_MomentumParamState(momentum=(1, 2)),
             mult=(1, 2)
         )
     ))
