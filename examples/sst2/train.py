@@ -191,12 +191,12 @@ def eval_step(model: nn.Module, inputs: jnp.ndarray, lengths: jnp.ndarray,
   return loss, num_correct
 
 
-def evaluate(model: nn.Model, eval_ds: tf.data.Dataset):
+def evaluate(model: nn.Model, dataset: tf.data.Dataset):
   """Evaluates the model on a dataset.
 
   Args:
     model: A model to be evaluated.
-    eval_ds: A dataset to be used for the evaluation. Typically valid or test.
+    dataset: A dataset to be used for the evaluation. Typically valid or test.
 
   Returns:
     A dict with the evaluation results.
@@ -205,7 +205,7 @@ def evaluate(model: nn.Model, eval_ds: tf.data.Dataset):
   total_loss = 0.
   total_correct = 0
 
-  for ex in tfds.as_numpy(eval_ds):
+  for ex in tfds.as_numpy(dataset):
     inputs, lengths, labels = ex['sentence'], ex['length'], ex['label']
     count = count + inputs.shape[0]
     loss, num_correct = eval_step(model, inputs, lengths, labels)
