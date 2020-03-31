@@ -353,12 +353,12 @@ def log_decode(question, inferred, golden):
 
 
 @jax.jit
-def decode(model, inputs):
+def decode(model, inputs, rng):
   """Decode inputs."""
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], get_max_output_len(), 1))
-  _, predictions = model(inputs, init_decoder_inputs, teacher_force=False)
+  _, predictions = model(rng, inputs, init_decoder_inputs, teacher_force=False)
   return predictions
 
 
@@ -366,7 +366,7 @@ def decode_batch(model, batch_size):
   """Decode and log results for a batch."""
   batch = get_batch(batch_size)
   inputs, outputs = batch['query'], batch['answer'][:, 1:]
-  inferred = decode(model, inputs)
+  inferred = decode(model, inputs, nn.make_rng())
   questions = decode_onehot(inputs)
   infers = decode_onehot(inferred)
   goldens = decode_onehot(outputs)
@@ -376,17 +376,17 @@ def decode_batch(model, batch_size):
 
 def train_model():
   """Train for a fixed number of steps and decode during training."""
-  init_rng, rng = jax.random.split(jax.random.PRNGKey(0), 2)
-  model = create_model(init_rng)
-  optimizer = create_optimizer(model, FLAGS.learning_rate)
-  for step in range(FLAGS.num_train_steps):
-    batch = get_batch(FLAGS.batch_size)
-    optimizer, metrics = train_step(optimizer, batch, rng)
-    if step % FLAGS.decode_frequency == 0:
-      logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                   metrics['loss'], metrics['accuracy'] * 100)
-      decode_batch(optimizer.target, 5)
-  return optimizer.target
+  with nn.stochastic(jax.random.PRNGKey(0)):
+    model = create_model(nn.make_rng())
+    optimizer = create_optimizer(model, FLAGS.learning_rate)
+    for step in range(FLAGS.num_train_steps):
+      batch = get_batch(FLAGS.batch_size)
+      optimizer, metrics = train_step(optimizer, batch, nn.make_rng())
+      if step % FLAGS.decode_frequency == 0:
+        logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
+                     metrics['loss'], metrics['accuracy'] * 100)
+        decode_batch(optimizer.target, 5)
+    return optimizer.target
 
 
 def main(_):
