@@ -230,6 +230,7 @@ class Seq2seq(nn.Module):
     """Run the seq2seq model with teacher forcing.
 
     Args:
+      rng_key: key for seeding the random numbers.
       encoder_inputs: padded batch of input sequences to encode, shaped
         `[batch_size, max(encoder_input_lengths), vocab_size]`.
       decoder_inputs: padded batch of expected decoded sequences for teacher
@@ -260,6 +261,7 @@ class Seq2seq(nn.Module):
         teacher_force=teacher_force)
 
     return logits, predictions
+
 
 def create_model(rng):
   """Creates a seq2seq model."""
@@ -382,7 +384,7 @@ def train_model():
     optimizer, metrics = train_step(optimizer, batch, rng)
     if step % FLAGS.decode_frequency == 0:
       logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                    metrics['loss'], metrics['accuracy'] * 100)
+                   metrics['loss'], metrics['accuracy'] * 100)
       decode_batch(optimizer.target, 5)
   return optimizer.target
 
