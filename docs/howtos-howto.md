@@ -30,7 +30,7 @@ In order to create a new HOWTO, you can simply make the desired changes local
 changes and run:
 
 ```
-./howtos/script/pack_howto_diff.sh
+./howtos/scripts/pack_howto_diffs.sh
 ```
 
 This will pack the changes you made into a diff file (you can set the name of
