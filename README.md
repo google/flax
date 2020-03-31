@@ -186,7 +186,7 @@ class ResNet(nn.Module):
 
 ## Installation
 
-You will need Python 3.5 or later.
+You will need Python 3.6 or later.
 
 For GPU support, first install `jaxlib`; please follow the
 instructions in the [JAX
