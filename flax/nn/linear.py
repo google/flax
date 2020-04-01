@@ -298,20 +298,15 @@ class ConvTranspose(base.Module):
     kernel = self.param('kernel', kernel_shape, kernel_init)
     kernel = jnp.asarray(kernel, dtype)
 
-    dimension_numbers = _conv_dimension_numbers(inputs.shape)
-    y = lax.conv_transpose(
-        inputs,
-        kernel,
-        strides,
-        padding,
-        rhs_dilation=kernel_dilation,
-        precision=precision)
+    y = lax.conv_transpose(inputs, kernel, strides, padding,
+                           rhs_dilation=kernel_dilation, precision=precision)
 
     if bias:
       bias = self.param('bias', (features,), bias_init)
       bias = jnp.asarray(bias, dtype)
       y = y + bias
     return y
+
 
 default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
                                                    out_axis=0)
