@@ -108,6 +108,10 @@ class TrainTest(absltest.TestCase):
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
 
+  def test_decode_batch(self):
+    with nn.stochastic(random.PRNGKey(0)):
+      model = train.create_model(nn.make_rng())
+      train.decode_batch(model, 5)
 
 if __name__ == '__main__':
   absltest.main()
