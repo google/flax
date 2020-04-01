@@ -644,6 +644,17 @@ class StochasticTest(absltest.TestCase):
       with self.assertRaises(ValueError):
         jax.jit(nn.make_rng)()
 
+  def test_init_by_shape_lifts_stochastic(self):
+    class StochasticModule(nn.Module):
+      def apply(self):
+        return nn.make_rng()
+
+    with nn.stochastic(random.PRNGKey(0)):
+      rng, _ = StochasticModule.init_by_shape(random.PRNGKey(1), [])
+    expected_rng = random.fold_in(random.PRNGKey(0), 1)
+    expected_rng = random.fold_in(expected_rng, 1)
+    self.assertTrue(onp.all(rng == expected_rng))
+
 
 if __name__ == '__main__':
   absltest.main()
