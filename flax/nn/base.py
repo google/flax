@@ -376,7 +376,7 @@ class Module(metaclass=_ModuleMeta):
     return PartialModule
 
   @classmethod
-  def create(cls, rng, *args, name=None, **kwargs):
+  def create(cls, _rng, *args, name=None, **kwargs):
     """Create a module instance by evaluating the model.
 
     DEPRECATION WARNING:
@@ -388,7 +388,7 @@ class Module(metaclass=_ModuleMeta):
     Initializer functions can depend both on the shape and the value of inputs.
 
     Args:
-      rng: the random number generator used to initialize parameters.
+      _rng: the random number generator used to initialize parameters.
       *args: arguments passed to the module's apply function
       name: name of this module
       **kwargs: keyword arguments passed to the module's apply function
@@ -400,12 +400,12 @@ class Module(metaclass=_ModuleMeta):
                   " create a `nn.Model` given the module and initialized"
                   " parameters.",
                   DeprecationWarning)
-    y, params = cls.init(rng, *args, name=name, **kwargs)
+    y, params = cls.init(_rng, *args, name=name, **kwargs)
     model = Model(cls, params)
     return y, model
 
   @classmethod
-  def create_by_shape(cls, rng, input_specs, *args, name=None, **kwargs):
+  def create_by_shape(cls, _rng, input_specs, *args, name=None, **kwargs):
     """Create a module instance using only shape and dtype information.
 
     DEPRECATION WARNING:
@@ -418,7 +418,7 @@ class Module(metaclass=_ModuleMeta):
     Initializer functions can depend on the shape but not the value of inputs.
 
     Args:
-      rng: the random number generator used to initialize parameters.
+      _rng: the random number generator used to initialize parameters.
       input_specs: an iterable of (shape, dtype) pairs specifying the inputs
       *args: other arguments passed to the module's apply function
       name: name of this module.
@@ -432,16 +432,16 @@ class Module(metaclass=_ModuleMeta):
                   " initialized parameters.",
                   DeprecationWarning)
 
-    y, params = cls.init_by_shape(rng, input_specs, *args, name=name, **kwargs)
+    y, params = cls.init_by_shape(_rng, input_specs, *args, name=name, **kwargs)
     model = Model(cls, params)
     return y, model
 
   @classmethod
-  def init(cls, rng, *args, name=None, **kwargs):
+  def init(cls, _rng, *args, name=None, **kwargs):
     """Initialize the module parameters.
 
     Args:
-      rng: the random number generator used to initialize parameters.
+      _rng: the random number generator used to initialize parameters.
       *args: arguments passed to the module's apply function
       name: name of this module.
       **kwargs: keyword arguments passed to the module's apply function
@@ -456,7 +456,7 @@ class Module(metaclass=_ModuleMeta):
     if name is None:
       name = cls._default_name()
 
-    frame = _ModuleFrame(name, rng=rng, parent=parent,
+    frame = _ModuleFrame(name, rng=_rng, parent=parent,
                          transparent=cls._is_transparent())
     with cls._with_instance(frame) as instance:
       y = instance.apply(*args, **kwargs)
@@ -464,14 +464,14 @@ class Module(metaclass=_ModuleMeta):
     return y, cls._post_process_params(frame.params)
 
   @classmethod
-  def init_by_shape(cls, rng, input_specs, *args, name=None, **kwargs):
+  def init_by_shape(cls, _rng, input_specs, *args, name=None, **kwargs):
     """Initialize the module parameters.
 
     This method will initialize the module parameters without computation.
     Initializer functions can depend on the shape but not the value of inputs.
 
     Args:
-      rng: the random number generator used to initialize parameters.
+      _rng: the random number generator used to initialize parameters.
       input_specs: an iterable of (shape, dtype) pairs specifying the inputs
       *args: arguments passed to the module's apply function
       name: name of this module.
@@ -480,7 +480,7 @@ class Module(metaclass=_ModuleMeta):
       A pair consisting of the model output and the initialized parameters
     """
     def lazy_init(*inputs):
-      return cls.init(rng, *(inputs + args), name=name, **kwargs)
+      return cls.init(_rng, *(inputs + args), name=name, **kwargs)
     return jax_utils.partial_eval_by_shape(lazy_init, input_specs)
 
   @classmethod
