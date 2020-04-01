@@ -100,7 +100,7 @@ class TrainTest(absltest.TestCase):
     rng = random.PRNGKey(0)
 
     with nn.stochastic(rng):
-      model = train.create_model(nn.make_rng())
+      model = train.create_model()
       optimizer = train.create_optimizer(model, 0.003)
       optimizer, train_metrics = train.train_step(
           optimizer, batch, nn.make_rng())
@@ -110,7 +110,7 @@ class TrainTest(absltest.TestCase):
 
   def test_decode_batch(self):
     with nn.stochastic(random.PRNGKey(0)):
-      model = train.create_model(nn.make_rng())
+      model = train.create_model()
       train.decode_batch(model, 5)
 
 if __name__ == '__main__':
