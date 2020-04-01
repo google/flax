@@ -25,6 +25,7 @@ from typing import Any
 import warnings
 
 from . import utils
+from . import stochastic
 from flax import jax_utils
 from flax import serialization
 from flax import struct
@@ -241,7 +242,7 @@ def _fold_in_str(rng, data):
   m.update(data.encode('utf-8'))
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
-  return jax.random.fold_in(rng, hash_int)
+  return random.fold_in(rng, hash_int)
 
 
 class Module(metaclass=_ModuleMeta):
@@ -479,8 +480,27 @@ class Module(metaclass=_ModuleMeta):
     Returns:
       A pair consisting of the model output and the initialized parameters
     """
+    stochastic_rng = None
+    try:
+      stochastic_rng = stochastic.make_rng()
+    except ValueError:
+      # Either there is no stochastic scope or the current
+      # scope is invalid due to another jax transformation.
+      # In both cases we should not try to lift the stochastic
+      # scope into the lazy evaluation
+      pass
+
     def lazy_init(*inputs):
-      return cls.init(_rng, *(inputs + args), name=name, **kwargs)
+      def init_fn():
+        return cls.init(_rng, *(inputs + args), name=name, **kwargs)
+      if stochastic_rng is not None:
+        # Create a new stochastic scope inside the lazy evalution
+        # this way we can use a stochastic scope in combination
+        # with init_by_shape.
+        with stochastic.stochastic(stochastic_rng):
+          return init_fn()
+      else:
+        return init_fn()
     return jax_utils.partial_eval_by_shape(lazy_init, input_specs)
 
   @classmethod
