@@ -211,6 +211,9 @@ When working with large-scale input data, it is important to create large enough
 
 TODO: Add an example for running on Google Cloud.
 
+## Getting involved
+We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
+
 ## Note
 
 This is not an official Google product.
