@@ -384,7 +384,7 @@ def train_model():
         logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
                      metrics['loss'], metrics['accuracy'] * 100)
         decode_batch(optimizer.target, 5)
-    return optimizer.target
+  return optimizer.target
 
 
 def main(_):
