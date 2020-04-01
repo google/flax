@@ -149,12 +149,10 @@ def module_method(fn):
 
       @nn.module_method
       def encode(self, x):
-        encoder, _ = self._create_modules(**hparams)
         return self.encoder(x)
 
       @nn.module_method
       def decode(self, x):
-        _, decoder = self._create_modules(**hparams)
         return self.decoder(x)
 
   A module method can be called on A Model instance directly::
