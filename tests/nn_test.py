@@ -271,6 +271,21 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(l2, 2.)
     self.assertEqual(l2_2, 2.)
 
+  def test_module_with_init_method(self):
+    class InitModel(nn.Module):
+
+      def __init__(self, features):
+        self.fc = nn.Dense.shared(features=features, name='fc',
+                                  kernel_init=initializers.ones)
+
+      def apply(self, x):
+        return self.fc(x)
+
+    model_def = InitModel.partial(features=1)
+    x = jnp.array([1., 2.])
+    y, _ = model_def.init(random.PRNGKey(0), x)
+    self.assertEqual(y.reshape(()).item(), 3.)
+
   def test_module_state(self):
     class StatefulModule(nn.Module):
 
