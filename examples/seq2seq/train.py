@@ -226,7 +226,7 @@ class Seq2seq(nn.Module):
             teacher_force=True,
             eos_id=1,
             hidden_size=512):
-    """Run the seq2seq model with teacher forcing.
+    """Run the seq2seq model.
 
     Args:
       rng_key: key for seeding the random numbers.
