@@ -53,7 +53,7 @@ flags.DEFINE_integer(
     help=('Frequency of eval during training, e.g. every 1000 steps.'))
 
 flags.DEFINE_integer(
-    'num_train_steps', default=500000, help=('Number of train steps.'))
+    'num_train_steps', default=75000, help=('Number of train steps.'))
 
 flags.DEFINE_integer(
     'num_eval_steps',
