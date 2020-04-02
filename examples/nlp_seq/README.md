@@ -21,11 +21,11 @@ The model should run with other configurations and hardware, but explicitly test
 
 | Hardware |  Batch size  | Learning rate | Training time | Accuracy  | TensorBoard.dev |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| Nvidia V100 (16GB) | 64  |  0.05 |  1d 11h 11m  | 72.20% | [2020-03-22](https://tensorboard.dev/experiment/IyswaKpRQbOpk0AfLwBu3A/) |
+| Nvidia V100 (16GB) | 64  |  0.05 | 5h 15m | 72.20% | [2020-03-22](https://tensorboard.dev/experiment/YkUAdwYaQ9OtYl2IVe3MvA/) |
 
 ### Running 
 ```
-python train.py --batch_size=64 --model_dir=model_dir \
+python train.py --batch_size=64 --model_dir=./ancient_greek \
     --dev=ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-dev.conllu \
     --train=ud-treebanks-v2.0/UD_Ancient_Greek/grc-ud-train.conllu
 ```
