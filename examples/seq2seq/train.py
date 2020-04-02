@@ -152,13 +152,13 @@ def mask_sequences(sequence_batch, lengths):
 class Encoder(nn.Module):
   """LSTM encoder, returning state after EOS is input."""
 
-  def apply(self, rng_key, inputs, eos_id=1, hidden_size=512):
+  def apply(self, inputs, eos_id=1, hidden_size=512):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
 
     lstm_cell = nn.LSTMCell.partial(name='lstm')
     init_lstm_state = nn.LSTMCell.initialize_carry(
-        rng_key,
+        nn.make_rng(),
         (batch_size,),
         hidden_size)
 
@@ -186,7 +186,7 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
   """LSTM decoder."""
 
-  def apply(self, rng_key, init_state, inputs, teacher_force=False):
+  def apply(self, init_state, inputs, teacher_force=False):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
     lstm_cell = nn.LSTMCell.partial(name='lstm')
@@ -205,7 +205,7 @@ class Decoder(nn.Module):
 
     _, (logits, predictions) = jax_utils.scan_in_dim(
         decode_step_fn,
-        init=(rng_key, init_state, inputs[:, 0]),  # rng, lstm_state, last_pred
+        init=(nn.make_rng(), init_state, inputs[:, 0]),  # rng, lstm_state, last_pred
         xs=inputs,
         axis=1)
     return logits, predictions
@@ -221,13 +221,12 @@ class Seq2seq(nn.Module):
     return encoder, decoder
 
   def apply(self,
-            rng_key,
             encoder_inputs,
             decoder_inputs,
             teacher_force=True,
             eos_id=1,
             hidden_size=512):
-    """Run the seq2seq model with teacher forcing.
+    """Run the seq2seq model.
 
     Args:
       rng_key: key for seeding the random numbers.
@@ -248,14 +247,12 @@ class Seq2seq(nn.Module):
     Returns:
       Array of decoded logits.
     """
-    encoder_rng, decoder_rng = jax.random.split(rng_key, 2)
     encoder, decoder = self._create_modules(eos_id, hidden_size)
 
     # Encode inputs
-    init_decoder_state = encoder(encoder_rng, encoder_inputs)
+    init_decoder_state = encoder(encoder_inputs)
     # Decode outputs.
     logits, predictions = decoder(
-        decoder_rng,
         init_decoder_state,
         decoder_inputs[:, :-1],
         teacher_force=teacher_force)
@@ -263,13 +260,12 @@ class Seq2seq(nn.Module):
     return logits, predictions
 
 
-def create_model(rng):
+def create_model():
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size
   _, initial_params = Seq2seq.partial(eos_id=CTABLE.eos_id).init_by_shape(
-      rng,
-      [((2,), jnp.uint32),
-       ((1, get_max_input_len(), vocab_size), jnp.float32),
+      nn.make_rng(),
+      [((1, get_max_input_len(), vocab_size), jnp.float32),
        ((1, get_max_output_len(), vocab_size), jnp.float32)])
   model = nn.Model(Seq2seq, initial_params)
   return model
@@ -335,7 +331,8 @@ def train_step(optimizer, batch, rng):
 
   def loss_fn(model):
     """Compute cross-entropy loss."""
-    logits, _ = model(rng, batch['query'], batch['answer'])
+    with nn.stochastic(rng):
+      logits, _ = model(batch['query'], batch['answer'])
     loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -358,7 +355,8 @@ def decode(model, inputs, rng):
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], get_max_output_len(), 1))
-  _, predictions = model(rng, inputs, init_decoder_inputs, teacher_force=False)
+  with nn.stochastic(rng):
+    _, predictions = model(inputs, init_decoder_inputs, teacher_force=False)
   return predictions
 
 
@@ -377,7 +375,7 @@ def decode_batch(model, batch_size):
 def train_model():
   """Train for a fixed number of steps and decode during training."""
   with nn.stochastic(jax.random.PRNGKey(0)):
-    model = create_model(nn.make_rng())
+    model = create_model()
     optimizer = create_optimizer(model, FLAGS.learning_rate)
     for step in range(FLAGS.num_train_steps):
       batch = get_batch(FLAGS.batch_size)
@@ -386,7 +384,7 @@ def train_model():
         logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
                      metrics['loss'], metrics['accuracy'] * 100)
         decode_batch(optimizer.target, 5)
-    return optimizer.target
+  return optimizer.target
 
 
 def main(_):
