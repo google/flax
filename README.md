@@ -74,6 +74,8 @@ comes with everything you need to start your research, including:
 ⟶ (work-in-progress) [WMT translation](https://github.com/google/flax/pull/133)
 
 ### RNNs
+⟶ [LSTM text classifier on SST-2](examples/sst2)
+
 ⟶ [LSTM seq2seq on number addition](examples/seq2seq)
 
 
