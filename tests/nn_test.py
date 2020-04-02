@@ -197,6 +197,8 @@ class ModuleTest(absltest.TestCase):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
     dummy_module = DummyModule.partial(x=x)  # partially apply the inputs
+    self.assertEqual(DummyModule.__name__, dummy_module.__name__)
+    self.assertEqual(DummyModule.__qualname__, dummy_module.__qualname__)
     y, initial_params = dummy_module.init(rng)
     model = nn.Model(dummy_module, initial_params)
     y2 = model()
@@ -264,6 +266,10 @@ class ModuleTest(absltest.TestCase):
         layer = MultiMethod.shared()
         layer(x)  # init
         return layer.l2()
+
+    self.assertEqual(
+        MultiMethod.l2.__qualname__,
+        MultiMethod.__qualname__ + '.l2')
 
     x = jnp.array([1., 2.])
     y, _ = MultiMethodModel.init(random.PRNGKey(0), x)

@@ -181,6 +181,7 @@ def module_method(fn):
       class ModuleMethod(cls):
         apply = fn
       ModuleMethod.__name__ = fn.__name__
+      ModuleMethod.__qualname__ = f'{cls.__qualname__}.{fn.__name__}'
       cache[cls] = ModuleMethod
     return cache[cls]
 
@@ -321,6 +322,7 @@ class Module(metaclass=_ModuleMeta):
         return parent
 
     SharedModule.__name__ = class_.__name__
+    SharedModule.__qualname__ = class_.__qualname__
 
     return SharedModule
 
@@ -373,6 +375,7 @@ class Module(metaclass=_ModuleMeta):
         return super()._extend_kwargs(extended_kwargs)
     # __doc__ is handled by the Module meta class
     PartialModule.__name__ = class_.__name__
+    PartialModule.__qualname__ = class_.__qualname__
 
     return PartialModule
 
