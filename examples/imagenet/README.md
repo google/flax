@@ -21,4 +21,4 @@ The model should run with other configurations and hardware, but explicitely tes
 `python train.py --batch_size=512 --cache=True --model_dir=./imagenet_fp32_bs512`
 
 #### 8 x Nvidia V100 (16GB), mixed precision
-`python train.py --batch_size=2048 --cache=True --model_dir=./imagenet_fp16_bs2048 --precision=float16 --loss_scale=256.`
+`python train.py --batch_size=2048 --cache=True --model_dir=./imagenet_fp16_bs2048 --half_precision=True --loss_scaling=256.`
