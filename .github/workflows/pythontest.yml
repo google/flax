@@ -16,6 +16,9 @@ jobs:
       matrix:
         python-version: [3.6]
     steps:
+    - name: Install native dependencies
+      run: |
+        sudo apt-get -y install pandoc
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v1
@@ -26,7 +29,6 @@ jobs:
         python -m pip install absl-py opt_einsum numpy scipy pytest-xdist pytest-benchmark jaxlib jax tensorflow tensorflow-datasets
         pip install -v .
         pip install -r docs/requirements.txt
-        apt-get -y install pandoc
     - name: Build documentation
       run: |
         sphinx-build -M html docs docs/_build
