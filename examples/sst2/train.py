@@ -154,7 +154,8 @@ def train_step(optimizer: Any, inputs: jnp.ndarray, lengths: jnp.ndarray,
     loss = loss + l2_penalty
     return loss, logits
 
-  (loss, _), grad = jax.value_and_grad(loss_fn)(optimizer.target)
+  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+  (loss, _), grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
   return optimizer, loss, new_rng
 
