@@ -258,7 +258,7 @@ class Optimizer:
     """
     warnings.warn('compute_gradient() will be removed soon.'
                   ' Use jax.grad() or jax.value_and_grad()'
-                  'and apply_gradient() instead.',
+                  ' and apply_gradient() instead.',
                   DeprecationWarning)
 
     def loss_wrapper(target):
@@ -294,7 +294,7 @@ class Optimizer:
     """
     warnings.warn('optimize() will be removed soon.'
                   ' Use jax.grad() or jax.value_and_grad()'
-                  'and apply_gradient() instead.',
+                  ' and apply_gradient() instead.',
                   DeprecationWarning)
 
     output_and_grad = self.compute_gradient(loss_fn)
