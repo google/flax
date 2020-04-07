@@ -1,5 +1,5 @@
 diff --git a/examples/seq2seq/train.py b/examples/seq2seq/train.py
-index 9b64f88..3eba1db 100644
+index 9b64f88..69bed4f 100644
 --- a/examples/seq2seq/train.py
 +++ b/examples/seq2seq/train.py
 @@ -186,17 +186,19 @@ class Encoder(nn.Module):
@@ -69,7 +69,7 @@ index 9b64f88..3eba1db 100644
  
      return logits, predictions
  
-@@ -325,14 +328,15 @@ def compute_metrics(logits, labels):
+@@ -325,14 +328,16 @@ def compute_metrics(logits, labels):
  
  
  @jax.jit
@@ -80,15 +80,15 @@ index 9b64f88..3eba1db 100644
  
    def loss_fn(model):
      """Compute cross-entropy loss."""
--    with nn.stochastic(rng):
+     with nn.stochastic(rng):
 -      logits, _ = model(batch['query'], batch['answer'])
-+    logits, _ = model(
-+        batch['query'], batch['answer'],
-+        sample_probability=sample_probability)
++      logits, _ = model(
++          batch['query'], batch['answer'],
++          sample_probability=sample_probability)
      loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
      return loss, logits
    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-@@ -356,7 +360,7 @@ def decode(model, inputs, rng):
+@@ -356,7 +361,7 @@ def decode(model, inputs, rng):
    init_decoder_inputs = jnp.tile(init_decoder_input,
                                   (inputs.shape[0], get_max_output_len(), 1))
    with nn.stochastic(rng):
@@ -97,7 +97,7 @@ index 9b64f88..3eba1db 100644
    return predictions
  
  
-@@ -374,15 +378,22 @@ def decode_batch(model, batch_size):
+@@ -374,15 +379,22 @@ def decode_batch(model, batch_size):
  
  def train_model():
    """Train for a fixed number of steps and decode during training."""
@@ -123,3 +123,16 @@ index 9b64f88..3eba1db 100644
          decode_batch(optimizer.target, 5)
    return optimizer.target
  
+diff --git a/examples/seq2seq/train_test.py b/examples/seq2seq/train_test.py
+index 7efc1b1..122659e 100644
+--- a/examples/seq2seq/train_test.py
++++ b/examples/seq2seq/train_test.py
+@@ -103,7 +103,7 @@ class TrainTest(absltest.TestCase):
+       model = train.create_model()
+       optimizer = train.create_optimizer(model, 0.003)
+       optimizer, train_metrics = train.train_step(
+-          optimizer, batch, nn.make_rng())
++          optimizer, batch, 0.5, nn.make_rng())
+ 
+     self.assertLessEqual(train_metrics['loss'], 5)
+     self.assertGreaterEqual(train_metrics['accuracy'], 0)
