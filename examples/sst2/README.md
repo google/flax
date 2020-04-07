@@ -60,7 +60,7 @@ tested on the following.
 ```
 | Hardware              | Batch size | Training time | Valid Accuracy  |
 | --------------------- | ---------- | ------------- | --------------- |
-| 1 x JellyDonut TPUv2  |         64 |            3m |           85.44 |
+| TPU v2-8              |         64 |            3m |           85.44 |
 | CPU                   |         64 |           50m |           85.09 |
 ```
 
