@@ -1,6 +1,5 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-
 **NOTE**: Flax is being actively improved and has a growing community
 of researchers and engineers at Google who happily use Flax for their
 daily research. Flax is in "early release stage" -- if that's your style,
@@ -12,7 +11,6 @@ API, but we'll use deprecation warnings when we can, and keep
 track of them in our [Changelog](CHANGELOG.md).
 
 In case you need to reach us directly, we're at flax-dev@google.com.
-
 
 ## Quickstart
 
