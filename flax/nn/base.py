@@ -919,7 +919,7 @@ class Model:
 
   def __getattr__(self, name):
     value = getattr(self.module, name)
-    if issubclass(value, Module):
+    if inspect.isclass(value) and issubclass(value, Module):
       def wrapper(*args, **kwargs):
         return value.call(self.params, *args, **kwargs)
       return wrapper
