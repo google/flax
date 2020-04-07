@@ -102,6 +102,16 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y2, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
+  def test_model(self):
+    rng = random.PRNGKey(0)
+    x = jnp.array([1.])
+    _, params = DummyModule.init(rng, x)
+    model = nn.Model(DummyModule, params)
+    y = model(x)
+    self.assertEqual(y, jnp.array([2.]))
+    y2 = jax.jit(model)(x)
+    self.assertEqual(y2, jnp.array([2.]))
+
   def test_shared_module(self):
     rng = random.PRNGKey(0)
     x = jnp.array([1.])
@@ -272,6 +282,11 @@ class ModuleTest(absltest.TestCase):
         MultiMethod.__qualname__ + '.l2')
 
     x = jnp.array([1., 2.])
+
+    _, params = MultiMethod.init(random.PRNGKey(0), x)
+    model = nn.Model(MultiMethod, params)
+    self.assertEqual(model.l2(), 2.)
+    
     y, _ = MultiMethodModel.init(random.PRNGKey(0), x)
     self.assertEqual(y, 2.)
 
