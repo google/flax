@@ -440,7 +440,7 @@ def main(argv):
         os.path.join(*os.path.split(FLAGS.model_dir)[:1]),
         'subwords.vocab')
 
-  # Load Dataset
+  # Load Dataset.
   train_ds, eval_ds, predict_ds, encoder = input_pipeline.get_wmt_datasets(
       n_devices=n_devices,
       dataset_name=FLAGS.dataset_name,
