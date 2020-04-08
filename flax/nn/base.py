@@ -482,6 +482,10 @@ class Module(metaclass=_ModuleMeta):
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       A pair consisting of the model output and the initialized parameters
+    Example:
+      input_shape = (batch_size, image_size, image_size, 3)
+      model_output, initial_params = model.init_by_shape(jax.random.PRNGKey(0),
+                                                         input_specs=[(input_shape, jnp.float32)])
     """
     stochastic_rng = None
     try:
