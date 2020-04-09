@@ -104,10 +104,17 @@ def train():
   key = jax.random.PRNGKey(0)
   generator_model, generator_state = create_model(key, BATCH_SIZE, IMG_HEIGHT,
                                                   Generator)
-  discriminatogr_model, discriminator_state = create_model(key, BATCH_SIZE,
+  discriminator_model, discriminator_state = create_model(key, BATCH_SIZE,
                                                            IMG_HEIGHT,
                                                            Discriminator)
 
   generator_optimizer = create_optimizer(generator_model, 2e-4, 0.5)
   discriminator_optimizer = create_optimizer(discriminator_model, 2e-4, 0.5)
-  p_train_step = jax.pmap(functools.partial(train_step), axis_name='batch')
+  # p_train_step = jax.pmap(functools.partial(train_step), axis_name='batch')
+  epochs = 100
+  for epoch in range(epochs):
+    print("Epoch: ", epoch)
+    #Train
+    for n, (input_image, target_image) in enumerate(test_dataset):
+      train_step(generator_optimizer, discriminator_optimizer, input_image,
+                 target_image)
