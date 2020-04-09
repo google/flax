@@ -62,30 +62,30 @@ comes with everything you need to start your research, including:
 ## Try Flax now by forking one of our starter examples
 
 ### Image Classification
-⟶ [MNIST](examples/mnist) (also see [annotated version](https://flax.readthedocs.io/en/latest/annotated_mnist.html))
+⟶ [MNIST](https://github.com/google/flaxexamples/mnist) (also see [annotated version](https://flax.readthedocs.io/en/latest/annotated_mnist.html))
 
-⟶ [CIFAR-10](examples/cifar10) (Wide ResNet w/ and w/o Shake-Shake, PyramidNet w/ShakeDrop)
+⟶ [CIFAR-10](https://github.com/google/flaxexamples/cifar10) (Wide ResNet w/ and w/o Shake-Shake, PyramidNet w/ShakeDrop)
 
-⟶ [ResNet50 on ImageNet](examples/imagenet)
+⟶ [ResNet50 on ImageNet](https://github.com/google/flaxexamples/imagenet)
 
 ### Transformer Models
-⟶ [Sequence tagging on Universal Dependencies](examples/nlp_seq)
+⟶ [Sequence tagging on Universal Dependencies](https://github.com/google/flaxexamples/nlp_seq)
 
-⟶ [LM1b language modeling](examples/lm1b) **([try on a TPU in Colab](https://colab.research.google.com/github/google/flax/blob/master/examples/lm1b/Colab_Language_Model.ipynb))**
+⟶ [LM1b language modeling](https://github.com/google/flaxexamples/lm1b) **([try on a TPU in Colab](https://colab.research.google.com/github/google/flax/blob/master/examples/lm1b/Colab_Language_Model.ipynb))**
 
 ⟶ (work-in-progress) [WMT translation](https://github.com/google/flax/pull/133)
 
 ### RNNs
-⟶ [LSTM text classifier on SST-2](examples/sst2)
+⟶ [LSTM text classifier on SST-2](https://github.com/google/flaxexamples/sst2)
 
-⟶ [LSTM seq2seq on number addition](examples/seq2seq)
+⟶ [LSTM seq2seq on number addition](https://github.com/google/flaxexamples/seq2seq)
 
 
 ### Generative Models
-⟶ [Basic VAE](examples/vae)
+⟶ [Basic VAE](https://github.com/google/flaxexamples/vae)
 
 ### Graph Neural Networks
-⟶ [Semi-supervised node classification on Zachary's karate club](examples/graph)
+⟶ [Semi-supervised node classification on Zachary's karate club](https://github.com/google/flaxexamples/graph)
 
 ## The Flax Module abstraction in a nutshell
 
@@ -135,7 +135,7 @@ def DenseLayer(x, features):
 
 ## A full ResNet implementation
 
-(from [examples/imagenet/models.py](examples/imagenet/models.py))
+(from [examples/imagenet/models.py](https://github.com/google/flaxexamples/imagenet/models.py))
 
 ```py
 class ResidualBlock(nn.Module):
