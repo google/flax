@@ -56,20 +56,20 @@ def train_and_eval_dataset(dataset_name,
   splits = dataset_builder.info.splits
   if tfds.Split.TRAIN not in splits:
     raise ValueError("To train we require a train split in the dataset.")
-  train_ri = tfds.core.ReadInstruction('train')
+  train_split = 'train'
   if eval_holdout_size > 0:
     holdout_percentage = int(eval_holdout_size * 100.0)
     train_percentage = 100 - holdout_percentage
-    train_ri = tfds.core.ReadInstruction('train',  to=train_percentage, unit='%')
-    eval_ri = tfds.core.ReadInstruction('train', from_=train_percentage, to=100, unit='%')
+    train_split = 'train[:{}%]'.format(train_percentage)
+    eval_split = 'train[{}%:]'.format(train_percentage)
   else:
     if tfds.Split.VALIDATION not in splits and "test" not in splits:
       raise ValueError("We require a validation or test split in the dataset.")
-    eval_ri = tfds.core.ReadInstruction('validation')
+    eval_split = 'validation'
     if tfds.Split.VALIDATION not in splits:
-      eval_ri = tfds.core.ReadInstruction('test')
-  train = dataset_builder.as_dataset(split=train_ri, shuffle_files=train_shuffle_files)
-  valid = dataset_builder.as_dataset(split=eval_ri, shuffle_files=eval_shuffle_files)
+      eval_split = 'test'
+  train = dataset_builder.as_dataset(split=train_split, shuffle_files=train_shuffle_files)
+  valid = dataset_builder.as_dataset(split=eval_split, shuffle_files=eval_shuffle_files)
   keys = None
   if info.supervised_keys:
     keys = (info.supervised_keys[0], info.supervised_keys[1])
