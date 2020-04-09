@@ -116,14 +116,14 @@ def dataclass(clz):
     for name in data_fields:
       if name not in state:
         raise ValueError(f'Missing field {name} in state dict while restoring'
-                         ' an instance of {clz.__name__}')
+                         f' an instance of {clz.__name__}')
       value = getattr(x, name)
       value_state = state.pop(name)
       updates[name] = serialization.from_state_dict(value, value_state)
     if state:
       names = ','.join(state.keys())
       raise ValueError(f'Unknown field(s) "{names}" in state dict while'
-                       ' restoring an instance of {clz.__name__}')
+                       f' restoring an instance of {clz.__name__}')
     return x.replace(**updates)
 
   serialization.register_serialization_state(

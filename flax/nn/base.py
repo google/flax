@@ -652,7 +652,7 @@ class Module(metaclass=_ModuleMeta):
       # a module with this name already exists. Check validity of sharing
       if shared != parent.shared[name]:
         raise ValueError(f'The name "{name}" is used for both a shared'
-                         'and unshared module.')
+                         ' and unshared module.')
       if not parent.shared[name]:
         raise ValueError(f'A module with named "{name}" already exists.')
     parent.shared[name] = shared
