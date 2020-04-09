@@ -77,7 +77,9 @@ class CIFAR10DataSource(object):
     flip_lr = self.CAN_FLIP_HORIZONTALLY
 
     # Training set
-    train_ds = tfds.load('cifar10', split='train').cache()
+    dataset_builder = tfds.builder('cifar10')
+    dataset_builder.download_and_prepare()
+    train_ds = dataset_builder.as_dataset(split='train')
     train_ds = train_ds.repeat()
     train_ds = train_ds.shuffle(16 * train_batch_size, seed=shuffle_seed)
 
@@ -94,7 +96,7 @@ class CIFAR10DataSource(object):
     self.train_ds = train_ds
 
     # Test set
-    eval_ds = tfds.load('cifar10', split='test').cache()
+    eval_ds = dataset_builder.as_dataset(split='test')
 
     def _process_test_sample(x):
       image = tf.cast(x['image'], tf.float32)
