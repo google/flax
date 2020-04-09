@@ -183,14 +183,14 @@ def preprocess_eval_image(image, image_size=224):
   return image
 
 
-def _load_tfds_imagenet(split_name, n_total):
+def _split_data(split_name, n_total):
   split_size = float(n_total) // jax.host_count()
   start = split_size * jax.host_id()
   end = start + split_size
   start_index = int(round(start))
   end_index = int(round(end))
   split = '{}[{}:{}]'.format(split_name, start_index, end_index)
-  return tfds.load('imagenet2012:5.*.*', split=split)
+  return split
 
 
 ImageNetDataSource = collections.namedtuple(
@@ -220,7 +220,9 @@ def load_imagenet(train_batch_size, eval_batch_size,
       test_ds: Test dataset
   """
   # Draw unsupervised samples from complete training set
-  train_ds = _load_tfds_imagenet('train', TRAIN_IMAGES)
+  ds_builder = tfds.builder('imagenet2012:5.*.*')
+  ds_builder.download_and_prepare()
+  train_ds = ds_builder.as_dataset(split=_split_data('train', TRAIN_IMAGES))
 
   def _augment_moco_sample(sample):
     aug_sample = {
@@ -271,9 +273,7 @@ def load_imagenet(train_batch_size, eval_batch_size,
   # Test set
   #
 
-  test_ds = _load_tfds_imagenet('validation', TEST_IMAGES)
-  test_ds = test_ds.cache()
-
+  test_ds = ds_builder.as_dataset(split=_split_data('validation', TEST_IMAGES))
   test_ds = test_ds.map(_process_eval_sample, num_parallel_calls=128)
   test_ds = test_ds.batch(eval_batch_size, drop_remainder=True)
   test_ds = test_ds.repeat()
