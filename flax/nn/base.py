@@ -937,7 +937,7 @@ class Collection:
   A Collection can be used to associate data with the application of a Module.
   For example a collection can be used to collect activations across modules.
   Another common use case for collections is to track internal state.
-  For example, The running averages in BatchNorm can be stored in a collection.
+  For example, the running averages in BatchNorm can be stored in a collection.
 
   Attributes:
     state: the initial state by default an empty collection is created.
@@ -947,8 +947,8 @@ class Collection:
     if state is None:
       state = {}
     self.state = state
-    # the anchor is used to determine the prefix of the collection.
-    # this way we can create/nest collections inside modules.
+    # The anchor is used to determine the prefix of the collection.
+    # This way we can create/nest collections inside modules.
     self._anchor = _module_stack[-1] if _module_stack else None
 
     self._mutable = False
@@ -1003,7 +1003,7 @@ class Collection:
     if not self._mutable:
       raise ValueError('Collection is not mutable. Use the `mutate` method to'
                        ' create a mutable copy.')
-    # use the Jax TraceMaster to determine if a Collection is modified from
+    # Use the Jax TraceMaster to determine if a Collection is modified from
     # inside a nested jax transformation.
     # In this case, we throw an error because transforming a stateful function
     # is ill-defined (eg. what does vmap of BatchNorm do?).
@@ -1016,9 +1016,9 @@ class Collection:
       raise ValueError('Stateful operations are not allowed when the Collection'
                        ' is created outside of the current Jax transformation')
 
-    # the root of a Collection is the first module scope that gets created
+    # The root of a Collection is the first module scope that gets created
     # inside the mutate scope of the Collection. By allowing only one unique
-    # root scope we guarantee that state is not accidentally shared
+    # root scope, we guarantee that state is not accidentally shared
     # between different models. When a user specifies an explicit name we can
     # distinguish models and a collection can have multiple roots.
     if frame == self._anchor:
@@ -1039,7 +1039,7 @@ class Collection:
     elif self._root != root:
       if self._root.name is None or root.name is None:
         # In the following examples, should the two calls to `StatefulModule` share state or not?
-        # because it's ambiguous, we throw an error and require the user to explicitly separate state
+        # Because it's ambiguous, we throw an error and require the user to explicitly separate state
         # by giving each instance a separate name, or to explicitly pass the same name
         # in order to share state.
         # with nn.statefull(state) as new_state:
