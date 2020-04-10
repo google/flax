@@ -25,6 +25,7 @@ from absl import logging
 
 from flax import nn
 from flax import optim
+from flax.metrics import tensorboard
 
 import jax
 from jax import random
@@ -53,6 +54,10 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     'num_epochs', default=10,
     help=('Number of training epochs.'))
+
+flags.DEFINE_string(
+    'model_dir', default=None,
+    help=('Directory to store model data.'))
 
 
 def load_split(split):
@@ -177,6 +182,9 @@ def train(train_ds, test_ds):
 
   batch_size = FLAGS.batch_size
   num_epochs = FLAGS.num_epochs
+  model_dir = FLAGS.model_dir
+
+  summary_writer = tensorboard.SummaryWriter(model_dir)
 
   model = create_model(rng)
   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
@@ -184,11 +192,15 @@ def train(train_ds, test_ds):
   input_rng = onp.random.RandomState(0)
 
   for epoch in range(1, num_epochs + 1):
-    optimizer, _ = train_epoch(
+    optimizer, train_metrics = train_epoch(
         optimizer, train_ds, batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                  epoch, loss, accuracy * 100)
+    summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
+    summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
+    summary_writer.scalar('eval_loss', loss, epoch)
+    summary_writer.scalar('eval_accuracy', accuracy, epoch)
   return optimizer
 
 
