@@ -27,7 +27,6 @@ class CifarTenBenchmark(Benchmark):
   def test_1x_v100(self):
     """Run Wide ResNet CIFAR10 on 1x V100 GPUs for 2 epochs."""
     model_dir = tempfile.mkdtemp()
-    FLAGS.batch_size = 256
     FLAGS.num_epochs = 2
     FLAGS.arch = 'wrn26_10'
     FLAGS.model_dir = model_dir
