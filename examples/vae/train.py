@@ -170,10 +170,10 @@ def main(argv):
   test_ds = np.array(list(test_ds)[0])
   test_ds = jax.device_put(test_ds)
 
-  model_def = VAE.partial(latents=FLAGS.latents)
-  _, params = model_def.init_by_shape(
+  module = VAE.partial(latents=FLAGS.latents)
+  _, params = module.init_by_shape(
       key, [(FLAGS.batch_size, 784)], z_rng=random.PRNGKey(0))
-  vae = nn.Model(model_def, params)
+  vae = nn.Model(module, params)
 
   optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(vae)
   optimizer = jax.device_put(optimizer)
