@@ -74,11 +74,11 @@ flags.DEFINE_integer(
 
 flags.DEFINE_string(
     'arch', default='wrn26_10',
-    help=('Network architecture'))
+    help=('Network architecture.'))
 
 flags.DEFINE_float(
     'wrn_dropout_rate', default=0.3,
-    help=('Wide ResNet DropOut rate'))
+    help=('Wide ResNet DropOut rate.'))
 
 flags.DEFINE_integer(
     'rng', default=0,
@@ -86,7 +86,7 @@ flags.DEFINE_integer(
 
 flags.DEFINE_string(
     'model_dir', default=None,
-    help=('Directory to store model data'))
+    help=('Directory to store model data.'))
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2, 3))
