@@ -136,6 +136,6 @@ def temperature_sample(prompt_inputs,
                                sampling_loop_body_fn,
                                sampling_loop_init_state)
 
-  # Gather sampled sequences and remove trailing singleton dimension.
-  final_sequences = jnp.squeeze(final_state[1], axis=-1)
+  # Pick part of the state corresponding to the sampled sequences.
+  final_sequences = final_state[1]
   return final_sequences
