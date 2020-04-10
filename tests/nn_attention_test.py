@@ -118,7 +118,7 @@ class AttentionTest(parameterized.TestCase):
     key1, key2 = random.split(rng)
     inputs = random.normal(
         key1, (bs,) + spatial_shape + (num_heads * num_features,))
-    model_def = nn.SelfAttention.partial(
+    module = nn.SelfAttention.partial(
         num_heads=num_heads,
         qkv_features=num_heads * num_features,
         attention_axis=attn_dims,
@@ -126,9 +126,9 @@ class AttentionTest(parameterized.TestCase):
         precision=lax.Precision.HIGHEST)
 
     with nn.attention.Cache().mutate() as cache_def:
-      _, initial_params = model_def.init_by_shape(
+      _, initial_params = module.init_by_shape(
           key2, [(inputs.shape, inputs.dtype)], cache=cache_def)
-    model = nn.Model(model_def, initial_params)
+    model = nn.Model(module, initial_params)
     y_ref = jax.jit(lambda f, x: f(x))(model, inputs)
 
     # feed the inputs sequentially to simulate decoding
@@ -166,13 +166,13 @@ class AttentionTest(parameterized.TestCase):
     input_shape = (1, length, dim)
     inputs = random.normal(rng2, input_shape)
 
-    model_def = nn.attention.SelfAttention.partial(
+    module = nn.attention.SelfAttention.partial(
         num_heads=num_heads,
         causal_mask=True,
         kernel_init=jax.nn.initializers.ones)
-    _, initial_params = model_def.init_by_shape(
+    _, initial_params = module.init_by_shape(
         rng1, [((1,) + (length, dim), jnp.float32)])
-    model = nn.Model(model_def, initial_params)
+    model = nn.Model(module, initial_params)
 
 
 

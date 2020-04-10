@@ -84,11 +84,11 @@ flags.DEFINE_float(
 
 def create_model(key, batch_size, image_size, model_dtype):
   input_shape = (batch_size, image_size, image_size, 3)
-  model_def = models.ResNet.partial(num_classes=1000, dtype=model_dtype)
+  module = models.ResNet.partial(num_classes=1000, dtype=model_dtype)
   with nn.stateful() as init_state:
-    _, initial_params = model_def.init_by_shape(
+    _, initial_params = module.init_by_shape(
         key, [(input_shape, model_dtype)])
-    model = nn.Model(model_def, initial_params)
+    model = nn.Model(module, initial_params)
   return model, init_state
 
 

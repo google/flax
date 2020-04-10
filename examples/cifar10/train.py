@@ -90,13 +90,13 @@ flags.DEFINE_string(
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2, 3))
-def create_model(prng_key, batch_size, image_size, model_def):
+def create_model(prng_key, batch_size, image_size, module):
   input_shape = (batch_size, image_size, image_size, 3)
   with flax.nn.stateful() as init_state:
     with flax.nn.stochastic(jax.random.PRNGKey(0)):
-      _, initial_params = model_def.init_by_shape(
+      _, initial_params = module.init_by_shape(
           prng_key, [(input_shape, jnp.float32)])
-      model = flax.nn.Model(model_def, initial_params)
+      model = flax.nn.Model(module, initial_params)
   return model, init_state
 
 
@@ -175,7 +175,7 @@ def load_and_shard_tf_batch(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def train(model_def, model_dir, batch_size,
+def train(module, model_dir, batch_size,
           num_epochs, learning_rate, sgd_momentum,
           make_lr_fun=None, l2_reg=0.0005, run_seed=0):
   """Train model."""
@@ -214,7 +214,7 @@ def train(model_def, model_dir, batch_size,
 
   # Create the model
   image_size = 32
-  model, state = create_model(rng, device_batch_size, image_size, model_def)
+  model, state = create_model(rng, device_batch_size, image_size, module)
   state = jax_utils.replicate(state)
   optimizer = create_optimizer(model, base_learning_rate, sgd_momentum)
   del model  # don't keep a copy of the initial model
@@ -296,24 +296,24 @@ def main(argv):
   tf.enable_v2_behavior()
 
   if FLAGS.arch == 'wrn26_10':
-    model_def = wideresnet.WideResnet.partial(
+    module = wideresnet.WideResnet.partial(
         blocks_per_group=4,
         channel_multiplier=10,
         num_outputs=10,
         dropout_rate=FLAGS.wrn_dropout_rate)
   elif FLAGS.arch == 'wrn26_2':
-    model_def = wideresnet.WideResnet.partial(
+    module = wideresnet.WideResnet.partial(
         blocks_per_group=4,
         channel_multiplier=2,
         num_outputs=10,
         dropout_rate=FLAGS.wrn_dropout_rate)
   elif FLAGS.arch == 'wrn26_6_ss':
-    model_def = wideresnet_shakeshake.WideResnetShakeShake.partial(
+    module = wideresnet_shakeshake.WideResnetShakeShake.partial(
         blocks_per_group=4,
         channel_multiplier=6,
         num_outputs=10)
   elif FLAGS.arch == 'pyramid':
-    model_def = pyramidnet.PyramidNetShakeDrop.partial(num_outputs=10)
+    module = pyramidnet.PyramidNetShakeDrop.partial(num_outputs=10)
   else:
     raise ValueError('Unknown architecture {}'.format(FLAGS.arch))
 
@@ -336,7 +336,7 @@ def main(argv):
   else:
     raise ValueError('Unknown LR schedule type {}'.format(FLAGS.lr_schedule))
 
-  train(model_def, FLAGS.model_dir, FLAGS.batch_size,
+  train(module, FLAGS.model_dir, FLAGS.batch_size,
         FLAGS.num_epochs, FLAGS.learning_rate,
         FLAGS.momentum, make_lr_fun, FLAGS.l2_reg, FLAGS.rng)
 

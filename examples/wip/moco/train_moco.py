@@ -151,24 +151,24 @@ flags.DEFINE_integer(
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2, 3))
-def create_model(key, batch_size, image_size, model_def):
+def create_model(key, batch_size, image_size, module):
   input_shape = (batch_size, image_size, image_size, 3)
   with flax.nn.stateful() as init_state:
     with flax.nn.stochastic(jax.random.PRNGKey(0)):
-      (_, _), initial_params = model_def.init_by_shape(
+      (_, _), initial_params = module.init_by_shape(
           key, [(input_shape, jnp.float32)])
-      model = flax.nn.Model(model_def, initial_params)
+      model = flax.nn.Model(module, initial_params)
   return model, init_state
 
 
 @functools.partial(jax.jit, static_argnums=(1, 2, 3))
 def create_linear_classifier(key, batch_size, feature_size, num_classes):
   input_shape = (batch_size, feature_size)
-  model_def = flax.nn.Dense.partial(features=num_classes)
+  module = flax.nn.Dense.partial(features=num_classes)
   with flax.nn.stateful():
-    _, initial_params = model_def.init_by_shape(
+    _, initial_params = module.init_by_shape(
         key, [(input_shape, jnp.float32)])
-    model = flax.nn.Model(model_def, initial_params)
+    model = flax.nn.Model(module, initial_params)
   return model
 
 
@@ -409,7 +409,7 @@ def eval_step(model_moco, state_moco, feat_clf_model, batch):
   return feat_metrics
 
 
-def train(model_def,
+def train(module,
           model_dir,
           batch_size,
           eval_batch_size,
@@ -497,7 +497,7 @@ def train(model_def,
   # Create query model
   #
   model_query, state_query = create_model(
-      init_moco_rng, device_batch_size, image_size, model_def)
+      init_moco_rng, device_batch_size, image_size, module)
   state_query = jax_utils.replicate(state_query)
 
   # Create linear classifier
@@ -741,13 +741,13 @@ def main(argv):
   emb_size = FLAGS.emb_size
 
   if FLAGS.arch == 'resnet50':
-    model_def = model_resnet.ResNet50.partial(num_outputs=emb_size)
+    module = model_resnet.ResNet50.partial(num_outputs=emb_size)
     feature_size = 64 * 8 * 4
   elif FLAGS.arch == 'resnet101':
-    model_def = model_resnet.ResNet101.partial(num_outputs=emb_size)
+    module = model_resnet.ResNet101.partial(num_outputs=emb_size)
     feature_size = 64 * 8 * 4
   elif FLAGS.arch == 'resnet152':
-    model_def = model_resnet.ResNet152.partial(num_outputs=emb_size)
+    module = model_resnet.ResNet152.partial(num_outputs=emb_size)
     feature_size = 64 * 8 * 4
   else:
     raise ValueError
@@ -772,7 +772,7 @@ def main(argv):
         base_lr, steps_per_epoch, lr_clf_sched_steps,
         warmup_length=FLAGS.lr_clf_sched_warmup)
 
-  train(model_def,
+  train(module,
         model_dir=FLAGS.model_dir,
         batch_size=FLAGS.batch_size,
         eval_batch_size=FLAGS.eval_batch_size,

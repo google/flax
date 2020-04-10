@@ -80,9 +80,9 @@ flags.DEFINE_string('dev', default='', help=('Path to development data.'))
 
 @functools.partial(jax.jit, static_argnums=(1, 2))
 def create_model(key, input_shape, model_kwargs):
-  model_def = models.Transformer.partial(train=False, **model_kwargs)
-  _, initial_params = model_def.init_by_shape(key, [(input_shape, jnp.float32)])
-  model = nn.Model(model_def, initial_params)
+  module = models.Transformer.partial(train=False, **model_kwargs)
+  _, initial_params = module.init_by_shape(key, [(input_shape, jnp.float32)])
+  model = nn.Model(module, initial_params)
   return model
 
 
