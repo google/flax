@@ -5,7 +5,9 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - master
+      - 'test_*'
   pull_request:
     branches: [ master ]
 
