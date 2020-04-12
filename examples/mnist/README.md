@@ -8,8 +8,8 @@ Trains a simple convolutional network on the MNIST dataset.
 ### Example output
 
 ```
-I0314 19:48:55.696393 140216908515136 train.py:155] train epoch: 10, loss: 0.0085, accuracy: 99.75
-I0314 19:48:55.718828 140216908515136 train.py:191] eval epoch: 10, loss: 0.0285, accuracy: 99.13
+I0413 01:38:37.660479 4484091328 train.py:149] train epoch: 10, loss: 0.0077, accuracy: 99.74
+I0413 01:38:51.978743 4484091328 train.py:189] eval epoch: 10, loss: 0.0313, accuracy: 99.02
 ```
 
 ### How to run
