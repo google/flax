@@ -85,8 +85,8 @@ def _get_tensorboard_scalars(path):
 class Benchmark(absltest.TestCase):
   """Benchmark class for Flax examples.
 
-  This class overrides changes the behaviour of `self.assert*` methods to
-  deferred instead of immediate failure. This allows for using absltest
+  This class overrides the behaviour of `self.assert*` methods to be
+  deferred instead of failing immediately. This allows for using absltest
   assert methods for checking benchmark target metrics. This is also
   necessary for correctly reporting benchmark results and determining its
   success.
@@ -173,7 +173,6 @@ class Benchmark(absltest.TestCase):
     stack = inspect.stack()
     calling_class, name = None, None
     for frame_info in stack[::-1]:
-      # print(frame_info.frame, frame_info.function)
       f_locals = frame_info.frame.f_locals
       f_self = f_locals.get('self', None)
       if isinstance(f_self, Benchmark):
@@ -230,7 +229,6 @@ class Benchmark(absltest.TestCase):
 
     results_str = json.dumps(results)
     logging.info(results_str)
-    print(results_str)
 
     # Maybe save results as a file for pickup by CI / monitornig frameworks.
     benchmark_output_dir = FLAGS.benchmark_output_dir
