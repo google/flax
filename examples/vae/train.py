@@ -157,7 +157,9 @@ def main(argv):
   rng = random.PRNGKey(0)
   rng, key = random.split(rng)
 
-  train_ds = tfds.load('binarized_mnist', split=tfds.Split.TRAIN)
+  ds_builder = tfds.builder('binarized_mnist')
+  ds_builder.download_and_prepare()
+  train_ds = ds_builder.as_dataset(split=tfds.Split.TRAIN)
   train_ds = train_ds.map(prepare_image)
   train_ds = train_ds.cache()
   train_ds = train_ds.repeat()
@@ -165,7 +167,7 @@ def main(argv):
   train_ds = train_ds.batch(FLAGS.batch_size)
   train_ds = tfds.as_numpy(train_ds)
 
-  test_ds = tfds.load('binarized_mnist', split=tfds.Split.TEST)
+  test_ds = ds_builder.as_dataset(split=tfds.Split.TEST)
   test_ds = test_ds.map(prepare_image).batch(10000)
   test_ds = np.array(list(test_ds)[0])
   test_ds = jax.device_put(test_ds)
