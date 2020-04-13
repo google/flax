@@ -26,8 +26,10 @@ import jax
 import numpy as onp
 
 from flax.optim.adam import _AdamHyperParams, _AdamParamState
-from flax.optim.sgd import _GradientDescentHyperParams
+from flax.optim.adagrad import _AdagradHyperParams, _AdagradParamState
 from flax.optim.momentum import _MomentumHyperParams, _MomentumParamState
+from flax.optim.rmsprop import _RMSPropHyperParams, _RMSPropParamState
+from flax.optim.sgd import _GradientDescentHyperParams
 from flax.optim.weight_norm import _WeightNormParamState
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -236,6 +238,66 @@ class AdamTest(absltest.TestCase):
     expected_new_state = optim.OptimizerState(
         2, _AdamParamState(onp.array([3.22]), onp.array([2.41])))
     expected_new_params = onp.array([0.906085])
+    onp.testing.assert_allclose(new_params, expected_new_params)
+    self.assertEqual(new_state, expected_new_state)
+
+
+class AdagradTest(absltest.TestCase):
+
+  def test_init_state(self):
+    params = onp.zeros((1,))
+    optimizer_def = optim.Adagrad(learning_rate=0.1)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _AdagradHyperParams(0.1)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
+        0, _AdagradParamState(onp.zeros((1,))))
+    self.assertEqual(state, expected_state)
+
+  def test_apply_gradient(self):
+    optimizer_def = optim.Adagrad(learning_rate=0.1)
+    params = onp.array([1.])
+    state = optim.OptimizerState(
+        1, _AdagradParamState(onp.array([0.1])))
+    grads = onp.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _AdagradParamState(onp.array([16.1])))
+    expected_new_params = onp.array([0.900311])
+    onp.testing.assert_allclose(new_params, expected_new_params)
+    self.assertEqual(new_state, expected_new_state)
+
+
+class RMSPropTest(absltest.TestCase):
+
+  def test_init_state(self):
+    params = onp.zeros((1,))
+    optimizer_def = optim.RMSProp(learning_rate=0.1,
+                               beta2=0.9,
+                               eps=0.01)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
+        0, _RMSPropParamState(onp.zeros((1,))))
+    self.assertEqual(state, expected_state)
+
+  def test_apply_gradient(self):
+    optimizer_def = optim.RMSProp(learning_rate=0.1,
+                               beta2=0.9,
+                               eps=0.01)
+    params = onp.array([1.])
+    state = optim.OptimizerState(
+        1, _RMSPropParamState(onp.array([0.1])))
+    grads = onp.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _RMSPropParamState(onp.array([1.69])))
+    expected_new_params = onp.array([0.6946565])
     onp.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 
