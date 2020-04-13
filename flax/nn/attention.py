@@ -218,7 +218,8 @@ class MultiHeadDotProductAttention(base.Module):
             precision=None,
             kernel_init=default_kernel_init,
             bias_init=initializers.zeros,
-            bias=True):
+            bias=True,
+            attention_fn=dot_product_attention):
     """Applies multi-head dot product attention on the input data.
 
     Projects the inputs into multi-headed query, key, and value vectors,
@@ -258,6 +259,9 @@ class MultiHeadDotProductAttention(base.Module):
       kernel_init: initializer for the kernel of the Dense layers.
       bias_init: initializer for the bias of the Dense layers.
       bias: bool: whether pointwise QKVO dense transforms use bias.
+      attention_fn: dot_product_attention or compatible function. Accepts
+      query, key, value, and returns output of shape
+      `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
 
     Returns:
       output of shape `[bs, dim1, dim2, ..., dimN, features]`.
@@ -382,7 +386,7 @@ class MultiHeadDotProductAttention(base.Module):
       attention_bias = None
 
     # apply attention
-    x = dot_product_attention(
+    x = attention_fn(
         query,
         key,
         value,
