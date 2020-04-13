@@ -38,10 +38,9 @@ class Adagrad(OptimizerDef):
   def __init__(self, learning_rate: float = None):
     """Constructor for the Adagrad optimizer.
         
-        Args:
-            learning_rate: the step size used to update the parameters.
-
-        """
+    Args:
+      learning_rate: the step size used to update the parameters.
+    """
     hyper_params = _AdagradHyperParams(learning_rate)
     super().__init__(hyper_params)
 
