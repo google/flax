@@ -24,6 +24,7 @@ class _AdagradHyperParams:
   """Adagrad hyper parameters"""
 
   learning_rate: float
+  eps: float
 
 
 @struct.dataclass
@@ -35,13 +36,13 @@ class _AdagradParamState:
 
 class Adagrad(OptimizerDef):
   """Adagrad optimizer"""
-  def __init__(self, learning_rate: float = None):
+  def __init__(self, learning_rate: float = None, eps=1e-8):
     """Constructor for the Adagrad optimizer.
         
     Args:
       learning_rate: the step size used to update the parameters.
     """
-    hyper_params = _AdagradHyperParams(learning_rate)
+    hyper_params = _AdagradHyperParams(learning_rate, eps)
     super().__init__(hyper_params)
 
   def init_param_state(self, param):
@@ -53,7 +54,8 @@ class Adagrad(OptimizerDef):
 
     assert hyper_params.learning_rate is not None, 'no learning rate provided.'
     new_G = state.G + jnp.square(grad)
-    new_param = param - hyper_params.learning_rate * grad / jnp.sqrt(new_G)
+    new_param = param - hyper_params.learning_rate * grad / (jnp.sqrt(new_G) +
+                                                             hyper_params.eps)
     new_state = _AdagradParamState(new_G)
 
     return new_param, new_state

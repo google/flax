@@ -246,17 +246,17 @@ class AdagradTest(absltest.TestCase):
 
   def test_init_state(self):
     params = onp.zeros((1,))
-    optimizer_def = optim.Adagrad(learning_rate=0.1)
+    optimizer_def = optim.Adagrad(learning_rate=0.1, eps=0.01)
     state = optimizer_def.init_state(params)
 
-    expected_hyper_params = _AdagradHyperParams(0.1)
+    expected_hyper_params = _AdagradHyperParams(0.1, 0.01)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
         0, _AdagradParamState(onp.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
-    optimizer_def = optim.Adagrad(learning_rate=0.1)
+    optimizer_def = optim.Adagrad(learning_rate=0.1, eps=0.01)
     params = onp.array([1.])
     state = optim.OptimizerState(
         1, _AdagradParamState(onp.array([0.1])))
@@ -265,7 +265,7 @@ class AdagradTest(absltest.TestCase):
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
         2, _AdagradParamState(onp.array([16.1])))
-    expected_new_params = onp.array([0.900311])
+    expected_new_params = onp.array([0.9005588])
     onp.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 

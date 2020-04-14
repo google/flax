@@ -47,8 +47,7 @@ class RMSProp(OptimizerDef):
       eps: the term added to the gradient magnitude estimate for
         numerical stability.
     """
-    hyper_params = _RMSPropHyperParams(learning_rate, beta2,
-                                                      eps)
+    hyper_params = _RMSPropHyperParams(learning_rate, beta2, eps)
     super().__init__(hyper_params)
 
   def init_param_state(self, param):
