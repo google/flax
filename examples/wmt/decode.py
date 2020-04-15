@@ -20,7 +20,6 @@ import typing
 import flax
 import jax
 from jax import lax
-from jax import random
 import jax.numpy as jnp
 import numpy as np
 

@@ -146,6 +146,7 @@ def create_learning_rate_scheduler(
   * constant: interpreted as the constant value,
   * linear_warmup: interpreted as linear warmup until warmup_steps,
   * rsqrt_decay: divide by square root of max(step, warmup_steps)
+  * rsqrt_normalized_decay: divide by square root of max(step/warmup_steps, 1)
   * decay_every: Every k steps decay the learning rate by decay_factor.
   * cosine_decay: Cyclic cosine decay, uses steps_per_cycle parameter.
 
@@ -296,6 +297,10 @@ def train_step(optimizer,
                use_bfloat16=False,
                dropout_rng=None):
   """Perform a single training step."""
+  # X_position and X_segmentation are needed only when using 'packed examples'
+  # where multiple sequences are packed into the same example with this metadata.
+  # if such features are not present they are ignored and the example is treated
+  # like a normal, unpacked sequence example.
   train_keys = ['inputs', 'targets',
                 'inputs_position', 'targets_position',
                 'inputs_segmentation', 'targets_segmentation']
@@ -349,7 +354,8 @@ def eval_step(model, batch, label_smoothing=0.0, use_bfloat16=False):
   return compute_metrics(logits, targets, weights, label_smoothing)
 
 
-def predict_step(inputs, model, cache, eos_token, max_decode_len):
+def predict_step(inputs, model, cache, eos_token, max_decode_len,
+                 use_bfloat16=False):
   """Predict translation with fast decoding beam search on a batch."""
   batch_size = inputs.shape[0]
   beam_size = 4
@@ -377,6 +383,7 @@ def predict_step(inputs, model, cache, eos_token, max_decode_len):
                                  cache=new_flat_cache,
                                  shift=False,
                                  train=False,
+                                 use_bfloat16=use_bfloat16,
                                  tgt_padding_mask=tgt_padding_mask)
     # Remove singleton sequence-length dimension:
     # [batch * beam, 1, vocab] --> [batch * beam, vocab]
@@ -507,10 +514,13 @@ def main(argv):
   p_eval_step = jax.pmap(
       functools.partial(
           eval_step,
-          label_smoothing=FLAGS.label_smoothing),
+          label_smoothing=FLAGS.label_smoothing,
+          use_bfloat16=FLAGS.use_bfloat16),
       axis_name='batch')
   p_pred_step = jax.pmap(
-      predict_step,
+      functools.partial(
+        predict_step,
+        use_bfloat16=FLAGS.use_bfloat16),
       axis_name='batch',
       static_broadcasted_argnums=(3, 4))  # eos token, max_length are constant
 
@@ -527,110 +537,113 @@ def main(argv):
         optimizer, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
 
-    # Save a checkpoint.
-    if step % FLAGS.checkpoint_freq == 0 and step > 0:
-      if jax.host_id() == 0 and FLAGS.save_checkpoints:
+    # Save a checkpoint on one host after every checkpoint_freq steps.
+    if (FLAGS.save_checkpoints
+        and step % FLAGS.checkpoint_freq == 0 and step > 0
+        and jax.host_id() == 0):
         checkpoints.save_checkpoint(FLAGS.model_dir,
                                     jax_utils.unreplicate(optimizer),
                                     step)
 
-    # Periodic metric handling.
-    if step % FLAGS.eval_frequency == 0:
-      # Training metrics.
-      metrics_all = common_utils.get_metrics(metrics_all)
-      lr = metrics_all.pop('learning_rate').mean()
-      metrics_sums = jax.tree_map(jnp.sum, metrics_all)
-      denominator = metrics_sums.pop('denominator')
-      summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
-      summary['learning_rate'] = lr
-      logging.info('train in step: %d, loss: %.4f', step, summary['loss'])
-      steps_per_eval = FLAGS.eval_frequency if step != 0 else 1
-      steps_per_sec = steps_per_eval / (time.time() - t_loop_start)
-      t_loop_start = time.time()
-      if jax.host_id() == 0:
-        train_summary_writer.scalar('steps per second', steps_per_sec, step)
-        for key, val in summary.items():
-          train_summary_writer.scalar(key, val, step)
-        train_summary_writer.flush()
-      metrics_all = []
+    # Periodic metric handling below.
+    if step % FLAGS.eval_frequency != 0:
+      continue
 
-      # Eval Metrics
-      t_eval_start = time.time()
-      eval_metrics = []
-      eval_iter = iter(eval_ds)
-      for _, eval_batch in zip(range(FLAGS.num_eval_steps), eval_iter):
-        eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
-        eval_batch = common_utils.shard(eval_batch)
-        metrics = p_eval_step(optimizer.target, eval_batch)
-        eval_metrics.append(metrics)
-      eval_metrics = common_utils.get_metrics(eval_metrics)
-      eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
-      eval_denominator = eval_metrics_sums.pop('denominator')
-      eval_summary = jax.tree_map(
-          lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
-          eval_metrics_sums)
-      logging.info('eval in step: %d, loss: %.4f', step, eval_summary['loss'])
-      if jax.host_id() == 0:
-        for key, val in eval_summary.items():
-          eval_summary_writer.scalar(key, val, step)
-        eval_summary_writer.flush()
-      logging.info('eval time: %.4f s step %d', time.time()-t_eval_start, step)
+    # Training metrics.
+    metrics_all = common_utils.get_metrics(metrics_all)
+    lr = metrics_all.pop('learning_rate').mean()
+    metrics_sums = jax.tree_map(jnp.sum, metrics_all)
+    denominator = metrics_sums.pop('denominator')
+    summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
+    summary['learning_rate'] = lr
+    logging.info('train in step: %d, loss: %.4f', step, summary['loss'])
+    steps_per_eval = FLAGS.eval_frequency if step != 0 else 1
+    steps_per_sec = steps_per_eval / (time.time() - t_loop_start)
+    t_loop_start = time.time()
+    if jax.host_id() == 0:
+      train_summary_writer.scalar('steps per second', steps_per_sec, step)
+      for key, val in summary.items():
+        train_summary_writer.scalar(key, val, step)
+      train_summary_writer.flush()
+    metrics_all = []
 
-      # Translation and BLEU Score.
-      t_inference_start = time.time()
-      predict_iter = iter(predict_ds)
-      sources, references, predictions = [], [], []
-      for _, pred_batch in enumerate(predict_iter):
-        pred_batch = jax.tree_map(lambda x: x._numpy(), pred_batch)  # pylint: disable=protected-access
-        # Handle final odd-sized batch by padding instead of dropping it.
-        cur_pred_batch_size = pred_batch['inputs'].shape[0]
-        if cur_pred_batch_size % n_devices:
-          logging.info('Translation: uneven batch size %d.',
-                       cur_pred_batch_size)
-          padded_size = int(
-              np.ceil(cur_pred_batch_size / n_devices) * n_devices)
-          pred_batch = jax.tree_map(
-              lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
-        pred_batch = common_utils.shard(pred_batch)
-        per_device_batch_size = pred_batch['inputs'].shape[1]
-        cache = jax_utils.replicate(
-            cache_def.initialize_cache((per_device_batch_size,
-                                        FLAGS.max_predict_length)))
-        predicted = p_pred_step(pred_batch['inputs'],
-                                optimizer.target,
-                                cache,
-                                eos_token,
-                                FLAGS.max_predict_length)
-        predicted = tohost(predicted)
-        inputs = tohost(pred_batch['inputs'])
-        targets = tohost(pred_batch['targets'])
-        # Iterate through non-padding examples of batch.
-        for i, s in enumerate(predicted[:cur_pred_batch_size]):
-          sources.append(decode_tokens(inputs[i]))
-          references.append(decode_tokens(targets[i]))
-          # TODO(levskaya): debug very rare initial 0-token predictions.
-          try:
-            predictions.append(decode_tokens(s))
-          except ValueError:
-            logging.error('bad predicted tokens: %s', s)
-            predictions.append('Wir haben technische Schwierigkeiten.')
-      logging.info('inference time: %.4f s step %d.',
-                   time.time()-t_inference_start, step)
-      logging.info('Translation: %d predictions %d references %d sources.',
-                   len(predictions), len(references), len(sources))
+    # Eval metrics.
+    t_eval_start = time.time()
+    eval_metrics = []
+    eval_iter = iter(eval_ds)
+    for _, eval_batch in zip(range(FLAGS.num_eval_steps), eval_iter):
+      eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
+      eval_batch = common_utils.shard(eval_batch)
+      metrics = p_eval_step(optimizer.target, eval_batch)
+      eval_metrics.append(metrics)
+    eval_metrics = common_utils.get_metrics(eval_metrics)
+    eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
+    eval_denominator = eval_metrics_sums.pop('denominator')
+    eval_summary = jax.tree_map(
+        lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
+        eval_metrics_sums)
+    logging.info('eval in step: %d, loss: %.4f', step, eval_summary['loss'])
+    if jax.host_id() == 0:
+      for key, val in eval_summary.items():
+        eval_summary_writer.scalar(key, val, step)
+      eval_summary_writer.flush()
+    logging.info('eval time: %.4f s step %d', time.time()-t_eval_start, step)
 
-      # Calculate BLEU score for translated eval corpus against reference.
-      bleu_score = bleu.bleu_local(references, predictions)
-      sacrebleu_score = sacrebleu.corpus_bleu(predictions, [references]).score
-      # Save translation samples for tensorboard.
-      exemplars = ''
-      for n in np.random.choice(np.arange(len(predictions)), 8):
-        exemplars += f'{sources[n]}\n\n{references[n]}\n\n{predictions[n]}\n\n'
-      if jax.host_id() == 0:
-        eval_summary_writer.scalar('bleu', bleu_score, step)
-        eval_summary_writer.scalar('sacrebleu', sacrebleu_score, step)
-        eval_summary_writer.text('samples', exemplars, step)
-        eval_summary_writer.flush()
+    # Translation and BLEU score.
+    t_inference_start = time.time()
+    predict_iter = iter(predict_ds)
+    sources, references, predictions = [], [], []
+    for _, pred_batch in enumerate(predict_iter):
+      pred_batch = jax.tree_map(lambda x: x._numpy(), pred_batch)  # pylint: disable=protected-access
+      # Handle final odd-sized batch by padding instead of dropping it.
+      cur_pred_batch_size = pred_batch['inputs'].shape[0]
+      if cur_pred_batch_size % n_devices:
+        logging.info('Translation: uneven batch size %d.',
+                      cur_pred_batch_size)
+        padded_size = int(
+            np.ceil(cur_pred_batch_size / n_devices) * n_devices)
+        pred_batch = jax.tree_map(
+            lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
+      pred_batch = common_utils.shard(pred_batch)
+      per_device_batch_size = pred_batch['inputs'].shape[1]
+      cache = jax_utils.replicate(
+          cache_def.initialize_cache((per_device_batch_size,
+                                      FLAGS.max_predict_length)))
+      predicted = p_pred_step(pred_batch['inputs'],
+                              optimizer.target,
+                              cache,
+                              eos_token,
+                              FLAGS.max_predict_length)
+      predicted = tohost(predicted)
+      inputs = tohost(pred_batch['inputs'])
+      targets = tohost(pred_batch['targets'])
+      # Iterate through non-padding examples of batch.
+      for i, s in enumerate(predicted[:cur_pred_batch_size]):
+        sources.append(decode_tokens(inputs[i]))
+        references.append(decode_tokens(targets[i]))
+        # TODO(levskaya): debug very rare initial 0-token predictions.
+        try:
+          predictions.append(decode_tokens(s))
+        except ValueError:
+          logging.error('bad predicted tokens: %s', s)
+          predictions.append('Wir haben technische Schwierigkeiten.')
+    logging.info('inference time: %.4f s step %d.',
+                  time.time()-t_inference_start, step)
+    logging.info('Translation: %d predictions %d references %d sources.',
+                  len(predictions), len(references), len(sources))
+
+    # Calculate BLEU score for translated eval corpus against reference.
+    bleu_score = bleu.bleu_local(references, predictions)
+    sacrebleu_score = sacrebleu.corpus_bleu(predictions, [references]).score
+    # Save translation samples for tensorboard.
+    exemplars = ''
+    for n in np.random.choice(np.arange(len(predictions)), 8):
+      exemplars += f'{sources[n]}\n\n{references[n]}\n\n{predictions[n]}\n\n'
+    if jax.host_id() == 0:
+      eval_summary_writer.scalar('bleu', bleu_score, step)
+      eval_summary_writer.scalar('sacrebleu', sacrebleu_score, step)
+      eval_summary_writer.text('samples', exemplars, step)
+      eval_summary_writer.flush()
 
 
 if __name__ == '__main__':

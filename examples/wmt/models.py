@@ -86,6 +86,7 @@ class AddPositionEmbs(nn.Module):
     Returns:
       output: `(bs, timesteps, in_dim)`
     """
+    # inputs.shape = (batch_size, seq_len, emb_dim)
     assert inputs.ndim == 3, ('Number of dimensions should be 3,'
                               ' but it is: %d' % inputs.ndim)
     length = inputs.shape[1]
@@ -173,7 +174,7 @@ class Encoder1DBlock(nn.Module):
       deterministic: bool, deterministic or not (to apply dropout).
 
     Returns:
-      output after transformer block.
+      output after transformer encoder block.
     """
 
     # Attention block.
@@ -222,7 +223,6 @@ class EncoderDecoder1DBlock(nn.Module):
             dtype=jnp.float32,
             inputs_segmentation=None,
             targets_segmentation=None,
-            causal_mask=True,
             padding_mask=None,
             key_padding_mask=None,
             dropout_rate=0.1,
@@ -249,7 +249,7 @@ class EncoderDecoder1DBlock(nn.Module):
       cache: flax attention cache for fast decoding.
 
     Returns:
-      output after transformer block.
+      output after transformer encoder-decoder block.
     """
 
     # Decoder block.
@@ -349,8 +349,7 @@ class Encoder(nn.Module):
       attention_dropout_rate: dropout rate for attention weights
 
     Returns:
-      output of a transformer decoder.
-
+      output of a transformer encoder.
     """
     assert inputs.ndim == 2  # (batch, len)
 
@@ -454,7 +453,6 @@ class Decoder(nn.Module):
 
     Returns:
       output of a transformer decoder.
-
     """
     assert encoded.ndim == 3  # (batch, len, depth)
     assert targets.ndim == 2  # (batch, len)
@@ -499,7 +497,6 @@ class Decoder(nn.Module):
           mlp_dim=mlp_dim,
           num_heads=num_heads,
           dtype=dtype,
-          causal_mask=True,
           padding_mask=tgt_padding_mask,
           key_padding_mask=src_padding_mask,
           inputs_segmentation=inputs_segmentation,
@@ -592,7 +589,6 @@ class Transformer(nn.Module):
 
     Returns:
       output of a transformer decoder.
-
     """
     src_padding_mask = (inputs > 0)[..., None]
 
