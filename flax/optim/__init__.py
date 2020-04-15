@@ -17,15 +17,18 @@
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
 from .adam import Adam
+from .adagrad import Adagrad
 from .base import OptimizerState, OptimizerDef, Optimizer, MultiOptimizer, ModelParamTraversal
 from .lamb import LAMB
 from .lars import LARS
 from .momentum import Momentum
+from .rmsprop import RMSProp
 from .sgd import GradientDescent
 from .weight_norm import WeightNorm
 
 __all__ = [
     "Adam",
+    "Adagrad",
     "OptimizerState",
     "OptimizerDef",
     "Optimizer",
@@ -33,6 +36,7 @@ __all__ = [
     "LAMB",
     "LARS",
     "Momentum",
+    "RMSProp",
     "GradientDescent",
     "WeightNorm",
 ]
