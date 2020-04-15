@@ -126,7 +126,7 @@ flags.DEFINE_bool(
 
 flags.DEFINE_integer(
     'checkpoint_freq', default=10000,
-    help='Whether to restore from existing model checkpoints.')
+    help='Save a checkpoint every these number of steps.')
 
 flags.DEFINE_bool(
     'use_bfloat16', default=True,
@@ -140,7 +140,7 @@ def create_learning_rate_scheduler(
     decay_factor=0.5,
     steps_per_decay=20000,
     steps_per_cycle=100000):
-  """creates learning rate schedule.
+  """Creates learning rate schedule.
 
   Interprets factors in the factors string which can consist of:
   * constant: interpreted as the constant value,
@@ -150,12 +150,12 @@ def create_learning_rate_scheduler(
   * cosine_decay: Cyclic cosine decay, uses steps_per_cycle parameter.
 
   Args:
-    factors: a string with factors separated by '*' that defines the schedule.
+    factors: string, factors separated by '*' that defines the schedule.
     base_learning_rate: float, the starting constant for the lr schedule.
-    warmup_steps: how many steps to warm up for in the warmup schedule.
-    decay_factor: The amount to decay the learning rate by.
-    steps_per_decay: How often to decay the learning rate.
-    steps_per_cycle: Steps per cycle when using cosine decay.
+    warmup_steps: int, how many steps to warm up for in the warmup schedule.
+    decay_factor: float, the amount to decay the learning rate by.
+    steps_per_decay: int, how often to decay the learning rate.
+    steps_per_cycle: int, steps per cycle when using cosine decay.
 
   Returns:
     a function learning_rate(step): float -> {'learning_rate': float}, the
@@ -222,7 +222,7 @@ def compute_weighted_cross_entropy(logits,
   Args:
    logits: [batch, length, num_classes] float array.
    targets: categorical targets [batch, length] int array.
-   weights: None or array of shape [batch, length]
+   weights: None or array of shape [batch, length].
    label_smoothing: label smoothing constant, used to determine the on and
      off values.
 
@@ -354,11 +354,10 @@ def predict_step(inputs, model, cache, eos_token, max_decode_len):
   batch_size = inputs.shape[0]
   beam_size = 4
 
-  # Prepare transformer fast-decoder call for beam search:
-  # for beam search, we need to set up our decoder model
-  # to handle a batch size equal to batch_size * beam_size,
-  # where each batch item's data is expanded in-place rather
-  # than tiled.
+  # Prepare transformer fast-decoder call for beam search: for beam search, we
+  # need to set up our decoder model to handle a batch size equal to 
+  # batch_size * beam_size, where each batch item's data is expanded in-place
+  # rather than tiled.
   # i.e. if we denote each batch element subtensor as el[n]:
   # [el0, el1, el2] --> beamsize=2 --> [el0,el0,el1,el1,el2,el2]
   src_padding_mask = decode.flat_batch_beam_expand(
@@ -379,12 +378,12 @@ def predict_step(inputs, model, cache, eos_token, max_decode_len):
                                  shift=False,
                                  train=False,
                                  tgt_padding_mask=tgt_padding_mask)
-    # Remove singleton sequence-length dimension
+    # Remove singleton sequence-length dimension:
     # [batch * beam, 1, vocab] --> [batch * beam, vocab]
     flat_logits = flat_logits.squeeze(axis=1)
     return flat_logits, new_flat_cache
 
-  # using the above-defined single-step decoder function, run a
+  # Using the above-defined single-step decoder function, run a
   # beam search over possible sequences given input encoding.
   beam_seqs, _ = decode.beam_search(
       inputs,
@@ -395,9 +394,9 @@ def predict_step(inputs, model, cache, eos_token, max_decode_len):
       eos_token=eos_token,
       max_decode_len=max_decode_len)
 
-  # beam search returns [n_batch, n_beam, n_length + 1] with beam dimension
-  # sorted in increasing order of log-probability
-  # return the highest scoring beam sequence, drop first dummy 0 token.
+  # Beam search returns [n_batch, n_beam, n_length + 1] with beam dimension
+  # sorted in increasing order of log-probability.
+  # Return the highest scoring beam sequence, drop first dummy 0 token.
   return beam_seqs[:, -1, 1:]
 
 
@@ -451,12 +450,12 @@ def main(argv):
       max_eval_target_length=FLAGS.max_eval_target_length)
   vocab_size = encoder.vocab_size + 1
   eos_token = encoder.vocab_size
-  def decode_tokens(toks, eos_token=encoder.vocab_size):
+  def decode_tokens(toks):
     return encoder.decode(toks - eos_token * (toks == eos_token))
 
   train_iter = iter(train_ds)
 
-  # Build Model and Optimizer
+  # Build Model and Optimizer.
   transformer_kwargs = {
       'vocab_size': vocab_size,
       'output_vocab_size': vocab_size,
@@ -482,7 +481,7 @@ def main(argv):
   optimizer = create_optimizer(model,
                                FLAGS.learning_rate,
                                FLAGS.weight_decay)
-  # we access model only from optimizer below via optimizer.target
+  # We access model only from optimizer below via optimizer.target.
   del model
 
   if FLAGS.restore_checkpoints:
@@ -491,7 +490,7 @@ def main(argv):
     # Grab last step.
     start_step = int(optimizer.state.step)
 
-  # Replicate optimizer.
+  # Replicate optimizer over local devices.
   optimizer = jax_utils.replicate(optimizer)
 
   learning_rate_fn = create_learning_rate_scheduler(
@@ -528,7 +527,7 @@ def main(argv):
         optimizer, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
 
-    # Save a Checkpoint
+    # Save a checkpoint.
     if step % FLAGS.checkpoint_freq == 0 and step > 0:
       if jax.host_id() == 0 and FLAGS.save_checkpoints:
         checkpoints.save_checkpoint(FLAGS.model_dir,
@@ -537,7 +536,7 @@ def main(argv):
 
     # Periodic metric handling.
     if step % FLAGS.eval_frequency == 0:
-      # Training Metrics
+      # Training metrics.
       metrics_all = common_utils.get_metrics(metrics_all)
       lr = metrics_all.pop('learning_rate').mean()
       metrics_sums = jax.tree_map(jnp.sum, metrics_all)
@@ -593,9 +592,9 @@ def main(argv):
           pred_batch = jax.tree_map(
               lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
         pred_batch = common_utils.shard(pred_batch)
-        per_device_batchsize = pred_batch['inputs'].shape[1]
+        per_device_batch_size = pred_batch['inputs'].shape[1]
         cache = jax_utils.replicate(
-            cache_def.initialize_cache((per_device_batchsize,
+            cache_def.initialize_cache((per_device_batch_size,
                                         FLAGS.max_predict_length)))
         predicted = p_pred_step(pred_batch['inputs'],
                                 optimizer.target,

@@ -36,7 +36,7 @@ def sinusoidal_init(max_len=2048,
   """1D Sinusoidal Position Embedding Initializer.
 
   Args:
-      max_len: maximum possible length for the input
+      max_len: maximum possible length for the input.
       min_scale: float: minimum frequency-scale in sine grating.
       max_scale: float: maximum frequency-scale in sine grating.
 
@@ -71,14 +71,14 @@ class AddPositionEmbs(nn.Module):
             cache=None):
     """Applies AddPositionEmbs module.
 
-    By default this layer uses a fixed sinusoidal embedding table.  If a
+    By default this layer uses a fixed sinusoidal embedding table. If a
     learned position embedding is desired, pass an initializer to
     posemb_init.
 
     Args:
-      inputs: input data
+      inputs: input data.
       inputs_positions: input position indices for packed sequences.
-      max_len: maximum possible length for the input
+      max_len: maximum possible length for the input.
       posemb_init: positional embedding initializer, if None, then use a
         fixed (non-learned) sinusoidal embedding table.
       cache: flax attention cache for fast decoding.
@@ -161,16 +161,16 @@ class Encoder1DBlock(nn.Module):
     """Applies Encoder1DBlock module.
 
     Args:
-      inputs: input data
-      qkv_dim: dimension of the query/key/value
-      mlp_dim: dimension of the mlp on top of attention block
-      num_heads: number of heads
-      dtype: the dtype of the computation (default: float32)
+      inputs: input data.
+      qkv_dim: dimension of the query/key/value.
+      mlp_dim: dimension of the mlp on top of attention block.
+      num_heads: number of heads.
+      dtype: the dtype of the computation (default: float32).
       inputs_segmentation: input segmentation info for packed examples.
-      padding_mask: bool, mask padding tokens
-      dropout_rate: dropout rate
-      attention_dropout_rate: dropout rate for attention weights
-      deterministic: bool, deterministic or not (to apply dropout)
+      padding_mask: bool, mask padding tokens.
+      dropout_rate: dropout rate.
+      attention_dropout_rate: dropout rate for attention weights.
+      deterministic: bool, deterministic or not (to apply dropout).
 
     Returns:
       output after transformer block.
@@ -441,16 +441,16 @@ class Decoder(nn.Module):
         embedding weights.
       shift: whether to shift or not (for fast decoding).
       use_bfloat16: bool: whether use bfloat16.
-      emb_dim: dimension of embedding
-      num_heads: number of heads
-      num_layers: number of layers
-      qkv_dim: dimension of the query/key/value
-      mlp_dim: dimension of the mlp on top of attention block
+      emb_dim: dimension of embedding.
+      num_heads: number of heads.
+      num_layers: number of layers.
+      qkv_dim: dimension of the query/key/value.
+      mlp_dim: dimension of the mlp on top of attention block.
       max_len: maximum length.
-      train: if it is training,
+      train: whether it is training.
       cache: flax attention cache for fast decoding.
-      dropout_rate: dropout rate
-      attention_dropout_rate: dropout rate for attention weights
+      dropout_rate: dropout rate.
+      attention_dropout_rate: dropout rate for attention weights.
 
     Returns:
       output of a transformer decoder.
@@ -564,10 +564,11 @@ class Transformer(nn.Module):
     """Applies Transformer model on the inputs.
 
     Args:
-      inputs: input data
-      targets: target data
-      vocab_size: size of the input vocabulary
-      output_vocab_size: size of the output vocabulary
+      inputs: input data.
+      targets: target data.
+      vocab_size: size of the input vocabulary.
+      output_vocab_size: size of the output vocabulary. If None, the output
+        vocabulary size is assumed to be the same as vocab_size.
       inputs_positions: input subsequence positions for packed examples.
       targets_positions: target subsequence positions for packed examples.
       inputs_segmentation: input segmentation info for packed examples.
@@ -577,16 +578,16 @@ class Transformer(nn.Module):
       logits_via_embedding: bool: whether final logit transform shares
         embedding weights.
       use_bfloat16: bool: whether use bfloat16.
-      emb_dim: dimension of embedding
-      num_heads: number of heads
-      num_layers: number of layers
-      qkv_dim: dimension of the query/key/value
-      mlp_dim: dimension of the mlp on top of attention block
+      emb_dim: dimension of embedding.
+      num_heads: number of heads.
+      num_layers: number of layers.
+      qkv_dim: dimension of the query/key/value.
+      mlp_dim: dimension of the mlp on top of attention block.
       max_len: maximum length.
-      train: if it is training,
+      train: whether it is training.
       shift: whether to right-shift targets.
-      dropout_rate: dropout rate
-      attention_dropout_rate: dropout rate for attention weights
+      dropout_rate: dropout rate.
+      attention_dropout_rate: dropout rate for attention weights.
       cache: flax autoregressive cache for fast decoding.
 
     Returns:
