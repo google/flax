@@ -114,11 +114,11 @@ def cosine_decay(lr, step, total_steps):
   return mult * lr
 
 
-def create_learning_rate_fn(base_learing_rate, steps_per_epoch, num_epochs):
+def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
   warmup_epochs = 5
   def step_fn(step):
     epoch = step / steps_per_epoch
-    lr = cosine_decay(base_learing_rate,
+    lr = cosine_decay(base_learning_rate,
                       epoch - warmup_epochs,
                       num_epochs - warmup_epochs)
     warmup = jnp.minimum(1., epoch / warmup_epochs)

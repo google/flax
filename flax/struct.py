@@ -63,7 +63,7 @@ def dataclass(clz):
     model.params = params_b  # Model is immutable. This will raise an error.
     model_b = model.replace(params=params_b)  # Use the replace method instead.
 
-    # This class can know be used safely in Jax to for example to compute
+    # This class can now be used safely in Jax to for example to compute
     # gradients w.r.t. the parameters.
     model = Model(params, apply_fn)
     model_grad = jax.grad(some_loss_fn)(model)
