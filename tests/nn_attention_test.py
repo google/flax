@@ -158,7 +158,7 @@ class AttentionTest(parameterized.TestCase):
 
     def get_receptive_field_1d(pos):
       g = grad_fn(inputs, pos)[0, :, :]
-      return jnp.any((jnp.abs(g) > 1e-5).astype(int), axis=-1)
+      return jnp.any((jnp.abs(g) > 1e-5).astype(jnp.uint32), axis=-1)
 
     length = 10
     dim = 1
