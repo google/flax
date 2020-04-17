@@ -136,7 +136,6 @@ def create_optimizer(model, learning_rate):
       eps=1e-9,
       weight_decay=FLAGS.weight_decay)
   optimizer = optimizer_def.create(model)
-  optimizer = jax_utils.replicate(optimizer)
   return optimizer
 
 
@@ -253,7 +252,7 @@ def compute_metrics(logits, labels, weights):
       'accuracy': acc,
       'denominator': weight_sum,
   }
-  metrics = common_utils.psum(metrics)
+  metrics = jax.lax.psum(metrics, 'batch')
   return metrics
 
 
@@ -387,8 +386,9 @@ def main(argv):
     optimizer = checkpoints.restore_checkpoint(FLAGS.model_dir, optimizer)
     # Grab last step.
     start_step = int(optimizer.state.step)
-    # Replicate optimizer.
-    optimizer = jax_utils.replicate(optimizer)
+
+  # Replicate optimizer.
+  optimizer = jax_utils.replicate(optimizer)
 
   learning_rate_fn = create_learning_rate_scheduler(
       base_learning_rate=learning_rate)
