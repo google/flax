@@ -244,6 +244,10 @@ class Optimizer:
   def compute_gradient(self, loss_fn):
     """Computes gradient of loss_fn.
 
+    DEPRECATION WARNING:
+    compute_gradient() is deprecated.
+    Use jax.grad() or jax.value_and_grad() and apply_gradient() instead.
+
     Args:
       loss_fn: a function that receives the target and returns a loss or a
         tuple of the loss and auxiliary outputs.
@@ -251,6 +255,10 @@ class Optimizer:
       A tuple consisting of the loss, auxiliary outputs if any,
         and a list of gradient.
     """
+    warnings.warn('compute_gradient() will be removed soon.'
+                  ' Use jax.grad() and jax.value_and_grad()'
+                  'instead.',
+                  DeprecationWarning)
     def loss_wrapper(target):
       loss_and_aux = loss_fn(target)
       if isinstance(loss_and_aux, jnp.ndarray):
