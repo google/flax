@@ -246,7 +246,7 @@ class Optimizer:
 
     DEPRECATION WARNING:
     compute_gradient() is deprecated.
-    Use jax.grad() or jax.value_and_grad() and apply_gradient() instead.
+    Use jax.grad() or jax.value_and_grad() instead.
 
     Args:
       loss_fn: a function that receives the target and returns a loss or a
@@ -256,7 +256,7 @@ class Optimizer:
         and a list of gradient.
     """
     warnings.warn('compute_gradient() will be removed soon.'
-                  ' Use jax.grad() and jax.value_and_grad()'
+                  ' Use jax.grad() or jax.value_and_grad()'
                   'instead.',
                   DeprecationWarning)
     def loss_wrapper(target):
