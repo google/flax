@@ -15,6 +15,7 @@
 # Lint as: python3
 """Tests for flax.optim."""
 
+import pytest
 from absl.testing import absltest
 
 from flax import nn
@@ -48,6 +49,7 @@ class OptimizerDefTest(absltest.TestCase):
     self.assertEqual(optimizer.state, expected_state)
     self.assertEqual(optimizer.target, params)
 
+  @pytest.mark.filterwarnings("ignore: compute_gradient()")
   def test_compute_grad(self):
     params = onp.ones(())
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
