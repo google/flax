@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import numpy as onp
 
 
-default_kernel_init = initializers.lecun_normal()
+default_kernel_init = initializers.kaiming_uniform()
 
 
 def _normalize_axes(axes, ndim):
