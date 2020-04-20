@@ -79,6 +79,14 @@ class OptimizerDefTest(absltest.TestCase):
     self.assertEqual(new_optimizer.state, expected_state)
     self.assertEqual(new_optimizer.target, expected_params)
 
+  def test_empty_optimizer(self):
+    params = {}
+    optimizer_def = optim.Momentum(learning_rate=0.1)
+    optimizer = optimizer_def.create(params)
+    new_optimizer = optimizer.apply_gradient({})
+    expected_state = optim.OptimizerState(1, {})
+    self.assertEqual(new_optimizer.state, expected_state)
+
 
 class ModelParamTraversalTest(absltest.TestCase):
 
