@@ -55,12 +55,6 @@ flags.DEFINE_integer(
     help=('Number of training epochs.'))
 
 
-def load_split(split):
-  ds = tfds.load('mnist', split=split, batch_size=-1)
-  data = tfds.as_numpy(ds)
-  data['image'] = onp.float32(data['image']) / 255.
-  return data
-
 
 class CNN(nn.Module):
   """A simple CNN model."""
@@ -166,8 +160,12 @@ def eval_model(model, test_ds):
 
 def get_datasets():
   """Load MNIST train and test datasets into memory."""
-  train_ds = load_split(tfds.Split.TRAIN)
-  test_ds = load_split(tfds.Split.TEST)
+  ds_builder = tfds.builder('mnist')
+  ds_builder.download_and_prepare()
+  train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
+  test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
+  train_ds['image'] = jnp.float32(train_ds['image']) / 255.
+  test_ds['image'] = jnp.float32(test_ds['image']) / 255.
   return train_ds, test_ds
 
 
