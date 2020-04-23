@@ -269,25 +269,24 @@ def ConvTransposeDownRight(
 
 
 # Resnet modules
-def make_gated_resnet(conv_module):
-  @nn.module
-  def Res(inputs, aux=None, nonlinearity=concat_elu, dropout_p=0.):
-    c = inputs.shape[-1]
-    y = conv_module(nonlinearity(inputs), c)
-    if aux is not None:
-      y = nonlinearity(y + ConvOneByOne(nonlinearity(aux), c))
+@nn.module
+def GatedResnet(
+    inputs, aux=None, conv_module=None, nonlinearity=concat_elu, dropout_p=0.):
+  c = inputs.shape[-1]
+  y = conv_module(nonlinearity(inputs), c)
+  if aux is not None:
+    y = nonlinearity(y + ConvOneByOne(nonlinearity(aux), c))
 
-    if dropout_p > 0:
-      y = nn.dropout(y, dropout_p)
+  if dropout_p > 0:
+    y = nn.dropout(y, dropout_p)
 
-    # Set init_scale=0.1 so that the res block is close to the identity at
-    # initialization.
-    a, b = np.split(conv_module(y, 2 * c, init_scale=0.1), 2, axis=-1)
-    return inputs + a * nn.sigmoid(b)
-  return Res
+  # Set init_scale=0.1 so that the res block is close to the identity at
+  # initialization.
+  a, b = np.split(conv_module(y, 2 * c, init_scale=0.1), 2, axis=-1)
+  return inputs + a * nn.sigmoid(b)
 
-ResDown = make_gated_resnet(ConvDown)
-ResDownRight = make_gated_resnet(ConvDownRight)
+ResDown = GatedResnet.partial(conv_module=ConvDown)
+ResDownRight = GatedResnet.partial(conv_module=ConvDownRight)
 
 
 # Logistic mixture distribution utils
