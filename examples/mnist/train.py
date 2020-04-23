@@ -40,19 +40,19 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
     'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
+    help='The learning rate for the momentum optimizer.')
 
 flags.DEFINE_float(
     'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
+    help='The decay rate used for the momentum optimizer.')
 
 flags.DEFINE_integer(
     'batch_size', default=128,
-    help=('Batch size for training.'))
+    help='Batch size for training.')
 
 flags.DEFINE_integer(
     'num_epochs', default=10,
-    help=('Number of training epochs.'))
+    help='Number of training epochs.')
 
 
 

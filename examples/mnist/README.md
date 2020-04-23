@@ -3,6 +3,7 @@
 Trains a simple convolutional network on the MNIST dataset.
 
 ### Requirements
+
 * TensorFlow dataset `mnist` will be downloaded and prepared automatically, if necessary
 
 ### Example output
