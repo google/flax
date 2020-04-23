@@ -293,8 +293,7 @@ ResDownRight = GatedResnet.partial(conv_module=ConvDownRight)
 def conditional_params_from_outputs(theta, img):
   """
   Maps an image `img` and the PixelCNN++ convnet output `theta` to conditional
-  parameters for a mixture of k logistics over each pixel. Note this method
-  won't work on a batch, so use jax.vmap!
+  parameters for a mixture of k logistics over each pixel.
 
   Returns a tuple `(means, inverse_scales, logit_weights)` where `means` and
   `inverse_scales` are the conditional means and inverse scales of each mixture
