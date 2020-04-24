@@ -457,10 +457,10 @@ class CollectionTest(absltest.TestCase):
           # constants should be storable
           state.store(1.)
           # values in the same trace should be storable
-          state.store(y)
+          state.store({'a': y})
           with test.assertRaises(ValueError):
             # values depending on the vmap should not be storable
-            state.store(x)
+            state.store({'a': y, 'b': x})
         jax.vmap(inner_fn)(jnp.ones((2,)))
 
     def outer_fn(x):

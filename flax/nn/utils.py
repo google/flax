@@ -86,8 +86,12 @@ def _current_trace():
   return None
 
 
-def _tracer_of_value(x):
-  """Returns the tracer associated with a value if any."""
-  if hasattr(x, '_trace'):
-    return x._trace.master
-  return None
+def _level_of_value(xs):
+  """Returns the tracer level associated with a value if any."""
+  xs = jax.tree_leaves(xs)
+  max_level = float('-inf')
+  for x in xs:
+    if hasattr(x, '_trace'):
+      level = _trace_level(x._trace.master)
+      max_level = max(level, max_level)
+  return max_level
