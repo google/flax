@@ -145,7 +145,7 @@ def train_step(state, batch, learning_rate_fn):
   step = state.step
   optimizer = state.optimizer
   lr = learning_rate_fn(step)
-  _, (new_model_state, logits), grad = optimizer.compute_gradient(loss_fn)
+  (_, (new_model_state, logits)), grad = jax.value_and_grad(loss_fn, has_aux=True)(optimizer.target)
 
   # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
   grad = lax.pmean(grad, axis_name='batch')
