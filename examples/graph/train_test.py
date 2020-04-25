@@ -16,9 +16,11 @@
 """Tests for flax.examples.graph.train."""
 
 from absl.testing import absltest
+import train
 from train import GNN
 
 from flax import nn
+from flax import optim
 import jax
 from jax import random
 from jax import test_util as jtu
@@ -60,6 +62,24 @@ class TrainTest(jtu.JaxTestCase):
     logits_perm = model(node_feats_perm, None, sources_perm, targets_perm)
 
     self.assertAllClose(logits[perm], logits_perm, check_dtypes=False)
+
+  def test_single_train_step(self):
+    prng = random.PRNGKey(0)
+    #       0 (0)
+    #      / \
+    # (0) 1 - 2 (1)
+    edge_list = [(0, 0), (1, 2), (2, 0)]
+    node_labels = [0, 0, 1]
+    node_feats, node_labels, sources, targets = train.create_graph_data(edge_list=edge_list,
+                                                                        node_labels=node_labels)
+    _, initial_params = GNN.init(prng, node_x=node_feats, edge_x=None,
+                                 sources=sources, targets=targets)
+    model = nn.Model(GNN, initial_params)
+    optimizer = optim.Adam(learning_rate=0.01).create(model)
+    _, loss = train.train_step(optimizer=optimizer, node_feats=node_feats,
+                               sources=sources, targets=targets)
+    
+    self.assertGreater(loss, 0.0)
 
 
 if __name__ == '__main__':

@@ -91,6 +91,25 @@ def get_karate_club_data():
       (31, 33), (32, 33)
   ]
 
+  # Student-teacher assignment (before split) as in Zachary (1977).
+  # Part-time karate instructor: Mr. Hi, node 0 (labeled as 0).
+  # President: John A., node 33 (labeled as 1).
+  node_labels = jnp.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0,
+                           0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+  
+  return create_graph_data(edge_list=edge_list, node_labels=node_labels)
+
+
+def create_graph_data(edge_list=None, node_labels=None):
+  """Creates data for training and eval of GNN.
+  
+  Args:
+    edge_list: List of tuples representing edges in the graph.
+    node_labels: List of labels for each node in the graph.
+  
+  Returns:
+     A tuple containing node features, node labels and edge indices
+  """
   # Add inverted edges to make graph undirected.
   edge_list += [(target, source) for source, target in edge_list]
 
@@ -98,15 +117,10 @@ def get_karate_club_data():
   sources = jnp.array([source for source, target in edge_list])
   targets = jnp.array([target for source, target in edge_list])
 
-  # Student-teacher assignment (before split) as in Zachary (1977).
-  # Part-time karate instructor: Mr. Hi, node 0 (labeled as 0).
-  # President: John A., node 33 (labeled as 1).
-  node_labels = jnp.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0,
-                           0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
   node_feats = jnp.eye(len(node_labels))  # Unique one-hot features.
 
   return node_feats, node_labels, sources, targets
-
+  
 
 def semi_supervised_cross_entropy_loss(logits):
   # Only use labels of first (instructor) and last (president) nodes.
