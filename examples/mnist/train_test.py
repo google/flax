@@ -21,26 +21,23 @@ import train
 import jax
 from jax import random
 
-import numpy as onp
-
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
 
 class TrainTest(absltest.TestCase):
 
-  def test_train_one_epoch(self):
-    train_ds, test_ds = train.get_datasets()
-    input_rng = onp.random.RandomState(0)
+  def test_single_train_step(self):
+    train_ds, _ = train.get_datasets()
+    batch_size = 32
     model = train.create_model(random.PRNGKey(0))
     optimizer = train.create_optimizer(model, 0.1, 0.9)
-    optimizer, train_metrics = train.train_epoch(optimizer, train_ds, 128, 0,
-                                                 input_rng)
-    self.assertLessEqual(train_metrics['loss'], 0.27)
-    self.assertGreaterEqual(train_metrics['accuracy'], 0.92)
-    loss, accuracy = train.eval_model(optimizer.target, test_ds)
-    self.assertLessEqual(loss, 0.06)
-    self.assertGreaterEqual(accuracy, 0.98)
+
+    _, train_metrics = \
+      train.train_step(optimizer=optimizer,
+                       batch={k: v[:batch_size] for k, v in train_ds.items()})
+    self.assertLessEqual(train_metrics['loss'], 2.302)
+    self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
 
 
 if __name__ == '__main__':
