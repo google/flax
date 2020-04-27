@@ -79,7 +79,7 @@ A tensorboard instance can then be launched and viewed on your local 2222 port v
 
 ### Downloading the WMT Datasets
 
-We recommend downloading and preparing the TFDS datasets beforehand.  For cloudTPUs, we
+We recommend downloading and preparing the TFDS datasets beforehand.  For Cloud TPUs, we
 recommend using a cheap standard instance and saving the prepared TFDS data on a storage bucket,
 from where it can be loaded directly during training using the `--data_dir=gs://...` option.
 
