@@ -170,7 +170,7 @@ def scan_in_dim(*args, **kwargs):
 class Cache(base.Collection):
   """Collect intermediate activations for efficient autoregressive decoding."""
 
-  def initialize_cache(self, shape):
+  def initialize_cache(self, shape, dtype=None):
     """Initialize the cache for the given input shape.
 
     Args:
@@ -178,14 +178,16 @@ class Cache(base.Collection):
     Returns:
       the initialized cache
     """
+    if dtype is None:
+      dtype = jnp.float32
     def _init(shape_fn):
       ndim, tail_shape = shape_fn()
       full_shape = shape + tail_shape
       if len(full_shape) != ndim:
         raise ValueError('Shape should be a tuple with the shape of the batch'
                          'and attention dims.')
-      return _CacheEntry(key=jnp.zeros(full_shape),
-                         value=jnp.zeros(full_shape),
+      return _CacheEntry(key=jnp.zeros(full_shape, dtype=dtype),
+                         value=jnp.zeros(full_shape, dtype=dtype),
                          i=jnp.zeros((), jnp.uint32))
     return Cache(jax.tree_map(_init, self.state))
 

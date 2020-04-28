@@ -100,7 +100,7 @@ class AddPositionEmbs(nn.Module):
     Returns:
       output: `(bs, timesteps, in_dim)`
     """
-    # inputs.shape = (batch_size, seq_len, emb_dim)
+    # inputs.shape is (batch_size, seq_len, emb_dim)
     assert inputs.ndim == 3, ('Number of dimensions should be 3,'
                               ' but it is: %d' % inputs.ndim)
     length = inputs.shape[1]

@@ -57,12 +57,15 @@ def brevity_penalty(alpha, length):
   return jnp.power(((5.0 + length) / 6.0), alpha)
 
 
-def top_k(x, k):
-  """Select the top k slices from the last dimension."""
-  bcast_idxs = jnp.broadcast_to(np.arange(x.shape[-1]), x.shape)
-  sorted_vals, sorted_idxs = lax.sort_key_val(x, bcast_idxs)
-  # TODO(levskaya): use lax.slice here instead to benefit from XLA optimization
-  return sorted_vals[..., -k:], sorted_idxs[..., -k:]
+# TODO(levskaya): try to eliminate this in favor of lax.top_k at its last
+# callsite w.o. causing the mysterious BLEU regression.
+# def top_k(x, k):
+#   """Select the top k slices from the last dimension."""
+#   bcast_idxs = jnp.broadcast_to(np.arange(x.shape[-1]), x.shape)
+#   sorted_vals, sorted_idxs = lax.sort_key_val(x, bcast_idxs)
+#   topk_vals = lax.slice_in_dim(sorted_vals, -k, sorted_vals.shape[-1], axis=-1)
+#   topk_idxs = lax.slice_in_dim(sorted_idxs, -k, sorted_idxs.shape[-1], axis=-1)
+#   return topk_vals, topk_idxs
 
 
 # Beam handling utility functions:
@@ -136,8 +139,9 @@ def gather_topk_beams(nested, score_or_log_prob, batch_size, new_beam_size):
     New pytree with new beam arrays containing top k new_beam_size slices.
     [batch_size, old_beam_size, ...] --> [batch_size, new_beam_size, ...]
   """
-  _, topk_indexes = top_k(score_or_log_prob, k=new_beam_size)
-  return gather_beams(nested, topk_indexes, batch_size, new_beam_size)
+  _, topk_indices = lax.top_k(score_or_log_prob, k=new_beam_size)
+  topk_indices = jnp.flip(topk_indices, axis=1)
+  return gather_beams(nested, topk_indices, batch_size, new_beam_size)
 
 
 # Beam search state:
@@ -293,14 +297,14 @@ def beam_search(inputs,
     flat_log_probs = log_probs.reshape((batch_size, beam_size * vocab_size))
     # Gather the top 2*K scores from _all_ beams.
     # --> [batch, 2*beams], [batch, 2*beams]
-    topk_log_probs, topk_indices = top_k(flat_log_probs, k=beams_to_keep)
+    topk_log_probs, topk_indices = lax.top_k(flat_log_probs, k=beams_to_keep)
     # Recover the beam index by floor division.
     topk_beam_indices = topk_indices // vocab_size
-    # Gather 2*k top beams and beam-associated caches.
-    # --> [batch, 2*beams, length], {[batch, 2*beams, ...], ...}
-    topk_seq, new_cache = gather_beams([state.live_seqs, new_cache],
-                                       topk_beam_indices,
-                                       batch_size, beams_to_keep)
+    # Gather 2*k top beams.
+    # --> [batch, 2*beams, length]
+    topk_seq = gather_beams(state.live_seqs,
+                            topk_beam_indices,
+                            batch_size, beams_to_keep)
 
     # Append the most probable 2*K token IDs to the top 2*K sequences
     # Recover token id by modulo division and expand Id array for broadcasting.
@@ -319,11 +323,23 @@ def beam_search(inputs,
     # set of active beam search sequences, set their log probs to a very large
     # negative value.
     new_log_probs = topk_log_probs + newly_finished * NEG_INF
-    # --> [batch, beams, length], [batch, beams], {[batch, beams, ...], ...}
-    top_alive_seq, top_alive_log_probs, top_alive_cache = gather_topk_beams(
-        [topk_seq, new_log_probs, new_cache],
-        new_log_probs,
-        batch_size, beam_size)
+    # Determine the top k beam indices (from top 2*k beams) from log probs.
+    # --> [batch, beams]
+    _, new_topk_indices = lax.top_k(new_log_probs, k=beam_size)
+    new_topk_indices = jnp.flip(new_topk_indices, axis=1)
+    # Gather the top k beams (from top 2*k beams).
+    # --> [batch, beams, length], [batch, beams]
+    top_alive_seq, top_alive_log_probs = gather_beams(
+        [topk_seq, new_log_probs], new_topk_indices, batch_size, beam_size)
+
+    # Determine the top k beam indices from the original set of all beams.
+    # --> [batch, beams]
+    top_alive_indices = gather_beams(
+        topk_beam_indices, new_topk_indices, batch_size, beam_size)
+    # With these, gather the top k beam-associated caches.
+    # --> {[batch, beams, ...], ...}
+    top_alive_cache = gather_beams(
+        new_cache, top_alive_indices, batch_size, beam_size)
 
     # Update FINISHED (reached end of sentence) sequences:
     # Calculate new seq scores from log probabilities.

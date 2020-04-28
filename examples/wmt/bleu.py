@@ -26,10 +26,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Approximate BLEU score.
+r"""Parallel BLEU score calculation.
 
-MLPerf version of BLEU calculation.
-Tries to match SacreBLEU metric reasonably well.
+This version of BLEU calculation is derived from the MLPerf transformer reference.
+Tries to match SacreBLEU metric reasonably well, but is not identical.
 
 Refs:
     tokenizer at:
@@ -127,11 +127,10 @@ def _get_ngrams(segment, max_order):
   return ngram_counts
 
 
-def compute_bleu(reference_corpus,
+def compute_bleu_matches(reference_corpus,
                  translation_corpus,
-                 max_order=4,
-                 use_bp=True):
-  """Computes BLEU score of translated segments against one or more references.
+                 max_order=4):
+  """Computes BLEU match stats of translations against one or more references.
 
   Args:
     reference_corpus: list of references for each translation. Each reference
@@ -139,10 +138,9 @@ def compute_bleu(reference_corpus,
     translation_corpus: list of translations to score. Each translation should
       be tokenized into a list of tokens.
     max_order: Maximum n-gram order to use when computing BLEU score.
-    use_bp: boolean, whether to apply brevity penalty.
 
   Returns:
-    BLEU score.
+    Aggregated n-gram stats for BLEU calculation.
   """
   reference_length = 0
   translation_length = 0
@@ -167,6 +165,33 @@ def compute_bleu(reference_corpus,
     for ngram in translation_ngram_counts:
       possible_matches_by_order[len(ngram) -
                                 1] += translation_ngram_counts[ngram]
+
+  return (np.array(matches_by_order),
+          np.array(possible_matches_by_order),
+          np.array(reference_length),
+          np.array(translation_length))
+
+
+def bleu_partial(ref_lines, hyp_lines, case_sensitive=False):
+  """Compute n-gram statistics for two lists of references and translations."""
+  if len(ref_lines) != len(hyp_lines):
+    raise ValueError("Reference and translation lists have different "
+                     "numbers of lines.")
+  if not case_sensitive:
+    ref_lines = [x.lower() for x in ref_lines]
+    hyp_lines = [x.lower() for x in hyp_lines]
+  ref_tokens = [bleu_tokenize(x) for x in ref_lines]
+  hyp_tokens = [bleu_tokenize(x) for x in hyp_lines]
+  return compute_bleu_matches(ref_tokens, hyp_tokens)
+
+
+def complete_bleu(matches_by_order,
+                 possible_matches_by_order,
+                 reference_length,
+                 translation_length,
+                 max_order=4,
+                 use_bp=True):
+  """Compute BLEU score from aggregated n-gram statistics."""
   precisions = [0] * max_order
   smooth = 1.0
   for i in range(0, max_order):
@@ -196,17 +221,10 @@ def compute_bleu(reference_corpus,
       else:
         bp = math.exp(1 - 1. / ratio)
   bleu = geo_mean * bp
-  return np.float32(bleu)
+  return float(bleu) * 100.0
 
 
 def bleu_local(ref_lines, hyp_lines, case_sensitive=False):
   """Compute BLEU for two lists of reference and hypothesis translations."""
-  if len(ref_lines) != len(hyp_lines):
-    raise ValueError("Reference and translation lists have different "
-                     "numbers of lines.")
-  if not case_sensitive:
-    ref_lines = [x.lower() for x in ref_lines]
-    hyp_lines = [x.lower() for x in hyp_lines]
-  ref_tokens = [bleu_tokenize(x) for x in ref_lines]
-  hyp_tokens = [bleu_tokenize(x) for x in hyp_lines]
-  return compute_bleu(ref_tokens, hyp_tokens) * 100
+  stats = bleu_partial(ref_lines, hyp_lines, case_sensitive=case_sensitive)
+  return complete_bleu(*stats) * 100
