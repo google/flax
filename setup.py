@@ -35,8 +35,11 @@ install_requires = [
 ]
 
 tests_require = [
+    "jaxlib",
     "pytest",
+    "pytest-cov",
     "pytest-xdist",
+    "tensorflow",
     "tensorflow_datasets",
 ]
 
