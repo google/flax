@@ -83,7 +83,6 @@ class Adam(OptimizerDef):
 
     denom = jnp.sqrt(grad_sq_ema_corr) + hyper_params.eps
     new_param = param - hyper_params.learning_rate * grad_ema_corr / denom
-    if weight_decay != 0.0:
-      new_param -= hyper_params.learning_rate * weight_decay * param
+    new_param -= hyper_params.learning_rate * weight_decay * param
     new_state = _AdamParamState(grad_ema, grad_sq_ema)
     return new_param, new_state
