@@ -112,3 +112,37 @@ def dropout(inputs, rate, deterministic=False, rng=None):
       rng = make_rng()
     mask = random.bernoulli(rng, p=keep_prob, shape=inputs.shape)
     return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
+
+def alpha_dropout(inputs, rate, deterministic=False, rng=None):
+  """Applies an affine transform to a random dropout mask to the input.
+
+  inputs: the inputs that should be randomly masked.
+    rate: the probablity of masking out a value.
+    deterministic: if false, an affine transform is applied to the masked input
+      and masked, whereas if true, no mask is applied and the inputs are
+      returned as is.
+    rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
+      be used.
+  Returns:
+    The masked inputs.
+  """
+  if rate == 0.:
+    return inputs
+  keep_prob = 1. - rate
+
+  if deterministic:
+    return inputs
+  else:
+    if rng is None:
+      rng = make_rng()
+    alpha = 1.6732632423543772848170429916717
+    scale = 1.0507009873554804934193349852946
+    alpha_p = -alpha * scale
+
+    mask = random.bernoulli(rng, p=keep_prob, shape=inputs.shape)
+    inputs_ = inputs * mask + alpha_p * (1 - mask)
+
+    a = ((1 - rate) * (1 + rate * alpha_p ** 2)) ** -0.5
+    b = -a * alpha_p * rate
+
+    return a*inputs_ + b
