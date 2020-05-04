@@ -17,7 +17,7 @@
 
 from absl.testing import absltest
 
-from examples.mnist import train
+import mnist_main
 import jax
 from jax import random
 
@@ -30,15 +30,15 @@ jax.config.parse_flags_with_absl()
 class TrainTest(absltest.TestCase):
 
   def test_train_one_epoch(self):
-    train_ds, test_ds = train.get_datasets()
+    train_ds, test_ds = mnist_main.get_datasets()
     input_rng = onp.random.RandomState(0)
-    model = train.create_model(random.PRNGKey(0))
-    optimizer = train.create_optimizer(model, 0.1, 0.9)
-    optimizer, train_metrics = train.train_epoch(optimizer, train_ds, 128, 0,
+    model = mnist_main.create_model(random.PRNGKey(0))
+    optimizer = mnist_main.create_optimizer(model, 0.1, 0.9)
+    optimizer, train_metrics = mnist_main.train_epoch(optimizer, train_ds, 128, 0,
                                                  input_rng)
     self.assertLessEqual(train_metrics['loss'], 0.27)
     self.assertGreaterEqual(train_metrics['accuracy'], 0.92)
-    loss, accuracy = train.eval_model(optimizer.target, test_ds)
+    loss, accuracy = mnist_main.eval_model(optimizer.target, test_ds)
     self.assertLessEqual(loss, 0.06)
     self.assertGreaterEqual(accuracy, 0.98)
 

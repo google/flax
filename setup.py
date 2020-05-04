@@ -59,7 +59,7 @@ setup(
     author_email="flax-dev@google.com",
     url="https://github.com/google/flax",
     license="Apache",
-    packages=find_packages(exclude=["examples"]),
+    packages=find_packages(),
     include_package_data=False,
     zip_safe=False,
     install_requires=install_requires,
