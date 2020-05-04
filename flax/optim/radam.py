@@ -16,6 +16,7 @@
 
 from .. import struct
 
+import jax
 import jax.numpy as jnp
 from jax import lax
 
@@ -25,7 +26,7 @@ from .base import OptimizerDef
 
 
 @struct.dataclass
-class _AdamHyperParams:
+class _RAdamHyperParams:
   learning_rate: onp.ndarray
   beta1: onp.ndarray
   beta2: onp.ndarray
@@ -34,16 +35,13 @@ class _AdamHyperParams:
 
 
 @struct.dataclass
-class _AdamParamState:
+class _RAdamParamState:
   grad_ema: onp.ndarray
   grad_sq_ema: onp.ndarray
-  first_moments: onp.ndarray
-  second_moments: onp.ndarray
-  
 
 
-class Adam(OptimizerDef):
-  """Adam optimizer."""
+class RAdam(OptimizerDef):
+  """RAdam optimizer."""
 
   def __init__(self,
                learning_rate=None,
@@ -64,12 +62,12 @@ class Adam(OptimizerDef):
       weight_decay: AdamW style weight decay rate
         (relative to learning rate).
     """
-    hyper_params = _AdamHyperParams(learning_rate, beta1, beta2, eps,
+    hyper_params = _RAdamHyperParams(learning_rate, beta1, beta2, eps,
                                     weight_decay)
     super().__init__(hyper_params)
 
   def init_param_state(self, param):
-    return _AdamParamState(jnp.zeros_like(param), jnp.zeros_like(param))
+    return _RAdamParamState(jnp.zeros_like(param), jnp.zeros_like(param))
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
     assert hyper_params.learning_rate is not None, 'no learning rate provided.'
@@ -80,14 +78,25 @@ class Adam(OptimizerDef):
     grad_ema = beta1 * state.grad_ema + (1. - beta1) * grad
     grad_sq_ema = beta2 * state.grad_sq_ema + (1. - beta2) * grad_sq
 
-    # bias correction
     t = step + 1.
-    grad_ema_corr = grad_ema / (1 - beta1 ** t)
-    grad_sq_ema_corr = grad_sq_ema / (1 - beta2 ** t)
+    n_sma_inf = 2. / (1 - beta2) - 1.
+    n_sma_t = n_sma_inf - 2. * step * (beta2 ** t) / (1. - (beta2 ** t))
 
-    denom = jnp.sqrt(grad_sq_ema_corr) + hyper_params.eps
-    new_param = param - hyper_params.learning_rate * grad_ema_corr / denom
+    def high_variance(*args):
+      grad_sq_ema_ = jnp.sqrt(grad_sq_ema) + hyper_params.eps
+      step_size = jnp.sqrt((n_sma_t - 4) * (n_sma_t - 2) * n_sma_inf
+                            / ((n_sma_inf - 4) * (n_sma_inf - 2) * (n_sma_t))) * hyper_params.learning_rate / (1 - (beta1 ** t))
+      new_param = param - ((grad_ema / grad_sq_ema_) * step_size * jnp.sqrt(1 - (beta2 ** t)))
+      return new_param
+
+    def low_variance(*args):
+      step_size = hyper_params.learning_rate / (1 - (beta1 ** t))
+      new_param = param - step_size
+      return new_param
+
+    new_param = lax.cond(n_sma_t >= 5, (grad_sq_ema, hyper_params, n_sma_t, n_sma_inf, grad_sq, t), high_variance, (hyper_params, beta1, t), low_variance)
     if weight_decay != 0.0:
       new_param -= hyper_params.learning_rate * weight_decay * param
-    new_state = _AdamParamState(grad_ema, grad_sq_ema)
+    
+    new_state = _RAdamParamState(grad_ema, grad_sq_ema)
     return new_param, new_state
