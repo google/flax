@@ -37,9 +37,6 @@ class _AdamHyperParams:
 class _AdamParamState:
   grad_ema: onp.ndarray
   grad_sq_ema: onp.ndarray
-  first_moments: onp.ndarray
-  second_moments: onp.ndarray
-  
 
 
 class Adam(OptimizerDef):

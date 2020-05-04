@@ -23,7 +23,6 @@ from .lars import LARS
 from .momentum import Momentum
 from .sgd import GradientDescent
 from .weight_norm import WeightNorm
-from .radam import RAdam
 
 __all__ = [
     "Adam",
@@ -36,6 +35,5 @@ __all__ = [
     "Momentum",
     "GradientDescent",
     "WeightNorm",
-    "RAdam",
 ]
 # pylint: enable=g-multiple-import
