@@ -18,7 +18,7 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = "0.1.0"
+version = "0.1.2"
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
@@ -59,7 +59,7 @@ setup(
     author_email="flax-dev@google.com",
     url="https://github.com/google/flax",
     license="Apache",
-    packages=find_packages(),
+    packages=find_packages(exclude=["examples"]),
     include_package_data=False,
     zip_safe=False,
     install_requires=install_requires,

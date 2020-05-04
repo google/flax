@@ -13,13 +13,16 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Tests for flax.examples.mnist.train."""
+"""Tests for flax.examples.imagenet.train."""
 
 from absl.testing import absltest
 
-import train
+from flax import nn
+from examples.imagenet import train
+
 import jax
 from jax import random
+import jax.numpy as jnp
 
 import numpy as onp
 
@@ -29,18 +32,16 @@ jax.config.parse_flags_with_absl()
 
 class TrainTest(absltest.TestCase):
 
-  def test_train_one_epoch(self):
-    train_ds, test_ds = train.get_datasets()
-    input_rng = onp.random.RandomState(0)
-    model = train.create_model(random.PRNGKey(0))
-    optimizer = train.create_optimizer(model, 0.1, 0.9)
-    optimizer, train_metrics = train.train_epoch(optimizer, train_ds, 128, 0,
-                                                 input_rng)
-    self.assertLessEqual(train_metrics['loss'], 0.27)
-    self.assertGreaterEqual(train_metrics['accuracy'], 0.92)
-    loss, accuracy = train.eval_model(optimizer.target, test_ds)
-    self.assertLessEqual(loss, 0.06)
-    self.assertGreaterEqual(accuracy, 0.98)
+  def test_create_model(self):
+    model, state = train.create_model(
+        random.PRNGKey(0), 8, 224, jnp.float32)
+    x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
+    with nn.stateful(state) as new_state:
+      y = model(x)
+    state = jax.tree_map(onp.shape, state.as_dict())
+    new_state = jax.tree_map(onp.shape, new_state.as_dict())
+    self.assertEqual(state, new_state)
+    self.assertEqual(y.shape, (8, 1000))
 
 
 if __name__ == '__main__':
