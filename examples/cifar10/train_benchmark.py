@@ -43,7 +43,7 @@ class CifarTenBenchmark(Benchmark):
     sec_per_epoch = np.mean(wall_time[1:] - wall_time[:-1])
     end_error_rate = eval_error_rate[-1]
 
-    # Assertions are deffered until the test finishes, so the metrics are
+    # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
     self.assertBetween(sec_per_epoch, 80., 84.)
