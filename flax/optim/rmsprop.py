@@ -37,13 +37,13 @@ class _RMSPropParamState:
 
 class RMSProp(OptimizerDef):
   """RMSProp optimizer"""
-  def __init__(self, learning_rate: float = None, beta2=0.999, eps=1e-8):
+  def __init__(self, learning_rate: float = None, beta2=0.9, eps=1e-8):
     """Constructor for the RMSProp optimizer
     
     Args:
       learning_rate: the step size used to update the parameters.
       beta2: the coefficient used for the moving average of the
-        gradient magnitude (default: 0.999).
+        gradient magnitude (default: 0.9).
       eps: the term added to the gradient magnitude estimate for
         numerical stability.
     """
