@@ -129,7 +129,8 @@ def bin_and_batch(dataset,
     if not training:
       max_eval_length = max_eval_length or target_bucket_length * 32
       bucket_boundaries[-1] = max_eval_length
-      bucket_batch_sizes[-1] = target_batch_size // max_eval_length
+      bucket_batch_sizes[-1] = (target_batch_size // 
+                                (max_eval_length // target_bucket_length))
     # We will pad to boundaries which pads to bucket_boundary-1: add 1 here.
     bucket_boundaries = [b + 1 for b in bucket_boundaries]
     # Make batch sizes divisible by n_devices.
