@@ -61,6 +61,8 @@ comes with everything you need to start your research, including:
 
 ## Try Flax now by forking one of our starter examples
 
+We keep here a limited list of canonical examples maintained by the Flax team. If you are looking for more examples, or others built by the community, please check the [examples folder](./examples/README.md) for further guidance.
+
 ### Image Classification
 ⟶ [MNIST](examples/mnist) (also see [annotated version](https://flax.readthedocs.io/en/latest/annotated_mnist.html))
 
