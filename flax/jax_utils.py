@@ -40,12 +40,15 @@ import numpy as onp
 import jax
 from jax import lax
 import jax.numpy as jnp
-import jax.xla_bridge as xb
+import jax.lib.xla_bridge as xb
 
 
 def _replicate(x, devices=None):
   x = jax.numpy.array(x)
   if devices is None:
+    # match the default device assignments used in pmap:
+    # for single-host, that's the XLA default device assignment
+    # for multi-host, it's the order of jax.local_devices()
     if jax.host_count() == 1:
       devices = [d for d in xb.get_backend().get_default_device_assignment(
           jax.device_count()) if d.host_id == jax.host_id()]
