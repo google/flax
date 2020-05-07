@@ -43,11 +43,13 @@ for howto in $howtos; do
     exit 1
   fi
   git apply $diff_file
-  git commit -am "Added howto branch ${howto_branch}"
-  git push -u origin $howto_branch
 
   # Run unit test on affected examples only
   git diff --name-only $master_branch | xargs dirname | xargs pytest
+
+  # Once we are satisfied with the howto, commit and push
+  git commit -am "Added howto branch ${howto_branch}"
+  git push -u origin $howto_branch
 
   # Make sure to checkout the master branch, otherwise the next diff branch
   # will be branched off of the current diff branch.
