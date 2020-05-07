@@ -40,12 +40,17 @@ import numpy as onp
 import jax
 from jax import lax
 import jax.numpy as jnp
+import jax.xla_bridge as xb
 
 
 def _replicate(x, devices=None):
   x = jax.numpy.array(x)
   if devices is None:
-    devices = jax.local_devices()
+    if jax.host_count() == 1:
+      devices = [d for d in xb.get_backend().get_default_device_assignment(
+          jax.device_count()) if d.host_id == jax.host_id()]
+    else:
+      devices = jax.local_devices()
   aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
   buffers = [jax.interpreters.xla.device_put(x, device=d) for d in devices]
   return jax.pxla.ShardedDeviceArray(aval, buffers)
