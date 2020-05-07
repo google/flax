@@ -44,7 +44,7 @@ class TrainTest(jtu.JaxTestCase):
     sources, targets = jnp.where(adjacency)
 
     # Get permuted graph.
-    perm = random.shuffle(rng, jnp.arange(num_nodes))
+    perm = random.permutation(rng, jnp.arange(num_nodes))
     node_feats_perm = node_feats[perm]
     adjacency_perm = adjacency[perm]
     for j in range(len(adjacency)):
