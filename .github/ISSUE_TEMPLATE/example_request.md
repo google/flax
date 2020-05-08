@@ -12,7 +12,7 @@ You would like to see a new example being implemented by the Flax core team or t
 ### Description of the model to be implemented
 
 
-### Dataset the model could be used on
+### Dataset the model could be trained on
 
 
-### Specific point to consider
+### Specific points to consider
