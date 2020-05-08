@@ -90,8 +90,8 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
     logging.info('Evaluating on TFDS dataset %s with split %s',
                  eval_dataset, eval_split + shard_spec)
     eval_builder = tfds.builder(eval_dataset, data_dir=data_dir)
-    eval_data = builder.as_dataset(split=eval_split + shard_spec,
-                                   shuffle_files=False)
+    eval_data = eval_builder.as_dataset(split=eval_split + shard_spec,
+                                        shuffle_files=False)
 
   features_info = builder.info
 
@@ -150,6 +150,9 @@ def train_sentencepiece(dataset,
     dataset: tf.dataset
     vocab_size: int: size of vocab tokens to train.
     maxchars: int: number of characters to use for sentencepiece training.
+    character_coverage: amount of characters covered by the model, good
+      defaults are 0.9995 for languages with rich character set like Japanese
+      or Chinese and 1.0 for other languages with small character set.
     model_path: str: path of model file to save vocab model to.
     model_type: str: type of sentencepiece vocab to train.
     data_keys: Tuple[str]: keys of dataset to use for training.
