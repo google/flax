@@ -86,37 +86,31 @@ class DenseGeneral(base.Module):
     n_axis, n_features = len(axis), len(features)
 
     def kernel_init_wrap(rng, shape, dtype=jnp.float32):
-      size_batch_dims = onp.prod(shape[:n_batch_dims], dtype=onp.int32)
-      flat_shape = (onp.prod(shape[n_batch_dims:n_axis + n_batch_dims]),
+      flat_shape = (onp.prod(shape[:n_axis]),
                     onp.prod(shape[-n_features:]),)
-      kernel = jnp.concatenate([kernel_init(rng, flat_shape, dtype)
-                                for _ in range(size_batch_dims)], axis=0)
+      kernel = kernel_init(rng, flat_shape, dtype)
       return jnp.reshape(kernel, shape)
 
-    batch_shape = tuple([inputs.shape[ax] for ax in batch_dims])
     kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
-    kernel = self.param('kernel', batch_shape + kernel_shape, kernel_init_wrap)
+    kernel = self.param('kernel', kernel_shape, kernel_init_wrap)
     kernel = jnp.asarray(kernel, dtype)
 
-    batch_ind = tuple(range(n_batch_dims))
-    contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
+    contract_ind = tuple(range(n_axis))
     out = lax.dot_general(inputs,
                           kernel,
-                          ((axis, contract_ind), (batch_dims, batch_ind)),
+                          ((axis, contract_ind), ((), ())),
                           precision=precision)
     if bias:
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
-        size_batch_dims = onp.prod(shape[:n_batch_dims], dtype=onp.int32)
         flat_shape = (onp.prod(shape[-n_features:]),)
-        bias = jnp.concatenate([bias_init(rng, flat_shape, dtype)
-                                for _ in range(size_batch_dims)], axis=0)
+        bias = bias_init(rng, flat_shape, dtype)
         return jnp.reshape(bias, shape)
 
-      bias = self.param('bias', batch_shape + features, bias_init_wrap)
+      bias = self.param('bias', features, bias_init_wrap)
 
       # Reshape bias for broadcast.
       expand_dims = sorted(
-          set(range(inputs.ndim)) - set(axis) - set(batch_dims))
+          set(range(inputs.ndim)) - set(axis))
       for ax in expand_dims:
         bias = jnp.expand_dims(bias, ax)
       bias = jnp.asarray(bias, dtype)

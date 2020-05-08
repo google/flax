@@ -139,13 +139,12 @@ class LinearTest(parameterized.TestCase):
         kernel_init=counter_init,
     )
     y, _ = dg_module.init(rng, x)
-    target = onp.concatenate(
-        [onp.full((1, 1, 7), 16.), onp.full((1, 1, 7), 31.)], axis=0)
+    target = onp.full((2, 1, 7), 16.)
     onp.testing.assert_allclose(y, target)
 
   @parameterized.parameters([((-2, 3), (), 'bijk,jklm->bilm'),
                              ((3, -2), (), 'bijk,kjlm->bilm'),
-                             ((-2, 3), (0,), 'bijk,bjklm->bilm')])
+                             ((-2, 3), (0,), 'bijk,jklm->bilm')])
   def test_dense_general_vs_numpy(self, axis, batch_dims, einsum_expr):
     rng = random.PRNGKey(0)
     x = jnp.ones((16, 8, 9, 10))
