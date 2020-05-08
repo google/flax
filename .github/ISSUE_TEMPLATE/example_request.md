@@ -14,5 +14,6 @@ You would like to see a new example being implemented by the Flax core team or t
 
 ### Dataset the model could be trained on
 
-
 ### Specific points to consider
+
+### Reference implementations in other frameworks

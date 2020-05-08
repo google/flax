@@ -20,7 +20,7 @@ Here are some of the models that people have built with Flax:
 | Link  | Author | Task type | Reference |
 | ------------- | ------------- | ------------ | ---------- |
 | [Gaussian Processes regression](https://github.com/danieljtait/ladax/tree/master/examples)  | @danieljtait | Regression | N/A |  |
-| T3D, PPO...  |   | Reinforcement learning | ... |
+| [JAX-RL](https://github.com/henry-prior/jax-rl)  | @henry-prior  | Reinforcement learning | N/A |
 
 If you are using Flax for your research, or have re-implemented interesting models in Flax, file a pull request against this README and add a link in the table.
  
