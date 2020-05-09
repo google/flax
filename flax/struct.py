@@ -134,9 +134,13 @@ def dataclass(clz=None, *, frozen=True):
         data_clz, to_state_dict, from_state_dict)
 
     return data_clz
-  if clz is None:
+  # If this is called as @dataclass(frozen=...), clz is will be None and
+  # and we return a function that will be later called with clz.
+  if clz is None: 
     return wrapped
-  else:
+  # Otherwise, this was called directly as @dataclass so we apply the 
+  # wrapper to the clz immediately.
+  else:  
     return wrapped(clz)
 
 
