@@ -70,10 +70,9 @@ def dataclass(clz=None, *, frozen=True):
 
   Args:
     clz: the class that will be transformed by the decorator.
-    frozen: whether to freeze the dataclass (default=True). WARNING: mutating
-      instance of the dataclass from within a module is not allowed and can
-      silently cause incorrect behavior. Only change this to `False` if you
-      want to mutate the dataclass from *outside* a module.
+    frozen: whether to freeze the dataclass (default=True). WARNING: mutations
+      that occur to an unfrozen dataset within a function that has been transformed
+      by Jax (influxing Flax modules) are not visible outside of that function.
   Returns:
     The new class.
   """
