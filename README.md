@@ -73,7 +73,7 @@ comes with everything you need to start your research, including:
 
 ⟶ [LM1b language modeling](examples/lm1b) **([try on a TPU in Colab](https://colab.research.google.com/github/google/flax/blob/master/examples/lm1b/Colab_Language_Model.ipynb))**
 
-⟶ (work-in-progress) [WMT translation](https://github.com/google/flax/pull/133)
+⟶ [WMT translation](examples/wmt)
 
 ### RNNs
 ⟶ [LSTM text classifier on SST-2](examples/sst2)
