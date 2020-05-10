@@ -131,7 +131,7 @@ def DenseLayer(x, features):
   return x
 ```
 
-**⟶ Read more about Modules in the [Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_intro.html#Flax-Modules)**
+**⟶ Read more about Modules in the [Flax Guide](https://flax.readthedocs.io/en/latest/notebooks/flax_guided_tour.html#Simplifying-Neural-Networks-in-JAX:-Flax-Modules)**
 
 ## A full ResNet implementation
 
