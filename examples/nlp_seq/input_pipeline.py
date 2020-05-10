@@ -243,4 +243,5 @@ def sentence_dataset_dict(filename,
       batch_size=batch_size, padded_shapes=(padded_shapes))
 
   dataset = dataset.prefetch(prefetch_size)
+  dataset = dataset.shuffle(16 * batch_size, reshuffle_each_iteration=True)
   return dataset
