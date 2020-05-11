@@ -18,7 +18,6 @@
 import io
 import struct
 import sys
-import time
 import warnings
 import wave
 import matplotlib as mpl
@@ -35,9 +34,6 @@ import numpy as onp
 import tensorflow.compat.v2 as tf
 from tensorflow.compat.v2.io import gfile
 
-from tensorflow.core.util import event_pb2  # pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.summary.writer.event_file_writer import EventFileWriter  # pylint: disable=g-direct-tensorflow-import
-
 
 class SummaryWriter(object):
   """Saves data in event and summary protos for tensorboard."""
@@ -52,13 +48,8 @@ class SummaryWriter(object):
     if not gfile.isdir(log_dir):
       gfile.makedirs(log_dir)
 
-    self._event_writer = EventFileWriter(log_dir, 10, 120, None)
+    self._event_writer = tf.summary.create_file_writer(log_dir, 10, 120, None)
     self._closed = False
-
-  def _add_summary(self, summary):
-    event = event_pb2.Event(summary=summary)
-    event.wall_time = time.time()
-    self._event_writer.add_event(event)
 
   def close(self):
     """Close SummaryWriter. Final!"""
@@ -79,8 +70,8 @@ class SummaryWriter(object):
       step: int: training step
     """
     value = float(onp.array(value))
-    summary = tf.summary.scalar(tag, value, step=step)
-    self._add_summary(summary)
+    with self._event_writer.as_default():
+      tf.summary.scalar(tag, value, step=step)
 
   def image(self, tag, image, step):
     """Saves RGB image summary from onp.ndarray [H,W], [H,W,1], or [H,W,3].
@@ -98,9 +89,9 @@ class SummaryWriter(object):
       image = onp.repeat(image, 3, axis=-1)
     image_strio = io.BytesIO()
     plt.imsave(image_strio, image, vmin=0., vmax=1., format='png')
-    image_summary = tf.summary.image(name=tag,
-        data=[1, image.shape[0], image.shape[1], 3], step=step)
-    self._add_summary(image_summary)
+    with self._event_writer.as_default():
+      tf.summary.image(name=tag,
+          data=[1, image.shape[0], image.shape[1], 3], step=step)
 
   def audio(self, tag, audiodata, step, sample_rate=44100):
     """Saves audio.
@@ -119,7 +110,8 @@ class SummaryWriter(object):
     audiodata = onp.clip(onp.squeeze(audiodata), -1, 1)
     if audiodata.ndim != 1:
       raise ValueError('Audio data must be 1D.')
-    # tf.summary.audio expects the audio data to have floating values in [-1.0, 1.0]
+    # tf.summary.audio expects the audio data to have floating values in
+    # [-1.0, 1.0].
     wio = io.BytesIO()
     wav_buf = wave.open(wio, 'wb')
     wav_buf.setnchannels(1)
@@ -130,9 +122,9 @@ class SummaryWriter(object):
     wav_buf.close()
     encoded_audio_bytes = wio.getvalue()
     wio.close()
-    audio = tf.summary.audio(name=tag, data=[1, audiodata, 1],
-        sample_rate=sample_rate, step=step, encoding='wav')
-    self._add_summary(audio)
+    with self._event_writer.as_default():
+      tf.summary.audio(name=tag, data=[1, audiodata, 1],
+          sample_rate=sample_rate, step=step, encoding='wav')
 
   def histogram(self, tag, values, bins, step):
     """Saves histogram of values.
@@ -158,9 +150,9 @@ class SummaryWriter(object):
         counts[start -
                1:end] if start > 0 else onp.concatenate([[0], counts[:end]]))
     limits = limits[start:end + 1]
-    histo = tf.summary.histogram(name=tag, data=values, step=step,
-        buckets=counts.tolist())
-    self._add_summary(histo)
+    with self._event_writer.as_default():
+      tf.summary.histogram(name=tag, data=values, step=step,
+          buckets=counts.tolist())
 
   def text(self, tag, textdata, step):
     """Saves a text summary.
@@ -187,5 +179,5 @@ class SummaryWriter(object):
                 td.encode(encoding='utf_8') for td in onp.reshape(textdata, -1)
             ],
             shape=(datashape[0], datashape[1]))
-    summary = tf.summary.text(name=tag, data=tensor, step=step)
-    self._add_summary(summary)
+    with self._event_writer.as_default():
+      tf.summary.text(name=tag, data=tensor, step=step)
