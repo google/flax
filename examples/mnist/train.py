@@ -199,6 +199,7 @@ def train(train_ds, test_ds):
     summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
     summary_writer.scalar('eval_loss', loss, epoch)
     summary_writer.scalar('eval_accuracy', accuracy, epoch)
+  summary_writer.flush()
   return optimizer
 
 
