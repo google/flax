@@ -71,8 +71,8 @@ def dataclass(clz=None, *, frozen=True):
   Args:
     clz: the class that will be transformed by the decorator.
     frozen: whether to freeze the dataclass (default=True). WARNING: mutations
-      that occur to an unfrozen dataset within a function that has been transformed
-      by Jax (influxing Flax modules) are not visible outside of that function.
+      that occur to an unfrozen dataclass within a function that has been transformed
+      by Jax (including Flax modules) are not visible outside of that function.
   Returns:
     The new class.
   """
