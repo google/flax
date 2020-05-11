@@ -32,11 +32,8 @@ with warnings.catch_warnings():
 # pylint: disable=g-import-not-at-top
 import matplotlib.pyplot as plt
 import numpy as onp
-import tensorflow.compat.v1 as tf
-from tensorflow.compat.v1 import HistogramProto
-from tensorflow.compat.v1 import Summary
-from tensorflow.compat.v1 import SummaryMetadata
-from tensorflow.compat.v1.io import gfile
+import tensorflow.compat.v2 as tf
+from tensorflow.compat.v2.io import gfile
 
 from tensorflow.core.util import event_pb2  # pylint: disable=g-direct-tensorflow-import
 from tensorflow.python.summary.writer.event_file_writer import EventFileWriter  # pylint: disable=g-direct-tensorflow-import
@@ -58,11 +55,9 @@ class SummaryWriter(object):
     self._event_writer = EventFileWriter(log_dir, 10, 120, None)
     self._closed = False
 
-  def _add_summary(self, summary, step):
+  def _add_summary(self, summary):
     event = event_pb2.Event(summary=summary)
     event.wall_time = time.time()
-    if step is not None:
-      event.step = int(step)
     self._event_writer.add_event(event)
 
   def close(self):
@@ -84,8 +79,8 @@ class SummaryWriter(object):
       step: int: training step
     """
     value = float(onp.array(value))
-    summary = Summary(value=[Summary.Value(tag=tag, simple_value=value)])
-    self._add_summary(summary, step)
+    summary = tf.summary.scalar(tag, value, step=step)
+    self._add_summary(summary)
 
   def image(self, tag, image, step):
     """Saves RGB image summary from onp.ndarray [H,W], [H,W,1], or [H,W,3].
@@ -103,13 +98,9 @@ class SummaryWriter(object):
       image = onp.repeat(image, 3, axis=-1)
     image_strio = io.BytesIO()
     plt.imsave(image_strio, image, vmin=0., vmax=1., format='png')
-    image_summary = Summary.Image(
-        encoded_image_string=image_strio.getvalue(),
-        colorspace=3,
-        height=image.shape[0],
-        width=image.shape[1])
-    summary = Summary(value=[Summary.Value(tag=tag, image=image_summary)])
-    self._add_summary(summary, step)
+    image_summary = tf.summary.image(name=tag,
+        data=[1, image.shape[0], image.shape[1], 3], step=step)
+    self._add_summary(image_summary)
 
   def audio(self, tag, audiodata, step, sample_rate=44100):
     """Saves audio.
@@ -128,26 +119,20 @@ class SummaryWriter(object):
     audiodata = onp.clip(onp.squeeze(audiodata), -1, 1)
     if audiodata.ndim != 1:
       raise ValueError('Audio data must be 1D.')
-    # convert from [-1, 1] -> [-2^15-1, 2^15-1]
-    sample_list = (32767.0 * audiodata).astype(int).tolist()
+    # tf.summary.audio expects the audio data to have floating values in [-1.0, 1.0]
     wio = io.BytesIO()
     wav_buf = wave.open(wio, 'wb')
     wav_buf.setnchannels(1)
     wav_buf.setsampwidth(2)
     wav_buf.setframerate(sample_rate)
-    enc = b''.join([struct.pack('<h', v) for v in sample_list])
+    enc = b''.join([struct.pack('<h', v) for v in audiodata])
     wav_buf.writeframes(enc)
     wav_buf.close()
     encoded_audio_bytes = wio.getvalue()
     wio.close()
-    audio = Summary.Audio(
-        sample_rate=sample_rate,
-        num_channels=1,
-        length_frames=len(sample_list),
-        encoded_audio_string=encoded_audio_bytes,
-        content_type='audio/wav')
-    summary = Summary(value=[Summary.Value(tag=tag, audio=audio)])
-    self._add_summary(summary, step)
+    audio = tf.summary.audio(name=tag, data=[1, audiodata, 1],
+        sample_rate=sample_rate, step=step, encoding='wav')
+    self._add_summary(audio)
 
   def histogram(self, tag, values, bins, step):
     """Saves histogram of values.
@@ -173,17 +158,9 @@ class SummaryWriter(object):
         counts[start -
                1:end] if start > 0 else onp.concatenate([[0], counts[:end]]))
     limits = limits[start:end + 1]
-    sum_sq = values.dot(values)
-    histo = HistogramProto(
-        min=values.min(),
-        max=values.max(),
-        num=len(values),
-        sum=values.sum(),
-        sum_squares=sum_sq,
-        bucket_limit=limits.tolist(),
-        bucket=counts.tolist())
-    summary = Summary(value=[Summary.Value(tag=tag, histo=histo)])
-    self._add_summary(summary, step)
+    histo = tf.summary.histogram(name=tag, data=values, step=step,
+        buckets=counts.tolist())
+    self._add_summary(histo)
 
   def text(self, tag, textdata, step):
     """Saves a text summary.
@@ -194,8 +171,6 @@ class SummaryWriter(object):
       step: int: training step
     Note: markdown formatting is rendered by tensorboard.
     """
-    smd = SummaryMetadata(
-        plugin_data=SummaryMetadata.PluginData(plugin_name='text'))
     if isinstance(textdata, (str, bytes)):
       tensor = tf.make_tensor_proto(
           values=[textdata.encode(encoding='utf_8')], shape=(1,))
@@ -212,6 +187,5 @@ class SummaryWriter(object):
                 td.encode(encoding='utf_8') for td in onp.reshape(textdata, -1)
             ],
             shape=(datashape[0], datashape[1]))
-    summary = Summary(
-        value=[Summary.Value(tag=tag, metadata=smd, tensor=tensor)])
-    self._add_summary(summary, step)
+    summary = tf.summary.text(name=tag, data=tensor, step=step)
+    self._add_summary(summary)
