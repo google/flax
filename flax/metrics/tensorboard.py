@@ -16,10 +16,8 @@
 """
 
 import io
-import struct
 import sys
 import warnings
-import wave
 import matplotlib as mpl
 # Necessary to prevent attempted Tk import:
 with warnings.catch_warnings():
@@ -71,7 +69,7 @@ class SummaryWriter(object):
     """
     value = float(onp.array(value))
     with self._event_writer.as_default():
-      tf.summary.scalar(tag, value, step=step)
+      tf.summary.scalar(name=tag, data=value, step=step)
 
   def image(self, tag, image, step):
     """Saves RGB image summary from onp.ndarray [H,W], [H,W,1], or [H,W,3].
@@ -90,17 +88,16 @@ class SummaryWriter(object):
     image_strio = io.BytesIO()
     plt.imsave(image_strio, image, vmin=0., vmax=1., format='png')
     with self._event_writer.as_default():
-      tf.summary.image(name=tag,
-          data=[1, image.shape[0], image.shape[1], 3], step=step)
+      tf.summary.image(name=tag, data=image, step=step)
 
   def audio(self, tag, audiodata, step, sample_rate=44100):
-    """Saves audio.
+    """Saves audio as wave.
 
     NB: single channel only right now.
 
     Args:
       tag: str: label for this data
-      audiodata: ndarray [Nsamples,]: audo data to be saves as wave.
+      audiodata: ndarray [Nsamples,]: audio data to be saved as wave.
         The data will be clipped to [-1, 1].
 
       step: int: training step
@@ -112,47 +109,23 @@ class SummaryWriter(object):
       raise ValueError('Audio data must be 1D.')
     # tf.summary.audio expects the audio data to have floating values in
     # [-1.0, 1.0].
-    wio = io.BytesIO()
-    wav_buf = wave.open(wio, 'wb')
-    wav_buf.setnchannels(1)
-    wav_buf.setsampwidth(2)
-    wav_buf.setframerate(sample_rate)
-    enc = b''.join([struct.pack('<h', v) for v in audiodata])
-    wav_buf.writeframes(enc)
-    wav_buf.close()
-    encoded_audio_bytes = wio.getvalue()
-    wio.close()
     with self._event_writer.as_default():
-      tf.summary.audio(name=tag, data=[1, audiodata, 1],
+      tf.summary.audio(name=tag, data=audiodata,
           sample_rate=sample_rate, step=step, encoding='wav')
 
-  def histogram(self, tag, values, bins, step):
+  def histogram(self, tag, values, step, bins=None):
     """Saves histogram of values.
 
     Args:
       tag: str: label for this data
       values: ndarray: will be flattened by this routine
-      bins: number of bins in histogram, or a sequence defining a monotonically
-        increasing array of bin edges, including the rightmost edge.
       step: int: training step
+      bins: number of bins in histogram
     """
     values = onp.array(values)
-    bins = onp.array(bins)
     values = onp.reshape(values, -1)
-    counts, limits = onp.histogram(values, bins=bins)
-    # boundary logic
-    # TODO(flax-dev) Investigate whether this logic can be simplified.
-    cum_counts = onp.cumsum(onp.greater(counts, 0, dtype=onp.int32))
-    start, end = onp.searchsorted(
-        cum_counts, [0, cum_counts[-1] - 1], side='right')
-    start, end = int(start), int(end) + 1
-    counts = (
-        counts[start -
-               1:end] if start > 0 else onp.concatenate([[0], counts[:end]]))
-    limits = limits[start:end + 1]
     with self._event_writer.as_default():
-      tf.summary.histogram(name=tag, data=values, step=step,
-          buckets=counts.tolist())
+      tf.summary.histogram(name=tag, data=values, step=step, buckets=bins)
 
   def text(self, tag, textdata, step):
     """Saves a text summary.
