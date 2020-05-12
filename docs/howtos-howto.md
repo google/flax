@@ -50,9 +50,44 @@ The workflow script for the Github action can be found at
 
 ## Resolving a conflict with an existing HOWTO
 
-TODO: This is still in progress. Currently conflicts are resolved by
-checking whether the Github action fails, and if so, manually making
-the required fixes.
+This is still a work in progress. Currently, conflicts are resolved by manually
+making the required fixes. The below can help speed up that process.
+
+### Start with a clean and updated copy of `master`
+As an example, assuming you have `https://github.com/google/flax` set as
+`upstream`:
+```bash
+git checkout master
+git fetch upstream
+git rebase upstream/master
+```
+If your local copy of `flax` isn't clean, you may need to stash your changes
+elsewhere (e.g., via `git stash`) or otherwise remove your changes.
+
+### Automatically apply as many diff hunks as possible
+The `--reject` flag tells `git apply` to apply whatever hunks in the supplied
+diff file it can and outputs the rejected hunks to a `*.rej` file in the same
+directory as the modified files (typically `examples/[EXAMPLE]`).
+
+```bash
+git apply $diff_file --reject
+```
+
+### Go through the remaining hunks manually
+This step is potentially most time-consuming. Examine the changes in each
+`*.rej` diff file for all hunks that couldn't be merged automatically. If the
+example code hasn't changed significantly, the work typically involves just
+finding the right place to insert and remove the lines mentioned in the diff.
+If the example code _has_ changed significantly, this work will be more
+involved (e.g., understanding the intent of the `howto`).
+
+### Re-pack the HOWTO
+Pack the changes on your branch into a `howto` via the below script. In this
+case, we can overwrite the existing diff (e.g., the path of the diff file less
+the directory structure and `.diff` extension).
+```bash
+./howtos/scripts/pack_howto_diffs.sh
+```
 
 ## Modifying an existing HOWTO
 
@@ -61,4 +96,4 @@ changes, pack the diff again and commit. It would be good to show
 this with an example. Note editing this diff is not a good idea 
 since it is extremely error-prone.
 
-
+The guidance above for resolving a conflict may also be helpful.
