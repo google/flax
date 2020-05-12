@@ -199,7 +199,7 @@ class Benchmark(absltest.TestCase):
 
     # Prefix the name with the class name.
     class_name = type(calling_class).__name__
-    name = "%s.%s" % (class_name, name)
+    name = '%s.%s' % (class_name, name)
     return name
 
   def _update_reported_name(self):
@@ -244,7 +244,7 @@ class Benchmark(absltest.TestCase):
     results_str = json.dumps(results)
     logging.info(results_str)
 
-    # Maybe save results as a file for pickup by CI / monitornig frameworks.
+    # Maybe save results as a file for pickup by CI / monitoring frameworks.
     benchmark_output_dir = FLAGS.benchmark_output_dir
     if benchmark_output_dir:
       os.makedirs(benchmark_output_dir, exist_ok=True)
