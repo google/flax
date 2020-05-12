@@ -83,8 +83,8 @@ involved (e.g., understanding the intent of the `howto`).
 
 ### Re-pack the HOWTO
 Pack the changes on your branch into a `howto` via the below script. In this
-case, we can overwrite the existing diff (e.g., the path of the diff file less
-the directory structure and `.diff` extension).
+case, we can overwrite the existing diff with the same name (e.g., the path of
+the diff file less the directory structure and `.diff` extension).
 ```bash
 ./howtos/scripts/pack_howto_diffs.sh
 ```
