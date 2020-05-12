@@ -88,28 +88,28 @@ class SummaryWriter(object):
     with self._event_writer.as_default():
       tf.summary.image(name=tag, data=image, step=step)
 
-  def audio(self, tag, audiodata, step, sample_rate=44100):
+  def audio(self, tag, audiodata, step, sample_rate=44100, max_outputs=3):
     """Saves audio as wave.
 
     NB: single channel only right now.
 
     Args:
       tag: str: label for this data
-      audiodata: ndarray [Nsamples,]: audio data to be saved as wave.
-        The data will be clipped to [-1, 1].
-
+      audiodata: ndarray [Nsamples, Nframes, Nchannels]: audio data to
+        be saved as wave. The data will be clipped to [-1.0, 1.0].
       step: int: training step
       sample_rate: sample rate of passed in audio buffer
+      max_outputs: At most this many audio clips will be emitted at each
+        step. Defaults to 3.
     """
     audiodata = onp.array(audiodata)
-    audiodata = onp.clip(onp.squeeze(audiodata), -1, 1)
-    if audiodata.ndim != 1:
-      raise ValueError('Audio data must be 1D.')
     # tf.summary.audio expects the audio data to have floating values in
     # [-1.0, 1.0].
+    audiodata = onp.clip(onp.squeeze(audiodata), -1, 1)
     with self._event_writer.as_default():
       tf.summary.audio(name=tag, data=audiodata,
-          sample_rate=sample_rate, step=step, encoding='wav')
+          sample_rate=sample_rate, step=step, max_outputs=max_outputs,
+          encoding='wav')
 
   def histogram(self, tag, values, step, bins=None):
     """Saves histogram of values.

@@ -18,6 +18,7 @@ import itertools
 import tempfile
 
 from absl.testing import absltest
+import numpy as onp
 
 from tensorboard.backend.event_processing import directory_watcher
 from tensorboard.backend.event_processing import event_file_loader
@@ -98,17 +99,32 @@ class TensorboardTest(absltest.TestCase):
     self.assertEqual(summary_value.tag, 'image_test')
 
     expected_img = tf.image.decode_image(summary_value.tensor.string_val[2])
-    element_equal = tf.math.equal(img, expected_img)
-    channel_equal = tf.math.equal(
-        tf.math.reduce_sum(tf.cast(element_equal, tf.uint8), 2),
-        tf.math.reduce_sum(tf.ones_like(tf.cast(element_equal, tf.uint8)), 2))
-    width_channel_equal = tf.math.equal(
-        tf.math.reduce_sum(tf.cast(channel_equal, tf.uint8), 1),
-        tf.math.reduce_sum(tf.ones_like(tf.cast(channel_equal, tf.uint8)), 1))
-    final_equal = tf.math.equal(
-        tf.math.reduce_sum(tf.cast(width_channel_equal, tf.uint8)),
-        tf.math.reduce_sum(tf.ones_like(tf.cast(width_channel_equal, tf.uint8))))
-    self.assertTrue(final_equal)
+    self.assertTrue(onp.allclose(img, expected_img.numpy()))
+
+  def test_summarywriter_audio(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    audio = tf.random.uniform(shape=[2, 48000, 3], minval=-2.0, maxval=2.0)
+    summary_writer.audio(tag='audio_test', audiodata=audio, step=1)
+    event_values = _get_event_values(path=log_dir)
+    event_values_list = _get_event_values_list(event_values=event_values)
+
+    self.assertLen(event_values_list, 1)
+    self.assertEqual(event_values_list[0]['step'], 1)
+    self.assertGreater(event_values_list[0]['wall_time'], 0.0)
+
+    summary_value = event_values_list[0]['value']
+    self.assertEqual(summary_value.tag, 'audio_test')
+
+    expected_audio = \
+        tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
+    # audio is trimmed to -1.0 to 1.0
+    self.assertFalse(onp.allclose(audio.numpy()[0], expected_audio.numpy()))
+
+    # trim the audio to assert the values.
+    trimmed_audio = onp.clip(onp.squeeze(onp.array(audio[0])), -1, 1)
+
+    self.assertTrue(onp.allclose(trimmed_audio, expected_audio.numpy(), atol=1e-04))
 
 if __name__ == '__main__':
   absltest.main()
