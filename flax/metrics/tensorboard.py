@@ -15,7 +15,6 @@
 """Write Summaries from JAX for use with Tensorboard.
 """
 
-import io
 import sys
 import warnings
 import matplotlib as mpl
@@ -27,7 +26,6 @@ with warnings.catch_warnings():
   else:
     mpl.use('Agg')
 # pylint: disable=g-import-not-at-top
-import matplotlib.pyplot as plt
 import numpy as onp
 import tensorflow.compat.v2 as tf
 from tensorflow.compat.v2.io import gfile
@@ -77,7 +75,6 @@ class SummaryWriter(object):
     Args:
       tag: str: label for this data
       image: ndarray: [H,W], [H,W,1], [H,W,3] save image in greyscale or colors.
-        Pixel values should be in the range [0, 1].
       step: int: training step
     """
     image = onp.array(image)
@@ -85,8 +82,9 @@ class SummaryWriter(object):
       image = image[:, :, onp.newaxis]
     if onp.shape(image)[-1] == 1:
       image = onp.repeat(image, 3, axis=-1)
-    image_strio = io.BytesIO()
-    plt.imsave(image_strio, image, vmin=0., vmax=1., format='png')
+    # tf.summary.image expects image to have shape [k, h, w, c] where,
+    # k = number of samples, h = height, w = width, c = number of channels.
+    image = image[onp.newaxis, :, :, :]
     with self._event_writer.as_default():
       tf.summary.image(name=tag, data=image, step=step)
 
@@ -132,25 +130,11 @@ class SummaryWriter(object):
 
     Args:
       tag: str: label for this data
-      textdata: string, or 1D/2D list/numpy array of strings
+      textdata: string
       step: int: training step
     Note: markdown formatting is rendered by tensorboard.
     """
-    if isinstance(textdata, (str, bytes)):
-      tensor = tf.make_tensor_proto(
-          values=[textdata.encode(encoding='utf_8')], shape=(1,))
-    else:
-      textdata = onp.array(textdata)  # convert lists, jax arrays, etc.
-      datashape = onp.shape(textdata)
-      if len(datashape) == 1:
-        tensor = tf.make_tensor_proto(
-            values=[td.encode(encoding='utf_8') for td in textdata],
-            shape=(datashape[0],))
-      elif len(datashape) == 2:
-        tensor = tf.make_tensor_proto(
-            values=[
-                td.encode(encoding='utf_8') for td in onp.reshape(textdata, -1)
-            ],
-            shape=(datashape[0], datashape[1]))
+    if not isinstance(textdata, (str, bytes)):
+      raise ValueError('textdata should be of the type `str` or `bytes`.')
     with self._event_writer.as_default():
-      tf.summary.text(name=tag, data=tensor, step=step)
+      tf.summary.text(name=tag, data=tf.constant(textdata), step=step)
