@@ -31,52 +31,54 @@ def _process_event(event):
   for value in event.summary.value:
     yield {'wall_time': event.wall_time, 'step': event.step, 'value': value}
 
-def _get_event_values(path):
-  event_file_generator = directory_watcher.DirectoryWatcher(
-      path, event_file_loader.EventFileLoader).Load()
-  return itertools.chain.from_iterable(map(_process_event,
-          event_file_generator))
-
-def _get_event_values_list(event_values):
-  event_value_list = []
-  for value_dict in event_values:
-    event_value_list.append(value_dict)
-  return event_value_list
-
 
 class TensorboardTest(absltest.TestCase):
+
+  def parse_and_return_summary_value(self, path):
+    """Parse the event file in the given path and return the
+    only summary value."""
+    event_value_list = []
+    event_file_generator = directory_watcher.DirectoryWatcher(
+        path, event_file_loader.EventFileLoader).Load()
+    event_values = itertools.chain.from_iterable(
+        map(_process_event, event_file_generator))
+    for value_dict in event_values:
+      event_value_list.append(value_dict)
+
+    self.assertLen(event_value_list, 1)
+    self.assertEqual(event_value_list[0]['step'], 1)
+    self.assertGreater(event_value_list[0]['wall_time'], 0.0)
+    return event_value_list[0]['value']
+
+  def assert_encoded_audio_files_equal(self, actual_audio, expected_audio):
+    # expected_audio is trimmed to -1.0 to 1.0
+    self.assertFalse(onp.allclose(actual_audio.numpy(), expected_audio.numpy()))
+
+    # trim the audio to assert the values.
+    trimmed_audio = onp.clip(onp.array(actual_audio), -1, 1)
+    self.assertTrue(
+        onp.allclose(trimmed_audio, expected_audio.numpy(), atol=1e-04))
 
   def test_summarywriter_scalar(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
     # Write the scalar and check if the event exists and check data.
-    float_value = 99.00
+    float_value = 99.1232
     summary_writer.scalar(tag='scalar_test', value=float_value, step=1)
-    event_values = _get_event_values(path=log_dir)
-    event_values_list = _get_event_values_list(event_values=event_values)
 
-    self.assertLen(event_values_list, 1)
-    self.assertEqual(event_values_list[0]['step'], 1)
-    self.assertGreater(event_values_list[0]['wall_time'], 0.0)
-
-    summary_value = event_values_list[0]['value']
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
     self.assertEqual(summary_value.tag, 'scalar_test')
-    self.assertEqual(tensor_util.make_ndarray(summary_value.tensor).item(),
-        float_value)
+    self.assertTrue(onp.allclose(
+        tensor_util.make_ndarray(summary_value.tensor).item(),
+        float_value))
 
   def test_summarywriter_text(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
     text = 'hello world.'
     summary_writer.text(tag='text_test', textdata=text, step=1)
-    event_values = _get_event_values(path=log_dir)
-    event_values_list = _get_event_values_list(event_values=event_values)
 
-    self.assertLen(event_values_list, 1)
-    self.assertEqual(event_values_list[0]['step'], 1)
-    self.assertGreater(event_values_list[0]['wall_time'], 0.0)
-
-    summary_value = event_values_list[0]['value']
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
     self.assertEqual(summary_value.tag, 'text_test')
     self.assertEqual(
         tensor_util.make_ndarray(summary_value.tensor).item().decode('utf-8'),
@@ -88,64 +90,108 @@ class TensorboardTest(absltest.TestCase):
     img = tf.random.uniform(shape=[30, 30, 3])
     img = tf.cast(255 * img, tf.uint8)
     summary_writer.image(tag='image_test', image=img, step=1)
-    event_values = _get_event_values(path=log_dir)
-    event_values_list = _get_event_values_list(event_values=event_values)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
 
-    self.assertLen(event_values_list, 1)
-    self.assertEqual(event_values_list[0]['step'], 1)
-    self.assertGreater(event_values_list[0]['wall_time'], 0.0)
-
-    summary_value = event_values_list[0]['value']
     self.assertEqual(summary_value.tag, 'image_test')
-
     expected_img = tf.image.decode_image(summary_value.tensor.string_val[2])
     self.assertTrue(onp.allclose(img, expected_img.numpy()))
+
+  def test_summarywriter_2dimage_scaled(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    img = tf.random.uniform(shape=[30, 30])
+    img = tf.cast(255 * img, tf.uint8)
+    summary_writer.image(tag='2dimage_test', image=img, step=1)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+
+    self.assertEqual(summary_value.tag, '2dimage_test')
+    expected_img = tf.image.decode_image(summary_value.tensor.string_val[2])
+    # assert the image was increased in dimension
+    self.assertEqual(expected_img.shape, (30, 30, 3))
+
+  def test_summarywriter_single_channel_image_scaled(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    img = tf.random.uniform(shape=[30, 30, 1])
+    img = tf.cast(255 * img, tf.uint8)
+    summary_writer.image(tag='2dimage_1channel_test', image=img, step=1)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+
+    self.assertEqual(summary_value.tag, '2dimage_1channel_test')
+    expected_img = tf.image.decode_image(summary_value.tensor.string_val[2])
+    # assert the image was increased in dimension
+    self.assertEqual(expected_img.shape, (30, 30, 3))
 
   def test_summarywriter_audio(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    audio = tf.random.uniform(shape=[2, 48000, 3], minval=-2.0, maxval=2.0)
+    audio = tf.random.uniform(shape=[2, 48000, 2], minval=-1.0, maxval=1.0)
     summary_writer.audio(tag='audio_test', audiodata=audio, step=1)
-    event_values = _get_event_values(path=log_dir)
-    event_values_list = _get_event_values_list(event_values=event_values)
 
-    self.assertLen(event_values_list, 1)
-    self.assertEqual(event_values_list[0]['step'], 1)
-    self.assertGreater(event_values_list[0]['wall_time'], 0.0)
-
-    summary_value = event_values_list[0]['value']
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
     self.assertEqual(summary_value.tag, 'audio_test')
 
+    # Assert two audio files are parsed.
+    self.assertLen(summary_value.tensor.string_val, 4)
+
+    # Assert values.
     expected_audio = \
         tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
-    # audio is trimmed to -1.0 to 1.0
-    self.assertFalse(onp.allclose(audio.numpy()[0], expected_audio.numpy()))
+    self.assert_encoded_audio_files_equal(
+        actual_audio=audio[0], expected_audio=expected_audio)
 
-    # trim the audio to assert the values.
-    trimmed_audio = onp.clip(onp.squeeze(onp.array(audio[0])), -1, 1)
+    expected_audio = \
+        tf.audio.decode_wav(summary_value.tensor.string_val[2]).audio
+    self.assert_encoded_audio_files_equal(
+        actual_audio=audio[1], expected_audio=expected_audio)
 
-    self.assertTrue(
-        onp.allclose(trimmed_audio, expected_audio.numpy(), atol=1e-04))
+  def test_summarywriter_audio_sampled_output(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    audio = tf.random.uniform(shape=[2, 48000, 2], minval=-1.0, maxval=1.0)
+    summary_writer.audio(
+        tag='audio_test', audiodata=audio, step=1, max_outputs=1)
+
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+    self.assertEqual(summary_value.tag, 'audio_test')
+
+    # Assert only the first audio clip is available.
+    self.assertLen(summary_value.tensor.string_val, 2)
+
+    # Assert values.
+    expected_audio = \
+        tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
+    self.assert_encoded_audio_files_equal(
+        actual_audio=audio[0], expected_audio=expected_audio)
 
   def test_summarywriter_histogram(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
     histogram = onp.arange(1000)
     summary_writer.histogram(tag='histogram_test', values=histogram, step=1)
-    event_values = _get_event_values(path=log_dir)
-    event_values_list = _get_event_values_list(event_values=event_values)
 
-    self.assertLen(event_values_list, 1)
-    self.assertEqual(event_values_list[0]['step'], 1)
-    self.assertGreater(event_values_list[0]['wall_time'], 0.0)
-
-    summary_value = event_values_list[0]['value']
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
     self.assertEqual(summary_value.tag, 'histogram_test')
-
     expected_histogram = tensor_util.make_ndarray(summary_value.tensor)
     self.assertTrue(expected_histogram.shape, (30, 3))
     self.assertTrue(
         onp.allclose(expected_histogram[0], (0.0, 33.3, 34.0), atol=1e-01))
+
+  def test_summarywriter_histogram_2bins(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    histogram = onp.arange(1000)
+    summary_writer.histogram(
+        tag='histogram_test', values=histogram, step=1, bins=2)
+
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+    self.assertEqual(summary_value.tag, 'histogram_test')
+    expected_histogram = tensor_util.make_ndarray(summary_value.tensor)
+    self.assertTrue(expected_histogram.shape, (2, 3))
+    self.assertTrue(
+        onp.allclose(expected_histogram[0], (0.0, 499.5, 500.0), atol=1e-01))
+    self.assertTrue(
+        onp.allclose(expected_histogram[1], (499.5, 999.0, 500.0), atol=1e-01))
 
 if __name__ == '__main__':
   absltest.main()

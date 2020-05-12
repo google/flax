@@ -102,14 +102,13 @@ class SummaryWriter(object):
       max_outputs: At most this many audio clips will be emitted at each
         step. Defaults to 3.
     """
-    audiodata = onp.array(audiodata)
     # tf.summary.audio expects the audio data to have floating values in
     # [-1.0, 1.0].
-    audiodata = onp.clip(onp.squeeze(audiodata), -1, 1)
+    audiodata = onp.clip(onp.array(audiodata), -1, 1)
     with self._event_writer.as_default():
-      tf.summary.audio(name=tag, data=audiodata,
-          sample_rate=sample_rate, step=step, max_outputs=max_outputs,
-          encoding='wav')
+      tf.summary.audio(
+          name=tag, data=audiodata, sample_rate=sample_rate, step=step,
+          max_outputs=max_outputs, encoding='wav')
 
   def histogram(self, tag, values, step, bins=None):
     """Saves histogram of values.
