@@ -124,7 +124,28 @@ class TensorboardTest(absltest.TestCase):
     # trim the audio to assert the values.
     trimmed_audio = onp.clip(onp.squeeze(onp.array(audio[0])), -1, 1)
 
-    self.assertTrue(onp.allclose(trimmed_audio, expected_audio.numpy(), atol=1e-04))
+    self.assertTrue(
+        onp.allclose(trimmed_audio, expected_audio.numpy(), atol=1e-04))
+
+  def test_summarywriter_histogram(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    histogram = onp.arange(1000)
+    summary_writer.histogram(tag='histogram_test', values=histogram, step=1)
+    event_values = _get_event_values(path=log_dir)
+    event_values_list = _get_event_values_list(event_values=event_values)
+
+    self.assertLen(event_values_list, 1)
+    self.assertEqual(event_values_list[0]['step'], 1)
+    self.assertGreater(event_values_list[0]['wall_time'], 0.0)
+
+    summary_value = event_values_list[0]['value']
+    self.assertEqual(summary_value.tag, 'histogram_test')
+
+    expected_histogram = tensor_util.make_ndarray(summary_value.tensor)
+    self.assertTrue(expected_histogram.shape, (30, 3))
+    self.assertTrue(
+        onp.allclose(expected_histogram[0], (0.0, 33.3, 34.0), atol=1e-01))
 
 if __name__ == '__main__':
   absltest.main()
