@@ -76,11 +76,6 @@ flags.DEFINE_bool(
     'half_precision', default=False,
     help=('If bfloat16/float16 should be used instead of float32.'))
 
-flags.DEFINE_float(
-    'loss_scaling', default=1.,
-    help=('Rescale the loss to avoid underflow when training with'
-          ' reduced precision'))
-
 
 def create_model(key, batch_size, image_size, model_dtype):
   input_shape = (batch_size, image_size, image_size, 3)
@@ -140,21 +135,38 @@ def train_step(state, batch, learning_rate_fn):
                      if x.ndim > 1])
     weight_penalty = weight_decay * 0.5 * weight_l2
     loss = loss + weight_penalty
-    return loss * FLAGS.loss_scaling, (new_model_state, logits)
+    return loss, (new_model_state, logits)
 
   step = state.step
   optimizer = state.optimizer
+  dynamic_scale = state.dynamic_scale
   lr = learning_rate_fn(step)
-  (_, (new_model_state, logits)), grad = jax.value_and_grad(loss_fn, has_aux=True)(optimizer.target)
 
-  # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
-  grad = lax.pmean(grad, axis_name='batch')
+  if dynamic_scale:
+    grad_fn = dynamic_scale.value_and_grad(
+        loss_fn, has_aux=True, axis_name='batch')
+    dynamic_scale, is_fin, aux, grad = grad_fn(optimizer.target)
+    # dynamic loss takes care of averaging gradients across replicas
+  else:
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    aux, grad = grad_fn(optimizer.target)
+    # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
+    grad = lax.pmean(grad, axis_name='batch')
+  new_model_state, logits = aux[1]
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
-  metrics['learning_rate'] = lr * FLAGS.loss_scaling
+  metrics['learning_rate'] = lr
+
+  if dynamic_scale:
+    # if is_fin == False the gradients contain Inf/NaNs and the old optimizer
+    # state should be restored.
+    new_optimizer = jax.tree_multimap(
+        functools.partial(jnp.where, is_fin), new_optimizer, optimizer)
+    metrics['scale'] = dynamic_scale.scale
 
   new_state = state.replace(
-      step=step + 1, optimizer=new_optimizer, model_state=new_model_state)
+      step=step + 1, optimizer=new_optimizer, model_state=new_model_state,
+      dynamic_scale=dynamic_scale)
   return new_state, metrics
 
 
@@ -194,6 +206,7 @@ class TrainState:
   step: int
   optimizer: optim.Optimizer
   model_state: nn.Collection
+  dynamic_scale: optim.DynamicScale
 
 
 def restore_checkpoint(state):
@@ -237,6 +250,7 @@ def main(argv):
 
   platform = jax.local_devices()[0].platform
 
+  dynamic_scale = None
   if FLAGS.half_precision:
     if platform == 'tpu':
       model_dtype = jnp.bfloat16
@@ -244,6 +258,7 @@ def main(argv):
     else:
       model_dtype = jnp.float16
       input_dtype = tf.float16
+      dynamic_scale = optim.DynamicScale()
   else:
     model_dtype = jnp.float32
     input_dtype = tf.float32
@@ -260,12 +275,13 @@ def main(argv):
   num_steps = steps_per_epoch * num_epochs
 
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
-  base_learning_rate = base_learning_rate / FLAGS.loss_scaling
+  base_learning_rate = base_learning_rate
 
   model, model_state = create_model(
       rng, device_batch_size, image_size, model_dtype)
   optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(model)
-  state = TrainState(step=0, optimizer=optimizer, model_state=model_state)
+  state = TrainState(step=0, optimizer=optimizer, model_state=model_state,
+                     dynamic_scale=dynamic_scale)
   del model, model_state  # do not keep a copy of the initial model
 
   state = restore_checkpoint(state)

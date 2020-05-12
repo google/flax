@@ -23,6 +23,7 @@ from flax import optim
 from flax import traverse_util
 
 import jax
+import jax.numpy as jnp
 
 import numpy as onp
 
@@ -332,6 +333,31 @@ class WeightNormTest(absltest.TestCase):
     onp.testing.assert_allclose(new_params, onp.full_like(params, 1.9))
     onp.testing.assert_allclose(new_state.param_states.mult, 1.9 * 2 ** 0.5)
 
+
+class DynamicScaleTest(absltest.TestCase):
+
+  def test_dynamic_scale(self):
+    def loss_fn(p):
+      return jnp.asarray(p, jnp.float16) ** 2
+    p = jnp.array(1., jnp.float32)
+
+    dyn_scale = optim.DynamicScale(growth_interval=2)
+    step = jax.jit(lambda ds, p: ds.value_and_grad(loss_fn)(p))
+    inf = float('inf')
+    nan = float('nan')
+    expected_values = [
+        (False, nan, 32768.0, inf),
+        (False, 1.0, 16384.0, inf),
+        (True, 1.0, 16384.0, 2.0),
+        (True, 1.0, 16384.0, 2.0),
+        (True, 1.0, 32768.0, 2.0),
+        (False, 1.0, 16384.0, inf),
+    ]
+
+    for expected in expected_values:
+      dyn_scale, is_fin, loss, grad = step(dyn_scale, p)
+      values = onp.array((is_fin, loss, dyn_scale.scale, grad))
+      onp.testing.assert_allclose(values, expected)
 
 if __name__ == '__main__':
   absltest.main()
