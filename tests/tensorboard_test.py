@@ -59,6 +59,13 @@ class TensorboardTest(absltest.TestCase):
     self.assertTrue(
         onp.allclose(trimmed_audio, expected_audio.numpy(), atol=1e-04))
 
+  def test_summarywriter_flush_after_close(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    summary_writer.close()
+    with self.assertRaises(AttributeError):
+      summary_writer.flush()
+
   def test_summarywriter_scalar(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
