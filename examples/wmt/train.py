@@ -476,6 +476,7 @@ def main(argv):
   n_devices = jax.local_device_count()
 
   if jax.host_id() == 0:
+    tf.io.gfile.makedirs(FLAGS.model_dir)
     train_summary_writer = tensorboard.SummaryWriter(
         os.path.join(FLAGS.model_dir, 'train'))
     eval_summary_writer = tensorboard.SummaryWriter(
@@ -487,6 +488,7 @@ def main(argv):
   vocab_path = FLAGS.vocab_path
   if vocab_path is None:
     vocab_path = os.path.join(FLAGS.model_dir, 'sentencepiece_model')
+  tf.io.gfile.makedirs(os.path.split(vocab_path)[0])
 
   # Load Dataset
   logging.info('Initializing dataset.')
