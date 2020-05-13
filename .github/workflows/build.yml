@@ -37,6 +37,9 @@ jobs:
     - name: Test with pytest
       run: |
         tests/run_all_tests.sh
+    - name: Check HOWTO patches
+      run: |
+        howtos/scripts/check_howto_diffs.sh
     # The below step just reports the success or failure of tests as a "commit status".
     # This is needed for copybara integration.
     - name: Report success or failure as github status
