@@ -28,18 +28,22 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        python -m pip install absl-py opt_einsum numpy scipy pytest-xdist pytest-benchmark jaxlib jax tensorflow tensorflow-datasets
         pip install -v .
+        pip install -v .[testing]
         pip install -r docs/requirements.txt
     - name: Build documentation
       run: |
         sphinx-build -M html docs docs/_build
-    - name: Test with pytest
+    - name: Test with pytest and generate coverage report
       run: |
-        tests/run_all_tests.sh
+        tests/run_all_tests.sh --with-cov
     - name: Check HOWTO patches
       run: |
         howtos/scripts/check_howto_diffs.sh
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v1
+      with:
+        file: ./coverage.xml
     # The below step just reports the success or failure of tests as a "commit status".
     # This is needed for copybara integration.
     - name: Report success or failure as github status
