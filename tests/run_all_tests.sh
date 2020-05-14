@@ -8,7 +8,7 @@ trap handle_errors ERR
 handle_errors () {
     ret="$?"
     if [[ "$ret" == 5 ]]; then
-      echo "error code $ret == no tests found"
+      echo "error code $ret == no tests found in $egd"
     else
       echo "error code $ret"
       exit 1
@@ -16,7 +16,11 @@ handle_errors () {
 }
 
 # Run battery of core FLAX API tests.
-pytest -n 4 tests
+PYTEST_OPTS=
+if [[ $1 == "--with-cov" ]]; then
+    PYTEST_OPTS+="--cov=flax --cov-report=xml --cov-report=term --cov-config=setup.cfg"
+fi
+pytest -n 4 tests $PYTEST_OPTS
 
 # Per-example tests.
 # we apply pytest within each example to avoid pytest's annoying test-filename collision.
