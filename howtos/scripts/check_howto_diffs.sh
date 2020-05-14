@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # Checks the following for each HOWTO diff in howtos/diffs
-# 1. Check if diffs are stale and can no longer be applied to master
-# 2. Apply each diff in turn and run appropriate unit tests
+# 1. Check if diffs are stale and can no longer be applied to *this branch*
+# 2. Apply each diff in turn and run appropriate unit tests in *this branch*
 
 # https://vaneyckt.io/posts/safer_bash_scripts_with_set_euxo_pipefail/
 set -euxo
@@ -10,7 +10,6 @@ set -euxo
 old_pwd=$(pwd)
 top_dir=$(git rev-parse --show-toplevel)
 howto_diff_path="${top_dir}/howtos/diffs"
-master_branch="origin/master"
 
 # Get names of howtos from diff files.
 cd $howto_diff_path
@@ -39,19 +38,26 @@ git fetch --all
 
 for howto in $howtos; do
   diff_file="${howto_diff_path}/${howto}.diff"
+  curr_branch="$(git rev-parse --abbrev-ref HEAD)"
+
+  # Delete local howto branch if already exists in case we're running locally
+  git branch -D $howto || true
+  git checkout -b $howto
   git apply $diff_file
 
   # Run unit test on affected examples only
-  if ! git diff --name-only $master_branch | xargs dirname | xargs pytest; then
+  if ! git diff --name-only $curr_branch | xargs dirname | xargs pytest; then
     printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
 
     # Undo patch in case we're running locally
     git apply -R $diff_file
+    git checkout $curr_branch
     exit 1
   fi
 
   # Undo patch so we can run the next test
   git apply -R $diff_file
+  git checkout $curr_branch
 done
 
 cd $old_pwd

@@ -1,5 +1,5 @@
 diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 362b9b2..fe44d34 100644
+index 5dc74db..5ba4df4 100644
 --- a/examples/mnist/train.py
 +++ b/examples/mnist/train.py
 @@ -23,6 +23,9 @@ from absl import app
@@ -104,33 +104,45 @@ index 362b9b2..fe44d34 100644
      summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
      summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
 diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
-index fb02770..2cd2bd8 100644
+index 429bda4..c1405d0 100644
 --- a/examples/mnist/train_test.py
 +++ b/examples/mnist/train_test.py
-@@ -23,6 +23,8 @@ from jax import random
- 
- import numpy as onp
+@@ -21,6 +21,8 @@ import train
+ import jax
+ from jax import random
  
 +from flax import jax_utils
 +
  # Parse absl flags test_srcdir and test_tmpdir.
  jax.config.parse_flags_with_absl()
  
-@@ -32,12 +34,14 @@ class TrainTest(absltest.TestCase):
-   def test_train_one_epoch(self):
+@@ -30,20 +32,23 @@ class TrainTest(absltest.TestCase):
+   def test_single_train_step(self):
      train_ds, test_ds = train.get_datasets()
-     input_rng = onp.random.RandomState(0)
+     batch_size = 32
 -    model = train.create_model(random.PRNGKey(0))
 +    model = train.create_model(random.split(random.PRNGKey(0),
 +                                            jax.device_count()))
 +    test_ds = jax_utils.replicate(test_ds)
      optimizer = train.create_optimizer(model, 0.1, 0.9)
-     optimizer, train_metrics = train.train_epoch(optimizer, train_ds, 128, 0,
-                                                  input_rng)
--    self.assertLessEqual(train_metrics['loss'], 0.27)
--    self.assertGreaterEqual(train_metrics['accuracy'], 0.92)
-+    self.assertLessEqual(train_metrics['loss'], 0.32)
-+    self.assertGreaterEqual(train_metrics['accuracy'], 0.90)
+ 
+     # test single train step.
++    batch = jax_utils.replicate({k: v[:batch_size] for k, v in train_ds.items()})
+     optimizer, train_metrics = train.train_step(
+         optimizer=optimizer,
+-        batch={k: v[:batch_size] for k, v in train_ds.items()})
+-    self.assertLessEqual(train_metrics['loss'], 2.302)
+-    self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
++        batch=batch)
++    self.assertLessEqual(train_metrics['loss'], 2.34)
++    self.assertGreaterEqual(train_metrics['accuracy'], 0.03125)
+ 
+     # Run eval model.
      loss, accuracy = train.eval_model(optimizer.target, test_ds)
-     self.assertLessEqual(loss, 0.06)
-     self.assertGreaterEqual(accuracy, 0.98)
+-    self.assertLess(loss, 2.252)
+-    self.assertGreater(accuracy, 0.2597)
++    self.assertLessEqual(train_metrics['loss'], 2.34)
++    self.assertGreaterEqual(train_metrics['accuracy'], 0.03125)
+ 
+ if __name__ == '__main__':
+   absltest.main()
