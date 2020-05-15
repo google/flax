@@ -94,7 +94,7 @@ class OptimizerDefTest(absltest.TestCase):
 class ModelParamTraversalTest(absltest.TestCase):
 
   def test_only_works_on_models(self):
-    traversal = optim.ModelParamTraversal(lambda *_: True)
+    traversal = traverse_util.ModelParamTraversal(lambda *_: True)
     with self.assertRaises(ValueError):
       list(traversal.iterate({}))
 
@@ -114,7 +114,7 @@ class ModelParamTraversalTest(absltest.TestCase):
       names.append(name)  # track names passed to filter_fn for testing
       return 'kernel' in name
     model = nn.Model(None, params)
-    traversal = optim.ModelParamTraversal(filter_fn)
+    traversal = traverse_util.ModelParamTraversal(filter_fn)
     values = list(traversal.iterate(model))
     self.assertEqual(values, [1, 3])
     self.assertEqual(set(names), set([

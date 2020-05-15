@@ -215,8 +215,8 @@ embed_layer.get_embedding()
 to specific optimizers. Here is the example from `MultiOptimizer`:
 
 ```python
-kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
-biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
+kernels = traverse_util.ModelParamTraversal(lambda path, _: 'kernel' in path)
+biases = traverse_util.ModelParamTraversal(lambda path, _: 'bias' in path)
 kernel_opt = optim.Momentum(learning_rate=0.01)
 bias_opt = optim.Momentum(learning_rate=0.1)
 opt_def = MultiOptimizer((kernels, kernel_opt), (biases, bias_opt))

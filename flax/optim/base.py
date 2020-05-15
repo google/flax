@@ -408,8 +408,8 @@ class MultiOptimizer(OptimizerDef):
 
     Example::
 
-      kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
-      biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
+      kernels = traverse_util.ModelParamTraversal(lambda path, _: 'kernel' in path)
+      biases = traverse_util.ModelParamTraversal(lambda path, _: 'bias' in path)
       kernel_opt = optim.Momentum(learning_rate=0.01)
       bias_opt = optim.Momentum(learning_rate=0.1)
       opt_def = MultiOptimizer((kernels, kernel_opt), (biases, bias_opt))
@@ -469,44 +469,3 @@ class MultiOptimizer(OptimizerDef):
 def _sorted_items(x):
   """Returns items of a dict ordered by keys."""
   return sorted(x.items(), key=lambda x: x[0])
-
-
-class ModelParamTraversal(traverse_util.Traversal):
-  """Select model parameters using a name filter."""
-
-  def __init__(self, filter_fn):
-    """Constructor a new ModelParamTraversal.
-
-    Args:
-      filter_fn: a function that takes a parameters full name and its value and
-        returns whether this parameter should be selected or not. The name of a
-        parameter is determined by the module hierarchy and the parameter name
-        (for example: '/module/sub_module/parameter_name').
-    """
-    self._filter_fn = filter_fn
-
-  @staticmethod
-  def _check_inputs(inputs):
-    if not isinstance(inputs, base.Model):
-      raise ValueError(
-          'ModelParamTraversal can only traverse a flax Model instance.')
-
-  def iterate(self, inputs):
-    self._check_inputs(inputs)
-    flat_dict = traverse_util.flatten_dict(inputs.params)
-    for key, value in _sorted_items(flat_dict):
-      path = '/' + '/'.join(key)
-      if self._filter_fn(path, value):
-        yield value
-
-  def update(self, fn, inputs):
-    self._check_inputs(inputs)
-    flat_dict = traverse_util.flatten_dict(inputs.params)
-    new_dict = {}
-    for key, value in _sorted_items(flat_dict):
-      path = '/' + '/'.join(key)
-      if self._filter_fn(path, value):
-        value = fn(value)
-      new_dict[key] = value
-    new_params = traverse_util.unflatten_dict(new_dict)
-    return inputs.replace(params=new_params)

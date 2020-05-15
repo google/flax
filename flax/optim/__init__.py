@@ -18,7 +18,7 @@
 # re-export commonly used modules and functions
 from .adam import Adam
 from .adagrad import Adagrad
-from .base import OptimizerState, OptimizerDef, Optimizer, MultiOptimizer, ModelParamTraversal
+from .base import OptimizerState, OptimizerDef, Optimizer, MultiOptimizer
 from .dynamic_scale import DynamicScale
 from .lamb import LAMB
 from .lars import LARS

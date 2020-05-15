@@ -356,3 +356,44 @@ class TraverseTree(Traversal):
 
   def iterate(self, inputs):
     yield from jax.tree_leaves(inputs)
+
+
+class ModelParamTraversal(traverse_util.Traversal):
+  """Select model parameters using a name filter."""
+
+  def __init__(self, filter_fn):
+    """Constructor a new ModelParamTraversal.
+
+    Args:
+      filter_fn: a function that takes a parameters full name and its value and
+        returns whether this parameter should be selected or not. The name of a
+        parameter is determined by the module hierarchy and the parameter name
+        (for example: '/module/sub_module/parameter_name').
+    """
+    self._filter_fn = filter_fn
+
+  @staticmethod
+  def _check_inputs(inputs):
+    if not isinstance(inputs, base.Model):
+      raise ValueError(
+          'ModelParamTraversal can only traverse a flax Model instance.')
+
+  def iterate(self, inputs):
+    self._check_inputs(inputs)
+    flat_dict = traverse_util.flatten_dict(inputs.params)
+    for key, value in _sorted_items(flat_dict):
+      path = '/' + '/'.join(key)
+      if self._filter_fn(path, value):
+        yield value
+
+  def update(self, fn, inputs):
+    self._check_inputs(inputs)
+    flat_dict = traverse_util.flatten_dict(inputs.params)
+    new_dict = {}
+    for key, value in _sorted_items(flat_dict):
+      path = '/' + '/'.join(key)
+      if self._filter_fn(path, value):
+        value = fn(value)
+      new_dict[key] = value
+    new_params = traverse_util.unflatten_dict(new_dict)
+    return inputs.replace(params=new_params)
