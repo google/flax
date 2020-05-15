@@ -84,7 +84,7 @@ the author(s) of the `howto`.
 ### Re-pack the HOWTO
 Pack the changes on your branch into a `howto` via the script below. In this
 case, we can overwrite the existing diff with the same name, where the name of
-a `howto` is the file name without the extension (e.g., the name for the
+a `howto` is the filename without the extension (e.g., the name for the
 `distributed-training.diff` `howto` is `distributed-training`).
 ```bash
 ./howtos/scripts/pack_howto_diffs.sh
