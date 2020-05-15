@@ -51,7 +51,7 @@ The workflow script for the Github action can be found at
 ## Resolving a conflict with an existing HOWTO
 
 This is still a work in progress. Currently, conflicts are resolved by manually
-making the required fixes. The below can help speed up that process.
+making the required fixes. The suggestions below can help speed up that process.
 
 ### Start with a clean and updated copy of `master`
 As an example, assuming you have `https://github.com/google/flax` set as
@@ -74,17 +74,18 @@ git apply $diff_file --reject
 ```
 
 ### Go through the remaining hunks manually
-This step is potentially most time-consuming. Examine the changes in each
-`*.rej` diff file for all hunks that couldn't be merged automatically. If the
-example code hasn't changed significantly, the work typically involves just
-finding the right place to insert and remove the lines mentioned in the diff.
-If the example code _has_ changed significantly, this work will be more
-involved (e.g., understanding the intent of the `howto`).
+Examine the changes in each `*.rej` diff file for all hunks that couldn't be
+merged automatically. If the example code hasn't changed significantly, the
+work typically involves just finding the right place to insert and remove the
+lines mentioned in the diff. If the example code _has_ changed significantly,
+the work may also involve understanding the intent of the `howto` or contacting
+the author(s) of the `howto`.
 
 ### Re-pack the HOWTO
-Pack the changes on your branch into a `howto` via the below script. In this
-case, we can overwrite the existing diff with the same name (e.g., the path of
-the diff file less the directory structure and `.diff` extension).
+Pack the changes on your branch into a `howto` via the script below. In this
+case, we can overwrite the existing diff with the same name, where the name of
+a `howto` is the file name without the extension (e.g., the name for the
+`distributed-training.diff` `howto` is `distributed-training`).
 ```bash
 ./howtos/scripts/pack_howto_diffs.sh
 ```
