@@ -75,6 +75,8 @@ class SummaryWriter(object):
     Args:
       tag: str: label for this data
       image: ndarray: [H,W], [H,W,1], [H,W,3] save image in greyscale or colors.
+        Pixel values could be either uint8 or float.
+        Floating point values should be in range [0, 1).
       step: int: training step
     """
     image = onp.array(image)
@@ -85,6 +87,9 @@ class SummaryWriter(object):
     # tf.summary.image expects image to have shape [k, h, w, c] where,
     # k = number of samples, h = height, w = width, c = number of channels.
     image = image[onp.newaxis, :, :, :]
+
+    # Convert to tensor value as tf.summary.image expects data to be a tensor.
+    image = tf.convert_to_tensor(image)
     with self._event_writer.as_default():
       tf.summary.image(name=tag, data=image, step=step)
 
@@ -105,9 +110,12 @@ class SummaryWriter(object):
     # tf.summary.audio expects the audio data to have floating values in
     # [-1.0, 1.0].
     audiodata = onp.clip(onp.array(audiodata), -1, 1)
+
+    # Convert to tensor value as tf.summary.audio expects data to be a tensor.
+    audio = tf.convert_to_tensor(audiodata, dtype=tf.float32)
     with self._event_writer.as_default():
       tf.summary.audio(
-          name=tag, data=audiodata, sample_rate=sample_rate, step=step,
+          name=tag, data=audio, sample_rate=sample_rate, step=step,
           max_outputs=max_outputs, encoding='wav')
 
   def histogram(self, tag, values, step, bins=None):

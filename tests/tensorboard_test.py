@@ -50,15 +50,6 @@ class TensorboardTest(absltest.TestCase):
     self.assertGreater(event_value_list[0]['wall_time'], 0.0)
     return event_value_list[0]['value']
 
-  def assert_encoded_audio_files_equal(self, actual_audio, expected_audio):
-    # expected_audio is trimmed to -1.0 to 1.0
-    self.assertFalse(onp.allclose(actual_audio.numpy(), expected_audio.numpy()))
-
-    # trim the audio to assert the values.
-    trimmed_audio = onp.clip(onp.array(actual_audio), -1, 1)
-    self.assertTrue(
-        onp.allclose(trimmed_audio, expected_audio.numpy(), atol=1e-04))
-
   def test_summarywriter_flush_after_close(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
@@ -94,8 +85,8 @@ class TensorboardTest(absltest.TestCase):
   def test_summarywriter_image(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    img = tf.random.uniform(shape=[30, 30, 3])
-    img = tf.cast(255 * img, tf.uint8)
+    img = onp.random.uniform(low=0., high=255., size=(30, 30, 3))
+    img = img.astype(onp.uint8)
     summary_writer.image(tag='image_test', image=img, step=1)
     summary_value = self.parse_and_return_summary_value(path=log_dir)
 
@@ -103,11 +94,24 @@ class TensorboardTest(absltest.TestCase):
     expected_img = tf.image.decode_image(summary_value.tensor.string_val[2])
     self.assertTrue(onp.allclose(img, expected_img.numpy()))
 
+  def test_summarywriter_image_float_pixel_values(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    img = onp.random.uniform(low=0., high=1., size=(30, 30, 3))
+    summary_writer.image(tag='image_test', image=img, step=1)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+
+    self.assertEqual(summary_value.tag, 'image_test')
+    expected_img = tf.image.decode_image(summary_value.tensor.string_val[2])
+    # convert img to uint8 as the decoded image is of type uint8.
+    actual_img = tf.image.convert_image_dtype(image=img, dtype=onp.uint8)
+    self.assertTrue(onp.allclose(actual_img, expected_img.numpy()))
+
   def test_summarywriter_2dimage_scaled(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    img = tf.random.uniform(shape=[30, 30])
-    img = tf.cast(255 * img, tf.uint8)
+    img = onp.random.uniform(low=0., high=255., size=(30, 30))
+    img = img.astype(onp.uint8)
     summary_writer.image(tag='2dimage_test', image=img, step=1)
     summary_value = self.parse_and_return_summary_value(path=log_dir)
 
@@ -119,8 +123,8 @@ class TensorboardTest(absltest.TestCase):
   def test_summarywriter_single_channel_image_scaled(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    img = tf.random.uniform(shape=[30, 30, 1])
-    img = tf.cast(255 * img, tf.uint8)
+    img = onp.random.uniform(low=0., high=255., size=(30, 30, 1))
+    img = img.astype(onp.uint8)
     summary_writer.image(tag='2dimage_1channel_test', image=img, step=1)
     summary_value = self.parse_and_return_summary_value(path=log_dir)
 
@@ -132,7 +136,7 @@ class TensorboardTest(absltest.TestCase):
   def test_summarywriter_audio(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    audio = tf.random.uniform(shape=[2, 48000, 2], minval=-1.0, maxval=1.0)
+    audio = onp.random.uniform(low=-1., high=1., size=(2, 48000, 2))
     summary_writer.audio(tag='audio_test', audiodata=audio, step=1)
 
     summary_value = self.parse_and_return_summary_value(path=log_dir)
@@ -144,18 +148,18 @@ class TensorboardTest(absltest.TestCase):
     # Assert values.
     expected_audio = \
         tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
-    self.assert_encoded_audio_files_equal(
-        actual_audio=audio[0], expected_audio=expected_audio)
+    self.assertTrue(
+        onp.allclose(audio[0], expected_audio.numpy(), atol=1e-04))
 
     expected_audio = \
         tf.audio.decode_wav(summary_value.tensor.string_val[2]).audio
-    self.assert_encoded_audio_files_equal(
-        actual_audio=audio[1], expected_audio=expected_audio)
+    self.assertTrue(
+        onp.allclose(audio[1], expected_audio.numpy(), atol=1e-04))
 
   def test_summarywriter_audio_sampled_output(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    audio = tf.random.uniform(shape=[2, 48000, 2], minval=-1.0, maxval=1.0)
+    audio = onp.random.uniform(low=-1., high=1., size=(2, 48000, 2))
     summary_writer.audio(
         tag='audio_test', audiodata=audio, step=1, max_outputs=1)
 
@@ -168,13 +172,38 @@ class TensorboardTest(absltest.TestCase):
     # Assert values.
     expected_audio = \
         tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
-    self.assert_encoded_audio_files_equal(
-        actual_audio=audio[0], expected_audio=expected_audio)
 
-  def test_summarywriter_histogram(self):
+    self.assertTrue(
+        onp.allclose(audio[0], expected_audio.numpy(), atol=1e-04))
+
+  def test_summarywriter_clipped_audio(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    audio = onp.random.uniform(low=-2., high=2., size=(2, 48000, 2))
+    summary_writer.audio(
+        tag='audio_test', audiodata=audio, step=1, max_outputs=1)
+
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+    self.assertEqual(summary_value.tag, 'audio_test')
+
+    # Assert one audio files is parsed.
+    self.assertLen(summary_value.tensor.string_val, 2)
+
+    # expected_audio is clipped.
+    expected_audio = tf.audio.decode_wav(
+        summary_value.tensor.string_val[0]).audio
+    self.assertFalse(
+        onp.allclose(audio[0], expected_audio.numpy(), atol=1e-04))
+
+    clipped_audio = onp.clip(onp.array(audio[0]), -1, 1)
+    self.assertTrue(
+        onp.allclose(clipped_audio, expected_audio.numpy(), atol=1e-04))
+
+  def test_summarywriter_histogram_defaultbins(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
     histogram = onp.arange(1000)
+    # Histogram will be created for 30 (default) bins.
     summary_writer.histogram(tag='histogram_test', values=histogram, step=1)
 
     summary_value = self.parse_and_return_summary_value(path=log_dir)
