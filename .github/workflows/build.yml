@@ -37,6 +37,9 @@ jobs:
     - name: Test with pytest and generate coverage report
       run: |
         tests/run_all_tests.sh --with-cov
+    - name: Check HOWTO patches
+      run: |
+        howtos/scripts/check_howto_diffs.sh
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:

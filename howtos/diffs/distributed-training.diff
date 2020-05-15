@@ -1,5 +1,5 @@
 diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 362b9b2..127a0f5 100644
+index 5dc74db..77b49fa 100644
 --- a/examples/mnist/train.py
 +++ b/examples/mnist/train.py
 @@ -23,6 +23,9 @@ from absl import app
@@ -81,25 +81,31 @@ index 362b9b2..127a0f5 100644
                   epoch, loss, accuracy * 100)
      summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
 diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
-index fb02770..3757893 100644
+index 429bda4..3ebf534 100644
 --- a/examples/mnist/train_test.py
 +++ b/examples/mnist/train_test.py
-@@ -23,6 +23,8 @@ from jax import random
- 
- import numpy as onp
+@@ -21,6 +21,8 @@ import train
+ import jax
+ from jax import random
  
 +from flax import jax_utils
 +
  # Parse absl flags test_srcdir and test_tmpdir.
  jax.config.parse_flags_with_absl()
  
-@@ -38,7 +40,8 @@ class TrainTest(absltest.TestCase):
-                                                  input_rng)
-     self.assertLessEqual(train_metrics['loss'], 0.27)
-     self.assertGreaterEqual(train_metrics['accuracy'], 0.92)
+@@ -36,12 +38,13 @@ class TrainTest(absltest.TestCase):
+     # test single train step.
+     optimizer, train_metrics = train.train_step(
+         optimizer=optimizer,
+-        batch={k: v[:batch_size] for k, v in train_ds.items()})
++        batch=train.shard({k: v[:batch_size] for k, v in train_ds.items()}))
+     self.assertLessEqual(train_metrics['loss'], 2.302)
+     self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
+ 
+     # Run eval model.
 -    loss, accuracy = train.eval_model(optimizer.target, test_ds)
 +    model = jax_utils.unreplicate(optimizer.target) # Fetch from 1st device
 +    loss, accuracy = train.eval_model(model, test_ds)
-     self.assertLessEqual(loss, 0.06)
-     self.assertGreaterEqual(accuracy, 0.98)
+     self.assertLess(loss, 2.252)
+     self.assertGreater(accuracy, 0.2597)
  

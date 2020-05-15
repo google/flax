@@ -32,20 +32,13 @@ cd $howto_diff_path
 howtos=$(ls *.diff | sed -e 's/.diff//')
 cd $top_dir
 
-printf "Applying HOWTO diffs to branches..\n"
+printf "Applying HOWTO diffs to branches...\n"
 
 for howto in $howtos; do
   howto_branch="howto/${howto}"
   git checkout -b $howto_branch
   diff_file="${howto_diff_path}/${howto}.diff"
-  if [[ -n $(git apply --check "${diff_file}") ]]; then
-    printf "\nERROR: Cannot apply howto ${howto}! ==> PLEASE FIX HOWTO\n"
-    exit 1
-  fi
   git apply $diff_file
-
-  # Run unit test on affected examples only
-  git diff --name-only $master_branch | xargs dirname | xargs pytest
 
   # Once we are satisfied with the howto, commit and push
   git commit -am "Added howto branch ${howto_branch}"
