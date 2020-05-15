@@ -464,8 +464,4 @@ class MultiOptimizer(OptimizerDef):
     if hyper_param_overrides:
       hps = [hp.replace(**hyper_param_overrides) for hp in hps]
     return hps
-
-
-def _sorted_items(x):
-  """Returns items of a dict ordered by keys."""
-  return sorted(x.items(), key=lambda x: x[0])
+    

@@ -62,6 +62,8 @@ import dataclasses
 
 import jax
 
+from flax.nn import base
+
 
 def flatten_dict(xs):
   """Flatten a nested dictionary.
@@ -358,7 +360,12 @@ class TraverseTree(Traversal):
     yield from jax.tree_leaves(inputs)
 
 
-class ModelParamTraversal(traverse_util.Traversal):
+def _sorted_items(x):
+  """Returns items of a dict ordered by keys."""
+  return sorted(x.items(), key=lambda x: x[0])
+
+
+class ModelParamTraversal(Traversal):
   """Select model parameters using a name filter."""
 
   def __init__(self, filter_fn):
@@ -380,7 +387,7 @@ class ModelParamTraversal(traverse_util.Traversal):
 
   def iterate(self, inputs):
     self._check_inputs(inputs)
-    flat_dict = traverse_util.flatten_dict(inputs.params)
+    flat_dict = flatten_dict(inputs.params)
     for key, value in _sorted_items(flat_dict):
       path = '/' + '/'.join(key)
       if self._filter_fn(path, value):
@@ -388,12 +395,12 @@ class ModelParamTraversal(traverse_util.Traversal):
 
   def update(self, fn, inputs):
     self._check_inputs(inputs)
-    flat_dict = traverse_util.flatten_dict(inputs.params)
+    flat_dict = flatten_dict(inputs.params)
     new_dict = {}
     for key, value in _sorted_items(flat_dict):
       path = '/' + '/'.join(key)
       if self._filter_fn(path, value):
         value = fn(value)
       new_dict[key] = value
-    new_params = traverse_util.unflatten_dict(new_dict)
+    new_params = unflatten_dict(new_dict)
     return inputs.replace(params=new_params)

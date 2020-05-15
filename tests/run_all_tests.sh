@@ -22,11 +22,14 @@ if [[ $1 == "--with-cov" ]]; then
 fi
 pytest -n 4 tests $PYTEST_OPTS
 
+echo "GOOOO!"
+
 # Per-example tests.
 # we apply pytest within each example to avoid pytest's annoying test-filename collision.
 # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
 # /foo/bar and /baz/bleep aren't set up as packages.
 for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+    echo "trying ${egd}"
     pytest $egd
 done
 
