@@ -74,3 +74,16 @@ index 5dc74db..11a5e50 100644
      loss, accuracy = eval_model(optimizer.target, test_ds)
      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                   epoch, loss, accuracy * 100)
+diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
+index 429bda4..50aa657 100644
+--- a/examples/mnist/train_test.py
++++ b/examples/mnist/train_test.py
+@@ -36,7 +36,7 @@ class TrainTest(absltest.TestCase):
+     # test single train step.
+     optimizer, train_metrics = train.train_step(
+         optimizer=optimizer,
+-        batch={k: v[:batch_size] for k, v in train_ds.items()})
++        batch={k: v[:batch_size] for k, v in train_ds.items()}, lr=0.1)
+     self.assertLessEqual(train_metrics['loss'], 2.302)
+     self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
+ 
