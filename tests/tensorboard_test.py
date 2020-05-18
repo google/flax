@@ -92,7 +92,7 @@ class TensorboardTest(absltest.TestCase):
 
     self.assertEqual(summary_value.tag, 'image_test')
     actual_img = tf.image.decode_image(summary_value.tensor.string_val[2])
-    self.assertTrue(onp.allclose(actual_img.numpy(), expected_img))
+    self.assertTrue(onp.allclose(actual_img, expected_img))
 
   def test_summarywriter_image_float_pixel_values(self):
     log_dir = tempfile.mkdtemp()
@@ -107,7 +107,7 @@ class TensorboardTest(absltest.TestCase):
 
     self.assertEqual(summary_value.tag, 'image_test')
     actual_img = tf.image.decode_image(summary_value.tensor.string_val[2])
-    self.assertTrue(onp.allclose(actual_img.numpy(), expected_img))
+    self.assertTrue(onp.allclose(actual_img, expected_img))
 
   def test_summarywriter_2dimage_scaled(self):
     log_dir = tempfile.mkdtemp()
@@ -153,12 +153,12 @@ class TensorboardTest(absltest.TestCase):
     actual_audio_1 = tf.audio.decode_wav(
         summary_value.tensor.string_val[0]).audio
     self.assertTrue(onp.allclose(
-        expected_audio_samples[0], actual_audio_1.numpy(), atol=1e-04))
+        expected_audio_samples[0], actual_audio_1, atol=1e-04))
 
     actual_audio_2 = tf.audio.decode_wav(
         summary_value.tensor.string_val[2]).audio
     self.assertTrue(onp.allclose(
-        expected_audio_samples[1], actual_audio_2.numpy(), atol=1e-04))
+        expected_audio_samples[1], actual_audio_2, atol=1e-04))
 
   def test_summarywriter_audio_sampled_output(self):
     log_dir = tempfile.mkdtemp()
@@ -179,7 +179,7 @@ class TensorboardTest(absltest.TestCase):
     actual_audio = tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
 
     self.assertTrue(onp.allclose(
-        expected_audio_samples[0], actual_audio.numpy(), atol=1e-04))
+        expected_audio_samples[0], actual_audio, atol=1e-04))
 
   def test_summarywriter_clipped_audio(self):
     log_dir = tempfile.mkdtemp()
@@ -200,11 +200,11 @@ class TensorboardTest(absltest.TestCase):
     actual_audio = tf.audio.decode_wav(
         summary_value.tensor.string_val[0]).audio
     self.assertFalse(onp.allclose(
-        expected_audio_samples[0], actual_audio.numpy(), atol=1e-04))
+        expected_audio_samples[0], actual_audio, atol=1e-04))
 
     clipped_audio = onp.clip(onp.array(expected_audio_samples[0]), -1, 1)
     self.assertTrue(
-        onp.allclose(clipped_audio, actual_audio.numpy(), atol=1e-04))
+        onp.allclose(clipped_audio, actual_audio, atol=1e-04))
 
   def test_summarywriter_histogram_defaultbins(self):
     log_dir = tempfile.mkdtemp()
