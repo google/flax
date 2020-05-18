@@ -142,6 +142,6 @@ class SummaryWriter(object):
     Note: markdown formatting is rendered by tensorboard.
     """
     if not isinstance(textdata, (str, bytes)):
-      raise ValueError('textdata should be of the type `str` or `bytes`.')
+      raise ValueError('`textdata` should be of the type `str` or `bytes`.')
     with self._event_writer.as_default():
       tf.summary.text(name=tag, data=tf.constant(textdata), step=step)
