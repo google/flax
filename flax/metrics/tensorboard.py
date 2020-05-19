@@ -15,12 +15,8 @@
 """Write Summaries from JAX for use with Tensorboard.
 """
 
-import io
-import struct
 import sys
-import time
 import warnings
-import wave
 import matplotlib as mpl
 # Necessary to prevent attempted Tk import:
 with warnings.catch_warnings():
@@ -30,16 +26,8 @@ with warnings.catch_warnings():
   else:
     mpl.use('Agg')
 # pylint: disable=g-import-not-at-top
-import matplotlib.pyplot as plt
 import numpy as onp
-import tensorflow.compat.v1 as tf
-from tensorflow.compat.v1 import HistogramProto
-from tensorflow.compat.v1 import Summary
-from tensorflow.compat.v1 import SummaryMetadata
-from tensorflow.compat.v1.io import gfile
-
-from tensorflow.core.util import event_pb2  # pylint: disable=g-direct-tensorflow-import
-from tensorflow.python.summary.writer.event_file_writer import EventFileWriter  # pylint: disable=g-direct-tensorflow-import
+import tensorflow.compat.v2 as tf
 
 
 class SummaryWriter(object):
@@ -52,18 +40,11 @@ class SummaryWriter(object):
       log_dir: path to record tfevents files in.
     """
     # If needed, create log_dir directory as well as missing parent directories.
-    if not gfile.isdir(log_dir):
-      gfile.makedirs(log_dir)
+    if not tf.io.gfile.isdir(log_dir):
+      tf.io.gfile.makedirs(log_dir)
 
-    self._event_writer = EventFileWriter(log_dir, 10, 120, None)
+    self._event_writer = tf.summary.create_file_writer(log_dir, 10, 120, None)
     self._closed = False
-
-  def _add_summary(self, summary, step):
-    event = event_pb2.Event(summary=summary)
-    event.wall_time = time.time()
-    if step is not None:
-      event.step = int(step)
-    self._event_writer.add_event(event)
 
   def close(self):
     """Close SummaryWriter. Final!"""
@@ -84,8 +65,8 @@ class SummaryWriter(object):
       step: int: training step
     """
     value = float(onp.array(value))
-    summary = Summary(value=[Summary.Value(tag=tag, simple_value=value)])
-    self._add_summary(summary, step)
+    with self._event_writer.as_default():
+      tf.summary.scalar(name=tag, data=value, step=step)
 
   def image(self, tag, image, step):
     """Saves RGB image summary from onp.ndarray [H,W], [H,W,1], or [H,W,3].
@@ -93,7 +74,8 @@ class SummaryWriter(object):
     Args:
       tag: str: label for this data
       image: ndarray: [H,W], [H,W,1], [H,W,3] save image in greyscale or colors.
-        Pixel values should be in the range [0, 1].
+        Pixel values could be either uint8 or float.
+        Floating point values should be in range [0, 1).
       step: int: training step
     """
     image = onp.array(image)
@@ -101,117 +83,64 @@ class SummaryWriter(object):
       image = image[:, :, onp.newaxis]
     if onp.shape(image)[-1] == 1:
       image = onp.repeat(image, 3, axis=-1)
-    image_strio = io.BytesIO()
-    plt.imsave(image_strio, image, vmin=0., vmax=1., format='png')
-    image_summary = Summary.Image(
-        encoded_image_string=image_strio.getvalue(),
-        colorspace=3,
-        height=image.shape[0],
-        width=image.shape[1])
-    summary = Summary(value=[Summary.Value(tag=tag, image=image_summary)])
-    self._add_summary(summary, step)
+    # tf.summary.image expects image to have shape [k, h, w, c] where,
+    # k = number of samples, h = height, w = width, c = number of channels.
+    image = image[onp.newaxis, :, :, :]
 
-  def audio(self, tag, audiodata, step, sample_rate=44100):
-    """Saves audio.
+    # Convert to tensor value as tf.summary.image expects data to be a tensor.
+    image = tf.convert_to_tensor(image)
+    with self._event_writer.as_default():
+      tf.summary.image(name=tag, data=image, step=step)
+
+  def audio(self, tag, audiodata, step, sample_rate=44100, max_outputs=3):
+    """Saves audio as wave.
 
     NB: single channel only right now.
 
     Args:
       tag: str: label for this data
-      audiodata: ndarray [Nsamples,]: audo data to be saves as wave.
-        The data will be clipped to [-1, 1].
-
+      audiodata: ndarray [Nsamples, Nframes, Nchannels]: audio data to
+        be saved as wave. The data will be clipped to [-1.0, 1.0].
       step: int: training step
       sample_rate: sample rate of passed in audio buffer
+      max_outputs: At most this many audio clips will be emitted at each
+        step. Defaults to 3.
     """
-    audiodata = onp.array(audiodata)
-    audiodata = onp.clip(onp.squeeze(audiodata), -1, 1)
-    if audiodata.ndim != 1:
-      raise ValueError('Audio data must be 1D.')
-    # convert from [-1, 1] -> [-2^15-1, 2^15-1]
-    sample_list = (32767.0 * audiodata).astype(int).tolist()
-    wio = io.BytesIO()
-    wav_buf = wave.open(wio, 'wb')
-    wav_buf.setnchannels(1)
-    wav_buf.setsampwidth(2)
-    wav_buf.setframerate(sample_rate)
-    enc = b''.join([struct.pack('<h', v) for v in sample_list])
-    wav_buf.writeframes(enc)
-    wav_buf.close()
-    encoded_audio_bytes = wio.getvalue()
-    wio.close()
-    audio = Summary.Audio(
-        sample_rate=sample_rate,
-        num_channels=1,
-        length_frames=len(sample_list),
-        encoded_audio_string=encoded_audio_bytes,
-        content_type='audio/wav')
-    summary = Summary(value=[Summary.Value(tag=tag, audio=audio)])
-    self._add_summary(summary, step)
+    # tf.summary.audio expects the audio data to have floating values in
+    # [-1.0, 1.0].
+    audiodata = onp.clip(onp.array(audiodata), -1, 1)
 
-  def histogram(self, tag, values, bins, step):
+    # Convert to tensor value as tf.summary.audio expects data to be a tensor.
+    audio = tf.convert_to_tensor(audiodata, dtype=tf.float32)
+    with self._event_writer.as_default():
+      tf.summary.audio(
+          name=tag, data=audio, sample_rate=sample_rate, step=step,
+          max_outputs=max_outputs, encoding='wav')
+
+  def histogram(self, tag, values, step, bins=None):
     """Saves histogram of values.
 
     Args:
       tag: str: label for this data
       values: ndarray: will be flattened by this routine
-      bins: number of bins in histogram, or a sequence defining a monotonically
-        increasing array of bin edges, including the rightmost edge.
       step: int: training step
+      bins: number of bins in histogram
     """
     values = onp.array(values)
-    bins = onp.array(bins)
     values = onp.reshape(values, -1)
-    counts, limits = onp.histogram(values, bins=bins)
-    # boundary logic
-    # TODO(flax-dev) Investigate whether this logic can be simplified.
-    cum_counts = onp.cumsum(onp.greater(counts, 0, dtype=onp.int32))
-    start, end = onp.searchsorted(
-        cum_counts, [0, cum_counts[-1] - 1], side='right')
-    start, end = int(start), int(end) + 1
-    counts = (
-        counts[start -
-               1:end] if start > 0 else onp.concatenate([[0], counts[:end]]))
-    limits = limits[start:end + 1]
-    sum_sq = values.dot(values)
-    histo = HistogramProto(
-        min=values.min(),
-        max=values.max(),
-        num=len(values),
-        sum=values.sum(),
-        sum_squares=sum_sq,
-        bucket_limit=limits.tolist(),
-        bucket=counts.tolist())
-    summary = Summary(value=[Summary.Value(tag=tag, histo=histo)])
-    self._add_summary(summary, step)
+    with self._event_writer.as_default():
+      tf.summary.histogram(name=tag, data=values, step=step, buckets=bins)
 
   def text(self, tag, textdata, step):
     """Saves a text summary.
 
     Args:
       tag: str: label for this data
-      textdata: string, or 1D/2D list/numpy array of strings
+      textdata: string
       step: int: training step
     Note: markdown formatting is rendered by tensorboard.
     """
-    smd = SummaryMetadata(
-        plugin_data=SummaryMetadata.PluginData(plugin_name='text'))
-    if isinstance(textdata, (str, bytes)):
-      tensor = tf.make_tensor_proto(
-          values=[textdata.encode(encoding='utf_8')], shape=(1,))
-    else:
-      textdata = onp.array(textdata)  # convert lists, jax arrays, etc.
-      datashape = onp.shape(textdata)
-      if len(datashape) == 1:
-        tensor = tf.make_tensor_proto(
-            values=[td.encode(encoding='utf_8') for td in textdata],
-            shape=(datashape[0],))
-      elif len(datashape) == 2:
-        tensor = tf.make_tensor_proto(
-            values=[
-                td.encode(encoding='utf_8') for td in onp.reshape(textdata, -1)
-            ],
-            shape=(datashape[0], datashape[1]))
-    summary = Summary(
-        value=[Summary.Value(tag=tag, metadata=smd, tensor=tensor)])
-    self._add_summary(summary, step)
+    if not isinstance(textdata, (str, bytes)):
+      raise ValueError('`textdata` should be of the type `str` or `bytes`.')
+    with self._event_writer.as_default():
+      tf.summary.text(name=tag, data=tf.constant(textdata), step=step)
