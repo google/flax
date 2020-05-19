@@ -51,6 +51,7 @@ from absl.testing import absltest
 
 from tensorboard.backend.event_processing import directory_watcher
 from tensorboard.backend.event_processing import event_file_loader
+from tensorboard.util import tensor_util
 
 
 flags.DEFINE_string(
@@ -70,8 +71,9 @@ def _make_events_generator(path):
 def _process_event(event):
   """Parse TensorBoard scalars into a (tag, wall_time, step, scalar) tuple."""
   for value in event.summary.value:
-    if value.HasField('simple_value'):
-      yield (value.tag, event.wall_time, event.step, value.simple_value)
+    if value.HasField('tensor'):
+      yield (value.tag, event.wall_time,
+             event.step, tensor_util.make_ndarray(value.tensor).item())
 
 
 def _get_tensorboard_scalars(path):
