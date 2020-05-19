@@ -28,7 +28,6 @@ with warnings.catch_warnings():
 # pylint: disable=g-import-not-at-top
 import numpy as onp
 import tensorflow.compat.v2 as tf
-from tensorflow.compat.v2.io import gfile
 
 
 class SummaryWriter(object):
@@ -41,8 +40,8 @@ class SummaryWriter(object):
       log_dir: path to record tfevents files in.
     """
     # If needed, create log_dir directory as well as missing parent directories.
-    if not gfile.isdir(log_dir):
-      gfile.makedirs(log_dir)
+    if not tf.io.gfile.isdir(log_dir):
+      tf.io.gfile.makedirs(log_dir)
 
     self._event_writer = tf.summary.create_file_writer(log_dir, 10, 120, None)
     self._closed = False
