@@ -29,9 +29,9 @@
 
 """Input pipeline for the wmt de-en dataset."""
 
-import copy
 import os
 import tempfile
+import time
 from absl import logging
 import jax
 import tensorflow.compat.v2 as tf
@@ -170,13 +170,18 @@ def train_sentencepiece(dataset,
     pass  # we just want a prefix'd tmp-filename
   argstr = ' '.join(
       [f'--input={fname}',
-        f'--vocab_size={vocab_size}',
-        f'--character_coverage={character_coverage}',
-        f'--model_prefix={model_fp.name}',
-        f'--model_type={model_type}'])
+       f'--vocab_size={vocab_size}',
+       f'--character_coverage={character_coverage}',
+       f'--model_prefix={model_fp.name}',
+       f'--model_type={model_type}'])
   SentencePieceTrainer.Train(argstr)
-  tf.io.gfile.copy(model_fp.name+'.model', abs_model_path, overwrite=True)
-  logging.info('copied %s to %s', model_fp.name+'.model', abs_model_path)
+  if jax.host_id() == 0:
+    tf.io.gfile.copy(model_fp.name+'.model', abs_model_path, overwrite=True)
+    logging.info('copied %s to %s', model_fp.name+'.model', abs_model_path)
+  else:
+    while not tf.io.gfile.exists(abs_model_path):
+      time.sleep(1)
+    time.sleep(1)
   return abs_model_path
 
 
@@ -361,7 +366,6 @@ def _pack_with_tf_ops(dataset, keys, length):
                  [[0, length[k] - tf.size(partial[k])]]))
     return new_partial, new_outputs
 
-
   def map_fn(x):
     """Internal function to flat_map over.
 
@@ -487,10 +491,10 @@ def preprocess_wmt_data(dataset,
         drop_remainder=drop_remainder)
   else:  # simple (static-shape) padded batching
     dataset = dataset.padded_batch(
-      batch_size,
-      padded_shapes={'inputs': max_length, 'targets': max_length},
-      padding_values={'inputs': 0, 'targets': 0},
-      drop_remainder=drop_remainder)
+        batch_size,
+        padded_shapes={'inputs': max_length, 'targets': max_length},
+        padding_values={'inputs': 0, 'targets': 0},
+        drop_remainder=drop_remainder)
 
   if prefetch_size:
     dataset = dataset.prefetch(prefetch_size)
