@@ -19,65 +19,21 @@ The data is loaded using tensorflow_datasets.
 
 """
 
-from absl import app
-from absl import flags
 from absl import logging
-
-from flax import nn
-from flax import optim
-from flax.metrics import tensorboard
 
 import jax
 from jax import random
-
 import jax.numpy as jnp
 
 import numpy as onp
 
 import tensorflow_datasets as tfds
 
+from flax import nn
+from flax import optim
+from flax.metrics import tensorboard
 
-FLAGS = flags.FLAGS
-
-flags.DEFINE_float(
-    'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
-
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=10,
-    help=('Number of training epochs.'))
-
-flags.DEFINE_string(
-    'model_dir', default=None,
-    help=('Directory to store model data.'))
-
-
-
-class CNN(nn.Module):
-  """A simple CNN model."""
-
-  def apply(self, x):
-    x = nn.Conv(x, features=32, kernel_size=(3, 3))
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = nn.Conv(x, features=64, kernel_size=(3, 3))
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = x.reshape((x.shape[0], -1))  # flatten
-    x = nn.Dense(x, features=256)
-    x = nn.relu(x)
-    x = nn.Dense(x, features=10)
-    x = nn.log_softmax(x)
-    return x
-
+from model import CNN
 
 def create_model(key):
   _, initial_params = CNN.init_by_shape(key, [((1, 28, 28, 1), jnp.float32)])
@@ -182,8 +138,6 @@ def train(train_ds, test_ds):
   num_epochs = FLAGS.num_epochs
   model_dir = FLAGS.model_dir
 
-  summary_writer = tensorboard.SummaryWriter(model_dir)
-
   model = create_model(rng)
   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
 
@@ -206,7 +160,3 @@ def train(train_ds, test_ds):
 def main(_):
   train_ds, test_ds = get_datasets()
   train(train_ds, test_ds)
-
-
-if __name__ == '__main__':
-  app.run(main)
