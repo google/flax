@@ -47,7 +47,8 @@ flags.DEFINE_string(
     help=('Directory to store model data.'))
 
 def main(_):
-  train_and_evaluate(model_dir=FLAGS.model_dir, batch_size=FLAGS.batch_size,
+  train_and_evaluate(
+      model_dir=FLAGS.model_dir, batch_size=FLAGS.batch_size,
       num_epochs=FLAGS.num_epochs, learning_rate=FLAGS.learning_rate,
       momentum=FLAGS.momentum)
 
