@@ -214,15 +214,13 @@ def load_split(batch_size, train, dtype=tf.float32, image_size=IMAGE_SIZE, cache
   if cache:
     ds = ds.cache()
 
+  ds = ds.repeat()
+
   if train:
-    ds = ds.repeat()
     ds = ds.shuffle(16 * batch_size, seed=0)
 
   ds = ds.map(decode_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   ds = ds.batch(batch_size, drop_remainder=True)
-
-  if not train:
-    ds = ds.repeat()
 
   ds = ds.prefetch(10)
 
