@@ -60,7 +60,6 @@ flags.DEFINE_string(
     help=('Directory to store model data.'))
 
 
-
 class CNN(nn.Module):
   """A simple CNN model."""
 
@@ -135,7 +134,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
 
-  perms = rng.permutation(len(train_ds['image']))
+  perms = random.permutation(rng, len(train_ds['image']))
   perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
   perms = perms.reshape((steps_per_epoch, batch_size))
   batch_metrics = []
@@ -184,12 +183,12 @@ def train(train_ds, test_ds):
 
   summary_writer = tensorboard.SummaryWriter(model_dir)
 
-  model = create_model(rng)
+  rng, init_rng = random.split(rng)
+  model = create_model(init_rng)
   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
 
-  input_rng = onp.random.RandomState(0)
-
   for epoch in range(1, num_epochs + 1):
+    rng, input_rng = random.split(rng)
     optimizer, train_metrics = train_epoch(
         optimizer, train_ds, batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)

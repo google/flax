@@ -147,7 +147,7 @@ class TensorboardTest(absltest.TestCase):
     self.assertEqual(summary_value.tag, 'audio_test')
 
     # Assert two audio files are parsed.
-    self.assertLen(summary_value.tensor.string_val, 4)
+    self.assertLen(summary_value.tensor.string_val, 2)
 
     # Assert values.
     actual_audio_1 = tf.audio.decode_wav(
@@ -156,7 +156,7 @@ class TensorboardTest(absltest.TestCase):
         expected_audio_samples[0], actual_audio_1, atol=1e-04))
 
     actual_audio_2 = tf.audio.decode_wav(
-        summary_value.tensor.string_val[2]).audio
+        summary_value.tensor.string_val[1]).audio
     self.assertTrue(onp.allclose(
         expected_audio_samples[1], actual_audio_2, atol=1e-04))
 
@@ -173,7 +173,7 @@ class TensorboardTest(absltest.TestCase):
     self.assertEqual(summary_value.tag, 'audio_test')
 
     # Assert only the first audio clip is available.
-    self.assertLen(summary_value.tensor.string_val, 2)
+    self.assertLen(summary_value.tensor.string_val, 1)
 
     # Assert values.
     actual_audio = tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
@@ -194,7 +194,7 @@ class TensorboardTest(absltest.TestCase):
     self.assertEqual(summary_value.tag, 'audio_test')
 
     # Assert one audio files is parsed.
-    self.assertLen(summary_value.tensor.string_val, 2)
+    self.assertLen(summary_value.tensor.string_val, 1)
 
     # actual_audio is clipped.
     actual_audio = tf.audio.decode_wav(

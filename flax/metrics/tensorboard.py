@@ -144,3 +144,22 @@ class SummaryWriter(object):
       raise ValueError('`textdata` should be of the type `str` or `bytes`.')
     with self._event_writer.as_default():
       tf.summary.text(name=tag, data=tf.constant(textdata), step=step)
+
+  def write(self, tag, tensor, step, metadata=None):
+    """Saves a arbitrary tensor summary.
+
+    Useful when working with custom plugins or constructing a summary directly.
+
+    Args:
+      tag: str: label for this data
+      tensor: ndarray: tensor data to save.
+      step: int: training step
+      metadata: Optional SummaryMetadata, as a proto or serialized bytes.
+    Note: markdown formatting is rendered by tensorboard.
+    """
+    with self._event_writer.as_default():
+      tf.summary.write(
+          tag=tag,
+          tensor=tensor,
+          step=step,
+          metadata=metadata)
