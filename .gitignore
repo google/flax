@@ -7,3 +7,4 @@ docs/_build
 dist/
 build/
 *.egg-info
+*.rej

@@ -1,0 +1,16 @@
+diff --git a/examples/mnist/train.py b/examples/mnist/train.py
+index 9c21985..ddc2eb4 100644
+--- a/examples/mnist/train.py
++++ b/examples/mnist/train.py
+@@ -85,8 +85,10 @@ def create_model(key):
+ 
+ 
+ def create_optimizer(model, learning_rate, beta):
++  # Only train Dense layers
+   optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
+-  optimizer = optimizer_def.create(model)
++  dense_traversal = optim.ModelParamTraversal(lambda path, param:'Dense' in path)
++  optimizer = optimizer_def.create(model, dense_traversal)
+   return optimizer
+ 
+ 
