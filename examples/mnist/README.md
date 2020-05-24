@@ -14,4 +14,4 @@ I0413 01:38:51.978743 4484091328 train.py:189] eval epoch: 10, loss: 0.0313, acc
 
 ### How to run
 
-`python train.py`
+`python train.py --model_dir=/tmp/mnist`

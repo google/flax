@@ -1,0 +1,84 @@
+diff --git a/examples/mnist/train.py b/examples/mnist/train.py
+index 5dc74db..12ee2b5 100644
+--- a/examples/mnist/train.py
++++ b/examples/mnist/train.py
+@@ -60,25 +60,39 @@ flags.DEFINE_string(
+     help=('Directory to store model data.'))
+ 
+ 
++# Global dict for storing layer output shapes
++LAYER_OUTPUT_SHAPES = {}
++
+ 
+ class CNN(nn.Module):
+   """A simple CNN model."""
+ 
+   def apply(self, x):
+-    x = nn.Conv(x, features=32, kernel_size=(3, 3))
++    x = capture_shapes(nn.Conv)(x, features=32, kernel_size=(3, 3))
+     x = nn.relu(x)
+     x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+-    x = nn.Conv(x, features=64, kernel_size=(3, 3))
++    x = capture_shapes(nn.Conv)(x, features=64, kernel_size=(3, 3))
+     x = nn.relu(x)
+     x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+     x = x.reshape((x.shape[0], -1))  # flatten
+-    x = nn.Dense(x, features=256)
++    x = capture_shapes(nn.Dense)(x, features=256)
+     x = nn.relu(x)
+-    x = nn.Dense(x, features=10)
++    x = capture_shapes(nn.Dense)(x, features=10)
+     x = nn.log_softmax(x)
+     return x
+ 
+ 
++def capture_shapes(module):
++  """Capture the shapes of the layer outputs"""
++  layer_idx = "{}_{}".format(module.__name__, len(LAYER_OUTPUT_SHAPES))
++  class CaptureModule(nn.Module):
++    def apply(*args, **kwargs):
++      x = module.apply(*args, **kwargs)
++      LAYER_OUTPUT_SHAPES[layer_idx] = onp.shape(x)
++      return x
++  return CaptureModule
++
++
+ def create_model(key):
+   _, initial_params = CNN.init_by_shape(key, [((1, 28, 28, 1), jnp.float32)])
+   model = nn.Model(CNN, initial_params)
+@@ -185,6 +199,9 @@ def train(train_ds, test_ds):
+   summary_writer = tensorboard.SummaryWriter(model_dir)
+ 
+   model = create_model(rng)
++
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
++  logging.info('layer output shapes', LAYER_OUTPUT_SHAPES)
+=======
++  # Save layer states (inputs / outputs)
+=======
+>>>>>>> 757dcbb... added 'enable_layer_states' argument
++  image = onp.random.rand(1,28,28,1)
++  with nn.stateful() as layer_states:
++    y = model(image)
++
++  # Access layer states
++  states_dict = layer_states.as_dict()
++  for layer in states_dict.keys():
++    logging.info(layer)
++    logging.info('inputs: ' + str(onp.shape(states_dict[layer]['input'])))
++    logging.info('outputs: ' + str(onp.shape(states_dict[layer]['output'])))
+<<<<<<< HEAD
+>>>>>>> 44a8a51... added intermediate-layer-state howto and linear module state suggestion
++
+=======
++  
+>>>>>>> 757dcbb... added 'enable_layer_states' argument
+=======
++  logging.info('layer output shapes', LAYER_OUTPUT_SHAPES)
++
+>>>>>>> 1d5fb54... using nn.Module to capture the layer output shapes
+   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+ 
+   input_rng = onp.random.RandomState(0)
