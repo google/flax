@@ -29,6 +29,7 @@ import jax.numpy as jnp
 
 import mnist_lib
 
+
 class MnistLibTest(absltest.TestCase):
   """Test cases for Mnist."""
 
@@ -68,6 +69,7 @@ class MnistLibTest(absltest.TestCase):
           model_dir=model_dir, batch_size=8, num_epochs=1,
           learning_rate=0.1, momentum=0.9)
     logging.info('workdir content: %s', tf.io.gfile.listdir(model_dir))
+
 
 if __name__ == '__main__':
   absltest.main()
