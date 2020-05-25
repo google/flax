@@ -59,6 +59,7 @@ flags.DEFINE_string(
     'model_dir', default=None,
     help=('Directory to store model data.'))
 
+flags.mark_flags_as_required(['model_dir'])
 
 
 class CNN(nn.Module):
