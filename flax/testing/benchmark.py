@@ -76,7 +76,7 @@ def _process_event(event):
              event.step, tensor_util.make_ndarray(value.tensor).item())
 
 
-def _get_tensorboard_scalars(path):
+def get_tensorboard_scalars(path):
   """Read and parse scalar TensorBoard summaries.
 
   Args:

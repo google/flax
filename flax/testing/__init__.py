@@ -30,4 +30,4 @@
 
 """Flax testing utilities."""
 
-from .benchmark import Benchmark
+from .benchmark import Benchmark, get_tensorboard_scalars
