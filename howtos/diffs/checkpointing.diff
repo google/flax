@@ -1,12 +1,12 @@
 diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 5dc74db..4e9d12b 100644
+index 5dc74db..975e50f 100644
 --- a/examples/mnist/train.py
 +++ b/examples/mnist/train.py
 @@ -26,6 +26,7 @@ from absl import logging
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
-+from flax import checkpoints
++from flax.training import checkpoints
  
  import jax
  from jax import random
