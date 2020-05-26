@@ -1,0 +1,33 @@
+diff --git a/examples/mnist/train.py b/examples/mnist/train.py
+index 5dc74db..975e50f 100644
+--- a/examples/mnist/train.py
++++ b/examples/mnist/train.py
+@@ -26,6 +26,7 @@ from absl import logging
+ from flax import nn
+ from flax import optim
+ from flax.metrics import tensorboard
++from flax.training import checkpoints
+ 
+ import jax
+ from jax import random
+@@ -187,6 +188,9 @@ def train(train_ds, test_ds):
+   model = create_model(rng)
+   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+ 
++  # Restore saved model
++  optimizer = checkpoints.restore_checkpoint(FLAGS.model_dir, optimizer)
++
+   input_rng = onp.random.RandomState(0)
+ 
+   for epoch in range(1, num_epochs + 1):
+@@ -199,6 +203,10 @@ def train(train_ds, test_ds):
+     summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
+     summary_writer.scalar('eval_loss', loss, epoch)
+     summary_writer.scalar('eval_accuracy', accuracy, epoch)
++    
++    # Save model at every epoch
++    checkpoints.save_checkpoint(FLAGS.model_dir, optimizer, epoch, keep=3)
++  
+   summary_writer.flush()
+   return optimizer
+ 
