@@ -24,6 +24,8 @@ from absl.testing import absltest
 import jax
 from jax import numpy as jnp
 
+import numpy as onp
+
 from tensorboard.backend.event_processing import directory_watcher
 from tensorboard.backend.event_processing import event_file_loader
 from tensorboard.util import tensor_util
@@ -89,10 +91,10 @@ class MnistLibTest(absltest.TestCase):
 
     # Since the values could change due to stochasticity in input processing
     # functions, model definition and dataset shuffling.
-    self.assertGreaterEqual(summary_values_dict['train_accuracy'], 0.0)
-    self.assertGreaterEqual(summary_values_dict['train_loss'], 2.452725)
-    self.assertGreaterEqual(summary_values_dict['eval_accuracy'], 0.25)
-    self.assertGreaterEqual(summary_values_dict['eval_loss'], 1.908085)
+    self.assertTrue(onp.allclose(summary_values_dict['train_accuracy'], 0.0))
+    self.assertTrue(onp.allclose(summary_values_dict['train_loss'], 2.452725))
+    self.assertTrue(onp.allclose(summary_values_dict['eval_accuracy'], 0.25))
+    self.assertTrue(onp.allclose(summary_values_dict['eval_loss'], 1.908085))
 
 
 if __name__ == '__main__':
