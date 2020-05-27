@@ -150,8 +150,8 @@ def model_summary(model):
   for i in range(len(param_names)):
     summary_str += "{:<20} {:>15} {:>10} {:>10}\n".format(param_names[i],
       str(param_info[i].shape), param_info[i].number, str(param_info[i].type))
-    total_params += param_info[i][1]
-    total_size += param_info[i][3]
+    total_params += param_info[i].number
+    total_size += param_info[i].size
 
   summary_str += "==========================================================\n"
   summary_str += "Total Parameters: {:,d}\n".format(total_params)
