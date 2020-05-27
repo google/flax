@@ -14,18 +14,11 @@
 
 """MNIST example.
 
-This script trains a simple Convolutional Neural Net on the MNIST dataset.
+Library file which executes the training and evaluation loop for MNIST.
 The data is loaded using tensorflow_datasets.
-
 """
 
-from absl import app
-from absl import flags
 from absl import logging
-
-from flax import nn
-from flax import optim
-from flax.metrics import tensorboard
 
 import jax
 from jax import random
@@ -36,34 +29,15 @@ import numpy as onp
 
 import tensorflow_datasets as tfds
 
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_float(
-    'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
-
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=10,
-    help=('Number of training epochs.'))
-
-flags.DEFINE_string(
-    'model_dir', default=None,
-    help=('Directory to store model data.'))
-
+from flax import nn
+from flax import optim
+from flax.metrics import tensorboard
 
 
 class CNN(nn.Module):
   """A simple CNN model."""
 
+  # pylint: disable=arguments-differ
   def apply(self, x):
     x = nn.Conv(x, features=32, kernel_size=(3, 3))
     x = nn.relu(x)
@@ -79,29 +53,29 @@ class CNN(nn.Module):
     return x
 
 
-def create_model(key):
+def _create_model(key):
   _, initial_params = CNN.init_by_shape(key, [((1, 28, 28, 1), jnp.float32)])
   model = nn.Model(CNN, initial_params)
   return model
 
 
-def create_optimizer(model, learning_rate, beta):
+def _create_optimizer(model, learning_rate, beta):
   optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
   optimizer = optimizer_def.create(model)
   return optimizer
 
 
-def onehot(labels, num_classes=10):
+def _onehot(labels, num_classes=10):
   x = (labels[..., None] == jnp.arange(num_classes)[None])
   return x.astype(jnp.float32)
 
 
-def cross_entropy_loss(logits, labels):
-  return -jnp.mean(jnp.sum(onehot(labels) * logits, axis=-1))
+def _cross_entropy_loss(logits, labels):
+  return -jnp.mean(jnp.sum(_onehot(labels) * logits, axis=-1))
 
 
-def compute_metrics(logits, labels):
-  loss = cross_entropy_loss(logits, labels)
+def _compute_metrics(logits, labels):
+  loss = _cross_entropy_loss(logits, labels)
   accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
   metrics = {
       'loss': loss,
@@ -111,26 +85,26 @@ def compute_metrics(logits, labels):
 
 
 @jax.jit
-def train_step(optimizer, batch):
+def _train_step(optimizer, batch):
   """Train for a single step."""
   def loss_fn(model):
     logits = model(batch['image'])
-    loss = cross_entropy_loss(logits, batch['label'])
+    loss = _cross_entropy_loss(logits, batch['label'])
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
-  metrics = compute_metrics(logits, batch['label'])
+  metrics = _compute_metrics(logits, batch['label'])
   return optimizer, metrics
 
 
 @jax.jit
-def eval_step(model, batch):
+def _eval_step(model, batch):
   logits = model(batch['image'])
-  return compute_metrics(logits, batch['label'])
+  return _compute_metrics(logits, batch['label'])
 
 
-def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+def _train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   """Train for a single epoch."""
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
@@ -141,7 +115,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   batch_metrics = []
   for perm in perms:
     batch = {k: v[perm] for k, v in train_ds.items()}
-    optimizer, metrics = train_step(optimizer, batch)
+    optimizer, metrics = _train_step(optimizer, batch)
     batch_metrics.append(metrics)
 
   # compute mean of metrics across each batch in epoch.
@@ -156,14 +130,14 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   return optimizer, epoch_metrics_np
 
 
-def eval_model(model, test_ds):
-  metrics = eval_step(model, test_ds)
+def _eval_model(model, test_ds):
+  metrics = _eval_step(model, test_ds)
   metrics = jax.device_get(metrics)
   summary = jax.tree_map(lambda x: x.item(), metrics)
   return summary['loss'], summary['accuracy']
 
 
-def get_datasets():
+def _get_datasets():
   """Load MNIST train and test datasets into memory."""
   ds_builder = tfds.builder('mnist')
   ds_builder.download_and_prepare()
@@ -174,39 +148,39 @@ def get_datasets():
   return train_ds, test_ds
 
 
-def train(train_ds, test_ds):
-  """Train MNIST to completion."""
-  rng = random.PRNGKey(0)
+def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+                       learning_rate: float, momentum: float):
+  """Execute model training and evaluation loop.
 
-  batch_size = FLAGS.batch_size
-  num_epochs = FLAGS.num_epochs
-  model_dir = FLAGS.model_dir
+  Args:
+    model_dir: Directory where the tensorboard summaries are written to.
+    num_epochs: Number of epochs to cycle through the dataset before stopping.
+    batch_size: Batch size of the input.
+    learning_rate: Learning rate for the momentum optimizer.
+    momentum: Momentum value for the momentum optimizer.
+"""
+  train_ds, test_ds = _get_datasets()
+  rng = random.PRNGKey(0)
 
   summary_writer = tensorboard.SummaryWriter(model_dir)
 
-  model = create_model(rng)
-  optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+  model = _create_model(rng)
+  optimizer = _create_optimizer(model, learning_rate, momentum)
 
   input_rng = onp.random.RandomState(0)
 
   for epoch in range(1, num_epochs + 1):
-    optimizer, train_metrics = train_epoch(
+    optimizer, train_metrics = _train_epoch(
         optimizer, train_ds, batch_size, epoch, input_rng)
-    loss, accuracy = eval_model(optimizer.target, test_ds)
+    loss, accuracy = _eval_model(optimizer.target, test_ds)
+
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                  epoch, loss, accuracy * 100)
+
     summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
     summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
     summary_writer.scalar('eval_loss', loss, epoch)
     summary_writer.scalar('eval_accuracy', accuracy, epoch)
+
   summary_writer.flush()
   return optimizer
-
-
-def main(_):
-  train_ds, test_ds = get_datasets()
-  train(train_ds, test_ds)
-
-
-if __name__ == '__main__':
-  app.run(main)

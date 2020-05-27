@@ -24,7 +24,7 @@ import jax
 import numpy as np
 from flax.testing import Benchmark
 
-import train
+import mnist_lib
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -41,10 +41,11 @@ class MnistBenchmark(Benchmark):
   def test_cpu(self):
     """Run full training for MNIST CPU training."""
     model_dir = tempfile.mkdtemp()
-    FLAGS.model_dir = model_dir
 
     start_time = time.time()
-    train.main([])
+    mnist_lib.train_and_evaluate(
+        model_dir=model_dir, num_epochs=10, batch_size=128,
+        learning_rate=0.1, momentum=0.9)
     benchmark_time = time.time() - start_time
     summaries = self.read_summaries(model_dir)
 
