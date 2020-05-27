@@ -17,6 +17,8 @@
 
 import jax
 
+import numpy as np
+
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 
@@ -27,12 +29,13 @@ MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
 STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
 
 
-def distorted_bounding_box_crop(image_bytes,
-                                bbox,
-                                min_object_covered=0.1,
-                                aspect_ratio_range=(0.75, 1.33),
-                                area_range=(0.05, 1.0),
-                                max_attempts=100):
+def _distorted_bounding_box_crop(image_bytes,
+                                 bbox,
+                                 min_object_covered=0.1,
+                                 aspect_ratio_range=(0.75, 1.33),
+                                 area_range=(0.05, 1.0),
+                                 max_attempts=100,
+                                 rng=None):
   """Generates cropped_image using one of the bboxes randomly distorted.
 
   See `tf.image.sample_distorted_bounding_box` for more documentation.
@@ -53,13 +56,21 @@ def distorted_bounding_box_crop(image_bytes,
     max_attempts: An optional `int`. Number of attempts at generating a cropped
         region of the image of the specified constraints. After `max_attempts`
         failures, return the entire image.
+    rng: RNG used for generating seeds for reproducibility of
+        sample_distorted_bounding_box.
   Returns:
     cropped image `Tensor`
   """
-  shape = tf.shape(image_bytes)
+  shape = tf.io.extract_jpeg_shape(image_bytes)
+  if rng is not None:
+    rng, seed = jax.random.split(rng, 2)
+  else:
+    seed = [None, None]
+
   sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(
       shape,
       bounding_boxes=bbox,
+      seed=seed[0],
       min_object_covered=min_object_covered,
       aspect_ratio_range=aspect_ratio_range,
       area_range=area_range,
@@ -70,8 +81,8 @@ def distorted_bounding_box_crop(image_bytes,
   # Crop the image to the specified bounding box.
   offset_y, offset_x, _ = tf.unstack(bbox_begin)
   target_height, target_width, _ = tf.unstack(bbox_size)
-  image = tf.image.crop_to_bounding_box(
-      image_bytes, offset_y, offset_x, target_height, target_width)
+  crop_window = tf.stack([offset_y, offset_x, target_height, target_width])
+  image = tf.io.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
 
   return image
 
@@ -88,17 +99,18 @@ def _at_least_x_are_equal(a, b, x):
   return tf.greater_equal(tf.reduce_sum(match), x)
 
 
-def _decode_and_random_crop(image_bytes, image_size):
+def _decode_and_random_crop(image_bytes, image_size, rng=None):
   """Make a random crop of image_size."""
   bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
-  image = distorted_bounding_box_crop(
+  image = _distorted_bounding_box_crop(
       image_bytes,
       bbox,
       min_object_covered=0.1,
       aspect_ratio_range=(3. / 4, 4. / 3.),
       area_range=(0.08, 1.0),
-      max_attempts=10)
-  original_shape = tf.shape(image_bytes)
+      max_attempts=10,
+      rng=rng)
+  original_shape = tf.io.extract_jpeg_shape(image_bytes)
   bad = _at_least_x_are_equal(original_shape, tf.shape(image), 3)
 
   image = tf.cond(
@@ -111,7 +123,7 @@ def _decode_and_random_crop(image_bytes, image_size):
 
 def _decode_and_center_crop(image_bytes, image_size):
   """Crops to center of image with padding then scales image_size."""
-  shape = tf.shape(image_bytes)
+  shape = tf.io.extract_jpeg_shape(image_bytes)
   image_height = shape[0]
   image_width = shape[1]
 
@@ -122,40 +134,48 @@ def _decode_and_center_crop(image_bytes, image_size):
 
   offset_height = ((image_height - padded_center_crop_size) + 1) // 2
   offset_width = ((image_width - padded_center_crop_size) + 1) // 2
-  image = tf.image.crop_to_bounding_box(
-      image_bytes, offset_height, offset_width, padded_center_crop_size,
-      padded_center_crop_size)
+  crop_window = tf.stack([offset_height, offset_width, padded_center_crop_size,
+                          padded_center_crop_size])
+  image = tf.io.decode_and_crop_jpeg(image_bytes, crop_window)
   image = _resize(image, image_size)
 
   return image
 
 
-def normalize_image(image):
+def _normalize_image(image):
   image -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=image.dtype)
   image /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=image.dtype)
   return image
 
 
-def preprocess_for_train(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
+def _preprocess_for_train(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE,
+                          rng=None):
   """Preprocesses the given image for training.
 
   Args:
     image_bytes: `Tensor` representing an image binary of arbitrary size.
     dtype: data type of the image.
     image_size: image size.
+    rng: RNG used for generating seeds for reproducibility of preprocessing OPs.
 
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = _decode_and_random_crop(image_bytes, image_size)
+  image = _decode_and_random_crop(image_bytes, image_size, rng=rng)
   image = tf.reshape(image, [image_size, image_size, 3])
-  image = tf.image.random_flip_left_right(image)
-  image = normalize_image(image)
+
+  if rng is not None:
+    rng, seed = jax.random.split(rng, 2)
+  else:
+    seed = [None, None]
+
+  image = tf.image.random_flip_left_right(image, seed=seed[0])
+  image = _normalize_image(image)
   image = tf.image.convert_image_dtype(image, dtype=dtype)
   return image
 
 
-def preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
+def _preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   """Preprocesses the given image for evaluation.
 
   Args:
@@ -168,25 +188,35 @@ def preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   """
   image = _decode_and_center_crop(image_bytes, image_size)
   image = tf.reshape(image, [image_size, image_size, 3])
-  image = normalize_image(image)
+  image = _normalize_image(image)
   image = tf.image.convert_image_dtype(image, dtype=dtype)
   return image
 
 
-def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
-                 image_size=IMAGE_SIZE, cache=False):
+def create_split(dataset_builder: tfds.core.DatasetBuilder, batch_size: int,
+                 train: bool, dtype: tf.DType = tf.float32,
+                 image_size: int = IMAGE_SIZE, cache: bool = False,
+                 rng: np.ndarray = None):
   """Creates a split from the ImageNet dataset using TensorFlow Datasets.
 
   Args:
     dataset_builder: TFDS dataset builder for ImageNet.
     batch_size: the batch size returned by the data pipeline.
     train: Whether to load the train or evaluation split.
-    dtype: data type of the image.
-    image_size: The target size of the images.
-    cache: Whether to cache the dataset.
+    dtype: data type of the image (default: float32).
+    image_size: The target size of the images (default: 224).
+    cache: Whether to cache the dataset (default: False).
+    rng: RNG key to use for seeding shuffle operations and preprocessing ops.
   Returns:
     A `tf.data.Dataset`.
   """
+  # Split given rng for tf.data.Dataset shuffle and generating seeds for
+  # preprocessing ops.
+  if rng is None:
+    rngs = 2 * [[None, None]]
+  else:
+    rngs = list(jax.random.split(rng, 2))
+
   if train:
     train_size = dataset_builder.info.splits['train'].num_examples
     split_size = train_size // jax.host_count()
@@ -198,16 +228,21 @@ def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
     start = jax.host_id() * split_size
     split = 'validation[{}:{}]'.format(start, start + split_size)
 
-  def decode_example(example):
+  preprocessing_rng = rngs.pop()
+  def _decode_example(example):
     if train:
-      image = preprocess_for_train(example['image'], dtype, image_size)
+      image = _preprocess_for_train(example['image'], dtype, image_size,
+                                    preprocessing_rng)
     else:
-      image = preprocess_for_eval(example['image'], dtype, image_size)
+      image = _preprocess_for_eval(example['image'], dtype, image_size)
     return {'image': image, 'label': example['label']}
 
-  ds = dataset_builder.as_dataset(split=split, decoders={
-      'image': tfds.decode.SkipDecoding()
-  })
+  ds = dataset_builder.as_dataset(
+      split=split,
+      decoders={
+          'image': tfds.decode.SkipDecoding()
+      }
+  )
   ds.options().experimental_threading.private_threadpool_size = 48
   ds.options().experimental_threading.max_intra_op_parallelism = 1
 
@@ -216,9 +251,11 @@ def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
 
   if train:
     ds = ds.repeat()
-    ds = ds.shuffle(16 * batch_size, seed=0)
+    ds = ds.shuffle(16 * batch_size, seed=rngs.pop()[0])
 
-  ds = ds.map(decode_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+  ds = ds.map(
+      _decode_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
   ds = ds.batch(batch_size, drop_remainder=True)
 
   if not train:

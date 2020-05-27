@@ -34,6 +34,8 @@ def _process_event(event):
 
 class TensorboardTest(absltest.TestCase):
 
+  # TODO(mohitreddy): Refactor logic in testing/benchmark.py to create a 
+  # utility class for parsing event files and extracting scalar summaries.
   def parse_and_return_summary_value(self, path):
     """Parse the event file in the given path and return the
     only summary value."""

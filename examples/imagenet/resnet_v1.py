@@ -13,18 +13,17 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Flax implementation of ResNet V1.
-"""
-
-
-from flax import nn
+"""Flax implementation of ResNet V1."""
 
 import jax.numpy as jnp
 
+from flax import nn
 
-class ResidualBlock(nn.Module):
+
+class _ResidualBlock(nn.Module):
   """Bottleneck ResNet block."""
 
+  # pylint: disable=arguments-differ
   def apply(self, x, filters, strides=(1, 1), train=True, dtype=jnp.float32):
     needs_projection = x.shape[-1] != filters * 4 or strides != (1, 1)
     batch_norm = nn.BatchNorm.partial(use_running_average=not train,
@@ -51,10 +50,25 @@ class ResidualBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-  """ResNetV1."""
+  """ResNet V1."""
 
-  def apply(self, x, num_classes, num_filters=64, num_layers=50,
-            train=True, dtype=jnp.float32):
+  # pylint: disable=arguments-differ
+  def apply(self, x, num_classes: int, num_filters: int = 64,
+            num_layers: int = 50, train: bool = True,
+            dtype: jnp.dtype = jnp.float32):
+    """Constructs ResNet V1 with `num_classes` outputs.
+
+    Args:
+      x: Input.
+      num_classes: Number of classes in the output classification.
+        This denotes the number of nodes in the final output layer.
+      num_filters: Number of Convolution filters (default: 64).
+      num_layers: Number of layers in ResNet (default: 50).
+        This determines the number of blocks in each stage.
+      train: Signifies if the ResNet is being created for Training or Inference.
+        This determines if BatchNorm should use running average (default: True).
+      dtype: dtype of the computation (default: float32).
+    """
     if num_layers not in _block_size_options:
       raise ValueError('Please provide a valid number of layers')
     block_sizes = _block_size_options[num_layers]
@@ -72,10 +86,10 @@ class ResNet(nn.Module):
     for i, block_size in enumerate(block_sizes):
       for j in range(block_size):
         strides = (2, 2) if i > 0 and j == 0 else (1, 1)
-        x = ResidualBlock(x, num_filters * 2 ** i,
-                          strides=strides,
-                          train=train,
-                          dtype=dtype)
+        x = _ResidualBlock(x, num_filters * 2 ** i,
+                           strides=strides,
+                           train=train,
+                           dtype=dtype)
     x = jnp.mean(x, axis=(1, 2))
     x = nn.Dense(x, num_classes, dtype=dtype)
     x = jnp.asarray(x, jnp.float32)
@@ -83,7 +97,7 @@ class ResNet(nn.Module):
     return x
 
 
-# a dictionary mapping the number of layers in a resnet to the number of blocks
+# A dictionary mapping the number of layers in a resnet to the number of blocks
 # in each stage of the model.
 _block_size_options = {
     18: [2, 2, 2, 2],

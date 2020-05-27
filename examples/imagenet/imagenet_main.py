@@ -22,8 +22,6 @@ The data is loaded using tensorflow_datasets.
 from absl import app
 from absl import flags
 
-import tensorflow.compat.v2 as tf
-
 import imagenet_lib
 
 

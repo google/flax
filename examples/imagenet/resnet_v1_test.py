@@ -13,21 +13,23 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Tests for flax.examples.imagenet.resnet."""
+"""Tests for flax.examples.imagenet.resnet_v1."""
 
 from absl.testing import absltest
 
 import jax
 import jax.numpy as jnp
 
-import resnet
+from resnet_v1 import ResNet
 
 
-class ResNetTest(absltest.TestCase):
+class ResNetV1Test(absltest.TestCase):
+  """Test cases for ResNet V1 model."""
 
-  def test_resnet_module(self):
+  def test_resnet_v1_module(self):
+    """Tests ResNet V1 model definition."""
     rng = jax.random.PRNGKey(0)
-    model_def = resnet.ResNet.partial(num_classes=10)
+    model_def = ResNet.partial(num_classes=10)
     output, init_params = model_def.init_by_shape(
         rng, [((8, 224, 224, 3), jnp.float32)])
 
