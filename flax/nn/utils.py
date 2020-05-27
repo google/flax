@@ -95,3 +95,66 @@ def _level_of_value(xs):
       level = _trace_level(x._trace.master)
       max_level = max(level, max_level)
   return max_level
+
+
+def model_summary(model: nn.Model):
+  """Returns a summary of the model's parameters.
+
+  Args:
+    model: the nn.Model of the model.
+  Returns:
+    A string summarizing the model.
+  ----------------------------------------------------------
+  Parameters                     Shape     Number       Type
+  ==========================================================
+  BatchNorm_1/bias               (32,)         32    float32
+  BatchNorm_1/scale              (32,)         32    float32
+  Conv_0/bias                    (32,)         32    float32
+  Conv_0/kernel          (3, 3, 1, 32)        288    float32
+  Conv_2/bias                    (64,)         64    float32
+  Conv_2/kernel         (3, 3, 32, 64)      18432    float32
+  Dense_3/bias                  (256,)        256    float32
+  Dense_3/kernel           (3136, 256)     802816    float32
+  Dense_4/bias                   (10,)         10    float32
+  Dense_4/kernel             (256, 10)       2560    float32
+  ==========================================================
+  Total Parameters: 824522
+  Total Size (MB): 3.3
+  ----------------------------------------------------------
+
+  """ 
+  
+  # Get parameter names
+  param_names = []
+  for layer in model.params.keys():
+    for params in list(model.params[layer].keys()):
+      param_names.append("{}/{}".format(layer, params))
+
+  # Get parameter shapes, numbers, types, sizes
+  param_info = []
+  for params in jax.tree_flatten(model.params)[0]:
+    param_info.append((
+      onp.shape(params),
+      onp.prod(onp.shape(params)),
+      params.dtype,
+      params.dtype.itemsize * params.size / 1000000
+    ))
+
+  summary_str = "----------------------------------------------------------\n"
+  summary_str += "{:<20} {:>15} {:>10} {:>10}\n".format("Parameters", "Shape", "Number", "Type")
+  summary_str += "==========================================================\n"
+  
+  # Totals
+  total_params = total_size = 0
+  for i in range(len(param_names)):
+    summary_str += "{:<20} {:>15} {:>10} {:>10}\n".format(param_names[i],
+      str(param_info[i][0]), str(param_info[i][1]), str(param_info[i][2]))
+    total_params += param_info[i][1]
+    total_size += param_info[i][3]
+
+  summary_str += "==========================================================\n"
+  summary_str += f"Total Parameters: {total_params}\n"
+  summary_str += f"Total Size (MB): {round(total_size, 1)}\n"
+  summary_str += "----------------------------------------------------------\n"
+
+  return summary_str
