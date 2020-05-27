@@ -160,10 +160,10 @@ def _prepare_tf_data(xs):
 
 
 def _create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
-                       cache, rng=None):
+                       cache):
   ds = input_pipeline.create_split(
       dataset_builder, batch_size, image_size=image_size, dtype=dtype,
-      train=train, cache=cache, rng=rng)
+      train=train, cache=cache)
   it = map(_prepare_tf_data, ds)
   it = jax_utils.prefetch_to_device(it, 2)
   return it
@@ -252,11 +252,9 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
     input_dtype = tf.float32
 
   dataset_builder = tfds.builder('imagenet2012:5.*.*')
-  rng, data_rng = jax.random.split(rng)
-  data_rng = jax.random.fold_in(data_rng, jax.host_id())
   train_iter = _create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=True,
-      cache=cache, rng=data_rng)
+      cache=cache)
   eval_iter = _create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=False,
       cache=cache)
@@ -275,9 +273,8 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
 
   base_learning_rate = learning_rate * batch_size / 256.
 
-  rng, model_rng = jax.random.split(rng)
   model, model_state = _create_model(
-      model_rng, device_batch_size, image_size, model_dtype)
+      rng, device_batch_size, image_size, model_dtype)
   optimizer = optim.Momentum(beta=momentum, nesterov=True).create(model)
   state = _TrainState(step=0, optimizer=optimizer, model_state=model_state,
                       dynamic_scale=dynamic_scale)

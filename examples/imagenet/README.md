@@ -22,6 +22,3 @@ The model should run with other configurations and hardware, but explicitely tes
 
 #### 8 x Nvidia V100 (16GB), mixed precision
 `python imagenet_main.py --batch_size=2048 --cache=True --model_dir=./imagenet_fp16_bs2048 --half_precision=True --loss_scaling=256.`
-
-### Reproducibility
-TODO(mohitreddy): Explain random seeds and how, when and why are they split.

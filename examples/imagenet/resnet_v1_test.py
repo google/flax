@@ -34,6 +34,9 @@ class ResNetV1Test(absltest.TestCase):
         rng, [((8, 224, 224, 3), jnp.float32)])
 
     self.assertEqual((8, 10), output.shape)
+
+    # TODO(mohitreddy): Consider creating a testing module which
+    # gives a parameters overview including number of parameters.
     self.assertLen(init_params, 19)
 
 
