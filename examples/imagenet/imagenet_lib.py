@@ -15,8 +15,7 @@
 # Lint as: python3
 """ImageNet example.
 
-This script trains a ResNet-50 on the ImageNet dataset.
-The data is loaded using tensorflow_datasets.
+Library file containing logic for training and evaluation loops.
 """
 
 import functools
