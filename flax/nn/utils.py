@@ -18,7 +18,8 @@
 import contextlib
 import threading
 import jax
-
+import numpy as onp
+from collections import namedtuple
 
 class CallStack(object):
   """Utility for tracking data across a call stack."""
@@ -97,7 +98,7 @@ def _level_of_value(xs):
   return max_level
 
 
-def model_summary(model: nn.Model):
+def model_summary(model):
   """Returns a summary of the model's parameters.
 
   Args:
@@ -118,12 +119,12 @@ def model_summary(model: nn.Model):
   Dense_4/bias                   (10,)         10    float32
   Dense_4/kernel             (256, 10)       2560    float32
   ==========================================================
-  Total Parameters: 824522
-  Total Size (MB): 3.3
+  Total Parameters: 824,522
+  Total Size: 3.1 MB
   ----------------------------------------------------------
+  """
+  Parameters = namedtuple("Parameters", ["shape", "number", "type", "size"])
 
-  """ 
-  
   # Get parameter names
   param_names = []
   for layer in model.params.keys():
@@ -133,11 +134,11 @@ def model_summary(model: nn.Model):
   # Get parameter shapes, numbers, types, sizes
   param_info = []
   for params in jax.tree_flatten(model.params)[0]:
-    param_info.append((
+    param_info.append(Parameters(
       onp.shape(params),
       onp.prod(onp.shape(params)),
       params.dtype,
-      params.dtype.itemsize * params.size / 1000000
+      params.dtype.itemsize * params.size / 2**20
     ))
 
   summary_str = "----------------------------------------------------------\n"
@@ -148,13 +149,13 @@ def model_summary(model: nn.Model):
   total_params = total_size = 0
   for i in range(len(param_names)):
     summary_str += "{:<20} {:>15} {:>10} {:>10}\n".format(param_names[i],
-      str(param_info[i][0]), str(param_info[i][1]), str(param_info[i][2]))
+      str(param_info[i].shape), param_info[i].number, str(param_info[i].type))
     total_params += param_info[i][1]
     total_size += param_info[i][3]
 
   summary_str += "==========================================================\n"
-  summary_str += f"Total Parameters: {total_params}\n"
-  summary_str += f"Total Size (MB): {round(total_size, 1)}\n"
+  summary_str += "Total Parameters: {:,d}\n".format(total_params)
+  summary_str += "Total Size: {} MB\n".format(round(total_size, 1))
   summary_str += "----------------------------------------------------------\n"
 
   return summary_str
