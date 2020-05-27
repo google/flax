@@ -34,7 +34,7 @@ import tensorflow_datasets as tfds
 import mnist_lib
 
 
-# TODO(mohitreddy): Refactor logic in testing/benchmark.py to create a
+# TODO(#290): Refactor logic in testing/benchmark.py to create a
 # utility class for parsing event files and extracting scalar summaries.
 def _process_event(event):
   for value in event.summary.value:
