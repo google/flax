@@ -76,7 +76,7 @@ index 9c21985..fed5421 100644
          optimizer, train_ds, batch_size, epoch, input_rng)
 -    loss, accuracy = eval_model(optimizer.target, test_ds)
 +    model = jax_utils.unreplicate(optimizer.target)  # Fetch from 1st device
-+    loss_accuracy = eval_model(model, test_ds)
++    loss, accuracy = eval_model(model, test_ds)
      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                   epoch, loss, accuracy * 100)
      summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
