@@ -72,85 +72,85 @@ index 5dc74db..1136a3c 100644
      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                   epoch, loss, accuracy * 100)
 diff --git a/examples/mnist/train.py.rej b/examples/mnist/train.py.rej
-new file mode 100644
-index 0000000..89fff40
---- /dev/null
-+++ b/examples/mnist/train.py.rej
-@@ -0,0 +1,74 @@
-+diff a/examples/mnist/train.py b/examples/mnist/train.py	(rejected hunks)
-+@@ -84,6 +84,16 @@ def create_model(key):
-+   model = nn.Model(CNN, initial_params)
-+   return model
-+ 
-++def create_triangular_schedule(lr_min, lr_max, epochs):
-++  """Return fn from epoch to LR, linearly interpolating between `lr_min`->`lr_max`->`lr_min`."""
-++  top = epochs // 2
-++  def learning_rate_fn(epoch):
-++    if epoch < top:
-++      lr = lr_min + epoch/top * (lr_max - lr_min)
-++    else:
-++      lr = lr_max - ((epoch - top)/top) * (lr_max - lr_min)
-++    return lr
-++  return learning_rate_fn
-+ 
-+ def create_optimizer(model, learning_rate, beta):
-+   optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
-+@@ -111,7 +121,7 @@ def compute_metrics(logits, labels):
-+ 
-+ 
-+ @jax.jit
-+-def train_step(optimizer, batch):
-++def train_step(optimizer, batch, lr):
-+   """Train for a single step."""
-+   def loss_fn(model):
-+     logits = model(batch['image'])
-+@@ -119,7 +129,7 @@ def train_step(optimizer, batch):
-+     return loss, logits
-+   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-+   (_, logits), grad = grad_fn(optimizer.target)
-+-  optimizer = optimizer.apply_gradient(grad)
-++  optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
-+   metrics = compute_metrics(logits, batch['label'])
-+   return optimizer, metrics
-+ 
-+@@ -130,18 +140,19 @@ def eval_step(model, batch):
-+   return compute_metrics(logits, batch['label'])
-+ 
-+ 
-+-def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
-++def train_epoch(optimizer, train_ds, batch_size, epoch, rng, learning_rate_fn):
-+   """Train for a single epoch."""
-+   train_ds_size = len(train_ds['image'])
-+   steps_per_epoch = train_ds_size // batch_size
-+-
-++  lr = learning_rate_fn(epoch)
-++  
-+   perms = rng.permutation(len(train_ds['image']))
-+   perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
-+   perms = perms.reshape((steps_per_epoch, batch_size))
-+   batch_metrics = []
-+   for perm in perms:
-+     batch = {k: v[perm] for k, v in train_ds.items()}
-+-    optimizer, metrics = train_step(optimizer, batch)
-++    optimizer, metrics = train_step(optimizer, batch, lr)
-+     batch_metrics.append(metrics)
-+ 
-+   # compute mean of metrics across each batch in epoch.
-+@@ -186,12 +197,13 @@ def train(train_ds, test_ds):
-+ 
-+   model = create_model(rng)
-+   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
-++  learning_rate_fn = create_triangular_schedule(FLAGS.learning_rate, 2.*FLAGS.learning_rate, num_epochs)
-+ 
-+   input_rng = onp.random.RandomState(0)
-+ 
-+   for epoch in range(1, num_epochs + 1):
-+     optimizer, train_metrics = train_epoch(
-+-        optimizer, train_ds, batch_size, epoch, input_rng)
-++        optimizer, train_ds, batch_size, epoch, input_rng, learning_rate_fn)
-+     loss, accuracy = eval_model(optimizer.target, test_ds)
-+     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
-+                  epoch, loss, accuracy * 100)
+deleted file mode 100644
+index 89fff40..0000000
+--- a/examples/mnist/train.py.rej
++++ /dev/null
+@@ -1,74 +0,0 @@
+-diff a/examples/mnist/train.py b/examples/mnist/train.py	(rejected hunks)
+-@@ -84,6 +84,16 @@ def create_model(key):
+-   model = nn.Model(CNN, initial_params)
+-   return model
+- 
+-+def create_triangular_schedule(lr_min, lr_max, epochs):
+-+  """Return fn from epoch to LR, linearly interpolating between `lr_min`->`lr_max`->`lr_min`."""
+-+  top = epochs // 2
+-+  def learning_rate_fn(epoch):
+-+    if epoch < top:
+-+      lr = lr_min + epoch/top * (lr_max - lr_min)
+-+    else:
+-+      lr = lr_max - ((epoch - top)/top) * (lr_max - lr_min)
+-+    return lr
+-+  return learning_rate_fn
+- 
+- def create_optimizer(model, learning_rate, beta):
+-   optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
+-@@ -111,7 +121,7 @@ def compute_metrics(logits, labels):
+- 
+- 
+- @jax.jit
+--def train_step(optimizer, batch):
+-+def train_step(optimizer, batch, lr):
+-   """Train for a single step."""
+-   def loss_fn(model):
+-     logits = model(batch['image'])
+-@@ -119,7 +129,7 @@ def train_step(optimizer, batch):
+-     return loss, logits
+-   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+-   (_, logits), grad = grad_fn(optimizer.target)
+--  optimizer = optimizer.apply_gradient(grad)
+-+  optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+-   metrics = compute_metrics(logits, batch['label'])
+-   return optimizer, metrics
+- 
+-@@ -130,18 +140,19 @@ def eval_step(model, batch):
+-   return compute_metrics(logits, batch['label'])
+- 
+- 
+--def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+-+def train_epoch(optimizer, train_ds, batch_size, epoch, rng, learning_rate_fn):
+-   """Train for a single epoch."""
+-   train_ds_size = len(train_ds['image'])
+-   steps_per_epoch = train_ds_size // batch_size
+--
+-+  lr = learning_rate_fn(epoch)
+-+  
+-   perms = rng.permutation(len(train_ds['image']))
+-   perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+-   perms = perms.reshape((steps_per_epoch, batch_size))
+-   batch_metrics = []
+-   for perm in perms:
+-     batch = {k: v[perm] for k, v in train_ds.items()}
+--    optimizer, metrics = train_step(optimizer, batch)
+-+    optimizer, metrics = train_step(optimizer, batch, lr)
+-     batch_metrics.append(metrics)
+- 
+-   # compute mean of metrics across each batch in epoch.
+-@@ -186,12 +197,13 @@ def train(train_ds, test_ds):
+- 
+-   model = create_model(rng)
+-   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+-+  learning_rate_fn = create_triangular_schedule(FLAGS.learning_rate, 2.*FLAGS.learning_rate, num_epochs)
+- 
+-   input_rng = onp.random.RandomState(0)
+- 
+-   for epoch in range(1, num_epochs + 1):
+-     optimizer, train_metrics = train_epoch(
+--        optimizer, train_ds, batch_size, epoch, input_rng)
+-+        optimizer, train_ds, batch_size, epoch, input_rng, learning_rate_fn)
+-     loss, accuracy = eval_model(optimizer.target, test_ds)
+-     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
+-                  epoch, loss, accuracy * 100)
 diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
 index 429bda4..50aa657 100644
 --- a/examples/mnist/train_test.py
@@ -165,18 +165,18 @@ index 429bda4..50aa657 100644
      self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
  
 diff --git a/examples/mnist/train_test.py.rej b/examples/mnist/train_test.py.rej
-new file mode 100644
-index 0000000..50c2e9a
---- /dev/null
-+++ b/examples/mnist/train_test.py.rej
-@@ -0,0 +1,10 @@
-+diff a/examples/mnist/train_test.py b/examples/mnist/train_test.py	(rejected hunks)
-+@@ -36,7 +36,7 @@ class TrainTest(absltest.TestCase):
-+     # test single train step.
-+     optimizer, train_metrics = train.train_step(
-+         optimizer=optimizer,
-+-        batch={k: v[:batch_size] for k, v in train_ds.items()})
-++        batch={k: v[:batch_size] for k, v in train_ds.items()}, lr=0.1)
-+     self.assertLessEqual(train_metrics['loss'], 2.302)
-+     self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
-+ 
+deleted file mode 100644
+index 50c2e9a..0000000
+--- a/examples/mnist/train_test.py.rej
++++ /dev/null
+@@ -1,10 +0,0 @@
+-diff a/examples/mnist/train_test.py b/examples/mnist/train_test.py	(rejected hunks)
+-@@ -36,7 +36,7 @@ class TrainTest(absltest.TestCase):
+-     # test single train step.
+-     optimizer, train_metrics = train.train_step(
+-         optimizer=optimizer,
+--        batch={k: v[:batch_size] for k, v in train_ds.items()})
+-+        batch={k: v[:batch_size] for k, v in train_ds.items()}, lr=0.1)
+-     self.assertLessEqual(train_metrics['loss'], 2.302)
+-     self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
+- 
