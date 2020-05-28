@@ -25,8 +25,8 @@ index 9c21985..45311c7 100644
      summary_writer.scalar('eval_loss', loss, epoch)
      summary_writer.scalar('eval_accuracy', accuracy, epoch)
 +
-+  # Save model at every epoch
-+  checkpoints.save_checkpoint(FLAGS.model_dir, optimizer, epoch, keep=3)
++    # Save model at every epoch
++    checkpoints.save_checkpoint(FLAGS.model_dir, optimizer, epoch, keep=3)
 +
    summary_writer.flush()
    return optimizer
