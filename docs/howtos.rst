@@ -45,7 +45,6 @@ Polyak averaging
 .. raw:: html
    :file: _formatted_howtos/polyak-averaging.diff.html
 
-
 Scheduled Sampling
 ----------------
 
@@ -53,15 +52,6 @@ Scheduled Sampling
 
 .. raw:: html
    :file: _formatted_howtos/scheduled-sampling.diff.html
-
-
-Checkpointing
-----------------
-
-⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/checkpointing?diff=split>`_
-
-.. raw:: html
-   :file: _formatted_howtos/checkpointing.diff.html
 
 
 How do HOWTOs work?
