@@ -27,7 +27,7 @@ for howto in $howtos; do
 
   # Check if command fails
   # See: https://stackoverflow.com/q/26675681/
-  if ! git apply --check "${diff_file}"; then
+  if ! git apply -3 --check "${diff_file}"; then
     printf "\nERROR: Cannot apply howto ${howto}! ==> PLEASE FIX HOWTO\n"
     exit 1
   fi
@@ -45,20 +45,20 @@ for howto in $howtos; do
   # Delete local howto branch if already exists in case we're running locally.
   git branch -D $howto || true
   git checkout -b $howto
-  git apply $diff_file
+  git apply -3 $diff_file
 
   # Run unit test on affected examples only.
   if ! git diff --name-only $curr_branch | xargs dirname | xargs pytest; then
     printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
 
     # Undo patch in case we're running locally.
-    git apply -R $diff_file
+    git apply -3 -R $diff_file
     git checkout $curr_branch
     exit 1
   fi
 
   # Undo patch so we can run the next test.
-  git apply -R $diff_file
+  git apply -3 -R $diff_file
   git checkout $curr_branch
 done
 
