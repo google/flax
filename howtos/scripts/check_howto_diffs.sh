@@ -44,7 +44,6 @@ for howto in $howtos; do
 
   # Delete local howto branch if already exists in case we're running locally.
   git branch -D $howto || true
-  git checkout -b $howto
   git apply $diff_file
 
   # Run unit test on affected examples only.
@@ -53,13 +52,11 @@ for howto in $howtos; do
 
     # Undo patch in case we're running locally.
     git apply -R $diff_file
-    git checkout $curr_branch
     exit 1
   fi
 
   # Undo patch so we can run the next test.
   git apply -R $diff_file
-  git checkout $curr_branch
 done
 
 cd $old_pwd
