@@ -43,7 +43,6 @@ for howto in $howtos; do
   diff_file="${howto_diff_path}/${howto}.diff"
 
   # Delete local howto branch if already exists in case we're running locally.
-  git branch -D $howto || true
   git apply $diff_file
 
   # Run unit test on affected examples only.
