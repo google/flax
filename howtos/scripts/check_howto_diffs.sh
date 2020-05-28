@@ -42,7 +42,6 @@ curr_branch="$(git rev-parse --abbrev-ref HEAD)"
 for howto in $howtos; do
   diff_file="${howto_diff_path}/${howto}.diff"
 
-  # Delete local howto branch if already exists in case we're running locally.
   git apply $diff_file
 
   # Run unit test on affected examples only.
