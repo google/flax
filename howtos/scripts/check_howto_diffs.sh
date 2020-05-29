@@ -65,7 +65,7 @@ for howto in $howtos; do
   git apply --3way $diff_file
 
   # Run unit test on affected examples only.
-  if ! git diff --name-only | xargs dirname | xargs pytest; then
+  if ! git diff --name-only HEAD | xargs dirname | xargs pytest; then
     printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
 
     # NOTE: Originally, we undid changes, but now we leave local copy modified
