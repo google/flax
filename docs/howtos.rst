@@ -17,6 +17,19 @@ Note that these HOWTOs do not require special library support, they just
 demonstate how assembling the JAX and Flax primitives in different ways
 allow you to make various training loop modifications.
 
+There are currently two ways to access a HOWTO: 1) check out a branch with the HOWTO diff applied to the master branch or 2) apply the HOWTO diff yourself:
+
+.. code-block:: bash
+   # Clone repository
+   git clone https://github.com/google/flax
+   cd flax
+
+   # Method 1: Check out HOWTO (e.g., distributed-training):
+   git checkout howto/distributed-training
+
+   # Method 2: Apply HOWTO diff
+   git apply --3way howtos/diffs/distributed-training.diff
+
 Currently the following HOWTOs are available:
 
 Multi-device data-parallel training

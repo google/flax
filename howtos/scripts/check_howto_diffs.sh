@@ -27,7 +27,8 @@ for howto in $howtos; do
 
   # Check if command fails
   # See: https://stackoverflow.com/q/26675681/
-  if ! git apply --check "${diff_file}"; then
+  # NOTE: This check will pass if the branches can be merged with conflicts
+  if ! git apply --check --3way "${diff_file}"; then
     printf "\nERROR: Cannot apply howto ${howto}! ==> PLEASE FIX HOWTO\n"
     exit 1
   fi
@@ -35,23 +36,47 @@ done
 
 printf "Running unit tests for each diff...\n"
 
-curr_branch="$(git rev-parse --abbrev-ref HEAD)"
 for howto in $howtos; do
   diff_file="${howto_diff_path}/${howto}.diff"
 
-  git apply $diff_file
+  # NOTE: If there is a merge conflict, we fail and leave conflicts in the
+  # local copy. If the user/developer's local copy was dirty, this may cause
+  # some pain. Ideally, we would want to check if applying a patch would cause
+  # merge conflicts _before_ applying the patch. So far, we have found three
+  # non-ideal ways to avoid applying conflicting merges:
+  #
+  # 1. Demand a clean local copy before running this script. This solution
+  # inevitably leads to many unnecessary commits since each time we run the
+  # script, we find one new error, but we must commit the fix before we can run
+  # the script again.
+  # 2. Create a new branch and use `git merge --no-commit`. If demanding a
+  # clean local copy is unreasonable, then we need to contend with many
+  # possible states a local copy may be in. Creating a new branch gets dicey
+  # quickly.
+  # 3. Parse output from `git apply --check --3way`. This is the least bad way
+  # (so far), but it's also kludgy. `git apply --check --3way` outputs to
+  # a TTY, not to stderr or stdout directly, so we have to run something likke
+  # the line below to check for conflicts without applying the patch:
+  #
+  #  > script -c '(git apply --check --3way howtos/diffs/checkpointing.diff >
+  #    $(tty))' | grep conflicts
+  #
+  # And so, we leave the merge conflicts for now.
+  git apply --3way $diff_file
 
   # Run unit test on affected examples only.
-  if ! git diff --name-only $curr_branch | xargs dirname | xargs pytest; then
+  if ! git diff --name-only | xargs dirname | xargs pytest; then
     printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
 
-    # Undo patch in case we're running locally.
-    git apply -R $diff_file
+    # NOTE: Originally, we undid changes, but now we leave local copy modified
+    # on error
     exit 1
   fi
 
   # Undo patch so we can run the next test.
-  git apply -R $diff_file
+  # TODO (dsuo): reversing a three-way merge on a (potentially) dirty local
+  # copy is a bit of a minefield
+  git reset --hard HEAD
 done
 
 cd $old_pwd
