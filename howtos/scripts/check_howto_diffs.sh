@@ -35,9 +35,6 @@ done
 
 printf "Running unit tests for each diff...\n"
 
-# Fetch all branches.
-git fetch --all
-
 curr_branch="$(git rev-parse --abbrev-ref HEAD)"
 for howto in $howtos; do
   diff_file="${howto_diff_path}/${howto}.diff"
