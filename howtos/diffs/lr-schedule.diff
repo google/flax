@@ -1,10 +1,10 @@
 diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 5dc74db..1136a3c 100644
+index 9c21985..60c3457 100644
 --- a/examples/mnist/train.py
 +++ b/examples/mnist/train.py
-@@ -84,6 +84,16 @@ def create_model(key):
-   model = nn.Model(CNN, initial_params)
+@@ -84,6 +84,18 @@ def create_model(key):
    return model
+ 
  
 +def create_triangular_schedule(lr_min, lr_max, epochs):
 +  """Return fn from epoch to LR, linearly interpolating between `lr_min`->`lr_max`->`lr_min`."""
@@ -16,10 +16,12 @@ index 5dc74db..1136a3c 100644
 +      lr = lr_max - ((epoch - top)/top) * (lr_max - lr_min)
 +    return lr
 +  return learning_rate_fn
- 
++
++
  def create_optimizer(model, learning_rate, beta):
    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
-@@ -111,7 +121,7 @@ def compute_metrics(logits, labels):
+   optimizer = optimizer_def.create(model)
+@@ -110,7 +122,7 @@ def compute_metrics(logits, labels):
  
  
  @jax.jit
@@ -28,7 +30,7 @@ index 5dc74db..1136a3c 100644
    """Train for a single step."""
    def loss_fn(model):
      logits = model(batch['image'])
-@@ -119,7 +129,7 @@ def train_step(optimizer, batch):
+@@ -118,7 +130,7 @@ def train_step(optimizer, batch):
      return loss, logits
    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
    (_, logits), grad = grad_fn(optimizer.target)
@@ -37,7 +39,7 @@ index 5dc74db..1136a3c 100644
    metrics = compute_metrics(logits, batch['label'])
    return optimizer, metrics
  
-@@ -130,7 +140,7 @@ def eval_step(model, batch):
+@@ -129,7 +141,7 @@ def eval_step(model, batch):
    return compute_metrics(logits, batch['label'])
  
  
@@ -46,7 +48,7 @@ index 5dc74db..1136a3c 100644
    """Train for a single epoch."""
    train_ds_size = len(train_ds['image'])
    steps_per_epoch = train_ds_size // batch_size
-@@ -141,7 +151,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -140,7 +152,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
@@ -55,16 +57,15 @@ index 5dc74db..1136a3c 100644
      batch_metrics.append(metrics)
  
    # compute mean of metrics across each batch in epoch.
-@@ -186,12 +196,14 @@ def train(train_ds, test_ds):
- 
-   model = create_model(rng)
+@@ -186,11 +198,13 @@ def train(train_ds, test_ds):
+   rng, init_rng = random.split(rng)
+   model = create_model(init_rng)
    optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
 +  learning_rate_fn = create_triangular_schedule(FLAGS.learning_rate, 2.*FLAGS.learning_rate, num_epochs)
  
-   input_rng = onp.random.RandomState(0)
- 
    for epoch in range(1, num_epochs + 1):
-+    lr = learning_rate_fn(epoch)
+     rng, input_rng = random.split(rng)
++    lr = learning_rate_fn
      optimizer, train_metrics = train_epoch(
 -        optimizer, train_ds, batch_size, epoch, input_rng)
 +        optimizer, train_ds, batch_size, epoch, input_rng, lr)
