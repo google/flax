@@ -1,5 +1,5 @@
 diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 5dc74db..77b49fa 100644
+index 9c21985..fed5421 100644
 --- a/examples/mnist/train.py
 +++ b/examples/mnist/train.py
 @@ -23,6 +23,9 @@ from absl import app
@@ -12,7 +12,7 @@ index 5dc74db..77b49fa 100644
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
-@@ -88,6 +91,7 @@ def create_model(key):
+@@ -87,6 +90,7 @@ def create_model(key):
  def create_optimizer(model, learning_rate, beta):
    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
    optimizer = optimizer_def.create(model)
@@ -20,7 +20,7 @@ index 5dc74db..77b49fa 100644
    return optimizer
  
  
-@@ -100,6 +104,11 @@ def cross_entropy_loss(logits, labels):
+@@ -99,6 +103,11 @@ def cross_entropy_loss(logits, labels):
    return -jnp.mean(jnp.sum(onehot(labels) * logits, axis=-1))
  
  
@@ -32,7 +32,7 @@ index 5dc74db..77b49fa 100644
  def compute_metrics(logits, labels):
    loss = cross_entropy_loss(logits, labels)
    accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
-@@ -110,7 +119,7 @@ def compute_metrics(logits, labels):
+@@ -109,7 +118,7 @@ def compute_metrics(logits, labels):
    return metrics
  
  
@@ -41,7 +41,7 @@ index 5dc74db..77b49fa 100644
  def train_step(optimizer, batch):
    """Train for a single step."""
    def loss_fn(model):
-@@ -119,8 +128,10 @@ def train_step(optimizer, batch):
+@@ -118,8 +127,10 @@ def train_step(optimizer, batch):
      return loss, logits
    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
    (_, logits), grad = grad_fn(optimizer.target)
@@ -52,7 +52,7 @@ index 5dc74db..77b49fa 100644
    return optimizer, metrics
  
  
-@@ -132,6 +143,9 @@ def eval_step(model, batch):
+@@ -131,6 +142,9 @@ def eval_step(model, batch):
  
  def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    """Train for a single epoch."""
@@ -62,7 +62,7 @@ index 5dc74db..77b49fa 100644
    train_ds_size = len(train_ds['image'])
    steps_per_epoch = train_ds_size // batch_size
  
-@@ -141,6 +155,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -140,6 +154,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
@@ -70,8 +70,8 @@ index 5dc74db..77b49fa 100644
      optimizer, metrics = train_step(optimizer, batch)
      batch_metrics.append(metrics)
  
-@@ -192,7 +207,8 @@ def train(train_ds, test_ds):
-   for epoch in range(1, num_epochs + 1):
+@@ -191,7 +206,8 @@ def train(train_ds, test_ds):
+     rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
          optimizer, train_ds, batch_size, epoch, input_rng)
 -    loss, accuracy = eval_model(optimizer.target, test_ds)
