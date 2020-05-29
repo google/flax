@@ -16,9 +16,6 @@
 """Stochastic modules.
 """
 
-import contextlib
-
-from . import utils
 from jax import lax
 from jax import random
 import jax.numpy as jnp

@@ -17,10 +17,9 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
-from . import base
-from . import initializers
+from flax.nn import initializers
 
-from ..core import Scope
+from flax.core import Scope
 
 from flax import struct
 
