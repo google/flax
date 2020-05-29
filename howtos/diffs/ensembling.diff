@@ -1,5 +1,5 @@
 diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 5dc74db..5ba4df4 100644
+index 9c21985..81a8434 100644
 --- a/examples/mnist/train.py
 +++ b/examples/mnist/train.py
 @@ -23,6 +23,9 @@ from absl import app
@@ -12,7 +12,7 @@ index 5dc74db..5ba4df4 100644
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
-@@ -79,12 +82,14 @@ class CNN(nn.Module):
+@@ -78,12 +81,14 @@ class CNN(nn.Module):
      return x
  
  
@@ -27,7 +27,7 @@ index 5dc74db..5ba4df4 100644
  def create_optimizer(model, learning_rate, beta):
    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
    optimizer = optimizer_def.create(model)
-@@ -110,7 +115,7 @@ def compute_metrics(logits, labels):
+@@ -109,7 +114,7 @@ def compute_metrics(logits, labels):
    return metrics
  
  
@@ -36,7 +36,7 @@ index 5dc74db..5ba4df4 100644
  def train_step(optimizer, batch):
    """Train for a single step."""
    def loss_fn(model):
-@@ -124,7 +129,7 @@ def train_step(optimizer, batch):
+@@ -123,7 +128,7 @@ def train_step(optimizer, batch):
    return optimizer, metrics
  
  
@@ -45,7 +45,7 @@ index 5dc74db..5ba4df4 100644
  def eval_step(model, batch):
    logits = model(batch['image'])
    return compute_metrics(logits, batch['label'])
-@@ -141,16 +146,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -140,16 +145,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
@@ -73,7 +73,7 @@ index 5dc74db..5ba4df4 100644
                 epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
  
    return optimizer, epoch_metrics_np
-@@ -159,7 +171,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -158,7 +170,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
  def eval_model(model, test_ds):
    metrics = eval_step(model, test_ds)
    metrics = jax.device_get(metrics)
@@ -82,18 +82,19 @@ index 5dc74db..5ba4df4 100644
    return summary['loss'], summary['accuracy']
  
  
-@@ -184,16 +196,19 @@ def train(train_ds, test_ds):
+@@ -183,16 +195,19 @@ def train(train_ds, test_ds):
  
    summary_writer = tensorboard.SummaryWriter(model_dir)
  
-+  rng = random.split(rng, jax.device_count())
-   model = create_model(rng)
+-  rng, init_rng = random.split(rng)
++  rng, init_rng = random.split(rng, jax.device_count())
+   model = create_model(init_rng)
    optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
  
-   input_rng = onp.random.RandomState(0)
 +  test_ds = jax_utils.replicate(test_ds)
- 
++
    for epoch in range(1, num_epochs + 1):
+     rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
          optimizer, train_ds, batch_size, epoch, input_rng)
      loss, accuracy = eval_model(optimizer.target, test_ds)
