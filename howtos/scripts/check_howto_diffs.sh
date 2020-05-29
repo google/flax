@@ -65,6 +65,7 @@ for howto in $howtos; do
   git apply --3way $diff_file
 
   # Run unit test on affected examples only.
+  # NOTE: this will pick up dirty changes outside of the patch as well
   if ! git diff --name-only HEAD | xargs dirname | xargs pytest; then
     printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
 
