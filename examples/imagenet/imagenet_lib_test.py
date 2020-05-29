@@ -49,7 +49,7 @@ def _parse_and_return_summary_values(path):
   return tag_event_value_dict
 
 
-class ImageNetLibTest(absltest.TestCase):
+class ImageNetTest(absltest.TestCase):
   """Test cases for imagenet_lib."""
 
   def test_train_and_evaluate(self):
@@ -68,7 +68,7 @@ class ImageNetLibTest(absltest.TestCase):
       imagenet_lib.train_and_evaluate(
           model_dir=model_dir, batch_size=8, num_epochs=1,
           learning_rate=0.1, momentum=0.9, cache=False, half_precision=False,
-          num_train_and_eval_steps=1, disable_checkpointing=True)
+          num_train_and_eval_steps=1)
 
     summary_values_dict = _parse_and_return_summary_values(path=model_dir)
 

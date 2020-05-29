@@ -30,5 +30,3 @@ with tfds.testing.mock_data(num_examples=num_examples, data_dir=data_dir):
 ```
 
 Example test: `flax/examples/imagenet_lib_test.py` 
-
-PR introducing the above mentioned changes: [PR](https://github.com/google/flax/pull/287).

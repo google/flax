@@ -45,7 +45,7 @@ import input_pipeline
 from resnet_v1 import ResNet
 
 
-def _create_model(key, batch_size, image_size, model_dtype):
+def create_model(key, batch_size, image_size, model_dtype):
   input_shape = (batch_size, image_size, image_size, 3)
   module = ResNet.partial(num_classes=1000, dtype=model_dtype)
   with nn.stateful() as init_state:
@@ -55,13 +55,13 @@ def _create_model(key, batch_size, image_size, model_dtype):
   return model, init_state
 
 
-def _cross_entropy_loss(logits, labels):
+def cross_entropy_loss(logits, labels):
   return -jnp.sum(
       common_utils.onehot(labels, num_classes=1000) * logits) / labels.size
 
 
-def _compute_metrics(logits, labels):
-  loss = _cross_entropy_loss(logits, labels)
+def compute_metrics(logits, labels):
+  loss = cross_entropy_loss(logits, labels)
   accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
   metrics = {
       'loss': loss,
@@ -71,31 +71,31 @@ def _compute_metrics(logits, labels):
   return metrics
 
 
-def _cosine_decay(lr, step, total_steps):
+def cosine_decay(lr, step, total_steps):
   ratio = jnp.maximum(0., step / total_steps)
   mult = 0.5 * (1. + jnp.cos(jnp.pi * ratio))
   return mult * lr
 
 
-def _create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
+def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
   warmup_epochs = 5
   def step_fn(step):
     epoch = step / steps_per_epoch
-    lr = _cosine_decay(base_learning_rate,
-                       epoch - warmup_epochs,
-                       num_epochs - warmup_epochs)
+    lr = cosine_decay(base_learning_rate,
+                      epoch - warmup_epochs,
+                      num_epochs - warmup_epochs)
     warmup = jnp.minimum(1., epoch / warmup_epochs)
     return lr * warmup
   return step_fn
 
 
-def _train_step(state, batch, learning_rate_fn):
+def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
   def _loss_fn(model):
     """loss function used for training."""
     with nn.stateful(state.model_state) as new_model_state:
       logits = model(batch['image'])
-    loss = _cross_entropy_loss(logits, batch['label'])
+    loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_leaves(model.params)
     weight_decay = 0.0001
     weight_l2 = sum([jnp.sum(x ** 2)
@@ -122,7 +122,7 @@ def _train_step(state, batch, learning_rate_fn):
     grad = lax.pmean(grad, axis_name='batch')
   new_model_state, logits = aux[1]
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
-  metrics = _compute_metrics(logits, batch['label'])
+  metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr
 
   if dynamic_scale:
@@ -138,14 +138,14 @@ def _train_step(state, batch, learning_rate_fn):
   return new_state, metrics
 
 
-def _eval_step(state, batch):
+def eval_step(state, batch):
   model = state.optimizer.target
   with nn.stateful(state.model_state, mutable=False):
     logits = model(batch['image'], train=False)
-  return _compute_metrics(logits, batch['label'])
+  return compute_metrics(logits, batch['label'])
 
 
-def _prepare_tf_data(xs):
+def prepare_tf_data(xs):
   """Convert a input batch from tf Tensors to numpy arrays."""
   local_device_count = jax.local_device_count()
   def _prepare(x):
@@ -159,12 +159,12 @@ def _prepare_tf_data(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def _create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
-                       cache):
+def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
+                      cache):
   ds = input_pipeline.create_split(
       dataset_builder, batch_size, image_size=image_size, dtype=dtype,
       train=train, cache=cache)
-  it = map(_prepare_tf_data, ds)
+  it = map(prepare_tf_data, ds)
   it = jax_utils.prefetch_to_device(it, 2)
   return it
 
@@ -172,18 +172,18 @@ def _create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
 # flax.struct.dataclass enables instances of this class to be passed into jax
 # transformations like tree_map and pmap.
 @flax.struct.dataclass
-class _TrainState:
+class TrainState:
   step: int
   optimizer: optim.Optimizer
   model_state: nn.Collection
   dynamic_scale: optim.DynamicScale
 
 
-def _restore_checkpoint(model_dir, state):
+def restore_checkpoint(model_dir, state):
   return checkpoints.restore_checkpoint(model_dir, state)
 
 
-def _save_checkpoint(model_dir, state):
+def save_checkpoint(model_dir, state):
   if jax.host_id() == 0:
     # get train state from the first replica
     state = jax.device_get(jax.tree_map(lambda x: x[0], state))
@@ -191,7 +191,7 @@ def _save_checkpoint(model_dir, state):
     checkpoints.save_checkpoint(model_dir, state, step, keep=3)
 
 
-def _sync_batch_stats(state):
+def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
   avg = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
   return state.replace(model_state=avg(state.model_state))
@@ -200,8 +200,7 @@ def _sync_batch_stats(state):
 def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
                        learning_rate: float, momentum: float, cache: bool,
                        half_precision: bool,
-                       num_train_and_eval_steps: int = -1,
-                       disable_checkpointing: bool = False):
+                       num_train_and_eval_steps: int = -1):
   """Runs model training and evaluation loop.
 
   Args:
@@ -209,15 +208,14 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
       should be written to.
     batch_size: Batch size of the input.
     num_epochs: Number of epochs to cycle through before stopping.
-    learning_rate: Learning rate for the momentum optimizer.
+    learning_rate: The learning rate in case you have batch size 256.
+      The effective learning rate is scaled linearly to the batch size.
     momentum: Momentum value for the momentum optimizer.
     cache: Determines whether the dataset should be cached.
     half_precision: Determines whether bfloat16/float16 should be used
       instead of float32.
     num_train_and_eval_steps: Number of steps for training and eval.
       This is used for testing (default: -1 i.e use the entire dataset).
-    disable_checkpointing: Determines whether the training and evaluation
-      loop should checkpoint model weights.
   """
 
   tf.enable_v2_behavior()
@@ -252,10 +250,10 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
     input_dtype = tf.float32
 
   dataset_builder = tfds.builder('imagenet2012:5.*.*')
-  train_iter = _create_input_iter(
+  train_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=True,
       cache=cache)
-  eval_iter = _create_input_iter(
+  eval_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=False,
       cache=cache)
 
@@ -273,24 +271,24 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
 
   base_learning_rate = learning_rate * batch_size / 256.
 
-  model, model_state = _create_model(
+  model, model_state = create_model(
       rng, device_batch_size, image_size, model_dtype)
   optimizer = optim.Momentum(beta=momentum, nesterov=True).create(model)
-  state = _TrainState(step=0, optimizer=optimizer, model_state=model_state,
-                      dynamic_scale=dynamic_scale)
+  state = TrainState(step=0, optimizer=optimizer, model_state=model_state,
+                     dynamic_scale=dynamic_scale)
   del model, model_state  # do not keep a copy of the initial model
 
-  state = _restore_checkpoint(model_dir, state)
+  state = restore_checkpoint(model_dir, state)
   step_offset = int(state.step)  # step_offset > 0 if restarting from checkpoint
   state = jax_utils.replicate(state)
 
-  learning_rate_fn = _create_learning_rate_fn(
+  learning_rate_fn = create_learning_rate_fn(
       base_learning_rate, steps_per_epoch, num_epochs)
 
   p_train_step = jax.pmap(
-      functools.partial(_train_step, learning_rate_fn=learning_rate_fn),
+      functools.partial(train_step, learning_rate_fn=learning_rate_fn),
       axis_name='batch')
-  p_eval_step = jax.pmap(_eval_step, axis_name='batch')
+  p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   epoch_metrics = []
   t_loop_start = time.time()
@@ -316,7 +314,7 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
       eval_metrics = []
 
       # sync batch statistics across replicas
-      state = _sync_batch_stats(state)
+      state = sync_batch_stats(state)
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
         metrics = p_eval_step(state, eval_batch)
@@ -330,10 +328,9 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
           tag = 'eval_%s' % key
           summary_writer.scalar(tag, val.mean(), step)
         summary_writer.flush()
-    if not disable_checkpointing and ((step + 1) % steps_per_checkpoint == 0
-                                      or step + 1 == num_steps):
-      state = _sync_batch_stats(state)
-      _save_checkpoint(model_dir, state)
+    if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
+      state = sync_batch_stats(state)
+      save_checkpoint(model_dir, state)
 
   # Wait until computations are done before exiting
   jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()

@@ -20,10 +20,9 @@ import jax.numpy as jnp
 from flax import nn
 
 
-class _ResidualBlock(nn.Module):
+class ResidualBlock(nn.Module):
   """Bottleneck ResNet block."""
 
-  # pylint: disable=arguments-differ
   def apply(self, x, filters, strides=(1, 1), train=True, dtype=jnp.float32):
     needs_projection = x.shape[-1] != filters * 4 or strides != (1, 1)
     batch_norm = nn.BatchNorm.partial(use_running_average=not train,
@@ -52,7 +51,6 @@ class _ResidualBlock(nn.Module):
 class ResNet(nn.Module):
   """ResNet V1."""
 
-  # pylint: disable=arguments-differ
   def apply(self, x, num_classes: int, num_filters: int = 64,
             num_layers: int = 50, train: bool = True,
             dtype: jnp.dtype = jnp.float32):
@@ -86,10 +84,10 @@ class ResNet(nn.Module):
     for i, block_size in enumerate(block_sizes):
       for j in range(block_size):
         strides = (2, 2) if i > 0 and j == 0 else (1, 1)
-        x = _ResidualBlock(x, num_filters * 2 ** i,
-                           strides=strides,
-                           train=train,
-                           dtype=dtype)
+        x = ResidualBlock(x, num_filters * 2 ** i,
+                          strides=strides,
+                          train=train,
+                          dtype=dtype)
     x = jnp.mean(x, axis=(1, 2))
     x = nn.Dense(x, num_classes, dtype=dtype)
     x = jnp.asarray(x, jnp.float32)

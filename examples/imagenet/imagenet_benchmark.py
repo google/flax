@@ -16,14 +16,22 @@
 import tempfile
 
 import time
+from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
+
+import jax
 
 import numpy as np
 from flax.testing import Benchmark
 
-import imagenet_lib
+import imagenet_main
 
+
+# Parse absl flags test_srcdir and test_tmpdir.
+jax.config.parse_flags_with_absl()
+
+FLAGS = flags.FLAGS
 
 class ImagenetBenchmark(Benchmark):
   """Benchmarks for the ImageNet Flax example."""
@@ -33,11 +41,14 @@ class ImagenetBenchmark(Benchmark):
     """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
     model_dir = tempfile.mkdtemp()
 
+    FLAGS.batch_size = 2048
+    FLAGS.half_precision = True
+    FLAGS.loss_scaling = 256.
+    FLAGS.num_epochs = 2
+    FLAGS.model_dir = model_dir
+
     start_time = time.time()
-    imagenet_lib.train_and_evaluate(model_dir=model_dir, batch_size=2048,
-                                    num_epochs=2, learning_rate=0.1,
-                                    momentum=0.9, cache=False,
-                                    half_precision=True)
+    imagenet_main.main([])
     benchmark_time = time.time() - start_time
     summaries = self.read_summaries(model_dir)
 

@@ -27,12 +27,12 @@ MEAN_RGB = [0.485 * 255, 0.456 * 255, 0.406 * 255]
 STDDEV_RGB = [0.229 * 255, 0.224 * 255, 0.225 * 255]
 
 
-def _distorted_bounding_box_crop(image_bytes,
-                                 bbox,
-                                 min_object_covered=0.1,
-                                 aspect_ratio_range=(0.75, 1.33),
-                                 area_range=(0.05, 1.0),
-                                 max_attempts=100):
+def distorted_bounding_box_crop(image_bytes,
+                                bbox,
+                                min_object_covered=0.1,
+                                aspect_ratio_range=(0.75, 1.33),
+                                area_range=(0.05, 1.0),
+                                max_attempts=100):
   """Generates cropped_image using one of the bboxes randomly distorted.
 
   See `tf.image.sample_distorted_bounding_box` for more documentation.
@@ -76,22 +76,22 @@ def _distorted_bounding_box_crop(image_bytes,
   return image
 
 
-def _resize(image, image_size):
+def resize(image, image_size):
   return tf.image.resize([image], [image_size, image_size],
                          method=tf.image.ResizeMethod.BICUBIC)[0]
 
 
-def _at_least_x_are_equal(a, b, x):
+def at_least_x_are_equal(a, b, x):
   """At least `x` of `a` and `b` `Tensors` are equal."""
   match = tf.equal(a, b)
   match = tf.cast(match, tf.int32)
   return tf.greater_equal(tf.reduce_sum(match), x)
 
 
-def _decode_and_random_crop(image_bytes, image_size):
+def decode_and_random_crop(image_bytes, image_size):
   """Make a random crop of image_size."""
   bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
-  image = _distorted_bounding_box_crop(
+  image = distorted_bounding_box_crop(
       image_bytes,
       bbox,
       min_object_covered=0.1,
@@ -99,17 +99,17 @@ def _decode_and_random_crop(image_bytes, image_size):
       area_range=(0.08, 1.0),
       max_attempts=10)
   original_shape = tf.io.extract_jpeg_shape(image_bytes)
-  bad = _at_least_x_are_equal(original_shape, tf.shape(image), 3)
+  bad = at_least_x_are_equal(original_shape, tf.shape(image), 3)
 
   image = tf.cond(
       bad,
-      lambda: _decode_and_center_crop(image_bytes, image_size),
-      lambda: _resize(image, image_size))
+      lambda: decode_and_center_crop(image_bytes, image_size),
+      lambda: resize(image, image_size))
 
   return image
 
 
-def _decode_and_center_crop(image_bytes, image_size):
+def decode_and_center_crop(image_bytes, image_size):
   """Crops to center of image with padding then scales image_size."""
   shape = tf.io.extract_jpeg_shape(image_bytes)
   image_height = shape[0]
@@ -122,21 +122,21 @@ def _decode_and_center_crop(image_bytes, image_size):
 
   offset_height = ((image_height - padded_center_crop_size) + 1) // 2
   offset_width = ((image_width - padded_center_crop_size) + 1) // 2
-  crop_window = tf.stack([offset_height, offset_width, padded_center_crop_size,
-                          padded_center_crop_size])
+  crop_window = tf.stack([offset_height, offset_width,
+                          padded_center_crop_size, padded_center_crop_size])
   image = tf.io.decode_and_crop_jpeg(image_bytes, crop_window)
-  image = _resize(image, image_size)
+  image = resize(image, image_size)
 
   return image
 
 
-def _normalize_image(image):
+def normalize_image(image):
   image -= tf.constant(MEAN_RGB, shape=[1, 1, 3], dtype=image.dtype)
   image /= tf.constant(STDDEV_RGB, shape=[1, 1, 3], dtype=image.dtype)
   return image
 
 
-def _preprocess_for_train(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
+def preprocess_for_train(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   """Preprocesses the given image for training.
 
   Args:
@@ -147,15 +147,15 @@ def _preprocess_for_train(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = _decode_and_random_crop(image_bytes, image_size)
+  image = decode_and_random_crop(image_bytes, image_size)
   image = tf.reshape(image, [image_size, image_size, 3])
   image = tf.image.random_flip_left_right(image)
-  image = _normalize_image(image)
+  image = normalize_image(image)
   image = tf.image.convert_image_dtype(image, dtype=dtype)
   return image
 
 
-def _preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
+def preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   """Preprocesses the given image for evaluation.
 
   Args:
@@ -166,9 +166,9 @@ def _preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = _decode_and_center_crop(image_bytes, image_size)
+  image = decode_and_center_crop(image_bytes, image_size)
   image = tf.reshape(image, [image_size, image_size, 3])
-  image = _normalize_image(image)
+  image = normalize_image(image)
   image = tf.image.convert_image_dtype(image, dtype=dtype)
   return image
 
@@ -201,9 +201,9 @@ def create_split(dataset_builder: tfds.core.DatasetBuilder, batch_size: int,
 
   def _decode_example(example):
     if train:
-      image = _preprocess_for_train(example['image'], dtype, image_size)
+      image = preprocess_for_train(example['image'], dtype, image_size)
     else:
-      image = _preprocess_for_eval(example['image'], dtype, image_size)
+      image = preprocess_for_eval(example['image'], dtype, image_size)
     return {'image': image, 'label': example['label']}
 
   ds = dataset_builder.as_dataset(
@@ -220,7 +220,7 @@ def create_split(dataset_builder: tfds.core.DatasetBuilder, batch_size: int,
 
   if train:
     ds = ds.repeat()
-    ds = ds.shuffle(16 * batch_size)
+    ds = ds.shuffle(16 * batch_size, seed=0)
 
   ds = ds.map(
       _decode_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
