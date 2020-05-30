@@ -19,7 +19,7 @@ import contextlib
 import threading
 import jax
 import numpy as onp
-from collections import namedtuple
+from typing import Dict
 
 class CallStack(object):
   """Utility for tracking data across a call stack."""
@@ -98,7 +98,49 @@ def _level_of_value(xs):
   return max_level
 
 
-def model_summary(model):
+def get_param_count(params: Dict[str, onp.ndarray]) -> int:
+  """Returns the count of variables for the module or parameter dictionary."""
+  flatten_params = flatten_dict(params)
+  return onp.sum(param.size for param in flatten_params.values())
+
+
+def _get_name_idx(name: str):
+  """Returns the layer index of the parameter name."""
+  index = name[name.find('_') + 1 : name.find('/')]
+  return int(index) if index[0] in '0123456789' else -1
+
+
+def get_param_info(param: Dict[str, onp.ndarray]):
+  """Returns dictionary with parameter shapes, numbers, types and bytes."""
+
+  if not isinstance(param, dict):
+    raise ValueError('Please provide a dictionary of parameters.')
+
+  param = flatten_dict(param)
+  # Sort parameter names by the order of layers in the module 
+  param_names, param_values = map(list, tuple(zip(*sorted(
+    param.items(), key=lambda item: _get_name_idx(item[0])))))
+  
+  param_info = {}
+  total_number = total_bytes = 0
+  for idx in range(len(param_values)):
+    name = param_names[idx]
+    value = param_values[idx]
+    param_info[name] = {
+      "shape": onp.shape(value), 
+      "number": value.size,
+      "type": value.dtype, 
+      "bytes": value.dtype.itemsize * value.size
+    }
+    total_number += value.size
+    total_bytes += value.dtype.itemsize * value.size
+  param_info["totals"] = {"number": total_number, "bytes": total_bytes}
+  
+  return param_info
+
+
+
+def params_summary(model_params):
   """Returns a summary of the model's parameters.
 
   Args:
@@ -127,13 +169,13 @@ def model_summary(model):
 
   # Get parameter names
   param_names = []
-  for layer in model.params.keys():
-    for params in list(model.params[layer].keys()):
+  for layer in model_params.keys():
+    for params in list(model_params[layer].keys()):
       param_names.append("{}/{}".format(layer, params))
 
   # Get parameter shapes, numbers, types, sizes
   param_info = []
-  for params in jax.tree_flatten(model.params)[0]:
+  for params in jax.tree_flatten(model_params)[0]:
     param_info.append(Parameters(
       onp.shape(params),
       onp.prod(onp.shape(params)),
