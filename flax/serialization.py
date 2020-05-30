@@ -162,9 +162,10 @@ def _restore_namedtuple(xs, state_dict):
     ys.append(y)
   return namedtuple_class(*ys)
 
+for x, y, z in ((dict, _dict_state_dict, _restore_dict),
+               (list, _list_state_dict, _restore_list)):
+  register_serialization_state(x, y, z)
 
-register_serialization_state(dict, _dict_state_dict, _restore_dict)
-register_serialization_state(list, _list_state_dict, _restore_list)
 register_serialization_state(
     tuple, _list_state_dict,
     lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)))
