@@ -152,10 +152,10 @@ def show_param_info(params: Dict[str, onp.ndarray], max_lines: int = None):
   ---------------------------------------------------------
   Parameters                     Shape     Number      Type
   =========================================================
-  BatchNorm_1/bias               (32,)         32    float32
-  BatchNorm_1/scale              (32,)         32    float32
   Conv_0/bias                    (32,)         32    float32
   Conv_0/kernel          (3, 3, 1, 32)        288    float32
+  BatchNorm_1/bias               (32,)         32    float32
+  BatchNorm_1/scale              (32,)         32    float32
   Conv_2/bias                    (64,)         64    float32
   Conv_2/kernel         (3, 3, 32, 64)      18432    float32
   Dense_3/bias                  (256,)        256    float32
@@ -189,8 +189,8 @@ def show_param_info(params: Dict[str, onp.ndarray], max_lines: int = None):
     _Column("Type", [str(v["type"]) for v in values]),
   ]
 
-  offset = 2 # between columns
-  name_format = f"{{: <{columns[0].width + offset}s}}" # align parameters on the left
+  offset = 2 # set distance between columns
+  name_format = f"{{: <{columns[0].width + offset}s}}" # align parameters to the left
   value_format = name_format + "".join(f"{{: >{c.width + offset}s}}" for c in columns[1:])
   header = value_format.format(*[c.name for c in columns])
 
