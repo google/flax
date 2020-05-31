@@ -19,7 +19,7 @@ import contextlib
 import threading
 import jax
 import numpy as onp
-from typing import Dict
+from typing import Dict, Any 
 
 class CallStack(object):
   """Utility for tracking data across a call stack."""
@@ -98,20 +98,26 @@ def _level_of_value(xs):
   return max_level
 
 
-def get_param_count(params: Dict[str, onp.ndarray]) -> int:
-  """Returns the count of variables for the module or parameter dictionary."""
-  flatten_params = flatten_dict(params)
-  return onp.sum(param.size for param in flatten_params.values())
+def flatten_dict(input_dict: Dict[str, Any], prefix: str = "") -> Dict[str, Any]:
+  """Flattens the keys of a nested dictionary."""
+  output_dict = {}
+  for key, value in input_dict.items():
+    nested_key = "{}/{}".format(prefix, key) if prefix else key
+    if isinstance(value, dict):
+      output_dict.update(flatten_dict(value, prefix=nested_key))
+    else:
+      output_dict[nested_key] = value
+  return output_dict
 
 
-def _get_name_idx(name: str):
+def _name_idx(name: str):
   """Returns the layer index of the parameter name."""
   index = name[name.find('_') + 1 : name.find('/')]
   return int(index) if index[0] in '0123456789' else -1
 
 
-def get_param_info(param: Dict[str, onp.ndarray]):
-  """Returns dictionary with parameter shapes, numbers, types and bytes."""
+def param_info(param: Dict[str, onp.ndarray]):
+  """Returns dictionary of parameter shapes, numbers, types and bytes."""
 
   if not isinstance(param, dict):
     raise ValueError('Please provide a dictionary of parameters.')
@@ -119,10 +125,9 @@ def get_param_info(param: Dict[str, onp.ndarray]):
   param = flatten_dict(param)
   # Sort parameter names by the order of layers in the module 
   param_names, param_values = map(list, tuple(zip(*sorted(
-    param.items(), key=lambda item: _get_name_idx(item[0])))))
+    param.items(), key=lambda item: _name_idx(item[0])))))
   
   param_info = {}
-  total_number = total_bytes = 0
   for idx in range(len(param_values)):
     name = param_names[idx]
     value = param_values[idx]
@@ -132,24 +137,21 @@ def get_param_info(param: Dict[str, onp.ndarray]):
       "type": value.dtype, 
       "bytes": value.dtype.itemsize * value.size
     }
-    total_number += value.size
-    total_bytes += value.dtype.itemsize * value.size
-  param_info["totals"] = {"number": total_number, "bytes": total_bytes}
   
   return param_info
 
 
-
-def params_summary(model_params):
-  """Returns a summary of the model's parameters.
+def show_param_info(params: Dict[str, onp.ndarray], max_lines: int = None):
+  """Returns a summary of the parameters.
 
   Args:
-    model: the nn.Model of the model.
+    params: dictionary of parameters.
+    max_lines: number of paramters to be summarized.
   Returns:
-    A string summarizing the model.
-  ----------------------------------------------------------
-  Parameters                     Shape     Number       Type
-  ==========================================================
+    A string summarizing the parameters.
+  ---------------------------------------------------------
+  Parameters                     Shape     Number      Type
+  =========================================================
   BatchNorm_1/bias               (32,)         32    float32
   BatchNorm_1/scale              (32,)         32    float32
   Conv_0/bias                    (32,)         32    float32
@@ -160,44 +162,54 @@ def params_summary(model_params):
   Dense_3/kernel           (3136, 256)     802816    float32
   Dense_4/bias                   (10,)         10    float32
   Dense_4/kernel             (256, 10)       2560    float32
-  ==========================================================
+  =========================================================
   Total Parameters: 824,522
   Total Size: 3.1 MB
-  ----------------------------------------------------------
+  ---------------------------------------------------------
   """
-  Parameters = namedtuple("Parameters", ["shape", "number", "type", "size"])
 
-  # Get parameter names
-  param_names = []
-  for layer in model_params.keys():
-    for params in list(model_params[layer].keys()):
-      param_names.append("{}/{}".format(layer, params))
+  if not isinstance(params, dict):
+    raise ValueError('Please provide a dictionary of parameters.')
 
-  # Get parameter shapes, numbers, types, sizes
-  param_info = []
-  for params in jax.tree_flatten(model_params)[0]:
-    param_info.append(Parameters(
-      onp.shape(params),
-      onp.prod(onp.shape(params)),
-      params.dtype,
-      params.dtype.itemsize * params.size / 2**20
-    ))
+  param_info_dict = param_info(params)
+  names = list(param_info_dict.keys())
+  values = list(param_info_dict.values())
 
-  summary_str = "----------------------------------------------------------\n"
-  summary_str += "{:<20} {:>15} {:>10} {:>10}\n".format("Parameters", "Shape", "Number", "Type")
-  summary_str += "==========================================================\n"
-  
-  # Totals
-  total_params = total_size = 0
-  for i in range(len(param_names)):
-    summary_str += "{:<20} {:>15} {:>10} {:>10}\n".format(param_names[i],
-      str(param_info[i].shape), param_info[i].number, str(param_info[i].type))
-    total_params += param_info[i].number
-    total_size += param_info[i].size
+  class _Column:
 
-  summary_str += "==========================================================\n"
-  summary_str += "Total Parameters: {:,d}\n".format(total_params)
-  summary_str += "Total Size: {} MB\n".format(round(total_size, 1))
-  summary_str += "----------------------------------------------------------\n"
+    def __init__(self, name, values):
+      self.name = name
+      self.values = values
+      self.width = max(len(v) for v in values + [name])
 
-  return summary_str
+  columns = [
+    _Column("Parameters", names),
+    _Column("Shape", [str(v["shape"]) for v in values]),
+    _Column("Number", [str(v["number"]) for v in values]),
+    _Column("Type", [str(v["type"]) for v in values]),
+  ]
+
+  offset = 2 # between columns
+  name_format = f"{{: <{columns[0].width + offset}s}}" # align parameters on the left
+  value_format = name_format + "".join(f"{{: >{c.width + offset}s}}" for c in columns[1:])
+  header = value_format.format(*[c.name for c in columns])
+
+  dash_format = value_format.replace(" ", "-")
+  equals_format = value_format.replace(" ", "=")
+  separator_dash = dash_format.format(*["" for c in columns])
+  separator_equals = equals_format.format(*["" for c in columns])
+
+  lines = [separator_dash, header, separator_equals]
+  for i in range(len(names)):
+    if max_lines and len(lines) >= max_lines+3:
+      lines.append("[...]")
+      break
+    lines.append(value_format.format(*[c.values[i] for c in columns]))
+
+  total_parameters = sum(v["number"] for v in values)
+  total_size = sum(v["bytes"] for v in values)
+  lines.append(separator_equals)
+  lines.append("Total parameters: {:,}".format(total_parameters))
+  lines.append("Total size: {:,} MB".format(round(total_size / 2**20, 1)))
+  lines.append(separator_dash)
+  return "\n".join(lines)
