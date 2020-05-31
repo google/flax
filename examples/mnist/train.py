@@ -84,18 +84,6 @@ def create_model(key):
   return model
 
 
-def create_triangular_schedule(lr_min, lr_max, epochs):
-  """Return fn from epoch to LR, linearly interpolating between `lr_min`->`lr_max`->`lr_min`."""
-  top = epochs // 2
-  def learning_rate_fn(epoch):
-    if epoch < top:
-      lr = lr_min + epoch/top * (lr_max - lr_min)
-    else:
-      lr = lr_max - ((epoch - top)/top) * (lr_max - lr_min)
-    return lr
-  return learning_rate_fn
-
-
 def create_optimizer(model, learning_rate, beta):
   optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
   optimizer = optimizer_def.create(model)
@@ -122,7 +110,7 @@ def compute_metrics(logits, labels):
 
 
 @jax.jit
-def train_step(optimizer, batch, lr):
+def train_step(optimizer, batch):
   """Train for a single step."""
   def loss_fn(model):
     logits = model(batch['image'])
@@ -130,7 +118,7 @@ def train_step(optimizer, batch, lr):
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grad = grad_fn(optimizer.target)
-  optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+  optimizer = optimizer.apply_gradient(grad)
   metrics = compute_metrics(logits, batch['label'])
   return optimizer, metrics
 
@@ -141,7 +129,7 @@ def eval_step(model, batch):
   return compute_metrics(logits, batch['label'])
 
 
-def train_epoch(optimizer, train_ds, batch_size, epoch, rng, lr):
+def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   """Train for a single epoch."""
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
@@ -152,7 +140,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng, lr):
   batch_metrics = []
   for perm in perms:
     batch = {k: v[perm] for k, v in train_ds.items()}
-    optimizer, metrics = train_step(optimizer, batch, lr)
+    optimizer, metrics = train_step(optimizer, batch)
     batch_metrics.append(metrics)
 
   # compute mean of metrics across each batch in epoch.
@@ -198,13 +186,11 @@ def train(train_ds, test_ds):
   rng, init_rng = random.split(rng)
   model = create_model(init_rng)
   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
-  learning_rate_fn = create_triangular_schedule(FLAGS.learning_rate, 2.*FLAGS.learning_rate, num_epochs)
 
   for epoch in range(1, num_epochs + 1):
     rng, input_rng = random.split(rng)
-    lr = learning_rate_fn(epoch)
     optimizer, train_metrics = train_epoch(
-        optimizer, train_ds, batch_size, epoch, input_rng, lr)
+        optimizer, train_ds, batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                  epoch, loss, accuracy * 100)
