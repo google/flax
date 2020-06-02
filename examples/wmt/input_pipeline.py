@@ -176,7 +176,11 @@ def train_sentencepiece(dataset,
        f'--model_type={model_type}'])
   SentencePieceTrainer.Train(argstr)
   if jax.host_id() == 0:
-    tf.io.gfile.copy(model_fp.name+'.model', abs_model_path, overwrite=True)
+    # Use an intermediate filename that is renamed to the target name to address
+    # create and fill delays.
+    copy_rename_path = abs_model_path + '.rntmp'
+    tf.io.gfile.copy(model_fp.name + '.model', copy_rename_path, overwrite=True)
+    tf.io.gfile.rename(copy_rename_path, abs_model_path, overwrite=True)
     logging.info('copied %s to %s', model_fp.name+'.model', abs_model_path)
   else:
     while not tf.io.gfile.exists(abs_model_path):
