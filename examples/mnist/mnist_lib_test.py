@@ -91,10 +91,10 @@ class MnistLibTest(absltest.TestCase):
 
     # Since the values could change due to stochasticity in input processing
     # functions, model definition and dataset shuffling.
-    self.assertTrue(onp.allclose(summary_values_dict['train_accuracy'], 0.0))
-    self.assertTrue(onp.allclose(summary_values_dict['train_loss'], 2.452725))
+    self.assertTrue(onp.allclose(summary_values_dict['train_accuracy'], 0.125))
+    self.assertTrue(onp.allclose(summary_values_dict['train_loss'], 2.3537478))
     self.assertTrue(onp.allclose(summary_values_dict['eval_accuracy'], 0.25))
-    self.assertTrue(onp.allclose(summary_values_dict['eval_loss'], 1.908085))
+    self.assertTrue(onp.allclose(summary_values_dict['eval_loss'], 2.0355732))
 
 
 if __name__ == '__main__':
