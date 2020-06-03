@@ -36,18 +36,18 @@ import mnist_lib
 
 # TODO(#290): Refactor logic in testing/benchmark.py to create a
 # utility class for parsing event files and extracting scalar summaries.
-def _process_event(event):
+def process_event(event):
   for value in event.summary.value:
     yield value
 
 
-def _parse_and_return_summary_values(path):
+def parse_and_return_summary_values(path):
   """Parses event file in given `path` and returns scalar summaries logged."""
   tag_event_value_dict = {}
   event_file_generator = directory_watcher.DirectoryWatcher(
       path, event_file_loader.EventFileLoader).Load()
   event_values = itertools.chain.from_iterable(
-      map(_process_event, event_file_generator))
+      map(process_event, event_file_generator))
   for value in event_values:
     tag_event_value_dict[value.tag] = tensor_util.make_ndarray(value.tensor)
 
@@ -87,7 +87,7 @@ class MnistLibTest(absltest.TestCase):
           model_dir=model_dir, num_epochs=1, batch_size=8,
           learning_rate=0.1, momentum=0.9)
 
-    summary_values_dict = _parse_and_return_summary_values(path=model_dir)
+    summary_values_dict = parse_and_return_summary_values(path=model_dir)
 
     # Since the values could change due to stochasticity in input processing
     # functions, model definition and dataset shuffling.
