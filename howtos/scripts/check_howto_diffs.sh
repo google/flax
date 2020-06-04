@@ -12,7 +12,7 @@ set -euxo
 old_pwd=$(pwd)
 top_dir=$(git rev-parse --show-toplevel)
 howto_diff_path="${top_dir}/howtos/diffs"
-howto_doc_path="${top_dir}/docs"
+howto_doc_path="${top_dir}/docs/howtos"
 
 # Get names of howtos from diff files.
 cd $howto_diff_path
@@ -33,7 +33,7 @@ for howto in $howtos; do
     exit 1
   fi
 
-  doc_file="${howto_doc_path}/howto.${howto}.rst"
+  doc_file="${howto_doc_path}/${howto}.rst"
   # Check if documentation exists
   if [[ ! -f "${doc_file}" ]]; then
     printf "\nERROR: Missing doc file for howto ${howto} at path ${doc_file}! ==> PLEASE WRITE DOCUMENTATION\n"

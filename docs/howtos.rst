@@ -21,10 +21,11 @@ Currently the following HOWTOs are available:
 
 .. toctree::
 
-   howto.distributed-training
-   howto.ensembling
-   howto.polyak-averaging
-   howto.scheduled-sampling
+   howtos/distributed-training
+   howtos/ensembling
+   howtos/polyak-averaging
+   howtos/scheduled-sampling
+   howtos/checkpointing
 
 How do HOWTOs work?
 -------------------
