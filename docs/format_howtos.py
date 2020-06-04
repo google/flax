@@ -51,7 +51,32 @@ def main():
 def format_howto(input_file, output_file):
   # Load one of our HOWTO diff files.
   with open(input_file) as f:
-    diff = f.readlines()
+    diff = f.read()
+
+  # Remove all portions of diff related to testing
+  chunks = []
+  skip_next = False
+
+  # Delimiter for new diff file
+  # - By compiling a grouped expression, we ensure re.split returns both
+  # delimiter and delimited strings (i.e., an array of alternating delimiters
+  # and delimited strings)
+  # - We don't assume any particular file extension or form
+  file_delimiter_regexp = re.compile("(diff.*--git)")
+
+  for chunk in file_delimiter_regexp.split(diff):
+    # If we see a diff line and it has the word `test`, assume we want to
+    # ignore (i.e., skip the string following this delimiter)
+    # NOTE: this may not always be true, depending on how files are named
+    if chunk.find("diff --git") == 0 and chunk.find("test") > -1:
+        skip_next = True
+        continue
+    elif skip_next:
+      skip_next = False
+      continue
+    chunks.append(chunk)
+
+  diff = "".join(chunks).split("\n")
 
   # Ignore the first two line, which look like:
   #
