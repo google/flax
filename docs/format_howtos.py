@@ -61,28 +61,22 @@ def format_howto(input_file, output_file):
   # - By compiling a grouped expression, we ensure re.split returns both
   # delimiter and delimited strings (i.e., an array of alternating delimiters
   # and delimited strings)
-  # - We don't assume any particular file extension or form
-  file_delimiter_regexp = re.compile("(diff.*--git)")
+  # - Assume we only want to ignore tests that are Python files
+  file_delimiter_regexp = re.compile("(^diff.*--git.*py$)", re.MULTILINE)
 
   for chunk in file_delimiter_regexp.split(diff):
     # If we see a diff line and it has the word `test`, assume we want to
     # ignore (i.e., skip the string following this delimiter)
     # NOTE: this may not always be true, depending on how files are named
-    if chunk.find("diff --git") == 0 and chunk.find("test") > -1:
+    if chunk.find("diff --git") == 0:
+      if chunk.find("test") > -1:
         skip_next = True
-        continue
+      continue
     elif skip_next:
       skip_next = False
       continue
-    chunks.append(chunk)
-
-  diff = "".join(chunks).split("\n")
-
-  # Ignore the first two line, which look like:
-  #
-  # diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-  # index 51d2fde..a9d7dcb 100644
-  diff = diff[2:]
+    # Append the chunk after the section "index 9b64f88..69bed4f"
+    chunks.extend(chunk.split("\n")[2:])
 
   # Remove double newlines of diff context from `diff` (which is a
   # list of lines).
@@ -91,7 +85,7 @@ def format_howto(input_file, output_file):
   # insert, remove or context.  Create a regexp that matches empty
   # lines that are either of these three types.
   empty_line_regexp = re.compile('[+\\- ]\n')
-  diff = [diff[lineno] for lineno in range(len(diff))
+  diff = [chunks[lineno] for lineno in range(len(chunks))
       if lineno == 0 or not (
         empty_line_regexp.match(diff[lineno]) and
         empty_line_regexp.match(diff[lineno-1])
