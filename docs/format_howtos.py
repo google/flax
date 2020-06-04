@@ -53,21 +53,21 @@ def format_howto(input_file, output_file):
   with open(input_file) as f:
     diff = f.read()
 
-  # Remove all portions of diff related to testing
+  # Remove all portions of diff related to testing.
   chunks = []
   skip_next = False
 
-  # Delimiter for new diff file
+  # Loop through the different files in the diff.
   # - By compiling a grouped expression, we ensure re.split returns both
   # delimiter and delimited strings (i.e., an array of alternating delimiters
-  # and delimited strings)
+  # and delimited strings).
   # - Assume we only want to ignore tests that are Python files
-  file_delimiter_regexp = re.compile("(^diff.*--git.*py$)", re.MULTILINE)
+  file_delimiter_regexp = re.compile("(^diff.*--git.*py$)", re.MULTILINE).
 
   for chunk in file_delimiter_regexp.split(diff):
     # If we see a diff line and it has the word `test`, assume we want to
-    # ignore (i.e., skip the string following this delimiter)
-    # NOTE: this may not always be true, depending on how files are named
+    # ignore (i.e., skip the string following this delimiter).
+    # NOTE: this may not always be true, depending on how files are named.
     if chunk.find("diff --git") == 0:
       if chunk.find("test") > -1:
         skip_next = True
