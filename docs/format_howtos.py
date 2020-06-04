@@ -75,7 +75,8 @@ def format_howto(input_file, output_file):
     elif skip_next:
       skip_next = False
       continue
-    # Append the chunk after the section "index 9b64f88..69bed4f"
+    # The first two elements in chunk are the empty string and "index
+    # 9b64f88..69bed4f". Remove them.
     chunks.extend(chunk.split("\n")[2:])
 
   # Remove double newlines of diff context from `diff` (which is a
