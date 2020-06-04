@@ -43,7 +43,6 @@ class ImagenetBenchmark(Benchmark):
     model_dir = tempfile.mkdtemp()
     FLAGS.batch_size = 2048
     FLAGS.half_precision = True
-    FLAGS.loss_scaling = 256.
     FLAGS.num_epochs = 2
     FLAGS.model_dir = model_dir
 
