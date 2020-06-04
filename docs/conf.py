@@ -49,8 +49,11 @@ sys.path.insert(0, os.path.abspath('..'))
 
 # Hacky but decent pre-process step: Format HOWTOs into color-coded
 # and syntax highlighted HTML files.
-from docs import format_howtos
+from docs.scripts import format_howtos
 format_howtos.main()
+
+from docs.scripts import generate_examples
+generate_examples.main()
 
 
 # -- Project information -----------------------------------------------------
@@ -74,6 +77,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'nbsphinx',
     'recommonmark',
+    'sphinx_markdown_tables',
 ]
 
 # Add any paths that contain templates here, relative to this directory.

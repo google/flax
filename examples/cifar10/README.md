@@ -49,7 +49,7 @@ or
 
 `python train.py --arch=pyramid --lr_sched_steps=cosine --num_epochs=1800 --l2_reg=0.0001 --model_dir=./cifar10_pyramid_bs=256_lr=cosine_l2=0.0001_epochs=1800`
 
-## Known issues
+### Known issues
 L2 regularization is applied to model kernels *and* biases, instead of only being applied to kernels.
 
 ### References

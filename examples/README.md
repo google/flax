@@ -1,4 +1,4 @@
-# Flax Examples
+# Overview of Flax examples
  
 ## Official examples maintained by the Flax core team
  

@@ -17,6 +17,16 @@ Flax is a neural network library for JAX that is designed for flexibility.
    annotated_mnist
 
 .. toctree::
+   :maxdepth: 1
+   :caption: Examples
+
+   _examples/README.md
+   examples/image-classification
+   examples/transformer-models
+   examples/rnns
+   examples/generative-models
+
+.. toctree::
    :maxdepth: 2
    :caption: HOWTOs
 

@@ -86,6 +86,7 @@ We keep here a limited list of canonical examples maintained by the Flax team. I
 
 
 ### Generative Models
+⟶ [PixelCNN++ image modelling](examples/pixelcnn)
 ⟶ [Basic VAE](examples/vae)
 
 ### Graph Neural Networks

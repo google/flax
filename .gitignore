@@ -4,6 +4,7 @@
 .DS_Store
 docs/_autosummary
 docs/_build
+docs/_examples
 dist/
 build/
 *.egg-info
