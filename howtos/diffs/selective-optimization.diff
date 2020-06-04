@@ -1,0 +1,31 @@
+diff --git a/examples/mnist/train.py b/examples/mnist/train.py
+index 9c21985..80d4635 100644
+--- a/examples/mnist/train.py
++++ b/examples/mnist/train.py
+@@ -112,12 +112,20 @@ def compute_metrics(logits, labels):
+ @jax.jit
+ def train_step(optimizer, batch):
+   """Train for a single step."""
+-  def loss_fn(model):
+-    logits = model(batch['image'])
+-    loss = cross_entropy_loss(logits, batch['label'])
+-    return loss, logits
+-  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+-  (_, logits), grad = grad_fn(optimizer.target)
++  logits = optimizer.target(batch['image'])
++
++  # Compute per-example gradients
++  def loss_fn(model, inputs, labels):
++    inputs = jnp.expand_dims(inputs, 0)
++    labels = jnp.expand_dims(labels, 0)
++    return cross_entropy_loss(model(inputs), labels)
++  grad_fn = jax.vmap(jax.grad(loss_fn), in_axes=(None, 0, 0))
++  grads = grad_fn(optimizer.target, batch['image'], batch['label'])
++
++  # Average across examples
++  mean_fn = lambda x: jnp.mean(x, axis=0)
++  grad = jax.tree_map(mean_fn, grads)
++
+   optimizer = optimizer.apply_gradient(grad)
+   metrics = compute_metrics(logits, batch['label'])
+   return optimizer, metrics
