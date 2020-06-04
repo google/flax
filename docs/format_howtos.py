@@ -61,8 +61,8 @@ def format_howto(input_file, output_file):
   # - By compiling a grouped expression, we ensure re.split returns both
   # delimiter and delimited strings (i.e., an array of alternating delimiters
   # and delimited strings).
-  # - Assume we only want to ignore tests that are Python files
-  file_delimiter_regexp = re.compile("(^diff.*--git.*py$)", re.MULTILINE).
+  # - Assume we only want to ignore tests that are Python files.
+  file_delimiter_regexp = re.compile("(^diff.*--git.*py$)", re.MULTILINE)
 
   for chunk in file_delimiter_regexp.split(diff):
     # If we see a diff line and it has the word `test`, assume we want to
