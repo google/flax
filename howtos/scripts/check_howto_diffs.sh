@@ -49,7 +49,7 @@ for howto in $howtos; do
     # Undo patch in case we're running locally.
     git apply -R $diff_file
 
-    printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
+    printf "\nERROR: Tests failed for howto ${howto}! Undoing `git apply` ==> PLEASE FIX HOWTO\n"
 
     exit 1
   fi
