@@ -46,10 +46,11 @@ for howto in $howtos; do
 
   # Run unit test on affected examples only.
   if ! git diff --name-only $curr_branch | xargs dirname | xargs pytest; then
-    printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
-
     # Undo patch in case we're running locally.
     git apply -R $diff_file
+
+    printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
+
     exit 1
   fi
 
