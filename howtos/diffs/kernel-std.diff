@@ -1,0 +1,45 @@
+diff --git a/examples/mnist/train.py b/examples/mnist/train.py
+index 9c21985..e9ea114 100644
+--- a/examples/mnist/train.py
++++ b/examples/mnist/train.py
+@@ -64,10 +64,10 @@ class CNN(nn.Module):
+   """A simple CNN model."""
+ 
+   def apply(self, x):
+-    x = nn.Conv(x, features=32, kernel_size=(3, 3))
++    x = std_kernel(nn.Conv)(x, features=32, kernel_size=(3, 3))
+     x = nn.relu(x)
+     x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+-    x = nn.Conv(x, features=64, kernel_size=(3, 3))
++    x = std_kernel(nn.Conv)(x, features=64, kernel_size=(3, 3))
+     x = nn.relu(x)
+     x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+     x = x.reshape((x.shape[0], -1))  # flatten
+@@ -78,6 +78,27 @@ class CNN(nn.Module):
+     return x
+ 
+ 
++def std_kernel(module):
++  """Standardize the kernel parameters of a module."""
++  def std(x, axis, eps=1e-10):
++    x -= jnp.mean(x, axis, keepdims=True)
++    x /= jnp.sqrt(jnp.mean(jnp.square(x), axis, keepdims=True) + eps)
++    return x
++
++  class StdModule(nn.Module):
++
++    def apply(self, *args, **kwargs):
++      def init_fn(rng, _):
++        _, params = module.init(rng, *args, **kwargs)
++        return params
++      params = self.param('kernel', None, init_fn)
++      assert 'kernel' in params
++      params['kernel'] = std(params['kernel'], axis=[0, 1, 2]) 
++      return module.call(params, *args, **kwargs)      
++  
++  return StdModule
++
++
+ def create_model(key):
+   _, initial_params = CNN.init_by_shape(key, [((1, 28, 28, 1), jnp.float32)])
+   model = nn.Model(CNN, initial_params)
