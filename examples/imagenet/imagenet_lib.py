@@ -91,7 +91,7 @@ def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
 
 def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
-  def _loss_fn(model):
+  def loss_fn(model):
     """loss function used for training."""
     with nn.stateful(state.model_state) as new_model_state:
       logits = model(batch['image'])
@@ -112,11 +112,11 @@ def train_step(state, batch, learning_rate_fn):
 
   if dynamic_scale:
     grad_fn = dynamic_scale.value_and_grad(
-        _loss_fn, has_aux=True, axis_name='batch')
+        loss_fn, has_aux=True, axis_name='batch')
     dynamic_scale, is_fin, aux, grad = grad_fn(optimizer.target)
     # dynamic loss takes care of averaging gradients across replicas
   else:
-    grad_fn = jax.value_and_grad(_loss_fn, has_aux=True)
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     aux, grad = grad_fn(optimizer.target)
     # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
     grad = lax.pmean(grad, axis_name='batch')
@@ -148,7 +148,7 @@ def eval_step(state, batch):
 def prepare_tf_data(xs):
   """Convert a input batch from tf Tensors to numpy arrays."""
   local_device_count = jax.local_device_count()
-  def _prepare(x):
+  def prepare(x):
     # Use _numpy() for zero-copy conversion between TF and NumPy.
     x = x._numpy()  # pylint: disable=protected-access
 
@@ -156,7 +156,7 @@ def prepare_tf_data(xs):
     # (local_devices, device_batch_size, height, width, 3)
     return x.reshape((local_device_count, -1) + x.shape[1:])
 
-  return jax.tree_map(_prepare, xs)
+  return jax.tree_map(prepare, xs)
 
 
 def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,

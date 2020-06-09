@@ -24,4 +24,4 @@ The model should run with other configurations and hardware, but explicitely tes
 `python imagenet_main.py --batch_size=2048 --cache=True --model_dir=./imagenet_fp16_bs2048 --half_precision=True --loss_scaling=256.`
 
 ### Reproducibility
-Making the ImageNet classification example reproducible in WIP. For more details, follow [#291](https://github.com/google/flax/issues/291).
+Making the ImageNet classification example reproducible is WIP. For more details, follow [#291](https://github.com/google/flax/issues/291).

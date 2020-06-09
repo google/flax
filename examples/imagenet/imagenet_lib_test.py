@@ -15,38 +15,14 @@
 # Lint as: python3
 """Tests for flax.examples.imagenet.imagenet_lib."""
 
-import itertools
 import os
 import tempfile
 
 from absl.testing import absltest
 
-from tensorboard.backend.event_processing import directory_watcher
-from tensorboard.backend.event_processing import event_file_loader
-from tensorboard.util import tensor_util
 import tensorflow_datasets as tfds
 
 import imagenet_lib
-
-
-# TODO(#290): Refactor logic in testing/benchmark.py to create a 
-# utility class for parsing event files and extracting scalar summaries. 
-def _process_event(event):
-  for value in event.summary.value:
-    yield value
-
-
-def _parse_and_return_summary_values(path):
-  """Parses event file in given `path` and returns scalar summaries logged."""
-  tag_event_value_dict = {}
-  event_file_generator = directory_watcher.DirectoryWatcher(
-      path, event_file_loader.EventFileLoader).Load()
-  event_values = itertools.chain.from_iterable(
-      map(_process_event, event_file_generator))
-  for value in event_values:
-    tag_event_value_dict[value.tag] = tensor_util.make_ndarray(value.tensor)
-
-  return tag_event_value_dict
 
 
 class ImageNetTest(absltest.TestCase):
@@ -69,15 +45,6 @@ class ImageNetTest(absltest.TestCase):
           model_dir=model_dir, batch_size=8, num_epochs=1,
           learning_rate=0.1, momentum=0.9, cache=False, half_precision=False,
           num_train_and_eval_steps=1)
-
-    summary_values_dict = _parse_and_return_summary_values(path=model_dir)
-
-    # Since the values could change due to stochasticity in input processing
-    # functions, model definition and dataset shuffling.
-    self.assertGreaterEqual(summary_values_dict['train_accuracy'], 0.0)
-    self.assertGreaterEqual(summary_values_dict['train_loss'], 0.0)
-    self.assertGreaterEqual(summary_values_dict['eval_accuracy'], 0.0)
-    self.assertGreaterEqual(summary_values_dict['eval_loss'], 0.0)
 
 
 if __name__ == '__main__':
