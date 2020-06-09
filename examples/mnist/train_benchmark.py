@@ -63,9 +63,14 @@ class MnistBenchmark(Benchmark):
 
     # Use the reporting API to report single or multiple metrics/extras.
     self.report_wall_time(benchmark_time)
-    self.report_metrics({'sec_per_epoch': sec_per_epoch,
-                         'accuracy': end_eval_accuracy})
-    self.report_extra('description', 'CPU test for MNIST.')
+    self.report_metrics({
+        'sec_per_epoch': sec_per_epoch,
+        'accuracy': end_eval_accuracy,
+    })
+    self.report_extras({
+        'model_name': 'MNIST',
+        'description': 'CPU test for MNIST.'
+    })
 
 
 if __name__ == '__main__':
