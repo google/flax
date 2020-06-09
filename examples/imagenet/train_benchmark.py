@@ -69,7 +69,12 @@ class ImagenetBenchmark(Benchmark):
     self.report_wall_time(benchmark_time)
     self.report_metrics({'sec_per_epoch': sec_per_epoch,
                          'accuracy': end_accuracy})
-    self.report_extra('description', 'Toy 8 x V100 test for ImageNet ResNet50.')
+    self.report_extras({
+        'description':
+            'Toy 8 x V100 test for ImageNet ResNet50.',
+        'model_name':
+            'resnet50'
+    })
 
 
 if __name__ == '__main__':
