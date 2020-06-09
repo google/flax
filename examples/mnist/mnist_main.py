@@ -45,8 +45,6 @@ flags.DEFINE_string(
     'model_dir', default=None,
     help=('Directory to store model data.'))
 
-flags.mark_flag_as_required('model_dir')
-
 
 def main(_):
   mnist_lib.train_and_evaluate(
@@ -56,4 +54,5 @@ def main(_):
 
 
 if __name__ == '__main__':
+  flags.mark_flag_as_required('model_dir')  
   app.run(main)
