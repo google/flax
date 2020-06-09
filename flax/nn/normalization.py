@@ -96,14 +96,14 @@ class BatchNorm(base.Module):
       mean, var = ra_mean.value, ra_var.value
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=False)
-      if axis_name is not None and not self.is_initializing():
-        mean = lax.pmean(
-            mean, axis_name=axis_name, axis_index_groups=axis_index_groups)
-
       mean2 = jnp.mean(lax.square(x), axis=reduction_axis, keepdims=False)
       if axis_name is not None and not self.is_initializing():
-        mean2 = lax.pmean(
-            mean2, axis_name=axis_name, axis_index_groups=axis_index_groups)
+        concatenated_mean = jnp.concatenate([mean, mean2])
+        mean, mean2 = jnp.split(
+            lax.pmean(
+                concatenated_mean,
+                axis_name=axis_name,
+                axis_index_groups=axis_index_groups), 2)
       var = mean2 - lax.square(mean)
 
       if ra_mean and not self.is_initializing():
