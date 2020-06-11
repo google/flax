@@ -21,7 +21,7 @@ The model should run with other configurations and hardware, but explicitly test
 
 | Hardware |  Batch size  | Learning rate | Training time | Accuracy  | TensorBoard.dev |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| Nvidia V100 (16GB) | 64  |  0.05 | 5h 15m | 72.20% | [2020-03-22](https://tensorboard.dev/experiment/YkUAdwYaQ9OtYl2IVe3MvA/) |
+| Nvidia 2080Ti (11GB) | 64  |  0.05 | 6h 25m | 71.97% | [2020-06-11](https://tensorboard.dev/experiment/1kp6O2xbRDWCJCmrmnLBgA/) |
 
 ### Running 
 ```
