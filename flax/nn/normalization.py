@@ -91,8 +91,8 @@ class BatchNorm(base.Module):
 
     if use_running_average:
       if ra_mean is None:
-        raise ValueError('batch_stats should be provided if '
-                         'use_running_averages is True')
+        raise ValueError('when use_running_averages is True '
+                         'either use a stateful context or provide batch_stats')
       mean, var = ra_mean.value, ra_var.value
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=False)
