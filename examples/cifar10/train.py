@@ -266,14 +266,15 @@ def train(module, model_dir, batch_size,
       eval_metrics = []
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
+        eval_batch_len = eval_batch['image'].shape[0]
         # Load and shard the TF batch
         eval_batch = load_and_shard_tf_batch(eval_batch)
         # Step
         metrics = p_eval_step(optimizer.target, state, eval_batch)
-        eval_metrics.append(metrics)
+        eval_metrics.append(jax.tree_map(lambda x: eval_batch_len * x, metrics))
       eval_metrics = common_utils.get_metrics(eval_metrics)
       # Get eval epoch summary for logging
-      eval_summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
+      eval_summary = jax.tree_map(lambda x: x.sum()/data_source.EVAL_IMAGES, eval_metrics)
 
       # Log epoch summary
       logging.info(
