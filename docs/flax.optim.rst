@@ -20,3 +20,7 @@ Optimizers
 .. autoclass:: Momentum
 
 .. autoclass:: Adam
+
+.. autoclass:: GradientDescent
+
+.. autoclass:: LARS
