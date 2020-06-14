@@ -61,7 +61,6 @@ Torchvision Datasets
 .. raw:: html
    :file: _formatted_howtos/torchvision-mnist.diff.html
 
-
 How do HOWTOs work?
 -------------------
 
