@@ -1,0 +1,30 @@
+diff --git a/examples/mnist/train.py b/examples/mnist/train.py
+index 9c21985..0c3a129 100644
+--- a/examples/mnist/train.py
++++ b/examples/mnist/train.py
+@@ -34,7 +34,7 @@ import jax.numpy as jnp
+ 
+ import numpy as onp
+ 
+-import tensorflow_datasets as tfds
++import torchvision
+ 
+ 
+ FLAGS = flags.FLAGS
+@@ -164,10 +164,12 @@ def eval_model(model, test_ds):
+ 
+ def get_datasets():
+   """Load MNIST train and test datasets into memory."""
+-  ds_builder = tfds.builder('mnist')
+-  ds_builder.download_and_prepare()
+-  train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
+-  test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
++  train_ds = torchvision.datasets.MNIST('./data', train=True, download=True)
++  test_ds = torchvision.datasets.MNIST('./data', train=False, download=True)
++  train_ds = {'image': onp.expand_dims(train_ds.data.numpy(), 3), 
++              'label': train_ds.targets.numpy()}
++  test_ds = {'image': onp.expand_dims(test_ds.data.numpy(), 3), 
++             'label': test_ds.targets.numpy()}
+   train_ds['image'] = jnp.float32(train_ds['image']) / 255.
+   test_ds['image'] = jnp.float32(test_ds['image']) / 255.
+   return train_ds, test_ds
