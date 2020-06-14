@@ -49,15 +49,20 @@ loop, not by adding features to a framework.
 Flax is being developed in close collaboration with the JAX team and 
 comes with everything you need to start your research, including:
 
-* **Common layers** (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
+* **Common layers** ([`flax.nn`](https://flax.readthedocs.io/en/latest/flax.nn.html)): [Dense](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.Dense.html), [Conv](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.Conv.html), [{Batch|Layer|Group} Norm](https://flax.readthedocs.io/en/latest/flax.nn.html#normalization), [Attention](https://flax.readthedocs.io/en/latest/flax.nn.html#attention-primitives), [Pooling](https://flax.readthedocs.io/en/latest/flax.nn.html#pooling), [{LSTM|GRU} Cell](https://flax.readthedocs.io/en/latest/flax.nn.html#rnn-primitives), [Dropout](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.dropout.html)
 
-* **Optimizers** (`flax.optim`): SGD, Momentum, Adam, LARS
+* **Optimizers** ([`flax.optim`](https://flax.readthedocs.io/en/latest/flax.optim.html)): [SGD](flax/optim/sgd.py), [Momentum](flax/optim/momentum.py), [Adam](flax/optim/adam.py), [LARS](flax/optim/lars.py)
 
-* **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device
+* **Utilities and patterns**: 
+  - [Replicated training](https://flax.readthedocs.io/en/latest/flax.jax_utils.html#multi-device-utilities)
+  - [Serialization](https://flax.readthedocs.io/en/latest/flax.serialization.html)
+  - [Checkpointing](flax/training/checkpoints.py)
+  - [Metrics](flax/metrics)
+  - [Prefetching on device](flax/jax_utils.py)
 
 * **Educational examples** that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
 
-* **HOWTO guides** -- diffs that add functionality to educational base exampless
+* **[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html)** -- diffs that add functionality to educational base examples
 
 * **Fast, tuned large-scale end-to-end examples**: CIFAR10, ResNet on ImageNet, Transformer LM1b
 
@@ -218,6 +223,73 @@ At present, Cloud TPUs are network-attached, and Flax users typically feed in da
 When working with large-scale input data, it is important to create large enough VMs with sufficient network bandwidth to avoid having the TPUs bottlenecked waiting for input
 
 TODO: Add an example for running on Google Cloud.
+
+## Frequently asked questions (FAQs)
+A small selection of FAQs:
+
+**Question: Is there something similar to `tf.keras.Sequential`?**
+
+**Answer:** We don’t have a `Sequential` combinator in flax at the moment, so you have to manually write the chain of layer function calls. In Flax `Sequential(Foo1, Foo2, Foo3)` just becomes something like:
+
+```python3
+class Foo(nn.Module):
+  def apply(self, x):
+    x = Foo1(x)
+    x = Foo2(x)
+    x = Foo3(x)
+    return x
+```
+(or can be made into 3 lines by applying all the function calls directly in one line). The benefit is that if you then want to add something between Foo2 and Foo3 you don’t need to rewrite the module – you can just “hack away”.
+
+**Question: When should I use Module.shared() and when not?**
+
+**Answer:** Iterating over a submodule in a module function may lead to errors if `Module.shared()` is not used:
+
+```python3
+class Test(nn.Module):
+  def apply(self, x):
+    return nn.Dense(x, features=5, name='dense')
+  
+  @nn.module_method
+  def apply2(self, x):
+    for _ in range(5):
+      x = nn.Dense(x, features=5, name='dense')
+    return x
+```
+The api guards you against accidentally sharing parameters. So you want to do something like this:
+```python3
+@nn.module_method
+  def apply2(self, x):
+    dense = nn.Dense.shared(features=5, name='dense')
+    for _ in range(5):
+      x = dense(x)
+    return x
+```
+
+**Question: How to get a submodule’s parameters?**
+
+**Answer:**
+
+Assuming you’re doing this within a module,
+
+```python3
+nn.Embed(.., name='vocab')
+embedding_matrix = self.get_param('vocab')['embedding']
+```
+Or alternatively
+
+```python3
+class MyEmbed(nn.Embed):
+  @nn.module_method
+  def get_embedding(self):
+    return self.get_param('embedding')
+
+embed_layer = MyEmbed.shared()
+...
+embed_layer.get_embedding()
+```
+
+**⟶ For more FAQs, refer to the [Flax FAQs](https://flax.readthedocs.io/en/latest/faq.html)**
 
 ## Getting involved
 We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
