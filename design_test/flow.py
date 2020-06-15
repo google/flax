@@ -13,6 +13,8 @@ Initializer = Callable[..., Any]
 Array = Any
 Flow = Any
 
+
+
 @dataclass
 class DenseFlow:
   kernel_init: Initializer = nn.linear.default_kernel_init
@@ -37,17 +39,20 @@ class StackFlow:
   flows: Sequence[Flow]
 
   def forward(self, scope: Scope, x: Array):
-    for i, flow in enumerate(self.flows):
-      x = scope.child(flow.forward, name=str(i))(x)
+    for i, f in enumerate(self.flows):
+      x = scope.child(f.forward, name=str(i))(x)
     return x
 
   def backward(self, scope: Scope, x: Array):
-    for i, flow in reversed(tuple(enumerate(self.flows))):
-      x = scope.child(flow.backward, name=str(i))(x)
+    for i, f in reversed(tuple(enumerate(self.flows))):
+      x = scope.child(f.backward, name=str(i))(x)
     return x
 
-flow = StackFlow((DenseFlow(),) * 3)
-y, params = init(flow.forward)(random.PRNGKey(0), jnp.ones((1, 3)))
-print(params)
-x_restore = apply(flow.backward)(params, y)
-print(x_restore)
+if __name__ == "__main__":
+  flow = StackFlow((DenseFlow(),) * 3)
+  # forward and backward are interchangeable here
+  # so shape inference and initialization can be done on the forward and backward pass of the flow
+  y, params = init(flow.forward)(random.PRNGKey(0), jnp.ones((1, 3)))
+  print(params)
+  x_restore = apply(flow.backward)(params, y)
+  print(x_restore)
