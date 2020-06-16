@@ -41,6 +41,7 @@ tests_require = [
     "pytest-xdist",
     "tensorflow",
     "tensorflow_datasets",
+    "torchvision"
 ]
 
 setup(
