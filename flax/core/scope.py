@@ -7,7 +7,7 @@ TODO(jheek): DO NOT SUBMIT without a detailed description of scope.
 import enum
 import functools
 import hashlib
-from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic
 
 from . import tracers
 from .frozen_dict import freeze
@@ -81,6 +81,22 @@ def group_kinds(xs: Variables,
   return tuple(groups)
 
 
+class Variable(Generic[T]):
+  
+  def __init__(self, scope: 'Scope', kind: str, name: str):
+    self.scope = scope
+    self.kind = kind
+    self.name = name
+
+  @property
+  def value(self) -> T:
+    return self.scope.get_variable(self.kind, self.name)
+
+  @value.setter
+  def value(self, value: T):
+    self.scope.put_variable(self.kind, self.name, value)
+
+
 class Scope:
   """Scope."""
 
@@ -106,6 +122,11 @@ class Scope:
   def rewind(self):
     self.reservations = set()
 
+  def reserve(self, name: str):
+    if name in self.reservations:
+      raise ValueError(f'Duplicate use of name: "{name}"')
+    self.reservations.add(name)
+
   def default_name(self, name_prefix: str) -> str:
     i = 0
     while True:
@@ -118,8 +139,7 @@ class Scope:
     self._validate_trace_level()
     if name is None:
       name = self.default_name(name_prefix)
-    assert name not in self.reservations
-    self.reservations.add(name)
+    self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
     scope = Scope({}, name=name, rngs=rngs, parent=self)
     return scope
@@ -179,11 +199,18 @@ class Scope:
     variables = self.get_kind(kind, mutable=True)
     variables[name] = value
 
+  def variable(self, kind: str, name: str, init_fn: Callable[..., T],
+               *init_args) -> Variable[T]:
+    self.reserve(name)
+    if not self.has_variable(kind, name):
+      init_value = init_fn(*init_args)
+      self.put_variable(kind, name, init_value)
+    return Variable(self, kind, name)
+
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    if not self.has_variable('param', name):
-      init_value = init_fn(self.make_rng('param'), *init_args)
-      self.put_variable('param', name, init_value)
-    return self.get_variable('param', name)
+    s_init_fn = lambda *args: init_fn(self.make_rng('param'), *init_args)
+    v = self.variable('param', name, s_init_fn, *init_args)
+    return v.value
 
   def _populate_kinds(self):
     kinds = self.root.variables.keys()

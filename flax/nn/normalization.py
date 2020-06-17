@@ -52,14 +52,14 @@ def batch_norm(scope: Scope,
   mean2 = pmean(jnp.square(x))
   var = mean2 - jnp.square(mean)
 
-  ra_mean = scope.get_variable(kind, 'mean')
-  ra_var = scope.get_variable(kind, 'var')
+  ra_mean = scope.variable(kind, 'mean', jnp.zeros, squeeze_shape)
+  ra_var = scope.variable(kind, 'var', jnp.ones, squeeze_shape)
 
   if use_running_average:
-    if ra_mean is not None:
-      raise ValueError('batch_stats should be provided if use_running_averages=True')
-    mean = jnp.reshape(ra_mean, mean.shape)
-    var = jnp.reshape(ra_var, var.shape)
+    # if ra_mean is not None:
+    #   raise ValueError('batch_stats should be provided if use_running_averages=True')
+    mean = jnp.reshape(ra_mean.value, mean.shape)
+    var = jnp.reshape(ra_var.value, var.shape)
   else:
     if ra_mean is not None:
       beta = 1. - momentum
