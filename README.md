@@ -98,7 +98,7 @@ We keep here a limited list of canonical examples maintained by the Flax team. I
 
 ## The Flax Module abstraction in a nutshell
 
-The core of Flax is the Module abstraction. Modules allow you to write parameterized functions just as if you were writing a normal numpy function with JAX. The Module api allows you to declare parameters and use them directly with the JAX api’s.
+The core of Flax is the Module abstraction. Modules allow you to write parameterized functions just as if you were writing a normal numpy function with JAX. The Module API allows you to declare parameters and use them directly with the JAX APIs.
 
 Modules are the one part of Flax with "magic" -- the magic is constrained, and enables a very ergonomic model construction style, where modules are defined in a single function with minimal boilerplate.
 
@@ -209,6 +209,7 @@ are not already installed, you will need to install
 [CuDNN](https://developer.nvidia.com/cudnn) runtimes.
 
 Then install `flax` from PyPi:
+
 ```
 > pip install flax
 ```
@@ -292,7 +293,7 @@ embed_layer.get_embedding()
 **⟶ For more FAQs, refer to the [Flax FAQs](https://flax.readthedocs.io/en/latest/faq.html)**
 
 ## Getting involved
-We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
+We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
 
 ## Note
 
