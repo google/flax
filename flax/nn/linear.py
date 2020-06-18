@@ -48,6 +48,8 @@ class DenseGeneral(base.Module):
             bias_init=initializers.zeros,
             precision=None):
     """Applies a linear transformation to the inputs along multiple dimensions.
+    
+    See also [XLA's DotGeneral op](https://www.tensorflow.org/xla/operation_semantics#dotgeneral).
 
     Args:
       inputs: The nd-array to be transformed.
