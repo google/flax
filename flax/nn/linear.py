@@ -49,7 +49,8 @@ class DenseGeneral(base.Module):
             precision=None):
     """Applies a linear transformation to the inputs along multiple dimensions.
     
-    See also [XLA's DotGeneral op](https://www.tensorflow.org/xla/operation_semantics#dotgeneral).
+    See also [XLA's DotGeneral op](https://www.tensorflow.org/xla/operation_semantics#dotgeneral)
+    and [Jax's dot_general wrapper of it](https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.dot_general.html).
 
     Args:
       inputs: The nd-array to be transformed.
