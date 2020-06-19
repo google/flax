@@ -38,6 +38,8 @@ import warnings
 import numpy as onp
 
 import jax
+from jax.interpreters import partial_eval as pe
+from jax import linear_util as lu
 from jax import lax
 import jax.numpy as jnp
 import jax.lib.xla_bridge as xb
@@ -103,28 +105,17 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   """
   # output cannot be returned in lazy_create because jax.eval_shape will only
   # return the shape and dtype.
-  output_traced = None
-  master = None
-  def lazy_fn(*inputs):
-    nonlocal output_traced, master
-    leaves = jax.tree_leaves(inputs)
-    if leaves:
-      master = leaves[0]._trace.master  # pylint: disable=protected-access
-    output = fn(*(inputs + args), **kwargs)
-    output_traced = output
-    return output
-
+  # TODO(mattjj,jheek): use a public JAX API
+  f = lambda *inputs: fn(*inputs, *args, **kwargs)
   input_structs = [_parse_spec(spec) for spec in input_spec]
-  output_shapes = jax.eval_shape(lazy_fn, *input_structs)
-  def merge_results(traced, shape):
-    # Only return the shape when an output depends on any unknown inputs.
-    # pylint: disable=protected-access
-    if isinstance(traced, jax.core.Tracer) and traced._trace.master == master:
-      return shape
-    else:
-      return traced
-    # pylint: enable=protected-access
-  return jax.tree_multimap(merge_results, output_traced, output_shapes)
+  inputs_flat, in_tree = jax.tree_flatten(input_structs)
+  f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(f), in_tree)
+  in_pvals = [pe.PartialVal.unknown(jax.ShapedArray(x.shape, x.dtype))
+              for x in inputs_flat]
+  _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
+  out_flat = [const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
+              for pv, const in out_pvals]
+  return jax.tree_unflatten(out_tree(), out_flat)
 
 
 def _parse_spec(spec):
