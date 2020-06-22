@@ -32,6 +32,19 @@ MaybeFrozenKind = Union[Dict[str, Any], FrozenDict[str, Any]]
 
 Variables = Dict[str, MaybeFrozenKind]
 
+
+def _named_call(f, name):
+  _, in_tree = jax.tree_flatten(())
+  def named_f(*args, **kwargs):
+    print(f, name, args)
+    lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
+    flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
+    out_flat = jax.core.call_p.bind(flat_f, name=name)
+    print(f, name, out_flat)
+    return jax.tree_unflatten(out_tree(), out_flat)
+  return named_f
+
+
 def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   """Fold a string into a jax.random.PRNGKey using its SHA-1 hash."""
   m = hashlib.sha1()
@@ -120,7 +133,7 @@ class Scope:
   def default_name(self, name_prefix: str) -> str:
     i = 0
     while True:
-      name = f'{name_prefix}_{i}'
+      name = f'{name_prefix}{i}'
       if name not in self.reservations:
         return name
       i += 1
@@ -140,7 +153,10 @@ class Scope:
             **partial_kwargs) -> Callable[..., Any]:
     """Partially applies a child scope to fn."""
     prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
-    scope = self.push(name, name_prefix=prefix)
+    if name is None:
+      name = self.default_name(prefix)
+    scope = self.push(name)
+    fn = _named_call(fn, name)
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
       kwargs = dict(partial_kwargs, **kwargs)

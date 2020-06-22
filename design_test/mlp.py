@@ -14,20 +14,26 @@ from functools import partial
 Array = Any
 
 def mlp(scope: Scope, x: Array,
-        sizes: Sequence[int] = (8, 1),
+        sizes: Sequence[int] = (2, 4, 1),
         act_fn: Callable[[Array], Array] = nn.relu):
   # hidden layers
   for size in sizes[:-1]:
-    x = scope.child(nn.dense)(x, size)
-    x = act_fn(x)
+    def hidden(scope, x, size):
+      h = nn.dense(scope, x, size)
+      return act_fn(h)
+
+    x = scope.child(hidden)(x, size)
+    # x = act_fn(x)
 
   # output layer
-  return scope.child(nn.dense)(x, sizes[-1])
+  return scope.child(nn.dense, 'out')(x, sizes[-1])
 
 
 
 
-x = random.normal(random.PRNGKey(0), (1, 4))
+x = random.normal(random.PRNGKey(0), (1, 4,))
 y, params = init(mlp)(random.PRNGKey(1), x)
 print(y.shape)
 print(jax.tree_map(jnp.shape, unfreeze(params)))
+
+print(jax.make_jaxpr(jax.jit(apply(mlp)))(params, x))
