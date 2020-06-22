@@ -52,6 +52,7 @@ def batch_norm(scope: Scope,
   mean2 = pmean(jnp.square(x))
   var = mean2 - jnp.square(mean)
 
+  is_init = not scope.has_variable(kind, 'mean')
   ra_mean = scope.variable(kind, 'mean', jnp.zeros, squeeze_shape)
   ra_var = scope.variable(kind, 'var', jnp.ones, squeeze_shape)
 
@@ -61,16 +62,10 @@ def batch_norm(scope: Scope,
     mean = jnp.reshape(ra_mean.value, mean.shape)
     var = jnp.reshape(ra_var.value, var.shape)
   else:
-    if ra_mean is not None:
+    if not is_init:
       beta = 1. - momentum
-      ra_mean += beta * (jnp.squeeze(mean) - ra_mean)
-      ra_var += beta * (jnp.squeeze(var) - ra_var)
-    else:
-      ra_mean = jnp.zeros(squeeze_shape)
-      ra_var = jnp.ones(squeeze_shape)
-    scope.put_variable(kind, 'mean', ra_mean)
-    scope.put_variable(kind, 'var', ra_var)
-
+      ra_mean.value += beta * (jnp.squeeze(mean) - ra_mean.value)
+      ra_var.value += beta * (jnp.squeeze(var) - ra_var.value)
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
   if scale:
@@ -81,13 +76,6 @@ def batch_norm(scope: Scope,
     y = y + scope.param(
         'bias', bias_init, squeeze_shape).reshape(mean.shape)
   return jnp.asarray(y, dtype)
-
-if __name__ == "__main__":
-  x = random.normal(random.PRNGKey(0), (2, 3))
-  y, params = init(batch_norm)(random.PRNGKey(1), x)
-  print(y)
-  print(params)
-
 
 
 def layer_norm(
