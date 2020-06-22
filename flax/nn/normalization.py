@@ -158,6 +158,7 @@ class LayerNorm(base.Module):
       Normalized inputs (the same shape as inputs).
 
     """
+    x = jnp.asarray(x, jnp.float32)
     features = x.shape[-1]
     mean = jnp.mean(x, axis=-1, keepdims=True)
     mean2 = jnp.mean(lax.square(x), axis=-1, keepdims=True)
@@ -169,7 +170,7 @@ class LayerNorm(base.Module):
     y = (x - mean) * mul
     if bias:
       y = y + jnp.asarray(self.param('bias', (features,), bias_init), dtype)
-    return y
+    return jnp.asarray(y, dtype)
 
 
 class GroupNorm(base.Module):
