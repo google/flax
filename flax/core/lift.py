@@ -46,11 +46,11 @@ def pack(fn: Callable[..., Any],
          rng_filters: Sequence[KindFilter]) -> Callable[..., Any]:
   """Pack variables and rngs for functional transformations."""
   @functools.wraps(fn)
-  def wrapper(self, *args):
+  def wrapper(scope, *args):
     # pylint: disable=protected-access
-    self._validate_trace_level()
-    self._populate_kinds()
-    variable_groups = group_kinds(self.variables, in_variable_filters)
+    scope._validate_trace_level()
+    scope._populate_kinds()
+    variable_groups = group_kinds(scope._variables, in_variable_filters)
     # Make sure in only variable kinds are frozen
     for variable_group in variable_groups:
       for kind, kind_variables in variable_group.items():
@@ -60,10 +60,10 @@ def pack(fn: Callable[..., Any],
         if not kind_in_out:
           variable_group[kind] = freeze(kind_variables)
 
-    rng_groups = group_kinds(self.rngs, rng_filters)
+    rng_groups = group_kinds(scope.rngs, rng_filters)
     for rng_group in rng_groups:
       for kind in rng_group:
-        rng_group[kind] = self.make_rng(kind)
+        rng_group[kind] = scope.make_rng(kind)
 
     def scope_fn(variable_groups, rng_groups):
       variables = {}
@@ -72,13 +72,14 @@ def pack(fn: Callable[..., Any],
         variables.update(variable_group)
       for rng_group in rng_groups:
         rngs.update(rng_group)
-      scope = Scope(variables, name=self.name, rngs=rngs, parent=None)
-      return scope
+      # make sure variable dicts are cloned and can't be manipulated by ref sharing.
+      variables = jax.tree_map(lambda x: x, variables)
+      return Scope(variables, name=scope.name, rngs=rngs, parent=None)
 
-    def repack(scope):
-      scope._validate_trace_level()
+    def repack(inner_scope):
+      inner_scope._validate_trace_level()
       mutable_variables = {key: val for key, val
-                            in scope.variables.items()
+                            in inner_scope._variables.items()
                             if not isinstance(val, FrozenDict)}
       out_variable_groups = group_kinds(
           mutable_variables, tuple(out_variable_filters) + (True,))
@@ -92,10 +93,27 @@ def pack(fn: Callable[..., Any],
     for out_variable_group in out_variable_groups:
       for kind, kind_variables in out_variable_group.items():
         for name, value in kind_variables.items():
-          self.put_variable(kind, name, value)
+          scope.put_variable(kind, name, value)
     return y
   return wrapper
 
+def transform(trans_fn: Callable[..., Any], target: KindFilter,
+              init: bool = False,
+              rngs: KindFilter = True, variables: KindFilter = True):
+  def wrapper(scope_fn, repack, variable_groups, rng_groups, fn, *args):
+    target, variables = variable_groups
+    if init:
+      scope = scope_fn((target, variables), rng_groups)
+      fn(scope, *args)
+      target, _ = repack(scope)
+    target = freeze(trans_fn(unfreeze(target)))
+    scope = scope_fn((target, variables), rng_groups)
+    y = fn(scope, *args)
+    return y, repack(scope)
+
+  out_vars = (target, variables) if init else (variables,)
+  wrapper = pack(wrapper, (target, variables), out_vars, (rngs,))
+  return wrapper
 
 def vmap(fn: Callable[..., Any],
          variable_in_axes: Mapping[KindFilter, Optional[int]],

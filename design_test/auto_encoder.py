@@ -34,7 +34,7 @@ class AutoEncoder:
     return scope.child(mlp, 'encoder')(x, self.hidden, self.latents)
 
   def decode(self, scope, z):
-    return scope.child(mlp, 'decoder')(x, self.hidden, self.features)
+    return scope.child(mlp, 'decoder')(z, self.hidden, self.features)
 
 
 

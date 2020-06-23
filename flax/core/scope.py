@@ -36,11 +36,9 @@ Variables = Dict[str, MaybeFrozenKind]
 def _named_call(f, name):
   _, in_tree = jax.tree_flatten(())
   def named_f(*args, **kwargs):
-    print(f, name, args)
     lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
     flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
     out_flat = jax.core.call_p.bind(flat_f, name=name)
-    print(f, name, out_flat)
     return jax.tree_unflatten(out_tree(), out_flat)
   return named_f
 
@@ -106,9 +104,9 @@ class Scope:
                rngs: Optional[Dict[str, PRNGKey]] = None,
                name: Optional[str] = None,
                parent: Optional['Scope'] = None):
+    self._variables = variables
     self.parent = parent
     self.name = name
-    self.variables = variables
     self.rngs = rngs if rngs else {}
 
     self.root = parent.root if parent else self
@@ -117,12 +115,24 @@ class Scope:
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = set()
 
+  def variables(self):
+    self._populate_kinds()
+    return freeze(self._variables)
+
   def _validate_trace_level(self):
     tracers.check_trace_level(self.trace_level)
 
-  def rewinded(self):
-    scope = Scope(self.variables, self.rngs, self.name, self.parent)
-    scope.rng_counters = self.rng_counters
+  def transformed(self, fn, kind):
+    variables = unfreeze(self.get_kind(kind))
+    variables = freeze(fn(variables))
+    scope = self.rewinded(rewind_rngs=True)
+    scope._variables[kind] = variables
+    return scope
+
+  def rewinded(self, rewind_rngs=False):
+    scope = Scope(self._variables, self.rngs, self.name, self.parent)
+    if not rewind_rngs:
+      scope.rng_counters = self.rng_counters
     return scope
 
   def reserve(self, name: str):
@@ -150,10 +160,12 @@ class Scope:
   def child(self,
             fn: Callable[..., Any],
             name: Optional[str] = None,
+            prefix: Optional[str] = None,
             **partial_kwargs) -> Callable[..., Any]:
     """Partially applies a child scope to fn."""
-    prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
     if name is None:
+      if prefix is None:
+        prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
       name = self.default_name(prefix)
     scope = self.push(name)
     fn = _named_call(fn, name)
@@ -165,19 +177,19 @@ class Scope:
 
   def get_kind(self, kind: str, mutable: bool = False) -> MaybeFrozenKind:
     """Returns all variable of a given kind."""
-    if kind not in self.variables:
+    if kind not in self._variables:
       if self.parent:
         parent_kind = self.parent.get_kind(kind, mutable)
         if self.name not in parent_kind:
           if isinstance(parent_kind, FrozenDict) or not mutable:
             return FrozenDict()
           parent_kind[self.name] = {}
-        self.variables[kind] = parent_kind[self.name]
+        self._variables[kind] = parent_kind[self.name]
       elif mutable:
-        self.variables[kind] = {}
+        self._variables[kind] = {}
       else:
         return FrozenDict()
-    return self.variables[kind]
+    return self._variables[kind]
 
   def has_rng(self, kind: str) -> bool:
     return kind in self.rngs
@@ -218,10 +230,9 @@ class Scope:
     return v.value
 
   def _populate_kinds(self):
-    kinds = self.root.variables.keys()
+    kinds = self.root._variables.keys()
     for kind in kinds:
       self.get_kind(kind)
-
 
 def _unfreeze_variables(variables, mutable):
   new_variables = {}

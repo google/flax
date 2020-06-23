@@ -68,7 +68,7 @@ def freeze(x: Dict[K, V]) -> FrozenDict[K, V]:
 
 
 def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
-  if not isinstance(x, FrozenDict):
+  if not isinstance(x, FrozenDict) and not isinstance(x, dict):
     return x
   temp = {}
   for key, value in x.items():
