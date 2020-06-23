@@ -113,9 +113,10 @@ def dot_product_attention(query,
 
   # normalize the attention weights
   norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))
-  attn_weights = lax.exp(
-      attn_weights -
-      jax.scipy.special.logsumexp(attn_weights, axis=norm_dims, keepdims=True))
+  # move the division by the softmax denominator to after the dot product
+  attn_weights = jnp.exp(attn_weights - lax.stop_gradient(
+      jnp.max(attn_weights, axis=norm_dims, keepdims=True)))
+  softmax_denominator = jnp.sum(attn_weights, axis=norm_dims, keepdims=True)
   attn_weights = attn_weights.astype(dtype)
 
   # apply dropout
@@ -140,6 +141,9 @@ def dot_product_attention(query,
       attn_weights,
       value, (wv_contracting_dims, (batch_dims_t, batch_dims_t)),
       precision=precision)
+  # divide by the denominator of the attention softmax now, when the array is
+  # O(N) rather than O(N^2)
+  y = y / softmax_denominator
 
   # back to (bs, dim1, dim2, ..., dimN, num_heads, channels)
   perm_inv = _invert_perm(qk_perm)
