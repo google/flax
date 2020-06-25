@@ -75,6 +75,8 @@ class LARS(OptimizerDef):
         grad_norm + hyper_params.weight_decay * param_norm + hyper_params.eps)
     clipped_trust_ratio = jnp.where(
         param_norm + grad_norm > 0., trust_ratio, 1.)
+    # clipped_trust_ratio = jnp.where(param_norm > 0., trust_ratio, jnp.where(
+    #     grad_norm > 0., trust_ratio, 1.))
     scaled_lr = hyper_params.learning_rate * clipped_trust_ratio
     if hyper_params.weight_decay != 0:
       grad += hyper_params.weight_decay * param
