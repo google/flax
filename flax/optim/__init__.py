@@ -26,6 +26,7 @@ from .momentum import Momentum
 from .rmsprop import RMSProp
 from .sgd import GradientDescent
 from .weight_norm import WeightNorm
+from .ggt import GGTOptimizer
 
 __all__ = [
     "Adam",
@@ -40,5 +41,6 @@ __all__ = [
     "RMSProp",
     "GradientDescent",
     "WeightNorm",
+    "GGTOptimizer",
 ]
 # pylint: enable=g-multiple-import
