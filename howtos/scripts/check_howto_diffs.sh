@@ -29,6 +29,7 @@ for howto in $howtos; do
   # See: https://stackoverflow.com/q/26675681/
   if ! git apply --check "${diff_file}"; then
     printf "\nERROR: Cannot apply howto ${howto}! ==> PLEASE FIX HOWTO\n"
+    printf "See https://flax.readthedocs.io/en/latest/howtos-howto.html#resolving-a-conflict-with-an-existing-howto for instructions.\n"
     exit 1
   fi
 done
@@ -47,6 +48,7 @@ for howto in $howtos; do
   # Run unit test on affected examples only.
   if ! git diff --name-only $curr_branch | xargs dirname | xargs pytest; then
     printf "\nERROR: Tests failed for howto ${howto}! ==> PLEASE FIX HOWTO\n"
+    printf "See https://flax.readthedocs.io/en/latest/howtos-howto.html#resolving-a-conflict-with-an-existing-howto for instructions.\n"
 
     # Undo patch in case we're running locally.
     git apply -R $diff_file
