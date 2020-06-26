@@ -67,8 +67,9 @@ def classproperty(f):
 
 def _masters():
   """Returns a list of currently active Jax tracers."""
-  stack = jax.core.trace_state.trace_stack
-  return stack.downward[::-1] + stack.upward
+  # TODO(jheek): consider re-introducing the tracer check
+  # for now we pretent there are never any tracers
+  return ()
 
 
 def _trace_level(master):
@@ -90,8 +91,9 @@ def _level_of_value(xs):
   """Returns the tracer level associated with a value if any."""
   xs = jax.tree_leaves(xs)
   max_level = float('-inf')
-  for x in xs:
-    if hasattr(x, '_trace'):
-      level = _trace_level(x._trace.master)
-      max_level = max(level, max_level)
+  # TODO(jheek): consider re-introducing the tracer check
+  # for x in xs:
+  #   if hasattr(x, '_trace'):
+  #     level = _trace_level(x._trace.master)
+  #     max_level = max(level, max_level)
   return max_level
