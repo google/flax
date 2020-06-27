@@ -14,17 +14,15 @@
 
 """Benchmark for the ImageNet example."""
 import tempfile
-
 import time
+
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-
+import train
+from flax.testing import Benchmark
 import jax
 import numpy as np
-from flax.testing import Benchmark
-
-import train
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
