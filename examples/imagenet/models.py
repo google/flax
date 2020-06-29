@@ -68,6 +68,7 @@ class ResNet(nn.Module):
                      momentum=0.9, epsilon=1e-5,
                      dtype=dtype,
                      name='init_bn')
+    x = nn.relu(x)
     x = nn.max_pool(x, (3, 3), strides=(2, 2), padding='SAME')
     for i, block_size in enumerate(block_sizes):
       for j in range(block_size):
