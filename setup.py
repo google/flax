@@ -39,6 +39,7 @@ tests_require = [
     "pytest",
     "pytest-cov",
     "pytest-xdist",
+    "svn",
     "tensorflow",
     "tensorflow_datasets",
 ]
