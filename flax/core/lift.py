@@ -97,6 +97,28 @@ def pack(fn: Callable[..., Any],
     return y
   return wrapper
 
+def transform_module(trans_fn: Callable[..., Any],
+                     fn: Callable[..., Any],
+                     target: str = 'param',
+                     init: bool = True,
+                     rngs: KindFilter = True,
+                     variables: KindFilter = True):
+  def wrap_trans(variables):
+    x = variables[target] if target in variables else {}
+    return {target: trans_fn(x)}
+  def wrapper(scope, *args, **kwargs):
+    if init:
+      vs = scope.variables()
+      is_init = target not in vs or not vs[target]
+    else:
+      is_init = False
+    lift_trans = transform(
+        wrap_trans, target, init=is_init,
+        rngs=rngs, variables=variables)
+    fn_p = functools.partial(fn, **kwargs)
+    return lift_trans(scope, fn_p, *args)
+  return wrapper
+
 def transform(trans_fn: Callable[..., Any], target: KindFilter,
               init: bool = False,
               rngs: KindFilter = True, variables: KindFilter = True):
