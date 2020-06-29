@@ -14,17 +14,15 @@
 
 """Benchmark for the ImageNet example."""
 import tempfile
-
 import time
+
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-
+import train
+from flax.testing import Benchmark
 import jax
 import numpy as np
-from flax.testing import Benchmark
-
-import train
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -43,7 +41,6 @@ class ImagenetBenchmark(Benchmark):
     model_dir = tempfile.mkdtemp()
     FLAGS.batch_size = 2048
     FLAGS.half_precision = True
-    FLAGS.loss_scaling = 256.
     FLAGS.num_epochs = 2
     FLAGS.model_dir = model_dir
 
@@ -69,7 +66,12 @@ class ImagenetBenchmark(Benchmark):
     self.report_wall_time(benchmark_time)
     self.report_metrics({'sec_per_epoch': sec_per_epoch,
                          'accuracy': end_accuracy})
-    self.report_extra('description', 'Toy 8 x V100 test for ImageNet ResNet50.')
+    self.report_extras({
+        'description':
+            'Toy 8 x V100 test for ImageNet ResNet50.',
+        'model_name':
+            'resnet50'
+    })
 
 
 if __name__ == '__main__':

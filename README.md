@@ -57,7 +57,7 @@ comes with everything you need to start your research, including:
 
 * **Educational examples** that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
 
-* **HOWTO guides** -- diffs that add functionality to educational base exampless
+* **HOWTO guides**: diffs that add functionality to educational base examples
 
 * **Fast, tuned large-scale end-to-end examples**: CIFAR10, ResNet on ImageNet, Transformer LM1b
 
@@ -93,7 +93,7 @@ We keep here a limited list of canonical examples maintained by the Flax team. I
 
 ## The Flax Module abstraction in a nutshell
 
-The core of Flax is the Module abstraction. Modules allow you to write parameterized functions just as if you were writing a normal numpy function with JAX. The Module api allows you to declare parameters and use them directly with the JAX api’s.
+The core of Flax is the Module abstraction. Modules allow you to write parameterized functions just as if you were writing a normal numpy function with JAX. The Module API allows you to declare parameters and use them directly with the JAX APIs.
 
 Modules are the one part of Flax with "magic" -- the magic is constrained, and enables a very ergonomic model construction style, where modules are defined in a single function with minimal boilerplate.
 
@@ -204,6 +204,7 @@ are not already installed, you will need to install
 [CuDNN](https://developer.nvidia.com/cudnn) runtimes.
 
 Then install `flax` from PyPi:
+
 ```
 > pip install flax
 ```
@@ -220,7 +221,7 @@ When working with large-scale input data, it is important to create large enough
 TODO: Add an example for running on Google Cloud.
 
 ## Getting involved
-We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
+We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
 
 ## Note
 

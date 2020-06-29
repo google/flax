@@ -177,7 +177,11 @@ def preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   return image
 
 
-def load_split(batch_size, train, dtype=tf.float32, image_size=IMAGE_SIZE, cache=False):
+def load_split(batch_size,
+               train,
+               dtype=tf.float32,
+               image_size=IMAGE_SIZE,
+               cache=False):
   """Creates a split from the ImageNet dataset using TensorFlow Datasets.
 
   Args:
