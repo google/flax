@@ -14,21 +14,22 @@ Array = Any
 
 
 def weight_std(fn, kernel_name='kernel', eps=1e-8):
-  def std(params):
+  def std(variables):
+    params = variables['param']
     assert kernel_name in params
     kernel = params[kernel_name]
     redux = tuple(range(kernel.ndim - 1))
     norm = jnp.square(kernel).sum(redux, keepdims=True)
     std_kernel = kernel / jnp.sqrt(norm + eps)
     params[kernel_name] = std_kernel
-    return params
+    return variables
 
   # transform handles a few of nasty edge cases here...
   # the transformed kind will be immutable inside fn
   # this way we avoid lost mutations to param
   # transform also avoids accidental reuse of rngs
   # and it makes sure that other state is updated correctly (not twice during init!)
-  return lift.transform_module(std, fn)
+  return lift.transform_module(fn, trans_in_fn=std)
 
 def mlp(scope: Scope, x: Array,
         sizes: Sequence[int] = (2, 4, 1),

@@ -97,15 +97,15 @@ def pack(fn: Callable[..., Any],
     return y
   return wrapper
 
-def transform_module(trans_fn: Callable[..., Any],
-                     fn: Callable[..., Any],
-                     target: str = 'param',
-                     init: bool = True,
+id_fn = lambda x: x
+
+def transform_module(fn: Callable[..., Any],
+                     target: KindFilter = 'param',
+                     trans_in_fn: Callable[..., Any] = id_fn,
+                     trans_out_fn: Callable[..., Any] = id_fn,
+                     init: bool = True, mutable: bool = False,
                      rngs: KindFilter = True,
                      variables: KindFilter = True):
-  def wrap_trans(variables):
-    x = variables[target] if target in variables else {}
-    return {target: trans_fn(x)}
   def wrapper(scope, *args, **kwargs):
     if init:
       vs = scope.variables()
@@ -113,29 +113,45 @@ def transform_module(trans_fn: Callable[..., Any],
     else:
       is_init = False
     lift_trans = transform(
-        wrap_trans, target, init=is_init,
+        target,
+        trans_in_fn=trans_in_fn,
+        trans_out_fn=trans_out_fn,
+        init=is_init, mutable=mutable,
         rngs=rngs, variables=variables)
     fn_p = functools.partial(fn, **kwargs)
     return lift_trans(scope, fn_p, *args)
   return wrapper
 
-def transform(trans_fn: Callable[..., Any], target: KindFilter,
-              init: bool = False,
-              rngs: KindFilter = True, variables: KindFilter = True):
+
+def transform(
+    target: KindFilter,
+    trans_in_fn: Callable[..., Any] = id_fn,
+    trans_out_fn: Callable[..., Any] = id_fn,
+    init: bool = False, mutable: bool = False,
+    rngs: KindFilter = True, variables: KindFilter = True):
   def wrapper(scope_fn, repack, variable_groups, rng_groups, fn, *args):
     target, variables = variable_groups
     if init:
       scope = scope_fn((target, variables), rng_groups)
       fn(scope, *args)
       target, _ = repack(scope)
-    target = freeze(trans_fn(unfreeze(target)))
+      target = trans_out_fn(target)
+    target = trans_in_fn(unfreeze(target))
+    if not is_target_out:
+      target = freeze(target)
     scope = scope_fn((target, variables), rng_groups)
     y = fn(scope, *args)
-    return y, repack(scope)
+    out_target, out_vars = repack(scope)
+    if is_target_out:
+      out_target = trans_out_fn(out_target)
+    return y, (out_target, out_vars)
 
-  out_vars = (target, variables) if init else (variables,)
-  wrapper = pack(wrapper, (target, variables), out_vars, (rngs,))
+  is_target_out = mutable or init
+  in_vars = (target, variables)
+  out_vars = (target, variables) if is_target_out else ((), variables)
+  wrapper = pack(wrapper, in_vars, out_vars, (rngs,))
   return wrapper
+
 
 def vmap(fn: Callable[..., Any],
          variable_in_axes: Mapping[KindFilter, Optional[int]],
