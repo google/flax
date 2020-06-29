@@ -1,5 +1,22 @@
 #!/bin/bash
 
+# Download TFDS metadata to flax/.tdfs/metadata directory. 
+# This allows the tests to specify the `data_dir` when using tfds.testing.mock_data().
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd)"
+DIR="$( dirname "${DIR}" )"
+
+if [ -d "${DIR}/.tfds/metadata" ]; then 
+  echo 'Exists'; 
+else 
+  echo 'TFDS metadata doesnt exist. Downloading...';
+  # subversion checkout to the `trunk` branch which corresponds to `tree/master`.
+  # To download from branch `foo`, replace `trunk` with `branches/foo`.
+  svn checkout \
+    https://github.com/tensorflow/datasets/trunk/tensorflow_datasets/testing/metadata \
+    "${DIR}/.tfds/metadata" -q; 
+fi
+
 # Instead of using set -e, we have a manual error trap that
 # exits for any error code != 5 since pytest returns error code 5
 # for no found tests. (We may force minimal test coverage in examples

@@ -16,7 +16,7 @@
 """Tests for flax.examples.mnist.mnist_lib."""
 
 import itertools
-import os
+from pathlib import Path
 import tempfile
 
 from absl.testing import absltest
@@ -32,26 +32,6 @@ from tensorboard.util import tensor_util
 import tensorflow_datasets as tfds
 
 import mnist_lib
-
-
-# TODO(#290): Refactor logic in testing/benchmark.py to create a
-# utility class for parsing event files and extracting scalar summaries.
-def process_event(event):
-  for value in event.summary.value:
-    yield value
-
-
-def parse_and_return_summary_values(path):
-  """Parses event file in given `path` and returns scalar summaries logged."""
-  tag_event_value_dict = {}
-  event_file_generator = directory_watcher.DirectoryWatcher(
-      path, event_file_loader.EventFileLoader).Load()
-  event_values = itertools.chain.from_iterable(
-      map(process_event, event_file_generator))
-  for value in event_values:
-    tag_event_value_dict[value.tag] = tensor_util.make_ndarray(value.tensor)
-
-  return tag_event_value_dict
 
 
 class MnistLibTest(absltest.TestCase):
@@ -75,9 +55,8 @@ class MnistLibTest(absltest.TestCase):
        mocked data for MNIST dataset.
     """
     # Get datasets testing-metadata directory.
-    current_dir = os.path.dirname(os.path.realpath(__file__))
-    parent_dir = os.path.dirname(current_dir)
-    data_dir = parent_dir + '/testing/datasets'
+    flax_root_dir = Path(__file__).parents[2]
+    data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
     # Create a temporary directory where tensorboard metrics are written.
     model_dir = tempfile.mkdtemp()
@@ -86,15 +65,6 @@ class MnistLibTest(absltest.TestCase):
       mnist_lib.train_and_evaluate(
           model_dir=model_dir, num_epochs=1, batch_size=8,
           learning_rate=0.1, momentum=0.9)
-
-    summary_values_dict = parse_and_return_summary_values(path=model_dir)
-
-    # Since the values could change due to stochasticity in input processing
-    # functions, model definition and dataset shuffling.
-    self.assertTrue(onp.allclose(summary_values_dict['train_accuracy'], 0.125))
-    self.assertTrue(onp.allclose(summary_values_dict['train_loss'], 2.3537478))
-    self.assertTrue(onp.allclose(summary_values_dict['eval_accuracy'], 0.25))
-    self.assertTrue(onp.allclose(summary_values_dict['eval_loss'], 2.0355732))
 
 
 if __name__ == '__main__':
