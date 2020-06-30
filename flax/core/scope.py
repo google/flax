@@ -34,13 +34,14 @@ Variables = Dict[str, MaybeFrozenKind]
 
 
 def _named_call(f, name):
-  _, in_tree = jax.tree_flatten(())
-  def named_f(*args, **kwargs):
-    lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
-    flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
-    out_flat = jax.core.call_p.bind(flat_f, name=name)
-    return jax.tree_unflatten(out_tree(), out_flat)
-  return named_f
+  # _, in_tree = jax.tree_flatten(())
+  # def named_f(*args, **kwargs):
+  #   lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
+  #   flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
+  #   out_flat = jax.core.call_p.bind(flat_f, name=name)
+  #   return jax.tree_unflatten(out_tree(), out_flat)
+  # return named_f
+  return f
 
 
 def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
@@ -281,6 +282,7 @@ def init(fn: Callable[..., Any], mutable: bool = True) -> Callable[..., Any]:
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs):
     if not isinstance(rngs, dict):
+      assert rngs.shape == (2,)
       rngs = {'param': rngs}
     return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)
   return wrapper

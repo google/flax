@@ -53,8 +53,7 @@ def module_method(fn, name=None):
     name = fn.__name__ if hasattr(fn, '__name__') else None
 
   def wrapper(self, *args, **kwargs):
-    scope = self.scope.rewinded()
-    
+    scope = self.scope.rewinded()  
     mod_fn = lambda scope: fn(self, scope, *args, **kwargs)
     return scope.child(mod_fn, name)()
   return wrapper

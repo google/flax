@@ -158,7 +158,7 @@ def vmap(fn: Callable[..., Any],
          variable_in_axes: Mapping[KindFilter, Optional[int]],
          variable_out_axes: Mapping[KindFilter, Optional[int]],
          split_rngs: Mapping[KindFilter, bool],
-         in_axes=0, out_axes=0) -> Callable[..., Any]:
+         in_axes=0, out_axes=0, axis_size=None) -> Callable[..., Any]:
   """Wraps jax.vmap."""
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
   variable_out_groups, variable_out_axes = _unzip2(variable_out_axes.items())
@@ -174,8 +174,11 @@ def vmap(fn: Callable[..., Any],
       return ()
     # split rngs
     axis_sizes = jax.tree_multimap(find_axis_size, in_axes, args)
-    axis_size, = set(jax.tree_leaves(axis_sizes))
-    split_fn = lambda rng: random.split(rng, axis_size)
+    if axis_size is None:
+      d_axis_size, = set(jax.tree_leaves(axis_sizes))
+    else:
+      d_axis_size = axis_size
+    split_fn = lambda rng: random.split(rng, d_axis_size)
     rng_groups = tuple(
         jax.tree_map(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
