@@ -49,11 +49,14 @@ print(params)
 print('AutoEncoder with scope')
 
 def module_method(fn, name=None):
+  if name is None:
+    name = fn.__name__ if hasattr(fn, '__name__') else None
+
   def wrapper(self, *args, **kwargs):
     scope = self.scope.rewinded()
-    prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
+    
     mod_fn = lambda scope: fn(self, scope, *args, **kwargs)
-    return scope.child(mod_fn, name, prefix=prefix)()
+    return scope.child(mod_fn, name)()
   return wrapper
 
 @dataclass
@@ -69,11 +72,11 @@ class AutoEncoder2:
 
   @module_method
   def encode(self, scope, x):
-    return scope.child(mlp, 'encoder')(x, self.hidden, self.latents)
+    return mlp(scope, x, self.hidden, self.latents)
 
   @module_method
   def decode(self, scope, z):
-    return scope.child(mlp, 'decoder')(z, self.hidden, self.features)
+    return mlp(scope, z, self.hidden, self.features)
 
 ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(x)
 x = jnp.ones((1, 3))
