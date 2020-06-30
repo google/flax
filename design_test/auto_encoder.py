@@ -19,12 +19,12 @@ def mlp(scope: Scope, x: Array, hidden: int, out: int):
   return scope.child(nn.dense, 'out')(x, out)
 
 
-@struct.dataclass
+@dataclass
 class AutoEncoder:
 
-  latents: int = struct.field(False)
-  features: int = struct.field(False)
-  hidden: int = struct.field(False)
+  latents: int
+  features: int
+  hidden: int
 
   def __call__(self, scope, x):
     z = self.encode(scope, x)
@@ -39,6 +39,43 @@ class AutoEncoder:
 
 
 ae = AutoEncoder(latents=2, features=4, hidden=3)
+x = jnp.ones((1, 3))
+
+x_r, params = init(ae)(random.PRNGKey(0), x)
+
+print(x, x_r)
+print(params)
+
+print('AutoEncoder with scope')
+
+def module_method(fn, name=None):
+  def wrapper(self, *args, **kwargs):
+    scope = self.scope.rewinded()
+    prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
+    mod_fn = lambda scope: fn(self, scope, *args, **kwargs)
+    return scope.child(mod_fn, name, prefix=prefix)()
+  return wrapper
+
+@dataclass
+class AutoEncoder2:
+  scope: Scope
+  latents: int
+  features: int
+  hidden: int
+
+  def __call__(self, x):
+    z = self.encode(x)
+    return self.decode(z)
+
+  @module_method
+  def encode(self, scope, x):
+    return scope.child(mlp, 'encoder')(x, self.hidden, self.latents)
+
+  @module_method
+  def decode(self, scope, z):
+    return scope.child(mlp, 'decoder')(z, self.hidden, self.features)
+
+ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(x)
 x = jnp.ones((1, 3))
 
 x_r, params = init(ae)(random.PRNGKey(0), x)
