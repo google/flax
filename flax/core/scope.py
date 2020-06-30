@@ -269,6 +269,7 @@ def apply(fn: Callable[..., Any],
     new_variables = _unfreeze_variables(variables, mutable)
     root = Scope(new_variables, rngs=rngs)
     y = fn(root, *args, **kwargs)
+    root.invalidate()
     if mutable:
       return y, freeze(new_variables)
     else:
