@@ -77,6 +77,7 @@ def pack(fn: Callable[..., Any],
       return Scope(variables, name=scope.name, rngs=rngs, parent=None)
 
     def repack(inner_scope):
+      inner_scope.invalidate()
       inner_scope._validate_trace_level()
       mutable_variables = {key: val for key, val
                             in inner_scope._variables.items()

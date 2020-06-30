@@ -115,6 +115,19 @@ class Scope:
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = set()
 
+    self._invalid = False
+
+  @property
+  def invalid(self):
+    return self._invalid
+
+  def _check_valid(self):
+    if self._invalid:
+      raise ValueError('This scope is no longer valid.')
+
+  def invalidate(self):
+    self._invalid = True
+
   def variables(self):
     self._populate_kinds()
     return freeze(self._variables)
@@ -130,6 +143,7 @@ class Scope:
     return scope
 
   def rewinded(self, rewind_rngs=False):
+    self._check_valid()
     scope = Scope(self._variables, self.rngs, self.name, self.parent)
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
@@ -149,6 +163,7 @@ class Scope:
       i += 1
 
   def push(self, name: Optional[str] = None, name_prefix: str = '') -> 'Scope':
+    self._check_valid()
     self._validate_trace_level()
     if name is None:
       name = self.default_name(name_prefix)
@@ -196,6 +211,7 @@ class Scope:
 
   def make_rng(self, kind: str) -> PRNGKey:
     assert self.has_rng(kind)
+    self._check_valid()
     self._validate_trace_level()
     self.rng_counters[kind] += 1
     return random.fold_in(self.rngs[kind], self.rng_counters[kind])
@@ -212,6 +228,7 @@ class Scope:
     return name in variables
 
   def put_variable(self, kind: str, name: str, value: Any):
+    self._check_valid()
     self._validate_trace_level()
     variables = self.get_kind(kind, mutable=True)
     variables[name] = value
