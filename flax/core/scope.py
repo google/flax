@@ -154,19 +154,19 @@ class Scope:
       raise ValueError(f'Duplicate use of name: "{name}"')
     self.reservations.add(name)
 
-  def default_name(self, name_prefix: str) -> str:
+  def default_name(self, prefix: str) -> str:
     i = 0
     while True:
-      name = f'{name_prefix}{i}'
+      name = f'{prefix}{i}'
       if name not in self.reservations:
         return name
       i += 1
 
-  def push(self, name: Optional[str] = None, name_prefix: str = '') -> 'Scope':
+  def push(self, name: Optional[str] = None, prefix: str = '') -> 'Scope':
     self._check_valid()
     self._validate_trace_level()
     if name is None:
-      name = self.default_name(name_prefix)
+      name = self.default_name(prefix)
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
     scope = Scope({}, name=name, rngs=rngs, parent=self)
