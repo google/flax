@@ -118,7 +118,7 @@ class AddPositionEmbs(nn.Module):
     # We only use the cache's position index for tracking decoding position.
     if cache:
       if self.is_initializing():
-        cache.store(lambda: (4, (1, 1)))
+        cache.store(np.array((4, 1, 1), dtype=np.int32))
       else:
         cache_entry = cache.retrieve(None)
         i = cache_entry.i
