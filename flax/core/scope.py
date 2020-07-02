@@ -82,7 +82,7 @@ def group_kinds(xs: Variables,
 
 
 class Variable(Generic[T]):
-  
+
   def __init__(self, scope: 'Scope', kind: str, name: str):
     self.scope = scope
     self.kind = kind
@@ -96,6 +96,7 @@ class Variable(Generic[T]):
   def value(self, value: T):
     self.scope.put_variable(self.kind, self.name, value)
 
+import contextlib
 
 class Scope:
   """Scope."""
@@ -125,6 +126,13 @@ class Scope:
   def _check_valid(self):
     if self._invalid:
       raise ValueError('This scope is no longer valid.')
+
+  @contextlib.contextmanager
+  def temporary(self):
+    try:
+      yield self
+    finally:
+      self.invalidate()
 
   def invalidate(self):
     self._invalid = True
@@ -268,9 +276,8 @@ def apply(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(variables, *args, rngs=None, **kwargs):
     new_variables = _unfreeze_variables(variables, mutable)
-    root = Scope(new_variables, rngs=rngs)
-    y = fn(root, *args, **kwargs)
-    root.invalidate()
+    with Scope(new_variables, rngs=rngs).temporary() as root:
+      y = fn(root, *args, **kwargs)
     if mutable:
       return y, freeze(new_variables)
     else:

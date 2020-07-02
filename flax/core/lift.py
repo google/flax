@@ -65,7 +65,11 @@ def pack(fn: Callable[..., Any],
       for kind in rng_group:
         rng_group[kind] = scope.make_rng(kind)
 
+    inner_scope = None
     def scope_fn(variable_groups, rng_groups):
+      nonlocal inner_scope
+      if inner_scope is not None:
+        inner_scope.invalidate()
       variables = {}
       rngs = {}
       for variable_group in variable_groups:
@@ -74,7 +78,8 @@ def pack(fn: Callable[..., Any],
         rngs.update(rng_group)
       # make sure variable dicts are cloned and can't be manipulated by ref sharing.
       variables = jax.tree_map(lambda x: x, variables)
-      return Scope(variables, name=scope.name, rngs=rngs, parent=None)
+      inner_scope = Scope(variables, name=scope.name, rngs=rngs, parent=None)
+      return inner_scope
 
     def repack(inner_scope):
       inner_scope.invalidate()
@@ -88,9 +93,11 @@ def pack(fn: Callable[..., Any],
       if remainder:
         raise ValueError(f'unmapped output variables: {remainder}')
       return out_variable_groups[:-1]
-
-    y, out_variable_groups = fn(
-        scope_fn, repack, variable_groups, rng_groups, *args)
+    try:
+      y, out_variable_groups = fn(
+          scope_fn, repack, variable_groups, rng_groups, *args)
+    finally:
+      inner_scope.invalidate()
     for out_variable_group in out_variable_groups:
       for kind, kind_variables in out_variable_group.items():
         for name, value in kind_variables.items():
@@ -314,6 +321,22 @@ def scan(
 
   return pack(
       inner, variable_in_groups, variable_out_groups, rng_groups)(scope)
+
+
+def remat(fn: Callable[..., Any],
+          variables: KindFilter = True,
+          rngs: KindFilter = True) -> Callable[..., Any]:
+  """Wraps jax.jit."""
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
+    @jax.remat
+    @functools.wraps(fn)
+    def rematted(variable_groups, rng_groups, *args):
+      scope = scope_fn(variable_groups, rng_groups)
+      y = fn(scope, *args)
+      return y, repack_fn(scope)
+
+    return rematted(variable_groups, rng_groups, *args)
+  return pack(inner, (variables,), (variables,), (rngs,))
 
 
 def jit(fn: Callable[..., Any],
