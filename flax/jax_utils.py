@@ -154,7 +154,9 @@ def prefetch_to_device(iterator, size, devices=None):
     devices = jax.local_devices()
   def _prefetch(xs):
     aval = jax.xla.abstractify(xs)
-    assert xs.shape[0] == len(devices)
+    assert xs.shape[0] == len(devices), "The first dimension of the " \
+                                        "iterator's ndarrays is not " \
+                                        "equal to the number of devices" 
     buffers = [jax.interpreters.xla.device_put(x, devices[i])
                for i, x in enumerate(xs)]
     return jax.pxla.ShardedDeviceArray(aval, buffers)
