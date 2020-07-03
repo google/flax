@@ -34,6 +34,8 @@ __all__ = [
     "OptimizerDef",
     "Optimizer",
     "MultiOptimizer",
+    "ModelParamTraversal",
+    "DynamicScale",
     "LAMB",
     "LARS",
     "Momentum",
