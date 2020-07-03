@@ -113,9 +113,7 @@ def dot_product_attention(query,
 
   # normalize the attention weights
   norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))
-  attn_weights = lax.exp(
-      attn_weights -
-      jax.scipy.special.logsumexp(attn_weights, axis=norm_dims, keepdims=True))
+  attn_weights = jax.nn.softmax(attn_weights, axis=norm_dims)
   attn_weights = attn_weights.astype(dtype)
 
   # apply dropout
