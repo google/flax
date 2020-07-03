@@ -33,13 +33,8 @@ def residual_block(scope: Scope, x: Array, conv, norm, act, features: int):
   return act(residual + x)
 
 
-def big_resnet(scope: Scope, x,
-           num_blocks=10,
-           num_superblocks=10,
-           dtype=jnp.float32,
-           norm=default_norm,
-           act=nn.relu,
-           ):
+def big_resnet(scope: Scope, x, num_blocks=10, num_superblocks=10, dtype=jnp.float32,
+               norm=default_norm, act=nn.relu):
   conv = partial(nn.conv, bias=False, dtype=dtype)
   norm = partial(norm, dtype=dtype)
 
