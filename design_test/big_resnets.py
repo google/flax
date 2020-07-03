@@ -38,6 +38,10 @@ def big_resnet(scope: Scope, x, num_blocks=10, num_superblocks=10, dtype=jnp.flo
   conv = partial(nn.conv, bias=False, dtype=dtype)
   norm = partial(norm, dtype=dtype)
 
+  # a two stage resnet where inner blocks are rematerialized to make sure
+  # memory consumtion grows as O(sqrt(N)) and compute is O(N) where N is the number of blocks..
+  # we use a double scan such that the compiled binary is of size O(1).
+  
   print('total residual blocks:', num_superblocks * num_blocks)
 
   @lift.remat
