@@ -63,8 +63,8 @@ def resnet(scope: Scope, x,
   x = scope.child(nn.dense, 'out')(x, num_classes)
   return x
 
-
-x = random.normal(random.PRNGKey(0), (1, 224, 224, 3))
-y, params = init(resnet)(random.PRNGKey(1), x)
-print(y.shape)
-print(jax.tree_map(jnp.shape, unfreeze(params)))
+if __name__ == "__main__":
+  x = random.normal(random.PRNGKey(0), (1, 224, 224, 3))
+  y, params = init(resnet)(random.PRNGKey(1), x)
+  print(y.shape)
+  print(jax.tree_map(jnp.shape, unfreeze(params)))

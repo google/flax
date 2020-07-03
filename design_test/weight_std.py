@@ -43,8 +43,8 @@ def mlp(scope: Scope, x: Array,
   # output layer
   return scope.child(nn.dense, 'out')(x, sizes[-1])
 
-
-x = random.normal(random.PRNGKey(0), (1, 4,))
-y, params = init(mlp)(random.PRNGKey(1), x)
-print(y)
-print(jax.tree_map(jnp.shape, unfreeze(params)))
+if __name__ == "__main__":
+  x = random.normal(random.PRNGKey(0), (1, 4,))
+  y, params = init(mlp)(random.PRNGKey(1), x)
+  print(y)
+  print(jax.tree_map(jnp.shape, unfreeze(params)))

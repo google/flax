@@ -37,15 +37,16 @@ def mlp_scan(scope: Scope, xs: Array,
   # output layer
   return carry, ys
 
-x = random.normal(random.PRNGKey(0), (1, 4))
-x = jnp.concatenate([x, x], 0)
+if __name__ == "__main__":
+  x = random.normal(random.PRNGKey(0), (1, 4))
+  x = jnp.concatenate([x, x], 0)
 
-print('unshared params: (outputs should be different, parameters has extra dim)')
-y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=False)
-print(y)
-print(unfreeze(variables))
+  print('unshared params: (outputs should be different, parameters has extra dim)')
+  y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=False)
+  print(y)
+  print(unfreeze(variables))
 
-print('shared params: (outputs should be the same)')
-y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=True)
-print(y)
-print(unfreeze(variables))
+  print('shared params: (outputs should be the same)')
+  y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=True)
+  print(y)
+  print(unfreeze(variables))

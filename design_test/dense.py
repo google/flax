@@ -82,23 +82,24 @@ def semi_explicit_mlp(scope, x, sizes=(3, 1)):
       x = nn.relu(x)
   return x
 
-model = Dense(features=4)
-x = jnp.ones((1, 3))
+if __name__ == "__main__":
+  model = Dense(features=4)
+  x = jnp.ones((1, 3))
 
-y, params = init(model)(random.PRNGKey(0), x)
+  y, params = init(model)(random.PRNGKey(0), x)
 
-print(y)
-print(params)
+  print(y)
+  print(params)
 
 
-print('explicit dense:')
-y, params = init(explicit_mlp)(random.PRNGKey(0), x)
+  print('explicit dense:')
+  y, params = init(explicit_mlp)(random.PRNGKey(0), x)
 
-print(y)
-print(params)
+  print(y)
+  print(params)
 
-print('semi-explicit dense:')
-y, params = init(semi_explicit_mlp)(random.PRNGKey(0), x)
+  print('semi-explicit dense:')
+  y, params = init(semi_explicit_mlp)(random.PRNGKey(0), x)
 
-print(y)
-print(params)
+  print(y)
+  print(params)

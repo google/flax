@@ -77,10 +77,11 @@ class AutoEncoder2:
   def decode(self, scope, z):
     return mlp(scope, z, self.hidden, self.features)
 
-ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(x)
-x = jnp.ones((1, 3))
+if __name__ == "__main__":
+  ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(x)
+  x = jnp.ones((1, 3))
 
-x_r, params = init(ae)(random.PRNGKey(0), x)
+  x_r, params = init(ae)(random.PRNGKey(0), x)
 
-print(x, x_r)
-print(params)
+  print(x, x_r)
+  print(params)

@@ -120,15 +120,16 @@ def multi_head_dot_product_attention(
   y = attn_fn(scope, inputs_q, inputs_kv, bias)
   return y.mean(axis=-2)
 
-inputs = jnp.ones((2, 7, 16))
+if __name__ == "__main__":
+  inputs = jnp.ones((2, 7, 16))
 
-y, variables = init(multi_head_dot_product_attention)(
-    {'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)},
-    inputs, inputs,
-    num_heads=2,
-    batch_axes=(0,),
-    attn_fn=with_dropout(softmax_attn, 0.1, deterministic=False)
-    )
+  y, variables = init(multi_head_dot_product_attention)(
+      {'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)},
+      inputs, inputs,
+      num_heads=2,
+      batch_axes=(0,),
+      attn_fn=with_dropout(softmax_attn, 0.1, deterministic=False)
+      )
 
-print(y.shape)
-print(jax.tree_map(jnp.shape, variables))
+  print(y.shape)
+  print(jax.tree_map(jnp.shape, variables))
