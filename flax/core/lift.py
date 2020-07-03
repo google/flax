@@ -304,7 +304,7 @@ def scan(
     input_pvals = (carry_pvals, scan_pvals)
     in_pvals, in_tree = jax.tree_flatten(input_pvals)
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(broadcast_body), in_tree)
-    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
+    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
     
     out_flat = []
     for pv, const in out_pvals:

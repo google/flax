@@ -1,0 +1,71 @@
+# this example demonstrates how to build big networks using rematerialzation and scan to reduce memory footprint compilation size. 
+
+
+
+from flax.core import Scope, init, apply, unfreeze, lift
+
+from flax import nn
+
+import jax
+from jax import lax, random, numpy as jnp
+
+from typing import Any
+from functools import partial
+
+
+Array = Any
+
+
+default_norm = partial(nn.batch_norm)
+
+def residual_block(scope: Scope, x: Array, conv, norm, act, features: int):
+  residual = x
+  x = scope.child(conv, 'conv_1')(x, features, (3, 3))
+  x = scope.child(norm, 'bn_1')(x)
+  x = act(x)
+  x = scope.child(conv, 'conv_2')(x, features, (3, 3))
+  x = scope.child(norm, 'bn_2')(x)
+
+  if x.shape != residual.shape:
+    residual = scope.child(conv, 'proj_conv')(residual, 4 * features, (1, 1))
+    residual = scope.child(norm, 'proj_bn')(residual)
+
+  return act(residual + x)
+
+
+def big_resnet(scope: Scope, x,
+           num_blocks=10,
+           num_superblocks=10,
+           dtype=jnp.float32,
+           norm=default_norm,
+           act=nn.relu,
+           ):
+  conv = partial(nn.conv, bias=False, dtype=dtype)
+  norm = partial(norm, dtype=dtype)
+
+  print('total residual blocks:', num_superblocks * num_blocks)
+
+  @lift.remat
+  def super_block(scope, x, _):
+    def block(scope, x, _):
+      return residual_block(scope, x, conv, norm, act, features=x.shape[-1]), ()
+    x, _ = lift.scan(
+      block, scope, x, (),
+      length=num_blocks,
+      variable_modes={'param': 'scan', 'batch_stats': 'scan'},
+      split_rngs={'param': True})
+    return x, ()
+
+  x, _ = lift.scan(
+        super_block, scope, x, (),
+        length=num_superblocks,
+        variable_modes={'param': 'scan', 'batch_stats': 'scan'},
+        split_rngs={'param': True})
+
+  return x
+
+if __name__ == "__main__":
+  x = random.normal(random.PRNGKey(0), (1, 8, 8, 8))
+  y, params = init(big_resnet)(random.PRNGKey(1), x)
+  print(y.shape)
+  print(jax.tree_map(jnp.shape, unfreeze(params)))
