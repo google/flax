@@ -25,55 +25,17 @@ from flax.core import Scope, init, apply, lift, Array
 from flax.core.scope import _unfreeze_variables
 from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
 
+from .dotgetter import DotGetter
+
 from jax import tree_util
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
-
 # Utilities
 # -----------------------------------------------------------------------------
-
-is_leaf = lambda x: tree_util.treedef_is_leaf(tree_util.tree_flatten(x)[1])
-
-class DotGetter:
-  """Dot-notation helper for interactive access of variable trees."""
-  def __init__(self, data):
-    object.__setattr__(self, '_data', data)
-
-  def __getattr__(self, key):
-    """Returns leaves unwrapped."""
-    if is_leaf(self._data[key]):
-      return self._data[key]
-    else:
-      return DotGetter(self._data[key])
-
-  def __getitem__(self, key):
-    if is_leaf(self._data[key]):
-      return self._data[key]
-    else:
-      return DotGetter(self._data[key])
-
-  def __setitem__(self, key, val):
-    self._data[key] = val
-
-  def __setattr__(self, key, val):
-    self._data[key] = val
-
-  def __dir__(self):
-    if isinstance(self._data, dict):
-      return list(self._data.keys())
-    elif isinstance(self._data, FrozenDict):
-      return list(self._data._dict.keys())
-    else:
-      return []
-
-  def __repr__(self):
-    return f'{self._data}'
-
-
 def is_module_tree(in_tree):
   """Determine if in_tree is a pytree of subclasses of Module."""
-  if not in_tree:
+  if not in_tree:  # reject trivial pytrees, {}, [], (), etc.
     return False
   reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
   return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
@@ -86,7 +48,7 @@ def get_suffix_module_pairs(module_tree):
   return [('_'.join(k), v) for k, v in flat_tree.items()]
 
 
-# Dataclass utils
+# Customized Dataclass
 # -----------------------------------------------------------------------------
 
 # The below functionality might be better written as separate function wrappers,
@@ -113,11 +75,11 @@ def manage_name_scopes(fun, manage_names=False):
         self.scope = self.scope.rewound()
   return wrapped
 
-SPECIAL = {'__setattr__', '__post_init__', 'setup'}
+SPECIAL_BASE_FNS = {'__setattr__', '__post_init__', 'setup'}
 
 def wrap_module_methods(cls):
   base_fns = set(dict(inspect.getmembers(Module, predicate=callable)).keys())
-  ignore_fns = base_fns.difference(SPECIAL)
+  ignore_fns = base_fns.difference(SPECIAL_BASE_FNS)
   dataclass_fieldnames = set([f.name for f in
                               dataclasses.fields(dataclasses.dataclass(cls))])
   for key, val in inspect.getmembers(cls, predicate=callable):
@@ -138,31 +100,43 @@ class Module:
   @classmethod
   def __init_subclass__(cls):
     """Automatically initialize all subclasses as custom dataclasses."""
-    annotations = getattr(cls, '__annotations__', {})
-    assert 'parent' not in annotations, 'property `parent` is reserved.'
-    assert 'name' not in annotations, 'property `name` is reserved.'
-    new_annotations = {'parent': Union[Type["Module"], Type["Scope"]]}
-    new_annotations.update(annotations)
-    new_annotations['name'] = str
-    cls.__annotations__ = new_annotations
-    cls.name = None
+    if not hasattr(cls.__base__, '__annotations__'):
+      annotations = cls.__dict__.get('__annotations__', {})
+      assert 'parent' not in annotations, f'property `parent` is reserved: {annotations}'
+      assert 'name' not in annotations, f'property `name` is reserved: {annotations}'
+      new_annotations = {'parent': Union[Type["Module"], Type["Scope"]]}
+      new_annotations.update(annotations)
+      new_annotations['name'] = str
+      cls.__annotations__ = new_annotations
+      cls.name = None
     wrap_module_methods(cls)
     dataclasses.dataclass(cls)
 
   def __setattr__(self, name, val):
-    # We overload setattr solely to support pythonic naming of submodules
-    # via self.submodule_name = SubModule(...) syntax in the setup() function.
-    if is_module_tree(val): #isinstance(val, Module):
+    """We overload setattr solely to support pythonic naming via
+    assignment of submodules in the special setup() function:
+      self.submodule_name = Module(...)
+    we also support lists and other general pytrees, e.g.:
+      self.submodules = [Module0(..), Module1(..), ...]
+    """
+    if is_module_tree(val):
       # Ignore parent and other Modules passed in as dataclass args.
       if name == 'parent' or name in self.__dataclass_fields__.keys():
         pass
-      # Special setattr naming is only allowed in setup()
-      elif self._call_stack[-2] != 'setup':
+      # Special setattr assignment of modules to self is only allowed in setup()
+      elif len(self._call_stack) > 1 and self._call_stack[-2] != 'setup':
         raise ValueError("You can only assign submodules to self in setup().")
-      # Assign name then finish deferred initialization of this class.
       else:
-        val.name = name
-        val.__post_init__()
+        # Common case, we're just attaching a single submodule.
+        if isinstance(val, Module):
+          val.name = name
+          val.__post_init__()
+        # If we're attaching a pytree of submodules (list, dict, etc),
+        # give each submodule in tree a suffix corresponding to tree location.
+        else:
+          for suffix, submodule in get_suffix_module_pairs(val):
+            submodule.name = f'{name}_{suffix}'
+            submodule.__post_init__()
     super().__setattr__(name, val)
 
   def __post_init__(self):
@@ -171,7 +145,7 @@ class Module:
     self.submodules = {}
     self._autoname_cursor = {}
     self._method_by_name = {}
-    #self._public_methods = set()
+
     # In setup() defer naming and registration on parent until __setattr__.
     if parent_call_stack[-2:] == ['__post_init__', 'setup']:
       if self.name is None:
@@ -248,10 +222,6 @@ class Module:
       method(initialized)(*args, **kwargs)
     return initialized
 
-  @property
-  def variables(self):
-    return self.scope.variables()
-
   def param(self, name, init_fn, *init_args):
     return self.scope.param(name, init_fn, *init_args)
 
@@ -261,6 +231,11 @@ class Module:
   def get_variable(self, kind, name, default=None):
     return self.scope.get_variable(kind, name, default)
 
+  @property
+  def variables(self):
+    return self.scope.variables()
+
+  # Simple dot-syntax, tab-completed navigation in jupyter/colab:
   @property
   def vars(self):
     return DotGetter(self.scope._variables)

@@ -147,11 +147,11 @@ class Scope:
   def transformed(self, fn, kind):
     variables = unfreeze(self.get_kind(kind))
     variables = freeze(fn(variables))
-    scope = self.rewinded(rewind_rngs=True)
+    scope = self.rewound(rewind_rngs=True)
     scope._variables[kind] = variables
     return scope
 
-  def rewinded(self, rewind_rngs=False):
+  def rewound(self, rewind_rngs=False):
     self._check_valid()
     scope = Scope(self._variables, self.rngs, self.name, self.parent)
     if not rewind_rngs:
@@ -196,7 +196,7 @@ class Scope:
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
       kwargs = dict(partial_kwargs, **kwargs)
-      return fn(scope.rewinded(), *args, **kwargs)
+      return fn(scope.rewound(), *args, **kwargs)
     return wrapper
 
   def get_kind(self, kind: str, mutable: bool = False) -> MaybeFrozenKind:
