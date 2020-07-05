@@ -75,43 +75,50 @@ class DotGetter:
     return f'{self._data}'
 
 
-BASE_METHODS = (
-    '__init__', '__post_init__', '__repr__','__eq__', '__setattr__',
-    'mutate', 'clone', 'param', 'variables', 'variable', 'initialized')
-
 
 # Dataclass utils
 # -----------------------------------------------------------------------------
 
 
-def track_calls(fun):
-  """Maintain per-module local call stack."""
+# def track_calls(fun):
+#   """Maintain per-module local call stack."""
+#   @functools.wraps(fun)
+#   def wrapped(self, *args, **kwargs):
+#     object.__setattr__(self, '_call_stack',
+#                        getattr(self, '_call_stack', []) + [fun.__name__,])
+#     try:
+#       return fun(self, *args, **kwargs)
+#     finally:
+#       self._call_stack.pop()
+#   return wrapped
+
+# The below functionality might be better written as separate function wrappers,
+# but each additional wrapper pollutes the stack trace.
+def manage_name_scopes(fun, manage_names=False):
   @functools.wraps(fun)
   def wrapped(self, *args, **kwargs):
+    # Call stack is updated by overwriting, so ok to grab reference
+    call_stack_at_entry = getattr(self, '_call_stack', [])
+    # Reset debugging information for preventing share-by-name.
+    if manage_names:
+      object.__setattr__(self, '_method_by_name',
+          {k: v for k, v in self._method_by_name.items() if v != fun.__name__})
+    # maintain call stack, update by overwriting
     object.__setattr__(self, '_call_stack',
                        getattr(self, '_call_stack', []) + [fun.__name__,])
     try:
       return fun(self, *args, **kwargs)
     finally:
       self._call_stack.pop()
-  return wrapped
-
-def manage_name_scopes(fun):
-  @functools.wraps(fun)
-  def wrapped(self, *args, **kwargs):
-    call_stack = self._call_stack
-    # Reset debugging information for preventing share-by-name.
-    self._method_by_name = {k: v for k, v in self._method_by_name.items()
-                            if v != fun.__name__}
-    try:
-      return fun(self, *args, **kwargs)
-    finally:
       # Rewind autonaming when called from outside self
-      if not call_stack:
-        #print('----------REWIND----------', self.__class__)
+      if manage_names and not call_stack_at_entry:
         self._autoname_cursor = {}
         self.scope = self.scope.rewound()
   return wrapped
+
+BASE_METHODS = (
+    '__init__', '__post_init__', '__repr__', '__eq__', '__setattr__',
+    'mutate', 'clone', 'param', 'variables', 'get_variable', 'variable', 'initialized')
 
 def wrap_module_methods(cls):
   dataclass_fieldnames = set([f.name for f in
@@ -120,15 +127,17 @@ def wrap_module_methods(cls):
     if (callable(val) and
         key not in dataclass_fieldnames  # don't touch passed-in Modules
         and not inspect.ismethod(val)):  # don't touch classmethods
-      val = track_calls(val)
-      if key not in BASE_METHODS:
-        val = manage_name_scopes(val)
+      #val = track_calls(val)
+      #if key not in BASE_METHODS:
+      val = manage_name_scopes(val, key not in BASE_METHODS)
       setattr(cls, key, val)
   return cls
 
 def dataclass(cls):
   if not issubclass(cls, Module):
     raise ValueError("Must extend from Module to use @module.dataclass")
+  cls.__annotations__["name"] = str
+  cls.name = None
   cls = wrap_module_methods(cls)
   cls = dataclasses.dataclass(cls)
   return cls
@@ -155,23 +164,23 @@ class Module:
     return module
 
   def __setattr__(self, name, val):
-    if name != 'parent' and isinstance(val, Module):
+    if isinstance(val, Module):
       # don't mess with Modules passed in as dataclass args.
-      if name in self.__dataclass_fields__.keys():
+      if name == 'parent' or name in self.__dataclass_fields__.keys():
         pass
       # special setattr naming is only allowed in setup()
       elif self._call_stack[-2] != 'setup':
         raise ValueError("You can only assign submodules to self in setup().")
+      # assign name then finish deferred initialization of class
       else:
-        if val.name is None:  # raise error if not None?
-          val.name = name
+        val.name = name
         val.__post_init__()
     super().__setattr__(name, val)
 
   def __post_init__(self):
     """Register self as a child of self.parent."""
     parent_call_stack = getattr(self.parent, '_call_stack', [])
-    # defer naming and registration on parent until __setattr__.
+    # in setup() defer naming and registration on parent until __setattr__.
     if parent_call_stack[-2:] == ['__post_init__', 'setup']:
       if self.name is None:
         return
@@ -218,9 +227,10 @@ class Module:
     """
     pass
 
-  def clone(self):
-    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
-    attrs = {**attrs}
+  def clone(self, **updates):
+    #attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
+    attrs = dataclasses.asdict(self)
+    attrs.update(**updates)
     return self.__class__(**attrs)
 
   @contextmanager
@@ -264,102 +274,49 @@ Module = dataclass(Module)
 
 
 
+# Module Lifting utils
+# -----------------------------------------------------------------------------
+
 
 def vmap_bound_method(method, *vmap_args, **vmap_kwargs):
   if inspect.ismethod(method):
     instance, unbound_fn = method.__self__, method.__func__
-  else: # transform __call__ by default
+  else:
+    # when module itself passed in, transform __call__
     instance, unbound_fn = method, method.__call__.__func__
-
-  attrs = {f.name: getattr(instance, f.name) for f in dataclasses.fields(instance)}
-  attrs['name'] = 'Vmap' + instance.name
-  instance = instance.__class__(**attrs)
-
-  def call_fn(scope, *args, **kwargs):
-    attrs = {f.name: getattr(instance, f.name) 
-             for f in dataclasses.fields(instance)
-             if f.name != 'parent'}
-    cloned = instance.__class__(parent=scope, **attrs)
-    ret = unbound_fn(cloned, *args, **kwargs)
-    return ret
-
-  vmap_fn = lift.vmap(call_fn, *vmap_args, **vmap_kwargs)
+  def scope_fn(scope, *args, **kwargs):
+    return unbound_fn(instance.clone(parent=scope), *args, **kwargs)
+  vmap_fn = lift.vmap(scope_fn, *vmap_args, **vmap_kwargs)
   @functools.wraps(unbound_fn)
   def wrap_fn(self, *args, **kwargs):
-    ret = vmap_fn(self.scope, *args, **kwargs)
-    return ret
-
+    return vmap_fn(self.scope, *args, **kwargs)
   # return function bound to instance again
-  wrap_fn = wrap_fn.__get__(instance, instance.__class__)
-  return wrap_fn
-"""
-@dataclass
-class MLP(Module):
-  name: str = None
+  return wrap_fn.__get__(instance.clone(name=f'Vmap{instance.name}'),
+                         instance.__class__)
 
-  # use inside makes new instances of Dense
-  def __call__(self, x):
-    #y = Dense(self, 3)(x)
-    dense = Dense(self, 3)
-    new_fn = vmap(dense,
-             in_axes=0, out_axes=0,
-             variable_in_axes={'param': None},
-             variable_out_axes={'param': None},
-             split_rngs={'param': False})
-    new_fn2 = vmap(new_fn,
-             in_axes=0, out_axes=0,
-             variable_in_axes={'param': 0},
-             variable_out_axes={'param': 0},
-             split_rngs={'param': True})
-    y = dense(x)
-    y += new_fn(x)
-    y += new_fn2(x)
-    return y
 
-"""
+# # too weird
+# def vmap_module_instance(instance, *vmap_args, methods=None, **vmap_kwargs):
+#   if methods is None:
+#     methods = ['__call__']
+#   elif isinstance(methods, str):
+#     methods = [method,]
+#   new_instance = instance.clone()
+#   for fn_name in methods:
+#     unbound_fn = getattr(instance, fn_name).__func__
+#     def scope_fn(scope, *args, **kwargs):
+#       return getattr(instance.clone(parent=scope), fn_name)(*args, **kwargs)
+#     vmap_fn = lift.vmap(scope_fn, *vmap_args, **vmap_kwargs)
+#     @functools.wraps(unbound_fn)
+#     def wrap_fn(self, *args, **kwargs):
+#       return vmap_fn(self.scope, *args, **kwargs)
+#     # return function bound to instance again
+#     new_name = 'vmap' if fn_name == '__call__' else 'vmap_' + fn_name
+#     setattr(new_instance, new_name,
+#             wrap_fn.__get__(new_instance, instance.__class__))
+#   return new_instance
 
-def vmap_module_instance(instance, *vmap_args, methods=None, **vmap_kwargs):
-  if methods is None:
-    methods = ['__call__']
-  elif isinstance(methods, str):
-    methods = [method,]
-  for fn_name in methods:
-    unbound_fn = getattr(instance, fn_name).__func__
 
-    def call_fn(scope, *args, **kwargs):
-      attrs = {f.name: getattr(instance, f.name)
-               for f in dataclasses.fields(instance) if f.name != 'parent'}
-      cloned = instance.__class__(parent=scope, **attrs)
-      return getattr(cloned, fn_name)(*args, **kwargs)
-
-    vmap_fn = lift.vmap(call_fn, *vmap_args, **vmap_kwargs)
-
-    @functools.wraps(unbound_fn)
-    def wrap_fn(self, *args, **kwargs):
-      return vmap_fn(self.scope, *args, **kwargs)
-
-    # return function bound to instance again
-    new_name = 'vmap' if fn_name == '__call__' else 'vmap_' + fn_name
-    setattr(instance, new_name, wrap_fn.__get__(instance, instance.__class__))
-  return instance
-
-"""
-@dataclass
-class MLP(Module):
-  name: str = None
-
-  def __call__(self, x):
-    new_inst = vmap(Dense(self, 3), 
-                    in_axes=0, out_axes=0,
-                    variable_in_axes={'param': 0},
-                    variable_out_axes={'param': 0},
-                    split_rngs={'param': False})
-    #print(inspect.signature(new_inst.__call__))
-    z = new_inst.vmap(x)
-    return z
-"""
-
-# class transform
 def vmap_class(module_class, *vmap_args, methods=None, **vmap_kwargs):
   if methods is None:
     # Default case, just transform __call__
@@ -370,7 +327,7 @@ def vmap_class(module_class, *vmap_args, methods=None, **vmap_kwargs):
   elif isinstance(methods, dict):
     # Pass different vmap args per each method.
     assert vmap_args == () and vmap_kwargs == {}, (
-    """When passing different vmap args per method, all args must be 
+    """When passing different vmap args per method, all args must be
     passed via methods kwarg.""")
     class_vmap_args = {k: ((),v) for k,v in methods.items()}
 
@@ -380,38 +337,19 @@ def vmap_class(module_class, *vmap_args, methods=None, **vmap_kwargs):
     vmap_args, vmap_kwargs = fn_vmap_args
     @functools.wraps(fn)
     def wrapped_fn(self, *args, **kwargs):
-      def call_fn(scope, *args, **kwargs):
-        attrs = {f.name: getattr(self, f.name) 
-                 for f in dataclasses.fields(self) if f.name != 'parent'}
+      def scope_fn(scope, *args, **kwargs):
+        attrs = {f.name: getattr(self, f.name)
+                 for f in dataclasses.fields(self)
+                 if f.name != 'parent'}
+        # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=scope, **attrs)
-        return getattr(cloned, fn_name)(*args, **kwargs)        
-      vmap_fn = lift.vmap(call_fn, *vmap_args, **vmap_kwargs)    
+        return getattr(cloned, fn_name)(*args, **kwargs)
+      vmap_fn = lift.vmap(scope_fn, *vmap_args, **vmap_kwargs)
       return vmap_fn(self.scope, *args, **kwargs)
     transformed_fns[fn_name] = wrapped_fn
   return type('Vmap' + module_class.__name__, (module_class,), transformed_fns)
 
-"""
-@dataclass
-class MLP(Module):
-  name: str = None
 
-  # use inside makes new instances of Dense
-  def __call__(self, x):
-    d = Dense
-    vd = vmap(d,
-             in_axes=0, out_axes=0,
-             variable_in_axes={'param': 0},
-             variable_out_axes={'param': 0},
-             split_rngs={'param': False})
-    vvd = vmap(vd,
-             in_axes=0, out_axes=0,
-             variable_in_axes={'param': 0},
-             variable_out_axes={'param': 0},
-             split_rngs={'param': False})
-    return d(self, 3)(x) + vd(self, 3)(x) + vvd(self, 3)(x)
-"""
-
-# class transforms
 def module_class_lift_transform(
     transform,
     module_class,
@@ -444,14 +382,15 @@ def module_class_lift_transform(
     @functools.wraps(fn)
     def wrapped_fn(self, *args, **kwargs):
       # make a scope-function to transform
-      def call_fn(scope, *args, **kwargs):
+      def scope_fn(scope, *args, **kwargs):
         # make a clone of self using its arguments
         attrs = {f.name: getattr(self, f.name)
                  for f in dataclasses.fields(self) if f.name != 'parent'}
+        # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=scope, **attrs)
         return getattr(cloned, fn_name)(*args, **kwargs)
       # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = transform(call_fn, *trafo_args, **trafo_kwargs)
+      trafo_fn = transform(scope_fn, *trafo_args, **trafo_kwargs)
       ret = trafo_fn(self.scope, *args, **kwargs)
       return ret
     transformed_fns[fn_name] = wrapped_fn
@@ -473,64 +412,25 @@ remat = functools.partial(module_class_lift_transform, lift.remat)
 # setattr(sys.modules[transformed_class.__module__], transformed_class.__name__, transformed_class)
 # return getattr(sys.modules[transformed_class.__module__], transformed_class.__name__)
 
-"""
-@dataclass
-class MLP(Module):
-  name: str = None
-
-  # use inside makes new instances of Dense
-  def __call__(self, x):
-    JitDense = jit(Dense)
-    VmapDense = vmap(
-      Dense,
-      in_axes=0, out_axes=0,
-      variable_in_axes={'param': 0},
-      variable_out_axes={'param': 0},
-      split_rngs={'param': False})
-    VmapVmapDense = vmap(
-      VmapDense,
-      in_axes=0, out_axes=0,
-      variable_in_axes={'param': 0},
-      variable_out_axes={'param': 0},
-      split_rngs={'param': False})
-    return Dense(self, 3)(x) + JitDense(self, 3)(x) + VmapDense(self, 3)(x) + VmapVmapDense(self, 3)(x)
-"""
-
 
 def class_method_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
     @functools.wraps(class_fn)
     def wrapped_fn(self, *args, **kwargs):
       # make a scope-function to transform
-      def call_fn(scope, *args, **kwargs):
+      def scope_fn(scope, *args, **kwargs):
         # make a clone of self using its arguments
-        attrs = {f.name: getattr(self, f.name) 
+        attrs = {f.name: getattr(self, f.name)
                  for f in dataclasses.fields(self)
                  if f.name != 'parent'}
         cloned = self.__class__(parent=scope, **attrs)
         return class_fn(cloned, *args, **kwargs)
       # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = transform(call_fn, *trafo_args, **trafo_kwargs)
+      trafo_fn = transform(scope_fn, *trafo_args, **trafo_kwargs)
       return trafo_fn(self.scope, *args, **kwargs)
     return wrapped_fn
+
 
 vmap_method = functools.partial(class_method_lift_transform, lift.vmap)
 scan_method = functools.partial(class_method_lift_transform, lift.scan)
 jit_method = functools.partial(class_method_lift_transform, lift.jit)
 remat_method = functools.partial(class_method_lift_transform, lift.remat)
-
-"""
-@dataclass
-class Dense2(Module):
-  features: int
-  kernel_init: Callable = initializers.lecun_normal()
-  name: str = None
-
-  @functools.partial(vmap_method, in_axes=0, out_axes=0,
-                     variable_in_axes={'param': 0},
-                     variable_out_axes={'param': 0},
-                     split_rngs={'param': False})
-  def __call__(self, x):
-    kernel = self.param('kernel', self.kernel_init, (x.shape[-1], self.features))
-    y = jnp.dot(x, kernel)
-    return y
-"""
