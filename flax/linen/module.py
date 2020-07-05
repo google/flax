@@ -8,7 +8,7 @@ import inspect
 from contextlib import contextmanager
 import dataclasses
 
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Sequence, Iterable, List, Optional, Tuple, Type, Union
 
 import jax
 from jax import numpy as jnp, random, lax
@@ -30,17 +30,13 @@ from jax import tree_util
 # pylint: disable=protected-access,attribute-defined-outside-init
 
 
-# Dot-notation helper for interactive access of variable trees.
+# Utilities
 # -----------------------------------------------------------------------------
 
 is_leaf = lambda x: tree_util.treedef_is_leaf(tree_util.tree_flatten(x)[1])
 
-def get_suffix_module_pairs(module_tree):
-  flat_tree = traverse_util.flatten_dict(
-      serialization.to_state_dict(module_tree))
-  return [('_'.join(k), v) for k,v in flat_tree.items()]
-
 class DotGetter:
+  """Dot-notation helper for interactive access of variable trees."""
   def __init__(self, data):
     object.__setattr__(self, '_data', data)
 
@@ -75,35 +71,36 @@ class DotGetter:
     return f'{self._data}'
 
 
+def is_module_tree(in_tree):
+  """Determine if in_tree is a pytree of subclasses of Module."""
+  if not in_tree:
+    return False
+  reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
+  return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
+
+
+def get_suffix_module_pairs(module_tree):
+  """Helper for naming pytrees of submodules."""
+  flat_tree = traverse_util.flatten_dict(
+      serialization.to_state_dict(module_tree))
+  return [('_'.join(k), v) for k, v in flat_tree.items()]
+
 
 # Dataclass utils
 # -----------------------------------------------------------------------------
-
-
-# def track_calls(fun):
-#   """Maintain per-module local call stack."""
-#   @functools.wraps(fun)
-#   def wrapped(self, *args, **kwargs):
-#     object.__setattr__(self, '_call_stack',
-#                        getattr(self, '_call_stack', []) + [fun.__name__,])
-#     try:
-#       return fun(self, *args, **kwargs)
-#     finally:
-#       self._call_stack.pop()
-#   return wrapped
 
 # The below functionality might be better written as separate function wrappers,
 # but each additional wrapper pollutes the stack trace.
 def manage_name_scopes(fun, manage_names=False):
   @functools.wraps(fun)
   def wrapped(self, *args, **kwargs):
-    # Call stack is updated by overwriting, so ok to grab reference
+    # Grab local call stack at entry.
     call_stack_at_entry = getattr(self, '_call_stack', [])
     # Reset debugging information for preventing share-by-name.
     if manage_names:
       object.__setattr__(self, '_method_by_name',
           {k: v for k, v in self._method_by_name.items() if v != fun.__name__})
-    # maintain call stack, update by overwriting
+    # Maintain call stack, update by overwriting.
     object.__setattr__(self, '_call_stack',
                        getattr(self, '_call_stack', []) + [fun.__name__,])
     try:
@@ -116,62 +113,53 @@ def manage_name_scopes(fun, manage_names=False):
         self.scope = self.scope.rewound()
   return wrapped
 
-BASE_METHODS = (
-    '__init__', '__post_init__', '__repr__', '__eq__', '__setattr__',
-    'mutate', 'clone', 'param', 'variables', 'get_variable', 'variable', 'initialized')
+SPECIAL = {'__setattr__', '__post_init__', 'setup'}
 
 def wrap_module_methods(cls):
+  base_fns = set(dict(inspect.getmembers(Module, predicate=callable)).keys())
+  ignore_fns = base_fns.difference(SPECIAL)
   dataclass_fieldnames = set([f.name for f in
                               dataclasses.fields(dataclasses.dataclass(cls))])
-  for key, val in cls.__dict__.items():
-    if (callable(val) and
-        key not in dataclass_fieldnames  # don't touch passed-in Modules
-        and not inspect.ismethod(val)):  # don't touch classmethods
-      #val = track_calls(val)
-      #if key not in BASE_METHODS:
-      val = manage_name_scopes(val, key not in BASE_METHODS)
+  for key, val in inspect.getmembers(cls, predicate=callable):
+    if (key not in dataclass_fieldnames  # don't touch passed-in Modules
+        and key not in ignore_fns):      # ignore base functions
+      manage_names = key not in ('__setattr__', '__post_init__')
+      val = manage_name_scopes(val, manage_names)
       setattr(cls, key, val)
-  return cls
-
-def dataclass(cls):
-  if not issubclass(cls, Module):
-    raise ValueError("Must extend from Module to use @module.dataclass")
-  cls.__annotations__["name"] = str
-  cls.name = None
-  cls = wrap_module_methods(cls)
-  cls = dataclasses.dataclass(cls)
   return cls
 
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
 
-
 class Module:
   """Base Module Class"""
-  parent: Union[Type["Module"], Type["Scope"]]
 
   @classmethod
-  def toplevel(cls, *args, rngs=None, variables=None, **kwargs):
-    if rngs is None:
-      rngs = {}
-    if variables is None:
-      variables = {'param': {}}
-    variables = unfreeze(variables)
-    scope = Scope(variables, rngs=rngs)
-    module = cls(scope, *args, **kwargs)
-    scope.variables = freeze(scope.variables)
-    return module
+  def __init_subclass__(cls):
+    """Automatically initialize all subclasses as custom dataclasses."""
+    annotations = getattr(cls, '__annotations__', {})
+    assert 'parent' not in annotations, 'property `parent` is reserved.'
+    assert 'name' not in annotations, 'property `name` is reserved.'
+    new_annotations = {'parent': Union[Type["Module"], Type["Scope"]]}
+    new_annotations.update(annotations)
+    new_annotations['name'] = str
+    cls.__annotations__ = new_annotations
+    cls.name = None
+    wrap_module_methods(cls)
+    dataclasses.dataclass(cls)
 
   def __setattr__(self, name, val):
-    if isinstance(val, Module):
-      # don't mess with Modules passed in as dataclass args.
+    # We overload setattr solely to support pythonic naming of submodules
+    # via self.submodule_name = SubModule(...) syntax in the setup() function.
+    if is_module_tree(val): #isinstance(val, Module):
+      # Ignore parent and other Modules passed in as dataclass args.
       if name == 'parent' or name in self.__dataclass_fields__.keys():
         pass
-      # special setattr naming is only allowed in setup()
+      # Special setattr naming is only allowed in setup()
       elif self._call_stack[-2] != 'setup':
         raise ValueError("You can only assign submodules to self in setup().")
-      # assign name then finish deferred initialization of class
+      # Assign name then finish deferred initialization of this class.
       else:
         val.name = name
         val.__post_init__()
@@ -180,16 +168,16 @@ class Module:
   def __post_init__(self):
     """Register self as a child of self.parent."""
     parent_call_stack = getattr(self.parent, '_call_stack', [])
-    # in setup() defer naming and registration on parent until __setattr__.
+    self.submodules = {}
+    self._autoname_cursor = {}
+    self._method_by_name = {}
+    #self._public_methods = set()
+    # In setup() defer naming and registration on parent until __setattr__.
     if parent_call_stack[-2:] == ['__post_init__', 'setup']:
       if self.name is None:
         return
       else:
         raise ValueError("In setup assign names via self.<name> assignment.")
-    self.submodules = {}
-    self._autoname_cursor = {}
-    self._method_by_name = {}
-    self._public_methods = set()
 
     if isinstance(self.parent, Module):
       method_name = parent_call_stack[-1]
@@ -215,6 +203,7 @@ class Module:
       self.scope = self.parent
     else:
       raise ValueError("parent must be a Module or Scope")
+
     # call user-defined "post post init" function
     self.setup()
 
@@ -227,9 +216,20 @@ class Module:
     """
     pass
 
+  @classmethod
+  def toplevel(cls, *args, rngs=None, variables=None, **kwargs):
+    if rngs is None:
+      rngs = {}
+    if variables is None:
+      variables = {'param': {}}
+    variables = unfreeze(variables)
+    scope = Scope(variables, rngs=rngs)
+    module = cls(scope, *args, **kwargs)
+    scope.variables = freeze(scope.variables)
+    return module
+
   def clone(self, **updates):
-    #attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
-    attrs = dataclasses.asdict(self)
+    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
     attrs.update(**updates)
     return self.__class__(**attrs)
 
@@ -268,169 +268,3 @@ class Module:
   @property
   def subs(self):
     return DotGetter(self.submodules)
-
-# wrap after definitions to avoid "circular defs" issue
-Module = dataclass(Module)
-
-
-
-# Module Lifting utils
-# -----------------------------------------------------------------------------
-
-
-def vmap_bound_method(method, *vmap_args, **vmap_kwargs):
-  if inspect.ismethod(method):
-    instance, unbound_fn = method.__self__, method.__func__
-  else:
-    # when module itself passed in, transform __call__
-    instance, unbound_fn = method, method.__call__.__func__
-  def scope_fn(scope, *args, **kwargs):
-    return unbound_fn(instance.clone(parent=scope), *args, **kwargs)
-  vmap_fn = lift.vmap(scope_fn, *vmap_args, **vmap_kwargs)
-  @functools.wraps(unbound_fn)
-  def wrap_fn(self, *args, **kwargs):
-    return vmap_fn(self.scope, *args, **kwargs)
-  # return function bound to instance again
-  return wrap_fn.__get__(instance.clone(name=f'Vmap{instance.name}'),
-                         instance.__class__)
-
-
-# # too weird
-# def vmap_module_instance(instance, *vmap_args, methods=None, **vmap_kwargs):
-#   if methods is None:
-#     methods = ['__call__']
-#   elif isinstance(methods, str):
-#     methods = [method,]
-#   new_instance = instance.clone()
-#   for fn_name in methods:
-#     unbound_fn = getattr(instance, fn_name).__func__
-#     def scope_fn(scope, *args, **kwargs):
-#       return getattr(instance.clone(parent=scope), fn_name)(*args, **kwargs)
-#     vmap_fn = lift.vmap(scope_fn, *vmap_args, **vmap_kwargs)
-#     @functools.wraps(unbound_fn)
-#     def wrap_fn(self, *args, **kwargs):
-#       return vmap_fn(self.scope, *args, **kwargs)
-#     # return function bound to instance again
-#     new_name = 'vmap' if fn_name == '__call__' else 'vmap_' + fn_name
-#     setattr(new_instance, new_name,
-#             wrap_fn.__get__(new_instance, instance.__class__))
-#   return new_instance
-
-
-def vmap_class(module_class, *vmap_args, methods=None, **vmap_kwargs):
-  if methods is None:
-    # Default case, just transform __call__
-    class_vmap_args = {'__call__': (vmap_args, vmap_kwargs)}
-  elif isinstance(methods, str):
-    # Transform every method in methods with given args, kwargs.
-    class_vmap_args = {methods: (vmap_args, vmap_kwargs)}
-  elif isinstance(methods, dict):
-    # Pass different vmap args per each method.
-    assert vmap_args == () and vmap_kwargs == {}, (
-    """When passing different vmap args per method, all args must be
-    passed via methods kwarg.""")
-    class_vmap_args = {k: ((),v) for k,v in methods.items()}
-
-  transformed_fns = {}
-  for fn_name, fn_vmap_args in class_vmap_args.items():
-    fn = getattr(module_class, fn_name)
-    vmap_args, vmap_kwargs = fn_vmap_args
-    @functools.wraps(fn)
-    def wrapped_fn(self, *args, **kwargs):
-      def scope_fn(scope, *args, **kwargs):
-        attrs = {f.name: getattr(self, f.name)
-                 for f in dataclasses.fields(self)
-                 if f.name != 'parent'}
-        # we reference module_class, not self.__class__ to avoid infinite loop
-        cloned = module_class(parent=scope, **attrs)
-        return getattr(cloned, fn_name)(*args, **kwargs)
-      vmap_fn = lift.vmap(scope_fn, *vmap_args, **vmap_kwargs)
-      return vmap_fn(self.scope, *args, **kwargs)
-    transformed_fns[fn_name] = wrapped_fn
-  return type('Vmap' + module_class.__name__, (module_class,), transformed_fns)
-
-
-def module_class_lift_transform(
-    transform,
-    module_class,
-    *trafo_args,
-    methods=None,
-    **trafo_kwargs):
-  transform_name = transform.__name__
-  # TODO (levskaya): find nicer argument convention for multi-method case?
-  # prepare per-method transform args, kwargs
-  if methods is None:
-    # Default case, just transform __call__
-    class_trafo_args = {'__call__': (trafo_args, trafo_kwargs)}
-  elif isinstance(methods, str):
-    # Transform every method in methods with given args, kwargs.
-    class_trafo_args = {methods: (trafo_args, trafo_kwargs)}
-  elif isinstance(methods, dict):
-    # Pass different trafo args per each method.
-    assert trafo_args == () and trafo_kwargs == {}, (
-        f"""When passing different {transform_name} args per method,
-        all args must be passed via methods kwarg.""")
-    class_trafo_args = {k: ((),v) for k,v in methods.items()}
-
-  transformed_fns = {}
-  # for each of the specified methods:
-  for fn_name, fn_trafo_args in class_trafo_args.items():
-    # get existing unbound method from class
-    fn = getattr(module_class, fn_name)
-    trafo_args, trafo_kwargs = fn_trafo_args
-    # we need to create a scope-function from our class for the given method
-    @functools.wraps(fn)
-    def wrapped_fn(self, *args, **kwargs):
-      # make a scope-function to transform
-      def scope_fn(scope, *args, **kwargs):
-        # make a clone of self using its arguments
-        attrs = {f.name: getattr(self, f.name)
-                 for f in dataclasses.fields(self) if f.name != 'parent'}
-        # we reference module_class, not self.__class__ to avoid infinite loop
-        cloned = module_class(parent=scope, **attrs)
-        return getattr(cloned, fn_name)(*args, **kwargs)
-      # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = transform(scope_fn, *trafo_args, **trafo_kwargs)
-      ret = trafo_fn(self.scope, *args, **kwargs)
-      return ret
-    transformed_fns[fn_name] = wrapped_fn
-  # construct new dynamic class w. transformed methods
-  return type(transform_name.capitalize() + module_class.__name__,
-              (module_class,),
-              transformed_fns)
-
-vmap = functools.partial(module_class_lift_transform, lift.vmap)
-scan = functools.partial(module_class_lift_transform, lift.scan)
-jit = functools.partial(module_class_lift_transform, lift.jit)
-remat = functools.partial(module_class_lift_transform, lift.remat)
-
-# if we want to expose the class on the module for pickling, add at end:
-#   transformed_class = type(
-#     transform_name.capitalize() + module_class.__name__,
-#     (module_class,),
-#     transformed_fns)
-# setattr(sys.modules[transformed_class.__module__], transformed_class.__name__, transformed_class)
-# return getattr(sys.modules[transformed_class.__module__], transformed_class.__name__)
-
-
-def class_method_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
-    @functools.wraps(class_fn)
-    def wrapped_fn(self, *args, **kwargs):
-      # make a scope-function to transform
-      def scope_fn(scope, *args, **kwargs):
-        # make a clone of self using its arguments
-        attrs = {f.name: getattr(self, f.name)
-                 for f in dataclasses.fields(self)
-                 if f.name != 'parent'}
-        cloned = self.__class__(parent=scope, **attrs)
-        return class_fn(cloned, *args, **kwargs)
-      # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = transform(scope_fn, *trafo_args, **trafo_kwargs)
-      return trafo_fn(self.scope, *args, **kwargs)
-    return wrapped_fn
-
-
-vmap_method = functools.partial(class_method_lift_transform, lift.vmap)
-scan_method = functools.partial(class_method_lift_transform, lift.scan)
-jit_method = functools.partial(class_method_lift_transform, lift.jit)
-remat_method = functools.partial(class_method_lift_transform, lift.remat)
