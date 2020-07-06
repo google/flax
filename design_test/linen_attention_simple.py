@@ -134,22 +134,24 @@ class MultiHeadDotProductAttention(Module):
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     out_features = self.out_features or inputs_q.shape[-1]
 
-    Attn = concise_vmap(DotProductAttention,
+    attn = DotProductAttention(self,
+                               attn_module=self.attn_module,
+                               qkv_features=qkv_features // self.num_heads,
+                               out_features=out_features)
+
+    # Now, vmap attn.__call__ along heads and spatial dims.
+    attn = concise_vmap(attn,
                         (None, None, None), -2,
                         param=(0, 0, True),
                         dropout=(None, None, not self.broadcast_dropout),
                         axis_size=self.num_heads)
     for axis in reversed(sorted(self.batch_axes)):
-        Attn = concise_vmap(Attn,
+        attn = concise_vmap(attn,
                             (axis, axis, axis), axis,
                             param=(None, None, False),
                             dropout=(None, None, not self.broadcast_dropout))
-    y = Attn(self,
-             attn_module=self.attn_module,
-             qkv_features=qkv_features // self.num_heads,
-             out_features=out_features)(
-               inputs_q, inputs_kv, bias)
-
+    # evaluate multi-headed-attention.
+    y = attn(inputs_q, inputs_kv, bias)
     return y.mean(axis=-2)
 
 
