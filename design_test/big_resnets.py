@@ -33,30 +33,6 @@ def residual_block(scope: Scope, x: Array, conv, norm, act, features: int):
   return act(residual + x)
 
 
-# general purpose remat scan primitive
-def remat_scan(body_fn, scope, x, lengths, variable_modes, split_rngs):
-  if len(lengths) == 1:
-    def wrapper(scope, x, _):
-      return body_fn(scope, x), ()
-
-    x, _ = lift.scan(
-        wrapper, scope, x, (),
-        length=lengths[0],
-        variable_modes=variable_modes,
-        split_rngs=split_rngs)
-  else:
-    @lift.remat
-    def inner_loop(scope, x, _):
-      x = remat_scan(body_fn, scope, x, lengths[1:], variable_modes, split_rngs)
-      return x, ()
-    x, _ = lift.scan(
-        inner_loop, scope, x, (),
-        length=lengths[0],
-        variable_modes=variable_modes,
-        split_rngs=split_rngs)
-  return x
-
-
 def big_resnet(scope: Scope, x, blocks=(10, 10), dtype=jnp.float32,
                norm=default_norm, act=nn.relu):
   conv = partial(nn.conv, bias=False, dtype=dtype)
@@ -70,7 +46,7 @@ def big_resnet(scope: Scope, x, blocks=(10, 10), dtype=jnp.float32,
   def body_fn(scope, x):
     return residual_block(scope, x, conv, norm, act, features=x.shape[-1])
 
-  return remat_scan(
+  return lift.remat_scan(
       body_fn, scope, x, lengths=blocks,
       variable_modes={'param': 'scan', 'batch_stats': 'scan'},
       split_rngs={'param': True})

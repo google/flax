@@ -19,26 +19,9 @@ from .frozen_dict import unfreeze
 
 from .scope import Scope, KindFilter, in_kind_filter, group_kinds
 
-
-# class ScanVariableMode(enum.Enum):
-#   CARRY = ('carry', 'carry')
-#   BROADCAST = ('broadcast', None)
-#   ONCE = ('broadcast', 'broadcast')
-#   SCAN = ('scan', None)
-#   YIELD = (None, 'scan')
-#   MAP = ('scan', 'scan')
-
-# class ScanVariableMode(enum.Enum):
-#   CARRY = 'carry'
-#   BROADCAST = 'broadcast'
-#   SCAN = 'scan'
-#   NONE = None
-
-
-# ScanVariableModes = Sequence[Tuple[KindFilter, Union[ScanVariableMode, str]]]
-
 scan_variable_modes = set(['carry', 'broadcast', 'scan', None])
 
+ScanVariableMode = Union[str, Tuple[str, str]]
 
 def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[KindFilter],
@@ -207,7 +190,7 @@ def vmap(fn: Callable[..., Any],
 
 def scan(
     fn: Callable[..., Any], scope: 'Scope', init_carry: Any, xs: Any,
-    variable_modes: Mapping[KindFilter, Optional[str]],
+    variable_modes: Mapping[KindFilter, ScanVariableMode],
     split_rngs: Mapping[KindFilter, bool],
     length: Optional[int] = None, reverse: bool = False) -> Callable[..., Any]:
   """Wraps jax.lax.scan."""
@@ -363,6 +346,32 @@ def jit(fn: Callable[..., Any],
     return jitted(variable_groups, rng_groups, *args)
 
   return pack(inner, (in_variables,), (out_variables,), (rngs,))
+
+
+def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
+               lengths: Sequence[int],
+               variable_modes: Mapping[KindFilter, ScanVariableMode],
+               split_rngs: Mapping[KindFilter, bool]):
+  # TODO(jheek) should remat scan have scan inputs/outputs?
+  if len(lengths) == 1:
+    def wrapper(scope, carry, _):
+      return body_fn(scope, carry), ()
+    carry, _ = scan(
+        wrapper, scope, carry, (),
+        length=lengths[0],
+        variable_modes=variable_modes,
+        split_rngs=split_rngs)
+  else:
+    @remat
+    def inner_loop(scope, carry, _):
+      carry = remat_scan(body_fn, scope, carry, lengths[1:], variable_modes, split_rngs)
+      return carry, ()
+    carry, _ = scan(
+        inner_loop, scope, carry, (),
+        length=lengths[0],
+        variable_modes=variable_modes,
+        split_rngs=split_rngs)
+  return carry
 
 
 def _unzip2(xs):
