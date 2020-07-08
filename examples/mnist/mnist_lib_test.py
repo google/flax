@@ -54,12 +54,12 @@ class MnistLibTest(absltest.TestCase):
     """Tests training and evaluation code by running a single step with
        mocked data for MNIST dataset.
     """
-    # Get datasets testing-metadata directory.
-    flax_root_dir = Path(__file__).parents[2]
-    data_dir = str(flax_root_dir) + '/.tfds/metadata'
-
     # Create a temporary directory where tensorboard metrics are written.
     model_dir = tempfile.mkdtemp()
+
+    # Go two directories up to the root of the flax directory. 
+    flax_root_dir = Path(__file__).parents[2]
+    data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
     with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
       mnist_lib.train_and_evaluate(
