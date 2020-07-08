@@ -48,7 +48,7 @@ _is_omnistaging = hasattr(pe, 'trace_to_jaxpr_dynamic')
 
 
 def _replicate(x, devices=None):
-  x = jax.numpy.array(x)
+  x = jax.numpy.asarray(x)
   if devices is None:
     # match the default device assignments used in pmap:
     # for single-host, that's the XLA default device assignment
