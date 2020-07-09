@@ -20,7 +20,6 @@ from flax.nn import initializers
 from flax import traverse_util
 from flax import serialization
 
-from flax.core import scope
 from flax.core import Scope, init, apply, lift, Array
 from flax.core.scope import _unfreeze_variables
 from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
@@ -66,11 +65,12 @@ def get_suffix_module_pairs(module_tree):
 # to use the gnarly exec() trick from dataclasses.py to collapse this wrappers'
 # traceback entry to a single line.
 
-def manage_name_scopes(fun, manage_names=False):
+def manage_name_scopes(fun):
   @functools.wraps(fun)
   def wrapped_module_method(self, *args, **kwargs):
     if fun.__name__ not in self._public and self._cur_method is None:
       raise ValueError("Can't call private methods from outside Module.")
+    # could simplify this by just recording a proper call stack:
     if fun.__name__ in self._public:
       prev_method = self._cur_method
       object.__setattr__(self, '_cur_method', fun.__name__)
@@ -118,7 +118,7 @@ def module_method(fn):
 
 class Module:
   """Base Module Class"""
-  _multimethod_module = False  # statically determined on subclass init.
+  _multimethod_module = False  # statically determined on subclass init
   _public = set()              #
 
   @classmethod
@@ -158,8 +158,7 @@ class Module:
     """
     if is_module_tree(val):
       # Ignore parent and other Modules passed in as dataclass args.
-      # TODO: we want to process Module(None, ...) args passed via dataclass args.
-      if name == 'parent' or name in self.__dataclass_fields__.keys():
+      if name == 'parent':
         pass
       # Special setattr assignment of modules to self is only allowed in setup()
       elif not self._in_setup:
@@ -170,8 +169,10 @@ class Module:
         for suffix, submodule in get_suffix_module_pairs(val):
           if submodule.parent is None:
             submodule.parent = self
-          else:  # TODO: error check?  submodule.parent == self ??
-            pass
+          elif not name in self.__dataclass_fields__.keys():
+            if submodule.parent != self:
+              raise ValueError("Can't attach to remote parent in setup, pass in "
+                               "bound Modules from outside as an argument.")
           if submodule.name is not None:
             raise ValueError("In setup assign names via self.<name> assignment.")
           submodule.name = f'{name}{suffix}'
