@@ -98,7 +98,8 @@ class Module:
       cls.name = None  # default value of name is None.
     dataclasses.dataclass(cls)
     # wrap setup and call methods
-    cls.__call__ = wrap_call(cls.__call__)
+    if hasattr(cls, '__call__'):
+      cls.__call__ = wrap_call(cls.__call__)
     cls.setup = wrap_setup(cls.setup)
 
   def __setattr__(self, name, val):
@@ -137,7 +138,6 @@ class Module:
     self._reservations = set()
     self._in_call = False
     self._in_setup = False
-    self.scope = Scope({})
     self.submodules = dict()
 
     # Initialization is deferred until attachment by __setattr__ for orphan
@@ -152,7 +152,7 @@ class Module:
       # i.e. self.mymodule = MyModule(self, ...)
       if self.parent._in_setup and self.name is None:
         return
-      if not self._initialization_allowed:
+      if not self.parent._initialization_allowed:
         raise ValueError("For multimethod Modules you must initialize any "
                          "submodules inside the setup() function.")
       # Autonaming of submodules.
@@ -202,14 +202,14 @@ class Module:
     if not self._initialization_allowed:
       raise ValueError(
         'For multi-method Modules, you must initialize parameters'
-        ' in the `setup` or `setup_variables` function.')
+        ' in the `setup` function.')
     return self.scope.param(name, init_fn, *init_args)
 
   def variable(self, kind, name, init_fn, *init_args):
     if not self._initialization_allowed:
       raise ValueError(
         'For multi-method Modules, you must initialize variables'
-        ' in the `setup` or `setup_variables` function.')
+        ' in the `setup` function.')
     return self.scope.variable(kind, name, init_fn, *init_args)
 
   def get_variable(self, kind, name, default=None):
