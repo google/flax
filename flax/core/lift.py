@@ -80,7 +80,8 @@ def pack(fn: Callable[..., Any],
       y, out_variable_groups = fn(
           scope_fn, repack, variable_groups, rng_groups, *args)
     finally:
-      inner_scope.invalidate()
+      if inner_scope:
+        inner_scope.invalidate()
     for out_variable_group in out_variable_groups:
       for kind, kind_variables in out_variable_group.items():
         for name, value in kind_variables.items():
@@ -287,7 +288,9 @@ def scan(
     input_pvals = (carry_pvals, scan_pvals)
     in_pvals, in_tree = jax.tree_flatten(input_pvals)
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(broadcast_body), in_tree)
-    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
+
+    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
+    # _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
     
     out_flat = []
     for pv, const in out_pvals:
@@ -335,8 +338,8 @@ def jit(fn: Callable[..., Any],
   static_argnums = tuple(i + 1 for i in static_argnums if i > 0)
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     @functools.partial(jax.jit,
-                        static_argnums=static_argnums,
-                        device=device, backend=backend)
+                       static_argnums=static_argnums,
+                       device=device, backend=backend)
     @functools.wraps(fn)
     def jitted(variable_groups, rng_groups, *args):
       scope = scope_fn(variable_groups, rng_groups)
@@ -373,6 +376,31 @@ def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
         split_rngs=split_rngs)
   return carry
 
+
+def named_call(fn: Callable[..., Any], name: str) -> Callable[..., Any]:
+  """Wraps jax.jit."""
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, args, kwargs):
+    @functools.wraps(fn)
+    def named(variable_groups, rng_groups):
+      scope = scope_fn(variable_groups, rng_groups)
+      y = fn(scope, *args, **kwargs)
+      return y, repack_fn(scope)
+    named = _named_call(named, name)
+    return named(variable_groups, rng_groups)
+  lifted = pack(inner, (True,), (True,), (True,))
+  def wrapper(scope, *args, **kwargs):
+    return lifted(scope, args, kwargs)
+  return wrapper
+
+
+def _named_call(f, name):
+  _, in_tree = jax.tree_flatten(())
+  def named_f(*args, **kwargs):
+    lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
+    flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
+    out_flat = jax.core.call_p.bind(flat_f, name=name)
+    return jax.tree_unflatten(out_tree(), out_flat)
+  return named_f
 
 def _unzip2(xs):
   ys = tuple(zip(*xs))
