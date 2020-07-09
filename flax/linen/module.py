@@ -30,7 +30,7 @@ from jax import tree_util
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
-SPECIAL_METHODS = ('__call__', 'setup', 'setup_variables')
+SPECIAL_METHODS = ('__call__', 'setup')
 
 # Utilities for autonaming pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
@@ -50,89 +50,41 @@ def get_suffix_module_pairs(module_tree):
         serialization.to_state_dict(module_tree))
     return [('_' + '_'.join(k), v) for k, v in flat_tree.items()]
 
-
 # Method wrapping
 # -----------------------------------------------------------------------------
-#
-# We use wrappers on Module methods to do 3 things:
-# 1. Prevent calling private internal methods by accident.
-# 2. Record current invoked methods for safeguards against misuse of submodules
-#    and variable initialization in the multi-method context.
-# 3. Reset the Module autonaming context on method exit.
-#
-# The below functionality might be better written as separate function wrappers,
-# but each additional wrapper pollutes the stack trace.  In fact, we might wish
-# to use the gnarly exec() trick from dataclasses.py to collapse this wrappers'
-# traceback entry to a single line.
-
-def manage_name_scopes(fun):
+def wrap_call(fun):
   @functools.wraps(fun)
-  def wrapped_module_method(self, *args, **kwargs):
-    if fun.__name__ not in self._public and self._cur_method is None:
-      raise ValueError("Can't call private methods from outside Module.")
-    # could simplify this by just recording a proper call stack:
-    if fun.__name__ in self._public:
-      prev_method = self._cur_method
-      object.__setattr__(self, '_cur_method', fun.__name__)
-    if fun.__name__ == 'setup':
-      object.__setattr__(self, '_in_setup', True)
-    if fun.__name__ == 'setup_variables':
-      object.__setattr__(self, '_in_setup_variables', True)
+  def wrapped_call_method(self, *args, **kwargs):
+    object.__setattr__(self, '_in_call', True)
     try:
       return fun(self, *args, **kwargs)
     finally:
-      if fun.__name__ in self._public:
-        self._cur_method = prev_method
-      if fun.__name__ == 'setup':
+      object.__setattr__(self, '_in_call', False)
+      object.__setattr__(self, '_reservations', set())
+      object.__setattr__(self, '_autoname_cursor', dict())
+      object.__setattr__(self, 'scope', self.scope.rewound())
+  return wrapped_call_method
+
+def wrap_setup(fun):
+  @functools.wraps(fun)
+  def wrapped_setup_method(self, *args, **kwargs):
+      object.__setattr__(self, '_in_setup', True)
+    try:
+      return fun(self, *args, **kwargs)
+    finally:
         object.__setattr__(self, '_in_setup', False)
-      if fun.__name__ == 'setup_variables':
-        object.__setattr__(self, '_in_setup_variables', False)
-      if fun.__name__ in self._public:
-        object.__setattr__(self, '_reservations', set())
-        object.__setattr__(self, '_autoname_cursor', dict())
-        object.__setattr__(self, 'scope', self.scope.rewound())
   return wrapped_module_method
-
-def get_method_names(cls, exclude=()):
-  """Get method names of a class, allow exclusions."""
-  methods = {m[0] for m in inspect.getmembers(cls, predicate=callable)}
-  return tuple(methods.difference(set(exclude)))
-
-def wrap_module_methods(cls):
-  # We only want to wrap user-defined and special methods.
-  ignore_fns = get_method_names(Module, exclude=SPECIAL_METHODS)
-  dataclass_fieldnames = set([f.name for f in dataclasses.fields(cls)])
-  for key in get_method_names(cls):
-    if (key not in dataclass_fieldnames  # don't touch passed-in Modules
-        and key not in ignore_fns):      # ignore base functions
-      setattr(cls, key, manage_name_scopes(getattr(cls, key)))
-  return cls
-
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
-def module_method(fn):
-  """Marks Module method as public."""
-  fn.public = True
-  return fn
-
 class Module:
   """Base Module Class"""
-  _multimethod_module = False  # statically determined on subclass init
-  _public = set()              #
+  _multimethod_module = False
+  _public = set(SPECIAL_METHODS)
 
   @classmethod
   def __init_subclass__(cls):
     """Automatically initialize all subclasses as custom dataclasses."""
-    # Record public functions and determine if this is a multimethod Module
-    cls._public = set(SPECIAL_METHODS).union(cls.__base__._public)
-    cls._multimethod_module = cls.__base__._multimethod_module
-    for name, fn in inspect.getmembers(cls, predicate=inspect.isfunction):
-      if hasattr(fn, 'public'):
-        cls._public.add(name)
-        cls._multimethod_module = True
-
-    # Setup dataclass with defaults.
     if not hasattr(cls.__base__, '__annotations__'):
       annotations = cls.__dict__.get('__annotations__', {})
       if 'parent' in annotations or 'name' in annotations:
@@ -143,11 +95,11 @@ class Module:
       new_annotations.update(annotations)
       new_annotations['name'] = str
       cls.__annotations__ = new_annotations
-      cls.name = None
+      cls.name = None  # default value of name is None.
     dataclasses.dataclass(cls)
-
-    # Apply module wrappers.
-    wrap_module_methods(cls)
+    # wrap setup and call methods
+    cls.__call__ = wrap_call(cls.__call__)
+    cls.setup = wrap_setup(cls.setup)
 
   def __setattr__(self, name, val):
     """We overload setattr solely to support pythonic naming via
@@ -157,8 +109,10 @@ class Module:
       self.submodules = [MyModule0(..), MyModule1(..), ...]
     """
     if is_module_tree(val):
+      # Ignore parent and other Modules passed in as dataclass args.
       if name == 'parent':
         pass
+      # Special setattr assignment of modules to self is only allowed in setup()
       elif not self._in_setup:
         raise ValueError("You can only assign submodules to self in setup().")
       else:
@@ -179,27 +133,26 @@ class Module:
 
   def __post_init__(self):
     """Register self as a child of self.parent."""
-    self._cur_method = None
     self._autoname_cursor = dict()
     self._reservations = set()
-    self.submodules = dict()
+    self._in_call = False
+    self._in_setup = False
     self.scope = Scope({})
+    self.submodules = dict()
 
-    # Initialization is deferred until attachment by __setattr__ in 2 cases:
-    # For orphan Modules, we defer setup until attachment to a parent Module.
-    # i.e. MyModule(None, ...)
+    # Initialization is deferred until attachment by __setattr__ for orphan
+    # Modules i.e. MyModule(None, ...)
     if self.parent is None:
-      return
-    # When initializing an unnamed Module inside setup()
-    # i.e. self.mymodule = MyModule(self, ...)
-    if (isinstance(self.parent, Module)
-        and self.parent._in_setup
-        and self.name is None):
       return
 
     # Register submodule on parent Module.
     if isinstance(self.parent, Module):
-      if self.parent._multimethod_module and not self.parent._in_setup:
+      # When initializing an unnamed Module inside setup()
+      # initialization is deferred until attachment by __setattr__
+      # i.e. self.mymodule = MyModule(self, ...)
+      if self.parent._in_setup and self.name is None:
+        return
+      if not self._initialization_allowed:
         raise ValueError("For multimethod Modules you must initialize any "
                          "submodules inside the setup() function.")
       # Autonaming of submodules.
@@ -214,8 +167,6 @@ class Module:
            f"{self.name} To share submodules, store module instances as a"
            f" Python object or as an attribute on self and reuse.")
       self.parent._reservations.add(self.name)
-
-      # Register submodule on parent.
       self.parent.submodules[self.name] = self
       self.scope = self.parent.scope.push(self.name)
 
@@ -229,7 +180,6 @@ class Module:
     # Call the user-defined initialization function.
     self.setup()
 
-
   def setup(self):
     """Called when module instance receives variables and PRNGs.
 
@@ -239,14 +189,9 @@ class Module:
     """
     pass
 
-  def setup_variables(self, *args, **kwargs):
-    """Call to initialize variables for multimethod Modules.
-
-    If you want to use shared parameters in a multimethod, override this
-    function, accepting whatever inputs are needed for shape-inference,
-    and assign the parameters to self for use in the module_methods.
-    """
-    pass
+  @property
+  def _initialization_allowed(self):
+    return self._in_setup or (self._in_call and not self._multimethod_module)
 
   def clone(self, **updates):
     attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
@@ -254,16 +199,14 @@ class Module:
     return self.__class__(**attrs)
 
   def param(self, name, init_fn, *init_args):
-    if (self._multimethod_module
-        and not (self._in_setup_variables or self._in_setup)):
+    if not self._initialization_allowed:
       raise ValueError(
         'For multi-method Modules, you must initialize parameters'
         ' in the `setup` or `setup_variables` function.')
     return self.scope.param(name, init_fn, *init_args)
 
   def variable(self, kind, name, init_fn, *init_args):
-    if (self._multimethod_module
-        and not (self._in_setup_variables or self._in_setup)):
+    if not self._initialization_allowed:
       raise ValueError(
         'For multi-method Modules, you must initialize variables'
         ' in the `setup` or `setup_variables` function.')
@@ -307,3 +250,7 @@ class Module:
     with self.mutate() as initialized:
       method(initialized)(*args, **kwargs)
     return initialized
+
+
+class MultiModule(Module):
+  _multimethod_module = True
