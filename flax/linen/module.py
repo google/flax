@@ -179,6 +179,9 @@ class Module:
       self.parent._reservations.add(self.name)
       self.parent.submodules[self.name] = self
       self.scope = self.parent.scope.push(self.name)
+      # we don't use the scope name-collision checking.
+      # TODO: find cleaner solution
+      self.parent.scope.reservations.remove(self.name)
 
     # Top-level invocation with a functional Scope.
     elif isinstance(self.parent, Scope):
@@ -213,14 +216,28 @@ class Module:
       raise ValueError(
         'For multi-method Modules, you must initialize parameters'
         ' in the `setup` function.')
-    return self.scope.param(name, init_fn, *init_args)
+    if name in self._reservations:
+      raise ValueError(
+        f'Name {name} already in use in {self.__class__.__name__}.')
+    self._reservations.add(name)
+    p = self.scope.param(name, init_fn, *init_args)
+    # TODO: find cleaner way to opt-out of name collision check
+    self.scope.reservations.remove(name)
+    return p
 
   def variable(self, kind, name, init_fn, *init_args):
     if not self._initialization_allowed:
       raise ValueError(
         'For multi-method Modules, you must initialize variables'
         ' in the `setup` function.')
-    return self.scope.variable(kind, name, init_fn, *init_args)
+    if name in self._reservations:
+      raise ValueError(
+        f'Name {name} already in use in {self.__class__.__name__}.')
+    self._reservations.add(name)
+    v = self.scope.variable(kind, name, init_fn, *init_args)
+    # TODO: find cleaner way to opt-out of name collision check
+    self.scope.reservations.remove(name)
+    return v
 
   @property
   def variables(self):
