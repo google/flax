@@ -68,12 +68,12 @@ def wrap_call(fun):
 def wrap_setup(fun):
   @functools.wraps(fun)
   def wrapped_setup_method(self, *args, **kwargs):
-      object.__setattr__(self, '_in_setup', True)
+    object.__setattr__(self, '_in_setup', True)
     try:
       return fun(self, *args, **kwargs)
     finally:
         object.__setattr__(self, '_in_setup', False)
-  return wrapped_module_method
+  return wrapped_setup_method
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
@@ -211,9 +211,6 @@ class Module:
         'For multi-method Modules, you must initialize variables'
         ' in the `setup` function.')
     return self.scope.variable(kind, name, init_fn, *init_args)
-
-  def get_variable(self, kind, name, default=None):
-    return self.scope.get_variable(kind, name, default)
 
   @property
   def variables(self):
