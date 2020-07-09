@@ -67,10 +67,9 @@ class ImagenetBenchmark(Benchmark):
     self.report_metrics({'sec_per_epoch': sec_per_epoch,
                          'accuracy': end_accuracy})
     self.report_extras({
-        'description':
-            'Toy 8 x V100 test for ImageNet ResNet50.',
-        'model_name':
-            'resnet50'
+        'description': 'Toy 8 x V100 test for ImageNet ResNet50.',
+        'model_name': 'resnet50',
+        'parameters': 'hp=true,bs=2048',
     })
 
 

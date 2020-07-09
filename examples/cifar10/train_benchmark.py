@@ -69,7 +69,8 @@ class CifarTenBenchmark(Benchmark):
                          'error_rate': end_error_rate})
     self.report_extras({
         'description': 'Toy 1 x V100 test for CIFAR10 WideResNet26_10.',
-        'model_name': 'cifar10'
+        'model_name': 'cifar10',
+        'parameters': 'arch=wrn26_10',
     })
 
 
