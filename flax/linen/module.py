@@ -157,10 +157,8 @@ class Module:
       self.submodules = [MyModule0(..), MyModule1(..), ...]
     """
     if is_module_tree(val):
-      # Ignore parent and other Modules passed in as dataclass args.
       if name == 'parent':
         pass
-      # Special setattr assignment of modules to self is only allowed in setup()
       elif not self._in_setup:
         raise ValueError("You can only assign submodules to self in setup().")
       else:
