@@ -86,17 +86,21 @@ class Module:
   @classmethod
   def __init_subclass__(cls):
     """Automatically initialize all subclasses as custom dataclasses."""
-    if not hasattr(cls.__base__, '__annotations__'):
-      annotations = cls.__dict__.get('__annotations__', {})
-      if 'parent' in annotations or 'name' in annotations:
-        raise ValueError(
-          f'properties `parent` and `name` are reserved: {annotations}')
-      # Add `parent` and `name` default fields at beginning and end, resp.
-      new_annotations = {'parent': Union[Type["Module"], Type["Scope"], None]}
-      new_annotations.update(annotations)
-      new_annotations['name'] = str
-      cls.__annotations__ = new_annotations
-      cls.name = None  # default value of name is None.
+    annotations = cls.__dict__.get('__annotations__', {})
+    if 'parent' in annotations or 'name' in annotations:
+      raise ValueError(
+        f'properties `parent` and `name` are reserved: {annotations}')
+    # Add `parent` and `name` default fields at beginning and end, resp.
+    new_annotations = {}
+    if 'parent' not in getattr(cls, '__dataclass_fields__', {}):
+      new_annotations.update(
+        {'parent': Union[Type["Module"], Type["Scope"], None]})
+    new_annotations.update(annotations)
+    if 'name' in getattr(cls, '__dataclass_fields__', {}):
+      cls.__dataclass_fields__.pop('name')
+    new_annotations['name'] = str
+    cls.__annotations__ = new_annotations
+    cls.name = None  # default value of name is None.
     dataclasses.dataclass(cls)
     # wrap setup and call methods
     if hasattr(cls, '__call__'):
