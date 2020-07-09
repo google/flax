@@ -7,8 +7,9 @@ import jax
 
 def _masters():
   """Returns a list of currently active Jax tracers."""
-  stack = jax.core.trace_state.trace_stack
-  return stack.downward[::-1] + stack.upward
+  # stack = jax.core.trace_state.trace_stack
+  # return stack.downward[::-1] + stack.upward
+  return []
 
 
 def current_trace():
