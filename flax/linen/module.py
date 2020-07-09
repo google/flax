@@ -80,7 +80,8 @@ def wrap_setup(fun):
 class Module:
   """Base Module Class"""
   _multimethod_module = False
-  _public = set(SPECIAL_METHODS)
+  _in_call = False
+  _in_setup = False
 
   @classmethod
   def __init_subclass__(cls):
@@ -110,22 +111,29 @@ class Module:
       self.submodules = [MyModule0(..), MyModule1(..), ...]
     """
     if is_module_tree(val):
-      # Ignore parent and other Modules passed in as dataclass args.
+      # We don't mess with the parent module.
       if name == 'parent':
         pass
-      # Special setattr assignment of modules to self is only allowed in setup()
-      elif not self._in_setup:
-        raise ValueError("You can only assign submodules to self in setup().")
-      else:
-        # If we're attaching a pytree of submodules (list, dict, etc),
-        # give each submodule in tree a suffix corresponding to tree location.
+      # Modules have been passed in as dataclass args.
+      # if they're orphaned, i.e. Module(None, ...) then attach them.
+      elif name in self.__dataclass_fields__.keys():
         for suffix, submodule in get_suffix_module_pairs(val):
           if submodule.parent is None:
             submodule.parent = self
-          elif not name in self.__dataclass_fields__.keys():
-            if submodule.parent != self:
-              raise ValueError("Can't attach to remote parent in setup, pass in "
-                               "bound Modules from outside as an argument.")
+            if submodule.name is not None:
+              raise ValueError("In setup assign names via self.<name> assignment.")
+            submodule.name = f'{name}{suffix}'
+            submodule.__post_init__()
+      # Submodules are being defined and attached in setup()
+      else:
+        if not self._in_setup:
+          raise ValueError("You can only assign submodules to self in setup().")
+        for suffix, submodule in get_suffix_module_pairs(val):
+          if submodule.parent is None:
+            submodule.parent = self
+          elif submodule.parent != self:
+            raise ValueError("Can't attach to remote parent in setup, pass in "
+                             "bound Modules from outside as an argument.")
           if submodule.name is not None:
             raise ValueError("In setup assign names via self.<name> assignment.")
           submodule.name = f'{name}{suffix}'
@@ -136,8 +144,6 @@ class Module:
     """Register self as a child of self.parent."""
     self._autoname_cursor = dict()
     self._reservations = set()
-    self._in_call = False
-    self._in_setup = False
     self.submodules = dict()
 
     # Initialization is deferred until attachment by __setattr__ for orphan
@@ -243,9 +249,9 @@ class Module:
     finally:
       cloned.scope._variables = freeze(cloned.scope._variables)
 
-  def initialized(self, *args, method=lambda self: self.__call__, **kwargs):
+  def initialized(self, *args, method='__call__', **kwargs):
     with self.mutate() as initialized:
-      method(initialized)(*args, **kwargs)
+      getattr(initialized, method)(*args, **kwargs)
     return initialized
 
 
