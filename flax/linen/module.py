@@ -257,7 +257,7 @@ class Module:
     variables = unfreeze(variables)
     scope = Scope(variables, rngs=rngs)
     module = cls(scope, *args, **kwargs)
-    scope.variables = freeze(scope.variables)
+    scope._variables = freeze(scope._variables)
     return module
 
   @contextmanager
