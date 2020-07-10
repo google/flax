@@ -157,3 +157,24 @@ class ModuleTest(absltest.TestCase):
         self.dense = Dense(None, 3)
     scope = Scope({})
     MLPclone = MLP(scope).clone()
+
+  def test_submodule_attr(self):
+    class Inner(nn.Module):
+      def __call__(self):
+        self.param('x', lambda rng: 40)
+
+    class Outer(nn.Module):
+      inner: nn.Module
+
+      def __call__(self):
+        return inner()
+
+    scope = Scope({'param': {}}, rngs={'param': rngkey})
+    inner = Inner(scope)
+
+    # Make sure this doesn't raise "Can't attach to remote parent"
+    outer = Outer(scope, inner)
+    outer()
+
+    # Make sure that variables are registered at the top-level scope
+    self.assertEqual(40, scope.variables()['param']['x'])
