@@ -270,9 +270,15 @@ class Module:
       raise ValueError("Pattern for initialized is `Module(parent=None, ...attrs...).initialized(...)`")
     scope = Scope(variables={k: {} for k in kinds}, rngs=rngs)
     with self.mutate(parent=scope) as initialized:
-      # TODO(avitalo): add a unit test that would have failed without this
       getattr(initialized, method)(*args, **kwargs)
     return initialized
+
+  def apply(self, *args, variables={}, rngs=None, kinds=('param',), method='__call__', **kwargs):
+    if self.parent is not None:
+      raise ValueError("Pattern for apply is `Module(parent=None, ...attrs...).apply(...)`")
+    scope = Scope(variables=variables, rngs=rngs)
+    with self.mutate(parent=scope) as clone:
+      return getattr(clone, method)(*args, **kwargs)
 
 
 class MultiModule(Module):
