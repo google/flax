@@ -167,14 +167,21 @@ class ModuleTest(absltest.TestCase):
       inner: nn.Module
 
       def __call__(self):
-        return inner()
+        return self.inner()
+
+    class Wrapper(nn.Module):
+      def setup(self):
+        self.inner = Inner(self)
+        self.outer = Outer(self, self.inner)
+
+      def __call__(self):
+        return self.outer()
 
     scope = Scope({'param': {}}, rngs={'param': rngkey})
-    inner = Inner(scope)
-
     # Make sure this doesn't raise "Can't attach to remote parent"
-    outer = Outer(scope, inner)
-    outer()
+    wrapper = Wrapper(scope)
+    wrapper()
 
-    # Make sure that variables are registered at the top-level scope
-    self.assertEqual(40, scope.variables()['param']['x'])
+    # Make sure that variables are registered at the level of the
+    # Wrapper submodule, not the Outer submodule.
+    self.assertEqual(40, scope.variables()['param']['inner']['x'])
