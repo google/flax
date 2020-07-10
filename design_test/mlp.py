@@ -30,10 +30,10 @@ def mlp(scope: Scope, x: Array,
 
 
 
+if __name__ == "__main__":
+  x = random.normal(random.PRNGKey(0), (1, 4,))
+  y, params = init(mlp)(random.PRNGKey(1), x)
+  print(y.shape)
+  print(jax.tree_map(jnp.shape, unfreeze(params)))
 
-x = random.normal(random.PRNGKey(0), (1, 4,))
-y, params = init(mlp)(random.PRNGKey(1), x)
-print(y.shape)
-print(jax.tree_map(jnp.shape, unfreeze(params)))
-
-print(jax.make_jaxpr(jax.jit(apply(mlp)))(params, x))
+  print(jax.make_jaxpr(jax.jit(apply(mlp)))(params, x))

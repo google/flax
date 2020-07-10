@@ -52,21 +52,19 @@ class TiedAutoEncoder:
     return lift.transform_module(
         fn, trans_in_fn=trans, trans_out_fn=trans)
 
+if __name__ == "__main__":
+  ae = TiedAutoEncoder(latents=2, features=4)
+  x = jnp.ones((1, ae.features))
+
+  x_r, params = init(ae)(random.PRNGKey(0), x)
+
+  print(x, x_r)
+  print(params)
 
 
+  print('init from decoder:')
+  z = jnp.ones((1, ae.latents))
+  x_r, params = init(ae.decode)(random.PRNGKey(0), z)
 
-ae = TiedAutoEncoder(latents=2, features=4)
-x = jnp.ones((1, ae.features))
-
-x_r, params = init(ae)(random.PRNGKey(0), x)
-
-print(x, x_r)
-print(params)
-
-
-print('init from decoder:')
-z = jnp.ones((1, ae.latents))
-x_r, params = init(ae.decode)(random.PRNGKey(0), z)
-
-print(apply(ae)(params, x))
-print(params)
+  print(apply(ae)(params, x))
+  print(params)
