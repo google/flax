@@ -36,6 +36,8 @@ SPECIAL_METHODS = ('__call__', 'setup')
 # -----------------------------------------------------------------------------
 def is_module_tree(in_tree):
   """Determine if in_tree is a pytree of subclasses of Module."""
+  if isinstance(in_tree, (np.ndarray, jax.interpreters.xla.DeviceArray)):
+    return False
   if not in_tree:  # reject trivial pytrees, {}, [], (), etc.
     return False
   reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
