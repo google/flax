@@ -8,8 +8,9 @@ import numpy as np
 
 from flax.nn import initializers
 from flax.core.frozen_dict import freeze, unfreeze
+from flax.core import Scope
 
-from flax.linen import Module, vmap
+from flax.linen import Module, MultiModule, vmap
 
 
 class Dense(Module):
@@ -161,18 +162,20 @@ class MultiHeadDotProductAttention(Module):
 if __name__ == '__main__':
 
   inputs = jnp.ones((8, 97, 256))
+  topscope = Scope({}, {'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)})
 
-  model = MultiHeadDotProductAttention.toplevel(
-      broadcast_dropout=False,
-      attn_module=functools.partial(SoftmaxAttnWDropout, rate=0.1),
-      num_heads=8,
-      batch_axes=(0,),
-      rngs={'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)})
+  model = MultiHeadDotProductAttention(
+    topscope,
+    broadcast_dropout=False,
+    qkv_features=256,
+    out_features=256,
+    attn_module=functools.partial(SoftmaxAttnWDropout, rate=0.1),
+    num_heads=8,
+    batch_axes=(0,),)
 
-  with model.mutate(mutable=['param']) as initmodel:
-    y = initmodel(inputs, inputs)
+  y = model(inputs, inputs)
 
   print('input shape: ', inputs.shape)
   print('parameter shapes:')
-  pprint(jax.tree_map(jnp.shape, unfreeze(initmodel.variables)))
+  pprint(jax.tree_map(jnp.shape, unfreeze(model.variables)))
   print('output shape: ', y.shape)
