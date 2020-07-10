@@ -55,6 +55,8 @@ def get_suffix_module_pairs(module_tree):
 def wrap_call(fun):
   @functools.wraps(fun)
   def wrapped_call_method(self, *args, **kwargs):
+    if self.scope is None:
+      raise ValueError("Can't call methods on orphaned modules")
     object.__setattr__(self, '_in_call', True)
     try:
       return fun(self, *args, **kwargs)
@@ -82,6 +84,7 @@ class Module:
   _multimethod_module = False
   _in_call = False
   _in_setup = False
+  scope = None
 
   @classmethod
   def __init_subclass__(cls):
@@ -239,6 +242,8 @@ class Module:
     self.scope.reservations.remove(name)
     return v
 
+  # avitalo@: Why do we have both variables() and vars()? Can't we
+  # only have vars()?
   @property
   def variables(self):
     return self.scope.variables()
@@ -248,21 +253,9 @@ class Module:
   def vars(self):
     return DotGetter(self.scope._variables)
 
-  @classmethod
-  def toplevel(cls, *args, rngs=None, variables=None, **kwargs):
-    if rngs is None:
-      rngs = {}
-    if variables is None:
-      variables = {'param': {}}
-    variables = unfreeze(variables)
-    scope = Scope(variables, rngs=rngs)
-    module = cls(scope, *args, **kwargs)
-    scope._variables = freeze(scope._variables)
-    return module
-
   @contextmanager
-  def mutate(self, mutable=True):
-    cloned = self.clone()
+  def mutate(self, mutable=True, **updates):
+    cloned = self.clone(**updates)
     try:
       cloned.scope._variables = _unfreeze_variables(
           cloned.scope._variables, mutable)
@@ -270,8 +263,12 @@ class Module:
     finally:
       cloned.scope._variables = freeze(cloned.scope._variables)
 
-  def initialized(self, *args, method='__call__', **kwargs):
-    with self.mutate() as initialized:
+  def initialized(self, *args, rngs=None, kinds=('param',), method='__call__', **kwargs):
+    if self.parent is not None:
+      raise ValueError("Pattern for initialized is `Module(parent=None, ...attrs...).initialized(...)`")
+    scope = Scope(variables={k: {} for k in kinds}, rngs=rngs)
+    with self.mutate(parent=scope) as initialized:
+      # TODO(avitalo): add a unit test that would have failed without this
       getattr(initialized, method)(*args, **kwargs)
     return initialized
 

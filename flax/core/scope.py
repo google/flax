@@ -219,7 +219,7 @@ class Scope:
     return kind in self.rngs
 
   def make_rng(self, kind: str) -> PRNGKey:
-    assert self.has_rng(kind)
+    assert self.has_rng(kind), f"Need RNG for kind {kind}"
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[kind] += 1
