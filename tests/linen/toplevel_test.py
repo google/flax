@@ -40,3 +40,9 @@ class ModuleTopLevelTest(absltest.TestCase):
     d_initialized = d.initialized(rngs={'param': random.PRNGKey(0)})
     # ... make sure that indeed `d` has no scope.
     self.assertIsNone(d.scope)
+
+  def test_can_only_call_initialized_once(self):
+    d = Dummy(parent=None)
+    d = d.initialized(rngs={'param': random.PRNGKey(0)})
+    with self.assertRaises(BaseException):
+      d.initialized(rngs={'param': random.PRNGKey(0)})
