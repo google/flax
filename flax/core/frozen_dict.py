@@ -14,6 +14,7 @@ V = TypeVar('V')
 class FrozenDict(Mapping[K, V]):
   """An immutable variant of dictionaries.
   """
+  __slots__ = ('_dict', '_hash')
 
   def __init__(self, *args, **kwargs):
     self._dict = dict(*args, **kwargs)
