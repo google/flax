@@ -4,7 +4,6 @@ import inspect
 from flax.core import lift
 from flax.linen import Module
 
-
 # Module method lifting
 # -----------------------------------------------------------------------------
 
@@ -33,7 +32,7 @@ def lift_method(transform, target, *trafo_args, **trafo_kwargs):
   if instance:
     # return function bound to clone of instance again
     return wrapped_fn.__get__(
-        instance.clone(name=f'{transform.__name__}{instance.name}'),
+        instance,  #  TODO(levskaya): double-check is this always safe?
         instance.__class__)
   else:
     return wrapped_fn
