@@ -19,13 +19,40 @@ allow you to make various training loop modifications.
 
 Currently the following HOWTOs are available:
 
-.. toctree::
+Multi-device data-parallel training
+-----------------------------------
 
-   distributed-training
-   ensembling
-   polyak-averaging
-   scheduled-sampling
-   checkpointing
+⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/distributed-training?diff=split>`_
+
+.. raw:: html
+   :file: _formatted_howtos/distributed-training.diff.html
+
+
+Ensembling on multiple devices
+------------------------------
+
+⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/ensembling?diff=split>`_
+
+.. raw:: html
+   :file: _formatted_howtos/ensembling.diff.html
+
+
+Polyak averaging
+----------------
+
+⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/polyak-averaging?diff=split>`_
+
+.. raw:: html
+   :file: _formatted_howtos/polyak-averaging.diff.html
+
+Scheduled Sampling
+----------------
+
+⟶ `View as a side-by-side diff <https://github.com/google/flax/compare/master..howto/scheduled-sampling?diff=split>`_
+
+.. raw:: html
+   :file: _formatted_howtos/scheduled-sampling.diff.html
+
 
 How do HOWTOs work?
 -------------------
