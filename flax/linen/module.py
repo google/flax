@@ -300,6 +300,9 @@ class Module:
         getattr(initialized, method)(*args, **kwargs)
     return initialized
 
+  def vars_init(self, *args, **kwargs):
+    return self.initialized(*args, **kwargs).variables
+
   # TODO: Add tests for apply
   def apply(self, variables, *args, rngs=None, kinds=('param',), method='__call__', **kwargs):
     if self.parent is not None:
