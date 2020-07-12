@@ -291,15 +291,17 @@ class Module:
     finally:
       cloned.scope._variables = freeze(cloned.scope._variables)
 
-  def initialized(self, *args, rngs=None, kinds=('param',), method='__call__', **kwargs):
+  def initialized(self, rngs, *args, kinds=('param',), method='__call__', **kwargs):
     if self.parent is not None:
       raise ValueError("Pattern for initialized is `Module(parent=None, ...attrs...).initialized(...)`")
     scope = Scope(variables={k: {} for k in kinds}, rngs=rngs)
     with self.mutate(parent=scope) as initialized:
-      getattr(initialized, method)(*args, **kwargs)
+      if method is not None:
+        getattr(initialized, method)(*args, **kwargs)
     return initialized
 
-  def apply(self, *args, variables={}, rngs=None, kinds=('param',), method='__call__', **kwargs):
+  # TODO: Add tests for apply
+  def apply(self, variables, *args, rngs=None, kinds=('param',), method='__call__', **kwargs):
     if self.parent is not None:
       raise ValueError("Pattern for apply is `Module(parent=None, ...attrs...).apply(...)`")
     scope = Scope(variables=variables, rngs=rngs)
