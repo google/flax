@@ -100,6 +100,15 @@ class Module:
   @classmethod
   def __init_subclass__(cls):
     """Automatically initialize all subclasses as custom dataclasses."""
+    cls._add_parent_and_name_attrs()
+    dataclasses.dataclass(cls)
+    cls.setup = wrap_setup(cls.setup)
+    if hasattr(cls, '__call__'):
+      cls.__call__ = wrap_call(cls.__call__)
+
+  @classmethod
+  def _add_parent_and_name_attrs(cls):
+    """Add dataclass attributes: `parent` first, required and `name` last, optional."""
     annotations = cls.__dict__.get('__annotations__', {})
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
@@ -115,11 +124,6 @@ class Module:
     new_annotations['name'] = str
     cls.__annotations__ = new_annotations
     cls.name = None  # default value of name is None.
-    dataclasses.dataclass(cls)
-    # wrap setup and call methods
-    if hasattr(cls, '__call__'):
-      cls.__call__ = wrap_call(cls.__call__)
-    cls.setup = wrap_setup(cls.setup)
 
   def __setattr__(self, name, val):
     """We overload setattr solely to support pythonic naming via
