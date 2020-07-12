@@ -67,8 +67,11 @@ class CifarTenBenchmark(Benchmark):
     self.report_wall_time(benchmark_time)
     self.report_metrics({'sec_per_epoch': sec_per_epoch,
                          'error_rate': end_error_rate})
-    self.report_extra(
-        'description', 'Toy 1 x V100 test for CIFAR10 WideResNet26_10.')
+    self.report_extras({
+        'description': 'Toy 1 x V100 test for CIFAR10 WideResNet26_10.',
+        'model_name': 'cifar10',
+        'parameters': 'arch=wrn26_10',
+    })
 
 
 if __name__ == '__main__':

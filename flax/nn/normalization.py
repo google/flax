@@ -91,19 +91,19 @@ class BatchNorm(base.Module):
 
     if use_running_average:
       if ra_mean is None:
-        raise ValueError('batch_stats should be provided if '
-                         'use_running_averages is True')
+        raise ValueError('when use_running_averages is True '
+                         'either use a stateful context or provide batch_stats')
       mean, var = ra_mean.value, ra_var.value
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=False)
-      if axis_name is not None and not self.is_initializing():
-        mean = lax.pmean(
-            mean, axis_name=axis_name, axis_index_groups=axis_index_groups)
-
       mean2 = jnp.mean(lax.square(x), axis=reduction_axis, keepdims=False)
       if axis_name is not None and not self.is_initializing():
-        mean2 = lax.pmean(
-            mean2, axis_name=axis_name, axis_index_groups=axis_index_groups)
+        concatenated_mean = jnp.concatenate([mean, mean2])
+        mean, mean2 = jnp.split(
+            lax.pmean(
+                concatenated_mean,
+                axis_name=axis_name,
+                axis_index_groups=axis_index_groups), 2)
       var = mean2 - lax.square(mean)
 
       if ra_mean and not self.is_initializing():
@@ -158,6 +158,7 @@ class LayerNorm(base.Module):
       Normalized inputs (the same shape as inputs).
 
     """
+    x = jnp.asarray(x, jnp.float32)
     features = x.shape[-1]
     mean = jnp.mean(x, axis=-1, keepdims=True)
     mean2 = jnp.mean(lax.square(x), axis=-1, keepdims=True)
@@ -169,7 +170,7 @@ class LayerNorm(base.Module):
     y = (x - mean) * mul
     if bias:
       y = y + jnp.asarray(self.param('bias', (features,), bias_init), dtype)
-    return y
+    return jnp.asarray(y, dtype)
 
 
 class GroupNorm(base.Module):

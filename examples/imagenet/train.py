@@ -275,7 +275,6 @@ def main(argv):
   num_steps = steps_per_epoch * num_epochs
 
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
-  base_learning_rate = base_learning_rate
 
   model, model_state = create_model(
       rng, device_batch_size, image_size, model_dtype)

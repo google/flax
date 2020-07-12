@@ -12,6 +12,7 @@ set -euxo
 old_pwd=$(pwd)
 top_dir=$(git rev-parse --show-toplevel)
 howto_diff_path="${top_dir}/howtos/diffs"
+howto_doc_path="${top_dir}/docs/howtos"
 
 # Get names of howtos from diff files.
 cd $howto_diff_path
@@ -20,7 +21,7 @@ cd $top_dir
 
 # Check for stale diffs first before running any tests. This duplicates some
 # logic, but should speed up testing.
-printf "Verifying all HOWTO diffs can be applied...\n"
+printf "Verifying all HOWTO diffs can be applied and have docs...\n"
 
 for howto in $howtos; do
   diff_file="${howto_diff_path}/${howto}.diff"
@@ -29,6 +30,13 @@ for howto in $howtos; do
   # See: https://stackoverflow.com/q/26675681/
   if ! git apply --check "${diff_file}"; then
     printf "\nERROR: Cannot apply howto ${howto}! ==> PLEASE FIX HOWTO\n"
+    exit 1
+  fi
+
+  doc_file="${howto_doc_path}/${howto}.rst"
+  # Check if documentation exists
+  if [[ ! -f "${doc_file}" ]]; then
+    printf "\nERROR: Missing doc file for howto ${howto} at path ${doc_file}! ==> PLEASE WRITE DOCUMENTATION\n"
     exit 1
   fi
 done
