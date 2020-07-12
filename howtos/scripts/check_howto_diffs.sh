@@ -53,7 +53,7 @@ for howto in $howtos; do
   git apply $diff_file
 
   # Run unit test on affected examples only.
-  if ! git diff --name-only $curr_branch | xargs dirname | xargs pytest; then
+  if ! git diff --name-only $curr_branch | xargs -I {} dirname {} | xargs pytest; 
     # Undo patch in case we're running locally.
     git apply -R $diff_file
 
