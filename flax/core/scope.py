@@ -180,8 +180,8 @@ class Scope:
         prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
       name = self.default_name(prefix)
     scope = self.push(name)
-    from .lift import named_call
-    fn = named_call(fn, name)
+    #from .lift import named_call
+    #fn = named_call(fn, name)
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
       kwargs = dict(partial_kwargs, **kwargs)
