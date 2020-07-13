@@ -66,6 +66,8 @@ class DotGetter(MutableMapping, dict):
     # Note: will only work when wrapping FrozenDict.
     return hash(self._data)
 
+  def copy(self):
+    return self._data.__class__(self._data.copy())
 
 tree_util.register_pytree_node(
     DotGetter,
