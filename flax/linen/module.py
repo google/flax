@@ -241,6 +241,11 @@ class Module:
     attrs.update(**updates)
     return self.__class__(**attrs)
 
+  # TODO: Consider whether this is a helpful abstraction, and think about naming.
+  # See its use in design_test/linen/weight_std.py
+  def scoped_clone(self, variables={}, rngs={}):
+    return self.clone(parent=Scope(variables, rngs))
+
   def variable(self, kind: str, name: str, init_fn, *init_args):
     if not self._initialization_allowed:
       if self._in_call:

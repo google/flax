@@ -35,17 +35,16 @@ class StdWeight:
       self.module(x)
 
     param = self.module.variables['param']
-    # Need to make a copy because `param` is (and should be) frozen. We're only transforming
+    # Make a copy because `param` is (and should be) frozen. We're only transforming
     # the parameters, not mutating them.
     std_param = param.copy(kernel=standardize(param['kernel'], axis=[0, 1]))
-    scope = Scope(variables={"param": std_param})
-    return self.module.clone(parent=scope)(x)
+    return self.module.scoped_clone(variables={"param": std_param})(x)
 
 class MyModule(Module):
   def __call__(self, x):
     module = Dense(self, 3)
     std_module = StdWeight(module)
-    return std_module(x)  # parameters
+    return std_module(x)
 
 m = MyModule(parent=None).initialized({'param': jax.random.PRNGKey(10)}, jnp.ones((1, 4)))
 print(m.variables)
