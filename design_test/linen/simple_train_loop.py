@@ -37,15 +37,15 @@ def predict(params):
   #
   # At the very least, that would be useful for Colab debugging but perhaps
   # not for top-level training loop patterns
-  return MLP(None, [3, 4, 5]).apply(X, variables={'param': params})
-  
+  return MLP(None, [3, 4, 5]).apply({'param': params}, X)
+
 @jit
 def loss_fn(params):
   return jnp.mean(jnp.abs(Y - predict(params)))
 
 @jit
 def init_params(rng):
-  mlp = MLP(None, [3, 4, 5]).initialized(X, rngs={'param': rng})
+  mlp = MLP(None, [3, 4, 5]).initialized({'param': rng}, X)
   return mlp.variables['param']
 
 # Get initial parameters
@@ -65,4 +65,3 @@ for i in range(50):
   print(i, "loss = ", loss, "Yhat = ", predict(params))
   lr = 0.03
   params = jax.tree_multimap(lambda x, d: x - lr * d, params, grad)
-  

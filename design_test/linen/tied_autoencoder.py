@@ -16,7 +16,7 @@ class Dense(Module):
 class TiedAutoEncoder(Module):
   def setup(self):
     self.encoder = Dense(self, features=4)
-  
+
   @property
   def decoder(self):
     return self.encoder.scoped_clone(variables={

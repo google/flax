@@ -26,7 +26,7 @@ class ModuleTopLevelTest(absltest.TestCase):
       d()
 
   def test_toplevel_initialized_requires_rng(self):
-    with self.assertRaisesRegex(BaseException, "Need RNG"):
+    with self.assertRaisesRegex(BaseException, "missing 1 required.*rngs"):
       d = Dummy(parent=None).initialized()
 
   def test_toplevel_initialized_with_rng(self):

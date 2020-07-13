@@ -19,7 +19,7 @@ class Dense(Module):
 
 class MLP(Module):
   widths: Iterable
-  
+
   def __call__(self, x):
     for width in self.widths[:-1]:
       x = nn.relu(Dense(self, width)(x))
@@ -47,8 +47,8 @@ class AutoEncoder(MultiModule):
     x = nn.sigmoid(z)
     x = jnp.reshape(x, (x.shape[0],) + self.input_shape)
     return x
-    
-  
+
+
 ae = AutoEncoder(
   parent=None,
   encoder_widths=(32, 32, 32),

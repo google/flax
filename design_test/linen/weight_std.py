@@ -15,7 +15,7 @@ def standardize(x, axis, eps=1e-8):
   x = x - jnp.mean(x, axis=axis, keepdims=True)
   x = x / jnp.sqrt(jnp.mean(jnp.square(x), axis=axis, keepdims=True) + eps)
   return x
-  
+
 class Dense(Module):
   features: int
   def __call__(self, x):
@@ -23,18 +23,17 @@ class Dense(Module):
     return jnp.dot(x, kernel) + self.param('bias', initializers.zeros, (self.features,))
 
 
-
-
 @dataclass
 class StdWeight:
   module: Module
-  
+
   def __call__(self, x):
-    if not 'param' in self.module.vars:
+    if not 'param' in self.module.variables:
       # initialize parameters
       self.module(x)
 
     param = self.module.variables['param']
+    print(param)
     # Make a copy because `param` is (and should be) frozen. We're only transforming
     # the parameters, not mutating them.
     std_param = param.copy(kernel=standardize(param['kernel'], axis=[0, 1]))

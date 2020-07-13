@@ -29,10 +29,10 @@ class MLPExplicitWithShapeInference(Module):
     print()
     print("In MLPExplicitWithShapeInference.setup, self.dense2.variables:")
     print(self.dense2.variables)
-    
+
   def __call__(self, x):
-    return self.dense2(nn.relu(self.dense1(x)))    
-  
+    return self.dense2(nn.relu(self.dense1(x)))
+
 class DenseExplicit(Dense):
   in_features: Optional[int] = None
 
@@ -49,10 +49,10 @@ class MLPExplicit(Module):
     print()
     print("In MLPExplicit.setup, self.dense2.variables:")
     print(self.dense2.variables)
-    
+
   def __call__(self, x):
     return self.dense2(nn.relu(self.dense1(x)))
-    
+
 rngkey = jax.random.PRNGKey(10)
 
 # For these two, need to init by passing in an input.
