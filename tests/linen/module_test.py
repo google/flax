@@ -319,6 +319,29 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaisesRegex(ValueError, 'assign names via self'):
       y = Dummy(scope, x.shape)(x)
 
+  def test_attr_param_name_collision(self):
+    class Dummy(nn.Module):
+      bias: bool
+      def setup(self):
+        self.bias = self.param('bias', initializers.ones, (3, 3))
+      def __call__(self, x):
+        return x + self.bias
+    x = jnp.array([1.])
+    scope = Scope({}, {'param': rngkey})
+    with self.assertRaisesRegex(ValueError, 'Name bias already in use'):
+      y = Dummy(scope, x.shape)(x)
+
+  def test_attr_submodule_name_collision(self):
+    class Dummy(nn.Module):
+      bias: bool
+      def setup(self):
+        self.bias = DummyModule(self, name='bias')
+      def __call__(self, x):
+        return self.bias(x)
+    x = jnp.array([1.])
+    scope = Scope({}, {'param': rngkey})
+    with self.assertRaisesRegex(ValueError, 'bias exists already'):
+      y = Dummy(scope, x.shape)(x)
 
 if __name__ == '__main__':
   absltest.main()

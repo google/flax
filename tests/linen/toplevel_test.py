@@ -31,7 +31,7 @@ class ModuleTopLevelTest(absltest.TestCase):
 
   def test_toplevel_initialized_with_rng(self):
     d = Dummy(parent=None).initialized(rngs={'param': random.PRNGKey(0)})
-    self.assertEqual(d.vars.param.foo, 1)
+    self.assertEqual(d.variables.param.foo, 1)
 
   def test_toplevel_initialized_has_new_scope(self):
     d = Dummy(parent=None)
