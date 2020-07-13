@@ -54,8 +54,12 @@ class MLPExplicit(Module):
     return self.dense2(nn.relu(self.dense1(x)))
     
 rngkey = jax.random.PRNGKey(10)
+
+# For these two, need to init by passing in an input.
 mlp_concise = MLPConcise(parent=None).initialized({'param': rngkey}, jnp.zeros((1, 3)))
 mlp_explicit_shape_infr = MLPExplicitWithShapeInference(parent=None).initialized({'param': rngkey}, jnp.zeros((1, 3)))
+
+# NOTE: method=None here because we only need to call `setup`
 mlp_explicit = MLPExplicit(parent=None).initialized({'param': rngkey}, method=None)
 
 print()
