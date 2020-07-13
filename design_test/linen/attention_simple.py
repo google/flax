@@ -15,19 +15,20 @@ from flax.linen import Module, MultiModule, vmap
 
 class Dense(Module):
   features: int
-  bias: bool = True
+  use_bias: bool = True
   kernel_init: Callable = initializers.lecun_normal()
   bias_init: Callable = initializers.zeros
   dtype: Any = jnp.float32
   precision: Any = None
   def __call__(self, inputs):
     inputs = jnp.asarray(inputs, self.dtype)
-    kernel = self.param('kernel', self.kernel_init, (inputs.shape[-1], self.features))
+    kernel = self.param('kernel', self.kernel_init,
+                        (inputs.shape[-1], self.features))
     kernel = jnp.asarray(kernel, self.dtype)
     y = lax.dot_general(inputs, kernel,
                         (((inputs.ndim - 1,), (0,)), ((), ())),
                         precision=self.precision)
-    if self.bias:
+    if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
       y = y + bias
@@ -98,7 +99,7 @@ class DotProductAttention(Module):
     out_features = self.out_features or inputs_q.shape[-1]
 
     QKVDense = functools.partial(
-      Dense, features=qkv_features, bias=False, dtype=dtype)
+      Dense, features=qkv_features, use_bias=False, dtype=dtype)
     query = QKVDense(self, name='query')(inputs_q)
     key = QKVDense(self, name='key')(inputs_kv)
     value = QKVDense(self, name='value')(inputs_kv)
@@ -135,22 +136,23 @@ class MultiHeadDotProductAttention(Module):
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     out_features = self.out_features or inputs_q.shape[-1]
 
-    attn = DotProductAttention(self,
-                               attn_module=self.attn_module,
-                               qkv_features=qkv_features // self.num_heads,
-                               out_features=out_features)
-
     # Now, vmap attn.__call__ along heads and spatial dims.
-    attn = concise_vmap(attn,
+    Attn = concise_vmap(DotProductAttention,
                         (None, None, None), -2,
                         param=(0, 0, True),
                         dropout=(None, None, not self.broadcast_dropout),
                         axis_size=self.num_heads)
     for axis in reversed(sorted(self.batch_axes)):
-        attn = concise_vmap(attn,
+        Attn = concise_vmap(Attn,
                             (axis, axis, axis), axis,
                             param=(None, None, False),
                             dropout=(None, None, not self.broadcast_dropout))
+
+    attn = Attn(self,
+                attn_module=self.attn_module,
+                qkv_features=qkv_features // self.num_heads,
+                out_features=out_features)
+
     # evaluate multi-headed-attention.
     y = attn(inputs_q, inputs_kv, bias)
     return y.mean(axis=-2)
@@ -162,16 +164,17 @@ class MultiHeadDotProductAttention(Module):
 if __name__ == '__main__':
 
   inputs = jnp.ones((8, 97, 256))
-  topscope = Scope({}, {'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)})
+  topscope = Scope({},
+                   {'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)})
 
   model = MultiHeadDotProductAttention(
-    topscope,
-    broadcast_dropout=False,
-    qkv_features=256,
-    out_features=256,
-    attn_module=functools.partial(SoftmaxAttnWDropout, rate=0.1),
-    num_heads=8,
-    batch_axes=(0,),)
+      topscope,
+      broadcast_dropout=False,
+      qkv_features=256,
+      out_features=256,
+      attn_module=functools.partial(SoftmaxAttnWDropout, rate=0.1),
+      num_heads=8,
+      batch_axes=(0,),)
 
   y = model(inputs, inputs)
 
