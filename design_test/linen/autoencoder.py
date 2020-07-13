@@ -33,8 +33,7 @@ class AutoEncoder(MultiModule):
 
   def setup(self):
     self._encoder = MLP(self, self.encoder_widths)
-    self._decoder = MLP(self, self.decoder_widths)
-    self._decoder_final = Dense(self, jnp.prod(self.input_shape))
+    self._decoder = MLP(self, self.decoder_widths + (jnp.prod(self.input_shape), ))
 
   def __call__(self, x):
     return self.decode(self.encode(x))
@@ -45,8 +44,6 @@ class AutoEncoder(MultiModule):
 
   def decode(self, z):
     z = self._decoder(z)
-    z = nn.relu(z)
-    z = self._decoder_final(z)
     x = nn.sigmoid(z)
     x = jnp.reshape(x, (x.shape[0],) + self.input_shape)
     return x
@@ -58,8 +55,8 @@ ae = AutoEncoder(
   decoder_widths=(32, 32, 32),
   input_shape=(28, 28, 1))
 ae = ae.initialized(
-  jnp.ones((1, 28, 28, 1)),
-  rngs={'param': random.PRNGKey(42)})
+  {'param': random.PRNGKey(42)},
+  jnp.ones((1, 28, 28, 1)))
 print("reconstruct", jnp.shape(ae(jnp.ones((1, 28, 28, 1)))))
 print("encoder", jnp.shape(ae.encode(jnp.ones((1, 28, 28, 1)))))
 print("var shapes", jax.tree_map(jnp.shape, ae.variables))
