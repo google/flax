@@ -37,6 +37,7 @@ def mlp(scope: Scope, x: Array,
   std_dense = weight_std(partial(nn.dense, kernel_init=nn.initializers.normal(stddev=1e5)))
   # hidden layers
   for size in sizes[:-1]:
+    print("one more dense")
     x = scope.child(std_dense, prefix='hidden_')(x, size)
     # x = act_fn(x)
 

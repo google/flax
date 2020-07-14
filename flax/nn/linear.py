@@ -148,6 +148,7 @@ def dense(scope,
   Returns:
     The transformed input.
   """
+  print("IN DENSE")
   inputs = jnp.asarray(inputs, dtype)
   kernel = scope.param('kernel', kernel_init, (inputs.shape[-1], features))
   kernel = jnp.asarray(kernel, dtype)

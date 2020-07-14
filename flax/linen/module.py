@@ -351,11 +351,7 @@ class Module:
 
   # TODO: Add tests for apply
   def apply(self, variables, *args, rngs=None, method='__call__', **kwargs):
-    if self.parent is not None:
-      raise ValueError("Pattern for apply is `Module(parent=None, ...attrs...).apply(...)`")
-    scope = Scope(variables=variables, rngs=rngs)
-    with self.mutate(parent=scope) as clone:
-      return getattr(clone, method)(*args, **kwargs)
+    return self.attached(variables, rngs)(*args, **kwargs)
 
 
 class MultiModule(Module):
