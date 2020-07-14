@@ -13,8 +13,6 @@
 # limitations under the License.
 
 """Benchmark for the MNIST example."""
-import tempfile
-
 import time
 from absl import flags
 from absl.testing import absltest
@@ -40,9 +38,8 @@ class MnistBenchmark(Benchmark):
   @flagsaver
   def test_cpu(self):
     """Run full training for MNIST CPU training."""
-    model_dir = tempfile.mkdtemp()
+    model_dir = self.get_tmp_model_dir()
     FLAGS.model_dir = model_dir
-
     start_time = time.time()
     train.main([])
     benchmark_time = time.time() - start_time
