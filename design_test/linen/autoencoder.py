@@ -7,17 +7,6 @@ from flax.linen import Module, MultiModule
 import numpy as np
 
 
-# A simple Dense module
-class Dense(Module):
-  features: int
-  kernel_init: Callable = initializers.lecun_normal()
-  bias_init: Callable = initializers.zeros
-
-  def __call__(self, x):
-    kernel = self.param('kernel', self.kernel_init, (x.shape[-1], self.features))
-    return jnp.dot(x, kernel) + self.param('bias', self.bias_init, (self.features,))
-
-
 # A concise MLP defined via lazy submodule initialization
 class MLP(Module):
   widths: Iterable

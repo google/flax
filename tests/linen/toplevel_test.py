@@ -33,6 +33,11 @@ class ModuleTopLevelTest(absltest.TestCase):
     d = Dummy(parent=None).initialized(rngs={'param': random.PRNGKey(0)})
     self.assertEqual(d.variables.param.foo, 1)
 
+  def test_toplevel_initialized_frozen(self):
+    d = Dummy(parent=None).initialized(rngs={'param': random.PRNGKey(0)})
+    with self.assertRaisesRegex(BaseException, "Can't set value"):
+      d.variables.param.foo = 2
+
   def test_toplevel_initialized_has_new_scope(self):
     d = Dummy(parent=None)
     # initializing should make a copy and not have any effect

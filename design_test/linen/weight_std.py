@@ -7,8 +7,7 @@ from flax.nn import initializers
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
 from flax.linen import Module, MultiModule
 import numpy as np
-
-
+from dense import Dense
 from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
 
 def standardize(x, axis, eps=1e-8):
@@ -16,13 +15,10 @@ def standardize(x, axis, eps=1e-8):
   x = x / jnp.sqrt(jnp.mean(jnp.square(x), axis=axis, keepdims=True) + eps)
   return x
 
-class Dense(Module):
-  features: int
-  def __call__(self, x):
-    kernel = self.param('kernel', initializers.lecun_normal(), (x.shape[-1], self.features))
-    return jnp.dot(x, kernel) + self.param('bias', initializers.zeros, (self.features,))
-
-
+# A wrapper that calls through a simple module with standardized parameters.
+#
+# Note that StdWeight is /not/ a module, hence it doesn't add another layer
+# of depth in the variable dict (i.e. this is a "transparent module")
 @dataclass
 class StdWeight:
   module: Module
@@ -33,11 +29,10 @@ class StdWeight:
       self.module(x)
 
     param = self.module.variables['param']
-    print(param)
     # Make a copy because `param` is (and should be) frozen. We're only transforming
     # the parameters, not mutating them.
     std_param = param.copy(kernel=standardize(param['kernel'], axis=[0, 1]))
-    return self.module.scoped_clone(variables={"param": std_param})(x)
+    return self.module.detached().attached(variables={"param": std_param})(x)
 
 class MyModule(Module):
   def __call__(self, x):

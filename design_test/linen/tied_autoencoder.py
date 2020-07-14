@@ -5,21 +5,15 @@ from flax.nn import initializers
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
 from flax.linen import Module, MultiModule
 import numpy as np
+from dense import Dense
 
-class Dense(Module):
-  features: int
-  def __call__(self, x):
-    kernel = self.param('kernel', initializers.lecun_normal(), (x.shape[-1], self.features))
-    return jnp.dot(x, kernel)
-
-# TODO: What does this look like with bias as well?
 class TiedAutoEncoder(Module):
   def setup(self):
-    self.encoder = Dense(self, features=4)
+    self.encoder = Dense(self, features=4, use_bias=False)
 
   @property
   def decoder(self):
-    return self.encoder.scoped_clone(variables={
+    return self.encoder.detached().attached(variables={
       "param": {"kernel": self.encoder.variables['param']['kernel'].T}})
 
   def __call__(self, x):

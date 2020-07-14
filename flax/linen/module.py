@@ -261,9 +261,15 @@ class Module:
     attrs.update(**updates)
     return self.__class__(**attrs)
 
+  # TODO: Should this be what `clone` always does if you don't pass in an explicit
+  # parent?
+  def detached(self):
+    return self.clone(parent=None)
+
   # TODO: Consider whether this is a helpful abstraction, and think about naming.
   # See its use in design_test/linen/weight_std.py
-  def scoped_clone(self, variables={}, rngs={}):
+  def attached(self, variables={}, rngs={}):
+    assert self.scope is None, "Can't attach a module twice. Maybe you want to clone first?"
     return self.clone(parent=Scope(variables, rngs))
 
   def variable(self, kind: str, name: str, init_fn, *init_args):
