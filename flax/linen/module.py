@@ -350,8 +350,32 @@ class Module:
     return self.initialized(*args, **kwargs).variables
 
   # TODO: Add tests for apply
-  def apply(self, variables, *args, rngs=None, method='__call__', **kwargs):
-    return self.attached(variables, rngs)(*args, **kwargs)
+  # def apply(self, variables, *args, rngs=None, method='__call__', **kwargs):
+  #   return self.attached(variables, rngs)(*args, **kwargs)
+
+  def apply(self, variables, *args, rngs=None, method='__call__', mutable=False, **kwargs):
+    """Apply module to variables and return output and modified variables."""
+    new_variables = _unfreeze_variables(variables, mutable)
+    with Scope(new_variables, rngs=rngs).temporary() as root:
+      clone = self.clone(parent=root)
+      y = getattr(clone, method)(*args, **kwargs)
+    if mutable:
+      return y, freeze(new_variables)
+    else:
+      return y
+
+  def init_with_output(self, rngs, *args, method='__call__', **kwargs):
+    """Create initialized data for module and return it with output."""
+    if not isinstance(rngs, dict):
+      assert rngs.shape == (2,)
+      rngs = {'param': rngs}
+    return self.apply(
+      {}, *args, rngs=rngs, method='__call__', mutable=True, **kwargs)
+
+  def init(self, rngs, *args, method='__call__', **kwargs):
+    """Create and return initialized data for module with rngs."""
+    y, v_out = self.init_with_output(rngs, *args, method='__call__', **kwargs)
+    return v_out
 
 
 class MultiModule(Module):
