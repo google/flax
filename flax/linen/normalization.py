@@ -14,8 +14,7 @@
 
 """Normalization modules for Flax."""
 
-from typing import (Any, Callable, Sequence, Iterable,
-                    Optional, Tuple, Type, Union, TypeVar)
+from typing import (Any, Callable, Optional, Tuple)
 
 from jax import lax
 from jax.nn import initializers
@@ -26,7 +25,6 @@ from flax.linen import Module
 
 PRNGKey = Any
 Array = Any
-T = TypeVar('T')
 Shape = Tuple[int]
 Dtype = Any  # this could be a real type?
 
@@ -90,12 +88,13 @@ class BatchNorm(Module):
     reduced_feature_shape = tuple(d for i, d in enumerate(x.shape) if i in axis)
     reduction_axis = tuple(i for i in range(x.ndim) if i not in axis)
 
-    initializing = not self.has_variable('batchstats', 'mean')
+    # we detect if we're in initialization via empty variable tree.
+    initializing = not self.has_variable('batch_stats', 'mean')
 
-    ra_mean = self.variable('batchstats', 'mean',
+    ra_mean = self.variable('batch_stats', 'mean',
                             lambda s: jnp.zeros(s, jnp.float32),
                             reduced_feature_shape)
-    ra_var = self.variable('batchstats', 'var',
+    ra_var = self.variable('batch_stats', 'var',
                            lambda s: jnp.ones(s, jnp.float32),
                            reduced_feature_shape)
 
@@ -104,7 +103,6 @@ class BatchNorm(Module):
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=False)
       mean2 = jnp.mean(lax.square(x), axis=reduction_axis, keepdims=False)
-      # TODO: should we skip this during init?  What's the new pattern for that?
       if self.axis_name is not None and not initializing:
         concatenated_mean = jnp.concatenate([mean, mean2])
         mean, mean2 = jnp.split(
@@ -114,7 +112,6 @@ class BatchNorm(Module):
                 axis_index_groups=self.axis_index_groups), 2)
       var = mean2 - lax.square(mean)
 
-      # TODO: should we skip this during init?  What's the new pattern for that?
       if not initializing:
         ra_mean.value = self.momentum * ra_mean.value + (1 - self.momentum) * mean
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var

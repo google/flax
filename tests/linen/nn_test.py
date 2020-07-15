@@ -83,9 +83,9 @@ class NormalizationTest(absltest.TestCase):
     np.testing.assert_allclose(mean, np.array([0., 0.]), atol=1e-4)
     np.testing.assert_allclose(var, np.array([1., 1.]), rtol=1e-4)
 
-    y, vars_out = model_cls.apply(initial_params, x, mutable=['batchstats'])
+    y, vars_out = model_cls.apply(initial_params, x, mutable=['batch_stats'])
 
-    ema = vars_out['batchstats']
+    ema = vars_out['batch_stats']
     np.testing.assert_allclose(
         ema['mean'], 0.1 * x.mean((0, 1), keepdims=False), atol=1e-4)
     np.testing.assert_allclose(
@@ -122,3 +122,52 @@ class NormalizationTest(absltest.TestCase):
     y_test = y_test.reshape([2, 5, 4, 4, 32])
 
     np.testing.assert_allclose(y_test, y, atol=1e-4)
+
+
+# TODO(flax-dev): add integration tests for RNN cells
+class RecurrentTest(absltest.TestCase):
+
+  def test_lstm(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (2, 3))
+    c0, h0 = nn.LSTMCell.initialize_carry(rng, (2,), 4)
+    self.assertEqual(c0.shape, (2, 4))
+    self.assertEqual(h0.shape, (2, 4))
+    lstm = nn.LSTMCell(None)
+    (carry, y), initial_params = lstm.init_with_output(key2, (c0, h0), x)
+    self.assertEqual(carry[0].shape, (2, 4))
+    self.assertEqual(carry[1].shape, (2, 4))
+    np.testing.assert_allclose(y, carry[1])
+    param_shapes = jax.tree_map(np.shape, initial_params['param'])
+    self.assertEqual(param_shapes, {
+        'ii': {'kernel': (3, 4)},
+        'if': {'kernel': (3, 4)},
+        'ig': {'kernel': (3, 4)},
+        'io': {'kernel': (3, 4)},
+        'hi': {'kernel': (4, 4), 'bias': (4,)},
+        'hf': {'kernel': (4, 4), 'bias': (4,)},
+        'hg': {'kernel': (4, 4), 'bias': (4,)},
+        'ho': {'kernel': (4, 4), 'bias': (4,)},
+    })
+
+  def test_gru(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (2, 3))
+    carry0 = nn.GRUCell.initialize_carry(rng, (2,), 4)
+    self.assertEqual(carry0.shape, (2, 4))
+    gru = nn.GRUCell(None)
+    (carry, y), initial_params = gru.init_with_output(key2, carry0, x)
+    #gru = nn.Model(nn.GRUCell, initial_params)
+    self.assertEqual(carry.shape, (2, 4))
+    np.testing.assert_allclose(y, carry)
+    param_shapes = jax.tree_map(np.shape, initial_params['param'])
+    self.assertEqual(param_shapes, {
+        'ir': {'kernel': (3, 4), 'bias': (4,)},
+        'iz': {'kernel': (3, 4), 'bias': (4,)},
+        'in': {'kernel': (3, 4), 'bias': (4,)},
+        'hr': {'kernel': (4, 4)},
+        'hz': {'kernel': (4, 4)},
+        'hn': {'kernel': (4, 4), 'bias': (4,)},
+    })

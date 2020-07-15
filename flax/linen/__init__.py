@@ -26,6 +26,6 @@ from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
 from .linear import Dense, DenseGeneral, Conv, ConvTranspose, Embed
 from .normalization import BatchNorm, LayerNorm, GroupNorm
 from .pooling import max_pool, avg_pool
-#from .recurrent import LSTMCell, GRUCell
+from .recurrent import LSTMCell, GRUCell
 from .stochastic import Dropout
 # pylint: enable=g-multiple-import

@@ -17,8 +17,7 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
-from typing import (Any, Callable, Sequence, Iterable,
-                    Optional, Tuple, Type, Union, TypeVar)
+from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
 from .module import Module, MultiModule
 from . import initializers
@@ -29,10 +28,9 @@ import numpy as np
 
 
 PRNGKey = Any
-Array = Any
-T = TypeVar('T')
 Shape = Tuple[int]
 Dtype = Any  # this could be a real type?
+Array = Any
 
 
 default_kernel_init = initializers.lecun_normal()
