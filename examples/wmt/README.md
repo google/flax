@@ -1,6 +1,6 @@
 ## Machine Translation
 Trains a Transformer-based model (Vaswani *et al.*, 2017) on the WMT Machine
-Translation dataset.
+Translation en-de dataset.
 
 This example uses linear learning rate warmup and inverse square root learning
 rate schedule.
@@ -8,7 +8,7 @@ rate schedule.
 ### Requirements
 * TensorFlow datasets `wmt17_translate/de-en` and `wmt14_translate/de-en` need to be
  downloaded and prepared. A sentencepiece tokenizer vocabulary will be automatically
- generated and saved on each training run.
+ generated and saved on each training run. 
 * This example additionally depends on the `sentencepiece` and `tensorflow-text` packages.
 
 ### Supported setups
@@ -19,7 +19,7 @@ The model should run with other configurations and hardware, but was explicitly 
 | TPU v3-8  | 256  |  1h 35m  | 25.13 | [2020-04-21](https://tensorboard.dev/experiment/9lsbEw7DQzKdv881v4nIQA/) |
 
 ### How to run
-  `python train.py --batch_size=256 --model_dir=./wmt_256`
+  `python train.py --batch_size=256 --model_dir=./wmt_256 --reverse_translation=True`
 
 ### How to run on Cloud TPUs
 
@@ -92,3 +92,4 @@ The typical academic BLEU evaluation also uses the WMT 2014 Test set:
 ```
 python -m tensorflow_datasets.scripts.download_and_prepare --datasets=wmt14_translate/de-en
 ```
+
