@@ -220,7 +220,8 @@ class Module:
         self.name = f"{prefix}_{cursor}"
         self.parent._autoname_cursor[prefix] = cursor + 1
       if self.parent._name_taken(self.name):
-        raise ValueError(f"A variable of name {self.name} exists already, or "
+        raise ValueError(
+           f"A variable of name {self.name} exists already, or "
            f"trying to share submodule {self.__class__.__name__} by name "
            f"{self.name}. To share submodules, store module instances as a"
            f" Python object or as an attribute on self and reuse.")
@@ -293,6 +294,9 @@ class Module:
     self.scope.reservations.remove(name)
     self.children[name] = kind
     return v
+
+  def has_variable(self, kind: str, name: str):
+    return self.scope.has_variable(kind, name)
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args,
             kind='param') -> T:

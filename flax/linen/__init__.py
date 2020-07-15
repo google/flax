@@ -24,7 +24,7 @@ from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          softplus, swish, tanh)
 #from .attention import (dot_product_attention, multi_head_dot_product_attention)
 from .linear import Dense, DenseGeneral, Conv, ConvTranspose, Embed
-#from .normalization import batch_norm, layer_norm, group_norm
+from .normalization import BatchNorm, LayerNorm, GroupNorm
 from .pooling import max_pool, avg_pool
 #from .recurrent import LSTMCell, GRUCell
 from .stochastic import Dropout
