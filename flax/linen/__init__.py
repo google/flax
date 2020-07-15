@@ -22,7 +22,8 @@ from .transforms import vmap, scan, remat, jit
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
                          softplus, swish, tanh)
-#from .attention import (dot_product_attention, multi_head_dot_product_attention)
+from .attention import (dot_product_attention,
+                        MultiHeadDotProductAttention)
 from .linear import Dense, DenseGeneral, Conv, ConvTranspose, Embed
 from .normalization import BatchNorm, LayerNorm, GroupNorm
 from .pooling import max_pool, avg_pool
