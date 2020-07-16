@@ -78,7 +78,7 @@ class ResNet(nn.Module):
                           dtype=dtype)
     x = jnp.mean(x, axis=(1, 2))
     x = nn.Dense(x, num_classes, dtype=dtype)
-    x = jnp.asarray(x, jnp.float32)
+    x = jnp.asarray(x, dtype)
     x = nn.log_softmax(x)
     return x
 
