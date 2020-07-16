@@ -24,6 +24,7 @@ class StdWeight:
   module: Module
 
   def __call__(self, x):
+    # TODO: Think about how this modifies other state
     if not 'param' in self.module.variables:
       # initialize parameters
       self.module(x)
