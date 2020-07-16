@@ -55,7 +55,6 @@ class MnistBenchmark(Benchmark):
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(sec_per_epoch, 14., 16.)
     self.assertBetween(end_eval_accuracy, 0.98, 1.0)
 
     # Use the reporting API to report single or multiple metrics/extras.

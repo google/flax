@@ -58,7 +58,6 @@ class ImagenetBenchmark(Benchmark):
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(sec_per_epoch, 210, 240)
     self.assertBetween(end_accuracy, 0.06, 0.09)
 
     # Use the reporting API to report single or multiple metrics/extras.

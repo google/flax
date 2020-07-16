@@ -58,7 +58,6 @@ class CifarTenBenchmark(Benchmark):
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(sec_per_epoch, 80., 84.)
     self.assertBetween(end_error_rate, 0.30, 0.36)
 
     # Use the reporting API to report single or multiple metrics/extras.
