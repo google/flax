@@ -180,7 +180,7 @@ def train_step(state, batch, learning_rate_fn):
 def eval_step(state, batch):
   params = state.optimizer.target
   variables = {'param': params, 'batch_stats': state.batch_stats}
-  logits = model().apply(batch['image'], train=False, mutable=False)
+  logits = model().apply(variables, batch['image'], train=False, mutable=False)
   return compute_metrics(logits, batch['label'])
 
 
