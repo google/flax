@@ -173,6 +173,7 @@ class Scope:
             fn: Callable[..., Any],
             name: Optional[str] = None,
             prefix: Optional[str] = None,
+            named_call: bool = True,
             **partial_kwargs) -> Callable[..., Any]:
     """Partially applies a child scope to fn."""
     if name is None:
@@ -180,8 +181,9 @@ class Scope:
         prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
       name = self.default_name(prefix)
     scope = self.push(name)
-    #from .lift import named_call
-    #fn = named_call(fn, name)
+    if named_call:
+      from . import lift
+      fn = lift.named_call(fn, name)
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
       kwargs = dict(partial_kwargs, **kwargs)
@@ -274,7 +276,7 @@ def apply(fn: Callable[..., Any],
   return wrapper
 
 
-def init(fn: Callable[..., Any], mutable: bool = True) -> Callable[..., Any]:
+def init(fn: Callable[..., Any], mutable: KindFilter = True) -> Callable[..., Any]:
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs):
     if not isinstance(rngs, dict):

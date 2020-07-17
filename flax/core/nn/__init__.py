@@ -12,35 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax Optimizer api."""
+"""Flax Neural Network api."""
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from .adam import Adam
-from .adagrad import Adagrad
-from .base import OptimizerState, OptimizerDef, Optimizer, MultiOptimizer, ModelParamTraversal
-from .dynamic_scale import DynamicScale
-from .lamb import LAMB
-from .lars import LARS
-from .momentum import Momentum
-from .rmsprop import RMSProp
-from .sgd import GradientDescent
-from .weight_norm import WeightNorm
+from flax.nn.activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
+                         log_softmax, relu, sigmoid, soft_sign, softmax,
+                         softplus, swish, tanh)
+from .attention import (dot_product_attention, multi_head_dot_product_attention)
+from .linear import dense, dense_general, conv, conv_transpose, embedding, Embedding
+from .normalization import batch_norm, layer_norm, group_norm
+from flax.nn.pooling import max_pool, avg_pool
+from .stochastic import dropout
 
-__all__ = [
-    "Adam",
-    "Adagrad",
-    "OptimizerState",
-    "OptimizerDef",
-    "Optimizer",
-    "MultiOptimizer",
-    "ModelParamTraversal",
-    "DynamicScale",
-    "LAMB",
-    "LARS",
-    "Momentum",
-    "RMSProp",
-    "GradientDescent",
-    "WeightNorm",
-]
+from flax.nn import initializers
+from flax.nn import activation
 # pylint: enable=g-multiple-import

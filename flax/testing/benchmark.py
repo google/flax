@@ -45,6 +45,7 @@ import inspect
 import json
 from typing import Dict
 import os
+import tempfile
 from absl import flags
 from absl import logging
 from absl.testing import absltest
@@ -118,6 +119,10 @@ class Benchmark(absltest.TestCase):
             self._collect_assert_wrapper, func=func)
         setattr(self, func_name, patched_func)
 
+    # Create target directory if defined.
+    if FLAGS.benchmark_output_dir:
+      os.makedirs(FLAGS.benchmark_output_dir, exist_ok=True)
+
   # pylint: disable=invalid-name
   def _collect_assert_wrapper(self, *args, func=None, **kwargs):
     """Wrapper around assert methods that caputres and collects failures."""
@@ -141,6 +146,19 @@ class Benchmark(absltest.TestCase):
     self._report_benchmark_results()
     for message in self._outstanding_fails:
       raise self.failureException(message)
+
+  def get_tmp_model_dir(self):
+    """Returns an unique temporary directory for storing model data.
+
+    Returns path by appending Classname.testname to `benchmark_output_dir` flag
+    if defined else uses a temporary directory. This helps to export summary
+    files to tensorboard as multiple separate runs for each test method.
+    """
+    if FLAGS.benchmark_output_dir:
+      model_dir = FLAGS.benchmark_output_dir
+    else:
+      model_dir = tempfile.mkdtemp()
+    return os.path.join(model_dir, self._reported_name or self._get_test_name())
 
   def has_outstanding_fails(self):
     """Determine whether the benchmark failed, but the error is deferred."""
@@ -249,7 +267,6 @@ class Benchmark(absltest.TestCase):
     # Maybe save results as a file for pickup by CI / monitoring frameworks.
     benchmark_output_dir = FLAGS.benchmark_output_dir
     if benchmark_output_dir:
-      os.makedirs(benchmark_output_dir, exist_ok=True)
       filename = os.path.join(benchmark_output_dir, name + '.json')
       with open(filename, 'w') as fout:
         json.dump(results, fout)

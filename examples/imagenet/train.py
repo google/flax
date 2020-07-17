@@ -279,7 +279,6 @@ def main(argv):
   num_steps = steps_per_epoch * num_epochs
 
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
-  base_learning_rate = base_learning_rate
 
   variables = init_vars(rng, image_size, model_dtype)
   optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(variables.param)

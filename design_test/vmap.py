@@ -1,13 +1,10 @@
 
-from flax.core import Scope, init, apply, unfreeze, lift
-from typing import Sequence, Callable
-
-from flax import nn
+from flax.core import Scope, init, apply, unfreeze, lift, nn
+from typing import Any, Sequence, Callable
 
 import jax
 from jax import lax, random, numpy as jnp
 
-from typing import Any
 from functools import partial
 
 

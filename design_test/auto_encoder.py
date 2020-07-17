@@ -1,7 +1,7 @@
-from flax.core.scope import Scope, init, apply
+from flax.core import Scope, init, apply, nn
 from jax import numpy as jnp, random
 
-from flax import nn, struct
+from flax import struct
 
 from jax.scipy.linalg import expm
 
@@ -37,17 +37,6 @@ class AutoEncoder:
     return scope.child(mlp, 'decoder')(z, self.hidden, self.features)
 
 
-
-ae = AutoEncoder(latents=2, features=4, hidden=3)
-x = jnp.ones((1, 3))
-
-x_r, params = init(ae)(random.PRNGKey(0), x)
-
-print(x, x_r)
-print(params)
-
-print('AutoEncoder with scope')
-
 def module_method(fn, name=None):
   if name is None:
     name = fn.__name__ if hasattr(fn, '__name__') else None
@@ -77,8 +66,45 @@ class AutoEncoder2:
   def decode(self, scope, z):
     return mlp(scope, z, self.hidden, self.features)
 
+
+@dataclass
+class AutoEncoder3:
+  encode: Callable
+  decode: Callable
+
+  @staticmethod
+  def create(scope, hidden: int, latents: int, features: int):
+    enc = scope.child(mlp, hidden=hidden, out=latents)
+    dec = scope.child(mlp, hidden=hidden, out=features)
+    return AutoEncoder3(enc, dec)
+
+  def __call__(self, x):
+    z = self.encode(x)
+    return self.decode(z)
+
+
 if __name__ == "__main__":
+  ae = AutoEncoder(latents=2, features=4, hidden=3)
+  x = jnp.ones((1, 3))
+
+  x_r, params = init(ae)(random.PRNGKey(0), x)
+
+  print(x, x_r)
+  print(params)
+
+  print('AutoEncoder with scope')
+
   ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(x)
+  x = jnp.ones((1, 3))
+
+  x_r, params = init(ae)(random.PRNGKey(0), x)
+
+  print(x, x_r)
+  print(params)
+
+  print('AutoEncoder3 with scope')
+
+  ae = lambda scope, x: AutoEncoder3.create(scope, latents=2, features=4, hidden=3)(x)
   x = jnp.ones((1, 3))
 
   x_r, params = init(ae)(random.PRNGKey(0), x)

@@ -1,8 +1,9 @@
 """Transformer-based machine translation model."""
 
+from flax.core import Scope, init, apply, nn
+
 from typing import Callable, Any, Optional
 
-from flax import nn
 from flax import struct
 
 from jax import lax

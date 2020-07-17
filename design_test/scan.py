@@ -1,8 +1,7 @@
 
-from flax.core import Scope, init, apply, unfreeze, lift
+from flax.core import Scope, init, apply, unfreeze, lift, nn
 from typing import Sequence, Callable
 
-from flax import nn
 
 import jax
 from jax import lax, random, numpy as jnp
@@ -15,7 +14,7 @@ Array = Any
 
 def mlp_scan(scope: Scope, xs: Array,
              share_params: bool = False):
-  
+
   scope.variable('counter', 'i', jnp.zeros, ())
   def body_fn(scope, c, x):
     counter = scope.variable('counter', 'i', jnp.zeros, ())
@@ -31,7 +30,7 @@ def mlp_scan(scope: Scope, xs: Array,
   else:
     carry, ys = lift.scan(
         body_fn, scope, (), xs,
-        variable_modes={'param': ('scan', 'scan'), 'counter': ('carry', 'carry')},
+        variable_modes={'param': 'scan', 'counter': 'carry'},
         split_rngs={'param': True})
 
   # output layer
