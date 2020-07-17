@@ -19,7 +19,9 @@ from . import base
 from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
-from ..core import Scope
+
+
+_no_init = lambda rng, shape: ()
 
 
 def _absolute_dims(rank, dims):
@@ -169,7 +171,6 @@ class LayerNorm(base.Module):
     if bias:
       y = y + jnp.asarray(self.param('bias', (features,), bias_init), dtype)
     return jnp.asarray(y, dtype)
-
 
 
 class GroupNorm(base.Module):

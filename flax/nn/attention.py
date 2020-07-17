@@ -16,28 +16,25 @@
 """Attention core modules for Flax."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-import functools
+
 import warnings
-from typing import Any
 
 from .. import jax_utils
 from . import base
 from . import initializers
 from . import stochastic
 from flax import struct
-from ..core import Scope
 
 import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
 from .linear import default_kernel_init
-from .linear import dense_general
+from .linear import DenseGeneral
 import numpy as onp
 
 
-def dot_product_attention(scope,
-                          query,
+def dot_product_attention(query,
                           key,
                           value,
                           dtype=jnp.float32,
@@ -122,7 +119,7 @@ def dot_product_attention(scope,
   # apply dropout
   if not deterministic and dropout_rate > 0.:
     if dropout_rng is None:
-      dropout_rng = scope.make_rng('dropout')
+      dropout_rng = stochastic.make_rng()
     keep_prob = jax.lax.tie_in(attn_weights, 1.0 - dropout_rate)
     if broadcast_dropout:
       # dropout is broadcast across the batch+head+non-attention dimension
@@ -156,87 +153,11 @@ def _invert_perm(perm):
 
 
 @struct.dataclass
-class CacheEntry:
+class _CacheEntry:
   key: onp.ndarray
   value: onp.ndarray
   i: onp.ndarray
 
-def multi_head_dot_product_attention(
-    scope: Scope,
-    inputs_q,
-    inputs_kv,
-    num_heads,
-    dtype=jnp.float32,
-    qkv_features=None,
-    out_features=None,
-    attention_axis=None,
-    causal_mask=False,
-    padding_mask=None,
-    key_padding_mask=None,
-    segmentation=None,
-    key_segmentation=None,
-    cache=False,
-    broadcast_dropout=True,
-    dropout_rng=None,
-    dropout_rate=0.,
-    deterministic=False,
-    precision=None,
-    kernel_init=default_kernel_init,
-    bias_init=initializers.zeros,
-    bias=True,
-    attention_fn=dot_product_attention):
-  """Applies multi-head dot product attention on the input data.
-
-  Projects the inputs into multi-headed query, key, and value vectors,
-  applies dot-product attention and project the results to an output vector.
-
-  This can be used for encoder-decoder attention by specifying both `inputs_q`
-  and `inputs_kv` orfor self-attention by only specifying `inputs_q` and
-  setting `inputs_kv` to None.
-
-  Args:
-    inputs_q: input queries of shape `[bs, dim1, dim2, ..., dimN, features]`.
-    inputs_kv: key/values of shape `[bs, dim1, dim2, ..., dimN, features]`
-      or None for self-attention, inn which case key/values will be derived
-      from inputs_q.
-    num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
-      should be divisible by the number of heads.
-    dtype: the dtype of the computation (default: float32)
-    qkv_features: dimension of the key, query, and value.
-    out_features: dimension of the last projection
-    attention_axis: axes over which the attention is applied ( 'None' means
-      attention over all axes, but batch, heads, and features).
-    causal_mask: boolean specifying whether to apply a causal mask on the
-      attention weights. If True, the output at timestep `t` will not depend
-      on inputs at timesteps strictly greater than `t`.
-    padding_mask: boolean specifying query tokens that are pad token.
-    key_padding_mask: boolean specifying key-value tokens that are pad token.
-    segmentation: segment indices for packed inputs_q data.
-    key_segmentation: segment indices for packed inputs_kv data.
-    cache: an instance of `flax.nn.attention.Cache` used for efficient
-      autoregressive decoding.
-    broadcast_dropout: bool: use a broadcasted dropout along batch dims.
-    dropout_rng: JAX PRNGKey: to be used for dropout
-    dropout_rate: dropout rate
-    deterministic: bool, deterministic or not (to apply dropout)
-    precision: numerical precision of the computation see `jax.lax.Precision`
-      for details.
-    kernel_init: initializer for the kernel of the Dense layers.
-    bias_init: initializer for the bias of the Dense layers.
-    bias: bool: whether pointwise QKVO dense transforms use bias.
-    attention_fn: dot_product_attention or compatible function. Accepts
-    query, key, value, and returns output of shape
-    `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
-
-  Returns:
-    output of shape `[bs, dim1, dim2, ..., dimN, features]`.
-  """
-
-  assert causal_mask or not cache, (
-      'Caching is only support for causal attention.')
-
-  if inputs_kv is None:
-    inputs_kv = inputs_q
 
 def scan_in_dim(*args, **kwargs):
   warnings.warn('scan_in_dim moved to flax.jax_utils',
@@ -464,74 +385,40 @@ class MultiHeadDotProductAttention(base.Module):
           attention_mask > 0, jnp.full(attention_mask.shape, 0.).astype(dtype),
           jnp.full(attention_mask.shape, -1e10).astype(dtype))
     else:
-      mask_components.append(_make_causal_mask(key, attention_axis))
+      attention_bias = None
 
-  if padding_mask is not None:
-    if key_padding_mask is None:
-      key_padding_mask = padding_mask
-    padding_mask = make_padding_mask(
-        padding_mask_query=padding_mask,
-        padding_mask_key=key_padding_mask,
-        query_shape=query.shape,
-        key_shape=key.shape,
-        attention_axis=attention_axis)
-    mask_components.append(padding_mask)
+    # apply attention
+    x = attention_fn(
+        query,
+        key,
+        value,
+        dtype=dtype,
+        axis=attention_axis,
+        bias=attention_bias,
+        precision=precision,
+        dropout_rng=dropout_rng,
+        dropout_rate=dropout_rate,
+        broadcast_dropout=broadcast_dropout,
+        deterministic=deterministic)
 
-  if segmentation is not None:
-    if key_segmentation is None:
-      key_segmentation = segmentation
-    segmentation_mask = make_padding_mask(
-        padding_mask_query=segmentation,
-        padding_mask_key=key_segmentation,
-        query_shape=query.shape,
-        key_shape=key.shape,
-        attention_axis=attention_axis,
-        segmentation_mask=True)
-    mask_components.append(segmentation_mask)
+    # back to the original inputs dimensions
+    out = DenseGeneral(
+        x,
+        features=features,
+        axis=(-2, -1),
+        kernel_init=kernel_init,
+        bias_init=bias_init,
+        bias=bias,
+        dtype=dtype,
+        precision=precision,
+        name='out')
 
-  if mask_components:
-    attention_mask = mask_components[0]
-    for component in mask_components[1:]:
-      attention_mask = jnp.logical_and(attention_mask, component)
-
-    # attention mask in the form of attention bias
-    attention_bias = lax.select(
-        attention_mask > 0, jnp.full(attention_mask.shape, 0.).astype(dtype),
-        jnp.full(attention_mask.shape, -1e10).astype(dtype))
-  else:
-    attention_bias = None
-
-  # apply attention
-  x = scope.child(attention_fn)(
-      query,
-      key,
-      value,
-      dtype=dtype,
-      axis=attention_axis,
-      bias=attention_bias,
-      precision=precision,
-      dropout_rng=dropout_rng,
-      dropout_rate=dropout_rate,
-      broadcast_dropout=broadcast_dropout,
-      deterministic=deterministic)
-
-  # back to the original inputs dimensions
-  out = scope.child(dense_general, name='out')(
-      x,
-      features=features,
-      axis=(-2, -1),
-      kernel_init=kernel_init,
-      bias_init=bias_init,
-      bias=bias,
-      dtype=dtype,
-      precision=precision)
-
-  return out
+    return out
 
 
 # TODO(flax-dev): Consider refactoring MultiHeadDotProductAttention and moving
 # causal_mask and cache support into this class instead.
-#SelfAttention = MultiHeadDotProductAttention.partial(inputs_kv=None)
+SelfAttention = MultiHeadDotProductAttention.partial(inputs_kv=None)
 
 
 def make_padding_mask(padding_mask_query,
