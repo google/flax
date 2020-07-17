@@ -1,7 +1,7 @@
 diff --git a/examples/mnist/train.py b/examples/mnist/train.py
 index 9c21985..4306d09 100644
---- a/examples/mnist/train.py
-+++ b/examples/mnist/train.py
+--- a/examples/mnist/mnist_lib.py
++++ b/examples/mnist/mnist_lib.py
 @@ -110,7 +110,7 @@ def compute_metrics(logits, labels):
  
  
@@ -46,7 +46,7 @@ index 9c21985..4306d09 100644
 @@ -186,14 +190,19 @@ def train(train_ds, test_ds):
    rng, init_rng = random.split(rng)
    model = create_model(init_rng)
-   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+   optimizer = create_optimizer(model, learning_rate, momentum)
 +  params_ema = model.params
  
    for epoch in range(1, num_epochs + 1):
@@ -64,18 +64,4 @@ index 9c21985..4306d09 100644
      summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
      summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
      summary_writer.scalar('eval_loss', loss, epoch)
-diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
-index 429bda4..b441168 100644
---- a/examples/mnist/train_test.py
-+++ b/examples/mnist/train_test.py
-@@ -34,8 +34,9 @@ class TrainTest(absltest.TestCase):
-     optimizer = train.create_optimizer(model, 0.1, 0.9)
- 
-     # test single train step.
--    optimizer, train_metrics = train.train_step(
-+    optimizer, params_ema, train_metrics = train.train_step(
-         optimizer=optimizer,
-+        params_ema=model.params,
-         batch={k: v[:batch_size] for k, v in train_ds.items()})
-     self.assertLessEqual(train_metrics['loss'], 2.302)
-     self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
+
