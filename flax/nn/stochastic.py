@@ -24,9 +24,72 @@ from jax import random
 import jax.numpy as jnp
 
 
+_prng_stack = utils.CallStack()
 
-def dropout(scope, inputs, rate, deterministic=False, rng=None):
+
+class _PRNGFrame:
+  """Random Number generator scope responsible for generation prngs in a stochastic context."""
+
+  def __init__(self, rng):
+    self.base_rng = rng
+    self.counter = 0
+    self.level = utils._trace_level(utils._current_trace())
+
+  def make_rng(self):
+    # when calling make_rng within a jax transformations
+    # the rng could be implicitly reused (eg. in jit, vmap, scan, ...).
+    # We raise an error to avoid silent errors.
+    level = utils._trace_level(utils._current_trace())
+    if level > self.level:
+      raise ValueError('stochastic operations are not allowed when the'
+                       ' stochastic context is created outside of the'
+                       ' current Jax transformation')
+    self.counter += 1
+    return random.fold_in(self.base_rng, self.counter)
+
+
+@contextlib.contextmanager
+def stochastic(rng):
+  """A context manager for stochastic computations.
+
+  Args:
+    rng: the random number generator used as a seed for the stochastic context.
+  Yields:
+    A scope in which unique rngs can be created using `nn.make_rng()`.
+  """
+  with _prng_stack.frame(_PRNGFrame(rng)):
+    yield
+
+
+def is_stochastic():
+  """Returns true if a stochastic scope is currently active."""
+  return bool(_prng_stack)
+
+
+def make_rng():
+  """Create a new unique random number generator in a stochastic scope.
+
+  In combination with `nn.stochastic()` this function is used to generate random
+  keys without manually passing around and splitting a random number generator::
+
+    with nn.stochastic(rng):
+      x = random.normal(nn.make_rng(), shape)
+      x_drop = nn.dropout(x, 0.5)
+
+
+  Returns:
+    A unique jax.random.PRNGKey.
+  """
+  if not _prng_stack:
+    raise ValueError('Use the `nn.stochastic()` context manager to enable'
+                     ' stochastic computations.')
+  rng_frame = _prng_stack[-1]
+  return rng_frame.make_rng()
+
+
+def dropout(inputs, rate, deterministic=False, rng=None):
   """Applies a random dropout mask to the input.
+
   Args:
     inputs: the inputs that should be randomly masked.
     rate: the probablity of masking out a value.
@@ -46,6 +109,6 @@ def dropout(scope, inputs, rate, deterministic=False, rng=None):
     return inputs
   else:
     if rng is None:
-      rng = scope.make_rng('dropout')
+      rng = make_rng()
     mask = random.bernoulli(rng, p=keep_prob, shape=inputs.shape)
     return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
