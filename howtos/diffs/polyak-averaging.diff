@@ -55,8 +55,10 @@ index 9c21985..4306d09 100644
 -        optimizer, train_ds, batch_size, epoch, input_rng)
 +        optimizer, params_ema, train_ds, batch_size, epoch, input_rng)
      loss, accuracy = eval_model(optimizer.target, test_ds)
+
      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                   epoch, loss, accuracy * 100)
+
 +    model_ema = optimizer.target.replace(params=params_ema)
 +    polyak_loss, polyak_accuracy = eval_model(model_ema, test_ds)
 +    logging.info('polyak eval epoch: %d, loss: %.4f, accuracy: %.2f',
