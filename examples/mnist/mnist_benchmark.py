@@ -13,8 +13,6 @@
 # limitations under the License.
 
 """Benchmark for the MNIST example."""
-import tempfile
-
 import time
 from absl import flags
 from absl.testing import absltest
@@ -40,9 +38,8 @@ class MnistBenchmark(Benchmark):
   @flagsaver
   def test_cpu(self):
     """Run full training for MNIST CPU training."""
-    model_dir = tempfile.mkdtemp()
+    model_dir = self.get_tmp_model_dir()
     FLAGS.model_dir = model_dir
-
     start_time = time.time()
     mnist_main.main([])
     benchmark_time = time.time() - start_time
@@ -58,7 +55,6 @@ class MnistBenchmark(Benchmark):
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(sec_per_epoch, 14., 16.)
     self.assertBetween(end_eval_accuracy, 0.98, 1.0)
 
     # Use the reporting API to report single or multiple metrics/extras.

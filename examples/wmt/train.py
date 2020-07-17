@@ -70,6 +70,10 @@ flags.DEFINE_string(
     'vocab_path', default=None,
     help='Path to load or store sentencepiece vocab file.')
 
+flags.DEFINE_integer(
+    'vocab_size', default=32000,
+    help='Vocabulary size if `vocab_path` is not given.')
+
 flags.DEFINE_string(
     'dataset_name', default='wmt17_translate/de-en',
     help='Name of TFDS translation dataset to use.')
@@ -79,12 +83,16 @@ flags.DEFINE_string(
     help='Optional name of TFDS translation dataset to use for evaluation.')
 
 flags.DEFINE_bool(
-    'reverse_translation', default=True,
+    'reverse_translation', default=False,
     help='Reverse the direction of translation.')
 
 flags.DEFINE_integer(
     'batch_size', default=256,
     help='Per host batch size for training.')
+
+flags.DEFINE_integer(
+    'beam_size', default=4,
+    help='Beam size for inference.')
 
 flags.DEFINE_integer(
     'eval_frequency', default=1000,
@@ -102,7 +110,7 @@ flags.DEFINE_float(
     'learning_rate', default=0.0625,
     help='Base learning rate.')
 
-flags.DEFINE_float(
+flags.DEFINE_integer(
     'warmup_steps', default=1000,
     help='Linear learning rate warmup.')
 
@@ -133,6 +141,34 @@ flags.DEFINE_bool(
 flags.DEFINE_bool(
     'logits_via_embedding', default=True,
     help='Final logit transform uses embedding matrix transpose.')
+
+flags.DEFINE_integer(
+    'num_layers', default=6,
+    help='Number of transformer layers.')
+
+flags.DEFINE_integer(
+    'qkv_dim', default=1024,
+    help='Size of query/key/value for attention.')
+
+flags.DEFINE_integer(
+    'emb_dim', default=1024,
+    help='Size of embeddings.')
+
+flags.DEFINE_integer(
+    'mlp_dim', default=4096,
+    help='Size of the MLP.')
+
+flags.DEFINE_integer(
+    'num_heads', default=16,
+    help='Number of attention heads.')
+
+flags.DEFINE_float(
+    'dropout_rate', default=0.1,
+    help='Dropout rate.')
+
+flags.DEFINE_float(
+    'attention_dropout_rate', default=0.1,
+    help='Attention dropout rate.')
 
 flags.DEFINE_integer(
     'random_seed', default=0,
@@ -325,7 +361,8 @@ def train_step(optimizer,
                dropout_rng=None):
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using 'packed examples'
-  # where multiple sequences are packed into the same example with this metadata.
+  # where multiple sequences are packed into the same example with this
+  # metadata.
   # if such features are not present they are ignored and the example is treated
   # like a normal, unpacked sequence example.
   train_keys = ['inputs', 'targets',
@@ -382,10 +419,9 @@ def eval_step(model, batch, label_smoothing=0.0, use_bfloat16=False):
 
 
 def predict_step(inputs, model, cache, eos_token, max_decode_len,
-                 use_bfloat16=False):
+                 use_bfloat16=False, beam_size=4):
   """Predict translation with fast decoding beam search on a batch."""
   batch_size = inputs.shape[0]
-  beam_size = 4
 
   # Prepare transformer fast-decoder call for beam search: for beam search, we
   # need to set up our decoder model to handle a batch size equal to
@@ -466,7 +502,7 @@ def main(argv):
     raise app.UsageError('Too many command-line arguments.')
 
   if FLAGS.jax_backend_target:
-    jax.config.FLAGS.jax_xla_backend = "tpu_driver"
+    jax.config.FLAGS.jax_xla_backend = 'tpu_driver'
     jax.config.FLAGS.jax_backend_target = FLAGS.jax_backend_target
 
   # This seems to be necessary even when importing TF2?
@@ -500,14 +536,16 @@ def main(argv):
       shard_count=jax.host_count(),
       data_dir=FLAGS.data_dir,
       vocab_path=vocab_path,
+      target_vocab_size=FLAGS.vocab_size,
       batch_size=FLAGS.batch_size,
       max_length=FLAGS.max_target_length,
-      max_eval_length=FLAGS.max_eval_target_length)
+      max_eval_length=FLAGS.max_eval_target_length,
+      random_seed=FLAGS.random_seed)
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
   eos_token = 2  # Default Sentencepiece EOS token.
   def decode_tokens(toks):
-    valid_toks = toks[:np.argmax(toks==eos_token)+1].astype(np.int32)
+    valid_toks = toks[:np.argmax(toks == eos_token) + 1].astype(np.int32)
     return encoder.detokenize(valid_toks).numpy().decode('utf-8')
 
   logging.info('Initializing model, optimizer, and step functions.')
@@ -515,11 +553,11 @@ def main(argv):
   transformer_kwargs = {
       'vocab_size': vocab_size,
       'output_vocab_size': vocab_size,
-      'emb_dim': 1024,
-      'num_heads': 16,
-      'num_layers': 6,
-      'qkv_dim': 1024,
-      'mlp_dim': 4096,
+      'emb_dim': FLAGS.emb_dim,
+      'num_heads': FLAGS.num_heads,
+      'num_layers': FLAGS.num_layers,
+      'qkv_dim': FLAGS.qkv_dim,
+      'mlp_dim': FLAGS.mlp_dim,
       'max_len': max(FLAGS.max_target_length, FLAGS.max_eval_target_length),
       'share_embeddings': FLAGS.share_embeddings,
       'logits_via_embedding': FLAGS.logits_via_embedding,
@@ -567,9 +605,8 @@ def main(argv):
           use_bfloat16=FLAGS.use_bfloat16),
       axis_name='batch')
   p_pred_step = jax.pmap(
-      functools.partial(
-        predict_step,
-        use_bfloat16=FLAGS.use_bfloat16),
+      functools.partial(predict_step, use_bfloat16=FLAGS.use_bfloat16,
+                        beam_size=FLAGS.beam_size),
       axis_name='batch',
       static_broadcasted_argnums=(3, 4))  # eos token, max_length are constant
 
@@ -588,15 +625,13 @@ def main(argv):
     metrics_all.append(metrics)
 
     # Save a checkpoint on one host after every checkpoint_freq steps.
-    if (FLAGS.save_checkpoints
-        and step % FLAGS.checkpoint_freq == 0 and step > 0
-        and jax.host_id() == 0):
-        checkpoints.save_checkpoint(FLAGS.model_dir,
-                                    jax_utils.unreplicate(optimizer),
-                                    step)
+    if (FLAGS.save_checkpoints and step % FLAGS.checkpoint_freq == 0 and
+        step > 0 and jax.host_id() == 0):
+      checkpoints.save_checkpoint(FLAGS.model_dir,
+                                  jax_utils.unreplicate(optimizer), step)
 
     # Periodic metric handling.
-    if step % FLAGS.eval_frequency != 0:
+    if step % FLAGS.eval_frequency != 0 and step > 0:
       continue
 
     logging.info('Gathering training metrics.')
@@ -676,9 +711,9 @@ def main(argv):
         references.append(decode_tokens(targets[i]))
         predictions.append(decode_tokens(s))
     logging.info('Translation: %d predictions %d references %d sources.',
-                  len(predictions), len(references), len(sources))
+                 len(predictions), len(references), len(sources))
     logging.info('Translation time: %.4f s step %d.',
-                  time.time()-t_inference_start, step)
+                 time.time() - t_inference_start, step)
 
     # Calculate BLEU score for translated eval corpus against reference.
     bleu_matches = bleu.bleu_partial(references, predictions)

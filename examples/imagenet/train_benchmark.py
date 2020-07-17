@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Benchmark for the ImageNet example."""
-import tempfile
 import time
 
 from absl import flags
@@ -38,7 +37,7 @@ class ImagenetBenchmark(Benchmark):
   @flagsaver
   def test_8x_v100_half_precision(self):
     """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
-    model_dir = tempfile.mkdtemp()
+    model_dir = self.get_tmp_model_dir()
     FLAGS.batch_size = 2048
     FLAGS.half_precision = True
     FLAGS.num_epochs = 2
@@ -59,7 +58,6 @@ class ImagenetBenchmark(Benchmark):
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(sec_per_epoch, 210, 240)
     self.assertBetween(end_accuracy, 0.06, 0.09)
 
     # Use the reporting API to report single or multiple metrics/extras.
@@ -67,10 +65,9 @@ class ImagenetBenchmark(Benchmark):
     self.report_metrics({'sec_per_epoch': sec_per_epoch,
                          'accuracy': end_accuracy})
     self.report_extras({
-        'description':
-            'Toy 8 x V100 test for ImageNet ResNet50.',
-        'model_name':
-            'resnet50'
+        'description': 'Toy 8 x V100 test for ImageNet ResNet50.',
+        'model_name': 'resnet50',
+        'parameters': 'hp=true,bs=2048',
     })
 
 
