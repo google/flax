@@ -203,7 +203,7 @@ def vmap(fn: Callable[..., Any],
       return tuple(
         jax.tree_map(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
-    print(rng_groups_xs)
+    # print(rng_groups_xs)
     rng_groups_xs = tuple(map(split_rngs, rng_groups_xs))
 
     n = len(variable_groups_xs)

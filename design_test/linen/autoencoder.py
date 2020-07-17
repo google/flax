@@ -1,10 +1,11 @@
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
+
 import jax
 from jax import numpy as jnp, random, lax
-from flax import nn
-from flax.nn import initializers
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, MultiModule
 import numpy as np
+
+from flax import linen as nn
+from flax.linen import Module, MultiModule, Dense
 
 
 # A concise MLP defined via lazy submodule initialization
