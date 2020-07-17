@@ -20,18 +20,16 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 from functools import partial
 from typing import (Any, Callable, Tuple, Optional)
 
-from .module import Module
-from . import initializers
-from . import stochastic
-from flax import struct
-
 import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
+import numpy as np
+
 from .linear import default_kernel_init
 from .linear import DenseGeneral
-import numpy as np
+from .module import Module
+from . import initializers
 
 
 PRNGKey = Any
@@ -156,44 +154,6 @@ def _invert_perm(perm):
   return tuple(perm_inv)
 
 
-# @struct.dataclass
-# class _CacheEntry:
-#   key: np.ndarray
-#   value: np.ndarray
-#   i: np.ndarray
-
-
-# class Cache(base.Collection):
-#   """Collect intermediate activations for efficient autoregressive decoding."""
-
-#   def initialize_cache(self, shape, dtype=None):
-#     """Initialize the cache for the given input shape.
-
-#     Args:
-#       shape: the shape of the batch and attention dimensions.
-#       dtype: the dtype of the autoregressive cache.
-#     Returns:
-#       the initialized cache
-#     """
-#     if dtype is None:
-#       dtype = jnp.float32
-#     def _init(shape_data):
-#       ndim = int(shape_data[0])
-#       tail_shape = tuple(shape_data[1:])
-#       full_shape = shape + tail_shape
-#       if len(full_shape) != ndim:
-#         raise ValueError('Shape should be a tuple with the shape of the batch'
-#                          'and attention dims.')
-#       return _CacheEntry(key=jnp.zeros(full_shape, dtype=dtype),
-#                          value=jnp.zeros(full_shape, dtype=dtype),
-#                          i=jnp.zeros((), jnp.uint32))
-#     return Cache(jax.tree_map(_init, self.state))
-
-
-# jax.tree_util.register_pytree_node(
-#     Cache, base.iterate_collection, base.collection_from_iterable)
-
-
 class MultiHeadDotProductAttention(Module):
   """Multi-head dot-product attention.
 
@@ -308,57 +268,53 @@ class MultiHeadDotProductAttention(Module):
                          dense(dtype=self.dtype, name='key')(inputs_kv),
                          dense(dtype=self.dtype, name='value')(inputs_kv))
 
+
     if cache:
-      pass
-      # assert isinstance(cache, Cache), 'cache must be an instance of Cache'
-      # if self.is_initializing():
-      #   cache.store(np.array((key.ndim,) + key.shape[-2:], dtype=np.int32))
-      # else:
-      #   cache_entry = cache.retrieve(None)
-      #   expected_shape = list(cache_entry.key.shape[:-2])
-      #   for attn_dim in attention_axis:
-      #     expected_shape[attn_dim] = 1
-      #   expected_shape = tuple(expected_shape) + inputs_q.shape[-1:]
-      #   if expected_shape != inputs_q.shape:
-      #     raise ValueError('Invalid shape provided, '
-      #                      'expected shape %s instead got %s.' %
-      #                      (expected_shape, inputs_q.shape))
+      # detect if we're initializing.
+      is_initialized = self.has_variable('cache', 'cached_key')
+      cached_key = self.variable('cache', 'cached_key', jnp.zeros, key.shape, key.dtype)
+      cached_value = self.variable('cache', 'cached_value', jnp.zeros, value.shape, value.dtype)
+      cache_index = self.variable('cache', 'cache_index', lambda: jnp.array(0, dtype=jnp.uint32))
+      if is_initialized:
+        expected_shape = list(cached_key.value.shape[:-2])
+        for attn_dim in attention_axis:
+          expected_shape[attn_dim] = 1
+        expected_shape = tuple(expected_shape) + inputs_q.shape[-1:]
+        if expected_shape != inputs_q.shape:
+          raise ValueError('Invalid shape provided, '
+                           'expected shape %s instead got %s.' %
+                           (expected_shape, inputs_q.shape))
 
-      #   if not isinstance(cache_entry, _CacheEntry):
-      #     raise ValueError('Cache is not initialized.')
+        cshape = cached_key.value.shape
+        indices = [0] * len(cshape)
+        i = cache_index.value
+        attn_size = np.prod(np.take(cshape, attention_axis))
+        for attn_dim in attention_axis:
+          attn_size //= cshape[attn_dim]
+          indices[attn_dim] = i // attn_size
+          i = i % attn_size
 
-      #   cshape = cache_entry.key.shape
-      #   indices = [0] * len(cshape)
-      #   i = cache_entry.i
-      #   attn_size = np.prod(np.take(cshape, attention_axis))
-      #   for attn_dim in attention_axis:
-      #     attn_size //= cshape[attn_dim]
-      #     indices[attn_dim] = i // attn_size
-      #     i = i % attn_size
+        key = lax.dynamic_update_slice(cached_key.value, key, indices)
+        value = lax.dynamic_update_slice(cached_value.value, value, indices)
+        cached_key.value = key
+        cached_value.value = value
+        cache_index.value = cache_index.value + 1
 
-      #   key = lax.dynamic_update_slice(cache_entry.key, key, indices)
-      #   value = lax.dynamic_update_slice(cache_entry.value, value, indices)
-      #   one = jnp.array(1, jnp.uint32)
-      #   cache_entry = cache_entry.replace(i=cache_entry.i + one,
-      #                                     key=key,
-      #                                     value=value)
-      #   cache.store(cache_entry)
-
-      #   # TODO(levskaya): verify this is still needed in translation decoding.
-      #   key_padding_mask = jnp.broadcast_to(
-      #       (jnp.arange(cshape[1]) < cache_entry.i), cshape[:2])
-      #   key_padding_mask = key_padding_mask.astype(jnp.float32)[..., None]
+        # TODO(levskaya): verify this is still needed in translation decoding.
+        key_padding_mask = jnp.broadcast_to(
+            (jnp.arange(cshape[1]) < cache_index.value), cshape[:2])
+        key_padding_mask = key_padding_mask.astype(jnp.float32)[..., None]
 
     # create attention masks
     mask_components = []
 
     if self.causal_mask:
-      if cache and not self.is_initializing():
+      if cache and is_initialized:
         bias_pre_shape = (1,) * (key.ndim - 1)
         attn_shape = tuple(np.take(key.shape, attention_axis))
         attn_size = np.prod(attn_shape)
         ii = jnp.arange(attn_size, dtype=jnp.uint32)
-        mask = ii < cache_entry.i
+        mask = ii < cache_index.value
         mask_components.append(mask.reshape(bias_pre_shape + attn_shape))
       else:
         mask_components.append(_make_causal_mask(key, attention_axis))
