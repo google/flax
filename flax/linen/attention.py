@@ -182,10 +182,11 @@ class MultiHeadDotProductAttention(Module):
         for details.
       kernel_init: initializer for the kernel of the Dense layers.
       bias_init: initializer for the bias of the Dense layers.
-      bias: bool: whether pointwise QKVO dense transforms use bias.
+      use_bias: bool: whether pointwise QKVO dense transforms use bias.
       attention_fn: dot_product_attention or compatible function. Accepts
-      query, key, value, and returns output of shape
-      `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
+        query, key, value, and returns output of shape
+        `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
+      decode: whether to prepare and use an autoregressive cache.
   """
   num_heads: int
   dtype: Dtype = jnp.float32
@@ -201,6 +202,7 @@ class MultiHeadDotProductAttention(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   use_bias: bool = True
   attention_fn: Callable[[Array, Array, Array], Array] = dot_product_attention
+  decode: bool = False
 
   def __call__(self,
                inputs_q,
@@ -209,8 +211,7 @@ class MultiHeadDotProductAttention(Module):
                key_padding_mask=None,
                segmentation=None,
                key_segmentation=None,
-               #dropout_rng=None,
-               cache=None):
+               decode=False):
     """Applies multi-head dot product attention on the input data.
 
     Projects the inputs into multi-headed query, key, and value vectors,
@@ -229,15 +230,12 @@ class MultiHeadDotProductAttention(Module):
       key_padding_mask: boolean specifying key-value tokens that are pad token.
       segmentation: segment indices for packed inputs_q data.
       key_segmentation: segment indices for packed inputs_kv data.
-      cache: an instance of `flax.nn.attention.Cache` used for efficient
-        autoregressive decoding.
-      dropout_rng: JAX PRNGKey: to be used for dropout
 
     Returns:
       output of shape `[bs, dim1, dim2, ..., dimN, features]`.
     """
 
-    assert self.causal_mask or not cache, (
+    assert self.causal_mask or not self.decode, (
         'Caching is only support for causal attention.')
 
     if inputs_kv is None:
@@ -269,12 +267,15 @@ class MultiHeadDotProductAttention(Module):
                          dense(dtype=self.dtype, name='value')(inputs_kv))
 
 
-    if cache:
-      # detect if we're initializing.
+    if self.decode:
+      # detect if we're initializing by absence of existing cache data.
       is_initialized = self.has_variable('cache', 'cached_key')
-      cached_key = self.variable('cache', 'cached_key', jnp.zeros, key.shape, key.dtype)
-      cached_value = self.variable('cache', 'cached_value', jnp.zeros, value.shape, value.dtype)
-      cache_index = self.variable('cache', 'cache_index', lambda: jnp.array(0, dtype=jnp.uint32))
+      cached_key = self.variable('cache', 'cached_key',
+                                 jnp.zeros, key.shape, key.dtype)
+      cached_value = self.variable('cache', 'cached_value',
+                                   jnp.zeros, value.shape, value.dtype)
+      cache_index = self.variable('cache', 'cache_index',
+                                  lambda: jnp.array(0, dtype=jnp.uint32))
       if is_initialized:
         expected_shape = list(cached_key.value.shape[:-2])
         for attn_dim in attention_axis:
@@ -309,7 +310,7 @@ class MultiHeadDotProductAttention(Module):
     mask_components = []
 
     if self.causal_mask:
-      if cache and is_initialized:
+      if self.decode and is_initialized:
         bias_pre_shape = (1,) * (key.ndim - 1)
         attn_shape = tuple(np.take(key.shape, attention_axis))
         attn_size = np.prod(attn_shape)
@@ -386,7 +387,19 @@ class MultiHeadDotProductAttention(Module):
     return out
 
 
-#SelfAttention = partial(MultiHeadDotProductAttention, inputs_kv=None)
+class SelfAttention(MultiHeadDotProductAttention):
+  """Self-attention special case of multi-head dot-product attention."""
+
+  def __call__(self,
+               inputs_q,
+               padding_mask=None,
+               segmentation=None):
+    super().__call__(inputs_q,
+                     inputs_q,
+                     padding_mask=padding_mask,
+                     key_padding_mask=padding_mask,
+                     segmentation=segmentation,
+                     key_segmentation=segmentation)
 
 
 def make_padding_mask(padding_mask_query,
