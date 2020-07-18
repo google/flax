@@ -545,6 +545,24 @@ class PoolTest(absltest.TestCase):
     ]).reshape((1, 3, 3, 1))
     onp.testing.assert_allclose(y_grad, expected_grad)
 
+  def test_max_pool_explicit_pads(self):
+    x = jnp.arange(9).reshape((1, 3, 3, 1)).astype(jnp.float32)
+    pool = lambda x: nn.max_pool(x, (2, 2), padding=((1,1),(1,1)))
+    expected_y = jnp.array([
+        [0.,1.,2.,2.],
+        [3.,4.,5.,5.],
+        [6.,7.,8.,8.],
+        [6.,7.,8.,8.],
+    ]).reshape((1, 4, 4, 1))
+    y = pool(x)
+    onp.testing.assert_allclose(y, expected_y)
+    y_grad = jax.grad(lambda x: pool(x).sum())(x)
+    expected_grad = jnp.array([
+        [1., 1., 2.],
+        [1., 1., 2.],
+        [2., 2., 4.],
+    ]).reshape((1, 3, 3, 1))
+    onp.testing.assert_allclose(y_grad, expected_grad)
 
 class NormalizationTest(absltest.TestCase):
 
