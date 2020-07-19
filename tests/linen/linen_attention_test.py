@@ -127,13 +127,16 @@ class AttentionTest(parameterized.TestCase):
         qkv_features=num_heads * num_features,
         attention_axis=attn_dims,
         causal_mask=True,
-        precision=lax.Precision.HIGHEST)
+        precision=lax.Precision.HIGHEST,
+        decode=False)
+    decode_module = module.clone(decode=True)
 
-    initial_vars = module.init(key2, inputs, inputs, cache=True)
+    initial_vars = decode_module.init(key2, inputs, inputs)
     y_ref = jax.jit(lambda x: module.apply(initial_vars, x, x))(inputs)
     # feed the inputs sequentially to simulate decoding
-    def body_fn(vars, x):
-      y, vars_out = module.apply(vars, x, x, cache=True, mutable=['cache'])
+    def body_fn(vars_in, x):
+      y, vars_out = decode_module.apply(vars_in, x, x,
+                                        decode=True, mutable=['cache'])
       return vars_out, y
     # scan_in_dim supports scanning multiple dims
     _, y = jax_utils.scan_in_dim(body_fn, initial_vars, inputs,
@@ -158,10 +161,10 @@ class AttentionTest(parameterized.TestCase):
         causal_mask=True,
         kernel_init=jax.nn.initializers.ones)
 
-    initial_vars = module.init(rng1, inputs, inputs, cache=False)
+    initial_vars = module.init(rng1, inputs, inputs, decode=False)
 
     def model_loss(inputs, pos):
-      out = module.apply(initial_vars, inputs, inputs, cache=False)
+      out = module.apply(initial_vars, inputs, inputs, decode=False)
       assert out.shape == input_shape
       assert len(out.shape) == 3
       return out[0, pos, :].sum()
