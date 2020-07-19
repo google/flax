@@ -77,14 +77,22 @@ flags.DEFINE_bool(
     help=('If bfloat16/float16 should be used instead of float32.'))
 
 
-def create_model(key, batch_size, image_size, model_dtype):
-  input_shape = (batch_size, image_size, image_size, 3)
-  module = models.ResNet.partial(num_classes=1000, dtype=model_dtype)
-  with nn.stateful() as init_state:
-    _, initial_params = module.init_by_shape(
-        key, [(input_shape, model_dtype)])
-    model = nn.Model(module, initial_params)
-  return model, init_state
+def model(**kwargs):
+  # TODO: Is this slow?
+  platform = jax.local_devices()[0].platform
+  if FLAGS.half_precision:
+    if platform == 'tpu':
+      model_dtype = jnp.bfloat16
+    else:
+      model_dtype = jnp.float16
+  else:
+    model_dtype = jnp.float32
+  return models.ResNet(parent=None, num_classes=1000, dtype=model_dtype, **kwargs)
+
+def initialized(key, image_size):
+  input_shape = (1, image_size, image_size, 3)
+  model_ = model()
+  return model_.initialized({"param": key}, jnp.ones(input_shape, model_.dtype)).variables
 
 
 def cross_entropy_loss(logits, labels):
@@ -123,12 +131,11 @@ def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
 
 def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
-  def loss_fn(model):
+  def loss_fn(variables):
     """loss function used for training."""
-    with nn.stateful(state.model_state) as new_model_state:
-      logits = model(batch['image'])
+    logits, new_variables = model().apply(variables, batch['image'], mutable=['batch_stats'])
     loss = cross_entropy_loss(logits, batch['label'])
-    weight_penalty_params = jax.tree_leaves(model.params)
+    weight_penalty_params = jax.tree_leaves(variables.param)
     weight_decay = 0.0001
     weight_l2 = sum([jnp.sum(x ** 2)
                      for x in weight_penalty_params
@@ -171,9 +178,9 @@ def train_step(state, batch, learning_rate_fn):
 
 
 def eval_step(state, batch):
-  model = state.optimizer.target
-  with nn.stateful(state.model_state, mutable=False):
-    logits = model(batch['image'], train=False)
+  params = state.optimizer.target
+  variables = {'param': params, 'batch_stats': state.batch_stats}
+  logits = model().apply(variables, batch['image'], train=False, mutable=False)
   return compute_metrics(logits, batch['label'])
 
 
@@ -205,7 +212,7 @@ def create_input_iter(batch_size, image_size, dtype, train, cache):
 class TrainState:
   step: int
   optimizer: optim.Optimizer
-  model_state: nn.Collection
+  batch_state: dict
   dynamic_scale: optim.DynamicScale
 
 
@@ -253,14 +260,11 @@ def main(argv):
   dynamic_scale = None
   if FLAGS.half_precision:
     if platform == 'tpu':
-      model_dtype = jnp.bfloat16
       input_dtype = tf.bfloat16
     else:
-      model_dtype = jnp.float16
       input_dtype = tf.float16
       dynamic_scale = optim.DynamicScale()
   else:
-    model_dtype = jnp.float32
     input_dtype = tf.float32
 
   train_iter = create_input_iter(
@@ -276,12 +280,10 @@ def main(argv):
 
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
 
-  model, model_state = create_model(
-      rng, device_batch_size, image_size, model_dtype)
-  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(model)
-  state = TrainState(step=0, optimizer=optimizer, model_state=model_state,
+  variables = init_vars(rng, image_size, model_dtype)
+  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(variables.param)
+  state = TrainState(step=0, optimizer=optimizer, model_state=variables.batch_stats,
                      dynamic_scale=dynamic_scale)
-  del model, model_state  # do not keep a copy of the initial model
 
   state = restore_checkpoint(state)
   step_offset = int(state.step)  # step_offset > 0 if restarting from checkpoint
