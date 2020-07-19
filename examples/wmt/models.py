@@ -233,12 +233,7 @@ class Encoder1DBlock(nn.Module):
 
     # MLP block.
     y = nn.LayerNorm(self, dtype=cfg.dtype)(x)
-    y = MlpBlock(
-        self,
-        mlp_dim=cfg.mlp_dim,
-        dtype=cfg.dtype,
-        dropout_rate=cfg.dropout_rate,
-        deterministic=cfg.deterministic)(y)
+    y = MlpBlock(self, config=cfg)(y)
 
     return x + y
 
@@ -324,12 +319,7 @@ class EncoderDecoder1DBlock(nn.Module):
 
     # MLP block.
     z = nn.LayerNorm(self, dtype=cfg.dtype)(y)
-    z = MlpBlock(
-        self,
-        mlp_dim=cfg.mlp_dim,
-        dtype=cfg.dtype,
-        dropout_rate=cfg.dropout_rate,
-        deterministic=cfg.deterministic)(z)
+    z = MlpBlock(self, config=cfg)(z)
 
     return y + z
 
@@ -339,6 +329,7 @@ class Encoder(nn.Module):
 
   Args:
     config: TransformerConfig dataclass containing hyperparameters.
+    shared_embedding: a shared embedding layer to use.
   """
   config: TransformerConfig
   shared_embedding: Any = None
@@ -353,7 +344,6 @@ class Encoder(nn.Module):
       inputs: input data
       inputs_positions: input subsequence positions for packed examples.
       inputs_segmentation: input segmentation info for packed examples.
-      shared_embedding: a shared embedding layer to use.
 
     Returns:
       output of a transformer encoder.
@@ -390,7 +380,7 @@ class Encoder(nn.Module):
           padding_mask=src_padding_mask,
           inputs_segmentation=inputs_segmentation)
 
-    encoded = nn.LayerNorm(self, config=cfg, name='encoder_norm')(x)
+    encoded = nn.LayerNorm(self, dtype=cfg.dtype, name='encoder_norm')(x)
 
     return encoded
 
@@ -400,6 +390,7 @@ class Decoder(nn.Module):
 
   Args:
     config: TransformerConfig dataclass containing hyperparameters.
+    shared_embedding: a shared embedding layer to use.
   """
   config: TransformerConfig
   shared_embedding: Any = None
@@ -510,12 +501,10 @@ class Transformer(nn.MultiModule):
 
     self.encoder = Encoder(self,
                            config=cfg,
-                           shared_embedding=self.shared_embedding,
-                           name='encoder')
+                           shared_embedding=self.shared_embedding)
     self.decoder = Decoder(self,
                            config=cfg,
-                           shared_embedding=self.shared_embedding,
-                           name='decoder')
+                           shared_embedding=self.shared_embedding)
 
   def __call__(self,
                inputs,

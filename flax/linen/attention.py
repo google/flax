@@ -394,12 +394,12 @@ class SelfAttention(MultiHeadDotProductAttention):
                inputs_q,
                padding_mask=None,
                segmentation=None):
-    super().__call__(inputs_q,
-                     inputs_q,
-                     padding_mask=padding_mask,
-                     key_padding_mask=padding_mask,
-                     segmentation=segmentation,
-                     key_segmentation=segmentation)
+    return super().__call__(inputs_q,
+                            inputs_q,
+                            padding_mask=padding_mask,
+                            key_padding_mask=padding_mask,
+                            segmentation=segmentation,
+                            key_segmentation=segmentation)
 
 
 def make_padding_mask(padding_mask_query,

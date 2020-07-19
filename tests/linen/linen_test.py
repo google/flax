@@ -124,6 +124,53 @@ class NormalizationTest(absltest.TestCase):
     np.testing.assert_allclose(y_test, y, atol=1e-4)
 
 
+class StochasticTest(absltest.TestCase):
+
+  def test_dropout(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    module = nn.Dropout(None, rate=0.5)
+    y1 = module.apply({},
+                      jnp.ones((20, 20)),
+                      deterministic=False,
+                      rngs={'dropout': key1})
+    y2 = module.apply({},
+                      jnp.ones((20, 20)),
+                      deterministic=False,
+                      rngs={'dropout': key2})
+    self.assertFalse(np.all(y1 == y2))
+
+    y1 = module.apply({},
+                      jnp.ones((20, 20)),
+                      deterministic=True,
+                      rngs={'dropout': key1})
+    y2 = module.apply({},
+                      jnp.ones((20, 20)),
+                      deterministic=True,
+                      rngs={'dropout': key2})
+    self.assertTrue(np.all(y1 == y2))
+
+  def test_dropout_rate_stats(self):
+    rootkey = random.PRNGKey(0)
+    for rate in np.arange(0.1, 1.0, 0.1):
+      rootkey, subkey = random.split(rootkey)
+      module = nn.Dropout(None, rate=rate)
+      n_trials = 10
+      nonzero_counts = 0
+      for key in random.split(subkey, n_trials):
+        y = module.apply({},
+                         jnp.ones((100, 100)),
+                         deterministic=False,
+                         rngs={'dropout': key})
+        nonzero_counts += np.sum(y > 0.0)
+      all_counts = np.prod((100, 100, n_trials))
+      frac = np.sum(nonzero_counts) / all_counts
+      keep_rate = 1.0 - rate
+      # just check within 3 sigma.
+      delta = 3 * np.sqrt(rate * keep_rate) / np.sqrt(all_counts)
+      self.assertTrue(keep_rate - delta < frac < keep_rate + delta)
+
+
 # TODO(flax-dev): add integration tests for RNN cells
 class RecurrentTest(absltest.TestCase):
 

@@ -391,8 +391,7 @@ def eval_step(params, batch, config, label_smoothing=0.0):
 
 def initialize_cache(inputs, max_decode_len, config):
   """Initialize a cache for a given input shape and max decode length."""
-  target_shape = inputs.shape
-  target_shape[1] = max_decode_len
+  target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
   initial_variables = models.Transformer(None, config).init(
       jax.random.PRNGKey(0),
       jnp.ones(inputs.shape, config.dtype),
@@ -529,8 +528,7 @@ def main(argv):
       target_vocab_size=FLAGS.vocab_size,
       batch_size=FLAGS.batch_size,
       max_length=FLAGS.max_target_length,
-      max_eval_length=FLAGS.max_eval_target_length,
-      random_seed=FLAGS.random_seed)
+      max_eval_length=FLAGS.max_eval_target_length)
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
   eos_token = 2  # Default Sentencepiece EOS token.
@@ -570,10 +568,13 @@ def main(argv):
   target_shape = (FLAGS.batch_size, FLAGS.max_target_length)
 
   # call a jitted initialization function to get the initial parameter tree
-  initial_variables = jax.jit(models.Transformer(None, train_config).init)(
-      init_rng,
-      jnp.ones(input_shape, jnp.float32),
-      jnp.ones(target_shape, jnp.float32))
+  @jax.jit
+  def initialize_variables(rng):
+    return models.Transformer(None, eval_config).init(
+        rng,
+        jnp.ones(input_shape, jnp.float32),
+        jnp.ones(target_shape, jnp.float32))
+  initial_variables = initialize_variables(init_rng)
 
   # apply an optimizer to this tree
   optimizer_def = optim.Adam(

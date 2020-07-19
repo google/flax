@@ -37,9 +37,8 @@ T = TypeVar('T')
 # -----------------------------------------------------------------------------
 def is_module_tree(in_tree):
   """Determine if in_tree is a pytree of subclasses of Module."""
-  if isinstance(in_tree, (np.ndarray, jax.interpreters.xla.DeviceArray)):
-    return False
-  if not in_tree:  # reject trivial pytrees, {}, [], (), etc.
+  # reject trivial pytrees, {}, [], (), etc.
+  if not tree_util.tree_leaves(in_tree):
     return False
   reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
   return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)

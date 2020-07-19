@@ -37,7 +37,7 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_self_attention(self):
     rng = random.PRNGKey(0)
     x = jnp.ones((4, 2, 3, 5))
-    sa_module = nn.MultiHeadDotProductAttention(
+    sa_module = nn.SelfAttention(
         None,
         num_heads=8,
         attention_axis=(1, 2),
@@ -45,7 +45,7 @@ class AttentionTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
     )
-    y, _ = sa_module.init_with_output(rng, x, x)
+    y, _ = sa_module.init_with_output(rng, x)
     self.assertEqual(y.shape, x.shape)
 
   def test_multihead_encoder_decoder_attention(self):
