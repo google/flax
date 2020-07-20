@@ -382,9 +382,7 @@ def eval_step(params, batch, config, label_smoothing=0.0):
   inputs, targets = batch['inputs'], batch['targets']
   weights = jnp.where(targets > 0, 1.0, 0.0)
   logits = models.Transformer(None, config).apply(
-      {'param': params},
-      inputs,
-      targets)
+      {'param': params}, inputs, targets)
 
   return compute_metrics(logits, targets, weights, label_smoothing)
 

@@ -437,7 +437,7 @@ class Decoder(nn.Module):
       output_embed = self.shared_embedding
 
     y = targets.astype('int32')
-    if cfg.decode:
+    if not cfg.decode:
       y = shift_right(y)
     y = output_embed(y)
     y = AddPositionEmbs(self, config=cfg, name='posembed_output')(
