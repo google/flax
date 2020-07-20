@@ -92,7 +92,7 @@ def model(**kwargs):
 def initialized(key, image_size):
   input_shape = (1, image_size, image_size, 3)
   model_ = model()
-  return model_.initialized({"param": key}, jnp.ones(input_shape, model_.dtype)).variables
+  return model_.init({"param": key}, jnp.ones(input_shape, model_.dtype))
 
 
 def cross_entropy_loss(logits, labels):
@@ -131,18 +131,19 @@ def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
 
 def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
-  def loss_fn(variables):
+  def loss_fn(params):
     """loss function used for training."""
+    variables = {'param': params, 'batch_stats': state.batch_stats}
     logits, new_variables = model().apply(variables, batch['image'], mutable=['batch_stats'])
     loss = cross_entropy_loss(logits, batch['label'])
-    weight_penalty_params = jax.tree_leaves(variables.param)
+    weight_penalty_params = jax.tree_leaves(variables['param'])
     weight_decay = 0.0001
     weight_l2 = sum([jnp.sum(x ** 2)
                      for x in weight_penalty_params
                      if x.ndim > 1])
     weight_penalty = weight_decay * 0.5 * weight_l2
     loss = loss + weight_penalty
-    return loss, (new_model_state, logits)
+    return loss, (new_variables, logits)
 
   step = state.step
   optimizer = state.optimizer
@@ -159,7 +160,8 @@ def train_step(state, batch, learning_rate_fn):
     aux, grad = grad_fn(optimizer.target)
     # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
     grad = lax.pmean(grad, axis_name='batch')
-  new_model_state, logits = aux[1]
+  new_variables, logits = aux[1]
+  new_batch_stats = new_variables['batch_stats']
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr
@@ -172,7 +174,7 @@ def train_step(state, batch, learning_rate_fn):
     metrics['scale'] = dynamic_scale.scale
 
   new_state = state.replace(
-      step=step + 1, optimizer=new_optimizer, model_state=new_model_state,
+      step=step + 1, optimizer=new_optimizer, batch_stats=new_batch_stats,
       dynamic_scale=dynamic_scale)
   return new_state, metrics
 
@@ -180,7 +182,7 @@ def train_step(state, batch, learning_rate_fn):
 def eval_step(state, batch):
   params = state.optimizer.target
   variables = {'param': params, 'batch_stats': state.batch_stats}
-  logits = model().apply(variables, batch['image'], train=False, mutable=False)
+  logits = model(train=False).apply(variables, batch['image'], mutable=False)
   return compute_metrics(logits, batch['label'])
 
 
@@ -212,7 +214,7 @@ def create_input_iter(batch_size, image_size, dtype, train, cache):
 class TrainState:
   step: int
   optimizer: optim.Optimizer
-  batch_state: dict
+  batch_stats: dict
   dynamic_scale: optim.DynamicScale
 
 
@@ -231,7 +233,7 @@ def save_checkpoint(state):
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
   avg = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
-  return state.replace(model_state=avg(state.model_state))
+  return state.replace(batch_stats=avg(state.batch_stats))
 
 
 def main(argv):
@@ -280,9 +282,9 @@ def main(argv):
 
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
 
-  variables = init_vars(rng, image_size, model_dtype)
-  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(variables.param)
-  state = TrainState(step=0, optimizer=optimizer, model_state=variables.batch_stats,
+  variables = initialized(rng, image_size)
+  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(variables['param'])
+  state = TrainState(step=0, optimizer=optimizer, batch_stats=variables['batch_stats'],
                      dynamic_scale=dynamic_scale)
 
   state = restore_checkpoint(state)
