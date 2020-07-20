@@ -17,68 +17,78 @@
 """
 
 
-from flax import nn
+from flax import linen as nn
 
 import jax.numpy as jnp
+
+from functools import partial
+from typing import Any
 
 
 class ResidualBlock(nn.Module):
   """Bottleneck ResNet block."""
+  filters: int
+  strides: (int, int) = (1, 1)
+  train: bool = True
+  dtype: Any = jnp.float32
 
-  def apply(self, x, filters, strides=(1, 1), train=True, dtype=jnp.float32):
-    needs_projection = x.shape[-1] != filters * 4 or strides != (1, 1)
-    batch_norm = nn.BatchNorm.partial(use_running_average=not train,
-                                      momentum=0.9, epsilon=1e-5,
-                                      dtype=dtype)
-    conv = nn.Conv.partial(bias=False, dtype=dtype)
+  def __call__(self, x):
+    needs_projection = x.shape[-1] != self.filters * 4 or self.strides != (1, 1)
+    batch_norm = partial(nn.BatchNorm, self, use_running_average=not self.train,
+                                       momentum=0.9, epsilon=1e-5,
+                                       dtype=self.dtype)
+    conv = partial(nn.Conv, self, use_bias=False, dtype=self.dtype)
 
     residual = x
     if needs_projection:
-      residual = conv(residual, filters * 4, (1, 1), strides, name='proj_conv')
-      residual = batch_norm(residual, name='proj_bn')
+      residual = conv(self.filters * 4, (1, 1), self.strides, name='proj_conv')(residual)
+      residual = batch_norm(name='proj_bn')(residual)
 
-    y = conv(x, filters, (1, 1), name='conv1')
-    y = batch_norm(y, name='bn1')
+    y = conv(self.filters, (1, 1), name='conv1')(x)
+    y = batch_norm(name='bn1')(y)
     y = nn.relu(y)
-    y = conv(y, filters, (3, 3), strides, name='conv2')
-    y = batch_norm(y, name='bn2')
+    y = conv(self.filters, (3, 3), self.strides, name='conv2')(y)
+    y = batch_norm(name='bn2')(y)
     y = nn.relu(y)
-    y = conv(y, filters * 4, (1, 1), name='conv3')
+    y = conv(self.filters * 4, (1, 1), name='conv3')(y)
 
-    y = batch_norm(y, name='bn3', scale_init=nn.initializers.zeros)
+    y = batch_norm(name='bn3', scale_init=nn.initializers.zeros)(y)
     y = nn.relu(residual + y)
     return y
 
 
 class ResNet(nn.Module):
   """ResNetV1."""
+  num_classes: int
+  num_filters: int = 64
+  num_layers: int = 50
+  train: bool = True
+  dtype: Any = jnp.float32
 
-  def apply(self, x, num_classes, num_filters=64, num_layers=50,
-            train=True, dtype=jnp.float32):
-    if num_layers not in _block_size_options:
+  def __call__(self, x):
+    if self.num_layers not in _block_size_options:
       raise ValueError('Please provide a valid number of layers')
-    block_sizes = _block_size_options[num_layers]
-    x = nn.Conv(x, num_filters, (7, 7), (2, 2),
+    block_sizes = _block_size_options[self.num_layers]
+    x = nn.Conv(self, self.num_filters, (7, 7), (2, 2),
                 padding=[(3, 3), (3, 3)],
-                bias=False,
-                dtype=dtype,
-                name='init_conv')
-    x = nn.BatchNorm(x,
-                     use_running_average=not train,
+                use_bias=False,
+                dtype=self.dtype,
+                name='init_conv')(x)
+    x = nn.BatchNorm(self, use_running_average=not self.train,
                      momentum=0.9, epsilon=1e-5,
-                     dtype=dtype,
-                     name='init_bn')
+                     dtype=self.dtype,
+                     name='init_bn')(x)
     x = nn.max_pool(x, (3, 3), strides=(2, 2), padding='SAME')
     for i, block_size in enumerate(block_sizes):
       for j in range(block_size):
         strides = (2, 2) if i > 0 and j == 0 else (1, 1)
-        x = ResidualBlock(x, num_filters * 2 ** i,
+        x = ResidualBlock(self, self.num_filters * 2 ** i,
                           strides=strides,
-                          train=train,
-                          dtype=dtype)
+                          train=self.train,
+                          dtype=self.dtype)(x)
     x = jnp.mean(x, axis=(1, 2))
-    x = nn.Dense(x, num_classes, dtype=dtype)
-    x = jnp.asarray(x, dtype)
+    x = nn.Dense(self, self.num_classes, dtype=self.dtype)(x)
+    x = jnp.asarray(x, jnp.float32)
     x = nn.log_softmax(x)
     return x
 
