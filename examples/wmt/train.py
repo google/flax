@@ -539,8 +539,7 @@ def main(argv):
       target_vocab_size=FLAGS.vocab_size,
       batch_size=FLAGS.batch_size,
       max_length=FLAGS.max_target_length,
-      max_eval_length=FLAGS.max_eval_target_length,
-      random_seed=FLAGS.random_seed)
+      max_eval_length=FLAGS.max_eval_target_length)
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
   eos_token = 2  # Default Sentencepiece EOS token.
