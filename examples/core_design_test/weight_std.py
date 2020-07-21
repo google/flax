@@ -1,14 +1,11 @@
 
-from flax.core import Scope, init, apply, unfreeze, lift
-from typing import Sequence, Callable
-
-from flax import nn
+from flax.core import Scope, init, apply, unfreeze, lift, nn
+from typing import Any, Sequence, Callable
 
 import jax
 from jax import lax, random, numpy as jnp
 
-from typing import Any
-from functools import partial, wraps
+from functools import partial
 
 Array = Any
 
@@ -37,7 +34,6 @@ def mlp(scope: Scope, x: Array,
   std_dense = weight_std(partial(nn.dense, kernel_init=nn.initializers.normal(stddev=1e5)))
   # hidden layers
   for size in sizes[:-1]:
-    print("one more dense")
     x = scope.child(std_dense, prefix='hidden_')(x, size)
     # x = act_fn(x)
 

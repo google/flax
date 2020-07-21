@@ -2,9 +2,7 @@
 
 import numpy as np
 
-from flax.core import Scope, init, apply, unfreeze, lift
-
-from flax import nn
+from flax.core import Scope, init, apply, unfreeze, lift, nn
 
 import jax
 from jax import lax, random, numpy as jnp
@@ -31,7 +29,6 @@ def residual_block(scope: Scope, x: Array, conv, norm, act, features: int):
     residual = scope.child(norm, 'proj_bn')(residual)
 
   return act(residual + x)
-
 
 def big_resnet(scope: Scope, x, blocks=(10, 10), dtype=jnp.float32,
                norm=default_norm, act=nn.relu):

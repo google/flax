@@ -16,16 +16,15 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
+from flax.nn.activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
                          softplus, swish, tanh)
-from .attention import (dot_product_attention, MultiHeadDotProductAttention,
-                        SelfAttention)
-from .base import (Module, Model, Collection, capture_module_outputs,
-                   module, stateful, get_state, module_method)
-from .linear import Dense, DenseGeneral, Conv, ConvTranspose, Embed
-from .normalization import BatchNorm, LayerNorm, GroupNorm
-from .pooling import max_pool, avg_pool
-from .recurrent import LSTMCell, GRUCell
-from .stochastic import make_rng, stochastic, dropout, is_stochastic
+from .attention import (dot_product_attention, multi_head_dot_product_attention)
+from .linear import dense, dense_general, conv, conv_transpose, embedding, Embedding
+from .normalization import batch_norm, layer_norm, group_norm
+from flax.nn.pooling import max_pool, avg_pool
+from .stochastic import dropout
+
+from flax.nn import initializers
+from flax.nn import activation
 # pylint: enable=g-multiple-import

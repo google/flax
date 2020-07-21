@@ -5,8 +5,7 @@ import jax
 from jax import lax, random
 from jax import numpy as jnp
 
-from flax.core import Scope, init, apply, lift, Array
-from flax import nn
+from flax.core import Scope, init, apply, lift, Array, nn
 
 
 

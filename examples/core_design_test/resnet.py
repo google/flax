@@ -1,7 +1,5 @@
 
-from flax.core import Scope, init, apply, unfreeze
-
-from flax import nn
+from flax.core import Scope, init, apply, unfreeze, nn
 
 import jax
 from jax import lax, random, numpy as jnp

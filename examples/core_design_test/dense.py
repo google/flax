@@ -1,7 +1,7 @@
-from flax.core.scope import Scope, init, apply
+from flax.core import Scope, init, apply, nn
 from jax import numpy as jnp, random
 
-from flax import nn, struct
+from flax import struct
 
 from jax.scipy.linalg import expm
 
@@ -59,7 +59,7 @@ class ExplicitDense:
     else:
       bias = None
     return ExplicitDense(kernel, bias)
-  
+
   def __call__(self, x):
     y = x @ self.kernel
     if self.bias is not None:

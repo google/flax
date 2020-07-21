@@ -12,22 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-"""Input pipeline for the wmt de-en dataset."""
+"""Input pipeline for a WMT dataset."""
 
 import os
 import tempfile
@@ -49,7 +34,7 @@ AUTOTUNE = tf.data.experimental.AUTOTUNE
 # -----------------------------------------------------------------------------
 def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
                      eval_dataset_name=None,
-                     reverse_translation=True,
+                     reverse_translation=False,
                      shard_idx=0,
                      shard_count=1,
                      data_dir=None):
@@ -84,7 +69,7 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
                                    shuffle_files=False)
   else:
     eval_dataset, *eval_split = eval_dataset_name.split(':')
-    if len(eval_split) == 0:
+    if not eval_split:
       eval_split = 'validation'
     else:
       eval_split = eval_split[0]
@@ -176,7 +161,11 @@ def train_sentencepiece(dataset,
        f'--model_type={model_type}'])
   SentencePieceTrainer.Train(argstr)
   if jax.host_id() == 0:
-    tf.io.gfile.copy(model_fp.name+'.model', abs_model_path, overwrite=True)
+    # Use an intermediate filename that is renamed to the target name to address
+    # create and fill delays.
+    copy_rename_path = abs_model_path + '.rntmp'
+    tf.io.gfile.copy(model_fp.name + '.model', copy_rename_path, overwrite=True)
+    tf.io.gfile.rename(copy_rename_path, abs_model_path, overwrite=True)
     logging.info('copied %s to %s', model_fp.name+'.model', abs_model_path)
   else:
     while not tf.io.gfile.exists(abs_model_path):

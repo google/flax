@@ -20,7 +20,7 @@ Flax is a neural network library for JAX that is designed for flexibility.
    :maxdepth: 2
    :caption: HOWTOs
 
-   howtos
+   howtos/index
 
 .. toctree::
    :maxdepth: 1

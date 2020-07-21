@@ -37,9 +37,8 @@ T = TypeVar('T')
 # -----------------------------------------------------------------------------
 def is_module_tree(in_tree):
   """Determine if in_tree is a pytree of subclasses of Module."""
-  if isinstance(in_tree, (np.ndarray, jax.interpreters.xla.DeviceArray)):
-    return False
-  if not in_tree:  # reject trivial pytrees, {}, [], (), etc.
+  # reject trivial pytrees, {}, [], (), etc.
+  if not tree_util.tree_leaves(in_tree):
     return False
   reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
   return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
@@ -87,7 +86,7 @@ def wrap_setup(fun):
     try:
       return fun(self, *args, **kwargs)
     finally:
-        object.__setattr__(self, '_in_setup', False)
+      object.__setattr__(self, '_in_setup', False)
   return wrapped_setup_method
 
 
@@ -123,12 +122,12 @@ class Module:
     annotations = cls.__dict__.get('__annotations__', {})
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
-        f'properties `parent` and `name` are reserved: {annotations}')
+          f'properties `parent` and `name` are reserved: {annotations}')
     # Add `parent` and `name` default fields at beginning and end, resp.
     new_annotations = {}
     if 'parent' not in getattr(cls, '__dataclass_fields__', {}):
       new_annotations.update(
-        {'parent': Union[Type["Module"], Type["Scope"], None]})
+          {'parent': Union[Type["Module"], Type["Scope"], None]})
       cls.parent = dataclasses.field(repr=False)
     new_annotations.update(annotations)
     if 'name' in getattr(cls, '__dataclass_fields__', {}):
@@ -221,10 +220,10 @@ class Module:
         self.parent._autoname_cursor[prefix] = cursor + 1
       if self.parent._name_taken(self.name):
         raise ValueError(
-           f"A variable of name {self.name} exists already, or "
-           f"trying to share submodule {self.__class__.__name__} by name "
-           f"{self.name}. To share submodules, store module instances as a"
-           f" Python object or as an attribute on self and reuse.")
+            f"A variable of name {self.name} exists already, or "
+            f"trying to share submodule {self.__class__.__name__} by name "
+            f"{self.name}. To share submodules, store module instances as a"
+            f" Python object or as an attribute on self and reuse.")
       self.parent._reservations.add(self.name)
       self.parent.children[self.name] = self
       self.scope = self.parent.scope.push(self.name)
@@ -270,7 +269,8 @@ class Module:
   # TODO: Consider whether this is a helpful abstraction, and think about naming.
   # See its use in design_test/linen/weight_std.py
   def attached(self, variables={}, rngs={}):
-    assert self.scope is None, "Can't attach a module twice. Maybe you want to clone first?"
+    assert self.scope is None, ("Can't attach a module twice."
+                                " Maybe you want to clone first?")
     return self.clone(parent=Scope(variables, rngs))
 
   def variable(self, kind: str, name: str, init_fn, *init_args):
@@ -353,10 +353,6 @@ class Module:
   def vars_init(self, *args, **kwargs):
     return self.initialized(*args, **kwargs).variables
 
-  # TODO: Add tests for apply
-  # def apply(self, variables, *args, rngs=None, method='__call__', **kwargs):
-  #   return self.attached(variables, rngs)(*args, **kwargs)
-
   def apply(self, variables, *args, rngs=None, method='__call__', mutable=False, **kwargs):
     """Apply module to variables and return output and modified variables."""
     new_variables = _unfreeze_variables(variables, mutable)
@@ -378,7 +374,7 @@ class Module:
 
   def init(self, rngs, *args, method='__call__', **kwargs):
     """Create and return initialized data for module with rngs."""
-    y, v_out = self.init_with_output(rngs, *args, method='__call__', **kwargs)
+    y, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
     return v_out
 
 

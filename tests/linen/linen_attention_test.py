@@ -37,7 +37,7 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_self_attention(self):
     rng = random.PRNGKey(0)
     x = jnp.ones((4, 2, 3, 5))
-    sa_module = nn.MultiHeadDotProductAttention(
+    sa_module = nn.SelfAttention(
         None,
         num_heads=8,
         attention_axis=(1, 2),
@@ -45,7 +45,7 @@ class AttentionTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
     )
-    y, _ = sa_module.init_with_output(rng, x, x)
+    y, _ = sa_module.init_with_output(rng, x)
     self.assertEqual(y.shape, x.shape)
 
   def test_multihead_encoder_decoder_attention(self):
@@ -109,84 +109,82 @@ class AttentionTest(parameterized.TestCase):
     np.testing.assert_allclose(mask_nd.reshape(mask_1d.shape), mask_1d,
                                 atol=1e-9)
 
-#   @parameterized.parameters([((5,), (1,)),
-#                              ((5, 6), (1,)),
-#                              ((5, 6), (2,)),
-#                              ((5, 6), (1, 2)),])
-#   def test_decoding(self, spatial_shape, attn_dims):
-#     bs = 2
-#     num_heads = 3
-#     num_features = 4
-#     rng = random.PRNGKey(0)
-#     key1, key2 = random.split(rng)
-#     inputs = random.normal(
-#         key1, (bs,) + spatial_shape + (num_heads * num_features,))
-#     module = nn.SelfAttention.partial(
-#         num_heads=num_heads,
-#         qkv_features=num_heads * num_features,
-#         attention_axis=attn_dims,
-#         causal_mask=True,
-#         precision=lax.Precision.HIGHEST)
+  @parameterized.parameters([((5,), (1,)),
+                             ((5, 6), (1,)),
+                             ((5, 6), (2,)),
+                             ((5, 6), (1, 2)),])
+  def test_decoding(self, spatial_shape, attn_dims):
+    bs = 2
+    num_heads = 3
+    num_features = 4
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    inputs = random.normal(
+        key1, (bs,) + spatial_shape + (num_heads * num_features,))
+    module = nn.MultiHeadDotProductAttention(
+        None,
+        num_heads=num_heads,
+        qkv_features=num_heads * num_features,
+        attention_axis=attn_dims,
+        causal_mask=True,
+        precision=lax.Precision.HIGHEST,
+        decode=False)
+    decode_module = module.clone(decode=True)
 
-#     with nn.attention.Cache().mutate() as cache_def:
-#       _, initial_params = module.init_by_shape(
-#           key2, [(inputs.shape, inputs.dtype)], cache=cache_def)
-#     model = nn.Model(module, initial_params)
-#     y_ref = jax.jit(lambda f, x: f(x))(model, inputs)
+    initial_vars = decode_module.init(key2, inputs, inputs)
+    y_ref = jax.jit(lambda x: module.apply(initial_vars, x, x))(inputs)
+    # feed the inputs sequentially to simulate decoding
+    def body_fn(vars_in, x):
+      y, vars_out = decode_module.apply(vars_in, x, x,
+                                        decode=True, mutable=['cache'])
+      return vars_out, y
+    # scan_in_dim supports scanning multiple dims
+    _, y = jax_utils.scan_in_dim(body_fn, initial_vars, inputs,
+                                    axis=attn_dims, keepdims=True)
 
-#     # feed the inputs sequentially to simulate decoding
-#     cache0 = cache_def.initialize_cache((bs,) + spatial_shape)
-#     def body_fn(cache, x):
-#       with cache.mutate() as new_cache:
-#         y = model(x, cache=new_cache)
-#       return new_cache, y
-#     # scan_in_dim supports scanning multiple dims
-#     _, y = jax_utils.scan_in_dim(body_fn, cache0, inputs,
-#                                     axis=attn_dims, keepdims=True)
+    np.testing.assert_allclose(y_ref, y, atol=1e-5)
 
-#     np.testing.assert_allclose(y_ref, y, atol=1e-5)
+  def test_autoregresive_receptive_field_1d(self):
+    """Tests the autoregresive self-attention receptive field."""
+    rng = random.PRNGKey(0)
+    rng1, rng2 = random.split(rng, num=2)
 
-#   def test_autoregresive_receptive_field_1d(self):
-#     """Tests the autoregresive self-attention receptive field."""
-#     rng = random.PRNGKey(0)
-#     rng1, rng2 = random.split(rng, num=2)
+    length = 10
+    dim = 1
+    num_heads = 1
+    input_shape = (1, length, dim)
+    inputs = random.normal(rng2, input_shape)
 
-#     def model_loss(inputs, pos):
-#       out = model(inputs)
-#       assert out.shape == input_shape
-#       assert len(out.shape) == 3
-#       return out[0, pos, :].sum()
+    module = nn.MultiHeadDotProductAttention(
+        None,
+        num_heads=num_heads,
+        causal_mask=True,
+        kernel_init=jax.nn.initializers.ones)
 
-#     grad_fn = jax.jit(jax.grad(model_loss))
+    initial_vars = module.init(rng1, inputs, inputs, decode=False)
 
-#     def get_receptive_field_1d(pos):
-#       g = grad_fn(inputs, pos)[0, :, :]
-#       return jnp.any((jnp.abs(g) > 1e-5).astype(jnp.uint32), axis=-1)
+    def model_loss(inputs, pos):
+      out = module.apply(initial_vars, inputs, inputs, decode=False)
+      assert out.shape == input_shape
+      assert len(out.shape) == 3
+      return out[0, pos, :].sum()
 
-#     length = 10
-#     dim = 1
-#     num_heads = 1
-#     input_shape = (1, length, dim)
-#     inputs = random.normal(rng2, input_shape)
+    grad_fn = jax.jit(jax.grad(model_loss))
 
-#     module = nn.attention.SelfAttention.partial(
-#         num_heads=num_heads,
-#         causal_mask=True,
-#         kernel_init=jax.nn.initializers.ones)
-#     _, initial_params = module.init_by_shape(
-#         rng1, [((1,) + (length, dim), jnp.float32)])
-#     model = nn.Model(module, initial_params)
+    def get_receptive_field_1d(pos):
+      g = grad_fn(inputs, pos)[0, :, :]
+      return jnp.any((jnp.abs(g) > 1e-5).astype(jnp.uint32), axis=-1)
 
-#     for i in range(length):
-#       deps = get_receptive_field_1d(i)
-#       assert (deps[:i] == 1).all(), ('Receptive Field Error: Some of the '
-#                                      'previous postions are not reachable '
-#                                      'in autoregressive self-attention.')
-#       if i != length - 1:
-#         k = i + 1
-#         assert (deps[k:] == 0).all(), ('Receptive Field Error: Some of the '
-#                                        'future postions are reachable in '
-#                                        'autoregressive self-attention.')
+    for i in range(length):
+      deps = get_receptive_field_1d(i)
+      assert (deps[:i] == 1).all(), ('Receptive Field Error: Some of the '
+                                     'previous postions are not reachable '
+                                     'in autoregressive self-attention.')
+      if i != length - 1:
+        k = i + 1
+        assert (deps[k:] == 0).all(), ('Receptive Field Error: Some of the '
+                                       'future postions are reachable in '
+                                       'autoregressive self-attention.')
 
 
 if __name__ == '__main__':

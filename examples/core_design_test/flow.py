@@ -1,7 +1,5 @@
-from flax.core.scope import Scope, init, apply
+from flax.core import Scope, init, apply, nn
 from jax import numpy as jnp, random
-
-from flax import nn
 
 from jax.scipy.linalg import expm
 
@@ -19,7 +17,7 @@ Flow = Any
 class DenseFlow:
   kernel_init: Initializer = nn.linear.default_kernel_init
   bias_init: Initializer = nn.initializers.zeros
-  
+
   def params(self, scope: Scope, features: int):
     kernel = scope.param('kernel', self.kernel_init, (features, features))
     bias = scope.param('bias', self.bias_init, (features,))

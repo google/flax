@@ -1,11 +1,9 @@
-from flax.core import Scope, init, apply, lift
+from flax.core import Scope, init, apply, lift, nn
 from jax import numpy as jnp, random
 
-from flax import nn, struct
+from flax import struct
 
-from jax.scipy.linalg import expm
-
-from dataclasses import dataclass, InitVar
+from dataclasses import dataclass
 from typing import Any, Callable, Sequence, NamedTuple, Any
 
 

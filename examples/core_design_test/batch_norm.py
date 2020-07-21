@@ -1,6 +1,5 @@
-from flax.core import Scope, init, apply
+from flax.core import Scope, init, apply, nn
 
-from flax import nn
 from jax import random
 
 # batch norm is in nn/normalization.py
