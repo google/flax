@@ -19,10 +19,14 @@ import random
 from absl import app
 from absl import flags
 from absl import logging
+from functools import partial
 
 from flax import jax_utils
-from flax import nn
+from flax import linen as nn
 from flax import optim
+from flax.core import Scope, init, apply, unfreeze, lift
+
+from typing import Any, Callable, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -40,6 +44,9 @@ flags.DEFINE_integer(
     'batch_size', default=128, help=('Batch size for training.'))
 
 flags.DEFINE_integer(
+    'hidden_size', default=128, help=('Hidden size of the LSTM.'))
+
+flags.DEFINE_integer(
     'num_train_steps', default=10000, help=('Number of train steps.'))
 
 flags.DEFINE_integer(
@@ -52,6 +59,11 @@ flags.DEFINE_integer(
     default=3,
     help=('Maximum length of a single input digit.'))
 
+
+PRNGKey = Any
+Shape = Tuple[int]
+Dtype = Any  # this could be a real type?
+Array = Any
 
 class CharacterTable(object):
   """Encode/decodes between strings and integer representations."""
@@ -151,17 +163,24 @@ def mask_sequences(sequence_batch, lengths):
 
 class Encoder(nn.Module):
   """LSTM encoder, returning state after EOS is input."""
+  eos_id: int = 1
+  hidden_size: int = 512
 
+<<<<<<< HEAD
+  def __call__(self, inputs):
+=======
   @nn.compact
   def apply(self, inputs, eos_id=1, hidden_size=512):
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
-
-    lstm_cell = nn.LSTMCell.shared(name='lstm')
+    lstm_cell = nn.LSTMCell(self, name='lstm')
+    # TODO(marcvanzee): Rewrite this uinsg lift.scan to ensure rngs work
+    # correctly within the loop.
     init_lstm_state = nn.LSTMCell.initialize_carry(
-        nn.make_rng(),
+        self.make_rng('lstm'),
         (batch_size,),
-        hidden_size)
+        self.hidden_size)
 
     def encode_step_fn(carry, x):
       lstm_state, is_eos = carry
@@ -173,17 +192,12 @@ class Encoder(nn.Module):
       carried_lstm_state = tuple(
           select_carried_state(*s) for s in zip(new_lstm_state, lstm_state))
       # Update `is_eos`.
-      is_eos = jnp.logical_or(is_eos, x[:, eos_id])
+      is_eos = jnp.logical_or(is_eos, x[:, self.eos_id])
       return (carried_lstm_state, is_eos), y
-
-    init_carry = (init_lstm_state, jnp.zeros(batch_size, dtype=np.bool))
-    if self.is_initializing():
-      # initialize parameters before scan
-      encode_step_fn(init_carry, inputs[:, 0])
 
     (final_state, _), _ = jax_utils.scan_in_dim(
         encode_step_fn,
-        init=init_carry,
+        init=(init_lstm_state, jnp.zeros(batch_size, dtype=np.bool)),
         xs=inputs,
         axis=1)
     return final_state
@@ -191,39 +205,57 @@ class Encoder(nn.Module):
 
 class Decoder(nn.Module):
   """LSTM decoder."""
+  init_state: Tuple[Any]
+  teacher_force: bool = False
 
+<<<<<<< HEAD
+  def __call__(self, inputs):
+=======
   @nn.compact
   def apply(self, init_state, inputs, teacher_force=False):
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
-    lstm_cell = nn.LSTMCell.shared(name='lstm')
-    projection = nn.Dense.shared(features=vocab_size, name='projection')
+    lstm_cell = nn.LSTMCell(self, name='lstm')
+    projection = nn.Dense(self, features=vocab_size, name='projection')
 
     def decode_step_fn(carry, x):
       rng, lstm_state, last_prediction = carry
       carry_rng, categorical_rng = jax.random.split(rng, 2)
-      if not teacher_force:
+      if not self.teacher_force:
         x = last_prediction
       lstm_state, y = lstm_cell(lstm_state, x)
       logits = projection(y)
       predicted_tokens = jax.random.categorical(categorical_rng, logits)
       prediction = onehot(predicted_tokens, vocab_size)
       return (carry_rng, lstm_state, prediction), (logits, prediction)
-    init_carry = (nn.make_rng(), init_state, inputs[:, 0])
-
-    if self.is_initializing():
-      # initialize parameters before scan
-      decode_step_fn(init_carry, inputs[:, 0])
 
     _, (logits, predictions) = jax_utils.scan_in_dim(
         decode_step_fn,
-        init=init_carry,  # rng, lstm_state, last_pred
+        init=(self.make_rng('lstm'), self.init_state, inputs[:, 0]),
         xs=inputs,
         axis=1)
     return logits, predictions
 
 
 class Seq2seq(nn.Module):
+<<<<<<< HEAD
+  """Sequence-to-sequence class using encoder/decoder architecture.
+
+  Attributes:
+    teacher_force: bool, whether to use `decoder_inputs` as input to the
+        decoder at every step. If False, only the first input is used, followed
+        by samples taken from the previous output logits.
+    eos_id: int, the token signaling when the end of a sequence is reached.
+    hidden_size: int, the number of hidden dimensions in the encoder and
+      decoder LSTMs.
+  """
+  teacher_force: bool = True
+  eos_id: int = 1
+  hidden_size: int = 512
+
+  def __call__(self, encoder_inputs, decoder_inputs):
+=======
   """Sequence-to-sequence class using encoder/decoder architecture."""
 
   def _create_modules(self, eos_id, hidden_size):
@@ -239,10 +271,10 @@ class Seq2seq(nn.Module):
             teacher_force=True,
             eos_id=1,
             hidden_size=512):
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
     """Run the seq2seq model.
 
     Args:
-      rng_key: key for seeding the random numbers.
       encoder_inputs: padded batch of input sequences to encode, shaped
         `[batch_size, max(encoder_input_lengths), vocab_size]`.
       decoder_inputs: padded batch of expected decoded sequences for teacher
@@ -251,44 +283,34 @@ class Seq2seq(nn.Module):
         forced into the model and samples are used for the following inputs. The
         second dimension of this tensor determines how many steps will be
         decoded, regardless of the value of `teacher_force`.
-      teacher_force: bool, whether to use `decoder_inputs` as input to the
-        decoder at every step. If False, only the first input is used, followed
-        by samples taken from the previous output logits.
-      eos_id: int, the token signaling when the end of a sequence is reached.
-      hidden_size: int, the number of hidden dimensions in the encoder and
-        decoder LSTMs.
     Returns:
       Array of decoded logits.
     """
-    encoder, decoder = self._create_modules(eos_id, hidden_size)
-
     # Encode inputs
-    init_decoder_state = encoder(encoder_inputs)
+    init_decoder_state = Encoder(
+        self, eos_id=self.eos_id, hidden_size=self.hidden_size)(
+            encoder_inputs)
     # Decode outputs.
-    logits, predictions = decoder(
-        init_decoder_state,
-        decoder_inputs[:, :-1],
-        teacher_force=teacher_force)
+    logits, predictions = Decoder(
+        self, init_state=init_decoder_state, teacher_force=self.teacher_force)(
+            decoder_inputs[:, :-1])
 
     return logits, predictions
 
 
-def create_model():
+def model(teacher_force=True):
+  return Seq2seq(parent=None, eos_id=CTABLE.eos_id, teacher_force=teacher_force,
+                 hidden_size=FLAGS.hidden_size)
+
+
+def get_param(key):
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size
-  _, initial_params = Seq2seq.partial(eos_id=CTABLE.eos_id).init_by_shape(
-      nn.make_rng(),
-      [((1, get_max_input_len(), vocab_size), jnp.float32),
-       ((1, get_max_output_len(), vocab_size), jnp.float32)])
-  model = nn.Model(Seq2seq, initial_params)
-  return model
-
-
-def create_optimizer(model, learning_rate):
-  """Creates an Adam optimizer for @model."""
-  optimizer_def = optim.Adam(learning_rate=learning_rate)
-  optimizer = optimizer_def.create(model)
-  return optimizer
+  encoder_shape = jnp.ones((1, get_max_input_len(), vocab_size), jnp.float32)
+  decoder_shape = jnp.ones((1, get_max_output_len(), vocab_size), jnp.float32)
+  return model().initialized({
+      'param': key, 'lstm': key
+  }, encoder_shape, decoder_shape).variables.param
 
 
 def get_examples(num_examples):
@@ -338,16 +360,19 @@ def compute_metrics(logits, labels):
 
 
 @jax.jit
-def train_step(optimizer, batch, rng):
+def train_step(optimizer, batch):
   """Train one step."""
   labels = batch['answer'][:, 1:]  # remove '=' start token
 
-  def loss_fn(model):
+  def loss_fn(params):
     """Compute cross-entropy loss."""
-    with nn.stochastic(rng):
-      logits, _ = model(batch['query'], batch['answer'])
+    logits, _ = model().apply({'param': params},
+                              batch['query'],
+                              batch['answer'],
+                              rngs={'lstm': jax.random.PRNGKey(0)})
     loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
     return loss, logits
+
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
@@ -363,21 +388,23 @@ def log_decode(question, inferred, golden):
 
 
 @jax.jit
-def decode(model, inputs, rng):
+def decode(params, inputs):
   """Decode inputs."""
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], get_max_output_len(), 1))
-  with nn.stochastic(rng):
-    _, predictions = model(inputs, init_decoder_inputs, teacher_force=False)
+  _, predictions = model(teacher_force=False).apply({'param': params},
+                                                    inputs,
+                                                    init_decoder_inputs,
+                                                    rngs={'lstm': jax.random.PRNGKey(0)})
   return predictions
 
 
-def decode_batch(model, batch_size):
+def decode_batch(params, batch_size):
   """Decode and log results for a batch."""
   batch = get_batch(batch_size)
   inputs, outputs = batch['query'], batch['answer'][:, 1:]
-  inferred = decode(model, inputs, nn.make_rng())
+  inferred = decode(params, inputs)
   questions = decode_onehot(inputs)
   infers = decode_onehot(inferred)
   goldens = decode_onehot(outputs)
@@ -387,21 +414,117 @@ def decode_batch(model, batch_size):
 
 def train_model():
   """Train for a fixed number of steps and decode during training."""
-  with nn.stochastic(jax.random.PRNGKey(0)):
-    model = create_model()
-    optimizer = create_optimizer(model, FLAGS.learning_rate)
-    for step in range(FLAGS.num_train_steps):
-      batch = get_batch(FLAGS.batch_size)
-      optimizer, metrics = train_step(optimizer, batch, nn.make_rng())
-      if step % FLAGS.decode_frequency == 0:
-        logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                     metrics['loss'], metrics['accuracy'] * 100)
-        decode_batch(optimizer.target, 5)
+  param = get_param(jax.random.PRNGKey(0))
+  optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(param)
+  for step in range(FLAGS.num_train_steps):
+    batch = get_batch(FLAGS.batch_size)
+    optimizer, metrics = train_step(optimizer, batch)
+    if step % FLAGS.decode_frequency == 0:
+      logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
+                   metrics['loss'], metrics['accuracy'] * 100)
+      decode_batch(optimizer.target, 5)
   return optimizer.target
 
 
+# def lstm(scope, x, ...):
+#   carry_shape = ...
+#   carry = scope.variable('memory', 'carry', carry_init_fn, carry_shape)
+#   new_carry = lstm_logic(carry.value)
+#   carry.value = new_carry
+#   return ...
+
+class LSTMCellStandard(nn.Module):
+  gate_fn: Callable = nn.activation.sigmoid
+  activation_fn: Callable = nn.activation.tanh
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.linear.default_kernel_init
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.orthogonal()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.zeros
+
+  def __call__(self, carry, inputs):
+    c, h = carry
+    hidden_features = h.shape[-1]
+    # input and recurrent layers are summed so only one needs a bias.
+    dense_h = partial(nn.linear.Dense,
+                      self,
+                      features=hidden_features,
+                      use_bias=True,
+                      kernel_init=self.recurrent_kernel_init,
+                      bias_init=self.bias_init)
+    dense_i = partial(nn.linear.Dense,
+                      self,
+                      features=hidden_features,
+                      use_bias=False,
+                      kernel_init=self.kernel_init)
+    i = self.gate_fn(dense_i(name='ii')(inputs) + dense_h(name='hi')(h))
+    f = self.gate_fn(dense_i(name='if')(inputs) + dense_h(name='hf')(h))
+    g = self.activation_fn(dense_i(name='ig')(inputs) + dense_h(name='hg')(h))
+    o = self.gate_fn(dense_i(name='io')(inputs) + dense_h(name='ho')(h))
+    new_c = f * c + i * g
+    new_h = o * self.activation_fn(new_c)
+    return (new_c, new_h), new_h
+
+
+def initialize_standard(rng, batch_dims, size, init_fn=nn.initializers.zeros):
+  key1, key2 = jax.random.split(rng)
+  mem_shape = batch_dims + (size,)
+  return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
+
+
+def lstm_logic(carry):
+  return carry * 2
+
+def initialize_new(key, batch_dims, size, init_fn=nn.initializers.zeros):
+  mem_shape = batch_dims + (size,)
+  return init_fn(key, mem_shape), init_fn(key, mem_shape)
+
+
+def lstm_cell_new(scope, x):
+  # carry = scope.variable('memory', 'carry', initialize_new, (1,), 8)
+  carry = scope.param('carry', initialize_new, (1,), 8)
+  new_carry = lstm_logic(carry.value)
+  carry.value = new_carry
+  return x
+
+
+def new(batch, batch_size, hidden_size):
+  input_init = jnp.ones(batch.shape, jnp.float32)
+  y, params = init(lstm_cell_new)(jax.random.PRNGKey(0), input_init)
+  x = lift.scan(lstm_cell, variable_modes={'param': 'broadcast', 'state': 'carry'}, split_rngs={'param': False, 'dropout': True})
+  print(x)
+
+
+def standard(batch, batch_size, hidden_size):
+  c, h = initialize_standard(jax.random.PRNGKey(0), (batch_size,), hidden_size)
+  # shapes of both c and h are: (batch_size, hidden_size)
+
+  carry_init = (jnp.ones(c.shape, jnp.float32), jnp.ones(h.shape, jnp.float32))
+  input_init = jnp.ones(batch.shape, jnp.float32)
+
+
+  lstm_cell = LSTMCellStandard(parent=None).initialized({'param': jax.random.PRNGKey(0)},
+      carry_init, input_init)
+
+  (final_state, _), _ = jax_utils.scan_in_dim(
+      lstm_cell,
+      init=(c, h),
+      xs=batch,
+      axis=1)
+  print('final_state', final_state)
+
+
+def train_model2():
+  hidden_size = 8
+  batch_size = 1
+
+  query, _ = zip(*get_examples(batch_size))
+  print('query', query)
+  print('onehot', onehot)
+
+  new(encode_onehot(query, get_max_input_len()), batch_size, hidden_size)
+
+
 def main(_):
-  _ = train_model()
+  _ = train_model2()
 
 
 if __name__ == '__main__':
