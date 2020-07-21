@@ -102,6 +102,7 @@ class ModuleTest(absltest.TestCase):
       def _mydense(self, x):
         return Dense(self, 3)(x)
     class Top(nn.Module):
+      @compact
       def __call__(self, x):
         mlp = MLP(self)
         y = mlp(x)
@@ -187,7 +188,7 @@ class ModuleTest(absltest.TestCase):
     scope = Scope({}, {'param': rngkey})
     y = DummyModule(scope, x.shape)(x)
     params = scope.variables()['param']
-    y2 = Dummy=Module(scope.rewound(), x.shape)(x)
+    y2 = DummyModule(scope.rewound(), x.shape)(x)
     onp.testing.assert_allclose(y, y2)
     onp.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
@@ -199,11 +200,12 @@ class ModuleTest(absltest.TestCase):
         return x + bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
-    with self.assertRaisesRegex(ValueError, 'must initialize.*setup'):
+    with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       y = DummyModule(scope)(x)
 
   def test_init_outside_call(self):
     class Dummy(nn.Module):
+      @compact
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
@@ -212,7 +214,7 @@ class ModuleTest(absltest.TestCase):
         return x + bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
-    with self.assertRaisesRegex(ValueError, 'bias.*__call__'):
+    with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       y = Dummy(scope).foo(x)
 
   def test_setup_call_var_collision(self):
@@ -349,16 +351,34 @@ class ModuleTest(absltest.TestCase):
       def call2(self):
         pass
 
-    scope = Scope()
+    scope = Scope(variables={})
 
     # NOTE: Currently, we only expect an error when we call both annotated methods.
     # We could make the error fire during module construction by annotating
     # the methods and catching the error during __post_init__. Or we could
     # even check earlier and catch during __init_subclass__.
-    dummy = Dummy()
+    dummy = Dummy(scope)
     dummy.call1()
     with self.assertRaisesRegex(RuntimeError, '@compact'):
       dummy.call2()
+
+  def test_only_one_compact_method_subclass(self):
+    class Dummy(nn.Module):
+      @nn.compact
+      def __call__(self):
+        pass
+    class SubDummy(Dummy):
+      @nn.compact
+      def __call__(self):
+        super().__call__()
+
+    scope = Scope(variables={})
+
+    subdummy = SubDummy(scope)
+    # Make sure the @compact annotation is valid on both base class and subclass, as long
+    # as its on the same method.
+    subdummy()
+
 
 if __name__ == '__main__':
   absltest.main()

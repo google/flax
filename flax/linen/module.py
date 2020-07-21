@@ -67,13 +67,17 @@ def compact(fun):
   """Allow inline submodules and parameters within a single Module method."""
   @functools.wraps(fun)
   def wrapped_method(self, *args, **kwargs):
-    if getattr(self, '_compact_method', fun) != fun:
+    # Store compact method *name* rather than reference, so that subclassing
+    # a module with a @compact __init__ method is still possible 
+    if getattr(self, '_compact_method', fun.__name__) != fun.__name__:
       raise RuntimeError(
         'Only one method per class can be @compact. You can remove @compact and define '
         'submodules and variables in setup(), or use two separate modules.')
-      object.__setattr__(self, '_compact_method', fun)
+    object.__setattr__(self, '_compact_method', fun.__name__)
+
     if self.scope is None:
       raise ValueError("Can't call methods on orphaned modules")
+
     object.__setattr__(self, '_in_compact_method', True)
     try:
       return fun(self, *args, **kwargs)
@@ -101,7 +105,7 @@ def wrap_setup(fun):
 class Module:
   """Base Module Class"""
   # class defaults -- Note: these __must not__ be made annotations!
-  _multimethod_module = False
+  _in_compact_method = False
   _in_call = False
   _in_setup = False
   _last_varname = None
