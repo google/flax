@@ -108,7 +108,6 @@ def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs)
 named_call = functools.partial(decorator_lift_transform, lift.named_call)
 
 vmap = functools.partial(lift_transform, lift.vmap)
-scan = functools.partial(lift_transform, lift.scan)
 jit = functools.partial(lift_transform, lift.jit)
 remat = functools.partial(lift_transform, lift.remat)
 
@@ -152,6 +151,59 @@ def lift_instance_method(transform, target, *trafo_args, **trafo_kwargs):
     return wrapped_fn
 
 vmap_instance_method = functools.partial(lift_instance_method, lift.vmap)
-scan_instance_method = functools.partial(lift_instance_method, lift.scan)
 jit_instance_method = functools.partial(lift_instance_method, lift.jit)
 remat_instance_method = functools.partial(lift_instance_method, lift.remat)
+
+
+# Scan specific lifting
+# TODO(levskaya): when using params in scan mode, init works, but apply
+#                 then seems busted. investigate and fix...
+def scan(
+    module_class,
+    *trafo_args,
+    methods=None,
+    **trafo_kwargs):
+  # Prepare per-method transform args, kwargs.
+  if methods is None:
+    # Default case, just transform __call__
+    class_trafo_args = {'__call__': (trafo_args, trafo_kwargs)}
+  elif isinstance(methods, (list, tuple)):
+    # Transform every method in methods with given args, kwargs.
+    class_trafo_args = {m: (trafo_args, trafo_kwargs) for m in methods}
+  elif isinstance(methods, dict):
+    # Pass different trafo args per each method.
+    assert trafo_args == () and trafo_kwargs == {}, (
+        f"""When passing different scan args per method,
+        all args must be passed via methods kwarg.""")
+    class_trafo_args = {k: ((), v) for k, v in methods.items()}
+
+  # Build the actual transformed class.
+  transformed_fns = {}
+  # for each of the specified methods:
+  for fn_name, fn_trafo_args in class_trafo_args.items():
+    # get existing unbound method from class
+    fn = getattr(module_class, fn_name)
+    trafo_args, trafo_kwargs = fn_trafo_args
+    # we need to create a scope-function from our class for the given method
+    @functools.wraps(fn)
+    def wrapped_fn(self, *args, **kwargs):
+      # make a scope-function to transform
+      def scope_fn(scope, *args, **kwargs):
+        # make a clone of self using its arguments
+        attrs = {f.name: getattr(self, f.name)
+                 for f in dataclasses.fields(self) if f.name != 'parent'}
+        # we reference module_class, not self.__class__ to avoid infinite loop
+        cloned = module_class(parent=scope, **attrs)
+        res = getattr(cloned, fn_name)(*args, **kwargs)
+        # preserve submodule-tree stripped of scopes/tracers for introspection
+        object.__setattr__(self, 'children', clean_clone(cloned).children)
+        return res
+      # here we apply the given lifting transform to the scope-ingesting fn
+      ret = lift.scan(scope_fn, self.scope, *args, **trafo_kwargs)
+      # ret = trafo_fn(self.scope, *args, **kwargs)
+      return ret
+    transformed_fns[fn_name] = wrapped_fn
+  # construct new dynamic class w. transformed methods
+  return type('Scan' + module_class.__name__,
+              (module_class,),
+              transformed_fns)
