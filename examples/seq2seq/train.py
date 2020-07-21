@@ -166,7 +166,12 @@ class Encoder(nn.Module):
   eos_id: int = 1
   hidden_size: int = 512
 
+<<<<<<< HEAD
   def __call__(self, inputs):
+=======
+  @nn.compact
+  def apply(self, inputs, eos_id=1, hidden_size=512):
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
     lstm_cell = nn.LSTMCell(self, name='lstm')
@@ -203,7 +208,12 @@ class Decoder(nn.Module):
   init_state: Tuple[Any]
   teacher_force: bool = False
 
+<<<<<<< HEAD
   def __call__(self, inputs):
+=======
+  @nn.compact
+  def apply(self, init_state, inputs, teacher_force=False):
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
     lstm_cell = nn.LSTMCell(self, name='lstm')
@@ -229,6 +239,7 @@ class Decoder(nn.Module):
 
 
 class Seq2seq(nn.Module):
+<<<<<<< HEAD
   """Sequence-to-sequence class using encoder/decoder architecture.
 
   Attributes:
@@ -244,6 +255,23 @@ class Seq2seq(nn.Module):
   hidden_size: int = 512
 
   def __call__(self, encoder_inputs, decoder_inputs):
+=======
+  """Sequence-to-sequence class using encoder/decoder architecture."""
+
+  def _create_modules(self, eos_id, hidden_size):
+    encoder = Encoder.partial(
+        eos_id=eos_id, hidden_size=hidden_size).shared(name='encoder')
+    decoder = Decoder.shared(name='decoder')
+    return encoder, decoder
+
+  @nn.compact
+  def apply(self,
+            encoder_inputs,
+            decoder_inputs,
+            teacher_force=True,
+            eos_id=1,
+            hidden_size=512):
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
     """Run the seq2seq model.
 
     Args:

@@ -32,6 +32,10 @@ class ResidualBlock(nn.Module):
   train: bool = True
   dtype: Any = jnp.float32
 
+<<<<<<< HEAD
+=======
+  @nn.compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self, x):
     needs_projection = x.shape[-1] != self.filters * 4 or self.strides != (1, 1)
     batch_norm = partial(nn.BatchNorm, self, use_running_average=not self.train,
@@ -65,6 +69,10 @@ class ResNet(nn.Module):
   train: bool = True
   dtype: Any = jnp.float32
 
+<<<<<<< HEAD
+=======
+  @nn.compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self, x):
     if self.num_layers not in _block_size_options:
       raise ValueError('Please provide a valid number of layers')

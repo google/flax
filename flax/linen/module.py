@@ -61,6 +61,7 @@ def all_names_on_object(x):
     nameset = nameset.union(set(cls.__dict__.keys()))
   return nameset
 
+<<<<<<< HEAD
 # Method wrapping of __call__() and setup()
 # -----------------------------------------------------------------------------
 def wrap_call(fun):
@@ -73,11 +74,39 @@ def wrap_call(fun):
       return fun(self, *args, **kwargs)
     finally:
       object.__setattr__(self, '_in_call', False)
+=======
+# Method wrapping of "compact methods" and setup()
+# -----------------------------------------------------------------------------
+def compact(fun):
+  """Allow inline submodules and parameters within a single Module method."""
+  @functools.wraps(fun)
+  def wrapped_method(self, *args, **kwargs):
+    # Store compact method *name* rather than reference, so that subclassing
+    # a module with a @compact __init__ method is still possible 
+    if getattr(self, '_compact_method', fun.__name__) != fun.__name__:
+      raise RuntimeError(
+        'Only one method per class can be @compact. You can remove @compact and define '
+        'submodules and variables in setup(), or use two separate modules.')
+    object.__setattr__(self, '_compact_method', fun.__name__)
+
+    if self.scope is None:
+      raise ValueError("Can't call methods on orphaned modules")
+
+    object.__setattr__(self, '_in_compact_method', True)
+    try:
+      return fun(self, *args, **kwargs)
+    finally:
+      object.__setattr__(self, '_in_compact_method', False)
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
       object.__setattr__(self, '_reservations', set())
       object.__setattr__(self, '_autoname_cursor', dict())
       object.__setattr__(self, '_last_varname', None)
       object.__setattr__(self, 'scope', self.scope.rewound())
+<<<<<<< HEAD
   return wrapped_call_method
+=======
+  return wrapped_method
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
 
 def wrap_setup(fun):
   @functools.wraps(fun)
@@ -95,7 +124,11 @@ def wrap_setup(fun):
 class Module:
   """Base Module Class"""
   # class defaults -- Note: these __must not__ be made annotations!
+<<<<<<< HEAD
   _multimethod_module = False
+=======
+  _in_compact_method = False
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   _in_call = False
   _in_setup = False
   _last_varname = None
@@ -113,8 +146,11 @@ class Module:
     cls._add_parent_and_name_attrs()
     dataclasses.dataclass(cls)
     cls.setup = wrap_setup(cls.setup)
+<<<<<<< HEAD
     if hasattr(cls, '__call__'):
       cls.__call__ = wrap_call(cls.__call__)
+=======
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
 
   @classmethod
   def _add_parent_and_name_attrs(cls):
@@ -210,8 +246,13 @@ class Module:
       if self.parent._in_setup and self.name is None:
         return
       if not self.parent._initialization_allowed:
+<<<<<<< HEAD
         raise ValueError("For multimethod Modules you must initialize any "
                          "submodules inside the setup() function.")
+=======
+        raise ValueError(
+          'Submodules must be defined in `setup()` or in a method wrapped in `@compact`')
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
       # Autonaming of submodules.
       if self.name is None:
         prefix = f"{self.__class__.__name__}"
@@ -254,7 +295,11 @@ class Module:
 
   @property
   def _initialization_allowed(self):
+<<<<<<< HEAD
     return self._in_setup or (self._in_call and not self._multimethod_module)
+=======
+    return self._in_setup or self._in_compact_method
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
 
   def clone(self, **updates):
     attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
@@ -275,6 +320,7 @@ class Module:
 
   def variable(self, kind: str, name: str, init_fn, *init_args):
     if not self._initialization_allowed:
+<<<<<<< HEAD
       if self._in_call:
         raise ValueError(
             'For multi-method Modules, you must initialize variables'
@@ -283,6 +329,10 @@ class Module:
         raise ValueError(
             f'You can only do lazy-initialization of {name} '
             f'from the `__call__` method.')
+=======
+      raise ValueError(
+        'Variables must be initialized in `setup()` or in a method wrapped in `@compact`')
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
     if self._name_taken(name):
       raise ValueError(
           f'Name {name} already in use in {self.__class__.__name__}.')
@@ -376,7 +426,10 @@ class Module:
     """Create and return initialized data for module with rngs."""
     y, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
     return v_out
+<<<<<<< HEAD
 
 
 class MultiModule(Module):
   _multimethod_module = True
+=======
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c

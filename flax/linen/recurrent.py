@@ -28,7 +28,11 @@ import abc
 from functools import partial
 from typing import (Any, Callable, Tuple)
 
+<<<<<<< HEAD
 from .module import Module
+=======
+from .module import Module, compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
 from . import activation
 from . import initializers
 from . import linear
@@ -92,6 +96,10 @@ class LSTMCell(RNNCellBase):
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
+<<<<<<< HEAD
+=======
+  @compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self, carry, inputs):
     r"""A long short-term memory (LSTM) cell.
 
@@ -174,6 +182,10 @@ class GRUCell(RNNCellBase):
       initializers.orthogonal())
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
+<<<<<<< HEAD
+=======
+  @compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self, carry, inputs):
     """Gated recurrent unit (GRU) cell.
 

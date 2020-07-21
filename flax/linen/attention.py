@@ -28,7 +28,11 @@ import numpy as np
 
 from .linear import default_kernel_init
 from .linear import DenseGeneral
+<<<<<<< HEAD
 from .module import Module
+=======
+from .module import Module, compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
 from . import initializers
 
 
@@ -204,6 +208,10 @@ class MultiHeadDotProductAttention(Module):
   attention_fn: Callable[[Array, Array, Array], Array] = dot_product_attention
   decode: bool = False
 
+<<<<<<< HEAD
+=======
+  @compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self,
                inputs_q,
                inputs_kv,
@@ -390,6 +398,10 @@ class MultiHeadDotProductAttention(Module):
 class SelfAttention(MultiHeadDotProductAttention):
   """Self-attention special case of multi-head dot-product attention."""
 
+<<<<<<< HEAD
+=======
+  @compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self,
                inputs_q,
                padding_mask=None,

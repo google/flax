@@ -20,7 +20,11 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
+<<<<<<< HEAD
 from flax.linen import Module
+=======
+from flax.linen import Module, compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
 
 
 PRNGKey = Any
@@ -72,6 +76,10 @@ class BatchNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
 
+<<<<<<< HEAD
+=======
+  @compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self, x):
     """Normalizes the input using batch statistics.
 
@@ -158,6 +166,10 @@ class LayerNorm(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
 
+<<<<<<< HEAD
+=======
+  @compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self, x):
     """Applies layer normalization on the input.
 
@@ -216,6 +228,10 @@ class GroupNorm(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
 
+<<<<<<< HEAD
+=======
+  @compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self, x):
     """Applies group normalization to the input (arxiv.org/abs/1803.08494).
 

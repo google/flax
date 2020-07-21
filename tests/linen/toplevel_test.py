@@ -15,6 +15,10 @@ from flax.core import Scope
 jax.config.parse_flags_with_absl()
 
 class Dummy(nn.Module):
+<<<<<<< HEAD
+=======
+  @nn.compact
+>>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
   def __call__(self):
     self.param('foo', lambda rng: 1)
 
