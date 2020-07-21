@@ -68,7 +68,7 @@ def compact(fun):
   @functools.wraps(fun)
   def wrapped_method(self, *args, **kwargs):
     # Store compact method *name* rather than reference, so that subclassing
-    # a module with a @compact __init__ method is still possible 
+    # a module with a @compact __init__ method is still possible
     if getattr(self, '_compact_method', fun.__name__) != fun.__name__:
       raise RuntimeError(
         'Only one method per class can be @compact. You can remove @compact and define '
@@ -276,7 +276,7 @@ class Module:
 
   # TODO: Consider whether this is a helpful abstraction, and think about naming.
   # See its use in design_test/linen/weight_std.py
-  def attached(self, variables={}, rngs={}):
+  def materialized(self, variables={}, rngs={}):
     assert self.scope is None, ("Can't attach a module twice."
                                 " Maybe you want to clone first?")
     return self.clone(parent=Scope(variables, rngs))
