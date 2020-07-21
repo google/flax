@@ -5,7 +5,7 @@
 from typing import TypeVar, Mapping, Dict
 
 import jax
-
+from flax import serialization
 
 K = TypeVar('K')
 V = TypeVar('V')
@@ -75,3 +75,7 @@ def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
   for key, value in x.items():
     temp[key] = unfreeze(value)
   return temp
+
+
+serialization.register_serialization_state(
+    FrozenDict, unfreeze, lambda _, x: freeze(x))
