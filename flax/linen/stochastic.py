@@ -20,7 +20,7 @@ from jax import lax
 from jax import random
 import jax.numpy as jnp
 
-from flax.linen import Module
+from flax.linen import Module, compact
 
 class Dropout(Module):
   """Create a dropout layer.
@@ -29,6 +29,7 @@ class Dropout(Module):
       rate: the dropout probability.  (_not_ the keep rate!)
     """
   rate: float
+  @compact
   def __call__(self, inputs, deterministic=False, rng=None):
     """Applies a random dropout mask to the input.
 

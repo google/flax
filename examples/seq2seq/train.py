@@ -152,6 +152,7 @@ def mask_sequences(sequence_batch, lengths):
 class Encoder(nn.Module):
   """LSTM encoder, returning state after EOS is input."""
 
+  @nn.compact
   def apply(self, inputs, eos_id=1, hidden_size=512):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
@@ -191,6 +192,7 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
   """LSTM decoder."""
 
+  @nn.compact
   def apply(self, init_state, inputs, teacher_force=False):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
@@ -230,6 +232,7 @@ class Seq2seq(nn.Module):
     decoder = Decoder.shared(name='decoder')
     return encoder, decoder
 
+  @nn.compact
   def apply(self,
             encoder_inputs,
             decoder_inputs,

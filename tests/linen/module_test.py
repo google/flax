@@ -25,6 +25,7 @@ import numpy as onp
 from typing import Any, Tuple
 
 from flax import linen as nn
+from flax.linen import compact
 from flax.core import Scope
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -32,12 +33,14 @@ jax.config.parse_flags_with_absl()
 
 
 class DummyModule(nn.Module):
+  @compact
   def __call__(self, x):
     bias = self.param('bias', initializers.ones, x.shape)
     return x + bias
 
 class Dense(nn.Module):
   features: int
+  @compact
   def __call__(self, x):
     kernel = self.param('kernel',
                         initializers.lecun_normal(),
@@ -71,11 +74,12 @@ class ModuleTest(absltest.TestCase):
 
   def test_util_fun(self):
     class MLP(nn.Module):
+      @compact
       def __call__(self, x):
-        x = self.mydense(x)
-        x = self.mydense(x)
+        x = self._mydense(x)
+        x = self._mydense(x)
         return x
-      def mydense(self, x):
+      def _mydense(self, x):
         return Dense(self, 3)(x)
     x = jnp.ones((10,))
     scope = Scope({}, {'param': rngkey})
@@ -90,11 +94,12 @@ class ModuleTest(absltest.TestCase):
 
   def test_nested_module_reuse(self):
     class MLP(nn.Module):
+      @compact
       def __call__(self, x):
-        x = self.mydense(x)
-        x = self.mydense(x)
+        x = self._mydense(x)
+        x = self._mydense(x)
         return x
-      def mydense(self, x):
+      def _mydense(self, x):
         return Dense(self, 3)(x)
     class Top(nn.Module):
       def __call__(self, x):
@@ -144,6 +149,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_submodule_attr(self):
     class Inner(nn.Module):
+      @compact
       def __call__(self):
         self.param('x', lambda rng: 40)
 
@@ -170,8 +176,8 @@ class ModuleTest(absltest.TestCase):
     # Wrapper submodule, not the Outer submodule.
     self.assertEqual(40, scope.variables()['param']['inner']['x'])
 
-  def test_multi_module(self):
-    class DummyMultiModule(nn.MultiModule):
+  def test_param_in_setup(self):
+    class DummyModule(nn.Module):
       xshape: Tuple[int]
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -179,22 +185,22 @@ class ModuleTest(absltest.TestCase):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
-    y = DummyMultiModule(scope, x.shape)(x)
+    y = DummyModule(scope, x.shape)(x)
     params = scope.variables()['param']
-    y2 = DummyMultiModule(scope.rewound(), x.shape)(x)
+    y2 = Dummy=Module(scope.rewound(), x.shape)(x)
     onp.testing.assert_allclose(y, y2)
     onp.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
-  def test_multi_module_init_outside_setup(self):
-    class DummyMultiModule(nn.MultiModule):
+  def test_init_outside_setup_without_compact(self):
+    class DummyModule(nn.Module):
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'must initialize.*setup'):
-      y = DummyMultiModule(scope)(x)
+      y = DummyModule(scope)(x)
 
   def test_init_outside_call(self):
     class Dummy(nn.Module):
@@ -209,22 +215,12 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaisesRegex(ValueError, 'bias.*__call__'):
       y = Dummy(scope).foo(x)
 
-  def test_init_in_setup(self):
-    class Dummy(nn.Module):
-      xshape: Tuple[int]
-      def setup(self):
-        self.bias = self.param('bias', initializers.ones, self.xshape)
-      def __call__(self, x):
-        return x + self.bias
-    x = jnp.array([1.])
-    scope = Scope({}, {'param': rngkey})
-    y = Dummy(scope, x.shape)(x)
-
   def test_setup_call_var_collision(self):
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
+      @compact
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + self.bias
@@ -249,8 +245,7 @@ class ModuleTest(absltest.TestCase):
   def test_call_var_collision(self):
     class Dummy(nn.Module):
       xshape: Tuple[int]
-      def setup(self):
-        pass
+      @compact
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, self.xshape)
         bias = self.param('bias', initializers.ones, self.xshape)
@@ -288,6 +283,7 @@ class ModuleTest(absltest.TestCase):
       xshape: Tuple[int]
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
+      @compact
       def __call__(self, x):
         bias = DummyModule(self, name='bias')
         return x + self.bias
@@ -299,6 +295,7 @@ class ModuleTest(absltest.TestCase):
       xshape: Tuple[int]
       def setup(self):
         self.bias = DummyModule(None)
+      @compact
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, self.xshape)
         return x + self.bias
@@ -342,6 +339,26 @@ class ModuleTest(absltest.TestCase):
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'bias exists already'):
       y = Dummy(scope, x.shape)(x)
+
+  def test_only_one_compact_method(self):
+    class Dummy(nn.Module):
+      @compact
+      def call1(self):
+        pass
+      @compact
+      def call2(self):
+        pass
+
+    scope = Scope()
+
+    # NOTE: Currently, we only expect an error when we call both annotated methods.
+    # We could make the error fire during module construction by annotating
+    # the methods and catching the error during __post_init__. Or we could
+    # even check earlier and catch during __init_subclass__.
+    dummy = Dummy()
+    dummy.call1()
+    with self.assertRaisesRegex(RuntimeError, '@compact'):
+      dummy.call2()
 
 if __name__ == '__main__':
   absltest.main()

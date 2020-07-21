@@ -19,7 +19,7 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 
 from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
-from .module import Module, MultiModule
+from .module import Module, compact
 from . import initializers
 
 from jax import lax
@@ -81,6 +81,7 @@ class DenseGeneral(Module):
         raise ValueError('batch_dims %s must be consecutive leading '
                          'dimensions starting from 0.' % str(self.batch_dims))
 
+  @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a linear transformation to the inputs along multiple dimensions.
 
@@ -156,6 +157,7 @@ class Dense(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
+  @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a linear transformation to the inputs along the last dimension.
 
@@ -230,6 +232,7 @@ class Conv(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
+  @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a convolution to the inputs.
 
@@ -304,6 +307,7 @@ class ConvTranspose(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
+  @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a transposed convolution to the inputs. Behaviour mirrors of
     `jax.lax.conv_transpose`.
@@ -340,7 +344,7 @@ default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
                                                    out_axis=0)
 
 
-class Embed(MultiModule):
+class Embed(Module):
   """Embedding Module.
   A parameterized function from integers [0, n) to d-dimensional vectors.
 

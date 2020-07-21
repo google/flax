@@ -17,7 +17,7 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from .module import Module, MultiModule
+from .module import Module, compact
 from .transforms import vmap, scan, remat, jit
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,

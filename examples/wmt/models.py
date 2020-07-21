@@ -98,6 +98,7 @@ class AddPositionEmbs(nn.Module):
   config: TransformerConfig
   posemb_init: Callable = None  # TODO(levskaya) move to config?!
 
+  @nn.compact
   def __call__(self,
                inputs,
                inputs_positions=None):
@@ -160,6 +161,7 @@ class MlpBlock(nn.Module):
   config: TransformerConfig
   out_dim: Optional[int] = None
 
+  @nn.compact
   def __call__(self, inputs):
     """Applies Transformer MlpBlock module."""
     cfg = self.config
@@ -191,6 +193,7 @@ class Encoder1DBlock(nn.Module):
   """
   config: TransformerConfig
 
+  @nn.compact
   def __call__(self,
                inputs,
                inputs_segmentation=None, # REFACTOR
@@ -246,6 +249,7 @@ class EncoderDecoder1DBlock(nn.Module):
   """
   config: TransformerConfig
 
+  @nn.compact
   def __call__(self,
                targets,
                encoded,
@@ -334,6 +338,7 @@ class Encoder(nn.Module):
   config: TransformerConfig
   shared_embedding: Any = None
 
+  @nn.compact
   def __call__(self,
                inputs,
                inputs_positions=None,
@@ -395,6 +400,7 @@ class Decoder(nn.Module):
   config: TransformerConfig
   shared_embedding: Any = None
 
+  @nn.compact
   def __call__(self,
                encoded,
                src_padding_mask,
@@ -476,7 +482,7 @@ class Decoder(nn.Module):
     return logits
 
 
-class Transformer(nn.MultiModule):
+class Transformer(nn.Module):
   """Transformer Model for sequence to sequence translation.
 
   Args:
