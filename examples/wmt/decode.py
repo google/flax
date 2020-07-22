@@ -38,7 +38,7 @@ import jax.numpy as jnp
 import numpy as np
 
 # Constants
-# We assume the default End-of-Sentence token is 2 (SentencePiece).
+# We assume the default End-of-Sentence token id is 2 (SentencePiece).
 EOS_ID = 2
 # "Effective negative infinity" constant for masking in beam search.
 NEG_INF = np.array(-1.0e7)
