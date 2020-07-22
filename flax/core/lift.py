@@ -18,6 +18,7 @@ from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
 from .scope import Scope, KindFilter, in_kind_filter, group_kinds
+from .named_call import named_call_p
 
 scan_variable_modes = set(['carry', 'broadcast', 'scan', None])
 
@@ -83,8 +84,8 @@ def pack(fn: Callable[..., Any],
         inner_scope.invalidate()
         inner_scope._validate_trace_level()
         mutable_variables = {key: val for key, val
-                              in inner_scope._variables.items()
-                              if not isinstance(val, FrozenDict)}
+                             in inner_scope._variables.items()
+                             if not isinstance(val, FrozenDict)}
         out_variable_groups = group_kinds(
             mutable_variables, tuple(out_variable_filters) + (True,))
         remainder = tuple(out_variable_groups[-1].keys())
@@ -352,11 +353,11 @@ def scan(
       if pv is not None:
         raise ValueError('broadcasted variable has a data dependency on the scan body.')
       out_flat.append(const)
-    broadcast_vars_xs = jax.tree_unflatten(out_tree(), out_flat)
 
     (carry_vars_xs, carry), (scan_vars_xs, ys) = lax.scan(
         body, carry0, xxs, length=length, reverse=reverse)
 
+    broadcast_vars_xs = jax.tree_unflatten(out_tree(), out_flat)
     out_vars_xs = combine(carry_vars_xs, scan_vars_xs, broadcast_vars_xs)
     return (carry, ys), out_vars_xs
 
@@ -453,7 +454,7 @@ def _named_call(f, name):
   def named_f(*args, **kwargs):
     lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
     flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
-    out_flat = jax.core.call_p.bind(flat_f, name=name)
+    out_flat = named_call_p.bind(flat_f, name=name)
     return jax.tree_unflatten(out_tree(), out_flat)
   return named_f
 
