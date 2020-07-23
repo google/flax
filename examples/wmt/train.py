@@ -397,7 +397,7 @@ def initialize_cache(inputs, max_decode_len, config):
   return initial_variables['cache']
 
 
-def predict_step(inputs, params, cache, eos_token, max_decode_len, config,
+def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
                  beam_size=4):
   """Predict translation with fast decoding beam search on a batch."""
   batch_size = inputs.shape[0]
@@ -442,7 +442,7 @@ def predict_step(inputs, params, cache, eos_token, max_decode_len, config,
       tokens_ids_to_logits,
       beam_size=beam_size,
       alpha=0.6,
-      eos_token=eos_token,
+      eos_id=eos_id,
       max_decode_len=max_decode_len)
 
   # Beam search returns [n_batch, n_beam, n_length + 1] with beam dimension
@@ -529,9 +529,9 @@ def main(argv):
       max_eval_length=FLAGS.max_eval_target_length)
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
-  eos_token = 2  # Default Sentencepiece EOS token.
+  eos_id = decode.EOS_ID  # Default Sentencepiece EOS token.
   def decode_tokens(toks):
-    valid_toks = toks[:np.argmax(toks == eos_token) + 1].astype(np.int32)
+    valid_toks = toks[:np.argmax(toks == eos_id) + 1].astype(np.int32)
     return encoder.detokenize(valid_toks).numpy().decode('utf-8')
 
   logging.info('Initializing model, optimizer, and step functions.')
@@ -715,7 +715,7 @@ def main(argv):
       predicted = p_pred_step(pred_batch['inputs'],
                               optimizer.target,
                               cache,
-                              eos_token,
+                              eos_id,
                               FLAGS.max_predict_length)
       predicted = tohost(predicted)
       inputs = tohost(pred_batch['inputs'])

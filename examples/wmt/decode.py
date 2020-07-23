@@ -22,8 +22,8 @@ import jax.numpy as jnp
 import numpy as np
 
 # Constants
-# We assume the default End-of-Sentence token is 1.
-EOS_ID = 1
+# We assume the default End-of-Sentence token id is 2 (SentencePiece).
+EOS_ID = 2
 # "Effective negative infinity" constant for masking in beam search.
 NEG_INF = np.array(-1.0e7)
 
@@ -180,7 +180,7 @@ def beam_search(inputs,
                 tokens_to_logits,
                 beam_size=4,
                 alpha=0.6,
-                eos_token=EOS_ID,
+                eos_id=EOS_ID,
                 max_decode_len=None):
   """Beam search for transformer machine translation.
 
@@ -191,7 +191,7 @@ def beam_search(inputs,
       slices and cache and returning next-token logits and updated cache.
     beam_size: int: number of beams to use in beam search.
     alpha: float: scaling factor for brevity penalty.
-    eos_token: int: end-of-sentence token for target vocabulary.
+    eos_id: int: id of end-of-sentence token for target vocabulary.
     max_decode_len: int: maximum length of decoded translations.
 
   Returns:
@@ -204,7 +204,7 @@ def beam_search(inputs,
   batch_size = inputs.shape[0]
   if max_decode_len is None:
     max_decode_len = inputs.shape[1]
-  end_marker = jnp.array(eos_token)
+  end_marker = jnp.array(eos_id)
 
   # initialize beam search state
   beam_search_init_state = beam_init(batch_size,
