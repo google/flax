@@ -21,7 +21,6 @@ from absl import flags
 from absl import logging
 from functools import partial
 
-from flax import jax_utils
 from flax import linen as nn
 from flax import optim
 from flax.core import Scope, init, apply, unfreeze, lift
@@ -166,19 +165,13 @@ class Encoder(nn.Module):
   eos_id: int = 1
   hidden_size: int = 512
 
-<<<<<<< HEAD
-  def __call__(self, inputs):
-=======
   @nn.compact
-  def apply(self, inputs, eos_id=1, hidden_size=512):
->>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
+  def __call__(self, inputs):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
     lstm_cell = nn.LSTMCell(self, name='lstm')
-    # TODO(marcvanzee): Rewrite this uinsg lift.scan to ensure rngs work
-    # correctly within the loop.
     init_lstm_state = nn.LSTMCell.initialize_carry(
-        self.make_rng('lstm'),
+        jax.random.PRNGKey(0),
         (batch_size,),
         self.hidden_size)
 
@@ -194,12 +187,13 @@ class Encoder(nn.Module):
       # Update `is_eos`.
       is_eos = jnp.logical_or(is_eos, x[:, self.eos_id])
       return (carried_lstm_state, is_eos), y
-
-    (final_state, _), _ = jax_utils.scan_in_dim(
+    
+    init_carry = (init_lstm_state, jnp.zeros(batch_size, dtype=np.bool))
+    scanned_lstm_class = nn.transforms.scan(
         encode_step_fn,
-        init=(init_lstm_state, jnp.zeros(batch_size, dtype=np.bool)),
-        xs=inputs,
-        axis=1)
+        variable_modes={'param': 'broadcast'},
+        split_rngs={'params': False})
+    (final_state, _), _ = scanned_lstm_class(self)(init_carry, inputs)
     return final_state
 
 
@@ -208,12 +202,8 @@ class Decoder(nn.Module):
   init_state: Tuple[Any]
   teacher_force: bool = False
 
-<<<<<<< HEAD
-  def __call__(self, inputs):
-=======
   @nn.compact
-  def apply(self, init_state, inputs, teacher_force=False):
->>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
+  def __call__(self, inputs):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     vocab_size = inputs.shape[2]
     lstm_cell = nn.LSTMCell(self, name='lstm')
@@ -230,16 +220,16 @@ class Decoder(nn.Module):
       prediction = onehot(predicted_tokens, vocab_size)
       return (carry_rng, lstm_state, prediction), (logits, prediction)
 
-    _, (logits, predictions) = jax_utils.scan_in_dim(
+    init_carry = (jax.random.PRNGKey(0), self.init_state, inputs[:, 0])
+    scanned_lstm_class = nn.transforms.scan(
         decode_step_fn,
-        init=(self.make_rng('lstm'), self.init_state, inputs[:, 0]),
-        xs=inputs,
-        axis=1)
+        variable_modes={'param': 'broadcast'},
+        split_rngs={'params': False})
+    _, (logits, predictions) = scanned_lstm_class(self)(init_carry, inputs)
     return logits, predictions
 
 
 class Seq2seq(nn.Module):
-<<<<<<< HEAD
   """Sequence-to-sequence class using encoder/decoder architecture.
 
   Attributes:
@@ -254,24 +244,8 @@ class Seq2seq(nn.Module):
   eos_id: int = 1
   hidden_size: int = 512
 
-  def __call__(self, encoder_inputs, decoder_inputs):
-=======
-  """Sequence-to-sequence class using encoder/decoder architecture."""
-
-  def _create_modules(self, eos_id, hidden_size):
-    encoder = Encoder.partial(
-        eos_id=eos_id, hidden_size=hidden_size).shared(name='encoder')
-    decoder = Decoder.shared(name='decoder')
-    return encoder, decoder
-
   @nn.compact
-  def apply(self,
-            encoder_inputs,
-            decoder_inputs,
-            teacher_force=True,
-            eos_id=1,
-            hidden_size=512):
->>>>>>> 2aed9a1fa9eb15a2ef3f79b6b4c7bd5d5e00604c
+  def __call__(self, encoder_inputs, decoder_inputs):
     """Run the seq2seq model.
 
     Args:
@@ -426,105 +400,8 @@ def train_model():
   return optimizer.target
 
 
-# def lstm(scope, x, ...):
-#   carry_shape = ...
-#   carry = scope.variable('memory', 'carry', carry_init_fn, carry_shape)
-#   new_carry = lstm_logic(carry.value)
-#   carry.value = new_carry
-#   return ...
-
-class LSTMCellStandard(nn.Module):
-  gate_fn: Callable = nn.activation.sigmoid
-  activation_fn: Callable = nn.activation.tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.linear.default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = nn.initializers.zeros
-
-  def __call__(self, carry, inputs):
-    c, h = carry
-    hidden_features = h.shape[-1]
-    # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(nn.linear.Dense,
-                      self,
-                      features=hidden_features,
-                      use_bias=True,
-                      kernel_init=self.recurrent_kernel_init,
-                      bias_init=self.bias_init)
-    dense_i = partial(nn.linear.Dense,
-                      self,
-                      features=hidden_features,
-                      use_bias=False,
-                      kernel_init=self.kernel_init)
-    i = self.gate_fn(dense_i(name='ii')(inputs) + dense_h(name='hi')(h))
-    f = self.gate_fn(dense_i(name='if')(inputs) + dense_h(name='hf')(h))
-    g = self.activation_fn(dense_i(name='ig')(inputs) + dense_h(name='hg')(h))
-    o = self.gate_fn(dense_i(name='io')(inputs) + dense_h(name='ho')(h))
-    new_c = f * c + i * g
-    new_h = o * self.activation_fn(new_c)
-    return (new_c, new_h), new_h
-
-
-def initialize_standard(rng, batch_dims, size, init_fn=nn.initializers.zeros):
-  key1, key2 = jax.random.split(rng)
-  mem_shape = batch_dims + (size,)
-  return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
-
-
-def lstm_logic(carry):
-  return carry * 2
-
-def initialize_new(key, batch_dims, size, init_fn=nn.initializers.zeros):
-  mem_shape = batch_dims + (size,)
-  return init_fn(key, mem_shape), init_fn(key, mem_shape)
-
-
-def lstm_cell_new(scope, x):
-  # carry = scope.variable('memory', 'carry', initialize_new, (1,), 8)
-  carry = scope.param('carry', initialize_new, (1,), 8)
-  new_carry = lstm_logic(carry.value)
-  carry.value = new_carry
-  return x
-
-
-def new(batch, batch_size, hidden_size):
-  input_init = jnp.ones(batch.shape, jnp.float32)
-  y, params = init(lstm_cell_new)(jax.random.PRNGKey(0), input_init)
-  x = lift.scan(lstm_cell, variable_modes={'param': 'broadcast', 'state': 'carry'}, split_rngs={'param': False, 'dropout': True})
-  print(x)
-
-
-def standard(batch, batch_size, hidden_size):
-  c, h = initialize_standard(jax.random.PRNGKey(0), (batch_size,), hidden_size)
-  # shapes of both c and h are: (batch_size, hidden_size)
-
-  carry_init = (jnp.ones(c.shape, jnp.float32), jnp.ones(h.shape, jnp.float32))
-  input_init = jnp.ones(batch.shape, jnp.float32)
-
-
-  lstm_cell = LSTMCellStandard(parent=None).initialized({'param': jax.random.PRNGKey(0)},
-      carry_init, input_init)
-
-  (final_state, _), _ = jax_utils.scan_in_dim(
-      lstm_cell,
-      init=(c, h),
-      xs=batch,
-      axis=1)
-  print('final_state', final_state)
-
-
-def train_model2():
-  hidden_size = 8
-  batch_size = 1
-
-  query, _ = zip(*get_examples(batch_size))
-  print('query', query)
-  print('onehot', onehot)
-
-  new(encode_onehot(query, get_max_input_len()), batch_size, hidden_size)
-
-
 def main(_):
-  _ = train_model2()
+  _ = train_model()
 
 
 if __name__ == '__main__':
