@@ -43,8 +43,7 @@ from jax import linear_util as lu
 from jax import lax
 import jax.numpy as jnp
 import jax.lib.xla_bridge as xb
-
-_is_omnistaging = hasattr(pe, 'trace_to_jaxpr_dynamic')
+from jax.config import config
 
 
 def _replicate(x, devices=None):
@@ -115,7 +114,7 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   in_pvals = [pe.PartialVal.unknown(jax.ShapedArray(x.shape, x.dtype))
               for x in inputs_flat]
 
-  if _is_omnistaging:
+  if config.omnistaging_enabled:
     _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
   else:
     _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
