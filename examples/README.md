@@ -21,7 +21,7 @@ Each examples is designed to be self-contained and easily forkable, while reprod
 | [pixelcnn](pixelcnn/README.md) | PixelCNN++ for CIFAR-10 generation | Single host SPMD, tfds `cifar10`, checkpointing, Polyak decay |
 | [seq2seq](seq2seq/README.md) | LSTM encoder/decoder for completing `42+1234=` sequences | On the fly data generation, LSTM state handling, simple code |
 | [vae](vae/README.md) | Variational auto-encoder for binarized MNIST images | Tfds `binarized_mnist`, vmap, simple code |
-| [wmt](wmt/REAMDE.md) | Transformer for translating en/de | Multi host SPMD, tfds `wmt1{4,7}_translate`, SentencePiece tokenization, checkpointing, dynamic bucketing, attention cache, packed sequences, recipe for TPU training on GCP |
+| [wmt](wmt/README.md) | Transformer for translating en/de | Multi host SPMD, tfds `wmt1{4,7}_translate`, SentencePiece tokenization, checkpointing, dynamic bucketing, attention cache, packed sequences, recipe for TPU training on GCP |
 
 ## Flax examples from the community
  
