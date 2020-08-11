@@ -115,7 +115,7 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
               for x in inputs_flat]
 
   if config.omnistaging_enabled:
-    _, out_pvals, _ = pe.partial_eval_to_jaxpr_dynamic(f_flat, in_pvals)
+    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
   else:
     with jax.core.initial_style_staging():
       _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
