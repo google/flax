@@ -19,7 +19,7 @@ import random
 from absl import app
 from absl import flags
 from absl import logging
-from functools import partial
+import functools
 
 from flax import jax_utils
 from flax import linen as nn
@@ -30,8 +30,11 @@ from typing import Any, Callable, Tuple
 
 import jax
 import jax.numpy as jnp
+from jax.config import config
+config.enable_omnistaging()
 
 import numpy as np
+
 
 FLAGS = flags.FLAGS
 
