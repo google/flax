@@ -117,7 +117,8 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   if config.omnistaging_enabled:
     _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
   else:
-    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
+    with jax.core.initial_style_staging():
+      _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
   out_flat = [const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
               for pv, const in out_pvals]
   return jax.tree_unflatten(out_tree(), out_flat)
