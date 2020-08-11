@@ -325,6 +325,7 @@ class GatedResnet(nn.Module):
     # Set init_scale=0.1 so that the res block is close to the identity at
     # initialization.
     a, b = jnp.split(self.conv_module(self, 2 * c, init_scale=0.1)(y), 2, axis=-1)
+    return inputs + a * nn.sigmoid(b)
 
 
 ResDown = partial(GatedResnet, conv_module=ConvDown)
