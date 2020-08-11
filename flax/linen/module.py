@@ -372,7 +372,7 @@ class Module:
       assert rngs.shape == (2,)
       rngs = {'param': rngs}
     return self.apply(
-      {}, *args, rngs=rngs, method='__call__', mutable=True, **kwargs)
+      {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 
   def init(self, rngs, *args, method='__call__', **kwargs):
     """Create and return initialized data for module with rngs."""
