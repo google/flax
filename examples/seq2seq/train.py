@@ -319,7 +319,6 @@ def get_examples(num_examples):
 def get_batch(batch_size):
   """Returns a batch of example of size @batch_size."""
   inputs, outputs = zip(*get_examples(batch_size))
-  #print(inputs[0], '|', outputs[0])
   return {
       'query': encode_onehot(inputs, max_len=get_max_input_len()),
       'answer': encode_onehot(outputs, max_len=get_max_output_len())
