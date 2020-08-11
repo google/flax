@@ -22,10 +22,16 @@ import jax
 from jax import random
 import numpy as np
 
-from flax import nn
+from flax import optim
 import train
 
 jax.config.parse_flags_with_absl()
+
+
+def create_test_optimizer():
+  rng = random.PRNGKey(0)
+  param = train.get_param(rng)
+  return optim.Adam(learning_rate=0.003).create(param)
 
 
 class TrainTest(absltest.TestCase):
@@ -96,21 +102,16 @@ class TrainTest(absltest.TestCase):
 
   def test_train_one_step(self):
     batch = train.get_batch(128)
-    rng = random.PRNGKey(0)
-
-    with nn.stochastic(rng):
-      model = train.create_model()
-      optimizer = train.create_optimizer(model, 0.003)
-      optimizer, train_metrics = train.train_step(
-          optimizer, batch, nn.make_rng())
+    
+    optimizer = create_test_optimizer()
+    _, train_metrics = train.train_step(optimizer, batch)
 
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
 
   def test_decode_batch(self):
-    with nn.stochastic(random.PRNGKey(0)):
-      model = train.create_model()
-      train.decode_batch(model, 5)
+    optimizer = create_test_optimizer()
+    train.decode_batch(optimizer.target, 5)
 
 if __name__ == '__main__':
   absltest.main()
