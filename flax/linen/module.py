@@ -1,4 +1,4 @@
-"""liNeN: lit neural-nets"""
+"""Linen: a refined Flax."""
 import sys
 import os
 import functools
@@ -9,8 +9,8 @@ from contextlib import contextmanager
 import dataclasses
 import threading
 
-from typing import Any, Callable, Sequence, Iterable, List, Optional, Tuple, Type, Union, TypeVar
-
+from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
+                    Type, Union, TypeVar)
 import jax
 from jax import numpy as jnp, random, lax
 from jax import tree_util
@@ -38,7 +38,7 @@ T = TypeVar('T')
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
-# Track parent in @compact methods.
+# Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
 _context = threading.local()
 _context.module_stack = [None,]
@@ -67,62 +67,61 @@ def get_suffix_module_pairs(module_tree):
 
 # Gathers all names on object.
 # -----------------------------------------------------------------------------
-def all_names_on_object(x):
+def all_names_on_object(obj):
   """Get all names on self and on classes throughout MRO."""
-  nameset = set(x.__dict__.keys())
-  for cls in x.__class__.__mro__:
+  nameset = set(obj.__dict__.keys())
+  for cls in obj.__class__.__mro__:
     nameset = nameset.union(set(cls.__dict__.keys()))
   return nameset
 
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
 def compact(fun):
+  """Decorator to mark a single Module method as compact."""
+  fun.compact = True
+  return fun
+
+def get_method_names(cls, exclude=()):
+  """Get method names of a class, allow exclusions."""
+  methods = {m[0] for m in inspect.getmembers(cls, predicate=callable)}
+  return tuple(methods.difference(set(exclude)))
+
+def wrap_method(fun):
   """Allow inline submodules and parameters within a single Module method."""
   @functools.wraps(fun)
-  def wrapped_method(self, *args, **kwargs):
-    # Store compact method *name* rather than reference, so that subclassing
-    # a module with a @compact __init__ method is still possible
-    if getattr(self, '_compact_method', fun.__name__) != fun.__name__:
-      raise RuntimeError(
-          'Only one method per class can be @compact. You can remove @compact '
-          'and define submodules and variables in setup(), or use two '
-          'separate modules.')
-    object.__setattr__(self, '_compact_method', fun.__name__)
+  def wrapped_module_method(self, *args, **kwargs):
+    is_compact_method = hasattr(fun, 'compact')
+    is_setup_method = fun.__name__ == 'setup'
 
     if self.scope is None:
       raise ValueError("Can't call methods on orphaned modules")
 
-    object.__setattr__(self, '_in_compact_method', True)
+    if is_compact_method:
+      object.__setattr__(self, '_in_compact_method', True)
+    elif is_setup_method:
+      object.__setattr__(self, '_in_setup', True)
     _context.module_stack.append(self)
     try:
       return fun(self, *args, **kwargs)
     finally:
       _context.module_stack.pop()
-      object.__setattr__(self, '_in_compact_method', False)
-      object.__setattr__(self, '_reservations', set())
-      object.__setattr__(self, '_autoname_cursor', dict())
-      object.__setattr__(self, '_last_varname', None)
-      object.__setattr__(self, 'scope', self.scope.rewound())
-  return wrapped_method
-
-def wrap_setup(fun):
-  @functools.wraps(fun)
-  def wrapped_setup_method(self, *args, **kwargs):
-    object.__setattr__(self, '_in_setup', True)
-    try:
-      return fun(self, *args, **kwargs)
-    finally:
-      object.__setattr__(self, '_in_setup', False)
-  return wrapped_setup_method
+      if is_compact_method:
+        object.__setattr__(self, '_in_compact_method', False)
+        object.__setattr__(self, '_reservations', set())
+        object.__setattr__(self, '_autoname_cursor', dict())
+        object.__setattr__(self, 'scope', self.scope.rewound())
+      elif is_setup_method:
+        object.__setattr__(self, '_in_setup', False)
+  return wrapped_module_method
 
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
 class Module:
   """Base Module Class"""
-  # class defaults -- Note: these __must not__ be made annotations!
+  # Class defaults at init. NB: these __must not__ be made annotations,
+  # as we don't want them to become dataclass fields.
   _in_compact_method = False
-  _in_call = False
   _in_setup = False
   _last_varname = None
   scope = None
@@ -134,15 +133,17 @@ class Module:
     # it encourages the stateless behavior needed to clone module instances for
     # functional transformation.  Instead of using a python metaclass, we
     # automatically transform Modules into dataclasses at subclass creation
-    # time, and we set the first dataclass argument to `parent`, and the last
-    # optional argument to `name`.
+    # time, and we set the last dataclass arguments to `parent` and `name`.
     cls._add_parent_and_name_attrs()
     dataclasses.dataclass(cls)
-    cls.setup = wrap_setup(cls.setup)
+    # We wrap user-defined methods including setup and __call__ to enforce
+    # a number of different checks and to provide clear error messages.
+    cls._verify_single_or_no_compact()
+    cls._wrap_module_methods()
 
   @classmethod
   def _add_parent_and_name_attrs(cls):
-    """Add final optional dataclass attributes: `parent` and `name`."""
+    """Direectly set value of a variable on this Module."""
     annotations = cls.__dict__.get('__annotations__', {})
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
@@ -160,6 +161,28 @@ class Module:
     new_annotations['name'] = str
     cls.__annotations__ = new_annotations
     cls.name = None  # default value of name is None.
+
+  @classmethod
+  def _verify_single_or_no_compact(cls):
+    """Statically verify that at most a single method is labelled compact."""
+    n_compact_fns = len([method_name for method_name in get_method_names(cls)
+                         if hasattr(getattr(cls, method_name), 'compact')])
+    if n_compact_fns > 1:
+      raise RuntimeError(
+          'Only one method per class can be @compact. You can remove @compact '
+          'and define submodules and variables in setup(), or use two '
+          'separate modules.')
+
+  @classmethod
+  def _wrap_module_methods(cls):
+    # We only want to wrap user-defined methods.
+    ignore_fns = get_method_names(cls, exclude=('__call__', 'setup'))
+    dataclass_fieldnames = set([f.name for f in dataclasses.fields(cls)])
+    for key in get_method_names(cls):
+      if (key not in dataclass_fieldnames  # don't touch passed-in Modules
+          and key not in ignore_fns):      # ignore base functions
+        setattr(cls, key, wrap_method(getattr(cls, key)))
+    return cls
 
   def __setattr__(self, name: str, val: Any):
     """We overload setattr solely to support pythonic naming via
@@ -203,7 +226,8 @@ class Module:
           submodule.__post_init__()
     # val is a parameter array or a Variable reference class.
     elif isinstance(val, (np.ndarray, jax.interpreters.xla.DeviceArray,
-                          Variable)):
+                          Variable)) and self._in_setup:
+      # namecheck to ensure named variable matches self attribute name.
       if self._last_varname and self._last_varname != name:
         raise ValueError(f'Variable name {self._last_varname} must equal'
                          f' attribute name {name}.')
@@ -268,11 +292,7 @@ class Module:
       raise ValueError("parent must be None, Module or Scope")
 
     # Call the user-defined initialization function.
-    _context.module_stack.append(self)
-    try:
-      self.setup()
-    finally:
-      _context.module_stack.pop()
+    self.setup()
 
   def setup(self):
     """Called when Module instance receives variables and PRNGs.
@@ -291,11 +311,24 @@ class Module:
     return self._in_setup or self._in_compact_method
 
   def clone(self, **updates):
+    """Create a clone of this Module, with optionally updated arguments."""
     attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
     attrs.update(**updates)
     return self.__class__(**attrs)
 
   def variable(self, kind: str, name: str, init_fn, *init_args):
+    """Declare a variable in this Module.
+
+    Args:
+      kind: the variable kind.
+      name: the variable name.
+      init_fn: a function taking any number of positiona arguments.
+      *init_args: the arguments to evaluate init_fn on lazily.
+
+    Returns:
+      A flax.core state Variable that can be read or set via ".value"
+      attribute.
+    """
     if not self._initialization_allowed:
       raise ValueError(
           'Variables must be initialized in `setup()` or in a method '
@@ -305,7 +338,7 @@ class Module:
           f'Name {name} already in use in {self.__class__.__name__}.')
     self._reservations.add(name)
     # ephemeral state for setattr name-equality-check
-    self._last_varname = None if self._in_call else name
+    self._last_varname = name
     v = self.scope.variable(kind, name, init_fn, *init_args)
     # TODO: find cleaner way to opt-out of core name collision check
     self.scope.reservations.remove(name)
@@ -314,19 +347,35 @@ class Module:
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args,
             kind='param') -> T:
+    """Declare a parameter in this Module.
+
+    Args:
+      name: the parameter name.
+      init_fn: a function taking a PRNGKey plus any other number of
+        positional arguments.
+      *init_args: the arguments to evaluate init_fn on lazily.
+      kind: an optional kind for the parameter.
+
+    Returns:
+      An initialized array.
+    """
     p_init_fn = lambda *args: init_fn(self.make_rng(kind), *args)
     return self.variable(kind, name, p_init_fn, *init_args).value
 
   def get_variable(self, kind: str, name: str, default: T = None) -> T:
+    """Get raw value of variable on this Module."""
     return self.scope.get_variable(kind, name, default)
 
   def has_variable(self, kind: str, name: str):
+    """Check if a variable of given kind and name exists in this Module."""
     return self.scope.has_variable(kind, name)
 
   def put_variable(self, kind: str, name: str, value: Any):
+    """Direectly set value of a variable on this Module."""
     return self.scope.put_variable(kind, name, value)
 
   def make_rng(self, kind: str) -> PRNGKey:
+    """Get a new rng key of a given kind from this Module."""
     return self.scope.make_rng(kind)
 
   def apply(self, variables, *args, rngs=None,

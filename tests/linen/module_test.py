@@ -18,11 +18,12 @@ from absl.testing import absltest
 
 import jax
 from jax import random
+from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as onp
-from typing import Any, Tuple
+from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
 from flax.linen import compact
@@ -343,24 +344,14 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_only_one_compact_method(self):
-    class Dummy(nn.Module):
-      @compact
-      def call1(self):
-        pass
-      @compact
-      def call2(self):
-        pass
-
-    scope = Scope(variables={})
-
-    # NOTE: Currently, we only expect an error when we call both annotated methods.
-    # We could make the error fire during module construction by annotating
-    # the methods and catching the error during __post_init__. Or we could
-    # even check earlier and catch during __init_subclass__.
-    dummy = Dummy(parent=scope)
-    dummy.call1()
     with self.assertRaisesRegex(RuntimeError, '@compact'):
-      dummy.call2()
+      class Dummy(nn.Module):
+        @compact
+        def call1(self):
+          pass
+        @compact
+        def call2(self):
+          pass
 
   def test_only_one_compact_method_subclass(self):
     class Dummy(nn.Module):
@@ -379,7 +370,48 @@ class ModuleTest(absltest.TestCase):
     # as its on the same method.
     subdummy()
 
+  def test_forgotten_compact_annotation(self):
+    class Bar(nn.Module):
+      # user forgot to add @compact
+      def __call__(self, x):
+        return nn.Dense(1)(x)
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = Bar()
+        x = bar(x)
+        x = bar(x)
+        return x
+    with self.assertRaisesRegex(ValueError, '@compact'):
+      Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
+
+  def test_forgotten_compact_annotation_with_explicit_parent(self):
+    class Bar(nn.Module):
+      def __call__(self, x):
+        return nn.Dense(1, parent=self)(x)
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = Bar()
+        x = bar(x)
+        x = bar(x)
+        return x
+
+    with self.assertRaisesRegex(ValueError, '@compact'):
+      Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
+
+  def test_numpy_array_shape_class_args(self):
+    class MLP(nn.Module):
+      widths: Iterable
+      @nn.compact
+      def __call__(self, x):
+        for width in self.widths[:-1]:
+          x = nn.relu(nn.Dense(width)(x))
+        return nn.Dense(self.widths[-1])(x)
+    test = MLP(onp.array([3, 3], onp.int32))
+    params = test.init({'param': random.PRNGKey(42)}, jnp.ones((3, 3)))
+    _ = test.apply(params, jnp.ones((3, 3)))
 
 if __name__ == '__main__':
   absltest.main()
-
