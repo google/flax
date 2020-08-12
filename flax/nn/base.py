@@ -1118,11 +1118,13 @@ jax.tree_util.register_pytree_node(Collection,
 
 
 def _collection_state_dict(collection):
-  return collection.as_dict()
+  return serialization._dict_state_dict(collection.as_dict())  # pylint: disable=protected-access
 
 
-def _collection_from_state_dict(_, state):
-  return Collection(state)
+def _collection_from_state_dict(xs, state):
+  restored_state = serialization._restore_dict(xs.as_dict(), state)  # pylint: disable=protected-access
+
+  return Collection(restored_state)
 
 
 serialization.register_serialization_state(

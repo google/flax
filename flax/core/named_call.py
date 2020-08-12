@@ -17,7 +17,7 @@ ad.primitive_transposes[named_call_p] = functools.partial(ad.call_transpose,
                                                           named_call_p)
 
 def _named_call_translation_rule(c, axis_env, in_nodes, name_stack,
-                           *, name='core_call', backend, call_jaxpr):
+                                 *, name='core_call', backend, call_jaxpr):
   subc = xla.xb.make_computation_builder(name)
   args = [xla.xb.parameter(subc, i, c.GetShape(n))
           for i, n in enumerate(in_nodes)]

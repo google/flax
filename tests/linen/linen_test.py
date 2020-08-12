@@ -75,7 +75,7 @@ class NormalizationTest(absltest.TestCase):
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (4, 3, 2))
-    model_cls = nn.BatchNorm(None, momentum=0.9)
+    model_cls = nn.BatchNorm(momentum=0.9)
     y, initial_params = model_cls.init_with_output(key2, x)
 
     mean = y.mean((0, 1))
@@ -96,7 +96,7 @@ class NormalizationTest(absltest.TestCase):
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 3, 4))
-    model_cls = nn.LayerNorm(None, use_bias=False, use_scale=False, epsilon=e)
+    model_cls = nn.LayerNorm(use_bias=False, use_scale=False, epsilon=e)
     y, _ = model_cls.init_with_output(key2, x)
     assert x.shape == y.shape
     input_type = type(x)
@@ -110,7 +110,7 @@ class NormalizationTest(absltest.TestCase):
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 5, 4, 4, 32))
-    model_cls = nn.GroupNorm(None, num_groups=2, use_bias=False, use_scale=False, epsilon=e)
+    model_cls = nn.GroupNorm(num_groups=2, use_bias=False, use_scale=False, epsilon=e)
 
     y, _ = model_cls.init_with_output(key2, x)
     self.assertEqual(x.shape, y.shape)
@@ -129,7 +129,7 @@ class StochasticTest(absltest.TestCase):
   def test_dropout(self):
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
-    module = nn.Dropout(None, rate=0.5)
+    module = nn.Dropout(rate=0.5)
     y1 = module.apply({},
                       jnp.ones((20, 20)),
                       deterministic=False,
@@ -154,7 +154,7 @@ class StochasticTest(absltest.TestCase):
     rootkey = random.PRNGKey(0)
     for rate in np.arange(0.1, 1.0, 0.1):
       rootkey, subkey = random.split(rootkey)
-      module = nn.Dropout(None, rate=rate)
+      module = nn.Dropout(rate=rate)
       n_trials = 10
       nonzero_counts = 0
       for key in random.split(subkey, n_trials):
@@ -181,7 +181,7 @@ class RecurrentTest(absltest.TestCase):
     c0, h0 = nn.LSTMCell.initialize_carry(rng, (2,), 4)
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
-    lstm = nn.LSTMCell(None)
+    lstm = nn.LSTMCell()
     (carry, y), initial_params = lstm.init_with_output(key2, (c0, h0), x)
     self.assertEqual(carry[0].shape, (2, 4))
     self.assertEqual(carry[1].shape, (2, 4))
@@ -204,7 +204,7 @@ class RecurrentTest(absltest.TestCase):
     x = random.normal(key1, (2, 3))
     carry0 = nn.GRUCell.initialize_carry(rng, (2,), 4)
     self.assertEqual(carry0.shape, (2, 4))
-    gru = nn.GRUCell(None)
+    gru = nn.GRUCell()
     (carry, y), initial_params = gru.init_with_output(key2, carry0, x)
     #gru = nn.Model(nn.GRUCell, initial_params)
     self.assertEqual(carry.shape, (2, 4))

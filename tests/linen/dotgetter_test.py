@@ -15,7 +15,7 @@ from flax import serialization
 
 class DotGetterTest(absltest.TestCase):
 
-  def simple_test(self):
+  def test_simple(self):
     dg = DotGetter({'a': 1, 'b': {'c': 2}, 'd': {'e': {'f': 3}}})
     self.assertEqual(dg.a, 1)
     self.assertEqual(dg.b.c, 2)
@@ -26,7 +26,7 @@ class DotGetterTest(absltest.TestCase):
     self.assertEqual(dg.b['c'], 2)
     self.assertEqual(dg.d.e.f, 3)
 
-  def simple_frozen_test(self):
+  def test_simple_frozen(self):
     dg = DotGetter(freeze({'a': 1, 'b': {'c': 2}, 'd': {'e': {'f': 3}}}))
     self.assertEqual(dg.a, 1)
     self.assertEqual(dg.b.c, 2)
@@ -37,19 +37,19 @@ class DotGetterTest(absltest.TestCase):
     self.assertEqual(dg.b['c'], 2)
     self.assertEqual(dg.d.e.f, 3)
 
-  def eq_test(self):
+  def test_eq(self):
     dg1 = DotGetter({'a': 1, 'b': {'c': 2, 'd': 3}})
     dg2 = DotGetter({'a': 1, 'b': {'c': 2, 'd': 3}})
     self.assertEqual(dg1, dg2)
     self.assertEqual(freeze(dg1), dg2)
     self.assertEqual(freeze(dg1), freeze(dg2))
 
-  def dir_test(self):
+  def test_dir(self):
     dg = DotGetter({'a': 1, 'b': {'c': 2, 'd': 3}})
     self.assertEqual(dir(dg), ['a', 'b'])
     self.assertEqual(dir(dg.b), ['c', 'd'])
 
-  def freeze_test(self):
+  def test_freeze(self):
     d = {'a': 1, 'b': {'c': 2, 'd': 3}}
     dg = DotGetter(d)
     self.assertEqual(freeze(dg), freeze(d))
@@ -57,7 +57,7 @@ class DotGetterTest(absltest.TestCase):
     fdg = DotGetter(d)
     self.assertEqual(unfreeze(fdg), unfreeze(fd))
 
-  def hash_test(self):
+  def test_hash(self):
     d = {'a': 1, 'b': {'c': 2, 'd': 3}}
     dg = DotGetter(d)
     fd = freeze(d)
@@ -66,7 +66,7 @@ class DotGetterTest(absltest.TestCase):
     with self.assertRaisesRegex(TypeError, 'unhashable'):
       hash(dg)
 
-  def pytree_test(self):
+  def test_pytree(self):
     dg1 = DotGetter({'a': jnp.array([1.0]),
                      'b': {'c': jnp.array([2.0]),
                            'd': jnp.array([3.0])}})
@@ -75,7 +75,7 @@ class DotGetterTest(absltest.TestCase):
                            'd': jnp.array([6.0])}})
     self.assertEqual(jax.tree_map(lambda x: 2 * x, dg1), dg2)
 
-  def statedict_test(self):
+  def test_statedict(self):
     d = {'a': jnp.array([1.0]),
          'b': {'c': jnp.array([2.0]),
                'd': jnp.array([3.0])}}
@@ -84,7 +84,7 @@ class DotGetterTest(absltest.TestCase):
     deser = serialization.from_state_dict(dg, ser)
     self.assertEqual(d, deser)
 
-  def is_leaf_test(self):
+  def test_is_leaf(self):
     for x in [0, 'foo', jnp.array([0.]), {}, [], (), {1, 2}]:
       self.assertTrue(is_leaf(x))
     self.assertFalse(is_leaf({'a': 1}))
