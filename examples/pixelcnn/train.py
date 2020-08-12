@@ -51,6 +51,8 @@ import tensorflow as tf
 import input_pipeline
 import pixelcnn
 
+import tpu_converter
+
 
 FLAGS = flags.FLAGS
 
@@ -115,7 +117,7 @@ def get_summary_writers():
 
 
 def model(**kwargs):
-  return pixelcnn.PixelCNNPP(None, depth=FLAGS.n_resnet, features=FLAGS.n_feature, **kwargs)
+  return pixelcnn.PixelCNNPP(depth=FLAGS.n_resnet, features=FLAGS.n_feature, **kwargs)
 
 
 def neg_log_likelihood_loss(nn_out, images):
@@ -210,16 +212,14 @@ def train():
   assert FLAGS.init_batch_size <= batch_size
   init_batch = next(train_iter)['image']._numpy()[:FLAGS.init_batch_size]
 
-  print('init batch', init_batch.shape)
-
   rng = random.PRNGKey(FLAGS.rng)
   rng, init_rng = random.split(rng)
   rng, dropout_rng = random.split(rng)
 
-  initial_variables = model().initialized({
+  initial_variables = model().init({
       'param': init_rng,
       'dropout': dropout_rng
-    }, init_batch).variables.param
+    }, init_batch)['param']
   optimizer_def = optim.Adam(learning_rate=FLAGS.learning_rate, 
                              beta1=0.95,
                              beta2=0.9995)
@@ -241,12 +241,15 @@ def train():
 
   # Gather metrics
   train_metrics = []
+  
+  print('===> SAVING CHECKPOINT!')
+  save_checkpoint(optimizer, ema)
+  print('===> DONE!')
 
   for step, batch in zip(range(step_offset, num_steps), train_iter):
     print('step', step)
     # Load and shard the TF batch
     batch = load_and_shard_tf_batch(batch)
-    print('batch loaded')
 
     # Generate a PRNG key that will be rolled into the batch.
     rng, step_rng = random.split(rng)
@@ -300,7 +303,7 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  # tf.executing_eagerly()
+  tpu_converter.convert_to_tpu()
 
   train()
 

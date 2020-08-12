@@ -60,18 +60,18 @@ class PixelCNNPP(nn.Module):
   def __call__(self, images):
     # Special convolutional and resnet blocks which allow information flow
     # downwards and to the right.
-    conv_down = partial(ConvDown, self, features=self.features)
-    conv_down_right = partial(ConvDownRight, self, features=self.features)
+    conv_down = partial(ConvDown, features=self.features)
+    conv_down_right = partial(ConvDownRight, features=self.features)
 
     # Conv Modules which halve or double the spatial dimensions
     halve_down = partial(conv_down, strides=(2, 2))
     halve_down_right = partial(conv_down_right, strides=(2, 2))
 
-    res_down = partial(ResDown, self, dropout_p=self.dropout_p)
-    res_down_right = partial(ResDownRight, self, dropout_p=self.dropout_p)
+    res_down = partial(ResDown, dropout_p=self.dropout_p)
+    res_down_right = partial(ResDownRight, dropout_p=self.dropout_p)
 
-    double_down = partial(ConvTransposeDown, self, features=self.features)
-    double_down_right = partial(ConvTransposeDownRight, self, features=self.features)
+    double_down = partial(ConvTransposeDown, features=self.features)
+    double_down_right = partial(ConvTransposeDownRight, features=self.features)
 
     # Add channel of ones to distinguish image from padding later on
     images = jnp.pad(images, ((0, 0), (0, 0), (0, 0), (0, 1)), constant_values=1)
@@ -148,7 +148,7 @@ class PixelCNNPP(nn.Module):
 
     # Note init_scale=0.1 on this layer was not in the original implementation,
     # but seems to make training more stable.
-    return ConvOneByOne(self, 10 * self.k, init_scale=0.1)(nn.elu(down_right))
+    return ConvOneByOne(10 * self.k, init_scale=0.1)(nn.elu(down_right))
 
 
 # General utils
@@ -257,7 +257,7 @@ class ConvDown(nn.Module):
     padding = ((k_h - 1, 0),          # Vertical padding
                (k_w // 2, k_w // 2))  # Horizontal padding
 
-    return Conv(self, self.features, self.kernel_size, self.strides, padding, init_scale=self.init_scale)(inputs)
+    return Conv(self.features, self.kernel_size, self.strides, padding, init_scale=self.init_scale)(inputs)
 
 
 class ConvDownRight(nn.Module):
@@ -273,7 +273,7 @@ class ConvDownRight(nn.Module):
     padding = ((k_h - 1, 0),  # Vertical padding
                (k_w - 1, 0))  # Horizontal padding
 
-    return Conv(self, self.features, self.kernel_size, self.strides, padding, init_scale=self.init_scale)(inputs)
+    return Conv(self.features, self.kernel_size, self.strides, padding, init_scale=self.init_scale)(inputs)
 
 
 class ConvTransposeDown(nn.Module):
@@ -289,7 +289,7 @@ class ConvTransposeDown(nn.Module):
   def __call__(self, inputs):
     _, k_w = self.kernel_size
     out_h, out_w = onp.multiply(self.strides, inputs.shape[1:3])
-    return ConvTranspose(self, self.features, self.kernel_size, self.strides)(inputs)[:, :out_h, (k_w - 1) // 2:out_w + (k_w - 1) // 2, :]
+    return ConvTranspose(self.features, self.kernel_size, self.strides)(inputs)[:, :out_h, (k_w - 1) // 2:out_w + (k_w - 1) // 2, :]
 
 
 class ConvTransposeDownRight(nn.Module):
@@ -304,7 +304,7 @@ class ConvTransposeDownRight(nn.Module):
   @nn.compact
   def __call__(self, inputs):
     out_h, out_w = onp.multiply(self.strides, inputs.shape[1:3])
-    return ConvTranspose(self, self.features, self.kernel_size, self.strides)(inputs)[:, :out_h, :out_w]
+    return ConvTranspose(self.features, self.kernel_size, self.strides)(inputs)[:, :out_h, :out_w]
 
 
 class GatedResnet(nn.Module):
@@ -315,16 +315,16 @@ class GatedResnet(nn.Module):
   @nn.compact
   def __call__(self, inputs, aux = None):
     c = inputs.shape[-1]
-    y = self.conv_module(self, c)(self.nonlinearity(inputs))
+    y = self.conv_module(c)(self.nonlinearity(inputs))
     if aux is not None:
-      y = self.nonlinearity(y + ConvOneByOne(self, c)(self.nonlinearity(aux)))
+      y = self.nonlinearity(y + ConvOneByOne(c)(self.nonlinearity(aux)))
 
     if self.dropout_p > 0:
-      y = nn.Dropout(self, rate=self.dropout_p)(y)
+      y = nn.Dropout(rate=self.dropout_p)(y)
 
     # Set init_scale=0.1 so that the res block is close to the identity at
     # initialization.
-    a, b = jnp.split(self.conv_module(self, 2 * c, init_scale=0.1)(y), 2, axis=-1)
+    a, b = jnp.split(self.conv_module(2 * c, init_scale=0.1)(y), 2, axis=-1)
     return inputs + a * nn.sigmoid(b)
 
 
