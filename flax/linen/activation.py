@@ -32,6 +32,11 @@ from jax.nn import soft_sign
 from jax.nn import softmax
 from jax.nn import softplus
 from jax.nn import swish
+from jax.nn import selu
+from jax.nn import hard_tanh
+from jax.nn import relu6
+from jax.nn import hard_sigmoid
+from jax.nn import hard_swish
 
 from jax.numpy import tanh
 # pylint: enable=unused-import

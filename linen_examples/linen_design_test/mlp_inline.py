@@ -1,9 +1,8 @@
 import jax
 from jax import numpy as jnp, random, lax
-from flax import nn
-from flax.nn import initializers
+from flax import linen as nn
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, MultiModule
+from flax.linen import Module, compact
 import numpy as np
 from pprint import pprint
 from dense import Dense
@@ -11,17 +10,22 @@ from dense import Dense
 # Many NN layers and blocks are best described by a single function with inline variables.
 # In this case, variables are initialized during the first call.
 class MLP(Module):
+  @compact
   def __call__(self, x):
-    return Dense(self, features=1)(nn.relu(Dense(self, features=2)(x)))
+    return Dense(features=1)(
+        nn.relu(
+            Dense(features=2)(x)
+        )
+    )
 
 # Return an initialized instance of MLP by calling `__call__` with an input batch,
 # initializing all variables.
 #
 # Variable shapes depend on the input shape passed in.
 rngkey = jax.random.PRNGKey(10)
-mlp = MLP(parent=None).initialized({'param': rngkey}, jnp.zeros((1, 3)))
+mlp_variables = MLP().init(rngkey, jnp.zeros((1, 3)))
 
-pprint(mlp.variables)
+pprint(mlp_variables)
 # {'param': {'Dense_0': {'bias': DeviceArray([0.], dtype=float32),
 #                        'kernel': DeviceArray([[-0.04267037],
 #              [-0.51097125]], dtype=float32)},

@@ -12,21 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Machine Translation example.
 
 This script trains a Transformer on a WMT dataset.
@@ -39,22 +24,24 @@ import time
 from absl import app
 from absl import flags
 from absl import logging
+from jax import random
+import jax
+import jax.numpy as jnp
+import numpy as np
+import tensorflow.compat.v2 as tf
+
 from flax import jax_utils
-from flax import nn
+from flax import linen as nn
 from flax import optim
+from flax.metrics import tensorboard
+from flax.training import checkpoints
+from flax.training import common_utils
+
 import bleu
 import decode
 import input_pipeline
 import models
-from flax.metrics import tensorboard
-from flax.training import checkpoints
-from flax.training import common_utils
-import jax
-from jax import random
-import jax.nn
-import jax.numpy as jnp
-import numpy as np
-import tensorflow.compat.v2 as tf
+
 
 FLAGS = flags.FLAGS
 
@@ -196,6 +183,9 @@ flags.DEFINE_string(
           ' e.g. grpc://192.168.0.2:8470'))
 
 
+# Training utility functions.
+# -----------------------------------------------------------------------------
+
 def create_learning_rate_scheduler(
     factors='constant * linear_warmup * rsqrt_decay',
     base_learning_rate=0.5,
@@ -252,29 +242,6 @@ def create_learning_rate_scheduler(
     return jnp.asarray(ret, dtype=jnp.float32)
 
   return step_fn
-
-
-@functools.partial(jax.jit, static_argnums=(1, 2, 3))
-def create_model(key, input_shape, target_shape, model_kwargs):
-  """Instantiate transformer model and associated autoregressive cache def."""
-  model_def = models.Transformer.partial(**model_kwargs)
-  with nn.attention.Cache().mutate() as cache_def:
-    _, initial_params = model_def.init_by_shape(
-        key, [(input_shape, jnp.float32), (target_shape, jnp.float32)],
-        cache=cache_def)
-    model = nn.Model(model_def, initial_params)
-  return model, cache_def
-
-
-def create_optimizer(model, learning_rate, weight_decay):
-  optimizer_def = optim.Adam(
-      learning_rate,
-      beta1=0.9,
-      beta2=0.98,
-      eps=1e-9,
-      weight_decay=weight_decay)
-  optimizer = optimizer_def.create(model)
-  return optimizer
 
 
 def compute_weighted_cross_entropy(logits,
@@ -353,11 +320,14 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
   return metrics
 
 
+# Primary training / eval / decode step functions.
+# -----------------------------------------------------------------------------
+
 def train_step(optimizer,
                batch,
+               config,
                learning_rate_fn,
                label_smoothing=0.0,
-               use_bfloat16=False,
                dropout_rng=None):
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using 'packed examples'
@@ -378,22 +348,20 @@ def train_step(optimizer,
   # We handle PRNG splitting inside the top pmap to improve efficiency.
   dropout_rng, new_dropout_rng = random.split(dropout_rng)
 
-  def loss_fn(model):
+  def loss_fn(params):
     """loss function used for training."""
-    with nn.stochastic(dropout_rng):
-      logits = model(
-          inputs,
-          targets,
-          use_bfloat16=use_bfloat16,
-          inputs_positions=inputs_positions,
-          targets_positions=targets_positions,
-          inputs_segmentation=inputs_segmentation,
-          targets_segmentation=targets_segmentation,
-          train=True,
-          cache=None)
+    logits = models.Transformer(config).apply(
+        {'param': params},
+        inputs,
+        targets,
+        inputs_positions=inputs_positions,
+        targets_positions=targets_positions,
+        inputs_segmentation=inputs_segmentation,
+        targets_segmentation=targets_segmentation,
+        rngs={'dropout': dropout_rng})
 
-    loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights,
-                                                      label_smoothing)
+    loss, weight_sum = compute_weighted_cross_entropy(
+        logits, targets, weights, label_smoothing)
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
@@ -409,17 +377,28 @@ def train_step(optimizer,
   return new_optimizer, metrics, new_dropout_rng
 
 
-def eval_step(model, batch, label_smoothing=0.0, use_bfloat16=False):
+def eval_step(params, batch, config, label_smoothing=0.0):
   """Calculate evaluation metrics on a batch."""
   inputs, targets = batch['inputs'], batch['targets']
   weights = jnp.where(targets > 0, 1.0, 0.0)
-  logits = model(inputs, targets, use_bfloat16=use_bfloat16, train=False,
-                 cache=None)
+  logits = models.Transformer(config).apply(
+      {'param': params}, inputs, targets)
+
   return compute_metrics(logits, targets, weights, label_smoothing)
 
 
-def predict_step(inputs, model, cache, eos_id, max_decode_len,
-                 use_bfloat16=False, beam_size=4):
+def initialize_cache(inputs, max_decode_len, config):
+  """Initialize a cache for a given input shape and max decode length."""
+  target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
+  initial_variables = models.Transformer(config).init(
+      jax.random.PRNGKey(0),
+      jnp.ones(inputs.shape, config.dtype),
+      jnp.ones(target_shape, config.dtype))
+  return initial_variables['cache']
+
+
+def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
+                 beam_size=4):
   """Predict translation with fast decoding beam search on a batch."""
   batch_size = inputs.shape[0]
 
@@ -434,21 +413,22 @@ def predict_step(inputs, model, cache, eos_id, max_decode_len,
   tgt_padding_mask = decode.flat_batch_beam_expand(
       jnp.ones((batch_size, 1, 1)), beam_size)
   encoded_inputs = decode.flat_batch_beam_expand(
-      model.encode(inputs, use_bfloat16=use_bfloat16,
-                   train=False, cache=None), beam_size)
+      models.Transformer(config).apply(
+        {'param': params}, inputs, method='encode'),
+      beam_size)
 
   def tokens_ids_to_logits(flat_ids, flat_cache):
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
-    with flat_cache.mutate() as new_flat_cache:
-      flat_logits = model.decode(encoded_inputs,
-                                 src_padding_mask,
-                                 flat_ids,
-                                 cache=new_flat_cache,
-                                 shift=False,
-                                 train=False,
-                                 use_bfloat16=use_bfloat16,
-                                 tgt_padding_mask=tgt_padding_mask)
+    flat_logits, new_vars = models.Transformer(config).apply(
+        {'param': params, 'cache': flat_cache},
+        encoded_inputs,
+        src_padding_mask,
+        flat_ids,
+        tgt_padding_mask=tgt_padding_mask,
+        mutable=['cache'],
+        method='decode')
+    new_flat_cache = new_vars['cache']
     # Remove singleton sequence-length dimension:
     # [batch * beam, 1, vocab] --> [batch * beam, vocab]
     flat_logits = flat_logits.squeeze(axis=1)
@@ -470,6 +450,9 @@ def predict_step(inputs, model, cache, eos_id, max_decode_len,
   # Return the highest scoring beam sequence, drop first dummy 0 token.
   return beam_seqs[:, -1, 1:]
 
+
+# Utils for prediction and BLEU calculation
+# -----------------------------------------------------------------------------
 
 def pad_examples(x, desired_batch_size):
   """Expand batch to desired size by repeating last slice."""
@@ -496,6 +479,9 @@ def tohost(x):
   n_device, n_batch, *remaining_dims = x.shape
   return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
 
+
+# Main
+# -----------------------------------------------------------------------------
 
 def main(argv):
   if len(argv) > 1:
@@ -527,6 +513,7 @@ def main(argv):
   tf.io.gfile.makedirs(os.path.split(vocab_path)[0])
 
   # Load Dataset
+  # ---------------------------------------------------------------------------
   logging.info('Initializing dataset.')
   train_ds, eval_ds, predict_ds, encoder = input_pipeline.get_wmt_datasets(
       n_devices=n_devices,
@@ -548,34 +535,56 @@ def main(argv):
     return encoder.detokenize(valid_toks).numpy().decode('utf-8')
 
   logging.info('Initializing model, optimizer, and step functions.')
+
   # Build Model and Optimizer
-  transformer_kwargs = {
-      'vocab_size': vocab_size,
-      'output_vocab_size': vocab_size,
-      'emb_dim': FLAGS.emb_dim,
-      'num_heads': FLAGS.num_heads,
-      'num_layers': FLAGS.num_layers,
-      'qkv_dim': FLAGS.qkv_dim,
-      'mlp_dim': FLAGS.mlp_dim,
-      'max_len': max(FLAGS.max_target_length, FLAGS.max_eval_target_length),
-      'share_embeddings': FLAGS.share_embeddings,
-      'logits_via_embedding': FLAGS.logits_via_embedding,
-  }
+  # ---------------------------------------------------------------------------
+  train_config = models.TransformerConfig(
+      vocab_size=vocab_size,
+      output_vocab_size=vocab_size,
+      share_embeddings=FLAGS.share_embeddings,
+      logits_via_embedding=FLAGS.logits_via_embedding,
+      dtype=jnp.bfloat16 if FLAGS.use_bfloat16 else jnp.float32,
+      emb_dim=FLAGS.emb_dim,
+      num_heads=FLAGS.num_heads,
+      num_layers=FLAGS.num_layers,
+      qkv_dim=FLAGS.qkv_dim,
+      mlp_dim=FLAGS.mlp_dim,
+      max_len=max(FLAGS.max_target_length, FLAGS.max_eval_target_length),
+      dropout_rate=FLAGS.dropout_rate,
+      attention_dropout_rate=FLAGS.attention_dropout_rate,
+      deterministic=False,
+      decode=False,
+      kernel_init=nn.initializers.xavier_uniform(),
+      bias_init=nn.initializers.normal(stddev=1e-6))
+  eval_config = train_config.replace(deterministic=True)
+  predict_config = train_config.replace(deterministic=True, decode=True)
 
   start_step = 0
   rng = random.PRNGKey(FLAGS.random_seed)
   rng, init_rng = random.split(rng)
   input_shape = (FLAGS.batch_size, FLAGS.max_target_length)
   target_shape = (FLAGS.batch_size, FLAGS.max_target_length)
-  model, cache_def = create_model(init_rng,
-                                  input_shape,
-                                  target_shape,
-                                  transformer_kwargs)
-  optimizer = create_optimizer(model,
-                               FLAGS.learning_rate,
-                               FLAGS.weight_decay)
-  # We access model only from optimizer below via optimizer.target.
-  del model
+
+  # call a jitted initialization function to get the initial parameter tree
+  @jax.jit
+  def initialize_variables(rng):
+    return models.Transformer(eval_config).init(
+        rng,
+        jnp.ones(input_shape, jnp.float32),
+        jnp.ones(target_shape, jnp.float32))
+  initial_variables = initialize_variables(init_rng)
+
+  # apply an optimizer to this tree
+  optimizer_def = optim.Adam(
+      FLAGS.learning_rate,
+      beta1=0.9,
+      beta2=0.98,
+      eps=1e-9,
+      weight_decay=FLAGS.weight_decay)
+  optimizer = optimizer_def.create(initial_variables['param'])
+
+  # We access model params only from optimizer below via optimizer.target.
+  del initial_variables
 
   if FLAGS.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
@@ -590,24 +599,36 @@ def main(argv):
       base_learning_rate=FLAGS.learning_rate,
       warmup_steps=FLAGS.warmup_steps)
 
+  # compile multidevice versions of train/eval/predict step and cache init fn.
   p_train_step = jax.pmap(
       functools.partial(
           train_step,
+          config=train_config,
           learning_rate_fn=learning_rate_fn,
-          label_smoothing=FLAGS.label_smoothing,
-          use_bfloat16=FLAGS.use_bfloat16),
+          label_smoothing=FLAGS.label_smoothing),
       axis_name='batch')
   p_eval_step = jax.pmap(
       functools.partial(
           eval_step,
-          label_smoothing=FLAGS.label_smoothing,
-          use_bfloat16=FLAGS.use_bfloat16),
+          config=eval_config,
+          label_smoothing=FLAGS.label_smoothing),
+      axis_name='batch')
+  p_init_cache = jax.pmap(
+      functools.partial(
+          initialize_cache,
+          max_decode_len=FLAGS.max_predict_length,
+          config=predict_config),
       axis_name='batch')
   p_pred_step = jax.pmap(
-      functools.partial(predict_step, use_bfloat16=FLAGS.use_bfloat16,
-                        beam_size=FLAGS.beam_size),
+      functools.partial(
+          predict_step,
+          config=predict_config,
+          beam_size=FLAGS.beam_size),
       axis_name='batch',
       static_broadcasted_argnums=(3, 4))  # eos token, max_length are constant
+
+  # Main Train Loop
+  # ---------------------------------------------------------------------------
 
   # We init the first set of dropout PRNG keys, but update it afterwards inside
   # the main pmap'd training update for performance.
@@ -633,8 +654,8 @@ def main(argv):
     if step % FLAGS.eval_frequency != 0 and step > 0:
       continue
 
-    logging.info('Gathering training metrics.')
     # Training Metrics
+    logging.info('Gathering training metrics.')
     metrics_all = common_utils.get_metrics(metrics_all)
     lr = metrics_all.pop('learning_rate').mean()
     metrics_sums = jax.tree_map(jnp.sum, metrics_all)
@@ -690,12 +711,7 @@ def main(argv):
         pred_batch = jax.tree_map(
             lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
       pred_batch = common_utils.shard(pred_batch)
-      per_device_batchsize = pred_batch['inputs'].shape[1]
-      cache_dtype = jnp.bfloat16 if FLAGS.use_bfloat16 else jnp.float32
-      cache = jax_utils.replicate(
-          cache_def.initialize_cache((per_device_batchsize,
-                                      FLAGS.max_predict_length),
-                                     dtype=cache_dtype))
+      cache = p_init_cache(pred_batch['inputs'])
       predicted = p_pred_step(pred_batch['inputs'],
                               optimizer.target,
                               cache,

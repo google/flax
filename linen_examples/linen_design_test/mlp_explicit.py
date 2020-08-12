@@ -3,7 +3,7 @@ from jax import numpy as jnp, random, lax
 from flax import nn
 from flax.nn import initializers
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, MultiModule
+from flax.linen import Module
 import numpy as np
 from pprint import pprint
 from dense import Dense
@@ -20,8 +20,8 @@ class DenseExplicit(Dense):
 
 class MLP(Module):
   def setup(self):
-    self.dense1 = DenseExplicit(self, in_features=3, features=2)
-    self.dense2 = DenseExplicit(self, in_features=2, features=1)
+    self.dense1 = DenseExplicit(in_features=3, features=2)
+    self.dense2 = DenseExplicit(in_features=2, features=1)
 
     # explicit instances are materialized immediately at init
     pprint(self.dense2.variables)
@@ -35,9 +35,9 @@ class MLP(Module):
 
 # Return an initialized instance of MLP by only calling `setup`.
 rngkey = jax.random.PRNGKey(10)
-mlp = MLP(parent=None).initialized({'param': rngkey}, method=None)  # TODO: `method=None` is weird.
+init_variables = MLP().init({'param': rngkey}, jnp.ones((1, 3)))
 
-pprint(mlp.variables)
+pprint(init_variables)
 # {'param': {'dense1': {'bias': DeviceArray([0., 0.], dtype=float32),
 #                       'kernel': DeviceArray([[ 0.18307537, -0.38739476],
 #              [-0.902451  , -0.5190721 ],

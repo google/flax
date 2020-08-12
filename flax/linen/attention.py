@@ -254,7 +254,6 @@ class MultiHeadDotProductAttention(Module):
     head_dim = qkv_features // self.num_heads
 
     dense = partial(DenseGeneral,
-                    self,
                     axis=-1,
                     features=(self.num_heads, head_dim),
                     kernel_init=self.kernel_init,
@@ -375,8 +374,7 @@ class MultiHeadDotProductAttention(Module):
         deterministic=self.deterministic)
 
     # back to the original inputs dimensions
-    out = DenseGeneral(self,
-                       features=features,
+    out = DenseGeneral(features=features,
                        axis=(-2, -1),
                        kernel_init=self.kernel_init,
                        bias_init=self.bias_init,

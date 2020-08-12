@@ -12,22 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 """Fast decoding routines for inference from a trained model."""
 
 import typing
@@ -207,7 +191,7 @@ def beam_search(inputs,
       slices and cache and returning next-token logits and updated cache.
     beam_size: int: number of beams to use in beam search.
     alpha: float: scaling factor for brevity penalty.
-    eos_id: int: if of end-of-sentence token for target vocabulary.
+    eos_id: int: id of end-of-sentence token for target vocabulary.
     max_decode_len: int: maximum length of decoded translations.
 
   Returns:

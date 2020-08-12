@@ -109,13 +109,11 @@ class LSTMCell(RNNCellBase):
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
     dense_h = partial(linear.Dense,
-                      self,
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
     dense_i = partial(linear.Dense,
-                      self,
                       features=hidden_features,
                       use_bias=False,
                       kernel_init=self.kernel_init)
@@ -192,13 +190,11 @@ class GRUCell(RNNCellBase):
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
     dense_h = partial(linear.Dense,
-                      self,
                       features=hidden_features,
                       use_bias=False,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
     dense_i = partial(linear.Dense,
-                      self,
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.kernel_init,

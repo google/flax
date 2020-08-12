@@ -33,14 +33,9 @@ jax.config.parse_flags_with_absl()
 class TrainTest(absltest.TestCase):
 
   def test_create_model(self):
-    model, state = train.create_model(
-        random.PRNGKey(0), 8, 224, jnp.float32)
+    variables = train.initialized(random.PRNGKey(0), 224)
     x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
-    with nn.stateful(state) as new_state:
-      y = model(x)
-    state = jax.tree_map(onp.shape, state.as_dict())
-    new_state = jax.tree_map(onp.shape, new_state.as_dict())
-    self.assertEqual(state, new_state)
+    y = train.model(train=False).apply(variables, x)
     self.assertEqual(y.shape, (8, 1000))
 
 

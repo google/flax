@@ -56,9 +56,9 @@ class ModuleTest(absltest.TestCase):
   def test_init_module(self):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
-    y = DummyModule(scope)(x)
+    y = DummyModule(parent=scope)(x)
     params = scope.variables()['param']
-    y2 = DummyModule(scope.rewound())(x)
+    y2 = DummyModule(parent=scope.rewound())(x)
     onp.testing.assert_allclose(y, y2)
     onp.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
@@ -66,9 +66,9 @@ class ModuleTest(absltest.TestCase):
   def test_arg_module(self):
     x = jnp.ones((10,))
     scope = Scope({}, {'param': rngkey})
-    y = Dense(scope, 3)(x)
+    y = Dense(3, parent=scope)(x)
     params = scope.variables()['param']
-    y2 = Dense(scope.rewound(), 3)(x)
+    y2 = Dense(3, parent=scope.rewound())(x)
     onp.testing.assert_allclose(y, y2)
     self.assertEqual(params['kernel'].shape, (10, 3))
 
@@ -80,12 +80,12 @@ class ModuleTest(absltest.TestCase):
         x = self._mydense(x)
         return x
       def _mydense(self, x):
-        return Dense(self, 3)(x)
+        return Dense(3)(x)
     x = jnp.ones((10,))
     scope = Scope({}, {'param': rngkey})
-    y = MLP(scope)(x)
+    y = MLP(parent=scope)(x)
     params = scope.variables()['param']
-    y2 = MLP(scope.rewound())(x)
+    y2 = MLP(parent=scope.rewound())(x)
     onp.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
@@ -100,19 +100,19 @@ class ModuleTest(absltest.TestCase):
         x = self._mydense(x)
         return x
       def _mydense(self, x):
-        return Dense(self, 3)(x)
+        return Dense(3)(x)
     class Top(nn.Module):
       @compact
       def __call__(self, x):
-        mlp = MLP(self)
+        mlp = MLP()
         y = mlp(x)
         z = mlp(x)
         return y + z
     x = jnp.ones((10,))
     scope = Scope({}, {'param': rngkey})
-    y = Top(scope)(x)
+    y = Top(parent=scope)(x)
     params = scope.variables()['param']
-    y2 = Top(scope.rewound())(x)
+    y2 = Top(parent=scope.rewound())(x)
     onp.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
@@ -123,8 +123,8 @@ class ModuleTest(absltest.TestCase):
   def test_setup_dict_assignment(self):
     class MLP(nn.Module):
       def setup(self):
-        self.lyrs1 = {'a': Dense(None, 3), 'b': Dense(None, 3),}
-        self.lyrs2 = [Dense(None, 3), Dense(None, 3)]
+        self.lyrs1 = {'a': Dense(3), 'b': Dense(3),}
+        self.lyrs2 = [Dense(3), Dense(3)]
       def __call__(self, x):
         y = self.lyrs1['a'](x)
         z = self.lyrs1['b'](y)
@@ -132,9 +132,9 @@ class ModuleTest(absltest.TestCase):
         return z
     x = jnp.ones((10,))
     scope = Scope({}, {'param': rngkey})
-    y = MLP(scope)(x)
+    y = MLP(parent=scope)(x)
     params = scope.variables()['param']
-    y2 = MLP(scope.rewound())(x)
+    y2 = MLP(parent=scope.rewound())(x)
     onp.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
@@ -144,9 +144,9 @@ class ModuleTest(absltest.TestCase):
   def test_setup_cloning(self):
     class MLP(nn.Module):
       def setup(self):
-        self.dense = Dense(None, 3)
+        self.dense = Dense(3)
     scope = Scope({})
-    MLPclone = MLP(scope).clone()
+    MLPclone = MLP(parent=scope).clone()
 
   def test_submodule_attr(self):
     class Inner(nn.Module):
@@ -162,15 +162,15 @@ class ModuleTest(absltest.TestCase):
 
     class Wrapper(nn.Module):
       def setup(self):
-        self.inner = Inner(self)
-        self.outer = Outer(self, self.inner)
+        self.inner = Inner()
+        self.outer = Outer(self.inner)
 
       def __call__(self):
         return self.outer()
 
     scope = Scope({'param': {}}, rngs={'param': rngkey})
     # Make sure this doesn't raise "Can't attach to remote parent"
-    wrapper = Wrapper(scope)
+    wrapper = Wrapper(parent=scope)
     wrapper()
 
     # Make sure that variables are registered at the level of the
@@ -186,9 +186,9 @@ class ModuleTest(absltest.TestCase):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
-    y = DummyModule(scope, x.shape)(x)
+    y = DummyModule(x.shape, parent=scope)(x)
     params = scope.variables()['param']
-    y2 = DummyModule(scope.rewound(), x.shape)(x)
+    y2 = DummyModule(x.shape, parent=scope.rewound())(x)
     onp.testing.assert_allclose(y, y2)
     onp.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
@@ -201,7 +201,7 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
-      y = DummyModule(scope)(x)
+      y = DummyModule(parent=scope)(x)
 
   def test_init_outside_call(self):
     class Dummy(nn.Module):
@@ -215,7 +215,7 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
-      y = Dummy(scope).foo(x)
+      y = Dummy(parent=scope).foo(x)
 
   def test_setup_call_var_collision(self):
     class Dummy(nn.Module):
@@ -229,7 +229,7 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_setup_var_collision(self):
     class Dummy(nn.Module):
@@ -242,7 +242,7 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_call_var_collision(self):
     class Dummy(nn.Module):
@@ -255,7 +255,7 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_setattr_name_var_disagreement(self):
     class Dummy(nn.Module):
@@ -267,36 +267,36 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'notbias.*must equal.*bias'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_submodule_var_collision(self):
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
-        self.bias = DummyModule(None)
+        self.bias = DummyModule()
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'name bias exists already'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
       @compact
       def __call__(self, x):
-        bias = DummyModule(self, name='bias')
+        bias = DummyModule(name='bias')
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'name bias exists already'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
-        self.bias = DummyModule(None)
+        self.bias = DummyModule()
       @compact
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, self.xshape)
@@ -304,19 +304,19 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'bias already'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_setattr_name_submodule_redundant(self):
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
-        self.bias = DummyModule(self, name='bias')
+        self.bias = DummyModule(name='bias')
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'assign names via self'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_param_name_collision(self):
     class Dummy(nn.Module):
@@ -328,19 +328,19 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'Name bias already in use'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_submodule_name_collision(self):
     class Dummy(nn.Module):
       bias: bool
       def setup(self):
-        self.bias = DummyModule(self, name='bias')
+        self.bias = DummyModule(name='bias')
       def __call__(self, x):
         return self.bias(x)
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     with self.assertRaisesRegex(ValueError, 'bias exists already'):
-      y = Dummy(scope, x.shape)(x)
+      y = Dummy(x.shape, parent=scope)(x)
 
   def test_only_one_compact_method(self):
     class Dummy(nn.Module):
@@ -357,7 +357,7 @@ class ModuleTest(absltest.TestCase):
     # We could make the error fire during module construction by annotating
     # the methods and catching the error during __post_init__. Or we could
     # even check earlier and catch during __init_subclass__.
-    dummy = Dummy(scope)
+    dummy = Dummy(parent=scope)
     dummy.call1()
     with self.assertRaisesRegex(RuntimeError, '@compact'):
       dummy.call2()
@@ -374,7 +374,7 @@ class ModuleTest(absltest.TestCase):
 
     scope = Scope(variables={})
 
-    subdummy = SubDummy(scope)
+    subdummy = SubDummy(parent=scope)
     # Make sure the @compact annotation is valid on both base class and subclass, as long
     # as its on the same method.
     subdummy()
