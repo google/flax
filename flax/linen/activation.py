@@ -20,6 +20,7 @@
 # re-export activation functions from jax.nn
 from jax.nn import celu
 from jax.nn import elu
+from jax.nn import selu
 from jax.nn import gelu
 from jax.nn import glu
 from jax.nn import leaky_relu
@@ -32,6 +33,10 @@ from jax.nn import soft_sign
 from jax.nn import softmax
 from jax.nn import softplus
 from jax.nn import swish
+from jax.nn import hard_tanh
+from jax.nn import relu6
+from jax.nn import hard_sigmoid
+from jax.nn import hard_swish
 
 from jax.numpy import tanh
 # pylint: enable=unused-import
