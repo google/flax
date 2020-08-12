@@ -167,20 +167,18 @@ class MlpBlock(nn.Module):
     cfg = self.config
     actual_out_dim = (inputs.shape[-1] if self.out_dim is None
                       else self.out_dim)
-    x = nn.Dense(self,
-                 cfg.mlp_dim,
+    x = nn.Dense(cfg.mlp_dim,
                  dtype=cfg.dtype,
                  kernel_init=cfg.kernel_init,
                  bias_init=cfg.bias_init)(inputs)
     x = nn.relu(x)
-    x = nn.Dropout(self, rate=cfg.dropout_rate)(
+    x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=cfg.deterministic)
-    output = nn.Dense(self,
-                      actual_out_dim,
+    output = nn.Dense(actual_out_dim,
                       dtype=cfg.dtype,
                       kernel_init=cfg.kernel_init,
                       bias_init=cfg.bias_init)(x)
-    output = nn.Dropout(self, rate=cfg.dropout_rate)(
+    output = nn.Dropout(rate=cfg.dropout_rate)(
         output, deterministic=cfg.deterministic)
     return output
 
@@ -212,9 +210,8 @@ class Encoder1DBlock(nn.Module):
 
     # Attention block.
     assert inputs.ndim == 3
-    x = nn.LayerNorm(self, dtype=cfg.dtype)(inputs)
+    x = nn.LayerNorm(dtype=cfg.dtype)(inputs)
     x = nn.SelfAttention(
-        self,
         num_heads=cfg.num_heads,
         dtype=cfg.dtype,
         qkv_features=cfg.qkv_dim,
@@ -230,13 +227,13 @@ class Encoder1DBlock(nn.Module):
             segmentation=inputs_segmentation, # REFACTOR
             padding_mask=padding_mask) # REFACTOR
 
-    x = nn.Dropout(self, rate=cfg.dropout_rate)(
+    x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=cfg.deterministic)
     x = x + inputs
 
     # MLP block.
-    y = nn.LayerNorm(self, dtype=cfg.dtype)(x)
-    y = MlpBlock(self, config=cfg)(y)
+    y = nn.LayerNorm(dtype=cfg.dtype)(x)
+    y = MlpBlock(config=cfg)(y)
 
     return x + y
 
@@ -274,9 +271,8 @@ class EncoderDecoder1DBlock(nn.Module):
 
     # Decoder block.
     assert targets.ndim == 3
-    x = nn.LayerNorm(self, dtype=cfg.dtype)(targets)
+    x = nn.LayerNorm(dtype=cfg.dtype)(targets)
     x = nn.SelfAttention(
-        self,
         num_heads=cfg.num_heads,
         dtype=cfg.dtype,
         qkv_features=cfg.qkv_dim,
@@ -291,14 +287,13 @@ class EncoderDecoder1DBlock(nn.Module):
         decode=cfg.decode)(x,
                            padding_mask=padding_mask,
                            segmentation=targets_segmentation)
-    x = nn.Dropout(self, rate=cfg.dropout_rate)(
+    x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=cfg.deterministic)
     x = x + targets
 
     # Encoder-Decoder block.
-    y = nn.LayerNorm(self, dtype=cfg.dtype)(x)
+    y = nn.LayerNorm(dtype=cfg.dtype)(x)
     y = nn.MultiHeadDotProductAttention(
-        self,
         num_heads=cfg.num_heads,
         dtype=cfg.dtype,
         qkv_features=cfg.qkv_dim,
@@ -317,13 +312,13 @@ class EncoderDecoder1DBlock(nn.Module):
             segmentation=targets_segmentation,
             key_segmentation=inputs_segmentation)
 
-    y = nn.Dropout(self, rate=cfg.dropout_rate)(
+    y = nn.Dropout(rate=cfg.dropout_rate)(
         y, deterministic=cfg.deterministic)
     y = y + x
 
     # MLP block.
-    z = nn.LayerNorm(self, dtype=cfg.dtype)(y)
-    z = MlpBlock(self, config=cfg)(z)
+    z = nn.LayerNorm(dtype=cfg.dtype)(y)
+    z = MlpBlock(config=cfg)(z)
 
     return y + z
 
@@ -363,7 +358,6 @@ class Encoder(nn.Module):
     # Input Embedding
     if self.shared_embedding is None:
       input_embed = nn.Embed(
-          self,
           num_embeddings=cfg.vocab_size,
           features=cfg.emb_dim,
           embedding_init=nn.initializers.normal(stddev=1.0))
@@ -371,21 +365,21 @@ class Encoder(nn.Module):
       input_embed = self.shared_embedding
     x = inputs.astype('int32')
     x = input_embed(x)
-    x = AddPositionEmbs(self, config=cfg, name='posembed_input')(
+    x = AddPositionEmbs(config=cfg, name='posembed_input')(
         x, inputs_positions=inputs_positions)
-    x = nn.Dropout(self, rate=cfg.dropout_rate)(
+    x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=cfg.deterministic)
 
     x = x.astype(cfg.dtype)
 
     # Input Encoder
     for lyr in range(cfg.num_layers):
-      x = Encoder1DBlock(self, config=cfg, name=f'encoderblock_{lyr}')(
+      x = Encoder1DBlock(config=cfg, name=f'encoderblock_{lyr}')(
           x,
           padding_mask=src_padding_mask,
           inputs_segmentation=inputs_segmentation)
 
-    encoded = nn.LayerNorm(self, dtype=cfg.dtype, name='encoder_norm')(x)
+    encoded = nn.LayerNorm(dtype=cfg.dtype, name='encoder_norm')(x)
 
     return encoded
 
@@ -435,7 +429,6 @@ class Decoder(nn.Module):
     # Target Embedding
     if self.shared_embedding is None:
       output_embed = nn.Embed(
-          self,
           num_embeddings=cfg.output_vocab_size,
           features=cfg.emb_dim,
           embedding_init=nn.initializers.normal(stddev=1.0))
@@ -446,9 +439,9 @@ class Decoder(nn.Module):
     if not cfg.decode:
       y = shift_right(y)
     y = output_embed(y)
-    y = AddPositionEmbs(self, config=cfg, name='posembed_output')(
+    y = AddPositionEmbs(config=cfg, name='posembed_output')(
         y, inputs_positions=targets_positions)
-    y = nn.Dropout(self, rate=cfg.dropout_rate)(
+    y = nn.Dropout(rate=cfg.dropout_rate)(
         y, deterministic=cfg.deterministic)
 
     y = y.astype(cfg.dtype)
@@ -456,14 +449,14 @@ class Decoder(nn.Module):
     # Target-Input Decoder
     for lyr in range(cfg.num_layers):
       y = EncoderDecoder1DBlock(
-          self, config=cfg, name=f'encoderdecoderblock_{lyr}')(
+          config=cfg, name=f'encoderdecoderblock_{lyr}')(
               y,
               encoded,
               padding_mask=tgt_padding_mask,
               key_padding_mask=src_padding_mask,
               inputs_segmentation=inputs_segmentation,
               targets_segmentation=targets_segmentation)
-    y = nn.LayerNorm(self, dtype=cfg.dtype, name='encoderdecoder_norm')(y)
+    y = nn.LayerNorm(dtype=cfg.dtype, name='encoderdecoder_norm')(y)
 
     # Decoded Logits
     if cfg.logits_via_embedding:
@@ -473,7 +466,6 @@ class Decoder(nn.Module):
       logits = logits / jnp.sqrt(y.shape[-1])
     else:
       logits = nn.Dense(
-          self,
           cfg.output_vocab_size,
           dtype=cfg.dtype,
           kernel_init=cfg.kernel_init,
@@ -498,18 +490,15 @@ class Transformer(nn.Module):
         assert cfg.output_vocab_size == cfg.vocab_size, (
             "can't share embedding with different vocab sizes.")
       self.shared_embedding = nn.Embed(
-          self,
           num_embeddings=cfg.vocab_size,
           features=cfg.emb_dim,
           embedding_init=nn.initializers.normal(stddev=1.0))
     else:
       self.shared_embedding = None
 
-    self.encoder = Encoder(self,
-                           config=cfg,
+    self.encoder = Encoder(config=cfg,
                            shared_embedding=self.shared_embedding)
-    self.decoder = Decoder(self,
-                           config=cfg,
+    self.decoder = Decoder(config=cfg,
                            shared_embedding=self.shared_embedding)
 
   def __call__(self,

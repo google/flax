@@ -102,7 +102,7 @@ class TrainTest(absltest.TestCase):
 
   def test_train_one_step(self):
     batch = train.get_batch(128)
-    
+
     optimizer = create_test_optimizer()
     _, train_metrics = train.train_step(optimizer, batch)
 

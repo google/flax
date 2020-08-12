@@ -350,7 +350,7 @@ def train_step(optimizer,
 
   def loss_fn(params):
     """loss function used for training."""
-    logits = models.Transformer(None, config).apply(
+    logits = models.Transformer(config).apply(
         {'param': params},
         inputs,
         targets,
@@ -381,7 +381,7 @@ def eval_step(params, batch, config, label_smoothing=0.0):
   """Calculate evaluation metrics on a batch."""
   inputs, targets = batch['inputs'], batch['targets']
   weights = jnp.where(targets > 0, 1.0, 0.0)
-  logits = models.Transformer(None, config).apply(
+  logits = models.Transformer(config).apply(
       {'param': params}, inputs, targets)
 
   return compute_metrics(logits, targets, weights, label_smoothing)
@@ -390,7 +390,7 @@ def eval_step(params, batch, config, label_smoothing=0.0):
 def initialize_cache(inputs, max_decode_len, config):
   """Initialize a cache for a given input shape and max decode length."""
   target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
-  initial_variables = models.Transformer(None, config).init(
+  initial_variables = models.Transformer(config).init(
       jax.random.PRNGKey(0),
       jnp.ones(inputs.shape, config.dtype),
       jnp.ones(target_shape, config.dtype))
@@ -413,14 +413,14 @@ def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
   tgt_padding_mask = decode.flat_batch_beam_expand(
       jnp.ones((batch_size, 1, 1)), beam_size)
   encoded_inputs = decode.flat_batch_beam_expand(
-      models.Transformer(None, config).apply(
+      models.Transformer(config).apply(
         {'param': params}, inputs, method='encode'),
       beam_size)
 
   def tokens_ids_to_logits(flat_ids, flat_cache):
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
-    flat_logits, new_vars = models.Transformer(None, config).apply(
+    flat_logits, new_vars = models.Transformer(config).apply(
         {'param': params, 'cache': flat_cache},
         encoded_inputs,
         src_padding_mask,
@@ -568,7 +568,7 @@ def main(argv):
   # call a jitted initialization function to get the initial parameter tree
   @jax.jit
   def initialize_variables(rng):
-    return models.Transformer(None, eval_config).init(
+    return models.Transformer(eval_config).init(
         rng,
         jnp.ones(input_shape, jnp.float32),
         jnp.ones(target_shape, jnp.float32))

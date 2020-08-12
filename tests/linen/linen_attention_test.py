@@ -38,7 +38,6 @@ class AttentionTest(parameterized.TestCase):
     rng = random.PRNGKey(0)
     x = jnp.ones((4, 2, 3, 5))
     sa_module = nn.SelfAttention(
-        None,
         num_heads=8,
         attention_axis=(1, 2),
         qkv_features=16,
@@ -53,7 +52,6 @@ class AttentionTest(parameterized.TestCase):
     q = jnp.ones((4, 2, 3, 5))
     kv = jnp.ones((4, 2, 3, 5))
     sa_module = nn.MultiHeadDotProductAttention(
-        None,
         num_heads=8,
         attention_axis=(1, 2),
         qkv_features=16,
@@ -67,7 +65,6 @@ class AttentionTest(parameterized.TestCase):
     rng = random.PRNGKey(0)
     x = jnp.ones((4, 2, 3, 5))
     sa_module = nn.MultiHeadDotProductAttention(
-        None,
         num_heads=8,
         attention_axis=(1, 2),
         qkv_features=16,
@@ -122,7 +119,6 @@ class AttentionTest(parameterized.TestCase):
     inputs = random.normal(
         key1, (bs,) + spatial_shape + (num_heads * num_features,))
     module = nn.MultiHeadDotProductAttention(
-        None,
         num_heads=num_heads,
         qkv_features=num_heads * num_features,
         attention_axis=attn_dims,
@@ -156,7 +152,6 @@ class AttentionTest(parameterized.TestCase):
     inputs = random.normal(rng2, input_shape)
 
     module = nn.MultiHeadDotProductAttention(
-        None,
         num_heads=num_heads,
         causal_mask=True,
         kernel_init=jax.nn.initializers.ones)

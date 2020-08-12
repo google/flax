@@ -173,7 +173,7 @@ class EncoderLSTM(nn.Module):
   @nn.compact
   def __call__(self, carry, x):
     lstm_state, is_eos = carry
-    new_lstm_state, y = nn.LSTMCell(self, name='lstm_cell')(lstm_state, x)
+    new_lstm_state, y = nn.LSTMCell(name='lstm_cell')(lstm_state, x)
     # Pass forward the previous state if EOS has already been reached.
     def select_carried_state(new_state, old_state):
       return jnp.where(is_eos[:, np.newaxis], old_state, new_state)
@@ -200,7 +200,7 @@ class Encoder(nn.Module):
   def __call__(self, inputs):
     # inputs.shape = (batch_size, seq_length, vocab_size).
     batch_size = inputs.shape[0]
-    lstm = EncoderLSTM(self, eos_id=self.eos_id, name='encoder_lstm')
+    lstm = EncoderLSTM(eos_id=self.eos_id, name='encoder_lstm')
     init_lstm_state = lstm.initialize_carry(batch_size, self.hidden_size)
     init_carry = (init_lstm_state, jnp.zeros(batch_size, dtype=np.bool))    
     # scan over input axis 1 - we should make scan accept an axis argument again.
@@ -223,8 +223,8 @@ class DecoderLSTM(nn.Module):
     carry_rng, categorical_rng = jax.random.split(rng, 2)
     if not self.teacher_force:
       x = last_prediction
-    lstm_cell = nn.LSTMCell(self, name='lstm_cell')
-    projection = nn.Dense(self, features=self.vocab_size, name='projection')
+    lstm_cell = nn.LSTMCell(name='lstm_cell')
+    projection = nn.Dense(features=self.vocab_size, name='projection')
     lstm_state, y = lstm_cell(lstm_state, x)
     logits = projection(y)
     predicted_tokens = jax.random.categorical(categorical_rng, logits)
@@ -240,8 +240,7 @@ class Decoder(nn.Module):
   @nn.compact
   def __call__(self, inputs):
     # inputs.shape = (batch_size, seq_length, vocab_size).
-    lstm = DecoderLSTM(self,
-                       vocab_size=inputs.shape[2], 
+    lstm = DecoderLSTM(vocab_size=inputs.shape[2], 
                        teacher_force=self.teacher_force)
     init_carry = (self.make_rng('lstm'), self.init_state, inputs[:, 0])
     # scan over input axis 1 - we should make scan accept an axis argument again.
@@ -282,18 +281,17 @@ class Seq2seq(nn.Module):
     """
     # Encode inputs
     init_decoder_state = Encoder(
-        self, eos_id=self.eos_id, hidden_size=self.hidden_size)(
-            encoder_inputs)
+        eos_id=self.eos_id, hidden_size=self.hidden_size)(encoder_inputs)
     # Decode outputs.
     logits, predictions = Decoder(
-        self, init_state=init_decoder_state, teacher_force=self.teacher_force)(
+        init_state=init_decoder_state, teacher_force=self.teacher_force)(
             decoder_inputs[:, :-1])
 
     return logits, predictions
 
 
 def model(teacher_force=True):
-  return Seq2seq(parent=None, eos_id=CTABLE.eos_id, teacher_force=teacher_force,
+  return Seq2seq(eos_id=CTABLE.eos_id, teacher_force=teacher_force,
                  hidden_size=FLAGS.hidden_size)
 
 

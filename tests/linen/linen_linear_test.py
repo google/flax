@@ -38,7 +38,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 3))
     dense_module = nn.Dense(
-        None,
         features=4,
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -51,7 +50,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 2, 3))
     dense_module = nn.Dense(
-        None,
         features=4,
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -63,7 +61,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 3))
     dense_module = nn.Dense(
-        None,
         features=4,
         use_bias=False,
         kernel_init=initializers.ones,
@@ -74,14 +71,12 @@ class LinearTest(parameterized.TestCase):
   def test_dense_is_dense_general(self):
     x = jax.random.normal(random.PRNGKey(0), (5, 3))
     dense_module = nn.Dense(
-        None,
         features=4,
         use_bias=True,
         bias_init=initializers.normal(),
     )
     y1, _ = dense_module.init_with_output(dict(param=random.PRNGKey(1)), x)
     dg_module = nn.DenseGeneral(
-        None,
         features=4,
         use_bias=True,
         bias_init=initializers.normal(),
@@ -95,7 +90,6 @@ class LinearTest(parameterized.TestCase):
     x = jnp.ones((1, 3, 2, 5))
     with self.assertRaises(ValueError):
       dg_module = nn.DenseGeneral(
-          None,
           features=4,
           batch_dims=(0, 2),
           kernel_init=initializers.ones,
@@ -107,7 +101,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 3))
     dg_module = nn.DenseGeneral(
-        None,
         features=(2, 2),
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -119,7 +112,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 2, 2))
     dg_module = nn.DenseGeneral(
-        None,
         features=3,
         axis=(-2, 2),
         kernel_init=initializers.ones,
@@ -140,7 +132,6 @@ class LinearTest(parameterized.TestCase):
     counter_init = functools.partial(_counter_init, state=state)
 
     dg_module = nn.DenseGeneral(
-        None,
         features=7,
         axis=(3, -2),
         batch_dims=0,
@@ -160,7 +151,6 @@ class LinearTest(parameterized.TestCase):
     x = jnp.ones((16, 8, 9, 10))
 
     dg_module = nn.DenseGeneral(
-        None,
         features=(11, 12),
         axis=axis,
         batch_dims=batch_dims,
@@ -175,7 +165,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_module = nn.Conv(
-        None,
         features=4,
         kernel_size=(3,),
         padding='VALID',
@@ -190,7 +179,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 8, 4))
     conv_module = nn.Conv(
-        None,
         features=4,
         kernel_size=(3,),
         feature_group_count=2,
@@ -206,7 +194,6 @@ class LinearTest(parameterized.TestCase):
     rng = dict(param=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_transpose_module = nn.ConvTranspose(
-        None,
         features=4,
         kernel_size=(3,),
         padding='VALID',
@@ -232,7 +219,7 @@ class LinearTest(parameterized.TestCase):
     x = jnp.arange(4)[None]
     dummy_embedding = jnp.broadcast_to(
         jnp.arange(4)[..., None], (4, 3)).astype(jnp.float32)
-    embed_module = nn.Embed(None,
+    embed_module = nn.Embed(
         num_embeddings=4,
         features=3,
         embedding_init=lambda rng, shape: dummy_embedding,

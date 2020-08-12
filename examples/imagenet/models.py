@@ -35,10 +35,10 @@ class ResidualBlock(nn.Module):
   @nn.compact
   def __call__(self, x):
     needs_projection = x.shape[-1] != self.filters * 4 or self.strides != (1, 1)
-    batch_norm = partial(nn.BatchNorm, self, use_running_average=not self.train,
+    batch_norm = partial(nn.BatchNorm, use_running_average=not self.train,
                                        momentum=0.9, epsilon=1e-5,
                                        dtype=self.dtype)
-    conv = partial(nn.Conv, self, use_bias=False, dtype=self.dtype)
+    conv = partial(nn.Conv, use_bias=False, dtype=self.dtype)
 
     residual = x
     if needs_projection:
@@ -71,12 +71,12 @@ class ResNet(nn.Module):
     if self.num_layers not in _block_size_options:
       raise ValueError('Please provide a valid number of layers')
     block_sizes = _block_size_options[self.num_layers]
-    x = nn.Conv(self, self.num_filters, (7, 7), (2, 2),
+    x = nn.Conv(self.num_filters, (7, 7), (2, 2),
                 padding=[(3, 3), (3, 3)],
                 use_bias=False,
                 dtype=self.dtype,
                 name='init_conv')(x)
-    x = nn.BatchNorm(self, use_running_average=not self.train,
+    x = nn.BatchNorm(use_running_average=not self.train,
                      momentum=0.9, epsilon=1e-5,
                      dtype=self.dtype,
                      name='init_bn')(x)
@@ -84,12 +84,12 @@ class ResNet(nn.Module):
     for i, block_size in enumerate(block_sizes):
       for j in range(block_size):
         strides = (2, 2) if i > 0 and j == 0 else (1, 1)
-        x = ResidualBlock(self, self.num_filters * 2 ** i,
+        x = ResidualBlock(self.num_filters * 2 ** i,
                           strides=strides,
                           train=self.train,
                           dtype=self.dtype)(x)
     x = jnp.mean(x, axis=(1, 2))
-    x = nn.Dense(self, self.num_classes, dtype=self.dtype)(x)
+    x = nn.Dense(self.num_classes, dtype=self.dtype)(x)
     x = jnp.asarray(x, jnp.float32)
     x = nn.log_softmax(x)
     return x
