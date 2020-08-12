@@ -26,6 +26,10 @@ from flax.core import Scope, init, apply, lift, Array
 from flax.core.scope import _unfreeze_variables, Variable, _fold_in_str
 from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
 
+# Require JAX omnistaging mode.
+from jax.config import config
+config.enable_omnistaging()
+
 # from .dotgetter import DotGetter
 
 PRNGKey = Any  # pylint: disable=invalid-name
