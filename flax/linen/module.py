@@ -26,10 +26,10 @@ from flax.core import Scope, init, apply, lift, Array
 from flax.core.scope import _unfreeze_variables, Variable, _fold_in_str
 from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
 
-from .dotgetter import DotGetter
+# from .dotgetter import DotGetter
 
-PRNGKey = Any
-Array = Any
+PRNGKey = Any  # pylint: disable=invalid-name
+Array = Any    # pylint: disable=invalid-name
 T = TypeVar('T')
 
 # pylint: disable=protected-access,attribute-defined-outside-init
@@ -80,8 +80,9 @@ def compact(fun):
     # a module with a @compact __init__ method is still possible
     if getattr(self, '_compact_method', fun.__name__) != fun.__name__:
       raise RuntimeError(
-        'Only one method per class can be @compact. You can remove @compact and define '
-        'submodules and variables in setup(), or use two separate modules.')
+          'Only one method per class can be @compact. You can remove @compact '
+          'and define submodules and variables in setup(), or use two '
+          'separate modules.')
     object.__setattr__(self, '_compact_method', fun.__name__)
 
     if self.scope is None:
@@ -137,7 +138,7 @@ class Module:
 
   @classmethod
   def _add_parent_and_name_attrs(cls):
-    """Add dataclass attributes: `parent` first, required and `name` last, optional."""
+    """Add final optional dataclass attributes: `parent` and `name`."""
     annotations = cls.__dict__.get('__annotations__', {})
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
@@ -221,8 +222,8 @@ class Module:
     if self.parent is _unspecified_parent:
       self.parent = _context.module_stack[-1]
 
-    # Initialization is deferred until attachment by __setattr__ for orphan
-    # Modules i.e. MyModule(..., parent=None)
+    # Initialization is deferred for top level Modules or any other "orphan"
+    # Modules until attachment by __setattr__ i.e. MyModule(..., parent=None)
     if self.parent is None:
       return
 
@@ -235,7 +236,8 @@ class Module:
         return
       if not self.parent._initialization_allowed:
         raise ValueError(
-          'Submodules must be defined in `setup()` or in a method wrapped in `@compact`')
+            'Submodules must be defined in `setup()` or in a method wrapped '
+            'in `@compact`')
       # Autonaming of submodules.
       if self.name is None:
         prefix = f"{self.__class__.__name__}"
@@ -289,22 +291,11 @@ class Module:
     attrs.update(**updates)
     return self.__class__(**attrs)
 
-  # TODO: Should this be what `clone` always does if you don't pass in an explicit
-  # parent?
-  # def detached(self):
-  #   return self.clone(parent=None)
-
-  # # TODO: Consider whether this is a helpful abstraction, and think about naming.
-  # # See its use in design_test/linen/weight_std.py
-  # def materialized(self, variables={}, rngs={}):
-  #   assert self.scope is None, ("Can't attach a module twice."
-  #                               " Maybe you want to clone first?")
-  #   return self.clone(parent=Scope(variables, rngs))
-
   def variable(self, kind: str, name: str, init_fn, *init_args):
     if not self._initialization_allowed:
       raise ValueError(
-        'Variables must be initialized in `setup()` or in a method wrapped in `@compact`')
+          'Variables must be initialized in `setup()` or in a method '
+          'wrapped in `@compact`')
     if self._name_taken(name):
       raise ValueError(
           f'Name {name} already in use in {self.__class__.__name__}.')
@@ -317,6 +308,11 @@ class Module:
     self.children[name] = kind
     return v
 
+  def param(self, name: str, init_fn: Callable[..., T], *init_args,
+            kind='param') -> T:
+    p_init_fn = lambda *args: init_fn(self.make_rng(kind), *args)
+    return self.variable(kind, name, p_init_fn, *init_args).value
+
   def get_variable(self, kind: str, name: str, default: T = None) -> T:
     return self.scope.get_variable(kind, name, default)
 
@@ -326,38 +322,37 @@ class Module:
   def put_variable(self, kind: str, name: str, value: Any):
     return self.scope.put_variable(kind, name, value)
 
-  def param(self, name: str, init_fn: Callable[..., T], *init_args,
-            kind='param') -> T:
-    p_init_fn = lambda *args: init_fn(self.make_rng(kind), *args)
-    return self.variable(kind, name, p_init_fn, *init_args).value
-
   def make_rng(self, kind: str) -> PRNGKey:
     return self.scope.make_rng(kind)
 
+  def apply(self, variables, *args, rngs=None,
+            method='__call__', mutable=False, **kwargs):
+    """Apply module to variables and return output and modified variables."""
+    new_variables = _unfreeze_variables(variables, mutable)
+    with Scope(new_variables, rngs=rngs).temporary() as root:
+      clone = self.clone(parent=root)
+      y = getattr(clone, method)(*args, **kwargs)
+    if mutable:
+      return y, freeze(new_variables)
+    else:
+      return y
+
+  def init_with_output(self, rngs, *args, method='__call__', **kwargs):
+    """Create initialized data for module and return it with output."""
+    if not isinstance(rngs, dict):
+      assert rngs.shape == (2,)
+      rngs = {'param': rngs}
+    return self.apply(
+        {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
+
+  def init(self, rngs, *args, method='__call__', **kwargs):
+    """Create and return initialized data for module with rngs."""
+    y, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
+    return v_out
+
   @property
   def variables(self):
-    #"""Get a view of Module variables with easy dot-syntax navigation."""
-    #return DotGetter(self.scope.variables())
     return self.scope.variables()
-
-  def __getattr__(self, name):
-    # Used for easy colab/jupyter introspection, and to provide a
-    # consistent top-level interface to self.<attr> for both simple
-    # and multi-method modules.
-    if name in self.children:
-      val = self.children[name]
-      if isinstance(val, str):  # variable
-        return self.variables[val][name]
-      else:  # submodule
-        val.scope = self.scope.push(name)
-        self.scope.reservations.remove(name)
-        return val
-    else:
-      raise AttributeError(
-          f"'{self.__class__.__name__}' object has no attribute '{name}'")
-
-  def __dir__(self):
-    return list(self.children.keys()) + object.__dir__(self)
 
   # @contextmanager
   # def mutate(self, mutable=True, **updates):
@@ -379,29 +374,38 @@ class Module:
   #       getattr(initialized, method)(*args, **kwargs)
   #   return initialized
 
-  # def vars_init(self, *args, **kwargs):
-  #   return self.initialized(*args, **kwargs).variables
+  # @property
+  # def variables(self):
+  #   """Get a view of Module variables with easy dot-syntax navigation."""
+  #   return DotGetter(self.scope.variables())
 
-  def apply(self, variables, *args, rngs=None, method='__call__', mutable=False, **kwargs):
-    """Apply module to variables and return output and modified variables."""
-    new_variables = _unfreeze_variables(variables, mutable)
-    with Scope(new_variables, rngs=rngs).temporary() as root:
-      clone = self.clone(parent=root)
-      y = getattr(clone, method)(*args, **kwargs)
-    if mutable:
-      return y, freeze(new_variables)
-    else:
-      return y
+  # def __getattr__(self, name):
+  #   # Used for easy colab/jupyter introspection, and to provide a
+  #   # consistent top-level interface to self.<attr> for both simple
+  #   # and multi-method modules.
+  #   if name in self.children:
+  #     val = self.children[name]
+  #     if isinstance(val, str):  # variable
+  #       return self.variables[val][name]
+  #     else:  # submodule
+  #       val.scope = self.scope.push(name)
+  #       self.scope.reservations.remove(name)
+  #       return val
+  #   else:
+  #     raise AttributeError(
+  #         f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-  def init_with_output(self, rngs, *args, method='__call__', **kwargs):
-    """Create initialized data for module and return it with output."""
-    if not isinstance(rngs, dict):
-      assert rngs.shape == (2,)
-      rngs = {'param': rngs}
-    return self.apply(
-      {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
+  # def __dir__(self):
+  #   return list(self.children.keys()) + object.__dir__(self)
 
-  def init(self, rngs, *args, method='__call__', **kwargs):
-    """Create and return initialized data for module with rngs."""
-    y, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
-    return v_out
+  # TODO: Should this be what `clone` always does if you don't pass in an explicit
+  # parent?
+  # def detached(self):
+  #   return self.clone(parent=None)
+
+  # # TODO: Consider whether this is a helpful abstraction, and think about naming.
+  # # See its use in design_test/linen/weight_std.py
+  # def materialized(self, variables={}, rngs={}):
+  #   assert self.scope is None, ("Can't attach a module twice."
+  #                               " Maybe you want to clone first?")
+  #   return self.clone(parent=Scope(variables, rngs))
