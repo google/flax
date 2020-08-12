@@ -1,18 +1,12 @@
 import jax
 from jax import numpy as jnp, random, lax, jit
-from flax import nn
-from flax.nn import initializers
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, MultiModule
-import numpy as np
-
-from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
+from flax import linen as nn
 from dense import Dense
 
 X = jnp.ones((1, 10))
-Y = jnp.ones((5, ))
+Y = jnp.ones((5,))
 
-model = Dense(None, features=5)
+model = Dense(features=5)
 
 @jit
 def predict(params):
@@ -24,8 +18,8 @@ def loss_fn(params):
 
 @jit
 def init_params(rng):
-  mlp = model.initialized({'param': rng}, X)
-  return mlp.variables['param']
+  mlp_variables = model.init({'param': rng}, X)
+  return mlp_variables['param']
 
 # Get initial parameters
 params = init_params(jax.random.PRNGKey(42))

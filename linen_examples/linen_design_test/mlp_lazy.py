@@ -1,9 +1,7 @@
 import jax
 from jax import numpy as jnp, random, lax
-from flax import nn
-from flax.nn import initializers
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, MultiModule
+from flax import linen as nn
+from flax.linen import Module
 import numpy as np
 from pprint import pprint
 from dense import Dense
@@ -12,8 +10,8 @@ from dense import Dense
 # lazily only once a first input is passed through and shapes are known.
 class MLP(Module):
   def setup(self):
-    self.dense1 = Dense(self, features=2)
-    self.dense2 = Dense(self, features=1)
+    self.dense1 = Dense(features=2)
+    self.dense2 = Dense(features=1)
 
     # shapes aren't yet known, so variables aren't materialized
     print(self.dense2.variables)
@@ -27,9 +25,9 @@ class MLP(Module):
 #
 # Variable shapes depend on the input shape passed in.
 rngkey = jax.random.PRNGKey(10)
-mlp = MLP(parent=None).initialized({'param': rngkey}, jnp.zeros((1, 3)))
+mlp_variables = MLP().init(rngkey, jnp.zeros((1, 3)))
 
-pprint(mlp.variables)
+pprint(mlp_variables)
 # {'param': {'dense1': {'bias': DeviceArray([0., 0.], dtype=float32),
 #                       'kernel': DeviceArray([[ 0.18307537, -0.38739476],
 #              [-0.902451  , -0.5190721 ],
