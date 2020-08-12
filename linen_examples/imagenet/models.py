@@ -29,10 +29,10 @@ ModuleDef = Any
 class ResNetBlock(nn.Module):
   """ResNet block."""
   filters: int
-  strides: (int, int) = (1, 1)
   conv: ModuleDef
   norm: ModuleDef
   act: Callable
+  strides: (int, int) = (1, 1)
 
   @nn.compact
   def __call__(self, x,):
@@ -54,10 +54,10 @@ class ResNetBlock(nn.Module):
 class BottleneckResNetBlock(nn.Module):
   """Bottleneck ResNet block."""
   filters: int
-  strides: (int, int) = (1, 1)
   conv: ModuleDef
   norm: ModuleDef
   act: Callable
+  strides: (int, int) = (1, 1)
 
   @nn.compact
   def __call__(self, x):
