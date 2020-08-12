@@ -87,7 +87,7 @@ def model(**kwargs):
       model_dtype = jnp.float16
   else:
     model_dtype = jnp.float32
-  return models.ResNet(num_classes=1000, dtype=model_dtype, **kwargs)
+  return models.ResNet50(num_classes=1000, dtype=model_dtype, **kwargs)
 
 def initialized(key, image_size):
   input_shape = (1, image_size, image_size, 3)
