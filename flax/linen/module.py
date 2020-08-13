@@ -10,7 +10,7 @@ import dataclasses
 import threading
 
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
-                    Type, Union, TypeVar)
+                    Set, Type, Union, TypeVar)
 import jax
 from jax import numpy as jnp, random, lax
 from jax import tree_util
@@ -40,23 +40,38 @@ T = TypeVar('T')
 
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
-_context = threading.local()
-_context.module_stack = [None,]
-class Sentinel:
+class _Context:
+  def __init__(self):
+    self._thread_data = threading.local()
+  @property
+  def module_stack(self):
+    if not hasattr(self._thread_data, 'module_stack'):
+      self._thread_data.module_stack = [None,]
+    return self._thread_data.module_stack
+_context = _Context()
+
+class _Sentinel:
   pass
-_unspecified_parent = Sentinel()
+_unspecified_parent = _Sentinel()
 
 # Utilities for autonaming pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
-def is_module_tree(in_tree):
-  """Determine if in_tree is a pytree of subclasses of Module."""
+def is_module_tree(in_tree: Any) -> bool:
+  """Determine if in_tree is a pytree of subclasses of Module.
+
+  Args:
+    in_tree: python object, typically a python tree.
+
+  Returns:
+    False in_tree is empty or if any leaf is not a Module, True otherwise.
+  """
   # reject trivial pytrees, {}, [], (), etc.
   if not tree_util.tree_leaves(in_tree):
     return False
   reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
   return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
 
-def get_suffix_module_pairs(module_tree):
+def get_suffix_module_pairs(module_tree) -> List[Tuple[str, "Module"]]:
   """Helper for naming pytrees of submodules."""
   if isinstance(module_tree, Module):
     return [('', module_tree)]
@@ -67,8 +82,8 @@ def get_suffix_module_pairs(module_tree):
 
 # Gathers all names on object.
 # -----------------------------------------------------------------------------
-def all_names_on_object(obj):
-  """Get all names on self and on classes throughout MRO."""
+def all_names_on_object(obj: Any) -> Set[str]:
+  """Get all names of attributes on self and its classes throughout MRO."""
   nameset = set(obj.__dict__.keys())
   for cls in obj.__class__.__mro__:
     nameset = nameset.union(set(cls.__dict__.keys()))
@@ -76,18 +91,18 @@ def all_names_on_object(obj):
 
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
-def compact(fun):
+def compact(fun: Callable) -> Callable:
   """Decorator to mark a single Module method as compact."""
   fun.compact = True
   return fun
 
-def get_method_names(cls, exclude=()):
+def get_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
   """Get method names of a class, allow exclusions."""
   methods = {m[0] for m in inspect.getmembers(cls, predicate=callable)}
   return tuple(methods.difference(set(exclude)))
 
-def wrap_method(fun):
-  """Allow inline submodules and parameters within a single Module method."""
+def wrap_method(fun: Callable) -> Callable:
+  """Manages Module state for user-defined methods."""
   @functools.wraps(fun)
   def wrapped_module_method(self, *args, **kwargs):
     is_compact_method = hasattr(fun, 'compact')
@@ -143,7 +158,7 @@ class Module:
 
   @classmethod
   def _add_parent_and_name_attrs(cls):
-    """Direectly set value of a variable on this Module."""
+    """Add final optional dataclass attributes: `parent` and `name`."""
     annotations = cls.__dict__.get('__annotations__', {})
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
