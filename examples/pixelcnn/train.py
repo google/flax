@@ -25,7 +25,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 """PixelCNN++ example."""
 
 from functools import partial
@@ -51,56 +50,51 @@ import tensorflow as tf
 import input_pipeline
 import pixelcnn
 
-import tpu_converter
-
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=0.001,
-    help=('The initial learning rate.'))
+    'learning_rate', default=0.001, help=('The initial learning rate.'))
 
 flags.DEFINE_float(
-    'lr_decay', default='0.999995',
+    'lr_decay',
+    default='0.999995',
     help=('Learning rate decay, applied each optimization step.'))
 
 flags.DEFINE_integer(
-    'init_batch_size', default=16,
+    'init_batch_size',
+    default=16,
     help=('Batch size to use for data-dependent initialization.'))
 
 flags.DEFINE_integer(
-    'batch_size', default=64,
-    help=('Batch size for training.'))
+    'batch_size', default=64, help=('Batch size for training.'))
 
 flags.DEFINE_integer(
-    'num_epochs', default=200,
-    help=('Number of training epochs.'))
+    'num_epochs', default=200, help=('Number of training epochs.'))
 
-flags.DEFINE_float(
-    'dropout_rate', default=0.5,
-    help=('DropOut rate.'))
+flags.DEFINE_float('dropout_rate', default=0.5, help=('DropOut rate.'))
 
 flags.DEFINE_integer(
-    'rng', default=0,
-    help=('Random seed for network initialization.'))
+    'rng', default=0, help=('Random seed for network initialization.'))
 
 flags.DEFINE_integer(
-    'n_resnet', default=5,
-    help=('Number of resnet layers per block.'))
+    'n_resnet', default=5, help=('Number of resnet layers per block.'))
 
 flags.DEFINE_integer(
-    'n_feature', default=160,
-    help=('Number of features in each conv layer.'))
+    'n_feature', default=160, help=('Number of features in each conv layer.'))
 
 flags.DEFINE_integer(
-    'n_logistic_mix', default=5,
+    'n_logistic_mix',
+    default=5,
     help=('Number of components in the output distribution.'))
 
 flags.DEFINE_string(
-    'model_dir', default='./model_data',
+    'model_dir',
+    default='./model_data',
     help=('Directory to store model data.'))
 
 flags.DEFINE_float(
-    'polyak_decay', default=0.9995,
+    'polyak_decay',
+    default=0.9995,
     help=('Exponential decay rate of the sum of previous model iterates '
           'during Polyak averaging.'))
 
@@ -116,23 +110,26 @@ def get_summary_writers():
 
 
 def model(**kwargs):
-  return pixelcnn.PixelCNNPP(depth=FLAGS.n_resnet, features=FLAGS.n_feature, **kwargs)
+  return pixelcnn.PixelCNNPP(
+      depth=FLAGS.n_resnet, features=FLAGS.n_feature, **kwargs)
 
 
 def neg_log_likelihood_loss(nn_out, images):
   # The log-likelihood in bits per pixel-channel
-  means, inv_scales, logit_weights = (pixelcnn.conditional_params_from_outputs(nn_out, images))
-  log_likelihoods = pixelcnn.logprob_from_conditional_params(images, means, inv_scales, logit_weights)
+  means, inv_scales, logit_weights = (
+      pixelcnn.conditional_params_from_outputs(nn_out, images))
+  log_likelihoods = pixelcnn.logprob_from_conditional_params(
+      images, means, inv_scales, logit_weights)
   return -jnp.mean(log_likelihoods) / (jnp.log(2) * jnp.prod(images.shape[-3:]))
 
 
 def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng=None):
   """Perform a single training step."""
+
   def loss_fn(params):
     """loss function used for training."""
-    logits = model(dropout_p=FLAGS.dropout_rate).apply({'param': params},
-                                                       batch['image'],
-                                                       rngs={'dropout': dropout_rng})
+    logits = model(dropout_p=FLAGS.dropout_rate).apply(
+        {'param': params}, batch['image'], rngs={'dropout': dropout_rng})
     return neg_log_likelihood_loss(logits, batch['image'])
 
   lr = learning_rate_fn(optimizer.state.step)
@@ -143,9 +140,8 @@ def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng=None):
 
   # Compute exponential moving average (aka Polyak decay)
   ema_decay = FLAGS.polyak_decay
-  ema = jax.tree_multimap(
-      lambda ema, p: ema * ema_decay + (1 - ema_decay) * p,
-      ema, optimizer.target)
+  ema = jax.tree_multimap(lambda ema, p: ema * ema_decay + (1 - ema_decay) * p,
+                          ema, optimizer.target)
 
   metrics = {'loss': lax.pmean(loss, 'batch'), 'learning_rate': lr}
   return optimizer, ema, metrics
@@ -159,10 +155,12 @@ def eval_step(params, batch):
 
 def load_and_shard_tf_batch(xs):
   local_device_count = jax.local_device_count()
+
   def _prepare(x):
     # Use _numpy() for zero-copy conversion between TF and NumPy.
     x = x._numpy()  # pylint: disable=protected-access
     return x.reshape((local_device_count, -1) + x.shape[1:])
+
   return jax.tree_map(_prepare, xs)
 
 
@@ -188,8 +186,8 @@ def train():
   train_summary_writer, eval_summary_writer = get_summary_writers()
 
   # Load dataset
-  data_source = input_pipeline.DataSource(train_batch_size=batch_size, 
-                                          eval_batch_size=batch_size)
+  data_source = input_pipeline.DataSource(
+      train_batch_size=batch_size, eval_batch_size=batch_size)
   train_ds = data_source.train_ds
   eval_ds = data_source.eval_ds
 
@@ -215,10 +213,9 @@ def train():
   initial_variables = model().init({
       'param': init_rng,
       'dropout': dropout_rng
-    }, init_batch)['param']
-  optimizer_def = optim.Adam(learning_rate=FLAGS.learning_rate, 
-                             beta1=0.95,
-                             beta2=0.9995)
+  }, init_batch)['param']
+  optimizer_def = optim.Adam(
+      learning_rate=FLAGS.learning_rate, beta1=0.95, beta2=0.9995)
   optimizer = optimizer_def.create(initial_variables)
 
   # TODO(marcvanzee): Restoring checkpoints is broken. Fix this.
@@ -229,12 +226,11 @@ def train():
   optimizer, ema = jax_utils.replicate((optimizer, ema))
 
   # Learning rate schedule
-  learning_rate_fn = lambda step: FLAGS.learning_rate * FLAGS.lr_decay ** step
+  learning_rate_fn = lambda step: FLAGS.learning_rate * FLAGS.lr_decay**step
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
-      partial(train_step, learning_rate_fn=learning_rate_fn),
-      axis_name='batch')
+      partial(train_step, learning_rate_fn=learning_rate_fn), axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   # Gather metrics
@@ -250,8 +246,8 @@ def train():
     sharded_rngs = common_utils.shard_prng_key(step_rng)
 
     # Train step
-    optimizer, ema, metrics = p_train_step(optimizer, ema, batch, 
-                                           dropout_rng=sharded_rngs)
+    optimizer, ema, metrics = p_train_step(
+        optimizer, ema, batch, dropout_rng=sharded_rngs)
     train_metrics.append(metrics)
 
     if (step + 1) % steps_per_epoch == 0:
@@ -281,9 +277,8 @@ def train():
       eval_summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
 
       # Log epoch summary
-      logging.info(
-          'Epoch %d: TRAIN loss=%.6f, EVAL loss=%.6f',
-          epoch, train_summary['loss'], eval_summary['loss'])
+      logging.info('Epoch %d: TRAIN loss=%.6f, EVAL loss=%.6f', epoch,
+                   train_summary['loss'], eval_summary['loss'])
 
       eval_summary_writer.scalar('loss', eval_summary['loss'], step)
       train_summary_writer.flush()
@@ -292,11 +287,10 @@ def train():
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
       save_checkpoint(optimizer, ema, step)
 
+
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
-
-  tpu_converter.convert_to_tpu()
 
   train()
 
