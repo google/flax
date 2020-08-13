@@ -82,8 +82,6 @@ class PixelCNNPP(nn.Module):
     # undoing of the stack as the 'reverse pass'.
     stack = []
 
-    print(images.shape)
-
     # -------------------------- FORWARD PASS ----------------------------------
     down = shift_down(conv_down(kernel_size=(2,3))(images))
     down_right = (shift_down(conv_down(kernel_size=(1,3))(images))

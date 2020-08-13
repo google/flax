@@ -53,7 +53,6 @@ import pixelcnn
 
 import tpu_converter
 
-
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
@@ -154,7 +153,7 @@ def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng=None):
 
 def eval_step(params, batch):
   images = batch['image']
-  logits = model().apply({'param': params}, images, dropout_p=0)
+  logits = model(dropout_p=0.).apply({'param': params}, images)
   return {'loss': lax.pmean(neg_log_likelihood_loss(logits, images), 'batch')}
 
 
@@ -171,11 +170,8 @@ def restore_checkpoint(optimizer, ema):
   return checkpoints.restore_checkpoint(FLAGS.model_dir, (optimizer, ema))
 
 
-def save_checkpoint(optimizer, ema):
-  # get train state from the first replica
-  optimizer, ema = jax.device_get(
-      jax.tree_map(lambda x: x[0], (optimizer, ema)))
-  step = int(optimizer.state.step)
+def save_checkpoint(optimizer, ema, step):
+  optimizer, ema = jax_utils.unreplicate((optimizer, ema))
   checkpoints.save_checkpoint(FLAGS.model_dir, (optimizer, ema), step, keep=3)
 
 
@@ -225,7 +221,9 @@ def train():
                              beta2=0.9995)
   optimizer = optimizer_def.create(initial_variables)
 
-  optimizer, ema = restore_checkpoint(optimizer, initial_variables)
+  # TODO(marcvanzee): Restoring checkpoints is broken. Fix this.
+  # optimizer, ema = restore_checkpoint(optimizer, initial_variables)
+  ema = initial_variables
   step_offset = int(optimizer.state.step)
 
   optimizer, ema = jax_utils.replicate((optimizer, ema))
@@ -241,13 +239,9 @@ def train():
 
   # Gather metrics
   train_metrics = []
-  
-  print('===> SAVING CHECKPOINT!')
-  save_checkpoint(optimizer, ema)
-  print('===> DONE!')
 
   for step, batch in zip(range(step_offset, num_steps), train_iter):
-    print('step', step)
+    logging.info('Train step %d', step)
     # Load and shard the TF batch
     batch = load_and_shard_tf_batch(batch)
 
@@ -274,14 +268,13 @@ def train():
       train_metrics = []
 
       # Evaluation
-      model_ema = optimizer.target.replace(params=ema)
       eval_metrics = []
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
         # Load and shard the TF batch
         eval_batch = load_and_shard_tf_batch(eval_batch)
         # Step
-        metrics = p_eval_step(model_ema, eval_batch)
+        metrics = p_eval_step(optimizer.target, eval_batch)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
       # Get eval epoch summary for logging
@@ -297,7 +290,7 @@ def train():
       eval_summary_writer.flush()
 
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
-      save_checkpoint(optimizer, ema)
+      save_checkpoint(optimizer, ema, step)
 
 def main(argv):
   if len(argv) > 1:
