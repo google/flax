@@ -116,6 +116,14 @@ def wrap_method(fun: Callable) -> Callable:
       self._state.reset()
   return wrapped_module_method
 
+def get_unbound_fn(method_or_fn):
+  """Return an unbound function from a bound method."""
+  if inspect.ismethod(method_or_fn):
+    return method_or_fn.__func__
+  elif callable(method_or_fn):
+    return method_or_fn
+  else:
+    raise ValueError('Expect a function or method.')
 
 # Ephemeral Module Evaluation State
 # -----------------------------------------------------------------------------
@@ -397,13 +405,34 @@ class Module:
     """Get a new rng key of a given kind from this Module."""
     return self.scope.make_rng(kind)
 
-  @classmethod
-  def template(cls, *args, **kwargs):
-    return ModuleTemplate(cls, args, kwargs)
+  def apply(self, variables, *args, rngs=None,
+            method=None, mutable=False, **kwargs):
+    """Apply module to variables and return output and modified variables."""
+    if method is None:
+      method = self.__class__.__call__
+    else:
+      method = get_unbound_fn(method)
+    fn = lambda scope: method(self.clone(parent=scope),
+                              *args, **kwargs)
+    return apply(fn, mutable=mutable)(variables, rngs=rngs)
+
+  def init_with_output(self, rngs, *args, method=None, **kwargs):
+    """Create initialized data for module and return it with output."""
+    if not isinstance(rngs, dict):
+      assert rngs.shape == (2,)
+      rngs = {'param': rngs}
+    return self.apply(
+        {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
+
+  def init(self, rngs, *args, method=None, **kwargs):
+    """Create and return initialized data for module with rngs."""
+    _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
+    return v_out
 
   @property
   def variables(self):
     return self.scope.variables()
+
 
   # @contextmanager
   # def mutate(self, mutable=True, **updates):
@@ -460,34 +489,3 @@ class Module:
   #   assert self.scope is None, ("Can't attach a module twice."
   #                               " Maybe you want to clone first?")
   #   return self.clone(parent=Scope(variables, rngs))
-
-@dataclasses.dataclass(frozen=True)
-class ModuleTemplate(Generic[T]):
-  cls: Type[T]
-  args: Any
-  kwargs: dict
-
-  def _new_instance(self, scope):
-    return self.cls(*self.args, parent=scope, **self.kwargs)
-
-  def apply(self, variables, *args, rngs=None,
-            method=None, mutable=False, **kwargs):
-    """Apply module to variables and return output and modified variables."""
-    if method is None:
-      method = self.cls.__call__
-    fn = lambda scope: method(self._new_instance(scope),
-                              *args, **kwargs)
-    return apply(fn, mutable=mutable)(variables, rngs=rngs)
-
-  def init_with_output(self, rngs, *args, method=None, **kwargs):
-    """Create initialized data for module and return it with output."""
-    if not isinstance(rngs, dict):
-      assert rngs.shape == (2,)
-      rngs = {'param': rngs}
-    return self.apply(
-        {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
-
-  def init(self, rngs, *args, method=None, **kwargs):
-    """Create and return initialized data for module with rngs."""
-    _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
-    return v_out

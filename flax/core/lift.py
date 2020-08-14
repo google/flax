@@ -33,7 +33,7 @@ def pack(fn: Callable[..., Any],
     # pylint: disable=protected-access
     scopes, treedef = jax.tree_flatten(scope)
     # TODO(jheek) check aliasing between scopes!!!
-    
+
     variable_groups_xs = []
 
     for scope in scopes:
@@ -203,7 +203,7 @@ def vmap(fn: Callable[..., Any],
       return tuple(
         jax.tree_map(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
-    print(rng_groups_xs)
+
     rng_groups_xs = tuple(map(split_rngs, rng_groups_xs))
 
     n = len(variable_groups_xs)
@@ -246,7 +246,7 @@ def scan(
       raise ValueError(f'illegal scan variable mode: {mode}')
     return mode
   variable_modes = tuple(parse_mode(m) for m in variable_modes)
-    
+
   rng_groups, rng_splits = _unzip2(split_rngs.items())
   variable_in_groups = tuple(
       False if mode[0] is None else group

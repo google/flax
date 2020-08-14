@@ -61,7 +61,7 @@ params = ae.init(
 
 # Now you can use `ae` as a normal object, calling any methods defined on AutoEncoder
 print("reconstruct", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)))))
-print("encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method='encode')))
+print("encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method=ae.encode)))
 
 
 # `ae.variables` is a frozen dict that looks like

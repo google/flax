@@ -414,7 +414,7 @@ def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
       jnp.ones((batch_size, 1, 1)), beam_size)
   encoded_inputs = decode.flat_batch_beam_expand(
       models.Transformer(config).apply(
-        {'param': params}, inputs, method='encode'),
+        {'param': params}, inputs, method=models.Transformer.encode),
       beam_size)
 
   def tokens_ids_to_logits(flat_ids, flat_cache):
@@ -427,7 +427,7 @@ def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
         flat_ids,
         tgt_padding_mask=tgt_padding_mask,
         mutable=['cache'],
-        method='decode')
+        method=models.Transformer.decode)
     new_flat_cache = new_vars['cache']
     # Remove singleton sequence-length dimension:
     # [batch * beam, 1, vocab] --> [batch * beam, vocab]

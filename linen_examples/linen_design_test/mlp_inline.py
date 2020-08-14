@@ -24,7 +24,7 @@ class MLP(Module):
 #
 # Variable shapes depend on the input shape passed in.
 rngkey = jax.random.PRNGKey(10)
-model = MLP.template((2, 1))
+model = MLP((2, 1))
 x = jnp.ones((1, 3))
 mlp_variables = model.init(rngkey, x)
 print(mlp_variables)

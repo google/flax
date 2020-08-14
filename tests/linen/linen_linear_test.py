@@ -226,7 +226,7 @@ class LinearTest(parameterized.TestCase):
     )
     y, initial_params = embed_module.init_with_output(rng, x)
     np.testing.assert_allclose(y, dummy_embedding[None])
-    z = embed_module.apply(initial_params, jnp.ones((3,)), method='attend')
+    z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
     np.testing.assert_allclose(z, 3. * jnp.arange(4))
 
 
