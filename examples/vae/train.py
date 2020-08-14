@@ -165,7 +165,7 @@ def main(argv):
   train_ds = train_ds.repeat()
   train_ds = train_ds.shuffle(50000)
   train_ds = train_ds.batch(FLAGS.batch_size)
-  train_ds = tfds.as_numpy(train_ds)
+  train_ds = iter(tfds.as_numpy(train_ds))
 
   test_ds = ds_builder.as_dataset(split=tfds.Split.TEST)
   test_ds = test_ds.map(prepare_image).batch(10000)
