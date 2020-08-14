@@ -43,7 +43,8 @@ class TrainTest(absltest.TestCase):
     # Run eval model.
     loss, accuracy = train.eval_model(optimizer.target, test_ds)
     self.assertLess(loss, 2.252)
-    self.assertGreater(accuracy, 0.2597)
+    self.assertGreater(accuracy, 0.257)
+
 
 if __name__ == '__main__':
   absltest.main()
