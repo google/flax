@@ -1,30 +1,21 @@
 """Linen: a refined Flax."""
-import sys
-import os
-import functools
-from importlib import reload
-from pprint import pprint
-import inspect
 from contextlib import contextmanager
 import dataclasses
+import functools
+import inspect
 import threading
-
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
                     Set, Type, Union, TypeVar)
+
 import jax
-from jax import numpy as jnp, random, lax
 from jax import tree_util
 import numpy as np
 
-import flax
-from flax import nn
-from flax.nn import initializers
 from flax import traverse_util
 from flax import serialization
-
-from flax.core import Scope, init, apply, lift, Array
-from flax.core.scope import _unfreeze_variables, Variable, _fold_in_str
-from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
+from flax.core import Scope, apply
+from flax.core.scope import _unfreeze_variables, Variable
+from flax.core.frozen_dict import freeze
 
 # Require JAX omnistaging mode.
 from jax.config import config
@@ -40,7 +31,7 @@ T = TypeVar('T')
 
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
-class _Context:
+class _DynamicContext:
   def __init__(self):
     self._thread_data = threading.local()
   @property
@@ -48,11 +39,12 @@ class _Context:
     if not hasattr(self._thread_data, 'module_stack'):
       self._thread_data.module_stack = [None,]
     return self._thread_data.module_stack
-_context = _Context()
+_context = _DynamicContext()
 
 class _Sentinel:
   pass
 _unspecified_parent = _Sentinel()
+
 
 # Utilities for autonaming pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
@@ -71,7 +63,7 @@ def is_module_tree(in_tree: Any) -> bool:
   reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
   return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
 
-def get_suffix_module_pairs(module_tree) -> List[Tuple[str, "Module"]]:
+def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
   """Helper for naming pytrees of submodules."""
   if isinstance(module_tree, Module):
     return [('', module_tree)]
@@ -80,14 +72,13 @@ def get_suffix_module_pairs(module_tree) -> List[Tuple[str, "Module"]]:
         serialization.to_state_dict(module_tree))
     return [('_' + '_'.join(k), v) for k, v in flat_tree.items()]
 
-# Gathers all names on object.
-# -----------------------------------------------------------------------------
 def all_names_on_object(obj: Any) -> Set[str]:
   """Get all names of attributes on self and its classes throughout MRO."""
   nameset = set(obj.__dict__.keys())
   for cls in obj.__class__.__mro__:
     nameset = nameset.union(set(cls.__dict__.keys()))
   return nameset
+
 
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
@@ -112,34 +103,47 @@ def wrap_method(fun: Callable) -> Callable:
       raise ValueError("Can't call methods on orphaned modules")
 
     if is_compact_method:
-      object.__setattr__(self, '_in_compact_method', True)
+      self._state.in_compact_method = True
     elif is_setup_method:
-      object.__setattr__(self, '_in_setup', True)
+      self._state.in_setup = True
     _context.module_stack.append(self)
     try:
       return fun(self, *args, **kwargs)
     finally:
       _context.module_stack.pop()
       if is_compact_method:
-        object.__setattr__(self, '_in_compact_method', False)
-        object.__setattr__(self, '_reservations', set())
-        object.__setattr__(self, '_autoname_cursor', dict())
         object.__setattr__(self, 'scope', self.scope.rewound())
-      elif is_setup_method:
-        object.__setattr__(self, '_in_setup', False)
+      self._state.reset()
   return wrapped_module_method
+
+
+# Ephemeral Module Evaluation State
+# -----------------------------------------------------------------------------
+# For clarity, we collect all of the temporary flags and ephemeral
+# state used by Modules for autonaming and error messages here.
+@dataclasses.dataclass
+class _ModuleInternalState:
+  in_compact_method: bool = False
+  in_setup: bool = False
+  last_varname: Optional[str] = None
+  autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
+  reservations: Optional[set] = dataclasses.field(default_factory=set)
+
+  def reset(self):
+    self.in_compact_method = False
+    self.in_setup = False
+    self.last_varname = None
+    self.autoname_cursor = dict()
+    self.reservations = set()
+
+_uninitialized_module_internal_state = _ModuleInternalState(
+    False, False, None, None, None)
 
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
 class Module:
   """Base Module Class"""
-  # Class defaults at init. NB: these __must not__ be made annotations,
-  # as we don't want them to become dataclass fields.
-  _in_compact_method = False
-  _in_setup = False
-  _last_varname = None
-  scope = None
 
   @classmethod
   def __init_subclass__(cls):
@@ -155,6 +159,9 @@ class Module:
     # a number of different checks and to provide clear error messages.
     cls._verify_single_or_no_compact()
     cls._wrap_module_methods()
+    # Set empty class defaults.
+    cls._state = _uninitialized_module_internal_state
+    cls.scope = None
 
   @classmethod
   def _add_parent_and_name_attrs(cls):
@@ -169,7 +176,7 @@ class Module:
     if 'parent' in getattr(cls, '__dataclass_fields__', {}):
       cls.__dataclass_fields__.pop('parent')
     new_annotations['parent'] = Union[Type["Module"], Type["Scope"],
-                                      Type["Sentinel"], None]
+                                      Type["_Sentinel"], None]
     cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
     if 'name' in getattr(cls, '__dataclass_fields__', {}):
       cls.__dataclass_fields__.pop('name')
@@ -212,9 +219,6 @@ class Module:
       if name == 'parent':
         pass
       # Modules have been passed in as dataclass args.
-      # if they're orphaned, i.e. Module(None, ...) then attach them.
-      # TODO: should we not do this immediately, and give the user more
-      #       control over when such "module defs" are attached?
       elif name in self.__dataclass_fields__.keys():
         for suffix, submodule in get_suffix_module_pairs(val):
           if submodule.parent is _unspecified_parent:
@@ -226,7 +230,7 @@ class Module:
             submodule.__post_init__()
       # Submodules are being defined and attached in setup()
       else:
-        if not self._in_setup:
+        if not self._state.in_setup:
           raise ValueError("You can only assign submodules to self in setup().")
         for suffix, submodule in get_suffix_module_pairs(val):
           if submodule.parent is _unspecified_parent:
@@ -241,12 +245,12 @@ class Module:
           submodule.__post_init__()
     # val is a parameter array or a Variable reference class.
     elif isinstance(val, (np.ndarray, jax.interpreters.xla.DeviceArray,
-                          Variable)) and self._in_setup:
+                          Variable)) and self._state.in_setup:
       # namecheck to ensure named variable matches self attribute name.
-      if self._last_varname and self._last_varname != name:
-        raise ValueError(f'Variable name {self._last_varname} must equal'
+      if self._state.last_varname and self._state.last_varname != name:
+        raise ValueError(f'Variable name {self._state.last_varname} must equal'
                          f' attribute name {name}.')
-      self._last_varname = None
+      self._state.last_varname = None
     # Finally, always run default __setattr__ to attach to self.__dict__.
     object.__setattr__(self, name, val)
 
@@ -257,8 +261,7 @@ class Module:
     # defer initialization, attach this Module as a submodule of a parent,
     # or bind this Module at the top-level to variables and rngs.
 
-    self._autoname_cursor = dict()  # autonaming state
-    self._reservations = set()  # autonaming state
+    self._state = _ModuleInternalState()
     self.children = dict()  # tracks child modules
 
     # Typically we set the parent based on the dynamic module context.
@@ -275,7 +278,7 @@ class Module:
       # When initializing an unnamed Module inside setup()
       # initialization is deferred until attachment by __setattr__
       # i.e. self.mymodule = MyModule(...)
-      if self.parent._in_setup and self.name is None:
+      if self.parent._state.in_setup and self.name is None:
         return
       if not self.parent._initialization_allowed:
         raise ValueError(
@@ -284,16 +287,16 @@ class Module:
       # Autonaming of submodules.
       if self.name is None:
         prefix = f"{self.__class__.__name__}"
-        cursor = self.parent._autoname_cursor.get(prefix, 0)
+        cursor = self.parent._state.autoname_cursor.get(prefix, 0)
         self.name = f"{prefix}_{cursor}"
-        self.parent._autoname_cursor[prefix] = cursor + 1
+        self.parent._state.autoname_cursor[prefix] = cursor + 1
       if self.parent._name_taken(self.name):
         raise ValueError(
             f"A variable of name {self.name} exists already, or "
             f"trying to share submodule {self.__class__.__name__} by name "
             f"{self.name}. To share submodules, store module instances as a"
             f" Python object or as an attribute on self and reuse.")
-      self.parent._reservations.add(self.name)
+      self.parent._state.reservations.add(self.name)
       self.parent.children[self.name] = self
       self.scope = self.parent.scope.push(self.name)
       # TODO: find cleaner way to opt-out of core name collision check
@@ -319,11 +322,12 @@ class Module:
     pass
 
   def _name_taken(self, name):
-    return name in self._reservations or name in all_names_on_object(self)
+    return (name in self._state.reservations or
+            name in all_names_on_object(self))
 
   @property
   def _initialization_allowed(self):
-    return self._in_setup or self._in_compact_method
+    return self._state.in_setup or self._state.in_compact_method
 
   def clone(self, **updates):
     """Create a clone of this Module, with optionally updated arguments."""
@@ -351,9 +355,9 @@ class Module:
     if self._name_taken(name):
       raise ValueError(
           f'Name {name} already in use in {self.__class__.__name__}.')
-    self._reservations.add(name)
+    self._state.reservations.add(name)
     # ephemeral state for setattr name-equality-check
-    self._last_varname = name
+    self._state.last_varname = name
     v = self.scope.variable(kind, name, init_fn, *init_args)
     # TODO: find cleaner way to opt-out of core name collision check
     self.scope.reservations.remove(name)
