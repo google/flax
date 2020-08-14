@@ -21,10 +21,11 @@ The model should run with other configurations and hardware, but was tested on t
 
 | Hardware | Batch size | Training time | Log-likelihood (bits/dimension) | TensorBoard.dev |
 | --- | --- | --- | --- | --- |
-| 8 x TPUv3  | 256  |   8h 55m | 3.03 | [2020-08-13](https://tensorboard.dev/experiment/XpXXKlOxRjmu8P2z49rPAA/) |
+| 8 x Nvidia V100 (16GB)  | 320  |  1d 14h | 2.92 | [2020-04-23](https://tensorboard.dev/experiment/t8fM3u2zSJG7tAx6YbXHkQ/) |
+| 8 x TPUv3 (16GB)  | 320  |  - | - | [2020-08-15]() |
 
 ### How to run
-#### 8 x TPUv3
+#### 8 x Nvidia V100 (16GB), 8 x TPUv3 (16GB)
 To run training
 ```
 python train.py --batch_size=320

@@ -128,9 +128,9 @@ def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng=None):
 
   def loss_fn(params):
     """loss function used for training."""
-    logits = model(dropout_p=FLAGS.dropout_rate).apply(
+    pcnn_out = model(dropout_p=FLAGS.dropout_rate).apply(
         {'param': params}, batch['image'], rngs={'dropout': dropout_rng})
-    return neg_log_likelihood_loss(logits, batch['image'])
+    return neg_log_likelihood_loss(pcnn_out, batch['image'])
 
   lr = learning_rate_fn(optimizer.state.step)
   grad_fn = jax.value_and_grad(loss_fn)
@@ -149,8 +149,8 @@ def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng=None):
 
 def eval_step(params, batch):
   images = batch['image']
-  logits = model(dropout_p=0.).apply({'param': params}, images)
-  return {'loss': lax.pmean(neg_log_likelihood_loss(logits, images), 'batch')}
+  pcnn_out = model(dropout_p=0.).apply({'param': params}, images)
+  return {'loss': lax.pmean(neg_log_likelihood_loss(pcnn_out, images), 'batch')}
 
 
 def load_and_shard_tf_batch(xs):

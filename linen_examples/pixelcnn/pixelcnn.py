@@ -47,12 +47,11 @@ from jax import custom_jvp
 from flax import linen as nn
 
 
-# High level model definition
 class PixelCNNPP(nn.Module):
-  """High-level model definition."""
+  """PixelCNN++ module."""
   depth: int = 5
   features: int = 160
-  k: int = 10
+  logistic_components: int = 10
   dropout_p: float = 0.5
 
   @nn.compact
@@ -147,7 +146,8 @@ class PixelCNNPP(nn.Module):
 
     # Note init_scale=0.1 on this layer was not in the original implementation,
     # but seems to make training more stable.
-    return ConvOneByOne(10 * self.k, init_scale=0.1)(nn.elu(down_right))
+    return ConvOneByOne(10 * self.logistic_components, 
+                        init_scale=0.1)(nn.elu(down_right))
 
 
 # General utils
@@ -161,8 +161,8 @@ def concat_elu(x):
 
 
 def spatial_pad(pad_vertical, pad_horizontal, operand):
-  """Wrapper around lax.pad which pads spatial dimensions (horizontal and vertical) with zeros, without any interior padding.
-  """
+  """Wrapper around lax.pad which pads spatial dimensions (horizontal and 
+  vertical) with zeros, without any interior padding."""
   zero = (0, 0, 0)
   return lax.pad(operand, 0.,
                  (zero, pad_vertical + (0,), pad_horizontal + (0,), zero))
@@ -174,17 +174,15 @@ shift_right = partial(spatial_pad, (0, 0), (1, -1))
 
 # Weightnorm utils
 def _l2_normalize(v):
-  """Normalize a convolution kernel direction over the in_features and spatial dimensions.
-  """
+  """Normalize a convolution kernel direction over the in_features and spatial
+  dimensions."""
   return v / jnp.sqrt(jnp.sum(jnp.square(v), (0, 1, 2)))
 
 
 def _make_kernel(direction, scale):
-  """Maps weightnorm parameterization (direction, scale) to standard parameterization.
-
-  The direction has shape (spatial..., in_features, out_features), scale has
-  shape (out_features,).
-  """
+  """Maps weightnorm parameterization (direction, scale) to standard
+  parameterization. The direction has shape (spatial..., in_features, 
+  out_features), scale has shape (out_features,)."""
   return scale * _l2_normalize(direction)
 
 
@@ -232,9 +230,6 @@ class Conv(nn.Module):
       return dict(
           direction=direction, scale=self.init_scale / var, bias=-mean / var)
 
-    # We feed in None as a dummy shape argument to self.param.  Typically
-    # Module.param assumes that the initializer takes in a shape argument but
-    # None can be used as an escape hatch.
     params = self.param('weightnorm_params', initializer, inputs.shape)
     direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
     return conv(inputs, _make_kernel(direction, scale)) + bias
@@ -255,17 +250,11 @@ class ConvDown(nn.Module):
   def __call__(self, inputs):
     k_h, k_w = self.kernel_size
     assert k_w % 2 == 1, 'kernel width must be odd.'
-    padding = (
-        (k_h - 1, 0),  # Vertical padding
-        (k_w // 2, k_w // 2))  # Horizontal padding
+    padding = ((k_h - 1, 0),          # Vertical padding
+               (k_w // 2, k_w // 2))  # Horizontal padding
 
-    return Conv(
-        self.features,
-        self.kernel_size,
-        self.strides,
-        padding,
-        init_scale=self.init_scale)(
-            inputs)
+    return Conv(self.features, self.kernel_size, self.strides, padding,
+                init_scale=self.init_scale)(inputs)
 
 
 class ConvDownRight(nn.Module):
@@ -278,17 +267,11 @@ class ConvDownRight(nn.Module):
   @nn.compact
   def __call__(self, inputs):
     k_h, k_w = self.kernel_size
-    padding = (
-        (k_h - 1, 0),  # Vertical padding
-        (k_w - 1, 0))  # Horizontal padding
+    padding = ((k_h - 1, 0),  # Vertical padding
+               (k_w - 1, 0))  # Horizontal padding
 
-    return Conv(
-        self.features,
-        self.kernel_size,
-        self.strides,
-        padding,
-        init_scale=self.init_scale)(
-            inputs)
+    return Conv(self.features, self.kernel_size, self.strides, padding, 
+                init_scale=self.init_scale)(inputs)
 
 
 class ConvTransposeDown(nn.Module):
@@ -354,7 +337,8 @@ ResDownRight = partial(GatedResnet, conv_module=ConvDownRight)
 
 # Logistic mixture distribution utils
 def conditional_params_from_outputs(theta, img):
-  """Maps an image `img` and the PixelCNN++ convnet output `theta` to conditional parameters for a mixture of k logistics over each pixel.
+  """Maps an image `img` and the PixelCNN++ convnet output `theta` to 
+  conditional parameters for a mixture of k logistics over each pixel.
 
   Returns a tuple `(means, inverse_scales, logit_weights)` where `means` and
   `inverse_scales` are the conditional means and inverse scales of each mixture
