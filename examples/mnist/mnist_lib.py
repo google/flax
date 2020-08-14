@@ -14,18 +14,11 @@
 
 """MNIST example.
 
-This script trains a simple Convolutional Neural Net on the MNIST dataset.
+Library file which executes the training and evaluation loop for MNIST.
 The data is loaded using tensorflow_datasets.
-
 """
 
-from absl import app
-from absl import flags
 from absl import logging
-
-from flax import nn
-from flax import optim
-from flax.metrics import tensorboard
 
 import jax
 from jax import random
@@ -36,29 +29,9 @@ import numpy as onp
 
 import tensorflow_datasets as tfds
 
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_float(
-    'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
-
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=10,
-    help=('Number of training epochs.'))
-
-flags.DEFINE_string(
-    'model_dir', default=None,
-    help=('Directory to store model data.'))
-
+from flax import nn
+from flax import optim
+from flax.metrics import tensorboard
 
 class CNN(nn.Module):
   """A simple CNN model."""
@@ -173,39 +146,39 @@ def get_datasets():
   return train_ds, test_ds
 
 
-def train(train_ds, test_ds):
-  """Train MNIST to completion."""
-  rng = random.PRNGKey(0)
+def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+                       learning_rate: float, momentum: float):
+  """Execute model training and evaluation loop.
 
-  batch_size = FLAGS.batch_size
-  num_epochs = FLAGS.num_epochs
-  model_dir = FLAGS.model_dir
+  Args:
+    model_dir: Directory where the tensorboard summaries are written to.
+    num_epochs: Number of epochs to cycle through the dataset before stopping.
+    batch_size: Batch size of the input.
+    learning_rate: Learning rate for the momentum optimizer.
+    momentum: Momentum value for the momentum optimizer.
+"""
+  train_ds, test_ds = get_datasets()
+  rng = random.PRNGKey(0)
 
   summary_writer = tensorboard.SummaryWriter(model_dir)
 
   rng, init_rng = random.split(rng)
   model = create_model(init_rng)
-  optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+  optimizer = create_optimizer(model, learning_rate, momentum)
 
   for epoch in range(1, num_epochs + 1):
     rng, input_rng = random.split(rng)
     optimizer, train_metrics = train_epoch(
         optimizer, train_ds, batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
+
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                  epoch, loss, accuracy * 100)
+
     summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
     summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
     summary_writer.scalar('eval_loss', loss, epoch)
     summary_writer.scalar('eval_accuracy', accuracy, epoch)
+
   summary_writer.flush()
   return optimizer
-
-
-def main(_):
-  train_ds, test_ds = get_datasets()
-  train(train_ds, test_ds)
-
-
-if __name__ == '__main__':
-  app.run(main)

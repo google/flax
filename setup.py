@@ -39,6 +39,7 @@ tests_require = [
     "pytest",
     "pytest-cov",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
+    "svn",
     "tensorflow",
     "tensorflow_datasets",
 ]

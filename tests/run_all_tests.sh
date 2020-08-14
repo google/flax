@@ -1,5 +1,7 @@
 #!/bin/bash
 
+sh $(dirname "$0")/download_dataset_metadata.sh
+
 # Instead of using set -e, we have a manual error trap that
 # exits for any error code != 5 since pytest returns error code 5
 # for no found tests. (We may force minimal test coverage in examples
