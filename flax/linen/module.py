@@ -475,8 +475,9 @@ class ModuleTemplate(Generic[T]):
     """Apply module to variables and return output and modified variables."""
     if method is None:
       method = self.cls.__call__
-    return apply(lambda scope: method(self._new_instance(scope), *args, **kwargs),
-                 mutable=mutable)(variables, rngs=rngs)
+    fn = lambda scope: method(self._new_instance(scope),
+                              *args, **kwargs)
+    return apply(fn, mutable=mutable)(variables, rngs=rngs)
 
   def init_with_output(self, rngs, *args, method=None, **kwargs):
     """Create initialized data for module and return it with output."""
