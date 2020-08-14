@@ -10,22 +10,24 @@ from dense import Dense
 # Many NN layers and blocks are best described by a single function with inline variables.
 # In this case, variables are initialized during the first call.
 class MLP(Module):
+  sizes: Iterable[int]
+
   @compact
   def __call__(self, x):
-    return Dense(features=1)(
-        nn.relu(
-            Dense(features=2)(x)
-        )
-    )
+    for size in self.sizes[:-1]:
+        x = Dense(size)(x)
+        x = nn.relu(x)
+    return Dense(self.sizes[-1])(x)
 
 # Return an initialized instance of MLP by calling `__call__` with an input batch,
 # initializing all variables.
 #
 # Variable shapes depend on the input shape passed in.
 rngkey = jax.random.PRNGKey(10)
-mlp_variables = MLP().init(rngkey, jnp.zeros((1, 3)))
-
-pprint(mlp_variables)
+model = MLP.template((2, 1))
+x = jnp.ones((1, 3))
+mlp_variables = model.init(rngkey, x)
+print(mlp_variables)
 # {'param': {'Dense_0': {'bias': DeviceArray([0.], dtype=float32),
 #                        'kernel': DeviceArray([[-0.04267037],
 #              [-0.51097125]], dtype=float32)},
@@ -33,3 +35,4 @@ pprint(mlp_variables)
 #                        'kernel': DeviceArray([[-6.3845289e-01,  6.0373604e-01],
 #              [-5.9814966e-01,  5.1718324e-01],
 #              [-6.2220657e-01,  5.8988278e-04]], dtype=float32)}}}
+print(model.apply(mlp_variables, x))
