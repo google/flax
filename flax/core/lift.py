@@ -18,7 +18,6 @@ from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
 from .scope import Scope, KindFilter, in_kind_filter, group_kinds
-from .named_call import named_call_p
 
 scan_variable_modes = set(['carry', 'broadcast', 'scan', None])
 
@@ -34,7 +33,7 @@ def pack(fn: Callable[..., Any],
     # pylint: disable=protected-access
     scopes, treedef = jax.tree_flatten(scope)
     # TODO(jheek) check aliasing between scopes!!!
-
+    
     variable_groups_xs = []
 
     for scope in scopes:
@@ -84,8 +83,8 @@ def pack(fn: Callable[..., Any],
         inner_scope.invalidate()
         inner_scope._validate_trace_level()
         mutable_variables = {key: val for key, val
-                             in inner_scope._variables.items()
-                             if not isinstance(val, FrozenDict)}
+                              in inner_scope._variables.items()
+                              if not isinstance(val, FrozenDict)}
         out_variable_groups = group_kinds(
             mutable_variables, tuple(out_variable_filters) + (True,))
         remainder = tuple(out_variable_groups[-1].keys())
@@ -204,7 +203,7 @@ def vmap(fn: Callable[..., Any],
       return tuple(
         jax.tree_map(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
-    # print(rng_groups_xs)
+    print(rng_groups_xs)
     rng_groups_xs = tuple(map(split_rngs, rng_groups_xs))
 
     n = len(variable_groups_xs)
@@ -247,7 +246,7 @@ def scan(
       raise ValueError(f'illegal scan variable mode: {mode}')
     return mode
   variable_modes = tuple(parse_mode(m) for m in variable_modes)
-
+    
   rng_groups, rng_splits = _unzip2(split_rngs.items())
   variable_in_groups = tuple(
       False if mode[0] is None else group
@@ -347,7 +346,7 @@ def scan(
 
     _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
     # _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
-
+    
     out_flat = []
     for pv, const in out_pvals:
       if pv is not None:
@@ -356,13 +355,55 @@ def scan(
 
     (carry_vars_xs, carry), (scan_vars_xs, ys) = lax.scan(
         body, carry0, xxs, length=length, reverse=reverse)
-
+    
     broadcast_vars_xs = jax.tree_unflatten(out_tree(), out_flat)
+        
     out_vars_xs = combine(carry_vars_xs, scan_vars_xs, broadcast_vars_xs)
     return (carry, ys), out_vars_xs
 
   return pack(
       inner, variable_in_groups, variable_out_groups, rng_groups)(scope)
+
+
+def custom_vjp(module_fn: Callable[..., Any], backward_fn: Callable[..., Any],
+               grad_kind: KindFilter='param',
+               nondiff_argnums=()):
+  def inner(scope_fn, repack_fn, variable_groups_xs, rng_groups_xs, *args):
+    assert len(variable_groups_xs) == 1, 'transform does not support multi-scope lifting.'
+    grad_variables, other_variables = variable_groups_xs[0]
+
+    def simple_scope_fn(grad_variables):
+      return scope_fn(((freeze(grad_variables), other_variables),), rng_groups_xs)
+
+    def f(grad_variables, *args):
+      scope = scope_fn(((grad_variables, other_variables),), rng_groups_xs)
+      y, _ = module_fn(scope, *args)
+      vars_out = repack_fn(scope)
+      return y, vars_out
+    f = jax.custom_vjp(f, nondiff_argnums=nondiff_argnums)
+
+    def f_fwd(grad_variables, *args):
+      scope = simple_scope_fn(grad_variables)
+      y, res = module_fn(scope, *args)
+      vars_out = repack_fn(scope)
+      return (y, vars_out), (res, grad_variables)
+
+    def f_bwd(*args):
+      nondiff_args = args[:-2]
+      res, g = args[-2:]
+      g_y, _ = g
+      user_res, grad_variables = res
+      return backward_fn(*nondiff_args, simple_scope_fn, grad_variables, user_res, g_y)
+
+    f.defvjp(f_fwd, f_bwd)
+
+    return f(grad_variables, *args)
+
+  variable_in_groups = (grad_kind, True,)
+  variable_out_groups = (grad_kind, True,)
+  rng_groups = (True,)
+  return pack(
+      inner, variable_in_groups, variable_out_groups, rng_groups)
 
 
 def remat(fn: Callable[..., Any],
@@ -454,7 +495,7 @@ def _named_call(f, name):
   def named_f(*args, **kwargs):
     lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
     flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
-    out_flat = named_call_p.bind(flat_f, name=name)
+    out_flat = jax.core.call_p.bind(flat_f, name=name)
     return jax.tree_unflatten(out_tree(), out_flat)
   return named_f
 
