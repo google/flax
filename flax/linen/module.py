@@ -5,7 +5,7 @@ import functools
 import inspect
 import threading
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
-                    Set, Type, Union, TypeVar)
+                    Set, Type, Union, TypeVar, Generic)
 
 import jax
 from jax import tree_util
@@ -13,7 +13,7 @@ import numpy as np
 
 from flax import traverse_util
 from flax import serialization
-from flax.core import Scope, apply
+from flax.core import Scope, apply, init
 from flax.core.scope import _unfreeze_variables, Variable
 from flax.core.frozen_dict import freeze
 
@@ -397,30 +397,9 @@ class Module:
     """Get a new rng key of a given kind from this Module."""
     return self.scope.make_rng(kind)
 
-  def apply(self, variables, *args, rngs=None,
-            method='__call__', mutable=False, **kwargs):
-    """Apply module to variables and return output and modified variables."""
-    new_variables = _unfreeze_variables(variables, mutable)
-    with Scope(new_variables, rngs=rngs).temporary() as root:
-      clone = self.clone(parent=root)
-      y = getattr(clone, method)(*args, **kwargs)
-    if mutable:
-      return y, freeze(new_variables)
-    else:
-      return y
-
-  def init_with_output(self, rngs, *args, method='__call__', **kwargs):
-    """Create initialized data for module and return it with output."""
-    if not isinstance(rngs, dict):
-      assert rngs.shape == (2,)
-      rngs = {'param': rngs}
-    return self.apply(
-        {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
-
-  def init(self, rngs, *args, method='__call__', **kwargs):
-    """Create and return initialized data for module with rngs."""
-    y, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
-    return v_out
+  @classmethod
+  def template(cls, *args, **kwargs):
+    return ModuleTemplate(cls, args, kwargs)
 
   @property
   def variables(self):
@@ -481,3 +460,34 @@ class Module:
   #   assert self.scope is None, ("Can't attach a module twice."
   #                               " Maybe you want to clone first?")
   #   return self.clone(parent=Scope(variables, rngs))
+
+@dataclasses.dataclass(frozen=True)
+class ModuleTemplate(Generic[T]):
+  cls: Type[T]
+  args: Any
+  kwargs: dict
+
+  def _new_instance(self, scope):
+    return self.cls(*self.args, parent=scope, **self.kwargs)
+
+  def apply(self, variables, *args, rngs=None,
+            method=None, mutable=False, **kwargs):
+    """Apply module to variables and return output and modified variables."""
+    if method is None:
+      method = self.cls.__call__
+    fn = lambda scope: method(self._new_instance(scope),
+                              *args, **kwargs)
+    return apply(fn, mutable=mutable)(variables, rngs=rngs)
+
+  def init_with_output(self, rngs, *args, method=None, **kwargs):
+    """Create initialized data for module and return it with output."""
+    if not isinstance(rngs, dict):
+      assert rngs.shape == (2,)
+      rngs = {'param': rngs}
+    return self.apply(
+        {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
+
+  def init(self, rngs, *args, method=None, **kwargs):
+    """Create and return initialized data for module with rngs."""
+    _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
+    return v_out
