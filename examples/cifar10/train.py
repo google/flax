@@ -48,7 +48,7 @@ flags.DEFINE_float(
 
 flags.DEFINE_enum(
     'lr_schedule', default='stepped',
-    enum_values=['stepped', 'constant', 'consine'],
+    enum_values=['stepped', 'constant', 'cosine'],
     help=('Learning rate schedule type; constant, stepped or cosine'))
 
 flags.DEFINE_string(
@@ -76,7 +76,7 @@ flags.DEFINE_integer(
 flags.DEFINE_enum(
     'arch', default='wrn26_10',
     enum_values=['wrn26_10', 'wrn26_2', 'wrn26_6_ss', 'pyramid'],
-    help=('Network architecture.'))
+    help=('Network architecture; wrn26_10, wrn26_2, wrn26_6_ss or pyramid.'))
 
 flags.DEFINE_float(
     'wrn_dropout_rate', default=0.3,
