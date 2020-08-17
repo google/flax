@@ -180,7 +180,7 @@ def load_and_shard_tf_batch(xs):
 def make_lr_fn(base_learning_rate, steps_per_epoch):
   if FLAGS.lr_schedule == 'constant':
     return lr_schedule.create_constant_learning_rate_schedule(
-        base_lr, steps_per_epoch)
+        base_learning_rate, steps_per_epoch)
 
   if FLAGS.lr_schedule == 'stepped':
     if not FLAGS.lr_sched_steps:
@@ -189,11 +189,11 @@ def make_lr_fn(base_learning_rate, steps_per_epoch):
       lr_sched_steps = ast.literal_eval(FLAGS.lr_sched_steps)
 
     return lr_schedule.create_stepped_learning_rate_schedule(
-        base_lr, steps_per_epoch, lr_sched_steps)
+        base_learning_rate, steps_per_epoch, lr_sched_steps)
 
   if FLAGS.lr_schedule == 'cosine':
     return lr_schedule.create_cosine_learning_rate_schedule(
-        base_lr, steps_per_epoch, FLAGS.num_epochs)
+        base_learning_rate, steps_per_epoch, FLAGS.num_epochs)
 
 
 def make_model_module_fn():
@@ -251,8 +251,8 @@ def train(model_dir, batch_size, num_epochs, learning_rate,
 
   # Create the model
   image_size = 32
-  module = make_model_module_fn()
-  model, state = create_model(rng, device_batch_size, image_size, module)
+  model, state = create_model(rng, device_batch_size, image_size,
+                              make_model_module_fn())
   state = jax_utils.replicate(state)
   optimizer = create_optimizer(model, base_learning_rate, sgd_momentum)
   del model  # don't keep a copy of the initial model
