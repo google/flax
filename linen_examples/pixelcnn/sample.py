@@ -41,18 +41,23 @@ flags.DEFINE_integer(
     'sample_rng_seed', default=0,
     help=('Random number generator seed for sampling.'))
 
-def generate_sample(pcnn_module, batch_size, rng_seed=0):
+def generate_sample():
   rng = random.PRNGKey(rng_seed)
   rng, model_rng = random.split(rng)
+  rng, dropout_rng = random.split(rng)
 
   # Create a model with dummy parameters and a dummy optimizer
   example_images = jnp.zeros((1, 32, 32, 3))
-  model = train.create_model(model_rng, example_images, pcnn_module)
-  optimizer = train.create_optimizer(model, 0)
 
-  # Load learned parameters
-  _, ema = train.restore_checkpoint(optimizer, model.params)
-  model = model.replace(params=ema)
+  initial_variables = train.model().init({
+      'param': model_rng,
+      'dropout': dropout_rng
+  }, init_batch)['param']
+  optimizer_def = optim.Adam(
+      learning_rate=FLAGS.learning_rate, beta1=0.95, beta2=0.9995)
+  optimizer = optimizer_def.create(initial_variables)
+
+  optimizer, ema = train.restore_checkpoint(optimizer, initial_variables)
 
   # Initialize batch of images
   device_count = jax.local_device_count()
@@ -114,13 +119,7 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  pcnn_module = pixelcnn.PixelCNNPP.partial(depth=FLAGS.n_resnet,
-                                            features=FLAGS.n_feature,
-                                            dropout_p=0)
-
-  batch = generate_sample(
-      pcnn_module, FLAGS.sample_batch_size, FLAGS.sample_rng_seed)
-  save_images(batch, 'sample.png')
+  save_images(generate_sample(), 'sample.png')
 
 if __name__ == '__main__':
   app.run(main)
