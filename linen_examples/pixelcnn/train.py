@@ -218,8 +218,7 @@ def train():
       learning_rate=FLAGS.learning_rate, beta1=0.95, beta2=0.9995)
   optimizer = optimizer_def.create(initial_variables)
 
-  # TODO(marcvanzee): Restoring checkpoints is broken. Fix this.
-  # optimizer, ema = restore_checkpoint(optimizer, initial_variables)
+  optimizer, ema = restore_checkpoint(optimizer, initial_variables)
   ema = initial_variables
   step_offset = int(optimizer.state.step)
 
