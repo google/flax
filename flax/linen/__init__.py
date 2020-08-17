@@ -17,16 +17,17 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from .module import Module, compact
-from .transforms import vmap, scan, remat, jit, named_call
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
                          softplus, swish, tanh)
-from .attention import (dot_product_attention,
-                        MultiHeadDotProductAttention, SelfAttention)
-from .linear import Dense, DenseGeneral, Conv, ConvTranspose, Embed
-from .normalization import BatchNorm, LayerNorm, GroupNorm
-from .pooling import max_pool, avg_pool
-from .recurrent import LSTMCell, GRUCell
+from .attention import (
+                        MultiHeadDotProductAttention, SelfAttention, dot_product_attention)
+from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
+from .module import Module, compact
+from .normalization import BatchNorm, GroupNorm, LayerNorm
+from .pooling import avg_pool, max_pool
+from .recurrent import GRUCell, LSTMCell
 from .stochastic import Dropout
+from .transforms import jit, named_call, remat, scan, vmap
+
 # pylint: enable=g-multiple-import

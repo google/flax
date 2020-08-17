@@ -1,18 +1,25 @@
-diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 9c21985..fed5421 100644
---- a/examples/mnist/train.py
-+++ b/examples/mnist/train.py
-@@ -23,6 +23,9 @@ from absl import app
- from absl import flags
+diff --git a/examples/mnist/mnist_lib.py b/examples/mnist/mnist_lib.py
+index 63af6e8..87c57b0 100644
+--- a/examples/mnist/mnist_lib.py
++++ b/examples/mnist/mnist_lib.py
+@@ -20,6 +20,8 @@ The data is loaded using tensorflow_datasets.
+ 
  from absl import logging
  
 +import functools
 +
+ import jax
+ from jax import random
+ 
+@@ -29,6 +31,7 @@ import numpy as onp
+ 
+ import tensorflow_datasets as tfds
+ 
 +from flax import jax_utils
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
-@@ -87,6 +90,7 @@ def create_model(key):
+@@ -60,6 +63,7 @@ def create_model(key):
  def create_optimizer(model, learning_rate, beta):
    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
    optimizer = optimizer_def.create(model)
@@ -20,7 +27,7 @@ index 9c21985..fed5421 100644
    return optimizer
  
  
-@@ -99,6 +103,11 @@ def cross_entropy_loss(logits, labels):
+@@ -72,6 +76,11 @@ def cross_entropy_loss(logits, labels):
    return -jnp.mean(jnp.sum(onehot(labels) * logits, axis=-1))
  
  
@@ -32,7 +39,7 @@ index 9c21985..fed5421 100644
  def compute_metrics(logits, labels):
    loss = cross_entropy_loss(logits, labels)
    accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
-@@ -109,7 +118,7 @@ def compute_metrics(logits, labels):
+@@ -82,7 +91,7 @@ def compute_metrics(logits, labels):
    return metrics
  
  
@@ -41,7 +48,7 @@ index 9c21985..fed5421 100644
  def train_step(optimizer, batch):
    """Train for a single step."""
    def loss_fn(model):
-@@ -118,8 +127,10 @@ def train_step(optimizer, batch):
+@@ -91,8 +100,10 @@ def train_step(optimizer, batch):
      return loss, logits
    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
    (_, logits), grad = grad_fn(optimizer.target)
@@ -52,7 +59,7 @@ index 9c21985..fed5421 100644
    return optimizer, metrics
  
  
-@@ -131,6 +142,9 @@ def eval_step(model, batch):
+@@ -104,6 +115,9 @@ def eval_step(model, batch):
  
  def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    """Train for a single epoch."""
@@ -62,7 +69,7 @@ index 9c21985..fed5421 100644
    train_ds_size = len(train_ds['image'])
    steps_per_epoch = train_ds_size // batch_size
  
-@@ -140,6 +154,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -113,6 +127,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
@@ -70,42 +77,13 @@ index 9c21985..fed5421 100644
      optimizer, metrics = train_step(optimizer, batch)
      batch_metrics.append(metrics)
  
-@@ -191,7 +206,8 @@ def train(train_ds, test_ds):
+@@ -170,7 +185,8 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
      rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
          optimizer, train_ds, batch_size, epoch, input_rng)
 -    loss, accuracy = eval_model(optimizer.target, test_ds)
 +    model = jax_utils.unreplicate(optimizer.target)  # Fetch from 1st device
 +    loss, accuracy = eval_model(model, test_ds)
+ 
      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                   epoch, loss, accuracy * 100)
-     summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
-diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
-index 429bda4..3ebf534 100644
---- a/examples/mnist/train_test.py
-+++ b/examples/mnist/train_test.py
-@@ -21,6 +21,8 @@ import train
- import jax
- from jax import random
- 
-+from flax import jax_utils
-+
- # Parse absl flags test_srcdir and test_tmpdir.
- jax.config.parse_flags_with_absl()
- 
-@@ -36,12 +38,13 @@ class TrainTest(absltest.TestCase):
-     # test single train step.
-     optimizer, train_metrics = train.train_step(
-         optimizer=optimizer,
--        batch={k: v[:batch_size] for k, v in train_ds.items()})
-+        batch=train.shard({k: v[:batch_size] for k, v in train_ds.items()}))
-     self.assertLessEqual(train_metrics['loss'], 2.302)
-     self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
- 
-     # Run eval model.
--    loss, accuracy = train.eval_model(optimizer.target, test_ds)
-+    model = jax_utils.unreplicate(optimizer.target) # Fetch from 1st device
-+    loss, accuracy = train.eval_model(model, test_ds)
-     self.assertLess(loss, 2.252)
-     self.assertGreater(accuracy, 0.2597)
- 

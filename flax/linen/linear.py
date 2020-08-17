@@ -1,4 +1,3 @@
-# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Lint as: python3
 """Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
@@ -378,6 +378,7 @@ class Embed(Module):
 
   def attend(self, query):
     """Attend over the embedding using a query array.
+
     Args:
       query: array with last dimension equal the feature depth `features` of the
         embedding.

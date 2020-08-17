@@ -1,9 +1,25 @@
+# Copyright 2020 The Flax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Lifting / Transforms of Modules."""
 import dataclasses
 import functools
 import inspect
 from flax.core import lift
 from flax.linen import Module
+from flax.linen.module import wrap_method
+
 
 # Utils
 # -----------------------------------------------------------------------------
@@ -75,12 +91,16 @@ def module_class_lift_transform(
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
 def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
+  # NB: due to the ordering of method decorators, we must re-wrap the class_fn
+  # to maintain Module state correctly for multiple invocations.  If we want to
+  # save another stacktrace entry we could instead replicate its logic below.
+  rewrapped_fn = wrap_method(class_fn)
   @functools.wraps(class_fn)
   def wrapped_fn(self, *args, **kwargs):
     # make a scope-function to transform
     def scope_fn(scope, *args, **kwargs):
       cloned = self.clone(parent=scope)
-      res = class_fn(cloned, *args, **kwargs)
+      res = rewrapped_fn(cloned, *args, **kwargs)
       # preserve submodule-tree stripped of scopes/tracers for introspection
       object.__setattr__(self, 'children', clean_clone(cloned).children)
       return res
@@ -172,6 +192,10 @@ def module_class_scan_transform(
 # Scan as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
 def decorator_scan_transform(class_fn, *trafo_args, **trafo_kwargs):
+  # NB: due to the ordering of method decorators, we must re-wrap the class_fn
+  # to maintain Module state correctly for multiple invocations.  If we want to
+  # save another stacktrace entry we could instead replicate its logic below.
+  rewrapped_fn = wrap_method(class_fn)
   @functools.wraps(class_fn)
   def wrapped_fn(self, *args, **kwargs):
     if len(args) != 2:
@@ -180,7 +204,7 @@ def decorator_scan_transform(class_fn, *trafo_args, **trafo_kwargs):
     # make a scope-function to transform
     def scope_fn(scope, *args_inner):
       cloned = self.clone(parent=scope)
-      res = class_fn(cloned, *args_inner, **kwargs)
+      res = rewrapped_fn(cloned, *args_inner, **kwargs)
       # preserve submodule-tree stripped of scopes/tracers for introspection
       object.__setattr__(self, 'children', clean_clone(cloned).children)
       return res

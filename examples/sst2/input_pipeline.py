@@ -118,7 +118,8 @@ class SST2DataSource:
     test_raw = data['test']
 
     # Print an example.
-    logging.info('Data sample: %s', next(tfds.as_numpy(train_raw.skip(4))))
+    logging.info(
+        'Data sample: %s', next(iter(tfds.as_numpy(train_raw.skip(4)))))
 
     # Get a vocabulary and a corresponding GloVe word embedding matrix.
     vocab = build_vocab((train_raw,), min_freq=min_freq)
