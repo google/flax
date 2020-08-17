@@ -46,8 +46,9 @@ flags.DEFINE_float(
     'learning_rate', default=0.1,
     help=('The learning rate for the momentum optimizer.'))
 
-flags.DEFINE_string(
+flags.DEFINE_enum(
     'lr_schedule', default='stepped',
+    enum_values=['stepped', 'constant', 'consine'],
     help=('Learning rate schedule type; constant, stepped or cosine'))
 
 flags.DEFINE_string(
@@ -72,8 +73,9 @@ flags.DEFINE_integer(
     'num_epochs', default=200,
     help=('Number of training epochs.'))
 
-flags.DEFINE_string(
+flags.DEFINE_enum(
     'arch', default='wrn26_10',
+    enum_values=['wrn26_10', 'wrn26_2', 'wrn26_6_ss', 'pyramid'],
     help=('Network architecture.'))
 
 flags.DEFINE_float(
@@ -175,21 +177,56 @@ def load_and_shard_tf_batch(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def train(module, model_dir, batch_size,
-          num_epochs, learning_rate, sgd_momentum,
-          make_lr_fun=None, l2_reg=0.0005, run_seed=0):
+def make_lr_fn(base_learning_rate, steps_per_epoch):
+  if FLAGS.lr_schedule == 'constant':
+    return lr_schedule.create_constant_learning_rate_schedule(
+        base_lr, steps_per_epoch)
+
+  if FLAGS.lr_schedule == 'stepped':
+    if not FLAGS.lr_sched_steps:
+      lr_sched_steps = [[60, 0.2], [120, 0.04], [160, 0.008]]
+    else:
+      lr_sched_steps = ast.literal_eval(FLAGS.lr_sched_steps)
+
+    return lr_schedule.create_stepped_learning_rate_schedule(
+        base_lr, steps_per_epoch, lr_sched_steps)
+
+  if FLAGS.lr_schedule == 'cosine':
+    return lr_schedule.create_cosine_learning_rate_schedule(
+        base_lr, steps_per_epoch, FLAGS.num_epochs)
+
+
+def make_model_module_fn():
+  if FLAGS.arch == 'wrn26_10':
+    return wideresnet.WideResnet.partial(
+        blocks_per_group=4,
+        channel_multiplier=10,
+        num_outputs=10,
+        dropout_rate=FLAGS.wrn_dropout_rate)
+
+  if FLAGS.arch == 'wrn26_2':
+    return wideresnet.WideResnet.partial(
+        blocks_per_group=4,
+        channel_multiplier=2,
+        num_outputs=10,
+        dropout_rate=FLAGS.wrn_dropout_rate)
+
+  if FLAGS.arch == 'wrn26_6_ss':
+    return wideresnet_shakeshake.WideResnetShakeShake.partial(
+        blocks_per_group=4,
+        channel_multiplier=6,
+        num_outputs=10)
+
+  if FLAGS.arch == 'pyramid':
+    return pyramidnet.PyramidNetShakeDrop.partial(num_outputs=10)
+
+
+def train(model_dir, batch_size, num_epochs, learning_rate,
+          sgd_momentum, l2_reg=0.0005, run_seed=0):
   """Train model."""
   if jax.host_count() > 1:
     raise ValueError('CIFAR-10 example should not be run on '
                      'more than 1 host (for now)')
-
-  if make_lr_fun is None:
-    # No learning rate function provided
-    # Default to stepped LR schedule for CIFAR-10 and Wide ResNet
-    def make_lr_fun(base_lr, steps_per_epoch):  # pylint: disable=function-redefined
-      return lr_schedule.create_stepped_learning_rate_schedule(
-          base_lr, steps_per_epoch,
-          [[60, 0.2], [120, 0.04], [160, 0.008]])
 
   summary_writer = tensorboard.SummaryWriter(model_dir)
 
@@ -214,13 +251,14 @@ def train(module, model_dir, batch_size,
 
   # Create the model
   image_size = 32
+  module = make_model_module_fn()
   model, state = create_model(rng, device_batch_size, image_size, module)
   state = jax_utils.replicate(state)
   optimizer = create_optimizer(model, base_learning_rate, sgd_momentum)
   del model  # don't keep a copy of the initial model
 
   # Learning rate schedule
-  learning_rate_fn = make_lr_fun(base_learning_rate, steps_per_epoch)
+  learning_rate_fn = make_lr_fn(base_learning_rate, steps_per_epoch)
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
@@ -295,51 +333,10 @@ def main(argv):
 
   tf.enable_v2_behavior()
 
-  if FLAGS.arch == 'wrn26_10':
-    module = wideresnet.WideResnet.partial(
-        blocks_per_group=4,
-        channel_multiplier=10,
-        num_outputs=10,
-        dropout_rate=FLAGS.wrn_dropout_rate)
-  elif FLAGS.arch == 'wrn26_2':
-    module = wideresnet.WideResnet.partial(
-        blocks_per_group=4,
-        channel_multiplier=2,
-        num_outputs=10,
-        dropout_rate=FLAGS.wrn_dropout_rate)
-  elif FLAGS.arch == 'wrn26_6_ss':
-    module = wideresnet_shakeshake.WideResnetShakeShake.partial(
-        blocks_per_group=4,
-        channel_multiplier=6,
-        num_outputs=10)
-  elif FLAGS.arch == 'pyramid':
-    module = pyramidnet.PyramidNetShakeDrop.partial(num_outputs=10)
-  else:
-    raise ValueError('Unknown architecture {}'.format(FLAGS.arch))
-
-  if FLAGS.lr_schedule == 'constant':
-    def make_lr_fun(base_lr, steps_per_epoch):
-      return lr_schedule.create_constant_learning_rate_schedule(
-          base_lr, steps_per_epoch)
-  elif FLAGS.lr_schedule == 'stepped':
-    if not FLAGS.lr_sched_steps:
-      lr_sched_steps = [[60, 0.2], [120, 0.04], [160, 0.008]]
-    else:
-      lr_sched_steps = ast.literal_eval(FLAGS.lr_sched_steps)
-    def make_lr_fun(base_lr, steps_per_epoch):
-      return lr_schedule.create_stepped_learning_rate_schedule(
-          base_lr, steps_per_epoch, lr_sched_steps)
-  elif FLAGS.lr_schedule == 'cosine':
-    def make_lr_fun(base_lr, steps_per_epoch):
-      return lr_schedule.create_cosine_learning_rate_schedule(
-          base_lr, steps_per_epoch, FLAGS.num_epochs)
-  else:
-    raise ValueError('Unknown LR schedule type {}'.format(FLAGS.lr_schedule))
-
-  train(module, FLAGS.model_dir, FLAGS.batch_size,
-        FLAGS.num_epochs, FLAGS.learning_rate,
-        FLAGS.momentum, make_lr_fun, FLAGS.l2_reg, FLAGS.rng)
+  train(FLAGS.model_dir, FLAGS.batch_size, FLAGS.num_epochs,
+        FLAGS.learning_rate, FLAGS.momentum, FLAGS.l2_reg, FLAGS.rng)
 
 
 if __name__ == '__main__':
+  flags.mark_flag_as_required('model_dir')
   app.run(main)
