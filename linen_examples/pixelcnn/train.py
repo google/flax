@@ -269,7 +269,7 @@ def train():
         # Load and shard the TF batch
         eval_batch = load_and_shard_tf_batch(eval_batch)
         # Step
-        metrics = p_eval_step(optimizer.target, eval_batch)
+        metrics = p_eval_step(ema, eval_batch)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
       # Get eval epoch summary for logging
