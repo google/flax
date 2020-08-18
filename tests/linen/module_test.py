@@ -430,5 +430,34 @@ class ModuleTest(absltest.TestCase):
     params = test.init({'param': random.PRNGKey(42)}, jnp.ones((3, 3)))
     _ = test.apply(params, jnp.ones((3, 3)))
 
+  def test_get_local_methods(self):
+    class Base:
+      @staticmethod
+      def bar(x):
+        return x
+      @classmethod
+      def baz(cls, x):
+        return x
+      def bleep(self, x):
+        return x
+    class Derived1(Base):
+      @staticmethod
+      def bar2(x):
+        return x
+      @classmethod
+      def baz2(cls, x):
+        return x
+      def bloop(self, x):
+        return x
+    class Derived2(Derived1):
+      pass
+
+    self.assertEqual(nn.module.get_local_method_names(Base), ('bleep',))
+    self.assertEqual(nn.module.get_local_method_names(Derived1), ('bloop',))
+    self.assertEqual(
+        nn.module.get_local_method_names(Derived1, exclude=('bloop',)), ())
+    self.assertEqual(nn.module.get_local_method_names(Derived2), ())
+
+
 if __name__ == '__main__':
   absltest.main()
