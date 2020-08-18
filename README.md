@@ -52,7 +52,7 @@ comes with everything you need to start your research, including:
 
 * **Common layers** (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
 
-* **Optimizers** (`flax.optim`): SGD, Momentum, Adam, LARS
+* **Optimizers** (`flax.optim`): SGD, Momentum, Adam, LARS, Adagrad, LAMB, RMSprop
 
 * **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device
 
