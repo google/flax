@@ -148,6 +148,7 @@ def train_step(optimizer: Any, inputs: jnp.ndarray, lengths: jnp.ndarray,
 
     # L2 regularization
     l2_params = jax.tree_leaves(model.params['lstm_classifier'])
+    # TODO(mohitreddy): Convert list to a ndarray in outer jnp.sum().
     l2_weight = jnp.sum([jnp.sum(p ** 2) for p in l2_params])
     l2_penalty = l2_reg * l2_weight
 
@@ -300,52 +301,68 @@ def train(
   return stats, best_model
 
 
+def train_and_evaluate(
+  seed, model_dir, num_epochs, batch_size, embedding_size, hidden_size,
+  min_freq, max_seq_len, dropout, emb_dropout, word_dropout_rate,
+  learning_rate, checkpoints_to_keep, l2_reg):
+  """Executes model training and evaluation loop."""
+  tf.enable_v2_behavior()
+
+  # Prepare data.
+  data_source = input_pipeline.SST2DataSource(min_freq=min_freq)
+
+  # Create model.
+  model = sst2_model.create_model(
+      seed,
+      batch_size,
+      max_seq_len,
+      dict(
+          vocab_size=data_source.vocab_size,
+          embedding_size=embedding_size,
+          hidden_size=hidden_size,
+          output_size=1,
+          unk_idx=data_source.unk_idx,
+          dropout=dropout,
+          emb_dropout=emb_dropout,
+          word_dropout_rate=word_dropout_rate))
+
+  # Train the model.
+  _, model = train(
+      model,
+      learning_rate=learning_rate,
+      num_epochs=num_epochs,
+      seed=seed,
+      model_dir=model_dir,
+      data_source=data_source,
+      batch_size=batch_size,
+      checkpoints_to_keep=checkpoints_to_keep,
+      l2_reg=l2_reg)
+
+  # Evaluate the best model.
+  valid_batches = input_pipeline.get_batches(
+      data_source.valid_dataset, batch_size=batch_size)
+  metrics = evaluate(model, valid_batches)
+  logging.info('Best validation accuracy: %.2f', metrics['acc'])
+
+
 def main(argv):
   """Main function."""
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
+  # TODO(mohitreddy): Change to flags.mark_flag_as_required('model_dir').
   assert FLAGS.model_dir is not None, 'Please provide model_dir.'
   if not gfile.exists(FLAGS.model_dir):
     gfile.makedirs(FLAGS.model_dir)
 
-  tf.enable_v2_behavior()
-
-  # Prepare data.
-  data_source = input_pipeline.SST2DataSource(min_freq=FLAGS.min_freq)
-
-  # Create model.
-  model = sst2_model.create_model(
-      FLAGS.seed,
-      FLAGS.batch_size,
-      FLAGS.max_seq_len,
-      dict(
-          vocab_size=data_source.vocab_size,
-          embedding_size=FLAGS.embedding_size,
-          hidden_size=FLAGS.hidden_size,
-          output_size=1,
-          unk_idx=data_source.unk_idx,
-          dropout=FLAGS.dropout,
-          emb_dropout=FLAGS.emb_dropout,
-          word_dropout_rate=FLAGS.word_dropout_rate))
-
-  # Train the model.
-  train_stats, model = train(
-      model,
-      learning_rate=FLAGS.learning_rate,
-      num_epochs=FLAGS.num_epochs,
-      seed=FLAGS.seed,
-      model_dir=FLAGS.model_dir,
-      data_source=data_source,
-      batch_size=FLAGS.batch_size,
-      checkpoints_to_keep=FLAGS.checkpoints_to_keep,
-      l2_reg=FLAGS.l2_reg)
-
-  # Evaluate the best model.
-  valid_batches = input_pipeline.get_batches(
-      data_source.valid_dataset, batch_size=FLAGS.batch_size)
-  metrics = evaluate(model, valid_batches)
-  logging.info('Best validation accuracy: %.2f', metrics['acc'])
+  train_and_evaluate(
+    seed=FLAGS.seed, model_dir=FLAGS.model_dir, num_epochs=FLAGS.num_epochs,
+    batch_size=FLAGS.batch_size, embedding_size=FLAGS.embedding_size,
+    hidden_size=FLAGS.hidden_size, min_freq=FLAGS.min_freq,
+    max_seq_len=FLAGS.max_seq_len, dropout=FLAGS.dropout,
+    emb_dropout=FLAGS.emb_dropout, word_dropout_rate=FLAGS.word_dropout_rate,
+    learning_rate=FLAGS.learning_rate,
+    checkpoints_to_keep=FLAGS.checkpoints_to_keep, l2_reg=FLAGS.l2_reg)
 
 
 if __name__ == '__main__':
