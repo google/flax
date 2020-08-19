@@ -50,6 +50,7 @@ def _check_omnistaging():
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
 class _DynamicContext:
+  # TODO: switch to using contextvars once minimum python version is 3.7
   def __init__(self):
     self._thread_data = threading.local()
   @property
@@ -258,14 +259,7 @@ class Module:
         pass
       # Modules have been passed in as dataclass args.
       elif name in self.__dataclass_fields__.keys():
-        for suffix, submodule in get_suffix_module_pairs(val):
-          if submodule.parent is _unspecified_parent:
-            submodule.parent = self
-            if submodule.name is not None:
-              raise ValueError(
-                  "In setup assign names via self.<name> assignment.")
-            submodule.name = f'{name}{suffix}'
-            submodule.__post_init__()
+        pass
       # Submodules are being defined and attached in setup()
       else:
         if not self._state.in_setup:
