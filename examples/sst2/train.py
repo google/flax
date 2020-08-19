@@ -305,7 +305,24 @@ def train_and_evaluate(
   seed, model_dir, num_epochs, batch_size, embedding_size, hidden_size,
   min_freq, max_seq_len, dropout, emb_dropout, word_dropout_rate,
   learning_rate, checkpoints_to_keep, l2_reg):
-  """Executes model training and evaluation loop."""
+  """Executes model training and evaluation loop.
+  
+  Args:
+    seed: Random seed for network initialization.
+    model_dir: Directory to store model data.
+    num_epochs: Number of training epochs.
+    batch_size: Batch size for training.
+    embedding_size: Size of the word embeddings.
+    hidden_size: Hidden size for the LSTM and MLP.
+    min_freq: Minimum frequency for training set words to be in vocabulary.
+    max_seq_len: Maximum sequence length in the dataset.
+    dropout: Dropout rate.
+    emb_dropout: Embedding dropout rate.
+    word_dropout_rate: Word dropout rate.
+    learning_rate: The learning rate for the Adam optimizer.
+    checkpoints_to_keep: Number of checkpoints to keep.
+    l2_reg: L2 regularization to keep. 
+  """
   tf.enable_v2_behavior()
 
   # Prepare data.

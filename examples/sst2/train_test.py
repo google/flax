@@ -26,12 +26,10 @@ import train as sst2_train
 
 
 class Sst2TrainTest(absltest.TestCase):
-  """Test cases for train."""
+  """Test cases for SST2 train file."""
 
   def test_train_and_evaluate(self):
-    """Tests training and evaluation code by running a single step with
-       mocked data for MNIST dataset.
-    """
+    """Tests training and evaluation loop using TFDS mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
     model_dir = tempfile.mkdtemp()
 
@@ -42,7 +40,7 @@ class Sst2TrainTest(absltest.TestCase):
     with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
       sst2_train.train_and_evaluate(
           seed=0, model_dir=model_dir, num_epochs=1, batch_size=8,
-          embedding_size=8, hidden_size=8, min_freq=5, max_seq_len=55,
+          embedding_size=256, hidden_size=256, min_freq=5, max_seq_len=55,
           dropout=0.5, emb_dropout=0.5, word_dropout_rate=0.1,
           learning_rate=0.0005, checkpoints_to_keep=0, l2_reg=1e-6)
 
