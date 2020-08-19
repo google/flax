@@ -16,9 +16,10 @@
 import dataclasses
 import functools
 import inspect
-from flax.core import lift
+from flax.core import lift, Scope
 from flax.linen import Module
 from flax.linen.module import wrap_method
+import jax
 
 
 # Utils
@@ -31,6 +32,40 @@ def clean_clone(x):
         {k: clean_clone(v) for k, v in x.children.items()})
     object.__setattr__(x, 'scope', None)
   return x
+
+
+def get_module_scopes(module):
+  """Get all scopes on module, including constructor Module arguments."""
+  outer_scopes = []
+  def get_scope(x):
+    nonlocal outer_scopes
+    if isinstance(x, Module) and isinstance(x.scope, Scope):
+      outer_scopes.append(x.scope)
+    return x
+  attrs = {f.name: getattr(module, f.name)
+           for f in dataclasses.fields(module) if f.name != 'parent'}
+  jax.tree_map(get_scope, attrs)
+  return outer_scopes + [module.scope,]
+
+
+def set_module_scopes(module, scopes):
+  """Set all scopes on module, including constructor Module arguments."""
+  idx = 0
+  def set_scope(x):
+    nonlocal idx
+    if isinstance(x, Module) and isinstance(x.scope, Scope):
+      new_x = x.clone(parent=scopes[idx])
+      idx += 1
+      return new_x
+    else:
+      return x
+  attrs = {f.name: getattr(module, f.name)
+           for f in dataclasses.fields(module) if f.name != 'parent'}
+  new_attrs = jax.tree_map(set_scope, attrs)
+  new_module = module.clone(parent=scopes[idx], **new_attrs)
+  idx += 1
+  assert len(scopes) == idx, f"scope list mismatch {len(scopes)} != {idx}"
+  return new_module
 
 
 # Class lifting
@@ -68,19 +103,20 @@ def module_class_lift_transform(
     @functools.wraps(fn)
     def wrapped_fn(self, *args, **kwargs):
       # make a scope-function to transform
-      def scope_fn(scope, *args, **kwargs):
+      def core_fn(scopes, *args, **kwargs):
         # make a clone of self using its arguments
         attrs = {f.name: getattr(self, f.name)
                  for f in dataclasses.fields(self) if f.name != 'parent'}
         # we reference module_class, not self.__class__ to avoid infinite loop
-        cloned = module_class(parent=scope, **attrs)
+        cloned = module_class(parent=None, **attrs)
+        cloned = set_module_scopes(cloned, scopes)
         res = getattr(cloned, fn_name)(*args, **kwargs)
         # preserve submodule-tree stripped of scopes/tracers for introspection
         object.__setattr__(self, 'children', clean_clone(cloned).children)
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = transform(scope_fn, *trafo_args, **trafo_kwargs)
-      ret = trafo_fn(self.scope, *args, **kwargs)
+      trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
+      ret = trafo_fn(get_module_scopes(self), *args, **kwargs)
       return ret
     transformed_fns[fn_name] = wrapped_fn
   # construct new dynamic class w. transformed methods
@@ -98,15 +134,15 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
   @functools.wraps(class_fn)
   def wrapped_fn(self, *args, **kwargs):
     # make a scope-function to transform
-    def scope_fn(scope, *args, **kwargs):
-      cloned = self.clone(parent=scope)
+    def core_fn(scopes, *args, **kwargs):
+      cloned = set_module_scopes(self, scopes)
       res = rewrapped_fn(cloned, *args, **kwargs)
       # preserve submodule-tree stripped of scopes/tracers for introspection
       object.__setattr__(self, 'children', clean_clone(cloned).children)
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
-    trafo_fn = transform(scope_fn, *trafo_args, **trafo_kwargs)
-    return trafo_fn(self.scope, *args, **kwargs)
+    trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
+    return trafo_fn(get_module_scopes(self), *args, **kwargs)
   return wrapped_fn
 
 
@@ -170,18 +206,20 @@ def module_class_scan_transform(
         raise ValueError('scan requires a Module taking two arguments, '
                          'a carry and an input.')
       # make a scope-function to transform
-      def scope_fn(scope, *args_inner):
+      def core_fn(scopes, *args_inner):
         # make a clone of self using its arguments
         attrs = {f.name: getattr(self, f.name)
                  for f in dataclasses.fields(self) if f.name != 'parent'}
         # we reference module_class, not self.__class__ to avoid infinite loop
-        cloned = module_class(parent=scope, **attrs)
+        cloned = module_class(parent=None, **attrs)
+        cloned = set_module_scopes(cloned, scopes)
         res = getattr(cloned, fn_name)(*args_inner, **kwargs)
         # preserve submodule-tree stripped of scopes/tracers for introspection
         object.__setattr__(self, 'children', clean_clone(cloned).children)
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
-      return lift.scan(scope_fn, self.scope, *args, *trafo_args, **trafo_kwargs)
+      return lift.scan(core_fn, get_module_scopes(self),
+                       *args, *trafo_args, **trafo_kwargs)
     transformed_fns[fn_name] = wrapped_fn
   # construct new dynamic class w. transformed methods
   return type('Scan' + module_class.__name__,
@@ -202,18 +240,19 @@ def decorator_scan_transform(class_fn, *trafo_args, **trafo_kwargs):
       raise ValueError('scan requires a Module taking two arguments, '
                        'a carry and an input.')
     # make a scope-function to transform
-    def scope_fn(scope, *args_inner):
-      cloned = self.clone(parent=scope)
+    def core_fn(scopes, *args_inner):
+      cloned = set_module_scopes(self, scopes)
       res = rewrapped_fn(cloned, *args_inner, **kwargs)
       # preserve submodule-tree stripped of scopes/tracers for introspection
       object.__setattr__(self, 'children', clean_clone(cloned).children)
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
-    return lift.scan(scope_fn, self.scope, *args, *trafo_args, **trafo_kwargs)
+    return lift.scan(core_fn, get_module_scopes(self),
+                     *args, *trafo_args, **trafo_kwargs)
   return wrapped_fn
 
 
-# Utility to wrap a class or to use as decorator in def of class method.
+# scan wraps a class or used as decorator in def of class method.
 # -----------------------------------------------------------------------------
 def scan(target, *trafo_args, methods=None, **trafo_kwargs):
   """Applies scan to a Module class or as a decorator on class functions."""
