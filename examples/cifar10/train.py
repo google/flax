@@ -90,6 +90,14 @@ flags.DEFINE_string(
     'model_dir', default=None,
     help=('Directory to store model data.'))
 
+flags.DEFINE_integer(
+    'num_train_steps', default=-1,
+    help=('Number of training steps to be executed in a single epoch.'))
+
+flags.DEFINE_integer(
+    'num_eval_steps', default=-1,
+    help=('Number of evaluation steps to be executed in a single epoch.'))
+
 
 @functools.partial(jax.jit, static_argnums=(1, 2, 3))
 def create_model(prng_key, batch_size, image_size, module):
@@ -177,53 +185,76 @@ def load_and_shard_tf_batch(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def make_lr_fn(base_learning_rate, steps_per_epoch):
-  if FLAGS.lr_schedule == 'constant':
+def make_lr_fn(
+  lr_schedule_type, lr_sched_steps, base_learning_rate, steps_per_epoch,
+  num_epochs):
+  if lr_schedule_type == 'constant':
     return lr_schedule.create_constant_learning_rate_schedule(
         base_learning_rate, steps_per_epoch)
 
-  if FLAGS.lr_schedule == 'stepped':
-    if not FLAGS.lr_sched_steps:
+  if lr_schedule_type == 'stepped':
+    if not lr_sched_steps:
       lr_sched_steps = [[60, 0.2], [120, 0.04], [160, 0.008]]
     else:
-      lr_sched_steps = ast.literal_eval(FLAGS.lr_sched_steps)
+      lr_sched_steps = ast.literal_eval(lr_sched_steps)
 
     return lr_schedule.create_stepped_learning_rate_schedule(
         base_learning_rate, steps_per_epoch, lr_sched_steps)
 
-  if FLAGS.lr_schedule == 'cosine':
+  if lr_schedule_type == 'cosine':
     return lr_schedule.create_cosine_learning_rate_schedule(
-        base_learning_rate, steps_per_epoch, FLAGS.num_epochs)
+        base_learning_rate, steps_per_epoch, num_epochs)
 
 
-def make_model_module_fn():
-  if FLAGS.arch == 'wrn26_10':
+def make_model_module_fn(arch, wrn_dropout_rate):
+  if arch == 'wrn26_10':
     return wideresnet.WideResnet.partial(
         blocks_per_group=4,
         channel_multiplier=10,
         num_outputs=10,
-        dropout_rate=FLAGS.wrn_dropout_rate)
+        dropout_rate=wrn_dropout_rate)
 
-  if FLAGS.arch == 'wrn26_2':
+  if arch == 'wrn26_2':
     return wideresnet.WideResnet.partial(
         blocks_per_group=4,
         channel_multiplier=2,
         num_outputs=10,
-        dropout_rate=FLAGS.wrn_dropout_rate)
+        dropout_rate=wrn_dropout_rate)
 
-  if FLAGS.arch == 'wrn26_6_ss':
+  if arch == 'wrn26_6_ss':
     return wideresnet_shakeshake.WideResnetShakeShake.partial(
         blocks_per_group=4,
         channel_multiplier=6,
         num_outputs=10)
 
-  if FLAGS.arch == 'pyramid':
+  if arch == 'pyramid':
     return pyramidnet.PyramidNetShakeDrop.partial(num_outputs=10)
 
 
-def train(model_dir, batch_size, num_epochs, learning_rate,
-          sgd_momentum, l2_reg=0.0005, run_seed=0):
-  """Train model."""
+def train_and_evaluate(
+  model_dir, batch_size, num_epochs, learning_rate, sgd_momentum,
+  model_arch='wrn26_10', lr_schedule_type='stepped',
+  lr_sched_steps='[[60, 0.2], [120, 0.04], [160, 0.008]]',
+  wrn_dropout_rate=0.3, l2_reg=0.0005, run_seed=0,
+  num_train_steps=-1, num_eval_steps=-1):
+  """Executes model training and evaluation loop.
+
+  Args:
+    model_dir: Directory to store model data.
+    batch_size: Batch size used for datasets during training and evaluation.
+    num_epochs: Number of training epochs.
+    learning_rate: Learning rate for the momentum optimizer.
+    sgd_momentum: Decay rate for the momentum optimizer.
+    model_arch: Model network architecture.
+    lr_schedule_type: Learning rate schedule type.
+    lr_sched_steps: Learning rate schedule steps.
+    wrn_dropout_rate: Wide ResNet Dropout rate.
+    l2_reg: L2 regularization to apply.
+    run_seed: Random seed for network initialization.
+    num_train_steps: Number of training steps to be executed in a single epoch.
+    num_eval_steps: Number of evaluation steps to be executed in a single
+      epoch.
+  """
   if jax.host_count() > 1:
     raise ValueError('CIFAR-10 example should not be run on '
                      'more than 1 host (for now)')
@@ -243,22 +274,35 @@ def train(model_dir, batch_size, num_epochs, learning_rate,
   eval_ds = data_source.eval_ds
 
   # Compute steps per epoch and nb of eval steps
-  steps_per_epoch = data_source.TRAIN_IMAGES // batch_size
-  steps_per_eval = data_source.EVAL_IMAGES // batch_size
+  if num_train_steps == -1:
+    steps_per_epoch = (
+      data_source.info.splits['train'].num_examples // batch_size
+    )
+  else:
+    steps_per_epoch = num_train_steps
+
+  if num_eval_steps == -1:
+    steps_per_eval = data_source.info.splits['test'].num_examples // batch_size
+  else:
+    steps_per_eval = num_eval_steps
+
   num_steps = steps_per_epoch * num_epochs
 
   base_learning_rate = learning_rate
 
   # Create the model
   image_size = 32
-  model, state = create_model(rng, device_batch_size, image_size,
-                              make_model_module_fn())
+  model, state = create_model(
+    rng, device_batch_size, image_size,
+    make_model_module_fn(arch=model_arch, wrn_dropout_rate=wrn_dropout_rate))
   state = jax_utils.replicate(state)
   optimizer = create_optimizer(model, base_learning_rate, sgd_momentum)
   del model  # don't keep a copy of the initial model
 
   # Learning rate schedule
-  learning_rate_fn = make_lr_fn(base_learning_rate, steps_per_epoch)
+  learning_rate_fn = make_lr_fn(
+    lr_schedule_type, lr_sched_steps, base_learning_rate, steps_per_epoch,
+    num_epochs)
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
@@ -333,8 +377,14 @@ def main(argv):
 
   tf.enable_v2_behavior()
 
-  train(FLAGS.model_dir, FLAGS.batch_size, FLAGS.num_epochs,
-        FLAGS.learning_rate, FLAGS.momentum, FLAGS.l2_reg, FLAGS.rng)
+  train_and_evaluate(
+    model_dir=FLAGS.model_dir, batch_size=FLAGS.batch_size,
+    num_epochs=FLAGS.num_epochs, learning_rate=FLAGS.learning_rate,
+    sgd_momentum=FLAGS.momentum, model_arch=FLAGS.arch,
+    lr_schedule_type=FLAGS.lr_schedule, lr_sched_steps=FLAGS.lr_sched_steps,
+    wrn_dropout_rate=FLAGS.wrn_dropout_rate, l2_reg=FLAGS.l2_reg,
+    run_seed=FLAGS.rng, num_train_steps=FLAGS.num_train_steps,
+    num_eval_steps=FLAGS.num_eval_steps)
 
 
 if __name__ == '__main__':

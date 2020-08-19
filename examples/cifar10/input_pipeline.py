@@ -59,9 +59,6 @@ def augment(image, crop_padding=4, flip_lr=True):
 
 class CIFAR10DataSource(object):
   """CIFAR-10 data source."""
-  TRAIN_IMAGES = 50000
-  EVAL_IMAGES = 10000
-
   # Computed from the training set by taking the per-channel mean/std-dev
   # over sample, height and width axes of all training samples.
   MEAN_RGB = [0.4914 * 255, 0.4822 * 255, 0.4465 * 255]
@@ -76,8 +73,16 @@ class CIFAR10DataSource(object):
       raise ValueError
     flip_lr = self.CAN_FLIP_HORIZONTALLY
 
+    cifar_builder = tfds.builder('cifar10')
+    cifar_info = cifar_builder.info
+    self.info = cifar_info
+
+    # Download and prepare dataset.
+    cifar_builder.download_and_prepare()
+    datasets = cifar_builder.as_dataset()
+    
     # Training set
-    train_ds = tfds.load('cifar10', split='train').cache()
+    train_ds = datasets['train'].cache()
     train_ds = train_ds.repeat()
     train_ds = train_ds.shuffle(16 * train_batch_size, seed=shuffle_seed)
 
@@ -94,7 +99,7 @@ class CIFAR10DataSource(object):
     self.train_ds = train_ds
 
     # Test set
-    eval_ds = tfds.load('cifar10', split='test').cache()
+    eval_ds = datasets['test'].cache()
 
     def _process_test_sample(x):
       image = tf.cast(x['image'], tf.float32)
@@ -104,8 +109,7 @@ class CIFAR10DataSource(object):
 
     eval_ds = eval_ds.map(_process_test_sample, num_parallel_calls=128)
     # Note: samples will be dropped if the number of test samples
-    # (EVAL_IMAGES=10000) is not divisible by the evaluation batch
-    # size
+    # is not divisible by the evaluation batch size.
     eval_ds = eval_ds.batch(eval_batch_size, drop_remainder=True)
     eval_ds = eval_ds.repeat()
     eval_ds = eval_ds.prefetch(10)
