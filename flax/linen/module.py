@@ -25,6 +25,7 @@ import jax
 from jax import tree_util
 import numpy as np
 
+import flax
 from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
@@ -63,6 +64,21 @@ _context = _DynamicContext()
 class _Sentinel:
   pass
 _unspecified_parent = _Sentinel()
+
+
+# Enable automatic named_call wrapping for labelling profile traces.
+# -----------------------------------------------------------------------------
+_use_named_call = False
+
+def enable_named_call():
+  """Enables named call wrapping for labelling profile traces."""
+  global _use_named_call
+  _use_named_call = True
+
+def disable_named_call():
+  """Disables named call wrapping."""
+  global _use_named_call
+  _use_named_call = False
 
 
 # Utilities for autonaming pytrees of Modules defined inside setup()
@@ -242,7 +258,13 @@ class Module:
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__'])
     for key in get_local_method_names(cls, exclude=exclusions):
-      setattr(cls, key, wrap_method(getattr(cls, key)))
+      method = getattr(cls, key)
+      if _use_named_call and key != 'setup':
+        printkey = f'.{key}' if key != '__call__' else ''
+        method_name = f'{cls.__name__}{printkey}'
+        from flax.linen.transforms import named_call
+        method = named_call(method, method_name)
+      setattr(cls, key, wrap_method(method))
     return cls
 
   def __setattr__(self, name: str, val: Any):

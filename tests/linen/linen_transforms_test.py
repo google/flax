@@ -364,6 +364,50 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(new_vars['counter']['outer2']['cntr']['foo'],
                      jnp.array([4], jnp.int32))
 
+  def test_multiscope_lifting_simple_decorator_w_named_call(self):
+    # TODO: actually test jaxpr on a simpler module.
+    nn.enable_named_call()
+    try:
+      class Counter(nn.Module):
+        @nn.jit
+        @nn.compact
+        def __call__(self):
+          v = self.variable('counter', 'foo', lambda: jnp.array([0]))
+          v.value += jnp.array([1])
+          return v.value
+      class Outer(nn.Module):
+        @nn.jit
+        @nn.compact
+        def __call__(self, x):
+          cntr = Counter(name='cntr')()
+          return x
+      class Inner(nn.Module):
+        outer_module: nn.Module
+        @nn.jit
+        @nn.compact
+        def __call__(self, x):
+          return self.outer_module(x)
+      class Test(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          outer_dense = Outer(name='outer')
+          # we share stateful outer module as arg to two different, transformed modules:
+          inner = Inner(outer_dense, name='inner1')
+          inner2 = Inner(outer_dense, name='inner2')
+          res = inner(x) + inner2(x)
+          return res
+
+      x = jnp.ones((1, 1))
+      rngs = random.PRNGKey(0)
+      init_vars = Test(None).init(rngs, x)
+      _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+      self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
+                      jnp.array([2], jnp.int32))
+      self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
+                      jnp.array([4], jnp.int32))
+    finally:
+      nn.disable_named_call()
+
   def test_vmapped_outer_module(self):
     class Outer(nn.Module):
       @nn.jit
