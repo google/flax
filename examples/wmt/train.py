@@ -81,10 +81,6 @@ flags.DEFINE_string(
     'eval_dataset_name', default='wmt14_translate/de-en:test',
     help='Optional name of TFDS translation dataset to use for evaluation.')
 
-flags.DEFINE_bool(
-    'reverse_translation', default=False,
-    help='Reverse the direction of translation.')
-
 flags.DEFINE_integer(
     'batch_size', default=256,
     help='Per host batch size for training.')
@@ -160,14 +156,6 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     'num_heads', default=16,
     help='Number of attention heads.')
-
-flags.DEFINE_float(
-    'dropout_rate', default=0.1,
-    help='Dropout rate.')
-
-flags.DEFINE_float(
-    'attention_dropout_rate', default=0.1,
-    help='Attention dropout rate.')
 
 flags.DEFINE_integer(
     'random_seed', default=0,
@@ -496,13 +484,53 @@ def tohost(x):
   return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
 
 
-def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+def train_and_evaluate(
+  random_seed, jax_backend_target, model_dir, data_dir, vocab_path, vocab_size,
+  dataset_name, eval_dataset_name, batch_size, beam_size, eval_frequency,
+  num_train_steps, num_eval_steps, learning_rate, warmup_steps,
+  label_smoothing, weight_decay, max_target_length, max_eval_target_length,
+  max_predict_length, emb_dim, num_heads, num_layers, qkv_dim, mlp_dim,
+  share_embeddings, logits_via_embedding, use_bfloat16, restore_checkpoints,
+  save_checkpoints, checkpoint_freq):
+  """Executes model training and evaluation loop.
 
-  if FLAGS.jax_backend_target:
+  Args:
+    random_seed: Integer for PRNG random seed.
+    jax_backend_target: TPU gRPC target for use with Cloud TPUs.
+    model_dir: Directory to store model data.
+    data_dir: Tensorflow datasets directory.
+    vocab_path: Path to load or store sentencepiece vocab file.
+    vocab_size: Vocabulary size.
+    dataset_name: TFDS translation dataset to use.
+    eval_dataset_name: TFDS translation dataset to use for evaluation.
+    batch_size: Per host batch size for training.
+    beam_size: Beam size for inference.
+    eval_frequency: Evaluate model every these number of steps.
+    num_train_steps: Number of steps to execute during training.
+    num_eval_steps: Number of steps to execute during evaluation.
+    learning_rate: Base learning rate.
+    warmup_steps: Linear learning rate warmup.
+    label_smoothing: Cross entropy loss label smoothing.
+    weight_decay: Decay factor for AdamW style weight decay.
+    max_target_length: Maximum length cutoff for training examples.
+    max_eval_target_length: Maximum length cutoff for eval examples.
+    max_predict_length: Maximum length cutoff for predicted tokens.
+    emb_dim: Size of the Embedding.
+    num_heads: Number of Attention heads.
+    num_layers: Number of transformer layers.
+    qkv_dim: Size of Query/Key/Value in Attention.
+    mlp_dim: Size of the MLP.
+    share_embeddings: Whether to share Embeddings for inputs and targets.
+    logits_via_embedding: Whether to use Embedding matrix transpose in the
+      final logit transform.
+    use_bfloat16: Whether to use bfloat16 mixed precision training.
+    restore_checkpoints: Whether to restore from existing model checkpoints.
+    save_checkpoints: Whether to save model checkpoints.
+    checkpoint_freq: Save a checkpoint every these number of steps.
+  """
+  if jax_backend_target:
     jax.config.FLAGS.jax_xla_backend = 'tpu_driver'
-    jax.config.FLAGS.jax_backend_target = FLAGS.jax_backend_target
+    jax.config.FLAGS.jax_backend_target = jax_backend_target
 
   # This seems to be necessary even when importing TF2?
   tf.enable_v2_behavior()
@@ -511,34 +539,34 @@ def main(argv):
   n_devices = jax.local_device_count()
 
   if jax.host_id() == 0:
-    tf.io.gfile.makedirs(FLAGS.model_dir)
+    tf.io.gfile.makedirs(model_dir)
     train_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, 'train'))
+        os.path.join(model_dir, 'train'))
     eval_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, 'eval'))
+        os.path.join(model_dir, 'eval'))
 
-  if FLAGS.batch_size % n_devices:
+  if batch_size % n_devices:
     raise ValueError('Batch size must be divisible by the number of devices')
 
-  vocab_path = FLAGS.vocab_path
+  vocab_path = vocab_path
   if vocab_path is None:
-    vocab_path = os.path.join(FLAGS.model_dir, 'sentencepiece_model')
+    vocab_path = os.path.join(model_dir, 'sentencepiece_model')
   tf.io.gfile.makedirs(os.path.split(vocab_path)[0])
 
   # Load Dataset
   logging.info('Initializing dataset.')
   train_ds, eval_ds, predict_ds, encoder = input_pipeline.get_wmt_datasets(
       n_devices=n_devices,
-      dataset_name=FLAGS.dataset_name,
-      eval_dataset_name=FLAGS.eval_dataset_name,
+      dataset_name=dataset_name,
+      eval_dataset_name=eval_dataset_name,
       shard_idx=jax.host_id(),
       shard_count=jax.host_count(),
-      data_dir=FLAGS.data_dir,
+      data_dir=data_dir,
       vocab_path=vocab_path,
-      target_vocab_size=FLAGS.vocab_size,
-      batch_size=FLAGS.batch_size,
-      max_length=FLAGS.max_target_length,
-      max_eval_length=FLAGS.max_eval_target_length)
+      target_vocab_size=vocab_size,
+      batch_size=batch_size,
+      max_length=max_target_length,
+      max_eval_length=max_eval_target_length)
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
   eos_id = decode.EOS_ID  # Default Sentencepiece EOS token.
@@ -551,34 +579,34 @@ def main(argv):
   transformer_kwargs = {
       'vocab_size': vocab_size,
       'output_vocab_size': vocab_size,
-      'emb_dim': FLAGS.emb_dim,
-      'num_heads': FLAGS.num_heads,
-      'num_layers': FLAGS.num_layers,
-      'qkv_dim': FLAGS.qkv_dim,
-      'mlp_dim': FLAGS.mlp_dim,
-      'max_len': max(FLAGS.max_target_length, FLAGS.max_eval_target_length),
-      'share_embeddings': FLAGS.share_embeddings,
-      'logits_via_embedding': FLAGS.logits_via_embedding,
+      'emb_dim': emb_dim,
+      'num_heads': num_heads,
+      'num_layers': num_layers,
+      'qkv_dim': qkv_dim,
+      'mlp_dim': mlp_dim,
+      'max_len': max(max_target_length, max_eval_target_length),
+      'share_embeddings': share_embeddings,
+      'logits_via_embedding': logits_via_embedding,
   }
 
   start_step = 0
-  rng = random.PRNGKey(FLAGS.random_seed)
+  rng = random.PRNGKey(random_seed)
   rng, init_rng = random.split(rng)
-  input_shape = (FLAGS.batch_size, FLAGS.max_target_length)
-  target_shape = (FLAGS.batch_size, FLAGS.max_target_length)
+  input_shape = (batch_size, max_target_length)
+  target_shape = (batch_size, max_target_length)
   model, cache_def = create_model(init_rng,
                                   input_shape,
                                   target_shape,
                                   transformer_kwargs)
   optimizer = create_optimizer(model,
-                               FLAGS.learning_rate,
-                               FLAGS.weight_decay)
+                               learning_rate,
+                               weight_decay)
   # We access model only from optimizer below via optimizer.target.
   del model
 
-  if FLAGS.restore_checkpoints:
+  if restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
-    optimizer = checkpoints.restore_checkpoint(FLAGS.model_dir, optimizer)
+    optimizer = checkpoints.restore_checkpoint(model_dir, optimizer)
     # Grab last step.
     start_step = int(optimizer.state.step)
 
@@ -586,25 +614,25 @@ def main(argv):
   optimizer = jax_utils.replicate(optimizer)
 
   learning_rate_fn = create_learning_rate_scheduler(
-      base_learning_rate=FLAGS.learning_rate,
-      warmup_steps=FLAGS.warmup_steps)
+      base_learning_rate=learning_rate,
+      warmup_steps=warmup_steps)
 
   p_train_step = jax.pmap(
       functools.partial(
           train_step,
           learning_rate_fn=learning_rate_fn,
-          label_smoothing=FLAGS.label_smoothing,
-          use_bfloat16=FLAGS.use_bfloat16),
+          label_smoothing=label_smoothing,
+          use_bfloat16=use_bfloat16),
       axis_name='batch')
   p_eval_step = jax.pmap(
       functools.partial(
           eval_step,
-          label_smoothing=FLAGS.label_smoothing,
-          use_bfloat16=FLAGS.use_bfloat16),
+          label_smoothing=label_smoothing,
+          use_bfloat16=use_bfloat16),
       axis_name='batch')
   p_pred_step = jax.pmap(
-      functools.partial(predict_step, use_bfloat16=FLAGS.use_bfloat16,
-                        beam_size=FLAGS.beam_size),
+      functools.partial(predict_step, use_bfloat16=use_bfloat16,
+                        beam_size=beam_size),
       axis_name='batch',
       static_broadcasted_argnums=(3, 4))  # eos token, max_length are constant
 
@@ -615,7 +643,7 @@ def main(argv):
   logging.info('Starting training loop.')
   metrics_all = []
   t_loop_start = time.time()
-  for step, batch in zip(range(start_step, FLAGS.num_train_steps), train_iter):
+  for step, batch in zip(range(start_step, num_train_steps), train_iter):
     # Shard data to devices and do a training step.
     batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
     optimizer, metrics, dropout_rngs = p_train_step(
@@ -623,13 +651,13 @@ def main(argv):
     metrics_all.append(metrics)
 
     # Save a checkpoint on one host after every checkpoint_freq steps.
-    if (FLAGS.save_checkpoints and step % FLAGS.checkpoint_freq == 0 and
+    if (save_checkpoints and step % checkpoint_freq == 0 and
         step > 0 and jax.host_id() == 0):
-      checkpoints.save_checkpoint(FLAGS.model_dir,
+      checkpoints.save_checkpoint(model_dir,
                                   jax_utils.unreplicate(optimizer), step)
 
     # Periodic metric handling.
-    if step % FLAGS.eval_frequency != 0 and step > 0:
+    if step % eval_frequency != 0 and step > 0:
       continue
 
     logging.info('Gathering training metrics.')
@@ -640,7 +668,7 @@ def main(argv):
     denominator = metrics_sums.pop('denominator')
     summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
     summary['learning_rate'] = lr
-    steps_per_eval = FLAGS.eval_frequency if step != 0 else 1
+    steps_per_eval = eval_frequency if step != 0 else 1
     steps_per_sec = steps_per_eval / (time.time() - t_loop_start)
     t_loop_start = time.time()
     if jax.host_id() == 0:
@@ -656,7 +684,7 @@ def main(argv):
     t_eval_start = time.time()
     eval_metrics = []
     eval_iter = iter(eval_ds)
-    for _, eval_batch in zip(range(FLAGS.num_eval_steps), eval_iter):
+    for _, eval_batch in zip(range(num_eval_steps), eval_iter):
       eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
       eval_batch = common_utils.shard(eval_batch)
       metrics = p_eval_step(optimizer.target, eval_batch)
@@ -690,16 +718,16 @@ def main(argv):
             lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
       pred_batch = common_utils.shard(pred_batch)
       per_device_batchsize = pred_batch['inputs'].shape[1]
-      cache_dtype = jnp.bfloat16 if FLAGS.use_bfloat16 else jnp.float32
+      cache_dtype = jnp.bfloat16 if use_bfloat16 else jnp.float32
       cache = jax_utils.replicate(
           cache_def.initialize_cache((per_device_batchsize,
-                                      FLAGS.max_predict_length),
+                                      max_predict_length),
                                      dtype=cache_dtype))
       predicted = p_pred_step(pred_batch['inputs'],
                               optimizer.target,
                               cache,
                               eos_id,
-                              FLAGS.max_predict_length)
+                              max_predict_length)
       predicted = tohost(predicted)
       inputs = tohost(pred_batch['inputs'])
       targets = tohost(pred_batch['targets'])
@@ -726,6 +754,32 @@ def main(argv):
       eval_summary_writer.text('samples', exemplars, step)
       eval_summary_writer.flush()
     logging.info('Translation BLEU Score %.4f', bleu_score)
+
+
+def main(argv):
+  if len(argv) > 1:
+    raise app.UsageError('Too many command-line arguments.')
+
+  train_and_evaluate(
+    random_seed=FLAGS.random_seed, jax_backend_target=FLAGS.jax_backend_target,
+    model_dir=FLAGS.model_dir, data_dir=FLAGS.data_dir,
+    vocab_path=FLAGS.vocab_path, vocab_size=FLAGS.vocab_size,
+    dataset_name=FLAGS.dataset_name, eval_dataset_name=FLAGS.eval_dataset_name,
+    batch_size=FLAGS.batch_size, beam_size=FLAGS.beam_size,
+    eval_frequency=FLAGS.eval_frequency, num_train_steps=FLAGS.num_train_steps,
+    num_eval_steps=FLAGS.num_eval_steps, learning_rate=FLAGS.learning_rate,
+    warmup_steps=FLAGS.warmup_steps, label_smoothing=FLAGS.label_smoothing,
+    weight_decay=FLAGS.weight_decay, max_target_length=FLAGS.max_target_length,
+    max_eval_target_length=FLAGS.max_eval_target_length,
+    max_predict_length=FLAGS.max_predict_length, emb_dim=FLAGS.emb_dim,
+    num_heads=FLAGS.num_heads, num_layers=FLAGS.num_layers,
+    qkv_dim=FLAGS.qkv_dim, mlp_dim=FLAGS.mlp_dim,
+    share_embeddings=FLAGS.share_embeddings,
+    logits_via_embedding=FLAGS.logits_via_embedding,
+    use_bfloat16=FLAGS.use_bfloat16,
+    restore_checkpoints=FLAGS.restore_checkpoints,
+    save_checkpoints=FLAGS.save_checkpoints,
+    checkpoint_freq=FLAGS.checkpoint_freq)
 
 
 if __name__ == '__main__':

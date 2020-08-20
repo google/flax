@@ -42,6 +42,8 @@ tests_require = [
     "svn",
     "tensorflow",
     "tensorflow_datasets",
+    "tensorflow-text>=2.0",
+    "sentencepiece",
 ]
 
 setup(

@@ -129,7 +129,10 @@ def dump_chars_to_textfile(dataset,
   with tempfile.NamedTemporaryFile(delete=False,
                                    prefix='/tmp/ds_chars') as outfp:
     while char_count < maxchars:
-      example = next(ds_iter)
+      try:
+        example = next(ds_iter)
+      except StopIteration:
+        break
       for k in data_keys:
         line = example[k] + b'\n'
         char_count += len(line)

@@ -1,2 +1,4 @@
 tensorflow>=2.1
 tensorflow-datasets
+tensorflow-text>=2.0
+sentencepiece
