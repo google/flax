@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Benchmark for the ImageNet example."""
-import tempfile
 import time
 
 from absl import flags
@@ -37,8 +36,6 @@ class ImagenetBenchmark(Benchmark):
   @flagsaver
   def test_8x_v100_half_precision(self):
     """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
-    model_dir = tempfile.mkdtemp()
-
     model_dir = self.get_tmp_model_dir()
     FLAGS.batch_size = 2048
     FLAGS.half_precision = True
