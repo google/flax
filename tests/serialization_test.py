@@ -112,6 +112,41 @@ class SerializationTest(absltest.TestCase):
     optimizer_plus1 = jax.tree_map(lambda x: x + 1, optimizer)
     self.assertEqual(restored_optimizer, optimizer_plus1)
 
+  def test_collection_serialization(self):
+
+    @struct.dataclass
+    class DummyDataClass:
+      x: float
+
+      @classmethod
+      def initializer(cls, key, shape):
+        del shape, key
+        return cls(x=0.)
+
+    class StatefulModule(nn.Module):
+
+      def apply(self):
+        state = self.state('state', (), DummyDataClass.initializer)
+        state.value = state.value.replace(x=state.value.x + 1.)
+
+    # use stateful
+    with nn.stateful() as state:
+      self.assertEqual(state.as_dict(), {})
+      StatefulModule.init(random.PRNGKey(0))
+    self.assertEqual(state.as_dict(), {'/': {'state': DummyDataClass(x=1.)}})
+    with nn.stateful(state) as new_state:
+      StatefulModule.call({})
+    self.assertEqual(new_state.as_dict(),
+                     {'/': {
+                         'state': DummyDataClass(x=2.)
+                     }})
+    serialized_state_dict = serialization.to_state_dict(new_state)
+    self.assertEqual(serialized_state_dict, {'/': {'state': {'x': 2.}}})
+    deserialized_state = serialization.from_state_dict(state,
+                                                       serialized_state_dict)
+    self.assertEqual(state.as_dict(), {'/': {'state': DummyDataClass(x=1.)}})
+    self.assertEqual(new_state.as_dict(), deserialized_state.as_dict())
+
   def test_numpy_serialization(self):
     normal_dtypes = ['byte', 'b', 'ubyte', 'short',
                      'h', 'ushort', 'i', 'uint', 'intp',

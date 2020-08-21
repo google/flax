@@ -13,37 +13,33 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Tests for flax.examples.mnist.train."""
+"""Tests for flax.examples.imagenet.train."""
 
 from absl.testing import absltest
 
+from flax import nn
 import train
+
 import jax
 from jax import random
+import jax.numpy as jnp
+
+import numpy as onp
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+# Require JAX omnistaging mode.
+jax.config.enable_omnistaging()
 
 
 class TrainTest(absltest.TestCase):
 
-  def test_single_train_step(self):
-    train_ds, test_ds = train.get_datasets()
-    batch_size = 32
-    model = train.create_model(random.PRNGKey(0))
-    optimizer = train.create_optimizer(model, 0.1, 0.9)
+  def test_create_model(self):
+    variables = train.initialized(random.PRNGKey(0), 224)
+    x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
+    y = train.model(train=False).apply(variables, x)
+    self.assertEqual(y.shape, (8, 1000))
 
-    # test single train step.
-    optimizer, train_metrics = train.train_step(
-        optimizer=optimizer,
-        batch={k: v[:batch_size] for k, v in train_ds.items()})
-    self.assertLessEqual(train_metrics['loss'], 2.302)
-    self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
-
-    # Run eval model.
-    loss, accuracy = train.eval_model(optimizer.target, test_ds)
-    self.assertLess(loss, 2.252)
-    self.assertGreater(accuracy, 0.2597)
 
 if __name__ == '__main__':
   absltest.main()

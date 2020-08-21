@@ -18,7 +18,7 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = "0.1.0"
+version = "0.2.0"
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
@@ -38,7 +38,8 @@ tests_require = [
     "jaxlib",
     "pytest",
     "pytest-cov",
-    "pytest-xdist",
+    "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
+    "svn",
     "tensorflow",
     "tensorflow_datasets",
 ]
@@ -53,7 +54,7 @@ setup(
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: MIT License",
+        "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3.7",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         ],
@@ -61,7 +62,6 @@ setup(
     author="Flax team",
     author_email="flax-dev@google.com",
     url="https://github.com/google/flax",
-    license="Apache",
     packages=find_packages(),
     include_package_data=False,
     zip_safe=False,

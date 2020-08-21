@@ -1,18 +1,25 @@
-diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 9c21985..81a8434 100644
---- a/examples/mnist/train.py
-+++ b/examples/mnist/train.py
-@@ -23,6 +23,9 @@ from absl import app
- from absl import flags
+diff --git a/examples/mnist/mnist_lib.py b/examples/mnist/mnist_lib.py
+index 63af6e8..ebf9f9b 100644
+--- a/examples/mnist/mnist_lib.py
++++ b/examples/mnist/mnist_lib.py
+@@ -20,6 +20,8 @@ The data is loaded using tensorflow_datasets.
+ 
  from absl import logging
  
 +import functools
 +
+ import jax
+ from jax import random
+ 
+@@ -29,6 +31,7 @@ import numpy as onp
+ 
+ import tensorflow_datasets as tfds
+ 
 +from flax import jax_utils
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
-@@ -78,12 +81,14 @@ class CNN(nn.Module):
+@@ -51,12 +54,14 @@ class CNN(nn.Module):
      return x
  
  
@@ -27,7 +34,7 @@ index 9c21985..81a8434 100644
  def create_optimizer(model, learning_rate, beta):
    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
    optimizer = optimizer_def.create(model)
-@@ -109,7 +114,7 @@ def compute_metrics(logits, labels):
+@@ -82,7 +87,7 @@ def compute_metrics(logits, labels):
    return metrics
  
  
@@ -36,7 +43,7 @@ index 9c21985..81a8434 100644
  def train_step(optimizer, batch):
    """Train for a single step."""
    def loss_fn(model):
-@@ -123,7 +128,7 @@ def train_step(optimizer, batch):
+@@ -96,7 +101,7 @@ def train_step(optimizer, batch):
    return optimizer, metrics
  
  
@@ -45,7 +52,7 @@ index 9c21985..81a8434 100644
  def eval_step(model, batch):
    logits = model(batch['image'])
    return compute_metrics(logits, batch['label'])
-@@ -140,16 +145,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -113,16 +118,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
@@ -73,7 +80,7 @@ index 9c21985..81a8434 100644
                 epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
  
    return optimizer, epoch_metrics_np
-@@ -158,7 +170,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -131,7 +143,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
  def eval_model(model, test_ds):
    metrics = eval_step(model, test_ds)
    metrics = jax.device_get(metrics)
@@ -82,14 +89,13 @@ index 9c21985..81a8434 100644
    return summary['loss'], summary['accuracy']
  
  
-@@ -183,16 +195,19 @@ def train(train_ds, test_ds):
- 
+@@ -163,22 +175,25 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
    summary_writer = tensorboard.SummaryWriter(model_dir)
  
--  rng, init_rng = random.split(rng)
-+  rng, init_rng = random.split(rng, jax.device_count())
-   model = create_model(init_rng)
-   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+   rng, init_rng = random.split(rng)
+-  model = create_model(init_rng)
++  model = create_model(random.split(init_rng, jax.device_count()))
+   optimizer = create_optimizer(model, learning_rate, momentum)
  
 +  test_ds = jax_utils.replicate(test_ds)
 +
@@ -98,52 +104,20 @@ index 9c21985..81a8434 100644
      optimizer, train_metrics = train_epoch(
          optimizer, train_ds, batch_size, epoch, input_rng)
      loss, accuracy = eval_model(optimizer.target, test_ds)
+ 
 -    logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
 +    # `loss` and `accuracy` are now 1D arrays of length `jax.device_count()`
 +    logging.info('eval epoch: %d, loss: %s, accuracy: %s',
                   epoch, loss, accuracy * 100)
-     summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
-     summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
-diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
-index 429bda4..c1405d0 100644
---- a/examples/mnist/train_test.py
-+++ b/examples/mnist/train_test.py
-@@ -21,6 +21,8 @@ import train
- import jax
- from jax import random
  
-+from flax import jax_utils
-+
- # Parse absl flags test_srcdir and test_tmpdir.
- jax.config.parse_flags_with_absl()
+-    summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
+-    summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
+-    summary_writer.scalar('eval_loss', loss, epoch)
+-    summary_writer.scalar('eval_accuracy', accuracy, epoch)
++    summary_writer.scalar('train_loss', onp.mean(train_metrics['loss']), epoch)
++    summary_writer.scalar('train_accuracy', onp.mean(train_metrics['accuracy']), epoch)
++    summary_writer.scalar('eval_loss', onp.mean(loss), epoch)
++    summary_writer.scalar('eval_accuracy', onp.mean(accuracy), epoch)
  
-@@ -30,20 +32,23 @@ class TrainTest(absltest.TestCase):
-   def test_single_train_step(self):
-     train_ds, test_ds = train.get_datasets()
-     batch_size = 32
--    model = train.create_model(random.PRNGKey(0))
-+    model = train.create_model(random.split(random.PRNGKey(0),
-+                                            jax.device_count()))
-+    test_ds = jax_utils.replicate(test_ds)
-     optimizer = train.create_optimizer(model, 0.1, 0.9)
- 
-     # test single train step.
-+    batch = jax_utils.replicate({k: v[:batch_size] for k, v in train_ds.items()})
-     optimizer, train_metrics = train.train_step(
-         optimizer=optimizer,
--        batch={k: v[:batch_size] for k, v in train_ds.items()})
--    self.assertLessEqual(train_metrics['loss'], 2.302)
--    self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)
-+        batch=batch)
-+    self.assertLessEqual(train_metrics['loss'], 2.34)
-+    self.assertGreaterEqual(train_metrics['accuracy'], 0.03125)
- 
-     # Run eval model.
-     loss, accuracy = train.eval_model(optimizer.target, test_ds)
--    self.assertLess(loss, 2.252)
--    self.assertGreater(accuracy, 0.2597)
-+    self.assertLessEqual(train_metrics['loss'], 2.34)
-+    self.assertGreaterEqual(train_metrics['accuracy'], 0.03125)
- 
- if __name__ == '__main__':
-   absltest.main()
+   summary_writer.flush()
+   return optimizer

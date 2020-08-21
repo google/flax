@@ -448,27 +448,28 @@ class CollectionTest(absltest.TestCase):
     with self.assertRaisesRegex(ValueError, pattern):
       test.init(random.PRNGKey(0))
 
-  def test_jax_transform_of_stateful_function(self):
-    test = self
-    class NestedTransform(nn.Module):
+  # TODO(jheek): re-introduce this test when the tracer check is revived.
+  # def test_jax_transform_of_stateful_function(self):
+  #   test = self
+  #   class NestedTransform(nn.Module):
 
-      def apply(self, state, y):
-        def inner_fn(x):
-          # constants should be storable
-          state.store(1.)
-          # values in the same trace should be storable
-          state.store({'a': y})
-          with test.assertRaises(ValueError):
-            # values depending on the vmap should not be storable
-            state.store({'a': y, 'b': x})
-        jax.vmap(inner_fn)(jnp.ones((2,)))
+  #     def apply(self, state, y):
+  #       def inner_fn(x):
+  #         # constants should be storable
+  #         state.store(1.)
+  #         # values in the same trace should be storable
+  #         state.store({'a': y})
+  #         with test.assertRaises(ValueError):
+  #           # values depending on the vmap should not be storable
+  #           state.store({'a': y, 'b': x})
+  #       jax.vmap(inner_fn)(jnp.ones((2,)))
 
-    def outer_fn(x):
-      with nn.Collection().mutate() as state:
-        NestedTransform.init(random.PRNGKey(0), state, x)
+  #   def outer_fn(x):
+  #     with nn.Collection().mutate() as state:
+  #       NestedTransform.init(random.PRNGKey(0), state, x)
 
-    outer_fn(1.)
-    jax.jit(outer_fn)(1.)
+  #   outer_fn(1.)
+  #   jax.jit(outer_fn)(1.)
 
 
 class UtilsTest(absltest.TestCase):
@@ -544,6 +545,24 @@ class PoolTest(absltest.TestCase):
     ]).reshape((1, 3, 3, 1))
     onp.testing.assert_allclose(y_grad, expected_grad)
 
+  def test_max_pool_explicit_pads(self):
+    x = jnp.arange(9).reshape((1, 3, 3, 1)).astype(jnp.float32)
+    pool = lambda x: nn.max_pool(x, (2, 2), padding=((1,1),(1,1)))
+    expected_y = jnp.array([
+        [0.,1.,2.,2.],
+        [3.,4.,5.,5.],
+        [6.,7.,8.,8.],
+        [6.,7.,8.,8.],
+    ]).reshape((1, 4, 4, 1))
+    y = pool(x)
+    onp.testing.assert_allclose(y, expected_y)
+    y_grad = jax.grad(lambda x: pool(x).sum())(x)
+    expected_grad = jnp.array([
+        [1., 1., 2.],
+        [1., 1., 2.],
+        [2., 2., 4.],
+    ]).reshape((1, 3, 3, 1))
+    onp.testing.assert_allclose(y_grad, expected_grad)
 
 class NormalizationTest(absltest.TestCase):
 
@@ -660,10 +679,11 @@ class StochasticTest(absltest.TestCase):
     self.assertTrue(onp.all(r1 == random.fold_in(rng, 1)))
     self.assertTrue(onp.all(r2 == random.fold_in(rng, 2)))
 
-  def test_make_rng_in_jax_transform_check(self):
-    with nn.stochastic(random.PRNGKey(0)):
-      with self.assertRaises(ValueError):
-        jax.jit(nn.make_rng)()
+  # TODO(jheek): re-introduce this test when the tracer check is revived.
+  # def test_make_rng_in_jax_transform_check(self):
+  #   with nn.stochastic(random.PRNGKey(0)):
+  #     with self.assertRaises(ValueError):
+  #       jax.jit(nn.make_rng)()
 
   def test_init_by_shape_lifts_stochastic(self):
     class StochasticModule(nn.Module):

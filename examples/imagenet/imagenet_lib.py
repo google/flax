@@ -42,12 +42,12 @@ from flax.training import checkpoints
 from flax.training import common_utils
 
 import input_pipeline
-from resnet_v1 import ResNet
+import resnet_v1 as models
 
 
 def create_model(key, batch_size, image_size, model_dtype):
   input_shape = (batch_size, image_size, image_size, 3)
-  module = ResNet.partial(num_classes=1000, dtype=model_dtype)
+  module = models.ResNet50.partial(num_classes=1000, dtype=model_dtype)
   with nn.stateful() as init_state:
     _, initial_params = module.init_by_shape(
         key, [(input_shape, model_dtype)])

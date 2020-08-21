@@ -113,9 +113,7 @@ def dot_product_attention(query,
 
   # normalize the attention weights
   norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))
-  attn_weights = lax.exp(
-      attn_weights -
-      jax.scipy.special.logsumexp(attn_weights, axis=norm_dims, keepdims=True))
+  attn_weights = jax.nn.softmax(attn_weights, axis=norm_dims)
   attn_weights = attn_weights.astype(dtype)
 
   # apply dropout
@@ -175,13 +173,15 @@ class Cache(base.Collection):
 
     Args:
       shape: the shape of the batch and attention dimensions.
+      dtype: the dtype of the autoregressive cache.
     Returns:
       the initialized cache
     """
     if dtype is None:
       dtype = jnp.float32
-    def _init(shape_fn):
-      ndim, tail_shape = shape_fn()
+    def _init(shape_data):
+      ndim = int(shape_data[0])
+      tail_shape = tuple(shape_data[1:])
       full_shape = shape + tail_shape
       if len(full_shape) != ndim:
         raise ValueError('Shape should be a tuple with the shape of the batch'
@@ -301,7 +301,7 @@ class MultiHeadDotProductAttention(base.Module):
     if cache:
       assert isinstance(cache, Cache), 'cache must be an instance of Cache'
       if self.is_initializing():
-        cache.store(lambda: (key.ndim, key.shape[-2:]))
+        cache.store(onp.array((key.ndim,) + key.shape[-2:], dtype=onp.int32))
       else:
         cache_entry = cache.retrieve(None)
         expected_shape = list(cache_entry.key.shape[:-2])

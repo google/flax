@@ -20,7 +20,7 @@ from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 
-from resnet_v1 import ResNet
+import resnet_v1 as models
 
 
 class ResNetV1Test(absltest.TestCase):
@@ -29,7 +29,7 @@ class ResNetV1Test(absltest.TestCase):
   def test_resnet_v1_module(self):
     """Tests ResNet V1 model definition."""
     rng = jax.random.PRNGKey(0)
-    model_def = ResNet.partial(num_classes=10)
+    model_def = models.ResNet50.partial(num_classes=10, dtype=jnp.float32)
     output, init_params = model_def.init_by_shape(
         rng, [((8, 224, 224, 3), jnp.float32)])
 
