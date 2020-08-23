@@ -41,17 +41,6 @@ def brevity_penalty(alpha, length):
   return jnp.power(((5.0 + length) / 6.0), alpha)
 
 
-# TODO(levskaya): try to eliminate this in favor of lax.top_k at its last
-# callsite w.o. causing the mysterious BLEU regression.
-# def top_k(x, k):
-#   """Select the top k slices from the last dimension."""
-#   bcast_idxs = jnp.broadcast_to(np.arange(x.shape[-1]), x.shape)
-#   sorted_vals, sorted_idxs = lax.sort_key_val(x, bcast_idxs)
-#   topk_vals = lax.slice_in_dim(sorted_vals, -k, sorted_vals.shape[-1], axis=-1)
-#   topk_idxs = lax.slice_in_dim(sorted_idxs, -k, sorted_idxs.shape[-1], axis=-1)
-#   return topk_vals, topk_idxs
-
-
 # Beam handling utility functions:
 
 
