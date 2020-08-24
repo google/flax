@@ -104,6 +104,16 @@ flags.DEFINE_float(
     help=('Exponential decay rate of the sum of previous model iterates '
           'during Polyak averaging.'))
 
+flags.DEFINE_integer(
+    'num_train_steps', default=-1,
+    help=('Number of training steps to be executed in a single epoch.'
+          'Default = -1 signifies using the entire TRAIN split.'))
+
+flags.DEFINE_integer(
+    'num_eval_steps', default=-1,
+    help=('Number of evaluation steps to be executed in a single epoch.'
+          'Default = -1 signifies using the entire TEST split.'))
+
 
 def create_model(prng_key, example_images, module):
   with flax.nn.stochastic(jax.random.PRNGKey(0)):
@@ -125,15 +135,17 @@ def neg_log_likelihood_loss(nn_out, images):
       pixelcnn.conditional_params_from_outputs(nn_out, images))
   log_likelihoods = pixelcnn.logprob_from_conditional_params(
       images, means, inv_scales, logit_weights)
+  # TODO(mohitreddy): jax.numpy reductions should accept ndarrays and not lists.
   return -jnp.mean(log_likelihoods) / (jnp.log(2) * jnp.prod(images.shape[-3:]))
 
 
-def train_step(optimizer, ema, batch, prng_key, learning_rate_fn):
+def train_step(optimizer, ema, batch, prng_key, learning_rate_fn,
+               dropout_rate, polyak_decay):
   """Perform a single training step."""
   def loss_fn(model):
     """loss function used for training."""
     with flax.nn.stochastic(prng_key):
-      nn_out = model(batch['image'], dropout_p=FLAGS.dropout_rate)
+      nn_out = model(batch['image'], dropout_p=dropout_rate)
     return neg_log_likelihood_loss(nn_out, batch['image'])
 
   lr = learning_rate_fn(optimizer.state.step)
@@ -143,7 +155,7 @@ def train_step(optimizer, ema, batch, prng_key, learning_rate_fn):
   optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
   # Compute exponential moving average (aka Polyak decay)
-  ema_decay = FLAGS.polyak_decay
+  ema_decay = polyak_decay
   ema = jax.tree_multimap(
       lambda ema, p: ema * ema_decay + (1 - ema_decay) * p,
       ema, optimizer.target.params)
@@ -167,24 +179,49 @@ def load_and_shard_tf_batch(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def restore_checkpoint(optimizer, ema):
-  return checkpoints.restore_checkpoint(FLAGS.model_dir, (optimizer, ema))
+def restore_checkpoint(model_dir, optimizer, ema):
+  return checkpoints.restore_checkpoint(model_dir, (optimizer, ema))
 
 
-def save_checkpoint(optimizer, ema):
+def save_checkpoint(model_dir, optimizer, ema):
   # get train state from the first replica
   optimizer, ema = jax.device_get(
       jax.tree_map(lambda x: x[0], (optimizer, ema)))
   step = int(optimizer.state.step)
-  checkpoints.save_checkpoint(FLAGS.model_dir, (optimizer, ema), step, keep=3)
+  checkpoints.save_checkpoint(model_dir, (optimizer, ema), step, keep=3)
 
 
-def train(pcnn_module, model_dir, batch_size, init_batch_size, num_epochs,
-          learning_rate, decay_rate, run_seed=0):
-  """Train model."""
+def train_and_evaluate(
+  n_resnet, n_feature, model_dir, batch_size, init_batch_size, num_epochs,
+  learning_rate, decay_rate, dropout_rate, polyak_decay, run_seed=0,
+  num_train_steps=-1, num_eval_steps=-1):
+  """Executes model training and evaluation loop.
+
+  Args:
+    n_resnet: Number of resnet layers per block.
+    n_feature: Number of features in each Conv layer.
+    model_dir: Directory to store model data.
+    batch_size: Batch size for training.
+    init_batch_size: Batch size to use for data-dependent initialization.
+    num_epochs: Number of training epochs.
+    learning_rate: Initial learning rate.
+    decay_rate: Learning rate decay, applied at each optimization step.
+    dropout_rate: Dropout rate.
+    polyak_decay: Exponential decay rate of the sum of previous
+      model iterates during Polyak averaging.
+    run_seed: Random seed for network initialization.
+    num_train_steps: Number of training steps to be executed in a single epoch.
+      Default = -1 signifies using the entire TRAIN split.
+    num_eval_steps: Number of evaluation steps to be executed in a
+      single epoch. Default = -1 signifies using the entire TEST split.
+  """
   if jax.host_count() > 1:
     raise ValueError('PixelCNN++ example should not be run on more than 1 host'
                      ' (for now)')
+
+  tf.enable_v2_behavior()
+
+  pcnn_module = pixelcnn.PixelCNNPP.partial(depth=n_resnet, features=n_feature)
 
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
   log_dir = model_dir + '/log/' + current_time
@@ -209,8 +246,18 @@ def train(pcnn_module, model_dir, batch_size, init_batch_size, num_epochs,
   eval_iter = iter(eval_ds)
 
   # Compute steps per epoch and nb of eval steps
-  steps_per_epoch = data_source.TRAIN_IMAGES // batch_size
-  steps_per_eval = data_source.EVAL_IMAGES // batch_size
+  if num_train_steps == -1:
+    steps_per_epoch = (
+      data_source.info.splits['train'].num_examples // batch_size
+    )
+  else:
+    steps_per_epoch = num_train_steps
+
+  if num_eval_steps:
+    steps_per_eval = data_source.info.splits['test'].num_examples // batch_size
+  else:
+    steps_per_eval = num_eval_steps
+
   steps_per_checkpoint = steps_per_epoch * 10
   num_steps = steps_per_epoch * num_epochs
 
@@ -225,7 +272,7 @@ def train(pcnn_module, model_dir, batch_size, init_batch_size, num_epochs,
   optimizer = create_optimizer(model, base_learning_rate)
   del model  # don't keep a copy of the initial model
 
-  optimizer, ema = restore_checkpoint(optimizer, ema)
+  optimizer, ema = restore_checkpoint(model_dir, optimizer, ema)
   step_offset = int(optimizer.state.step)
   optimizer, ema = jax_utils.replicate((optimizer, ema))
 
@@ -234,7 +281,9 @@ def train(pcnn_module, model_dir, batch_size, init_batch_size, num_epochs,
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
-      functools.partial(train_step, learning_rate_fn=learning_rate_fn),
+      functools.partial(
+        train_step, learning_rate_fn=learning_rate_fn,
+        dropout_rate=dropout_rate, polyak_decay=polyak_decay),
       axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
@@ -289,19 +338,17 @@ def train(pcnn_module, model_dir, batch_size, init_batch_size, num_epochs,
       eval_summary_writer.flush()
 
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
-      save_checkpoint(optimizer, ema)
+      save_checkpoint(model_dir, optimizer, ema)
 
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
-
-  pcnn_module = pixelcnn.PixelCNNPP.partial(depth=FLAGS.n_resnet,
-                                            features=FLAGS.n_feature)
-
-  train(pcnn_module, FLAGS.model_dir, FLAGS.batch_size, FLAGS.init_batch_size,
-        FLAGS.num_epochs, FLAGS.learning_rate, FLAGS.lr_decay, FLAGS.rng)
+  train_and_evaluate(
+    FLAGS.n_resnet, FLAGS.n_feature, FLAGS.model_dir, FLAGS.batch_size,
+    FLAGS.init_batch_size, FLAGS.num_epochs, FLAGS.learning_rate,
+    FLAGS.lr_decay, FLAGS.dropout_rate, FLAGS.polyak_decay, FLAGS.rng,
+    FLAGS.num_train_steps, FLAGS.num_eval_steps)
 
 
 if __name__ == '__main__':
