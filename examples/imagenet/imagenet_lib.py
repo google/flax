@@ -199,8 +199,8 @@ def sync_batch_stats(state):
 
 def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
                        learning_rate: float, momentum: float, cache: bool,
-                       half_precision: bool,
-                       num_train_and_eval_steps: int = -1):
+                       half_precision: bool, num_train_steps: int = -1,
+                       num_eval_steps: int = -1):
   """Runs model training and evaluation loop.
 
   Args:
@@ -214,8 +214,10 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
     cache: Determines whether the dataset should be cached.
     half_precision: Determines whether bfloat16/float16 should be used
       instead of float32.
-    num_train_and_eval_steps: Number of steps for training and eval.
-      This is used for testing (default: -1 i.e use the entire dataset).
+    num_train_steps: Number of trainings steps to be executed in a
+      single epoch. Default = -1 signifies using the entire TRAIN split.
+    num_eval_steps: Number of evaluation steps to be executed in a
+      single epoch. Default = -1 signifies using the entire VALIDATION split.
   """
 
   tf.enable_v2_behavior()
@@ -257,14 +259,17 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
       dataset_builder, local_batch_size, image_size, input_dtype, train=False,
       cache=cache)
 
-  if num_train_and_eval_steps == -1:
+  if num_train_steps == -1:
     steps_per_epoch = \
         dataset_builder.info.splits['train'].num_examples // batch_size
+  else:
+    steps_per_epoch = num_train_steps
+
+  if num_eval_steps == -1:
     steps_per_eval = \
         dataset_builder.info.splits['validation'].num_examples // batch_size
   else:
-    steps_per_epoch = num_train_and_eval_steps
-    steps_per_eval = num_train_and_eval_steps
+    steps_per_eval = num_eval_steps
 
   steps_per_checkpoint = steps_per_epoch * 10
   num_steps = steps_per_epoch * num_epochs

@@ -44,7 +44,7 @@ class ImageNetTest(absltest.TestCase):
       imagenet_lib.train_and_evaluate(
           model_dir=model_dir, batch_size=8, num_epochs=1,
           learning_rate=0.1, momentum=0.9, cache=False, half_precision=False,
-          num_train_and_eval_steps=1)
+          num_train_steps=1, num_eval_steps=1)
 
 
 if __name__ == '__main__':

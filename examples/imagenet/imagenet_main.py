@@ -55,6 +55,16 @@ flags.DEFINE_bool(
     'half_precision', default=False,
     help=('If bfloat16/float16 should be used instead of float32.'))
 
+flags.DEFINE_integer(
+    'num_train_steps', default=-1,
+    help=('Number of training steps to be executed in a single epoch.'
+          'Default = -1 signifies using the entire TRAIN split.'))
+
+flags.DEFINE_integer(
+    'num_eval_steps', default=-1,
+    help=('Number of evaluation steps to be executed in a single epoch.'
+          'Default = -1 signifies using the entire VALIDATION split.'))
+
 
 def main(argv):
   if len(argv) > 1:
@@ -64,7 +74,9 @@ def main(argv):
       model_dir=FLAGS.model_dir, batch_size=FLAGS.batch_size,
       num_epochs=FLAGS.num_epochs, learning_rate=FLAGS.learning_rate,
       momentum=FLAGS.momentum, cache=FLAGS.cache,
-      half_precision=FLAGS.half_precision)
+      half_precision=FLAGS.half_precision,
+      num_train_steps=FLAGS.num_train_steps,
+      num_eval_steps=FLAGS.num_eval_steps)
 
 
 if __name__ == '__main__':
