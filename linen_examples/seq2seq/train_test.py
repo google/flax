@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for flax.examples.seq2seq.train."""
 
 import functools
@@ -26,6 +25,8 @@ from flax import optim
 import train
 
 jax.config.parse_flags_with_absl()
+# Require JAX omnistaging mode.
+jax.config.enable_omnistaging()
 
 
 def create_test_optimizer():
@@ -104,14 +105,16 @@ class TrainTest(absltest.TestCase):
     batch = train.get_batch(128)
 
     optimizer = create_test_optimizer()
-    _, train_metrics = train.train_step(optimizer, batch)
+    key = random.PRNGKey(0)
+    _, train_metrics = train.train_step(optimizer, batch, key)
 
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
 
   def test_decode_batch(self):
+    key = random.PRNGKey(0)
     optimizer = create_test_optimizer()
-    train.decode_batch(optimizer.target, 5)
+    train.decode_batch(optimizer.target, 5, key)
 
 if __name__ == '__main__':
   absltest.main()

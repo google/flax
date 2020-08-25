@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for flax.examples.imagenet.train."""
 
 from absl.testing import absltest
@@ -28,6 +27,8 @@ import numpy as onp
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+# Require JAX omnistaging mode.
+jax.config.enable_omnistaging()
 
 
 class TrainTest(absltest.TestCase):

@@ -1,8 +1,8 @@
-diff --git a/examples/mnist/train.py b/examples/mnist/train.py
-index 9c21985..4306d09 100644
---- a/examples/mnist/train.py
-+++ b/examples/mnist/train.py
-@@ -110,7 +110,7 @@ def compute_metrics(logits, labels):
+diff --git a/examples/mnist/mnist_lib.py b/examples/mnist/mnist_lib.py
+index 63af6e8..29d512f 100644
+--- a/examples/mnist/mnist_lib.py
++++ b/examples/mnist/mnist_lib.py
+@@ -83,7 +83,7 @@ def compute_metrics(logits, labels):
  
  
  @jax.jit
@@ -11,7 +11,7 @@ index 9c21985..4306d09 100644
    """Train for a single step."""
    def loss_fn(model):
      logits = model(batch['image'])
-@@ -119,8 +119,12 @@ def train_step(optimizer, batch):
+@@ -92,8 +92,12 @@ def train_step(optimizer, batch):
    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
    (_, logits), grad = grad_fn(optimizer.target)
    optimizer = optimizer.apply_gradient(grad)
@@ -25,7 +25,7 @@ index 9c21985..4306d09 100644
  
  
  @jax.jit
-@@ -129,7 +133,7 @@ def eval_step(model, batch):
+@@ -102,7 +106,7 @@ def eval_step(model, batch):
    return compute_metrics(logits, batch['label'])
  
  
@@ -34,19 +34,19 @@ index 9c21985..4306d09 100644
    """Train for a single epoch."""
    train_ds_size = len(train_ds['image'])
    steps_per_epoch = train_ds_size // batch_size
-@@ -140,7 +144,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -113,7 +117,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
 -    optimizer, metrics = train_step(optimizer, batch)
-+    optimizer, params_ema, metrics = train_step(optimizer, batch)
++    optimizer, params_ema, metrics = train_step(optimizer, params_ema, batch)
      batch_metrics.append(metrics)
  
    # compute mean of metrics across each batch in epoch.
-@@ -186,14 +190,19 @@ def train(train_ds, test_ds):
+@@ -165,16 +169,21 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
    rng, init_rng = random.split(rng)
    model = create_model(init_rng)
-   optimizer = create_optimizer(model, FLAGS.learning_rate, FLAGS.momentum)
+   optimizer = create_optimizer(model, learning_rate, momentum)
 +  params_ema = model.params
  
    for epoch in range(1, num_epochs + 1):
@@ -55,8 +55,10 @@ index 9c21985..4306d09 100644
 -        optimizer, train_ds, batch_size, epoch, input_rng)
 +        optimizer, params_ema, train_ds, batch_size, epoch, input_rng)
      loss, accuracy = eval_model(optimizer.target, test_ds)
+ 
      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                   epoch, loss, accuracy * 100)
+ 
 +    model_ema = optimizer.target.replace(params=params_ema)
 +    polyak_loss, polyak_accuracy = eval_model(model_ema, test_ds)
 +    logging.info('polyak eval epoch: %d, loss: %.4f, accuracy: %.2f',
@@ -64,18 +66,3 @@ index 9c21985..4306d09 100644
      summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
      summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
      summary_writer.scalar('eval_loss', loss, epoch)
-diff --git a/examples/mnist/train_test.py b/examples/mnist/train_test.py
-index 429bda4..b441168 100644
---- a/examples/mnist/train_test.py
-+++ b/examples/mnist/train_test.py
-@@ -34,8 +34,9 @@ class TrainTest(absltest.TestCase):
-     optimizer = train.create_optimizer(model, 0.1, 0.9)
- 
-     # test single train step.
--    optimizer, train_metrics = train.train_step(
-+    optimizer, params_ema, train_metrics = train.train_step(
-         optimizer=optimizer,
-+        params_ema=model.params,
-         batch={k: v[:batch_size] for k, v in train_ds.items()})
-     self.assertLessEqual(train_metrics['loss'], 2.302)
-     self.assertGreaterEqual(train_metrics['accuracy'], 0.0625)

@@ -18,11 +18,12 @@ from absl.testing import absltest
 
 import jax
 from jax import random
+from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as onp
-from typing import Any, Tuple
+from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
 from flax.linen import compact
@@ -30,6 +31,8 @@ from flax.core import Scope
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+# Require JAX omnistaging mode.
+jax.config.enable_omnistaging()
 
 
 class DummyModule(nn.Module):
@@ -48,12 +51,11 @@ class Dense(nn.Module):
     y = jnp.dot(x, kernel)
     return y
 
-rngkey = jax.random.PRNGKey(0)
-
 
 class ModuleTest(absltest.TestCase):
 
   def test_init_module(self):
+    rngkey = jax.random.PRNGKey(0)
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
     y = DummyModule(parent=scope)(x)
@@ -64,6 +66,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_arg_module(self):
+    rngkey = jax.random.PRNGKey(0)
     x = jnp.ones((10,))
     scope = Scope({}, {'param': rngkey})
     y = Dense(3, parent=scope)(x)
@@ -73,6 +76,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(params['kernel'].shape, (10, 3))
 
   def test_util_fun(self):
+    rngkey = jax.random.PRNGKey(0)
     class MLP(nn.Module):
       @compact
       def __call__(self, x):
@@ -93,6 +97,7 @@ class ModuleTest(absltest.TestCase):
        'Dense_1': {'kernel': (3, 3)}})
 
   def test_nested_module_reuse(self):
+    rngkey = jax.random.PRNGKey(0)
     class MLP(nn.Module):
       @compact
       def __call__(self, x):
@@ -121,6 +126,7 @@ class ModuleTest(absltest.TestCase):
         'Dense_1': {'kernel': (3, 3)}}})
 
   def test_setup_dict_assignment(self):
+    rngkey = jax.random.PRNGKey(0)
     class MLP(nn.Module):
       def setup(self):
         self.lyrs1 = {'a': Dense(3), 'b': Dense(3),}
@@ -149,6 +155,7 @@ class ModuleTest(absltest.TestCase):
     MLPclone = MLP(parent=scope).clone()
 
   def test_submodule_attr(self):
+    rngkey = jax.random.PRNGKey(0)
     class Inner(nn.Module):
       @compact
       def __call__(self):
@@ -178,6 +185,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(40, scope.variables()['param']['inner']['x'])
 
   def test_param_in_setup(self):
+    rngkey = jax.random.PRNGKey(0)
     class DummyModule(nn.Module):
       xshape: Tuple[int]
       def setup(self):
@@ -194,6 +202,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_init_outside_setup_without_compact(self):
+    rngkey = jax.random.PRNGKey(0)
     class DummyModule(nn.Module):
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, x.shape)
@@ -204,6 +213,7 @@ class ModuleTest(absltest.TestCase):
       y = DummyModule(parent=scope)(x)
 
   def test_init_outside_call(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       @compact
       def __call__(self, x):
@@ -218,6 +228,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(parent=scope).foo(x)
 
   def test_setup_call_var_collision(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
@@ -232,6 +243,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_setup_var_collision(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
@@ -245,6 +257,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_call_var_collision(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       @compact
@@ -258,6 +271,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_setattr_name_var_disagreement(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
@@ -270,6 +284,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_submodule_var_collision(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
@@ -307,6 +322,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_setattr_name_submodule_redundant(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       xshape: Tuple[int]
       def setup(self):
@@ -319,6 +335,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_param_name_collision(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       bias: bool
       def setup(self):
@@ -331,6 +348,7 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_submodule_name_collision(self):
+    rngkey = jax.random.PRNGKey(0)
     class Dummy(nn.Module):
       bias: bool
       def setup(self):
@@ -343,24 +361,14 @@ class ModuleTest(absltest.TestCase):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_only_one_compact_method(self):
-    class Dummy(nn.Module):
-      @compact
-      def call1(self):
-        pass
-      @compact
-      def call2(self):
-        pass
-
-    scope = Scope(variables={})
-
-    # NOTE: Currently, we only expect an error when we call both annotated methods.
-    # We could make the error fire during module construction by annotating
-    # the methods and catching the error during __post_init__. Or we could
-    # even check earlier and catch during __init_subclass__.
-    dummy = Dummy(parent=scope)
-    dummy.call1()
     with self.assertRaisesRegex(RuntimeError, '@compact'):
-      dummy.call2()
+      class Dummy(nn.Module):
+        @compact
+        def call1(self):
+          pass
+        @compact
+        def call2(self):
+          pass
 
   def test_only_one_compact_method_subclass(self):
     class Dummy(nn.Module):
@@ -379,7 +387,77 @@ class ModuleTest(absltest.TestCase):
     # as its on the same method.
     subdummy()
 
+  def test_forgotten_compact_annotation(self):
+    class Bar(nn.Module):
+      # user forgot to add @compact
+      def __call__(self, x):
+        return nn.Dense(1)(x)
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = Bar()
+        x = bar(x)
+        x = bar(x)
+        return x
+    with self.assertRaisesRegex(ValueError, '@compact'):
+      Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
+
+  def test_forgotten_compact_annotation_with_explicit_parent(self):
+    class Bar(nn.Module):
+      def __call__(self, x):
+        return nn.Dense(1, parent=self)(x)
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = Bar()
+        x = bar(x)
+        x = bar(x)
+        return x
+
+    with self.assertRaisesRegex(ValueError, '@compact'):
+      Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
+
+  def test_numpy_array_shape_class_args(self):
+    class MLP(nn.Module):
+      widths: Iterable
+      @nn.compact
+      def __call__(self, x):
+        for width in self.widths[:-1]:
+          x = nn.relu(nn.Dense(width)(x))
+        return nn.Dense(self.widths[-1])(x)
+    test = MLP(onp.array([3, 3], onp.int32))
+    params = test.init({'param': random.PRNGKey(42)}, jnp.ones((3, 3)))
+    _ = test.apply(params, jnp.ones((3, 3)))
+
+  def test_get_local_methods(self):
+    class Base:
+      @staticmethod
+      def bar(x):
+        return x
+      @classmethod
+      def baz(cls, x):
+        return x
+      def bleep(self, x):
+        return x
+    class Derived1(Base):
+      @staticmethod
+      def bar2(x):
+        return x
+      @classmethod
+      def baz2(cls, x):
+        return x
+      def bloop(self, x):
+        return x
+    class Derived2(Derived1):
+      pass
+
+    self.assertEqual(nn.module.get_local_method_names(Base), ('bleep',))
+    self.assertEqual(nn.module.get_local_method_names(Derived1), ('bloop',))
+    self.assertEqual(
+        nn.module.get_local_method_names(Derived1, exclude=('bloop',)), ())
+    self.assertEqual(nn.module.get_local_method_names(Derived2), ())
+
 
 if __name__ == '__main__':
   absltest.main()
-

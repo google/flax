@@ -22,7 +22,7 @@ import jax
 import numpy as np
 from flax.testing import Benchmark
 
-import train
+import mnist_main
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -41,7 +41,7 @@ class MnistBenchmark(Benchmark):
     model_dir = self.get_tmp_model_dir()
     FLAGS.model_dir = model_dir
     start_time = time.time()
-    train.main([])
+    mnist_main.main([])
     benchmark_time = time.time() - start_time
     summaries = self.read_summaries(model_dir)
 

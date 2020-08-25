@@ -12,26 +12,35 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, init, apply
+from dataclasses import dataclass
 
-from jax import random
+import jax
+from jax import lax
 
-import numpy as np
+from typing import Union, Optional, Callable, Any
 
+@dataclass(frozen=True)
+class Scan:
+  axis: int
 
-from absl.testing import absltest
-
-class ScopeTest(absltest.TestCase):
-
-  def test_rng(self):
-    def f(scope):
-      self.assertTrue(scope.has_rng('param'))
-      self.assertFalse(scope.has_rng('dropout'))
-      rng = scope.make_rng('param')
-      self.assertTrue(np.all(rng == random.fold_in(random.PRNGKey(0), 1)))
-
-    init(f)(random.PRNGKey(0))
+ScanAxis = Optional[int]
 
 
-if __name__ == '__main__':
-  absltest.main()
+def scan(
+    fn: Callable[..., Any],
+    scan_in_axis: Any,
+    scan_out_axis: Any):
+
+  def body_fn(c, x):
+    jax.tree_multimap()
+    c, y = fn(c, x)
+    return c, y
+
+
+
+  def scan_fn(init, *args,
+              length: Optional[int] = None, reverse: bool = False):
+
+    return lax.scan(body_fn, init, args, length=length, reverse=reverse)
+
+  return scan_fn

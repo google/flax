@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """seq2seq addition example."""
 
 import random
@@ -66,6 +65,7 @@ PRNGKey = Any
 Shape = Tuple[int]
 Dtype = Any
 Array = Any
+
 
 class CharacterTable(object):
   """Encode/decodes between strings and integer representations."""
@@ -167,9 +167,9 @@ class EncoderLSTM(nn.Module):
   eos_id: int = 1
 
   @functools.partial(
-    nn.transforms.scan,
-    variable_modes={'param': 'broadcast'},
-    split_rngs={'param': False})
+      nn.transforms.scan,
+      variable_modes={'param': 'broadcast'},
+      split_rngs={'param': False})
   @nn.compact
   def __call__(self, carry, x):
     lstm_state, is_eos = carry
@@ -188,7 +188,7 @@ class EncoderLSTM(nn.Module):
   def initialize_carry(batch_size, hidden_size):
     # use dummy key since default state init fn is just zeros.
     return nn.LSTMCell.initialize_carry(
-      jax.random.PRNGKey(0), (batch_size,), hidden_size)
+        jax.random.PRNGKey(0), (batch_size,), hidden_size)
 
 
 class Encoder(nn.Module):
@@ -202,8 +202,8 @@ class Encoder(nn.Module):
     batch_size = inputs.shape[0]
     lstm = EncoderLSTM(eos_id=self.eos_id, name='encoder_lstm')
     init_lstm_state = lstm.initialize_carry(batch_size, self.hidden_size)
-    init_carry = (init_lstm_state, jnp.zeros(batch_size, dtype=np.bool))    
-    # scan over input axis 1 - we should make scan accept an axis argument again.
+    init_carry = (init_lstm_state, jnp.zeros(batch_size, dtype=np.bool))
+    # scan over input axis 1, we should make scan accept an axis argument again.
     inputs = jax.tree_map(lambda x: jnp.moveaxis(x, 0, 1), inputs)
     (final_state, _), _ = lstm(init_carry, inputs)
     return final_state
@@ -214,9 +214,9 @@ class DecoderLSTM(nn.Module):
   teacher_force: bool = False
 
   @functools.partial(
-    nn.transforms.scan,
-    variable_modes={'param': 'broadcast'},
-    split_rngs={'param': False})
+      nn.transforms.scan,
+      variable_modes={'param': 'broadcast'},
+      split_rngs={'param': False})
   @nn.compact
   def __call__(self, carry, x):
     rng, lstm_state, last_prediction = carry
@@ -240,18 +240,20 @@ class Decoder(nn.Module):
   @nn.compact
   def __call__(self, inputs):
     # inputs.shape = (batch_size, seq_length, vocab_size).
-    lstm = DecoderLSTM(vocab_size=inputs.shape[2], 
+    lstm = DecoderLSTM(vocab_size=inputs.shape[2],
                        teacher_force=self.teacher_force)
     init_carry = (self.make_rng('lstm'), self.init_state, inputs[:, 0])
-    # scan over input axis 1 - we should make scan accept an axis argument again.
+    # scan over input axis 1, we should make scan accept an axis argument again.
     inputs = jax.tree_map(lambda x: jnp.moveaxis(x, 0, 1), inputs)
     _, (logits, predictions) = lstm(init_carry, inputs)
-    logits, predictions = jax.tree_map(lambda x: jnp.moveaxis(x, 0, 1), (logits, predictions))
+    logits, predictions = jax.tree_map(
+        lambda x: jnp.moveaxis(x, 0, 1), (logits, predictions))
     return logits, predictions
 
 
 class Seq2seq(nn.Module):
   """Sequence-to-sequence class using encoder/decoder architecture.
+
   Attributes:
     teacher_force: bool, whether to use `decoder_inputs` as input to the
         decoder at every step. If False, only the first input is used, followed
@@ -267,6 +269,7 @@ class Seq2seq(nn.Module):
   @nn.compact
   def __call__(self, encoder_inputs, decoder_inputs):
     """Run the seq2seq model.
+
     Args:
       encoder_inputs: padded batch of input sequences to encode, shaped
         `[batch_size, max(encoder_input_lengths), vocab_size]`.
@@ -300,7 +303,8 @@ def get_param(key):
   vocab_size = CTABLE.vocab_size
   encoder_shape = jnp.ones((1, get_max_input_len(), vocab_size), jnp.float32)
   decoder_shape = jnp.ones((1, get_max_output_len(), vocab_size), jnp.float32)
-  return model().init({'param': key, 'lstm': key}, encoder_shape, decoder_shape)['param']
+  return model().init({'param': key, 'lstm': key},
+                      encoder_shape, decoder_shape)['param']
 
 
 def get_examples(num_examples):

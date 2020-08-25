@@ -1,6 +1,7 @@
 *~
 \#*\#
 *.pyc
+.tfds
 .DS_Store
 docs/_autosummary
 docs/_build

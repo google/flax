@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 
 # Copyright 2020 The Flax Authors.
 #
@@ -52,26 +51,42 @@ from absl.testing import absltest
 
 from tensorboard.backend.event_processing import directory_watcher
 from tensorboard.backend.event_processing import event_file_loader
+from tensorboard.backend.event_processing import io_wrapper
+from tensorboard.summary import v1 as summary_lib
 from tensorboard.util import tensor_util
 
 
 flags.DEFINE_string(
-  'benchmark_output_dir', default=None, help='Benchmark output directory.')
+    'benchmark_output_dir', default=None, help='Benchmark output directory.')
 
 
 FLAGS = flags.FLAGS
+
+_SCALAR_PLUGIN_NAME = summary_lib.scalar_pb(
+    '', 0).value[0].metadata.plugin_data.plugin_name
 
 
 def _make_events_generator(path):
   """Makes a generator yielding TensorBoard events from files in `path`."""
   return directory_watcher.DirectoryWatcher(
-      path,
-      event_file_loader.EventFileLoader).Load()
+      path, event_file_loader.EventFileLoader,
+      io_wrapper.IsSummaryEventsFile).Load()
+
+
+def _is_scalar_value(value):
+  if value.HasField('metadata') and value.metadata.HasField('plugin_data'):
+    plugin_data = value.metadata.plugin_data
+    return plugin_data.plugin_name == _SCALAR_PLUGIN_NAME
+
+  return False
 
 
 def _process_event(event):
   """Parse TensorBoard scalars into a (tag, wall_time, step, scalar) tuple."""
   for value in event.summary.value:
+    if not _is_scalar_value(value):
+      continue
+
     if value.HasField('tensor'):
       yield (value.tag, event.wall_time,
              event.step, tensor_util.make_ndarray(value.tensor).item())

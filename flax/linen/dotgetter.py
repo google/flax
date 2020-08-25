@@ -1,3 +1,17 @@
+# Copyright 2020 The Flax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Simple syntactic wrapper for nested dictionaries to allow dot traversal."""
 from collections.abc import MutableMapping
 from flax import serialization
@@ -76,6 +90,6 @@ tree_util.register_pytree_node(
 
 # Note: restores as raw dict, intentionally.
 serialization.register_serialization_state(
-  DotGetter,
-  serialization._dict_state_dict,  # pylint: disable=protected-access
-  serialization._restore_dict)  # pylint: disable=protected-access
+    DotGetter,
+    serialization._dict_state_dict,  # pylint: disable=protected-access
+    serialization._restore_dict)  # pylint: disable=protected-access

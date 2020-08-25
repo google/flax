@@ -1,4 +1,3 @@
-# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -378,6 +377,7 @@ class Embed(Module):
 
   def attend(self, query):
     """Attend over the embedding using a query array.
+
     Args:
       query: array with last dimension equal the feature depth `features` of the
         embedding.

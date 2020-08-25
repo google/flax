@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """ImageNet example.
 
 This script trains a ResNet-50 on the ImageNet dataset.
@@ -28,7 +27,6 @@ from absl import logging
 
 import flax
 from flax import jax_utils
-from flax import nn
 from flax import optim
 import input_pipeline
 import models
@@ -44,6 +42,10 @@ import jax.nn
 import jax.numpy as jnp
 
 import tensorflow.compat.v2 as tf
+
+# enable jax omnistaging
+from jax.config import config
+config.enable_omnistaging()
 
 
 FLAGS = flags.FLAGS
