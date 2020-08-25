@@ -44,11 +44,14 @@ import jax
 from jax import random
 from jax import lax
 import jax.numpy as jnp
+from jax.config import config
 
 import tensorflow as tf
 
 import input_pipeline
 import pixelcnn
+
+config.enable_omnistaging()
 
 FLAGS = flags.FLAGS
 
@@ -236,7 +239,6 @@ def train():
   train_metrics = []
 
   for step, batch in zip(range(step_offset, num_steps), train_iter):
-    logging.info('Train step %d', step)
     # Load and shard the TF batch
     batch = load_and_shard_tf_batch(batch)
 
