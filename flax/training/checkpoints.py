@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Checkpointing helper functions.
 
 Handles saving and restoring optimizer checkpoints based on step-number or
@@ -26,7 +25,7 @@ import re
 from absl import logging
 
 from flax import serialization
-from tensorflow.compat.v2.io import gfile
+from tensorflow.io import gfile
 
 
 # Single-group reg-exps for int or float numerical substrings.

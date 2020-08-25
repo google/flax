@@ -41,7 +41,7 @@ import jax.numpy as jnp
 
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
-from tensorflow.compat.v2.io import gfile
+from tensorflow.io import gfile
 
 import input_pipeline
 import model as sst2_model

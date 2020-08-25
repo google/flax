@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for flax.training.checkpoints."""
 
 import copy
@@ -23,7 +22,7 @@ from flax.training import checkpoints
 import jax
 from jax import test_util as jtu
 import numpy as np
-from tensorflow.compat.v2.io import gfile
+from tensorflow.io import gfile
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
