@@ -18,8 +18,7 @@ class ClassificationSubnet(flax.nn.Module):
             classes=1000,
             features=256,
             anchors=9,
-            pi=0.01,
-            dtype=jnp.float32):
+            pi=0.01):
     """Applies the classification subnet from the RetinaNet architecture.
 
     Args:
@@ -28,7 +27,6 @@ class ClassificationSubnet(flax.nn.Module):
       features: the number of convolution features
       anchors: the number of anchors per spatial location
       pi: a constant which is used for initializing the bias terms
-      dtype: the data type of the model
 
     Returns:
       The output of the model, of the form (H * W * anchors, classes), where
@@ -36,7 +34,7 @@ class ClassificationSubnet(flax.nn.Module):
     """
     # Prepare the partial conv required in the subnet
     conv = flax.nn.Conv.partial(
-        kernel_size=(3, 3), strides=(1, 1), kernel_init=normal(), dtype=dtype)
+        kernel_size=(3, 3), strides=(1, 1), kernel_init=normal())
 
     # The actual logic of the subnet
     for i in range(4):
@@ -60,8 +58,7 @@ class RegressionSubnet(flax.nn.Module):
             x,
             anchor_values=4,
             anchors=9,
-            features=256,
-            dtype=jnp.float32):
+            features=256):
     """Applies the regression subnet from the RetinaNet architecture.
 
     Args:
@@ -69,7 +66,6 @@ class RegressionSubnet(flax.nn.Module):
       anchor_values: the number of values which describe an anchor
       anchors: the number of anchors per spatial location
       features: the number of convolution features
-      dtype: the data type of the model
 
     Returns:
       The output of the model, of the form (H * W * anchors, anchor_values),
@@ -79,7 +75,7 @@ class RegressionSubnet(flax.nn.Module):
     """
     # Prepare the partial modules required for the subnet
     conv = flax.nn.Conv.partial(
-        kernel_size=(3, 3), strides=(1, 1), kernel_init=normal(), dtype=dtype)
+        kernel_size=(3, 3), strides=(1, 1), kernel_init=normal())
 
     # The actual logic of the subnet
     for i in range(4):
@@ -104,8 +100,7 @@ class BottleneckBlock(flax.nn.Module):
             data,
             filters,
             train=True,
-            downsample=False,
-            dtype=jnp.float32):
+            downsample=False):
     """Implements the logic of a ResNet Bottleneck block.
 
     Args:
@@ -116,19 +111,17 @@ class BottleneckBlock(flax.nn.Module):
                   switch is also useful in determining if the feature size
                   of the input needs to be expanded, as the two phenomena
                   take place at the same time
-      dtype: the data type employed by this block
 
     Returns:
       The transformed input after a Bottleneck pass
     """
     # Declare the partial modules
     final_filters = self.block_expansion * filters
-    conv = flax.nn.Conv.partial(dtype=dtype, bias=False)
+    conv = flax.nn.Conv.partial(bias=False)
     batch_norm = flax.nn.BatchNorm.partial(
         use_running_average=(not train),
         momentum=0.9,
-        epsilon=1e-5,
-        dtype=dtype)
+        epsilon=1e-5)
 
     # Process the residual such that it is compatible with the final addition
     residual = data
@@ -191,7 +184,7 @@ class RetinaNet(flax.nn.Module):
 
   nn_upsample = staticmethod(jax.vmap(_nn_upsample, in_axes=(0, None)))
 
-  def _bottom_up_phase(self, data, train, base_features, layers, dtype):
+  def _bottom_up_phase(self, data, train, base_features, layers):
     """Implements the backbone architecture.
 
     Args:
@@ -202,7 +195,6 @@ class RetinaNet(flax.nn.Module):
                      typically 64 according to https://arxiv.org/abs/1512.03385
       layers: a list which indicates the number of layers for each of the
               Bottleneck blocks
-      dtype: the data type used by the backbone
 
     Returns:
       A map of the form conv_name : str -> conv_layer_feature_map
@@ -216,22 +208,20 @@ class RetinaNet(flax.nn.Module):
         base_features, (7, 7),
         strides=(2, 2),
         bias=False,
-        name="init_conv",
-        dtype=dtype)
+        name="init_conv")
     x = flax.nn.BatchNorm(
         x,
         use_running_average=(not train),
         momentum=0.9,
         epsilon=1e-5,
-        name="init_bn",
-        dtype=dtype)
+        name="init_bn")
     x = flax.nn.relu(x)
     x = flax.nn.max_pool(x, (3, 3), strides=(2, 2), padding="SAME")
 
     # C2 to C5
     for block_idx in range(len(layers)):
       block = BottleneckBlock.partial(
-          filters=base_features * 2**block_idx, train=train, dtype=dtype)
+          filters=base_features * 2**block_idx, train=train)
 
       start_idx = 0
       # From C2 and onward, the first block implies downsampling
@@ -249,7 +239,7 @@ class RetinaNet(flax.nn.Module):
 
     return feature_maps
 
-  def _top_down_phase(self, backbone_features, filters, dtype):
+  def _top_down_phase(self, backbone_features, filters):
     """Builds the top-down phase of the RetinaNet.
 
     In this phase, semantically rich feature maps at different scales
@@ -261,7 +251,6 @@ class RetinaNet(flax.nn.Module):
                          contains the feature maps from the backbone
       filters: the number of filters in the FPN. This is generally 256,
                according to https://arxiv.org/pdf/1708.02002.pdf
-      dtype: the data type of this phase
 
 
     Returns:
@@ -271,18 +260,17 @@ class RetinaNet(flax.nn.Module):
     fpn_features = {}
 
     # Create partial for lateral connections and antialiasing operations
-    conv = flax.nn.Conv.partial(features=filters, strides=(1, 1), dtype=dtype)
+    conv = flax.nn.Conv.partial(features=filters, strides=(1, 1))
 
     # Create the supplementary feature maps P6 and P7
     fpn_features["P6"] = flax.nn.Conv(
         backbone_features["C5"],
         filters, (3, 3),
         strides=(2, 2),
-        dtype=dtype,
         name="fpn_conv_p6")
     x = flax.nn.relu(fpn_features["P6"])
     fpn_features["P7"] = flax.nn.Conv(
-        x, filters, (3, 3), strides=(2, 2), dtype=dtype, name="fpn_conv_p7")
+        x, filters, (3, 3), strides=(2, 2), name="fpn_conv_p7")
 
     # Create the feature map for P5
     x = conv(
@@ -317,8 +305,7 @@ class RetinaNet(flax.nn.Module):
             k=100,
             per_class=True,
             anchors_config=None,
-            img_shape=None,
-            dtype=jnp.float32):
+            img_shape=None):
     """Applies the RetinaNet architecture.
 
     Args:
@@ -337,7 +324,6 @@ class RetinaNet(flax.nn.Module):
       img_shape: an array of the shape (B, 3), which stores the true dimensions
         of the images in the batch (prior to padding); the rows should contain
         the [H, W, C] of each image.
-      dtype: the data type of the model
 
     Returns:
       A dictionary of the form: feature_map_lvl : int -> (feature_map,
@@ -354,24 +340,23 @@ class RetinaNet(flax.nn.Module):
 
     # Bottom-up phase
     backbone_features = self._bottom_up_phase(data, train, base_features,
-                                              layers, dtype)
+                                              layers)
 
     # Top-down phase
-    fpn_features = self._top_down_phase(backbone_features, fpn_filters, dtype)
+    fpn_features = self._top_down_phase(backbone_features, fpn_filters)
 
     # Create the partial shared models of the subnetworks
     classification_subnet = ClassificationSubnet.shared(
-        classes=classes, features=fpn_filters, anchors=anchors, dtype=dtype)
+        classes=classes, features=fpn_filters, anchors=anchors)
     regression_subnet = RegressionSubnet.shared(
         anchor_values=anchor_values,
         features=fpn_filters,
-        anchors=anchors,
-        dtype=dtype)
+        anchors=anchors)
 
     # Initialize structures relevant for training
-    bboxes = jnp.zeros((data.shape[0], 0, 4), dtype=dtype)
-    regressions = jnp.zeros((data.shape[0], 0, 4), dtype=dtype)
-    classifications = jnp.zeros((data.shape[0], 0, classes), dtype=jnp.int32)
+    bboxes = jnp.zeros((data.shape[0], 0, 4))
+    regressions = jnp.zeros((data.shape[0], 0, 4))
+    classifications = jnp.zeros((data.shape[0], 0, classes))
 
     for idx, layer_idx in enumerate(range(3, 8)):
       # Get the feature maps for this subnet
@@ -391,10 +376,9 @@ class RetinaNet(flax.nn.Module):
         anchors = generate_anchors(layer_input.shape[:3],
                                    anchors_config.strides[idx],
                                    anchors_config.sizes[idx],
-                                   anchors_config.ratios, anchors_config.scales,
-                                   dtype)
+                                   anchors_config.ratios, anchors_config.scales)
         bboxes_temp = apply_anchor_regressions(
-            anchors, regressions_temp, dtype=dtype)
+            anchors, regressions_temp)
         bboxes_temp = clip_anchors(bboxes_temp, img_shape[:, 0], img_shape[:,
                                                                            1])
         bboxes = jnp.append(bboxes, bboxes_temp, axis=1)

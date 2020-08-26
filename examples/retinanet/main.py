@@ -16,7 +16,9 @@ from absl import flags
 from absl import logging
 
 import jax
+from ml_collections import config_flags
 import tensorflow as tf
+
 import train
 
 # Config TPU.
@@ -30,11 +32,8 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
     "workdir", f"/tmp/workdir_{int(time.time())}", "Work unit directory.")
-flags.DEFINE_string(
-    "config",
-    "configs.default",
-    "Name of the config module. The config model must have a get_config() method"
-    "that returns a ConfigDict.")
+config_flags.DEFINE_config_file(
+    "config", "configs/default.py", "Training configuration.", lock_config=True)
 flags.DEFINE_string(
     "jax_backend_target", None,
     "JAX backend target to use. Set this to grpc://<TPU_IP_ADDRESS>:8740 to use your TPU (2VM mode)."
@@ -52,10 +51,6 @@ def main(argv):
     # Turn on omnistaging since it fixes some bugs but is not yet the default.
     jax.config.enable_omnistaging()
 
-    config_module = importlib.import_module(FLAGS.config)
-    config = config_module.get_config()
-    logging.info("Config: %s", config)
-
     if FLAGS.jax_backend_target:
         # Configure JAX to run in 2VM mode with a remote TPU node.
         logging.info("Using JAX backend target %s", FLAGS.jax_backend_target)
@@ -68,7 +63,8 @@ def main(argv):
     logging.info("JAX host: %d / %d", jax.host_id(), jax.host_count())
     logging.info("JAX devices: %r", jax.devices())
 
-    train.train_and_evaluate(config, FLAGS.workdir)
+    logging.info("Config: %s", FLAGS.config)
+    train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
 
 
 if __name__ == "__main__":

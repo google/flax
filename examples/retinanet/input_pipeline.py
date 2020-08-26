@@ -1,6 +1,7 @@
 from typing import Iterable, Tuple
 
 from clu import deterministic_data
+import ml_collections
 from flax import jax_utils
 import jax
 import jax.numpy as jnp
@@ -604,7 +605,7 @@ def eval_preprocess_fn(features):
   return fn(features)
 
 
-def create_datasets(config, rng) -> Tuple[tfds.core.DatasetInfo, tf.data.Dataset, tf.data.Dataset]:
+def create_datasets(config: ml_collections.ConfigDict, rng) -> Tuple[tfds.core.DatasetInfo, tf.data.Dataset, tf.data.Dataset]:
   """Create datasets for training and evaluation.
 
   Args:
