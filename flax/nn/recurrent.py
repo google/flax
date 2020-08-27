@@ -239,10 +239,10 @@ class ConvLSTM(RNNCellBase):
     """
     c, h = carry
     input_to_hidden = linear.Conv.partial(
-        features=4*features, kernel_size=kernel_size)
+        features=4*features, kernel_size=kernel_size, name="ih")
 
     hidden_to_hidden = linear.Conv.partial(
-        features=4*features, kernel_size=kernel_size)
+        features=4*features, kernel_size=kernel_size, name="hh")
 
     gates = input_to_hidden(inputs) + hidden_to_hidden(h)
     i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
