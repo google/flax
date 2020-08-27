@@ -32,10 +32,5 @@ for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
     pytest $egd
 done
 
-# Per-example tests for linen examples.
-for egd in $(find linen_examples -maxdepth 1 -mindepth 1 -type d); do
-    pytest $egd
-done
-
 # Return error code 0 if no real failures happened.
 echo "finished all tests."
