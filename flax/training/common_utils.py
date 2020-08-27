@@ -41,6 +41,10 @@ def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
 
 
 def stack_forest(forest):
+  if not forest:
+    return forest
+  if len(forest) == 1:
+    return forest[0]
   stack_args = lambda *args: onp.stack(args)
   return jax.tree_multimap(stack_args, *forest)
 
