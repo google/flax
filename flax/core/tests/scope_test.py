@@ -32,6 +32,8 @@ class ScopeTest(absltest.TestCase):
 
     init(f)(random.PRNGKey(0))
 
+  
+
 
 if __name__ == '__main__':
   absltest.main()
