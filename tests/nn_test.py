@@ -1,17 +1,3 @@
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Tests for flax.nn."""
 
 import threading
@@ -662,6 +648,25 @@ class RecurrentTest(absltest.TestCase):
         'hr': {'kernel': (4, 4)},
         'hz': {'kernel': (4, 4)},
         'hn': {'kernel': (4, 4), 'bias': (4,)},
+    })
+
+  def test_conv2dlstm(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (2, 4, 4, 3))
+    c0, h0 = nn.ConvLSTM.initialize_carry(rng, (2,), (4, 4, 6))
+    self.assertEqual(c0.shape, (2, 4, 4, 6))
+    self.assertEqual(h0.shape, (2, 4, 4, 6))
+    (carry, y), initial_params = nn.ConvLSTM.init(
+        key2, (c0, h0), x, features=6, kernel_size=(3, 3))
+    lstm = nn.Model(nn.ConvLSTM, initial_params)
+    self.assertEqual(carry[0].shape, (2, 4, 4, 6))
+    self.assertEqual(carry[1].shape, (2, 4, 4, 6))
+    onp.testing.assert_allclose(y, carry[1])
+    param_shapes = jax.tree_map(onp.shape, lstm.params)
+    self.assertEqual(param_shapes, {
+        'hh': {'bias': (6*4,), 'kernel': (3, 3, 6, 6*4)},
+        'ih': {'bias': (6*4,), 'kernel': (3, 3, 3, 6*4)},
     })
 
 
