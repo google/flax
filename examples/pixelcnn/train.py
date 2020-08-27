@@ -46,6 +46,7 @@ import jax
 from jax import random
 from jax import lax
 import jax.numpy as jnp
+import numpy as np
 
 import tensorflow.compat.v2 as tf
 
@@ -125,7 +126,7 @@ def neg_log_likelihood_loss(nn_out, images):
       pixelcnn.conditional_params_from_outputs(nn_out, images))
   log_likelihoods = pixelcnn.logprob_from_conditional_params(
       images, means, inv_scales, logit_weights)
-  return -jnp.mean(log_likelihoods) / (jnp.log(2) * jnp.prod(images.shape[-3:]))
+  return -jnp.mean(log_likelihoods) / (jnp.log(2) * np.prod(images.shape[-3:]))
 
 
 def train_step(optimizer, ema, batch, prng_key, learning_rate_fn):
