@@ -23,6 +23,8 @@ from absl import flags
 import numpy as onp
 from PIL import Image
 
+from flax import optim
+
 import jax
 from jax import random
 import jax.numpy as jnp
@@ -30,11 +32,13 @@ import jax.numpy as jnp
 import pixelcnn
 import train
 
+import tpu_converter
+
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_integer(
-    'sample_batch_size', default=64,
+    'sample_batch_size', default=256,
     help=('Batch size for sampling.'))
 
 flags.DEFINE_integer(
@@ -42,22 +46,23 @@ flags.DEFINE_integer(
     help=('Random number generator seed for sampling.'))
 
 def generate_sample():
-  rng = random.PRNGKey(rng_seed)
+  batch_size = FLAGS.sample_batch_size
+  rng = random.PRNGKey(FLAGS.sample_rng_seed)
   rng, model_rng = random.split(rng)
   rng, dropout_rng = random.split(rng)
 
-  # Create a model with dummy parameters and a dummy optimizer
-  example_images = jnp.zeros((1, 32, 32, 3))
+  # Create a model with dummy parameters and a dummy optimizer.
+  init_batch = jnp.zeros((1, 32, 32, 3))
 
-  initial_variables = train.model().init({
+  params = train.model().init({
       'param': model_rng,
       'dropout': dropout_rng
   }, init_batch)['param']
   optimizer_def = optim.Adam(
       learning_rate=FLAGS.learning_rate, beta1=0.95, beta2=0.9995)
-  optimizer = optimizer_def.create(initial_variables)
+  optimizer = optimizer_def.create(params)
 
-  optimizer, ema = train.restore_checkpoint(optimizer, initial_variables)
+  _, params = train.restore_checkpoint(optimizer, params)
 
   # Initialize batch of images
   device_count = jax.local_device_count()
@@ -71,9 +76,9 @@ def generate_sample():
   sample_rng = random.split(rng, device_count)
 
   # Generate sample using fixed-point iteration
-  sample = sample_iteration(sample_rng, model, sample_prev)
+  sample = sample_iteration(sample_rng, params, sample_prev)
   while jnp.any(sample != sample_prev):
-    sample_prev, sample = sample, sample_iteration(sample_rng, model, sample)
+    sample_prev, sample = sample, sample_iteration(sample_rng, params, sample)
   return jnp.reshape(sample, (batch_size, 32, 32, 3))
 
 def _categorical_onehot(rng, logit_probs):
@@ -95,10 +100,13 @@ def conditional_params_to_sample(rng, conditional_params):
   return snap_to_grid(sample)
 
 @partial(jax.pmap, static_broadcasted_argnums=1)
-def sample_iteration(rng, model, sample):
+def sample_iteration(rng, params, sample):
   """PixelCNN++ sampling expressed as a fixed-point iteration.
   """
-  c_params = pixelcnn.conditional_params_from_outputs(model(sample), sample)
+  rng, dropout_rng = random.split(rng)
+  out = train.model().apply({'param': params}, sample, 
+                            rngs={'dropout': dropout_rng})
+  c_params = pixelcnn.conditional_params_from_outputs(out, sample)
   return conditional_params_to_sample(rng, c_params)
 
 def snap_to_grid(sample):
@@ -119,6 +127,7 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
+  tpu_converter.convert_to_tpu()
   save_images(generate_sample(), 'sample.png')
 
 if __name__ == '__main__':
