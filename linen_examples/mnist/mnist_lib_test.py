@@ -33,14 +33,14 @@ class MnistLibTest(absltest.TestCase):
   def test_cnn(self):
     """Tests CNN module used as the trainable model."""
     rng = jax.random.PRNGKey(0)
-    output, init_params = mnist_lib.CNN.init_by_shape(
-        rng, [((5, 224, 224, 3), jnp.float32)])
+    inputs = jnp.ones((5, 224, 224, 3), jnp.float32)
+    output, variables = mnist_lib.CNN().init_with_output(rng, inputs)
 
     self.assertEqual((5, 10), output.shape)
 
     # TODO(mohitreddy): Consider creating a testing module which
     # gives a parameters overview including number of parameters.
-    self.assertLen(init_params, 4)
+    self.assertLen(variables['param'], 4)
 
   def test_train_and_evaluate(self):
     """Tests training and evaluation code by running a single step with
