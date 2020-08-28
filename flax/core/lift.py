@@ -14,17 +14,12 @@
 
 """Jax transform lifting."""
 
-import enum
+import collections
 import functools
 
 
 import jax
 from jax import random
-from jax import lax
-from jax import numpy as jnp
-
-from jax.interpreters import partial_eval as pe
-from jax import linear_util as lu
 
 from typing import Any, Callable, Sequence, Union, Iterable, Tuple, Optional, Mapping
 
@@ -45,7 +40,8 @@ ScanVariableMode = Union[str, Tuple[str, str]]
 
 def _dedup_scopes(scopes):
   paths = []
-  minimal_set = set(scopes)
+  # must preseve insertion order for duplication to work correctly
+  minimal_set = collections.OrderedDict((s, ()) for s in scopes)
   for leave in scopes:
     scope = leave.parent
     max_parent = leave
@@ -60,8 +56,7 @@ def _dedup_scopes(scopes):
     if max_parent is not leave:
       minimal_set.remove(leave)
     paths.append((max_parent, max_parent_path))
-
-  return tuple(minimal_set), paths
+  return tuple(minimal_set), tuple(paths)
 
 def _dup_scopes(orig_scopes, scopes, paths):
   mapping = dict(zip(orig_scopes, scopes))
@@ -130,6 +125,7 @@ def pack(fn: Callable[..., Any],
     def repack(inner_scope_tree):
       inner_scopes = treedef.flatten_up_to(inner_scope_tree)
       inner_scopes, inner_paths = _dedup_scopes(inner_scopes)
+      inner_scopes = list(inner_scopes)
       assert [p for _, p in paths] == [p for _, p in inner_paths]
       out_variable_groups_xs = []
       for inner_scope in inner_scopes:
