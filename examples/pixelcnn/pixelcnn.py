@@ -46,6 +46,8 @@ from jax import vmap, custom_jvp
 
 from flax import nn
 
+from jax import random
+
 
 # High level model definition
 @nn.module
@@ -207,6 +209,7 @@ class Conv(nn.Module):
     kernel_shape = kernel_size + (in_features, features)
 
     def initializer(key, shape):
+      key = random.PRNGKey(0)
       # A weightnorm initializer generating a (direction, scale, bias) tuple.
       # Note that the shape argument is not used.
       direction = nn.initializers.normal()(key, kernel_shape, dtype)
@@ -220,7 +223,8 @@ class Conv(nn.Module):
     # None can be used as an escape hatch.
     params = self.param('weightnorm_params', None, initializer)
     direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
-    return conv(inputs, _make_kernel(direction, scale)) + bias
+    kernel = _make_kernel(direction, scale)
+    return conv(inputs, kernel) + bias
 
 ConvTranspose = Conv.partial(transpose=True)
 ConvOneByOne  = Conv.partial(kernel_size=(1, 1))
@@ -250,6 +254,8 @@ def ConvDownRight(inputs, features, kernel_size=(2, 2), strides=None, **kwargs):
   k_h, k_w = kernel_size
   padding = ((k_h - 1, 0),  # Vertical padding
              (k_w - 1, 0))  # Horizontal padding
+
+  print('kwargs:', **kwargs)
 
   return Conv(inputs, features, kernel_size, strides, padding, **kwargs)
 

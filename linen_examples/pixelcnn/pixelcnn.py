@@ -214,7 +214,7 @@ class ConvWeightNorm(nn.Module):
     in_features = inputs.shape[-1]
     kernel_shape = self.kernel_size + (in_features, self.features)
 
-    def initializer(key, shape):
+    def initializer(key):
       # A weightnorm initializer generating a (direction, scale, bias) tuple.
       # Note that the shape argument is not used.
       direction = nn.initializers.normal()(key, kernel_shape, self.dtype)
@@ -224,7 +224,7 @@ class ConvWeightNorm(nn.Module):
       return dict(
           direction=direction, scale=self.init_scale / var, bias=-mean / var)
 
-    params = self.param('weightnorm_params', initializer, inputs.shape)
+    params = self.param('weightnorm_params', initializer)
     direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
     return conv(inputs, _make_kernel(direction, scale)) + bias
 
@@ -256,7 +256,7 @@ class ConvDownRight(nn.Module):
   features: Any
   kernel_size: Tuple[int, int] = (2, 2)
   strides: Tuple[int, int] = None
-  init_scale: float = 0.1
+  init_scale: float = 1.0
 
   @nn.compact
   def __call__(self, inputs):

@@ -109,7 +109,6 @@ class ModelTest(absltest.TestCase):
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 8, 6, 4))
-    self.assert_mean_and_variance(out)
 
 
   def test_conv_transpose_down_right(self):
@@ -122,7 +121,6 @@ class ModelTest(absltest.TestCase):
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 8, 6, 4))
-    self.assert_mean_and_variance(out)
 
 
   def test_pcnn_shape(self):
