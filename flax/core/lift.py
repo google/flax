@@ -82,10 +82,7 @@ def pack(fn: Callable[..., Any],
   def wrapper(scope: Scope, *args):
     # pylint: disable=protected-access
     scopes, treedef = jax.tree_flatten(scope)
-    
     scopes, paths = _dedup_scopes(scopes)
-
-    # TODO(jheek) check aliasing between scopes!!!
 
     variable_groups_xs = []
 
@@ -132,8 +129,8 @@ def pack(fn: Callable[..., Any],
 
     def repack(inner_scope_tree):
       inner_scopes = treedef.flatten_up_to(inner_scope_tree)
-      inner_scopes, _ = _dedup_scopes(inner_scopes)
-      # TODO(jheek) validate path structure is the same
+      inner_scopes, inner_paths = _dedup_scopes(inner_scopes)
+      assert [p for _, p in paths] == [p for _, p in inner_paths]
       out_variable_groups_xs = []
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
