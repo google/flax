@@ -296,7 +296,7 @@ class Module:
           if submodule.name is not None:
             raise ValueError(
                 "In setup, assign names of Modules via self.<name> and not "
-                "using keyword arguments name=\"<name>\"")
+                "using keyword argument name=\"<name>\"")
           submodule.name = f'{name}{suffix}'
           submodule.__post_init__()
     # val is a parameter array or a Variable reference class.
