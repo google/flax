@@ -150,12 +150,6 @@ class PixelCNNPP(nn.Module):
                         init_scale=0.1)(nn.elu(down_right))
 
 
-# General utils
-def centre(images):
-  """Mapping from {0, 1, ..., 255} to {-1, -1 + 1/127.5, ..., 1}."""
-  return images / 127.5 - 1
-
-
 def concat_elu(x):
   return nn.elu(jnp.concatenate((x, -x), -1))
 
@@ -187,7 +181,7 @@ def _make_kernel(direction, scale):
 
 
 # 2D convolution Modules with weightnorm
-class Conv(nn.Module):
+class ConvWeightNorm(nn.Module):
   """2D convolution Modules with weightnorm."""
   features: int
   kernel_size: Tuple[int, int] = (2, 3)
@@ -235,8 +229,8 @@ class Conv(nn.Module):
     return conv(inputs, _make_kernel(direction, scale)) + bias
 
 
-ConvOneByOne = partial(Conv, kernel_size=(1, 1))
-ConvTranspose = partial(Conv, transpose=True)
+ConvOneByOne = partial(ConvWeightNorm, kernel_size=(1, 1))
+ConvTranspose = partial(ConvWeightNorm, transpose=True)
 
 
 class ConvDown(nn.Module):
@@ -253,7 +247,7 @@ class ConvDown(nn.Module):
     padding = ((k_h - 1, 0),          # Vertical padding
                (k_w // 2, k_w // 2))  # Horizontal padding
 
-    return Conv(self.features, self.kernel_size, self.strides, padding,
+    return ConvWeightNorm(self.features, self.kernel_size, self.strides, padding,
                 init_scale=self.init_scale)(inputs)
 
 
@@ -270,7 +264,7 @@ class ConvDownRight(nn.Module):
     padding = ((k_h - 1, 0),  # Vertical padding
                (k_w - 1, 0))  # Horizontal padding
 
-    return Conv(self.features, self.kernel_size, self.strides, padding, 
+    return ConvWeightNorm(self.features, self.kernel_size, self.strides, padding, 
                 init_scale=self.init_scale)(inputs)
 
 
@@ -311,7 +305,7 @@ class ConvTransposeDownRight(nn.Module):
 
 
 class GatedResnet(nn.Module):
-  conv_module: Callable[..., Any] = None
+  conv_module: Callable[..., Any]
   nonlinearity: Callable[..., Any] = concat_elu
   dropout_p: float = 0.
 
