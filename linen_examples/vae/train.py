@@ -140,7 +140,7 @@ def train_step(optimizer, batch, z_rng):
   return optimizer
 
 
-# @jax.jit
+@jax.jit
 def eval(params, images, z, z_rng):
   recon_images, mean, logvar = model().apply({'param': params}, images, z_rng)
 
