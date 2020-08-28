@@ -32,8 +32,6 @@ import jax.numpy as jnp
 import pixelcnn
 import train
 
-import tpu_converter
-
 
 FLAGS = flags.FLAGS
 
@@ -127,7 +125,6 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tpu_converter.convert_to_tpu()
   save_images(generate_sample(), 'sample.png')
 
 if __name__ == '__main__':
