@@ -15,6 +15,9 @@
 from absl import app
 from absl import flags
 
+import ml_collections
+from ml_collections.config_flags import config_flags
+
 import numpy as np
 import jax.numpy as jnp
 
@@ -29,28 +32,14 @@ import tensorflow_datasets as tfds
 
 from utils import save_image
 
+config = ml_collections.ConfigDict()
+config.learning_rate = 0.1
+config.batch_size = 128
+config.num_epochs = 30
+config.latents = 30
 
 FLAGS = flags.FLAGS
-
-flags.DEFINE_float(
-    'learning_rate', default=1e-3,
-    help=('The learning rate for the Adam optimizer.')
-)
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.')
-)
-
-flags.DEFINE_integer(
-    'num_epochs', default=30,
-    help=('Number of training epochs.')
-)
-
-flags.DEFINE_integer(
-    'latents', default=20,
-    help=('Number of latent variables.')
-)
+config_flags.DEFINE_config_dict('config', config)
 
 
 class Encoder(nn.Module):

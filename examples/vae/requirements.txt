@@ -1,4 +1,6 @@
 jax
+jaxlib
 flax
 tensorflow
 pillow
+git+https://github.com/google/ml_collections
