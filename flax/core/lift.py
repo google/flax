@@ -42,19 +42,19 @@ def _dedup_scopes(scopes):
   paths = []
   # must preseve insertion order for duplication to work correctly
   minimal_set = collections.OrderedDict((s, ()) for s in scopes)
-  for leave in scopes:
-    scope = leave.parent
-    max_parent = leave
+  for leaf in scopes:
+    scope = leaf.parent
+    max_parent = leaf
     max_parent_path = ()
-    path = [leave.name]
+    path = [leaf.name]
     while scope is not None:
       if scope in minimal_set:
         max_parent = scope
         max_parent_path = tuple(reversed(path))
       path.append(scope.name)
       scope = scope.parent
-    if max_parent is not leave:
-      minimal_set.remove(leave)
+    if max_parent is not leaf:
+      minimal_set.remove(leaf)
     paths.append((max_parent, max_parent_path))
   return tuple(minimal_set), tuple(paths)
 
