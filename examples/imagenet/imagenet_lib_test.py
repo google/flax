@@ -21,6 +21,7 @@ import tempfile
 
 from absl.testing import absltest
 
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 import imagenet_lib
@@ -28,6 +29,10 @@ import imagenet_lib
 
 class ImageNetTest(absltest.TestCase):
   """Test cases for imagenet_lib."""
+
+  def setUp(self):
+    super().setUp()
+    tf.config.experimental.set_visible_devices([], "GPU")
 
   def test_train_and_evaluate(self):
     """Tests training and evaluation code by running a single step with

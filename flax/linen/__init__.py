@@ -23,11 +23,11 @@ from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
 from .attention import (
                         MultiHeadDotProductAttention, SelfAttention, dot_product_attention)
 from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
-from .module import Module, compact
+from .module import Module, compact, enable_named_call, disable_named_call
 from .normalization import BatchNorm, GroupNorm, LayerNorm
 from .pooling import avg_pool, max_pool
 from .recurrent import GRUCell, LSTMCell
 from .stochastic import Dropout
-from .transforms import jit, named_call, remat, scan, vmap
+from .transforms import jit, named_call, remat, scan, vmap, broadcast
 
 # pylint: enable=g-multiple-import

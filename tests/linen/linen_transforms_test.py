@@ -161,7 +161,8 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, c, xs):
         LSTM = nn.scan(nn.LSTMCell,
-                       variable_modes={'param': 'broadcast'},
+                       variable_in_axes={'param': nn.broadcast},
+                       variable_out_axes={'param': nn.broadcast},
                        split_rngs={'param': False})
         return LSTM(name="lstm_cell")(c, xs)
 
@@ -190,7 +191,8 @@ class TransformTest(absltest.TestCase):
   def test_scan_decorated(self):
     class SimpleScan(nn.Module):
       @partial(nn.scan,
-               variable_modes={'param': 'broadcast'},
+               variable_in_axes={'param': nn.broadcast},
+               variable_out_axes={'param': nn.broadcast},
                split_rngs={'param': False})
       @nn.compact
       def __call__(self, c, xs):
@@ -217,6 +219,248 @@ class TransformTest(absltest.TestCase):
     np.testing.assert_allclose(y1, y2, atol=1e-7)
     np.testing.assert_allclose(c[0], c2[0], atol=1e-7)
     np.testing.assert_allclose(c[1], c2[1], atol=1e-7)
+
+  def test_multiscope_lifting_simple(self):
+    class Counter(nn.Module):
+      @nn.compact
+      def __call__(self):
+        v = self.variable('counter', 'foo', lambda: jnp.array([0]))
+        v.value += jnp.array([1])
+        return v.value
+    class Outer(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        cntr = nn.jit(Counter)(name='cntr')()
+        return x
+    class Inner(nn.Module):
+      outer_module: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return self.outer_module(x)
+    class Test(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        outer_dense = nn.jit(Outer)(name='outer')
+        # we share stateful outer module as arg to two different, transformed modules:
+        inner = nn.jit(Inner)(outer_dense, name='inner1')
+        inner2 = nn.jit(Inner)(outer_dense, name='inner2')
+        res = inner(x) + inner2(x)
+        return res
+
+    x = jnp.ones((10, 10))
+    rngs = random.PRNGKey(0)
+    init_vars = Test(None).init(rngs, x)
+    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
+                     jnp.array([2], jnp.int32))
+    self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
+                     jnp.array([4], jnp.int32))
+
+  def test_multiscope_lifting_simple_decorator(self):
+    class Counter(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self):
+        v = self.variable('counter', 'foo', lambda: jnp.array([0]))
+        v.value += jnp.array([1])
+        return v.value
+    class Outer(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        cntr = Counter(name='cntr')()
+        return x
+    class Inner(nn.Module):
+      outer_module: nn.Module
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return self.outer_module(x)
+    class Test(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        outer_dense = Outer(name='outer')
+        # we share stateful outer module as arg to two different, transformed modules:
+        inner = Inner(outer_dense, name='inner1')
+        inner2 = Inner(outer_dense, name='inner2')
+        res = inner(x) + inner2(x)
+        return res
+
+    x = jnp.ones((1, 1))
+    rngs = random.PRNGKey(0)
+    init_vars = Test(None).init(rngs, x)
+    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
+                     jnp.array([2], jnp.int32))
+    self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
+                     jnp.array([4], jnp.int32))
+
+  def test_multiscope_lifting_argtree(self):
+    class Counter(nn.Module):
+      @nn.compact
+      def __call__(self):
+        v = self.variable('counter', 'foo', lambda: jnp.array([0]))
+        v.value += jnp.array([1])
+        return v.value
+    class Outer(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        cntr = nn.jit(Counter)(name='cntr')()
+        return x
+    class Inner(nn.Module):
+      outer_module: Sequence[nn.Module]
+      @nn.compact
+      def __call__(self, x):
+        return self.outer_module[0](x) + self.outer_module[1](x)
+    class Test(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        outer_dense1 = nn.jit(Outer)(name='outer1')
+        outer_dense2 = nn.jit(Outer)(name='outer2')
+        # we share stateful outer module as arg to two different, transformed modules:
+        inner1 = nn.jit(Inner)((outer_dense1, outer_dense2), name='inner1')
+        inner2 = nn.jit(Inner)((outer_dense1, outer_dense2), name='inner2')
+        res = inner1(x) + inner2(x)
+        return res
+
+    x = jnp.ones((1, 1))
+    rngs = random.PRNGKey(0)
+    init_vars = Test(None).init(rngs, x)
+    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    self.assertEqual(init_vars['counter']['outer1']['cntr']['foo'],
+                     jnp.array([2], jnp.int32))
+    self.assertEqual(new_vars['counter']['outer1']['cntr']['foo'],
+                     jnp.array([4], jnp.int32))
+    self.assertEqual(init_vars['counter']['outer2']['cntr']['foo'],
+                     jnp.array([2], jnp.int32))
+    self.assertEqual(new_vars['counter']['outer2']['cntr']['foo'],
+                     jnp.array([4], jnp.int32))
+
+  def test_multiscope_lifting_argtree_decorator(self):
+    class Counter(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self):
+        v = self.variable('counter', 'foo', lambda: jnp.array([0]))
+        v.value += jnp.array([1])
+        return v.value
+    class Outer(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        cntr = nn.jit(Counter)(name='cntr')()
+        return x
+    class Inner(nn.Module):
+      outer_module: Sequence[nn.Module]
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return self.outer_module[0](x) + self.outer_module[1](x)
+    class Test(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        outer_dense1 = Outer(name='outer1')
+        outer_dense2 = Outer(name='outer2')
+        # we share stateful outer module as arg to two different, transformed modules:
+        inner1 = Inner((outer_dense1, outer_dense2), name='inner1')
+        inner2 = Inner((outer_dense1, outer_dense2), name='inner2')
+        res = inner1(x) + inner2(x)
+        return res
+
+    x = jnp.ones((1, 1))
+    rngs = random.PRNGKey(0)
+    init_vars = Test(None).init(rngs, x)
+    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    self.assertEqual(init_vars['counter']['outer1']['cntr']['foo'],
+                     jnp.array([2], jnp.int32))
+    self.assertEqual(new_vars['counter']['outer1']['cntr']['foo'],
+                     jnp.array([4], jnp.int32))
+    self.assertEqual(init_vars['counter']['outer2']['cntr']['foo'],
+                     jnp.array([2], jnp.int32))
+    self.assertEqual(new_vars['counter']['outer2']['cntr']['foo'],
+                     jnp.array([4], jnp.int32))
+
+  def test_multiscope_lifting_simple_decorator_w_named_call(self):
+    # TODO: actually test jaxpr on a simpler module.
+    nn.enable_named_call()
+    try:
+      class Counter(nn.Module):
+        @nn.jit
+        @nn.compact
+        def __call__(self):
+          v = self.variable('counter', 'foo', lambda: jnp.array([0]))
+          v.value += jnp.array([1])
+          return v.value
+      class Outer(nn.Module):
+        @nn.jit
+        @nn.compact
+        def __call__(self, x):
+          cntr = Counter(name='cntr')()
+          return x
+      class Inner(nn.Module):
+        outer_module: nn.Module
+        @nn.jit
+        @nn.compact
+        def __call__(self, x):
+          return self.outer_module(x)
+      class Test(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          outer_dense = Outer(name='outer')
+          # we share stateful outer module as arg to two different, transformed modules:
+          inner = Inner(outer_dense, name='inner1')
+          inner2 = Inner(outer_dense, name='inner2')
+          res = inner(x) + inner2(x)
+          return res
+
+      x = jnp.ones((1, 1))
+      rngs = random.PRNGKey(0)
+      init_vars = Test(None).init(rngs, x)
+      _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+      self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
+                      jnp.array([2], jnp.int32))
+      self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
+                      jnp.array([4], jnp.int32))
+    finally:
+      nn.disable_named_call()
+
+  def test_vmapped_outer_module(self):
+    class Outer(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(5)(x)
+    class Inner(nn.Module):
+      outer_module: nn.Module
+      @partial(nn.vmap,
+               in_axes=(0,),
+               variable_in_axes={'param': 0},
+               variable_out_axes={'param': 0},
+               split_rngs={'param': True})
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return self.outer_module(x)
+    class Test(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        outer_dense = Outer(name='outer')
+        inner = Inner(outer_dense, name='inner1')
+        inner2 = Inner(outer_dense, name='inner2')
+        res = inner(x) + inner2(x)
+        return res
+
+    x = jnp.ones((3, 1, 2))
+    rngs = random.PRNGKey(0)
+    init_vars = Test(None).init(rngs, x)
+    y = Test(None).apply(init_vars, x)
+    self.assertEqual(
+        init_vars['param']['outer']['Dense_0']['kernel'].shape,
+        (3, 2, 5))
+    self.assertEqual(
+        init_vars['param']['outer']['Dense_0']['bias'].shape,
+        (3, 5))
+    self.assertEqual(y.shape, (3, 1, 5))
 
 
 if __name__ == '__main__':

@@ -25,6 +25,7 @@ import jax
 from jax import tree_util
 import numpy as np
 
+import flax
 from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
@@ -50,6 +51,7 @@ def _check_omnistaging():
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
 class _DynamicContext:
+  # TODO: switch to using contextvars once minimum python version is 3.7
   def __init__(self):
     self._thread_data = threading.local()
   @property
@@ -62,6 +64,21 @@ _context = _DynamicContext()
 class _Sentinel:
   pass
 _unspecified_parent = _Sentinel()
+
+
+# Enable automatic named_call wrapping for labelling profile traces.
+# -----------------------------------------------------------------------------
+_use_named_call = False
+
+def enable_named_call():
+  """Enables named call wrapping for labelling profile traces."""
+  global _use_named_call
+  _use_named_call = True
+
+def disable_named_call():
+  """Disables named call wrapping."""
+  global _use_named_call
+  _use_named_call = False
 
 
 # Utilities for autonaming pytrees of Modules defined inside setup()
@@ -241,7 +258,14 @@ class Module:
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__'])
     for key in get_local_method_names(cls, exclude=exclusions):
-      setattr(cls, key, wrap_method(getattr(cls, key)))
+      method = getattr(cls, key)
+      if _use_named_call and key != 'setup':
+        printkey = f'.{key}' if key != '__call__' else ''
+        method_name = f'{cls.__name__}{printkey}'
+        # We import named_call at runtime to avoid a circular import issue.
+        from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
+        method = named_call(method, method_name)
+      setattr(cls, key, wrap_method(method))
     return cls
 
   def __setattr__(self, name: str, val: Any):
@@ -258,14 +282,7 @@ class Module:
         pass
       # Modules have been passed in as dataclass args.
       elif name in self.__dataclass_fields__.keys():
-        for suffix, submodule in get_suffix_module_pairs(val):
-          if submodule.parent is _unspecified_parent:
-            submodule.parent = self
-            if submodule.name is not None:
-              raise ValueError(
-                  "In setup assign names via self.<name> assignment.")
-            submodule.name = f'{name}{suffix}'
-            submodule.__post_init__()
+        pass
       # Submodules are being defined and attached in setup()
       else:
         if not self._state.in_setup:

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """ImageNet example.
 
 Library file containing logic for training and evaluation loops.
@@ -30,7 +29,7 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 import flax
@@ -219,8 +218,6 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
     num_eval_steps: Number of evaluation steps to be executed in a
       single epoch. Default = -1 signifies using the entire VALIDATION split.
   """
-
-  tf.enable_v2_behavior()
   # make sure tf does not allocate gpu memory
   tf.config.experimental.set_visible_devices([], 'GPU')
 

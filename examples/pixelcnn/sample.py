@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Sampling from PixelCNN++ using fixed-point iteration.
 """
 from functools import partial

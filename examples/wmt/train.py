@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -308,7 +307,7 @@ def compute_weighted_cross_entropy(logits,
   loss = -jnp.sum(soft_targets * nn.log_softmax(logits), axis=-1)
   loss = loss - normalizing_constant
 
-  normalizing_factor = jnp.prod(targets.shape)
+  normalizing_factor = np.prod(targets.shape)
   if weights is not None:
     loss = loss * weights
     normalizing_factor = weights.sum()
@@ -331,7 +330,7 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
                      (str(logits.shape), str(targets.shape)))
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
-  normalizing_factor = jnp.prod(logits.shape[:-1])
+  normalizing_factor = np.prod(logits.shape[:-1])
   if weights is not None:
     loss = loss * weights
     normalizing_factor = weights.sum()

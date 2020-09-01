@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """seq2seq addition example."""
 
 import random
@@ -169,7 +168,8 @@ class EncoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_modes={'param': 'broadcast'},
+      variable_in_axes={'param': nn.broadcast},
+      variable_out_axes={'param': nn.broadcast},
       split_rngs={'param': False})
   @nn.compact
   def __call__(self, carry, x):
@@ -216,7 +216,8 @@ class DecoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_modes={'param': 'broadcast'},
+      variable_in_axes={'param': nn.broadcast},
+      variable_out_axes={'param': nn.broadcast},
       split_rngs={'param': False})
   @nn.compact
   def __call__(self, carry, x):
