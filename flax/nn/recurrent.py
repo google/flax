@@ -246,9 +246,9 @@ class ConvLSTM(RNNCellBase):
     gates = input_to_hidden(inputs) + hidden_to_hidden(h)
     i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
 
-    f = nn.sigmoid(f + 1)
-    new_c = f * c + nn.sigmoid(i) * jnp.tanh(g)
-    new_h = nn.sigmoid(o) * jnp.tanh(new_c)
+    f = activation.sigmoid(f + 1)
+    new_c = f * c + activation.sigmoid(i) * jnp.tanh(g)
+    new_h = activation.sigmoid(o) * jnp.tanh(new_c)
     return (new_c, new_h), new_h
 
   @staticmethod
