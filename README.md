@@ -1,6 +1,5 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-
 [![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
 
 **NOTE**: Flax is being actively improved and has a growing community
@@ -8,13 +7,15 @@ of researchers and engineers at Google who happily use Flax for their
 daily research. Flax is in "early release stage" -- if that's your style,
 now could be a good time to start using it.
 We want to smooth out any rough edges so please report
-any issues, questions or concerns as
-[GitHub issues](https://github.com/google/flax/issues). Expect changes to the
+any issues, questions or concerns in our 
+[discussion forum](https://github.com/google/flax/discussions), or just let us know 
+what you're working on!
+
+Expect changes to the
 API, but we'll use deprecation warnings when we can, and keep
 track of them in our [Changelog](CHANGELOG.md).
 
 In case you need to reach us directly, we're at flax-dev@google.com.
-
 
 ## Quickstart
 
@@ -51,7 +52,7 @@ comes with everything you need to start your research, including:
 
 * **Common layers** (`flax.nn`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
 
-* **Optimizers** (`flax.optim`): SGD, Momentum, Adam, LARS
+* **Optimizers** (`flax.optim`): SGD, Momentum, Adam, LARS, Adagrad, LAMB, RMSprop
 
 * **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device
 

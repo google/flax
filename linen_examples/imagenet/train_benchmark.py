@@ -12,35 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Benchmark for the MNIST example."""
-import tempfile
-
+"""Benchmark for the ImageNet example."""
 import time
+
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-
+import train
+from flax.testing import Benchmark
 import jax
 import numpy as np
-from flax.testing import Benchmark
-
-import train
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+# Require JAX omnistaging mode.
+jax.config.enable_omnistaging()
 
 
 FLAGS = flags.FLAGS
 
 
-class MnistBenchmark(Benchmark):
-  """Benchmarks for the MNIST Flax example."""
+class ImagenetBenchmark(Benchmark):
+  """Benchmarks for the ImageNet Flax example."""
 
   @flagsaver
-  def test_cpu(self):
-    """Run full training for MNIST CPU training."""
-    model_dir = tempfile.mkdtemp()
+  def test_8x_v100_half_precision(self):
+    """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
+    model_dir = self.get_tmp_model_dir()
+    FLAGS.batch_size = 2048
+    FLAGS.half_precision = True
+    FLAGS.num_epochs = 2
     FLAGS.model_dir = model_dir
 
     start_time = time.time()
@@ -53,23 +55,21 @@ class MnistBenchmark(Benchmark):
     wall_time, _, eval_accuracy = zip(*summaries['eval_accuracy'])
     wall_time = np.array(wall_time)
     sec_per_epoch = np.mean(wall_time[1:] - wall_time[:-1])
-    end_eval_accuracy = eval_accuracy[-1]
+    end_accuracy = eval_accuracy[-1]
 
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(sec_per_epoch, 14., 16.)
-    self.assertBetween(end_eval_accuracy, 0.98, 1.0)
+    self.assertBetween(end_accuracy, 0.06, 0.09)
 
     # Use the reporting API to report single or multiple metrics/extras.
     self.report_wall_time(benchmark_time)
-    self.report_metrics({
-        'sec_per_epoch': sec_per_epoch,
-        'accuracy': end_eval_accuracy,
-    })
+    self.report_metrics({'sec_per_epoch': sec_per_epoch,
+                         'accuracy': end_accuracy})
     self.report_extras({
-        'model_name': 'MNIST',
-        'description': 'CPU test for MNIST.'
+        'description': 'Toy 8 x V100 test for ImageNet ResNet50.',
+        'model_name': 'resnet50',
+        'parameters': 'hp=true,bs=2048',
     })
 
 

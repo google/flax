@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """ImageNet example.
 
 This script trains a ResNet-50 on the ImageNet dataset.
@@ -79,7 +78,7 @@ flags.DEFINE_bool(
 
 def create_model(key, batch_size, image_size, model_dtype):
   input_shape = (batch_size, image_size, image_size, 3)
-  module = models.ResNet.partial(num_classes=1000, dtype=model_dtype)
+  module = models.ResNet50.partial(num_classes=1000, dtype=model_dtype)
   with nn.stateful() as init_state:
     _, initial_params = module.init_by_shape(
         key, [(input_shape, model_dtype)])

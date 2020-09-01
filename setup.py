@@ -18,7 +18,7 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = "0.1.0"
+version = "0.2.0"
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
@@ -38,7 +38,8 @@ tests_require = [
     "jaxlib",
     "pytest",
     "pytest-cov",
-    "pytest-xdist",
+    "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
+    "svn",
     "tensorflow",
     "tensorflow_datasets",
 ]

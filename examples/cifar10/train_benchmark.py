@@ -13,8 +13,6 @@
 # limitations under the License.
 
 """Benchmark for the CIFAR10 example."""
-import tempfile
-
 import time
 from absl import flags
 from absl.testing import absltest
@@ -40,7 +38,7 @@ class CifarTenBenchmark(Benchmark):
   @flagsaver
   def test_1x_v100(self):
     """Run Wide ResNet CIFAR10 on 1x V100 GPUs for 2 epochs."""
-    model_dir = tempfile.mkdtemp()
+    model_dir = self.get_tmp_model_dir()
     FLAGS.num_epochs = 2
     FLAGS.arch = 'wrn26_10'
     FLAGS.model_dir = model_dir
@@ -60,7 +58,6 @@ class CifarTenBenchmark(Benchmark):
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(sec_per_epoch, 80., 84.)
     self.assertBetween(end_error_rate, 0.30, 0.36)
 
     # Use the reporting API to report single or multiple metrics/extras.
@@ -69,7 +66,8 @@ class CifarTenBenchmark(Benchmark):
                          'error_rate': end_error_rate})
     self.report_extras({
         'description': 'Toy 1 x V100 test for CIFAR10 WideResNet26_10.',
-        'model_name': 'cifar10'
+        'model_name': 'cifar10',
+        'parameters': 'arch=wrn26_10',
     })
 
 

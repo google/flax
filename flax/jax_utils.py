@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 
 # Copyright 2020 The Flax Authors.
 #
@@ -43,12 +42,11 @@ from jax import linear_util as lu
 from jax import lax
 import jax.numpy as jnp
 import jax.lib.xla_bridge as xb
-
-_is_omnistaging = hasattr(pe, 'trace_to_jaxpr_dynamic')
+from jax.config import config
 
 
 def _replicate(x, devices=None):
-  x = jax.numpy.array(x)
+  x = jax.numpy.asarray(x)
   if devices is None:
     # match the default device assignments used in pmap:
     # for single-host, that's the XLA default device assignment
@@ -115,10 +113,11 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   in_pvals = [pe.PartialVal.unknown(jax.ShapedArray(x.shape, x.dtype))
               for x in inputs_flat]
 
-  if _is_omnistaging:
+  if config.omnistaging_enabled:
     _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
   else:
-    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
+    with jax.core.initial_style_staging():
+      _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
   out_flat = [const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
               for pv, const in out_pvals]
   return jax.tree_unflatten(out_tree(), out_flat)
@@ -154,7 +153,9 @@ def prefetch_to_device(iterator, size, devices=None):
     devices = jax.local_devices()
   def _prefetch(xs):
     aval = jax.xla.abstractify(xs)
-    assert xs.shape[0] == len(devices)
+    assert xs.shape[0] == len(devices), (
+      "The first dimension of the iterator's ndarrays is not "
+      "equal to the number of devices.")
     buffers = [jax.interpreters.xla.device_put(x, devices[i])
                for i, x in enumerate(xs)]
     return jax.pxla.ShardedDeviceArray(aval, buffers)
