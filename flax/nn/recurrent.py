@@ -31,7 +31,6 @@ from . import base
 from . import initializers
 from . import linear
 
-from jax import nn as jnn
 from jax import numpy as jnp
 from jax import random
 
@@ -247,9 +246,9 @@ class ConvLSTM(RNNCellBase):
     gates = input_to_hidden(inputs) + hidden_to_hidden(h)
     i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
 
-    f = jnn.sigmoid(f + 1)
-    new_c = f * c + jnn.sigmoid(i) * jnp.tanh(g)
-    new_h = jnn.sigmoid(o) * jnp.tanh(new_c)
+    f = nn.sigmoid(f + 1)
+    new_c = f * c + nn.sigmoid(i) * jnp.tanh(g)
+    new_h = nn.sigmoid(o) * jnp.tanh(new_c)
     return (new_c, new_h), new_h
 
   @staticmethod
