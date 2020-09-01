@@ -14,17 +14,12 @@
 
 """Jax transform lifting."""
 
-import enum
+import collections
 import functools
 
 
 import jax
 from jax import random
-from jax import lax
-from jax import numpy as jnp
-
-from jax.interpreters import partial_eval as pe
-from jax import linear_util as lu
 
 from typing import Any, Callable, Sequence, Union, Iterable, Tuple, Optional, Mapping
 
@@ -42,6 +37,37 @@ scan_variable_modes = set(['carry', 'broadcast', 'scan', None])
 
 ScanVariableMode = Union[str, Tuple[str, str]]
 
+
+def _dedup_scopes(scopes):
+  paths = []
+  # must preseve insertion order for duplication to work correctly
+  minimal_set = collections.OrderedDict((s, ()) for s in scopes)
+  for leaf in scopes:
+    scope = leaf.parent
+    max_parent = leaf
+    max_parent_path = ()
+    path = [leaf.name]
+    while scope is not None:
+      if scope in minimal_set:
+        max_parent = scope
+        max_parent_path = tuple(reversed(path))
+      path.append(scope.name)
+      scope = scope.parent
+    if max_parent is not leaf:
+      minimal_set.remove(leaf)
+    paths.append((max_parent, max_parent_path))
+  return tuple(minimal_set), tuple(paths)
+
+def _dup_scopes(orig_scopes, scopes, paths):
+  mapping = dict(zip(orig_scopes, scopes))
+  scopes = []
+  for root, path in paths:
+    scope = mapping[root]
+    for name in path:
+      scope = scope.push(name, reuse=True)
+    scopes.append(scope)
+  return scopes
+
 def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[KindFilter],
          out_variable_filters: Sequence[KindFilter],
@@ -51,7 +77,7 @@ def pack(fn: Callable[..., Any],
   def wrapper(scope: Scope, *args):
     # pylint: disable=protected-access
     scopes, treedef = jax.tree_flatten(scope)
-    # TODO(jheek) check aliasing between scopes!!!
+    scopes, paths = _dedup_scopes(scopes)
 
     variable_groups_xs = []
 
@@ -93,10 +119,14 @@ def pack(fn: Callable[..., Any],
         variables = jax.tree_map(lambda x: x, variables)
         inner_scope = Scope(variables, name=scope.name, rngs=rngs, parent=None)
         inner_scopes.append(inner_scope)
+      inner_scopes = _dup_scopes(scopes, inner_scopes, paths)
       return treedef.unflatten(inner_scopes)
 
     def repack(inner_scope_tree):
       inner_scopes = treedef.flatten_up_to(inner_scope_tree)
+      inner_scopes, inner_paths = _dedup_scopes(inner_scopes)
+      inner_scopes = list(inner_scopes)
+      assert [p for _, p in paths] == [p for _, p in inner_paths]
       out_variable_groups_xs = []
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
@@ -210,8 +240,14 @@ def vmap(fn: Callable[..., Any],
         if leaves:
           return leaves[0].shape[axis]
       return ()
+
+    n = len(variable_groups_xs)
+    variable_in_axes_xs = (variable_in_axes,) * n
+    variable_out_axes_xs = (variable_out_axes,) * n
+    rng_axes_xs = (rng_axes,) * n
+
     # split rngs
-    axis_sizes = jax.tree_multimap(find_axis_size, in_axes, args)
+    axis_sizes = jax.tree_multimap(find_axis_size, (variable_in_axes_xs, in_axes), (variable_groups_xs, args))
     if axis_size is None:
       d_axis_size, = set(jax.tree_leaves(axis_sizes))
     else:
@@ -224,11 +260,6 @@ def vmap(fn: Callable[..., Any],
         for rng_group, split in zip(rng_groups, rng_splits))
 
     rng_groups_xs = tuple(map(split_rngs, rng_groups_xs))
-
-    n = len(variable_groups_xs)
-    variable_in_axes_xs = (variable_in_axes,) * n
-    variable_out_axes_xs = (variable_out_axes,) * n
-    rng_axes_xs = (rng_axes,) * n
 
     @functools.partial(jax.vmap,
                        in_axes=(variable_in_axes_xs, rng_axes_xs, in_axes),
