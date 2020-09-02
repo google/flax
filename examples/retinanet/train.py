@@ -475,7 +475,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
       # Run evaluation on the model
       coco_evaluator.clear_annotations()  # Clear former annotations
-      for step, batch in enumerate(val_data):
+      for eval_step, batch in enumerate(val_data):
         batch = jax.tree_map(lambda x: x._numpy(), batch)  # pylint: disable=protected-access
         scores, regressions, bboxes = p_infer_fn(batch, meta_state)
         coco_eval_step(bboxes, scores, batch["id"], batch["scale"],
