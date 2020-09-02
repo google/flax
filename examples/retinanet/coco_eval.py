@@ -1,13 +1,15 @@
+import os
+import sys
+from typing import Dict, Iterable, Tuple
+import json
+import numpy as np
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
-import jax
-import json
-import numpy as np
-import os
-import sys
 
-# A dictionary which converts model labels to COCO labels
+# The original COCO labels are not always contiguous, but for training
+# they are; we need to convert the pseudo labels for training
+# to those used in the COCO Dataset and the pycocotools
 MODEL_TO_COCO = {
     1: [1, "person"],
     2: [2, "bicycle"],
@@ -111,10 +113,10 @@ class CocoEvaluator(metaclass=CocoEvaluatorMeta):
   """
 
   def __init__(self,
-               annotations_loc,
-               remove_background=True,
-               threshold=0.05,
-               disable_output=True):
+               annotations_loc: str,
+               remove_background: bool = True,
+               threshold: float = 0.05,
+               disable_output: bool = True):
     """Initializes a CocoEvaluator object.
 
     Args:
@@ -136,7 +138,7 @@ class CocoEvaluator(metaclass=CocoEvaluatorMeta):
     self.coco = COCO(annotations_loc)
 
   @staticmethod
-  def construct_result_dict(coco_metrics):
+  def construct_result_dict(coco_metrics: Iterable[float]) -> Dict[str, float]:
     """Packs the COCOEval results into a dictionary
 
     Args:
@@ -171,7 +173,9 @@ class CocoEvaluator(metaclass=CocoEvaluatorMeta):
     self.annotations.clear()
     self.annotated_img_ids.clear()
 
-  def extract_classifications(self, bboxes, scores):
+  def extract_classifications(
+      self, bboxes: np.ndarray,
+      scores: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Extracts the label for each bbox, and sorts the results by score.
 
     More specifically, after extracting each bbox's label, the bboxes and 
@@ -217,7 +221,8 @@ class CocoEvaluator(metaclass=CocoEvaluatorMeta):
 
     return bboxes, labels, scores
 
-  def add_annotations(self, bboxes, scores, img_ids, scales):
+  def add_annotations(self, bboxes: np.ndarray, scores: np.ndarray,
+                      img_ids: np.ndarray, scales: np.ndarray):
     """Add a batch of inferences as COCO annotations for later evaluation
 
     Note that this method may raise an exception if the `threshold` is too
@@ -266,7 +271,7 @@ class CocoEvaluator(metaclass=CocoEvaluatorMeta):
     # Add the evaluated image ids
     self.annotated_img_ids.extend(img_ids)
 
-  def get_annotations_and_ids(self):
+  def get_annotations_and_ids(self) -> Tuple[Iterable[Dict], Iterable[int]]:
     """Returns copies of `self.annotations` and `self.annotated_img_ids`.
 
     Returns:
@@ -274,7 +279,8 @@ class CocoEvaluator(metaclass=CocoEvaluatorMeta):
     """
     return self.annotations.copy(), self.annotated_img_ids.copy()
 
-  def set_annotations_and_ids(self, annotations, ids):
+  def set_annotations_and_ids(self, annotations: Iterable[Dict],
+                              ids: Iterable[int]):
     """Sets the `self.annotations` and `self.annotated_img_ids`.
 
     This method should only be used when trying to compute the metrics across
@@ -288,7 +294,9 @@ class CocoEvaluator(metaclass=CocoEvaluatorMeta):
     self.annotations = annotations
     self.annotated_img_ids = ids
 
-  def compute_coco_metrics(self, clear_collected_annotations=False):
+  def compute_coco_metrics(self,
+                           clear_collected_annotations: bool = False
+                          ) -> Dict[str, float]:
     """Compute the COCO metrics for the collected annotations
 
     Args:

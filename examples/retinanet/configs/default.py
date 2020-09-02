@@ -1,7 +1,9 @@
+import os
+
 import ml_collections
 
 
-def get_config():
+def get_config() -> ml_collections.ConfigDict:
   """Get the default hyperparameter configuration."""
   config = ml_collections.ConfigDict()
 
@@ -17,10 +19,10 @@ def get_config():
   config.depth = 50
 
   config.sync_steps = 100
-  config.checkpoint_period = 1_500
+  config.checkpoint_period = 500
 
   # Evaluation parameters
-  config.eval_annotations_path = "/home/dgraur/data/files/coco_annotations/instances_val2014.json"
+  config.eval_annotations_path = os.environ['COCO_ANNOTATIONS_PATH']
   config.eval_remove_background = True
   config.eval_threshold = 0.05
 

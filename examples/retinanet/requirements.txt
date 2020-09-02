@@ -1,0 +1,7 @@
+jax
+jaxlib
+mlconfig
+pycocotools
+tensorflow==2.2.0rc3 
+tensorflow-datasets==3.0.0
+tensorboard

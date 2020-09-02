@@ -1,95 +1,12 @@
-from jax import numpy as jnp
+from typing import Dict, Tuple
 
+from jax import numpy as jnp
 import jax
 import numpy as np
 import tensorflow as tf
 
-CATEGORY_MAP = {
-    0: "background",
-    1: "person",
-    2: "bicycle",
-    3: "car",
-    4: "motorcycle",
-    5: "airplane",
-    6: "bus",
-    7: "train",
-    8: "truck",
-    9: "boat",
-    10: "traffic light",
-    11: "fire hydrant",
-    12: "stop sign",
-    13: "parking meter",
-    14: "bench",
-    15: "bird",
-    16: "cat",
-    17: "dog",
-    18: "horse",
-    19: "sheep",
-    20: "cow",
-    21: "elephant",
-    22: "bear",
-    23: "zebra",
-    24: "giraffe",
-    25: "backpack",
-    26: "umbrella",
-    27: "handbag",
-    28: "tie",
-    29: "suitcase",
-    30: "frisbee",
-    31: "skis",
-    32: "snowboard",
-    33: "sports ball",
-    34: "kite",
-    35: "baseball bat",
-    36: "baseball glove",
-    37: "skateboard",
-    38: "surfboard",
-    39: "tennis racket",
-    40: "bottle",
-    41: "wine glass",
-    42: "cup",
-    43: "fork",
-    44: "knife",
-    45: "spoon",
-    46: "bowl",
-    47: "banana",
-    48: "apple",
-    49: "sandwich",
-    50: "orange",
-    51: "broccoli",
-    52: "carrot",
-    53: "hot dog",
-    54: "pizza",
-    55: "donut",
-    56: "cake",
-    57: "chair",
-    58: "couch",
-    59: "potted plant",
-    60: "bed",
-    61: "dining table",
-    62: "toilet",
-    63: "tv",
-    64: "laptop",
-    65: "mouse",
-    66: "remote",
-    67: "keyboard",
-    68: "cell phone",
-    69: "microwave",
-    70: "oven",
-    71: "toaster",
-    72: "sink",
-    73: "refrigerator",
-    74: "book",
-    75: "clock",
-    76: "vase",
-    77: "scissors",
-    78: "teddy bear",
-    79: "hair drier",
-    80: "toothbrush"
-}
 
-
-def pi_init(pi):
+def pi_init(pi: float):
   """Wrapper to log-based weight initializer function.
 
   This initializer is used for the bias term in the classification subnet, as
@@ -99,7 +16,7 @@ def pi_init(pi):
     pi: the prior probability of detecting an object
 
   Returns:
-    An array for initializing a module's weights / biases
+    A function used for initializing a module's weights / biases
   """
 
   def _inner(key, shape, dtype=jnp.float32):
@@ -108,32 +25,7 @@ def pi_init(pi):
   return _inner
 
 
-@jax.vmap
-def clip_anchors(anchors, height, width):
-  """Clips anchors to height and width of image.
-
-  More specifically, the x coordinates of the base anchors are clipped,
-  such that they are always found in the `[0, width]` interval, and
-  the `y` coordinates are always found in the `[0, height]` interval.
-
-  Args:
-    anchors: a tensor of the shape (|A|, 4) where each row contains 
-      the `[x1, y1, x2, y1]` of that anchor
-    height: the height of the image
-    width: the width of the image
-
-  Returns:
-    A matrix of the form (|A|, 4), which contains the clipped anchors, as well
-    as an extra column which can be used to store the status of the anchor.
-  """
-  x1 = jnp.clip(anchors[:, 0], 0.0, width)
-  y1 = jnp.clip(anchors[:, 1], 0.0, height)
-  x2 = jnp.clip(anchors[:, 2], 0.0, width)
-  y2 = jnp.clip(anchors[:, 3], 0.0, height)
-  return jnp.stack([x1, y1, x2, y2], axis=1)
-
-
-def non_max_suppression(bboxes, scores, t):
+def non_max_suppression(bboxes: jnp.ndarray, scores: jnp.ndarray, t: float):
   """Implements the Non-Maximum Suppression algorithm.
 
   More specifically, this algorithm retains the bboxes based on their scores 
@@ -189,7 +81,9 @@ def non_max_suppression(bboxes, scores, t):
   return bboxes[selected_idx, :], selected_idx
 
 
-def vertical_pad(data, pad_count, dtype=jnp.float32):
+def vertical_pad(data: jnp.ndarray,
+                 pad_count: int,
+                 dtype=jnp.float32) -> jnp.ndarray:
   """Applies vertical padding to the data by adding extra rows with 0.
   
   Args:
@@ -204,7 +98,9 @@ def vertical_pad(data, pad_count, dtype=jnp.float32):
   return jnp.append(data, pad_structure, axis=0)
 
 
-def _top_k(scores, k, t=0.0):
+def _top_k(scores: jnp.ndarray,
+           k: int,
+           t: float = 0.0) -> Tuple[jnp.ndarray, jnp.ndarray]:
   """Applies top k selection on the `scores` parameter.
 
   Args:
@@ -226,11 +122,12 @@ def _top_k(scores, k, t=0.0):
 top_k = jax.vmap(_top_k, in_axes=(0, None, None))
 
 
-def filter_by_score(bboxes,
-                    scores,
-                    score_threshold: float = 0.05,
-                    k: int = 1000,
-                    per_class=False):
+def filter_by_score(
+    bboxes: jnp.ndarray,
+    scores: jnp.ndarray,
+    score_threshold: float = 0.05,
+    k: int = 1000,
+    per_class=False) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
   """Apply top-k filtering on the bbox scores.
 
   More specifically, apply top `k` selection on the bboxes by filtering 
@@ -287,12 +184,14 @@ def filter_by_score(bboxes,
     return _filter(current_scores, current_labels)
 
 
-def batch_filter_by_score(bboxes,
-                          scores,
-                          max_rows,
-                          score_threshold: float = 0.05,
-                          k: int = 1000,
-                          per_class=False):
+def batch_filter_by_score(
+    bboxes: jnp.ndarray,
+    scores: jnp.ndarray,
+    max_rows: int,
+    score_threshold: float = 0.05,
+    k: int = 1000,
+    per_class=False
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
   """Apply top-k filtering on a batch. 
 
   For further explanation see `filter_by_score` documentation.
@@ -348,7 +247,6 @@ def batch_filter_by_score(bboxes,
   filtered_labels = np.zeros((batch_size, max_rows), dtype=int)
 
   # Apply the filtering function on each batch entry
-  # FIXME: Find a way to do this in parallel
   for idx, pack in enumerate(map(_inner, np.arange(batch_size))):
     counts[idx], filtered_bboxes[idx], filtered_scores[idx], filtered_labels[
         idx] = pack
@@ -361,15 +259,15 @@ def batch_filter_by_score(bboxes,
   return counts, filtered_bboxes, filtered_scores, filtered_labels
 
 
-def generate_inferences(bboxes,
-                        scores,
-                        labels,
-                        counts,
-                        nms=True,
-                        classes=-1,
-                        per_class=False,
-                        iou_threshold=0.5,
-                        max_outputs=100):
+def generate_inferences(bboxes: jnp.ndarray,
+                        scores: jnp.ndarray,
+                        labels: jnp.ndarray,
+                        counts: jnp.ndarray,
+                        nms: bool = True,
+                        classes: int = -1,
+                        per_class: bool = False,
+                        iou_threshold: float = 0.5,
+                        max_outputs: int = 100) -> Dict[str, jnp.ndarray]:
   """Generates the batch bbox predictions.
 
   More specifically, given a dictionary which stores the filtered outputs 

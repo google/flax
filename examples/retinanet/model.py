@@ -1,10 +1,12 @@
-from anchor import *
-from util import *
-from flax.nn.initializers import normal
-from jax import numpy as jnp
+from typing import Dict, Iterable, Mapping, Tuple
 
-import flax
 import jax
+from jax import numpy as jnp
+import flax
+from flax.nn.initializers import normal
+
+import anchor
+from util import *
 
 
 class ClassificationSubnet(flax.nn.Module):
@@ -14,11 +16,11 @@ class ClassificationSubnet(flax.nn.Module):
   """
 
   def apply(self,
-            x,
-            classes=1000,
-            features=256,
-            anchors=9,
-            pi=0.01):
+            x: jnp.ndarray,
+            classes: int = 1000,
+            features: int = 256,
+            anchors: int = 9,
+            pi: float = 0.01) -> jnp.ndarray:
     """Applies the classification subnet from the RetinaNet architecture.
 
     Args:
@@ -55,10 +57,10 @@ class RegressionSubnet(flax.nn.Module):
   """
 
   def apply(self,
-            x,
-            anchor_values=4,
-            anchors=9,
-            features=256):
+            x: jnp.ndarray,
+            anchor_values: int = 4,
+            anchors: int = 9,
+            features: int = 256) -> jnp.ndarray:
     """Applies the regression subnet from the RetinaNet architecture.
 
     Args:
@@ -97,10 +99,10 @@ class BottleneckBlock(flax.nn.Module):
   block_expansion = 4
 
   def apply(self,
-            data,
-            filters,
-            train=True,
-            downsample=False):
+            data: jnp.ndarray,
+            filters: int,
+            train: bool = True,
+            downsample: bool = False) -> jnp.ndarray:
     """Implements the logic of a ResNet Bottleneck block.
 
     Args:
@@ -119,9 +121,7 @@ class BottleneckBlock(flax.nn.Module):
     final_filters = self.block_expansion * filters
     conv = flax.nn.Conv.partial(bias=False)
     batch_norm = flax.nn.BatchNorm.partial(
-        use_running_average=(not train),
-        momentum=0.9,
-        epsilon=1e-5)
+        use_running_average=(not train), momentum=0.9, epsilon=1e-5)
 
     # Process the residual such that it is compatible with the final addition
     residual = data
@@ -162,7 +162,7 @@ class RetinaNet(flax.nn.Module):
   # Maps to the number of blocks in the ResNet, relative to the model's depth
   depths = {50: [3, 4, 6, 3], 101: [3, 4, 23, 3], 156: [3, 8, 36, 3]}
 
-  def _nn_upsample(a, shape):
+  def _nn_upsample(a: jnp.ndarray, shape: Iterable[int]) -> jnp.ndarray:
     """This method does nearest neighbor single octave upsampling on the input.
 
     It also features a `shape` parameter, which will trim the height and 
@@ -184,7 +184,8 @@ class RetinaNet(flax.nn.Module):
 
   nn_upsample = staticmethod(jax.vmap(_nn_upsample, in_axes=(0, None)))
 
-  def _bottom_up_phase(self, data, train, base_features, layers):
+  def _bottom_up_phase(self, data: jnp.ndarray, train: bool, base_features: int,
+                       layers: Iterable[int]) -> Dict[str, jnp.ndarray]:
     """Implements the backbone architecture.
 
     Args:
@@ -239,7 +240,8 @@ class RetinaNet(flax.nn.Module):
 
     return feature_maps
 
-  def _top_down_phase(self, backbone_features, filters):
+  def _top_down_phase(self, backbone_features: Mapping[str, jnp.ndarray],
+                      filters: int) -> Dict[str, jnp.ndarray]:
     """Builds the top-down phase of the RetinaNet.
 
     In this phase, semantically rich feature maps at different scales
@@ -293,19 +295,21 @@ class RetinaNet(flax.nn.Module):
 
     return fpn_features
 
-  def apply(self,
-            data,
-            depth=50,
-            base_features=64,
-            fpn_filters=256,
-            anchors=9,
-            anchor_values=4,
-            classes=1000,
-            train=True,
-            k=100,
-            per_class=True,
-            anchors_config=None,
-            img_shape=None):
+  def apply(
+      self,
+      data: jnp.ndarray,
+      depth: int = 50,
+      base_features: int = 64,
+      fpn_filters: int = 256,
+      anchors: int = 9,
+      anchor_values: int = 4,
+      classes: int = 1000,
+      train: bool = True,
+      k: int = 100,
+      per_class: bool = True,
+      anchors_config: anchor.AnchorConfig = None,
+      img_shape: jnp.ndarray = None
+  ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Applies the RetinaNet architecture.
 
     Args:
@@ -319,8 +323,8 @@ class RetinaNet(flax.nn.Module):
       train: indicates if the model is being used for training
       k: the `k` used in top k filtering
       per_class: True if filtering and NMS should be applied per class level
-      anchors_config: an AnchorConfig object, with relevant information for
-                      unpacking the anchors at various scales
+      anchors_config: an anchor.AnchorConfig object, with relevant information 
+        for unpacking the anchors at various scales
       img_shape: an array of the shape (B, 3), which stores the true dimensions
         of the images in the batch (prior to padding); the rows should contain
         the [H, W, C] of each image.
@@ -336,7 +340,7 @@ class RetinaNet(flax.nn.Module):
     layers = self.depths[depth]
 
     if anchors_config is None:
-      anchors_config = AnchorConfig()
+      anchors_config = anchor.AnchorConfig()
 
     # Bottom-up phase
     backbone_features = self._bottom_up_phase(data, train, base_features,
@@ -349,9 +353,7 @@ class RetinaNet(flax.nn.Module):
     classification_subnet = ClassificationSubnet.shared(
         classes=classes, features=fpn_filters, anchors=anchors)
     regression_subnet = RegressionSubnet.shared(
-        anchor_values=anchor_values,
-        features=fpn_filters,
-        anchors=anchors)
+        anchor_values=anchor_values, features=fpn_filters, anchors=anchors)
 
     # Initialize structures relevant for training
     bboxes = jnp.zeros((data.shape[0], 0, 4))
@@ -372,22 +374,21 @@ class RetinaNet(flax.nn.Module):
 
       # If not training, then expand the anchors and apply regressions
       if not train:
-        # TODO: Consider moving this to its own Module
-        anchors = generate_anchors(layer_input.shape[:3],
-                                   anchors_config.strides[idx],
-                                   anchors_config.sizes[idx],
-                                   anchors_config.ratios, anchors_config.scales)
-        bboxes_temp = apply_anchor_regressions(
-            anchors, regressions_temp)
-        bboxes_temp = clip_anchors(bboxes_temp, img_shape[:, 0], img_shape[:,
-                                                                           1])
+        anchors = anchor.generate_anchors(layer_input.shape[:3],
+                                          anchors_config.strides[idx],
+                                          anchors_config.sizes[idx],
+                                          anchors_config.ratios,
+                                          anchors_config.scales)
+        bboxes_temp = anchor.apply_anchor_regressions(anchors, regressions_temp)
+        bboxes_temp = anchor.clip_anchors_vmap(bboxes_temp, img_shape[:, 0],
+                                               img_shape[:, 1])
         bboxes = jnp.append(bboxes, bboxes_temp, axis=1)
 
     # Return the regressions, classifications, and bboxes
     return classifications, regressions, bboxes
 
 
-def create_retinanet(depth, **kwargs):
+def create_retinanet(depth: int, **kwargs) -> flax.nn.Module:
   """Creates a partial RetinaNet instance.
 
   Args:

@@ -1,8 +1,10 @@
 from dataclasses import dataclass, field
-from jax import numpy as jnp
+from typing import Iterable
 
 import flax
 import jax
+from jax import numpy as jnp
+
 
 
 @dataclass
@@ -21,7 +23,10 @@ class AnchorConfig:
       default_factory=lambda: [1.0, 2.0**(1.0 / 3.0), 2.0**(2.0 / 3.0)])
 
 
-def generate_base_anchors(size, ratios, scales, dtype=jnp.float32):
+def generate_base_anchors(size: int,
+                          ratios: Iterable[float],
+                          scales: Iterable[float],
+                          dtype=jnp.float32) -> jnp.ndarray:
   """Generates candidate anchor shapes.
 
   Args:
@@ -54,7 +59,12 @@ def generate_base_anchors(size, ratios, scales, dtype=jnp.float32):
   return anchors
 
 
-def generate_anchors(shape, stride, size, ratios, scales, dtype=jnp.float32):
+def generate_anchors(shape: Iterable[int],
+                     stride: int,
+                     size: int,
+                     ratios: Iterable[float],
+                     scales: Iterable[float],
+                     dtype=jnp.float32) -> jnp.ndarray:
   """Applies anchor unpacking.
 
   Args:
@@ -88,7 +98,7 @@ def generate_anchors(shape, stride, size, ratios, scales, dtype=jnp.float32):
   return jnp.tile(jnp.expand_dims(centers, axis=0), (shape[0], 1, 1))
 
 
-def clip_anchors(anchors, shape):
+def clip_anchors(anchors: jnp.ndarray, height: int, width: int) -> jnp.ndarray:
   """Clips the anchors, such that they do not exceed `shape`
 
   Args:
@@ -99,29 +109,24 @@ def clip_anchors(anchors, shape):
   Returns:
     A matrix of the form (|A|, 4), which contains the clipped anchors
   """
-  anchors = jax.ops.index_update(
-      anchors, jax.ops.index[:, 0],
-      jnp.minimum(jnp.maximum(anchors[:, 0], 0), shape[1]))
-  anchors = jax.ops.index_update(
-      anchors, jax.ops.index[:, 1],
-      jnp.minimum(jnp.maximum(anchors[:, 1], 0), shape[0]))
-  anchors = jax.ops.index_update(
-      anchors, jax.ops.index[:, 2],
-      jnp.minimum(jnp.maximum(anchors[:, 2], 0), shape[1]))
-  anchors = jax.ops.index_update(
-      anchors, jax.ops.index[:, 3],
-      jnp.minimum(jnp.maximum(anchors[:, 3], 0), shape[0]))
-  return anchors
+  x1 = jnp.clip(anchors[:, 0], 0.0, width)
+  y1 = jnp.clip(anchors[:, 1], 0.0, height)
+  x2 = jnp.clip(anchors[:, 2], 0.0, width)
+  y2 = jnp.clip(anchors[:, 3], 0.0, height)
+  return jnp.stack([x1, y1, x2, y2], axis=1)
 
 
-def generate_all_anchors(shape,
-                         levels,
-                         strides,
-                         sizes,
-                         ratios,
-                         scales,
-                         clip=False,
-                         dtype=jnp.float32):
+clip_anchors_vmap = jax.vmap(clip_anchors)
+
+
+def generate_all_anchors(shape: Iterable[int],
+                         levels: Iterable[int],
+                         strides: Iterable[int],
+                         sizes: Iterable[int],
+                         ratios: Iterable[float],
+                         scales: Iterable[float],
+                         clip: bool = False,
+                         dtype=jnp.float32) -> jnp.ndarray:
   """Generate all the anchors for an image of a given size.
 
   More specifically, given an image size, this method generates the entire 
@@ -162,17 +167,17 @@ def generate_all_anchors(shape,
 
   # Clip the anchors such that their coords do not fall outside the image bounds
   if clip:
-    anchors = clip_anchors(anchors, shape)
+    anchors = clip_anchors(anchors, shape[0], shape[1])
 
   extra_zeros = jnp.zeros((anchors.shape[0], 1), dtype=dtype)
   return jnp.concatenate((anchors, extra_zeros), axis=1)
 
 
-def apply_anchor_regressions(anchors,
-                             regressions,
-                             means=None,
-                             devs=None,
-                             dtype=jnp.float32):
+def apply_anchor_regressions(anchors: jnp.ndarray,
+                             regressions: jnp.ndarray,
+                             means: Iterable[float] = None,
+                             devs: Iterable[float] = None,
+                             dtype=jnp.float32) -> jnp.ndarray:
   """Applies the regression values to the raw anchor boxes.
 
   Args:

@@ -1,21 +1,21 @@
 import math
+import sys
 import time
+from typing import Any, Iterable, Mapping, Tuple
 
 from absl import logging
 from clu import hooks
 from coco_eval import CocoEvaluator
-import ml_collections
 import flax
 from flax.metrics import tensorboard
 from flax.training import checkpoints, common_utils
 from functools import partial
 import jax
 import jax.numpy as jnp
+import ml_collections
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import sys
-from typing import Any, Iterable, Mapping, Tuple
 
 import input_pipeline
 from model import create_retinanet
@@ -83,10 +83,11 @@ def create_scheduled_decay_fn(learning_rate: float,
   return decay_fn
 
 
-def create_model(rng: jnp.ndarray,
-                 depth: int = 50,
-                 classes: int = 1000,
-                 shape: Iterable[int] = (224, 224, 3)) -> flax.nn.Model:
+def create_model(
+    rng: jnp.ndarray,
+    depth: int = 50,
+    classes: int = 1000,
+    shape: Iterable[int] = (224, 224, 3)) -> flax.nn.Model:
   """Creates a RetinaNet model.
 
   Args:
@@ -133,7 +134,7 @@ def create_optimizer(model: flax.nn.Model,
 
 
 @jax.vmap
-def focal_loss(logits: jnp.array,
+def focal_loss(logits: jnp.ndarray,
                label: int,
                anchor_type: int,
                alpha: float = 0.25,
@@ -158,7 +159,7 @@ def focal_loss(logits: jnp.array,
 
 
 @jax.vmap
-def smooth_l1(regressions: jnp.array, targets: jnp.array,
+def smooth_l1(regressions: jnp.ndarray, targets: jnp.ndarray,
               anchor_type: int) -> float:
   """Implements the Smooth-L1 loss. 
 
@@ -180,11 +181,11 @@ def smooth_l1(regressions: jnp.array, targets: jnp.array,
 
 
 @jax.vmap
-def retinanet_loss(classifications: jnp.array,
-                   regressions: jnp.array,
-                   anchor_types: jnp.array,
-                   classification_targets: jnp.array,
-                   regression_targets: jnp.array,
+def retinanet_loss(classifications: jnp.ndarray,
+                   regressions: jnp.ndarray,
+                   anchor_types: jnp.ndarray,
+                   classification_targets: jnp.ndarray,
+                   regression_targets: jnp.ndarray,
                    reg_weight: float = 1.0) -> float:
   """Implements the loss for the RetinaNet: Focal Loss and Smooth-L1
 
@@ -211,7 +212,8 @@ def retinanet_loss(classifications: jnp.array,
   return jnp.sum(fl + sl1 * reg_weight) / valid_anchors
 
 
-def coco_eval_step(bboxes, scores, img_ids, scales, evaluator):
+def coco_eval_step(bboxes: np.ndarray, scores: np.ndarray, img_ids: np.ndarray,
+                   scales: np.ndarray, evaluator: CocoEvaluator):
   """Adds a set of batch inferences to the COCO evaluation object
 
   Args:
@@ -238,36 +240,8 @@ def coco_eval_step(bboxes, scores, img_ids, scales, evaluator):
   evaluator.add_annotations(bboxes, scores, img_ids, scales)
 
 
-def sync_results(coco_evaluator):
-  """Synchronize the CocoEvaluator across hosts, and produce the COCO metrics.
-
-  Args:
-    coco_evaluator: the local CocoEvaluator object
-
-  Returns:
-    The results synchronized across hosts
-  """
-  # Get the local annotations, and clear the evaluator
-  annotations, ids = coco_evaluator.get_annotations_and_ids()
-  coco_evaluator.clear_annotations()
-
-  def _inner(x):
-    i_annotations = jax.lax.all_gather(annotations, 'batch')
-    i_ids = jax.lax.all_gather(ids, 'batch')
-
-    return i_annotations, i_ids
-  inner = jax.pmap(_inner, 'batch')
-
-
-  # Compute the results this is host 0
-  inner()
-  if jax.host_id() == 0:
-    coco_evaluator.set_annotations_and_ids(annotations, ids) 
-
-  return jax.tree_util.build_tree(tree_def, results[0])
-
-
-def infer(data, meta_state):
+def infer(data: jnp.ndarray,
+          meta_state: State) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
   """Infers on data.
 
   Args:
@@ -345,7 +319,7 @@ def create_step_fn(lr_function):
     stores the current training state.
   """
 
-  def take_step(data: Mapping[str, jnp.array],
+  def take_step(data: Mapping[str, jnp.ndarray],
                 meta_state: State) -> Tuple[State, Any]:
     """Trains the model on a batch and returns the updated model.
 
@@ -409,7 +383,8 @@ def eval_to_tensorboard(writer, evals, step, train=True, aggregate=True):
   writer.flush()
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str) -> State:
+def train_and_evaluate(config: ml_collections.ConfigDict,
+                       workdir: str) -> State:
   """Runs a training and evaluation loop.
 
   Args:
@@ -438,10 +413,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str) -> State
   rng, model_rng = jax.random.split(rng)
 
   model, model_state = create_model(
-      model_rng,
-      shape=input_shape,
-      classes=num_classes,
-      depth=config.depth)
+      model_rng, shape=input_shape, classes=num_classes, depth=config.depth)
   optimizer = create_optimizer(model, beta=0.9, weight_decay=0.0001)
   meta_state = State(optimizer=optimizer, model_state=model_state)
   del model, model_state, optimizer
@@ -503,9 +475,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str) -> State
 
       # Run evaluation on the model
       coco_evaluator.clear_annotations()  # Clear former annotations
-      val_iter = iter(val_data)  # Refresh the eval iterator
-      for _ in range(250):
-        batch = jax.tree_map(lambda x: x._numpy(), next(val_iter))  # pylint: disable=protected-access
+      for step, batch in enumerate(val_data):
+        batch = jax.tree_map(lambda x: x._numpy(), batch)  # pylint: disable=protected-access
         scores, regressions, bboxes = p_infer_fn(batch, meta_state)
         coco_eval_step(bboxes, scores, batch["id"], batch["scale"],
                        coco_evaluator)

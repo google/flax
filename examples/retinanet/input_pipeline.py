@@ -1,18 +1,15 @@
 from typing import Iterable, Tuple
 
+# TODO(DanGraur) Replace when CLU is opensourced
 from clu import deterministic_data
-import ml_collections
-from flax import jax_utils
 import jax
 import jax.numpy as jnp
-
+from flax import jax_utils
+import ml_collections
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
 from anchor import generate_all_anchors, AnchorConfig
-
-# This controls the maximal number of bbox annotations in an image
-MAX_PADDING_ROWS = 100
 
 
 class DataPreprocessor:
@@ -108,7 +105,8 @@ class DataPreprocessor:
     self.all_anchors = tf.convert_to_tensor(self.all_anchors)
 
   @staticmethod
-  def get_clipped_anchors(anchors: tf.Tensor, height: float, width: float):
+  def get_clipped_anchors(anchors: tf.Tensor, height: float,
+                          width: float) -> tf.Tensor:
     """Clips and returns the base anchors.
 
     More specifically, the x coordinates of the base anchors are clipped,
@@ -133,7 +131,7 @@ class DataPreprocessor:
 
     return tf.stack([x1, y1, x2, y2, anchors[:, 4]], axis=1)
 
-  def standardize_image(self, image):
+  def standardize_image(self, image: tf.Tensor) -> tf.Tensor:
     """Standardizes the image values.
 
     Standardizes the image values to mean 0 with standard deviation 1. This
@@ -150,7 +148,7 @@ class DataPreprocessor:
     image /= tf.constant(self.std, shape=[1, 1, 3])
     return image
 
-  def resize_image(self, image):
+  def resize_image(self, image: tf.Tensor) -> tf.Tensor:
     """Resizes and pads the image to `max_size` x `max_size`.
 
     The image is resized, such that its shorter size becomes `min_size`, while
@@ -189,7 +187,8 @@ class DataPreprocessor:
                                         self.max_size), ratio
 
   @staticmethod
-  def augment_image(image, bboxes):
+  def augment_image(image: tf.Tensor,
+                    bboxes: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
     """This applies data augmentation on the image and its associated bboxes.
 
     Currently, the image only applies horizontal flipping to the image and
@@ -211,24 +210,6 @@ class DataPreprocessor:
         bboxes,
         fn_output_signature=tf.TensorSpec(4, dtype=tf.float32))
     return image, bboxes
-
-  @staticmethod
-  def pad(data, output_rows, dtype=tf.float32):
-    """Adds extra rows to the data.
-
-    Args:
-      data: a 1D or 2D dataset to be padded
-      output_rows: a scalar indicating the number of rows of the padded data
-      dtype: the TF dtype used for padding
-
-    Returns:
-      The padded data
-    """
-    data_shape = tf.shape(data)
-    to_pad = tf.math.maximum(0, output_rows - data_shape[0])
-    padding_shape = [to_pad, data_shape[1]] if len(data_shape) == 2 else to_pad
-    padding = tf.zeros(padding_shape, dtype=dtype)
-    return tf.concat([data, padding], axis=0)
 
   @staticmethod
   def filter_outer_anchors(anchors: tf.Tensor, shape: tf.Tensor) -> tf.Tensor:
@@ -261,7 +242,8 @@ class DataPreprocessor:
     return in_idx, out_idx
 
   @staticmethod
-  def compute_anchor_overlaps(anchors: tf.Tensor, bboxes: tf.Tensor):
+  def compute_anchor_overlaps(anchors: tf.Tensor,
+                              bboxes: tf.Tensor) -> tf.Tensor:
     """Computes the IoU of each anchor against each bbox.
 
     Given an (|A|, 4) matrix for the anchors, and a (|B|, 4) matrix for the
@@ -303,7 +285,8 @@ class DataPreprocessor:
     # Compute the IoU and return it
     return intersections / unions
 
-  def compute_foreground_ignored(self, overlaps: tf.Tensor):
+  def compute_foreground_ignored(
+      self, overlaps: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
     """Identifies the row indices of the foreground and ignored anchors.
 
     More specifically, this method will inspect the argmax of `overlaps`
@@ -337,7 +320,8 @@ class DataPreprocessor:
 
     return foreground_idx, ignored_idx, argmax
 
-  def compute_regression_targets(self, anchors, bbox):
+  def compute_regression_targets(self, anchors: tf.Tensor,
+                                 bbox: tf.Tensor) -> tf.Tensor:
     """Computes the regression targets of the `anchors`.
 
     This method also applies standardization on the regression targets.
@@ -368,7 +352,9 @@ class DataPreprocessor:
     targets = tf.transpose(tf.stack([dx1, dy1, dx2, dy2]))
     return (targets - self.bbox_mean) / self.bbox_std
 
-  def compute_anchors_and_labels(self, bboxes, labels, height, width):
+  def compute_anchors_and_labels(
+      self, bboxes: tf.Tensor, labels: tf.Tensor, height: tf.float32,
+      width: tf.float32) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
     """Computes the anchors, their type, as well as their targets.
 
     More specifically, this method will compute all the anchors within the
@@ -467,7 +453,9 @@ class DataPreprocessor:
     # Return the computed results
     return anchors, classification_labels, regression_targets
 
-  def __call__(self, augment_image=False, augment_probability=0.5):
+  def __call__(self,
+               augment_image: bool = False,
+               augment_probability: float = 0.5):
     """Creates a TF compatible function which can be used to preprocess batches.
 
     The generated function will unpack an object detection dataset, as returned
@@ -496,7 +484,8 @@ class DataPreprocessor:
         `augment_image` is True
 
     Returns:
-      A dictionary for each image having the following entries:
+      A function which processes the input data, and returns a dictionary 
+      for each image having the following entries:
 
       ```
        {
@@ -563,7 +552,7 @@ class DataPreprocessor:
     return _inner
 
 
-def is_annotated(data):
+def is_annotated(data: tf.Tensor) -> tf.Tensor:
   """Predicate which identifies images with annotations.
 
   Args:
@@ -592,20 +581,28 @@ def get_coco_splits(rng):
   EVAL_SIZE = 5504
   start = jax.random.randint(rng, (1,), 0, EVAL_SIZE)[0]
   end = start + 35000
-  return f"train+validation[{start}:{end}]", f"validation[:{start}]+validation[{end}:]"
+  train_split = f"train+validation[{start}:{end}]"
+  validation_split = f"validation[:{start}]+validation[{end}:]"
+  return train_split, validation_split
 
 
 def train_preprocess_fn(features):
-  fn = DataPreprocessor(min_size=224, max_size=224, label_shift=1)(augment_image=True)
+  fn = DataPreprocessor(
+      min_size=600, max_size=1000, label_shift=1)(
+          augment_image=True)
   return fn(features)
 
 
 def eval_preprocess_fn(features):
-  fn = DataPreprocessor(min_size=224, max_size=224, label_shift=1)(augment_image=False)
+  fn = DataPreprocessor(
+      min_size=600, max_size=1000, label_shift=1)(
+          augment_image=False)
   return fn(features)
 
 
-def create_datasets(config: ml_collections.ConfigDict, rng) -> Tuple[tfds.core.DatasetInfo, tf.data.Dataset, tf.data.Dataset]:
+def create_datasets(
+    config: ml_collections.ConfigDict,
+    rng) -> Tuple[tfds.core.DatasetInfo, tf.data.Dataset, tf.data.Dataset]:
   """Create datasets for training and evaluation.
 
   Args:
