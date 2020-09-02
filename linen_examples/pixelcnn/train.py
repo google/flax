@@ -34,6 +34,8 @@ from absl import app
 from absl import flags
 from absl import logging
 
+import numpy as np
+
 from flax import jax_utils
 from flax import optim
 from flax.metrics import tensorboard
@@ -87,7 +89,7 @@ flags.DEFINE_integer(
 
 flags.DEFINE_integer(
     'n_logistic_mix',
-    default=5,
+    default=10,
     help=('Number of components in the output distribution.'))
 
 flags.DEFINE_string(
@@ -114,7 +116,8 @@ def get_summary_writers():
 
 def model(**kwargs):
   return pixelcnn.PixelCNNPP(
-      depth=FLAGS.n_resnet, features=FLAGS.n_feature, **kwargs)
+      depth=FLAGS.n_resnet, features=FLAGS.n_feature,
+      logistic_components=FLAGS.n_logistic_mix, **kwargs)
 
 
 def neg_log_likelihood_loss(nn_out, images):
@@ -123,10 +126,10 @@ def neg_log_likelihood_loss(nn_out, images):
       pixelcnn.conditional_params_from_outputs(nn_out, images))
   log_likelihoods = pixelcnn.logprob_from_conditional_params(
       images, means, inv_scales, logit_weights)
-  return -jnp.mean(log_likelihoods) / (jnp.log(2) * jnp.prod(images.shape[-3:]))
+  return -jnp.mean(log_likelihoods) / (jnp.log(2) * np.prod(images.shape[-3:]))
 
 
-def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng=None):
+def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng):
   """Perform a single training step."""
 
   def loss_fn(params):
@@ -228,7 +231,7 @@ def train():
   optimizer, ema = jax_utils.replicate((optimizer, ema))
 
   # Learning rate schedule
-  learning_rate_fn = lambda step: FLAGS.learning_rate * FLAGS.lr_decay**step
+  learning_rate_fn = lambda step: FLAGS.learning_rate * FLAGS.lr_decay ** step
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
@@ -247,8 +250,7 @@ def train():
     sharded_rngs = common_utils.shard_prng_key(step_rng)
 
     # Train step
-    optimizer, ema, metrics = p_train_step(
-        optimizer, ema, batch, dropout_rng=sharded_rngs)
+    optimizer, ema, metrics = p_train_step(optimizer, ema, batch, sharded_rngs)
     train_metrics.append(metrics)
 
     if (step + 1) % steps_per_epoch == 0:
