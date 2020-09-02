@@ -38,10 +38,9 @@ class AttentionTest(parameterized.TestCase):
 
   def test_multihead_self_attention(self):
     rng = random.PRNGKey(0)
-    x = jnp.ones((4, 2, 3, 5))
+    x = jnp.ones((4, 6, 5))
     sa_module = nn.SelfAttention(
         num_heads=8,
-        attention_axis=(1, 2),
         qkv_features=16,
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
@@ -55,7 +54,6 @@ class AttentionTest(parameterized.TestCase):
     kv = jnp.ones((4, 2, 3, 5))
     sa_module = nn.MultiHeadDotProductAttention(
         num_heads=8,
-        attention_axis=(1, 2),
         qkv_features=16,
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
@@ -68,7 +66,6 @@ class AttentionTest(parameterized.TestCase):
     x = jnp.ones((4, 2, 3, 5))
     sa_module = nn.MultiHeadDotProductAttention(
         num_heads=8,
-        attention_axis=(1, 2),
         qkv_features=16,
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
@@ -81,37 +78,14 @@ class AttentionTest(parameterized.TestCase):
 
   def test_causal_mask_1d(self):
     """Tests autoregresive masking for 1d attention."""
-    key = jnp.ones((4, 5, 2, 16))  # (bs, dim1, dim2, heads, channel)
-    att_axis = (1,)
-    mask_1d = nn.attention._make_causal_mask(
-        key, attention_axis=att_axis, self_mask=False)
-
-    ts = np.arange(key.shape[1])
+    x = jnp.ones((3, 16))  # (bs1, length)
+    mask_1d = nn.attention.make_causal_mask(x)
+    ts = np.arange(16)
     mask_1d_simple = (ts[:, None] >= ts[None, :])[None, None, :, :]
+    mask_1d_simple = jnp.broadcast_to(mask_1d_simple, (3, 1, 16, 16))
     np.testing.assert_allclose(mask_1d, mask_1d_simple,)
 
-  def test_causal_mask_2d(self):
-    """Tests autoregresive masking for 2d attention."""
-    key = jnp.ones((4, 5, 5, 2, 16))  # (bs, dim1, dim2, heads, channel)
-
-    # masking when dealing with nd attention weights
-    # w_nd_shape = (4, 5, 5, 5, 5, 2)
-    att_axis = (1, 2)
-    mask_nd = nn.attention._make_causal_mask(
-        key, attention_axis=att_axis, self_mask=False)
-
-    # masking when dealing with 1d attention weights
-    # w_1d_shape = (4, 5*5, 5*5, 2)
-    ts = np.arange(25)
-    mask_1d = (ts[:, None] >= ts[None, :])[None, None, :, :]
-
-    np.testing.assert_allclose(mask_nd.reshape(mask_1d.shape), mask_1d,
-                                atol=1e-9)
-
-  @parameterized.parameters([((5,), (1,)),
-                             ((5, 6), (1,)),
-                             ((5, 6), (2,)),
-                             ((5, 6), (1, 2)),])
+  @parameterized.parameters([((5,), (1,)), ((6, 5), (2,))])
   def test_decoding(self, spatial_shape, attn_dims):
     bs = 2
     num_heads = 3
@@ -120,25 +94,25 @@ class AttentionTest(parameterized.TestCase):
     key1, key2 = random.split(rng)
     inputs = random.normal(
         key1, (bs,) + spatial_shape + (num_heads * num_features,))
-    module = nn.MultiHeadDotProductAttention(
+    module = nn.SelfAttention(
         num_heads=num_heads,
         qkv_features=num_heads * num_features,
-        attention_axis=attn_dims,
-        causal_mask=True,
         precision=lax.Precision.HIGHEST,
         decode=False)
     decode_module = module.clone(decode=True)
 
-    initial_vars = decode_module.init(key2, inputs, inputs)
-    y_ref = jax.jit(lambda x: module.apply(initial_vars, x, x))(inputs)
+    initial_vars = decode_module.init(key2, inputs)
+    causal_mask = nn.attention.make_causal_mask(jnp.ones((bs,) + spatial_shape))
+    y_ref = jax.jit(lambda x, y: module.apply(initial_vars, x, y))(
+        inputs, causal_mask)
     # feed the inputs sequentially to simulate decoding
     def body_fn(vars_in, x):
-      y, vars_out = decode_module.apply(vars_in, x, x,
-                                        decode=True, mutable=['cache'])
+      y, vars_out = decode_module.apply(vars_in, x,
+                                        mutable=['cache'])
       return vars_out, y
     # scan_in_dim supports scanning multiple dims
     _, y = jax_utils.scan_in_dim(body_fn, initial_vars, inputs,
-                                    axis=attn_dims, keepdims=True)
+                                 axis=attn_dims, keepdims=True)
 
     np.testing.assert_allclose(y_ref, y, atol=1e-5)
 
@@ -155,13 +129,13 @@ class AttentionTest(parameterized.TestCase):
 
     module = nn.MultiHeadDotProductAttention(
         num_heads=num_heads,
-        causal_mask=True,
         kernel_init=jax.nn.initializers.ones)
 
-    initial_vars = module.init(rng1, inputs, inputs, decode=False)
+    initial_vars = module.init(rng1, inputs, inputs)
+    causal_mask = nn.attention.make_causal_mask(jnp.ones(input_shape[:-1]))
 
     def model_loss(inputs, pos):
-      out = module.apply(initial_vars, inputs, inputs, decode=False)
+      out = module.apply(initial_vars, inputs, inputs, causal_mask)
       assert out.shape == input_shape
       assert len(out.shape) == 3
       return out[0, pos, :].sum()

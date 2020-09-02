@@ -43,8 +43,8 @@ import input_pipeline
 import models
 
 # enable jax omnistaging
-from jax.config import config
-config.enable_omnistaging()
+from jax.config import config as jax_config
+jax_config.enable_omnistaging()
 
 FLAGS = flags.FLAGS
 
@@ -278,7 +278,7 @@ def compute_weighted_cross_entropy(logits,
   loss = -jnp.sum(soft_targets * nn.log_softmax(logits), axis=-1)
   loss = loss - normalizing_constant
 
-  normalizing_factor = jnp.prod(targets.shape)
+  normalizing_factor = np.prod(targets.shape)
   if weights is not None:
     loss = loss * weights
     normalizing_factor = weights.sum()
@@ -301,7 +301,7 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
                      (str(logits.shape), str(targets.shape)))
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
-  normalizing_factor = jnp.prod(logits.shape[:-1])
+  normalizing_factor = np.prod(logits.shape[:-1])
   if weights is not None:
     loss = loss * weights
     normalizing_factor = weights.sum()
@@ -403,22 +403,17 @@ def initialize_cache(inputs, max_decode_len, config):
 def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
                  beam_size=4):
   """Predict translation with fast decoding beam search on a batch."""
-  batch_size = inputs.shape[0]
-
   # Prepare transformer fast-decoder call for beam search: for beam search, we
   # need to set up our decoder model to handle a batch size equal to
   # batch_size * beam_size, where each batch item's data is expanded in-place
   # rather than tiled.
   # i.e. if we denote each batch element subtensor as el[n]:
   # [el0, el1, el2] --> beamsize=2 --> [el0,el0,el1,el1,el2,el2]
-  src_padding_mask = decode.flat_batch_beam_expand(
-      (inputs > 0)[..., None], beam_size)
-  tgt_padding_mask = decode.flat_batch_beam_expand(
-      jnp.ones((batch_size, 1, 1)), beam_size)
   encoded_inputs = decode.flat_batch_beam_expand(
       models.Transformer(config).apply(
         {'param': params}, inputs, method=models.Transformer.encode),
       beam_size)
+  raw_inputs = decode.flat_batch_beam_expand(inputs, beam_size)
 
   def tokens_ids_to_logits(flat_ids, flat_cache):
     """Token slice to logits from decoder model."""
@@ -426,9 +421,8 @@ def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
     flat_logits, new_vars = models.Transformer(config).apply(
         {'param': params, 'cache': flat_cache},
         encoded_inputs,
-        src_padding_mask,
+        raw_inputs,  # only needed for input padding mask
         flat_ids,
-        tgt_padding_mask=tgt_padding_mask,
         mutable=['cache'],
         method=models.Transformer.decode)
     new_flat_cache = new_vars['cache']
@@ -609,7 +603,8 @@ def main(argv):
           config=train_config,
           learning_rate_fn=learning_rate_fn,
           label_smoothing=FLAGS.label_smoothing),
-      axis_name='batch')
+      axis_name='batch',
+      donate_argnums=(0,))
   p_eval_step = jax.pmap(
       functools.partial(
           eval_step,
