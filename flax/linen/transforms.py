@@ -17,7 +17,7 @@ import dataclasses
 import functools
 import inspect
 from flax.core import lift, Scope
-from flax.linen import Module
+from flax.linen.module import Module
 from flax.linen.module import wrap_method
 import jax
 
