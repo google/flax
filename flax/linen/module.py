@@ -261,11 +261,9 @@ class Module:
     for key in get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       if _use_named_call and key != 'setup':
-        printkey = f'.{key}' if key != '__call__' else ''
-        method_name = f'{cls.__name__}{printkey}'
         # We import named_call at runtime to avoid a circular import issue.
         from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
-        method = named_call(method, method_name)
+        method = named_call(method)
       setattr(cls, key, wrap_method(method))
     return cls
 
