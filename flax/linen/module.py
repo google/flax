@@ -17,6 +17,7 @@ from contextlib import contextmanager
 import dataclasses
 import functools
 import inspect
+import os
 import threading
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
                     Set, Type, Union, TypeVar, Generic)
@@ -68,7 +69,7 @@ _unspecified_parent = _Sentinel()
 
 # Enable automatic named_call wrapping for labelling profile traces.
 # -----------------------------------------------------------------------------
-_use_named_call = False
+_use_named_call = True if os.getenv('FLAX_PROFILE', '') else False
 
 def enable_named_call():
   """Enables named call wrapping for labelling profile traces."""

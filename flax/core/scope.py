@@ -115,6 +115,8 @@ class Scope:
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = set()
 
+    self._children = {}
+
     self._invalid = False
 
   @property
@@ -169,14 +171,17 @@ class Scope:
         return name
       i += 1
 
-  def push(self, name: Optional[str] = None, prefix: str = '') -> 'Scope':
+  def push(self, name: Optional[str] = None, prefix: str = '', reuse=False) -> 'Scope':
     self._check_valid()
     self._validate_trace_level()
     if name is None:
       name = self.default_name(prefix)
+    if reuse and name in self._children:
+      return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
     scope = Scope({}, name=name, rngs=rngs, parent=self)
+    self._children[name] = scope
     return scope
 
   def child(self,

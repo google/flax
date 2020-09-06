@@ -29,8 +29,8 @@ from flax import struct
 @struct.dataclass
 class TransformerConfig:
   """Global hyperparameters used to minimize obnoxious kwarg plumbing."""
-  vocab_size: Optional[int] = None
-  output_vocab_size: Optional[int] = None
+  vocab_size: int
+  output_vocab_size: int
   share_embeddings: bool = False
   logits_via_embedding: bool = False
   dtype: Any = jnp.float32
@@ -46,6 +46,7 @@ class TransformerConfig:
   decode: bool = False
   kernel_init: Callable = nn.initializers.xavier_uniform()
   bias_init: Callable = nn.initializers.normal(stddev=1e-6)
+  posemb_init: Optional[Callable] = None
 
 
 def shift_right(x, axis=1):
@@ -92,11 +93,8 @@ class AddPositionEmbs(nn.Module):
 
   Args:
     config: TransformerConfig dataclass containing hyperparameters.
-    posemb_init: positional embedding initializer, if None, then use a
-      fixed (non-learned) sinusoidal embedding table.
   """
   config: TransformerConfig
-  posemb_init: Callable = None  # TODO(levskaya) move to config?!
 
   @nn.compact
   def __call__(self,
@@ -106,7 +104,7 @@ class AddPositionEmbs(nn.Module):
 
     By default this layer uses a fixed sinusoidal embedding table. If a
     learned position embedding is desired, pass an initializer to
-    posemb_init.
+    posemb_init in the configuration.
 
     Args:
       inputs: input data.
@@ -121,13 +119,13 @@ class AddPositionEmbs(nn.Module):
                               ' but it is: %d' % inputs.ndim)
     length = inputs.shape[1]
     pos_emb_shape = (1, cfg.max_len, inputs.shape[-1])
-    if self.posemb_init is None:
+    if cfg.posemb_init is None:
       # Use a fixed (non-learned) sinusoidal position embedding.
       pos_embedding = sinusoidal_init(max_len=cfg.max_len)(
           None, pos_emb_shape, None)
     else:
       pos_embedding = self.param('pos_embedding',
-                                 self.posemb_init,
+                                 cfg.posemb_init,
                                  pos_emb_shape)
     pe = pos_embedding[:, :length, :]
 
@@ -194,14 +192,12 @@ class Encoder1DBlock(nn.Module):
   @nn.compact
   def __call__(self,
                inputs,
-               inputs_segmentation=None, # REFACTOR
-               padding_mask=None): # REFACTOR
+               encoder_mask=None):
     """Applies Encoder1DBlock module.
 
     Args:
       inputs: input data.
-      inputs_segmentation: input segmentation info for packed examples.
-      padding_mask: bool, mask padding tokens.
+      encoder_mask: encoder self-attention mask.
 
     Returns:
       output after transformer encoder block.
@@ -215,17 +211,12 @@ class Encoder1DBlock(nn.Module):
         num_heads=cfg.num_heads,
         dtype=cfg.dtype,
         qkv_features=cfg.qkv_dim,
-        attention_axis=(1,),
-        causal_mask=False,
         kernel_init=cfg.kernel_init,
         bias_init=cfg.bias_init,
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=cfg.attention_dropout_rate,
-        deterministic=cfg.deterministic)(
-            x,
-            segmentation=inputs_segmentation, # REFACTOR
-            padding_mask=padding_mask) # REFACTOR
+        deterministic=cfg.deterministic)(x, encoder_mask)
 
     x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=cfg.deterministic)
@@ -250,19 +241,15 @@ class EncoderDecoder1DBlock(nn.Module):
   def __call__(self,
                targets,
                encoded,
-               inputs_segmentation=None,  # REFACTOR
-               targets_segmentation=None,  # REFACTOR
-               padding_mask=None,  # REFACTOR
-               key_padding_mask=None):  # REFACTOR
+               decoder_mask=None,
+               encoder_decoder_mask=None):
     """Applies EncoderDecoder1DBlock module.
 
     Args:
       targets: input data for decoder
       encoded: input data from encoder
-      inputs_segmentation: input segmentation info for packed examples.
-      targets_segmentation: target segmentation info for packed examples.
-      padding_mask: bool, mask padding tokens
-      key_padding_mask: bool, mask padding tokens
+      decoder_mask: decoder self-attention mask.
+      encoder_decoder_mask: encoder-decoder attention mask.
 
     Returns:
       output after transformer encoder-decoder block.
@@ -276,17 +263,13 @@ class EncoderDecoder1DBlock(nn.Module):
         num_heads=cfg.num_heads,
         dtype=cfg.dtype,
         qkv_features=cfg.qkv_dim,
-        attention_axis=(1,),
-        causal_mask=True,
         kernel_init=cfg.kernel_init,
         bias_init=cfg.bias_init,
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=cfg.attention_dropout_rate,
         deterministic=cfg.deterministic,
-        decode=cfg.decode)(x,
-                           padding_mask=padding_mask,
-                           segmentation=targets_segmentation)
+        decode=cfg.decode)(x, decoder_mask)
     x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=cfg.deterministic)
     x = x + targets
@@ -297,20 +280,13 @@ class EncoderDecoder1DBlock(nn.Module):
         num_heads=cfg.num_heads,
         dtype=cfg.dtype,
         qkv_features=cfg.qkv_dim,
-        attention_axis=(1,),
-        causal_mask=False,
         kernel_init=cfg.kernel_init,
         bias_init=cfg.bias_init,
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=cfg.attention_dropout_rate,
         deterministic=cfg.deterministic)(
-            y,
-            encoded,
-            padding_mask=padding_mask,
-            key_padding_mask=key_padding_mask,
-            segmentation=targets_segmentation,
-            key_segmentation=inputs_segmentation)
+            y, encoded, encoder_decoder_mask)
 
     y = nn.Dropout(rate=cfg.dropout_rate)(
         y, deterministic=cfg.deterministic)
@@ -337,23 +313,19 @@ class Encoder(nn.Module):
   def __call__(self,
                inputs,
                inputs_positions=None,
-               inputs_segmentation=None):
+               encoder_mask=None):
     """Applies Transformer model on the inputs.
 
     Args:
       inputs: input data
       inputs_positions: input subsequence positions for packed examples.
-      inputs_segmentation: input segmentation info for packed examples.
+      encoder_mask: decoder self-attention mask.
 
     Returns:
       output of a transformer encoder.
     """
     cfg = self.config
-
     assert inputs.ndim == 2  # (batch, len)
-
-    # Padding Masks
-    src_padding_mask = (inputs > 0)[..., None]
 
     # Input Embedding
     if self.shared_embedding is None:
@@ -375,9 +347,7 @@ class Encoder(nn.Module):
     # Input Encoder
     for lyr in range(cfg.num_layers):
       x = Encoder1DBlock(config=cfg, name=f'encoderblock_{lyr}')(
-          x,
-          padding_mask=src_padding_mask,
-          inputs_segmentation=inputs_segmentation)
+          x, encoder_mask)
 
     encoded = nn.LayerNorm(dtype=cfg.dtype, name='encoder_norm')(x)
 
@@ -397,22 +367,18 @@ class Decoder(nn.Module):
   @nn.compact
   def __call__(self,
                encoded,
-               src_padding_mask,
                targets,
                targets_positions=None,
-               inputs_segmentation=None,
-               targets_segmentation=None,
-               tgt_padding_mask=None):
+               decoder_mask=None,
+               encoder_decoder_mask=None):
     """Applies Transformer model on the inputs.
 
     Args:
       encoded: encoded input data from encoder.
-      src_padding_mask: padding mask for inputs.
       targets: target inputs.
       targets_positions: input subsequence positions for packed examples.
-      inputs_segmentation: input segmentation info for packed examples.
-      targets_segmentation: target segmentation info for packed examples.
-      tgt_padding_mask: target tokens padding mask.
+      decoder_mask: decoder self-attention mask.
+      encoder_decoder_mask: encoder-decoder attention mask.
 
     Returns:
       output of a transformer decoder.
@@ -421,10 +387,6 @@ class Decoder(nn.Module):
 
     assert encoded.ndim == 3  # (batch, len, depth)
     assert targets.ndim == 2  # (batch, len)
-
-    # Padding Masks
-    if tgt_padding_mask is None:
-      tgt_padding_mask = (targets > 0)[..., None]
 
     # Target Embedding
     if self.shared_embedding is None:
@@ -452,10 +414,8 @@ class Decoder(nn.Module):
           config=cfg, name=f'encoderdecoderblock_{lyr}')(
               y,
               encoded,
-              padding_mask=tgt_padding_mask,
-              key_padding_mask=src_padding_mask,
-              inputs_segmentation=inputs_segmentation,
-              targets_segmentation=targets_segmentation)
+              decoder_mask=decoder_mask,
+              encoder_decoder_mask=encoder_decoder_mask)
     y = nn.LayerNorm(dtype=cfg.dtype, name='encoderdecoder_norm')(y)
 
     # Decoded Logits
@@ -501,14 +461,102 @@ class Transformer(nn.Module):
     self.decoder = Decoder(config=cfg,
                            shared_embedding=self.shared_embedding)
 
+  def encode(self,
+             inputs,
+             inputs_positions=None,
+             inputs_segmentation=None):
+    """Applies Transformer encoder-branch on the inputs.
+
+    Args:
+      inputs: input data.
+      inputs_positions: input subsequence positions for packed examples.
+      inputs_segmentation: input segmentation info for packed examples.
+
+    Returns:
+      encoded feature array from the transformer encoder.
+    """
+    cfg = self.config
+    # Make padding attention mask.
+    encoder_mask = nn.make_attention_mask(
+        inputs > 0, inputs > 0, dtype=cfg.dtype)
+    # Add segmentation block-diagonal attention mask if using segmented data.
+    if inputs_segmentation is not None:
+      encoder_mask = nn.combine_masks(
+          encoder_mask,
+          nn.make_attention_mask(inputs_segmentation,
+                                 inputs_segmentation,
+                                 jnp.equal,
+                                 dtype=cfg.dtype)
+      )
+    return self.encoder(
+        inputs,
+        inputs_positions=inputs_positions,
+        encoder_mask=encoder_mask)
+
+  def decode(self,
+             encoded,
+             inputs,  # only needed for masks
+             targets,
+             targets_positions=None,
+             inputs_segmentation=None,
+             targets_segmentation=None):
+    """Applies Transformer decoder-branch on encoded-input and target.
+
+    Args:
+      encoded: encoded input data from encoder.
+      inputs: input data (only needed for masking).
+      targets: target data.
+      targets_positions: target subsequence positions for packed examples.
+      inputs_segmentation: input segmentation info for packed examples.
+      targets_segmentation: target segmentation info for packed examples.
+
+    Returns:
+      logits array from transformer decoder.
+    """
+    cfg = self.config
+
+    # Make padding attention masks.
+    if cfg.decode:
+      # for fast autoregressive decoding only a special encoder-decoder mask is used
+      decoder_mask = None
+      encoder_decoder_mask = nn.make_attention_mask(
+          jnp.ones_like(targets) > 0, inputs > 0, dtype=cfg.dtype)
+    else:
+      decoder_mask = nn.combine_masks(
+          nn.make_attention_mask(targets > 0, targets > 0, dtype=cfg.dtype),
+          nn.make_causal_mask(targets, dtype=cfg.dtype))
+      encoder_decoder_mask = nn.make_attention_mask(
+          targets > 0, inputs > 0, dtype=cfg.dtype)
+
+    # Add segmentation block-diagonal attention masks if using segmented data.
+    if inputs_segmentation is not None:
+      decoder_mask = nn.combine_masks(
+          decoder_mask,
+          nn.make_attention_mask(targets_segmentation,
+                                 targets_segmentation,
+                                 jnp.equal,
+                                 dtype=cfg.dtype))
+      encoder_decoder_mask = nn.combine_masks(
+          encoder_decoder_mask,
+          nn.make_attention_mask(targets_segmentation,
+                                 inputs_segmentation,
+                                 jnp.equal,
+                                 dtype=cfg.dtype))
+    logits = self.decoder(
+        encoded,
+        targets,
+        targets_positions=targets_positions,
+        decoder_mask=decoder_mask,
+        encoder_decoder_mask=encoder_decoder_mask)
+    return logits.astype(self.config.dtype)
+
   def __call__(self,
                inputs,
                targets,
                inputs_positions=None,
                targets_positions=None,
                inputs_segmentation=None,
-               targets_segmentation=None,
-               tgt_padding_mask=None):
+               targets_segmentation=None):
     """Applies Transformer model on the inputs.
 
     Args:
@@ -518,54 +566,17 @@ class Transformer(nn.Module):
       targets_positions: target subsequence positions for packed examples.
       inputs_segmentation: input segmentation info for packed examples.
       targets_segmentation: target segmentation info for packed examples.
-      tgt_padding_mask: target tokens padding mask.
 
     Returns:
-      output of a transformer decoder.
+      logits array from full transformer.
     """
-    src_padding_mask = (inputs > 0)[..., None]
+    encoded = self.encode(inputs,
+                          inputs_positions=inputs_positions,
+                          inputs_segmentation=inputs_segmentation)
 
-    encoded = self.encoder(
-        inputs,
-        inputs_positions=inputs_positions,
-        inputs_segmentation=inputs_segmentation)
-
-    logits = self.decoder(
-        encoded,
-        src_padding_mask,
-        targets,
-        targets_positions=targets_positions,
-        inputs_segmentation=inputs_segmentation,
-        targets_segmentation=targets_segmentation,
-        tgt_padding_mask=tgt_padding_mask)
-
-    return logits.astype(self.config.dtype)
-
-  # The following two methods allow us to run the trained Transformer in
-  # two parts during fast decoding.
-  def encode(self,
-             inputs,
-             inputs_positions=None,
-             inputs_segmentation=None):
-    return self.encoder(
-        inputs,
-        inputs_positions=inputs_positions,
-        inputs_segmentation=inputs_segmentation)
-
-  def decode(self,
-             encoded,
-             src_padding_mask,
-             targets,
-             targets_positions=None,
-             inputs_segmentation=None,
-             targets_segmentation=None,
-             tgt_padding_mask=None):
-    logits = self.decoder(
-        encoded,
-        src_padding_mask,
-        targets,
-        targets_positions=targets_positions,
-        inputs_segmentation=inputs_segmentation,
-        targets_segmentation=targets_segmentation,
-        tgt_padding_mask=tgt_padding_mask)
-    return logits.astype(self.config.dtype)
+    return self.decode(encoded,
+                       inputs,  # only used for masks
+                       targets,
+                       targets_positions=targets_positions,
+                       inputs_segmentation=inputs_segmentation,
+                       targets_segmentation=targets_segmentation)
