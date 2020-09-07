@@ -124,8 +124,7 @@ class TransformTest(absltest.TestCase):
     def vmap(cls):
       return nn.vmap(cls,
                      in_axes=(0,),
-                     variable_in_axes={'param': None},
-                     variable_out_axes={'param': None},
+                     variable_axes={'param': None},
                      split_rngs={'param': False})
     normal_model = TransformedMLP(features=[3, 4, 5])
     vmap_model = TransformedMLP(features=[3, 4, 5], transform=vmap)
@@ -144,8 +143,7 @@ class TransformTest(absltest.TestCase):
     def vmap(fn):
       return nn.vmap(fn,
                      in_axes=(0,),
-                     variable_in_axes={'param': None},
-                     variable_out_axes={'param': None},
+                     variable_axes={'param': None},
                      split_rngs={'param': False})
     normal_model = decorated_MLP()(features=[3, 4, 5])
     vmap_model = decorated_MLP(vmap)(features=[3, 4, 5])
@@ -161,8 +159,7 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, c, xs):
         LSTM = nn.scan(nn.LSTMCell,
-                       variable_in_axes={'param': nn.broadcast},
-                       variable_out_axes={'param': nn.broadcast},
+                       variable_axes={'param': nn.broadcast},
                        split_rngs={'param': False})
         return LSTM(name="lstm_cell")(c, xs)
 
@@ -191,8 +188,7 @@ class TransformTest(absltest.TestCase):
   def test_scan_decorated(self):
     class SimpleScan(nn.Module):
       @partial(nn.scan,
-               variable_in_axes={'param': nn.broadcast},
-               variable_out_axes={'param': nn.broadcast},
+               variable_axes={'param': nn.broadcast},
                split_rngs={'param': False})
       @nn.compact
       def __call__(self, c, xs):
@@ -434,8 +430,7 @@ class TransformTest(absltest.TestCase):
       outer_module: nn.Module
       @partial(nn.vmap,
                in_axes=(0,),
-               variable_in_axes={'param': 0},
-               variable_out_axes={'param': 0},
+               variable_axes={'param': 0},
                split_rngs={'param': True})
       @nn.jit
       @nn.compact

@@ -119,15 +119,13 @@ def multi_head_dot_product_attention(
       attn_fn,
       in_axes=(None, None, None), out_axes=-2,
       axis_size=num_heads,
-      variable_in_axes={'param': 0},
-      variable_out_axes={'param': 0},
+      variable_axes={'param': 0},
       split_rngs={'param': True, 'dropout': not broadcast_dropout})
   for axis in reversed(sorted(batch_axes)):
     attn_fn = lift.vmap(
         attn_fn,
         in_axes=(axis, axis, axis), out_axes=axis,
-        variable_in_axes={'param': None},
-        variable_out_axes={'param': None},
+        variable_axes={'param': None},
         split_rngs={'param': False, 'dropout': not broadcast_dropout})
 
   y = attn_fn(scope, inputs_q, inputs_kv, bias)

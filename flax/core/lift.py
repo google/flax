@@ -15,13 +15,14 @@
 """Jax transform lifting."""
 
 import collections
+from dataclasses import dataclass
 import functools
 
 
 import jax
 from jax import random
 
-from typing import Any, Callable, Sequence, Union, Iterable, Tuple, Optional, Mapping
+from typing import Any, Callable, Sequence, Union, Iterable, Tuple, Optional, Mapping, TypeVar, Generic
 
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
@@ -33,9 +34,8 @@ from .named_call import named_call_p
 from . import unified_transforms
 from .unified_transforms import broadcast
 
-scan_variable_modes = set(['carry', 'broadcast', 'scan', None])
 
-ScanVariableMode = Union[str, Tuple[str, str]]
+T = TypeVar('T')
 
 
 def _dedup_scopes(scopes):
@@ -222,12 +222,32 @@ def swapkind(from_kind: str, to_kind: str):
   return transform((from_kind, to_kind), swap, swap, mutable=True)
 
 
+@dataclass(frozen=True)
+class In(Generic[T]):
+  axis: T 
+
+@dataclass(frozen=True)
+class Out(Generic[T]):
+  axis: T
+
+
+def _split_in_out_axes(xs: Mapping[KindFilter, Any]):
+  unpack = lambda v: v.axis if isinstance(v, (In, Out)) else v
+  in_axes = {k: unpack(v) for k, v in xs.items() if not isinstance(v, Out)}
+  out_axes = {k: unpack(v) for k, v in xs.items() if not isinstance(v, In)}
+  return in_axes, out_axes
+
+
+Axis = Optional[int]
+InOutAxis = Union[Axis, In[Axis], Out[Axis]]
+
+
 def vmap(fn: Callable[..., Any],
-         variable_in_axes: Mapping[KindFilter, Optional[int]],
-         variable_out_axes: Mapping[KindFilter, Optional[int]],
+         variable_axes: Mapping[KindFilter, InOutAxis],
          split_rngs: Mapping[KindFilter, bool],
          in_axes=0, out_axes=0, axis_size=None) -> Callable[..., Any]:
   """Wraps jax.vmap."""
+  variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
   variable_out_groups, variable_out_axes = _unzip2(variable_out_axes.items())
   rng_groups, rng_splits = _unzip2(split_rngs.items())
@@ -276,15 +296,19 @@ def vmap(fn: Callable[..., Any],
       inner, variable_in_groups, variable_out_groups, rng_groups)
 
 
+ScanAxis = Union[unified_transforms._Broadcast, int]
+InOutScanAxis = Union[ScanAxis, In[ScanAxis], Out[ScanAxis]]
+
+
 def scan(fn: Callable[..., Any],
-         variable_in_axes: Mapping[KindFilter, Any] = {},
-         variable_out_axes: Mapping[KindFilter, Any] = {},
+         variable_axes: Mapping[KindFilter, InOutScanAxis] = {},
          variable_carry: KindFilter = False,
          split_rngs: Mapping[KindFilter, bool] = {},
          in_axes=0, out_axes=0,
          length: Optional[int] = None,
          reverse: bool = False) -> Callable[..., Any]:
   """Wraps jax.vmap."""
+  variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
   variable_out_groups, variable_out_axes = _unzip2(variable_out_axes.items())
   rng_groups, rng_splits = _unzip2(split_rngs.items())
@@ -429,8 +453,7 @@ def jit(fn: Callable[..., Any],
 def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
                lengths: Sequence[int],
                variable_carry: KindFilter = False,
-               variable_in_axes: Mapping[KindFilter, Any] = {},
-               variable_out_axes: Mapping[KindFilter, Any] = {},
+               variable_axes: Mapping[KindFilter, InOutScanAxis] = {},
                split_rngs: Mapping[KindFilter, bool] = {}):
   # TODO(jheek) should remat scan have scan inputs/outputs?
   if len(lengths) == 1:
@@ -440,21 +463,19 @@ def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
         wrapper,
         length=lengths[0],
         variable_carry=variable_carry,
-        variable_in_axes=variable_in_axes,
-        variable_out_axes=variable_out_axes,
+        variable_axes=variable_axes,
         split_rngs=split_rngs)(scope, carry)
   else:
     @remat
     def inner_loop(scope, carry):
       carry = remat_scan(body_fn, scope, carry, lengths[1:],
-                         variable_carry, variable_in_axes, variable_out_axes, split_rngs)
+                         variable_carry, variable_axes, split_rngs)
       return carry, ()
     carry, _ = scan(
         inner_loop,
         length=lengths[0],
         variable_carry=variable_carry,
-        variable_in_axes=variable_in_axes,
-        variable_out_axes=variable_out_axes,
+        variable_in_axes=variable_axes,
         split_rngs=split_rngs)(scope, carry)
   return carry
 
