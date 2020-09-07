@@ -300,7 +300,7 @@ def model(teacher_force=True):
                  hidden_size=FLAGS.hidden_size)
 
 
-def get_param(key):
+def get_initial_params(key):
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size
   encoder_shape = jnp.ones((1, get_max_input_len(), vocab_size), jnp.float32)
@@ -409,7 +409,7 @@ def decode_batch(params, batch_size, key):
 
 def train_model():
   """Train for a fixed number of steps and decode during training."""
-  param = get_param(jax.random.PRNGKey(0))
+  param = get_initial_params(jax.random.PRNGKey(0))
   optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(param)
   key = jax.random.PRNGKey(0)
   for step in range(FLAGS.num_train_steps):

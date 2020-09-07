@@ -53,7 +53,7 @@ class CNN(nn.Module):
     return x
 
 
-def get_params(key):
+def get_initial_params(key):
   init_shape = jnp.ones((1, 28, 28, 1), jnp.float32)
   initial_params = CNN().init(key, init_shape)["param"]
   return initial_params
@@ -165,7 +165,7 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
   summary_writer = tensorboard.SummaryWriter(model_dir)
 
   rng, init_rng = random.split(rng)
-  params = get_params(init_rng)
+  params = get_initial_params(init_rng)
   optimizer = create_optimizer(params, learning_rate, momentum)
 
   for epoch in range(1, num_epochs + 1):
