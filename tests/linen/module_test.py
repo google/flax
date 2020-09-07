@@ -331,7 +331,8 @@ class ModuleTest(absltest.TestCase):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'param': rngkey})
-    with self.assertRaisesRegex(ValueError, 'assign names via self'):
+    with self.assertRaisesRegex(ValueError, 'In setup, assign names of Modules '
+        'via self.<name> and not using keyword argument name="<name>"'):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_param_name_collision(self):
