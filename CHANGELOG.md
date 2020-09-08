@@ -1,19 +1,6 @@
 Changelog
 ----------
 
-We only include user-facing changes here. See our Git history or issue tracker for a full
-list.
-
-vNEXT
------
-
-v0.2.1
-------
- - Support both pre- and post-omnistaging changes in JAX core.
- - Add single input conv and conv_transpost support (for use with vmap)
- - Export new initializers
- - Add Adafactor optimizer
-
 
 v0.2
 ----
@@ -26,6 +13,7 @@ v0.2
 v0.1
 ----
 
+### API Changes
  - Add ConvTranspose Module to nn.linear
  - Rename the following optional arguments to nn.linear.Conv:
      `lhs_dilation` -> `input_dilation`,
