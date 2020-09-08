@@ -159,7 +159,7 @@ class EncoderLSTM(nn.Module):
       split_rngs={'param': False})
   @nn.compact
   def __call__(self, carry, x):
-    return nn.LSTMCell(name='lstm_cell')(carry, x)
+    return nn.LSTMCell()(carry, x)
 
   @staticmethod
   def initialize_carry(hidden_size):
@@ -181,9 +181,8 @@ class DecoderLSTM(nn.Module):
     carry_rng, categorical_rng = jax.random.split(rng, 2)
     if not self.teacher_force:
       x = last_prediction
-    projection = nn.Dense(features=CTABLE.vocab_size, name='projection')
     lstm_state, y = nn.LSTMCell()(lstm_state, x)
-    logits = projection(y)
+    logits = nn.Dense(features=CTABLE.vocab_size)(y)
     predicted_token = jax.random.categorical(categorical_rng, logits)
     prediction = jnp.array(predicted_token == jnp.arange(CTABLE.vocab_size), 
                            dtype=jnp.float32)
