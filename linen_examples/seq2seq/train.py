@@ -278,7 +278,8 @@ def get_batch(batch_size):
   query, query_len = zip(*encode_onehot(inputs, max_len=get_max_input_len()))
   answer, ans_len = zip(*encode_onehot(outputs, max_len=get_max_output_len()))
   batch = { 'query': np.array(query), 'answer': np.array(answer)}
-  return batch, np.array(query_len), np.array(ans_len)
+  masks = (np.array(query_len), np.array(ans_len))
+  return batch, masks
 
 
 def log_softmax(x, axis=-1):
@@ -312,32 +313,28 @@ def compute_metrics(logits, labels, lengths):
   return metrics
 
 
+def loss_fn(params, batch, masks, labels, lstm_key):
+  in_shapes = [{'query': '(n, _)', 'answer': '(m, _)'}]
+  out_shape = f'(m +- 1, {CTABLE.vocab_size})'
+  @functools.partial(jax.mask, in_shapes=in_shapes, out_shape=out_shape)
+  def get_logits(example):
+    logits, _ = model().apply({'param': params}, example['query'],
+                              example['answer'], rngs={'lstm': lstm_key})
+    return logits
+  in_masks, out_masks = masks
+  logits = jax.vmap(get_logits)([batch], dict(n=in_masks, m=out_masks))
+  loss = cross_entropy_loss(logits, labels, out_masks)
+  return loss, logits
+
+
 @jax.jit
-def train_step(optimizer, batch, in_masks, out_masks, lstm_key):
+def train_step(optimizer, batch, masks, lstm_key):
   """Train one step."""
-  get_labels = lambda arr, axis=0: jax.lax.slice_in_dim(arr, 1, None, axis=axis)
-  def loss_fn(params, batch, in_masks, out_masks):
-    def single_loss_fn(example):
-      """Compute cross-entropy loss."""
-      label = get_labels(example['answer'])
-      logits, _ = model().apply({'param': params}, example['query'],
-                                example['answer'], rngs={'lstm': lstm_key})
-      loss = jnp.sum(log_softmax(logits) * label)
-      return loss, logits
-    out_shape = ('', '(m +- 1, ' + str(batch['query'].shape[2]) + ',)')
-    # masked_loss_fn = jax.mask(single_loss_fn,
-    #                           in_shapes=[{'query': '(n, _)', 'answer': '(m, _)'}], 
-    #                           out_shape=out_shape)
-    # batched_loss_fn = jax.vmap(masked_loss_fn)
-    # losses, logits = batched_loss_fn([batch], dict(n=in_masks, m=out_masks))
-    losses, logits = jax.vmap(single_loss_fn)(batch)
-    loss = jnp.mean(losses, axis=-1)
-    return loss, logits
+  labels = batch['answer'][:, 1:]
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (loss, logits), grad = grad_fn(optimizer.target, batch, in_masks, out_masks)
+  (_, logits), grad = grad_fn(optimizer.target, batch, masks, labels, lstm_key)
   optimizer = optimizer.apply_gradient(grad)
-  labels = get_labels(batch['answer'], axis=1)
-  metrics = compute_metrics(logits, labels, out_masks-1)
+  metrics = compute_metrics(logits, labels, masks[1]-1)
   return optimizer, metrics
 
 
@@ -361,9 +358,10 @@ def decode(params, inputs, key):
 
 def decode_batch(params, batch_size, key):
   """Decode and log results for a batch."""
-  batch, _, _ = get_batch(batch_size)
+  batch, _ = get_batch(batch_size)
   inputs, outputs = batch['query'], batch['answer'][:, 1:]
-  inferred = jax.vmap(decode, in_axes=(None, 0, None))(params, inputs, key)
+  keys = jax.random.split(key, num=batch_size)
+  inferred = jax.vmap(decode, in_axes=(None, 0, 0))(params, inputs, keys)
   questions = decode_onehot(inputs)
   infers = decode_onehot(inferred)
   goldens = decode_onehot(outputs)
@@ -378,8 +376,8 @@ def train_model():
   key = jax.random.PRNGKey(0)
   for step in range(FLAGS.num_train_steps):
     key, lstm_key = jax.random.split(key)
-    batch, xs_mask, ys_mask = get_batch(FLAGS.batch_size)
-    optimizer, metrics = train_step(optimizer, batch, xs_mask, ys_mask, lstm_key)
+    batch, masks = get_batch(FLAGS.batch_size)
+    optimizer, metrics = train_step(optimizer, batch, masks, lstm_key)
     if step % FLAGS.decode_frequency == 0:
       key, decode_key = jax.random.split(key)
       logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
