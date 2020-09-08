@@ -212,7 +212,6 @@ class Seq2seq(nn.Module):
     teacher_force: bool, whether to use `decoder_inputs` as input to the
         decoder at every step. If False, only the first input is used, followed
         by samples taken from the previous output logits.
-    eos_id: int, the token signaling when the end of a sequence is reached.
     hidden_size: int, the number of hidden dimensions in the encoder and
       decoder LSTMs.
   """
@@ -224,13 +223,13 @@ class Seq2seq(nn.Module):
     """Run the seq2seq model.
 
     Args:
-      encoder_inputs: padded batch of input sequences to encode, shaped
-        `[batch_size, max(encoder_input_lengths), vocab_size]`.
-      decoder_inputs: padded batch of expected decoded sequences for teacher
-        forcing, shaped `[batch_size, max(decoder_inputs_length), vocab_size]`.
+      encoder_inputs: masked input sequences to encode, shaped
+        `[len(input_sequence), vocab_size]`.
+      decoder_inputs: masked expected decoded sequences for teacher
+        forcing, shaped `[len(output_sequence), vocab_size]`.
         When sampling (i.e., `teacher_force = False`), the initial time step is
         forced into the model and samples are used for the following inputs. The
-        second dimension of this tensor determines how many steps will be
+        first dimension of this tensor determines how many steps will be
         decoded, regardless of the value of `teacher_force`.
     Returns:
       Array of decoded logits.
@@ -282,16 +281,9 @@ def get_batch(batch_size):
   return batch, masks
 
 
-def log_softmax(x, axis=-1):
-  # This is the same as nn.log_softmax, except stop_gradient is omitted, which
-  # is currently not supported by masking. The behavior is identical.
-  shifted = x - x.max(axis, keepdims=True)
-  return shifted - jnp.log(jnp.sum(jnp.exp(shifted), axis, keepdims=True))
-
-
 def cross_entropy_loss(logits, labels, lengths):
   """Returns cross-entropy loss."""
-  xe = jnp.sum(log_softmax(logits) * labels, axis=-1)
+  xe = jnp.sum(nn.log_softmax(logits) * labels, axis=-1)
   masked_xe = jnp.mean(mask_sequences(xe, lengths))
   return -masked_xe
 
@@ -349,7 +341,7 @@ def log_decode(question, inferred, golden):
 def decode(params, inputs, key):
   """Decode inputs."""
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
-  init_decoder_inputs = jnp.tile(init_decoder_input,  (get_max_output_len(), 1))
+  init_decoder_inputs = jnp.tile(init_decoder_input, (get_max_output_len(), 1))
   _, predictions = model(teacher_force=False).apply({'param': params}, inputs,
                                                     init_decoder_inputs,
                                                     rngs={'lstm': key})
