@@ -136,7 +136,7 @@ def encode_onehot(batch_inputs, max_len):
     tokens = np.pad(tokens, [(0, max_len-len(tokens))], mode='constant')
     return onehot(tokens, CTABLE.vocab_size), unpadded_len
 
-  return np.array([encode_str(inp) for inp in batch_inputs])
+  return np.array([encode_str(inp) for inp in batch_inputs], dtype=object)
 
 
 def decode_onehot(batch_inputs):
