@@ -22,50 +22,41 @@ from flax import serialization
 K = TypeVar('K')
 V = TypeVar('V')
 
+
 @jax.tree_util.register_pytree_node_class
 class FrozenDict(Mapping[K, V]):
-  """An immutable variant of dictionaries.
-  """
-  __slots__ = ('_dict', '_leaves', '_treedef', '_hash')
+  """An immutable variant of the Python dict."""
+  __slots__ = ('_dict', '_hash')
 
   def __init__(self, *args, **kwargs):
-    if len(args) == 2:
-      self._treedef, self._leaves = args
-      self._dict = None
-    else:
-      self._dict = dict(*args, **kwargs)
-      self._treedef = None
-      self._leaves = None
+    self._dict = dict(*args, **kwargs)
     self._hash = None
     
   def __getitem__(self, key):
-    self._ensure_dict()
-    return self._dict[key]
+    v = self._dict[key]
+    if isinstance(v, dict):
+      return FrozenDict(v)
+    return v
 
   def __setitem__(self, key, value):
     raise ValueError('FrozenDict is immutable.')
 
   def __contains__(self, key):
-    self._ensure_dict()
     return key in self._dict
 
   def __iter__(self):
-    self._ensure_dict()
     return iter(self._dict)
 
   def __len__(self):
-    self._ensure_dict()
     return len(self._dict)
 
   def __repr__(self):
-    self._ensure_dict()
     return 'FrozenDict(%r)' % unfreeze(self._dict)
 
   def __hash__(self):
     if self._hash is None:
-      self._ensure_dict()
       h = 0
-      for key, value in self._dict.items():
+      for key, value in self.items():
         h ^= hash((key, value))
       self._hash = h
     return self._hash
@@ -74,40 +65,46 @@ class FrozenDict(Mapping[K, V]):
     return type(self)(self, **add_or_replace)
 
   def items(self):
-    self._ensure_dict()
-    return self._dict.items()
+    for key in self._dict:
+      yield (key, self[key])
 
-  def _ensure_dict(self):
-    if self._dict is None:
-      self._dict = jax.tree_unflatten(self._treedef, self._leaves)
+  def unfreeze(self) -> Dict[K, V]:
+    return unfreeze(self)
 
   def tree_flatten(self):
-    if self._treedef is None:
-      self._leaves, self._treedef = jax.tree_flatten(self._dict)
-    return self._leaves, self._treedef
+    return (self._dict,), ()
 
   @classmethod
-  def tree_unflatten(cls, aux_data, children):
-    return cls(aux_data, children)
+  def tree_unflatten(cls, _, data):
+    return cls(*data)
 
 
-def freeze(x: Dict[K, V]) -> FrozenDict[K, V]:
-  """Freeze a nested dict."""
-  if not isinstance(x, dict):
-    return x
-  temp = {}
-  for key, value in x.items():
-    temp[key] = freeze(value)
-  return FrozenDict(temp)
+def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
+  """Freeze a nested dict.
+
+  Makes a nested `dict` immutable by transforming it into `FrozenDict`.
+  """
+  # Turn the nested FrozenDict into a dict. This way the internal data structure
+  # of FrozenDict does not contain any FrozenDicts.
+  # instead we create those lazily in `__getitem__`.
+  # As a result tree_flatten/unflatten will be fast
+  # because it operates on native dicts.
+  xs = unfreeze(xs)
+  return FrozenDict(xs)
 
 
 def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
-  if not isinstance(x, FrozenDict) and not isinstance(x, dict):
+  """Unfreeze a FrozenDict.
+
+  Makes a mutable copy of a `FrozenDict` mutable by transforming
+  it into (nested) dict.
+  """
+  if not isinstance(x, (FrozenDict, dict)):
     return x
-  temp = {}
+  ys = {}
   for key, value in x.items():
-    temp[key] = unfreeze(value)
-  return temp
+    ys[key] = unfreeze(value)
+  return ys
 
 
 def _frozen_dict_state_dict(xs):
