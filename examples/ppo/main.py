@@ -20,16 +20,17 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   Eqs. (11-12) in PPO paper arXiv: 1707.06347"""
   assert rewards.shape[0] + 1 == values.shape[0], ("One more value needed; "
           "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate \delta_t")
-  return_values, gae = [], 0
+  advantages, gae = [], 0
+  # Key observation: A_{t} = \delta_t + \gamma*\lambda*A_{t+1}
   for t in reversed(range(len(rewards))):
-    #masks to set next state value to 0 for terminal states
+    # masks to set next state value to 0 for terminal states
     value_diff = discount * values[t + 1] * terminal_masks[t] - values[t]
     delta = rewards[t] + value_diff
     # masks[t] to ensure that values before and after a terminal state
     # are independent of each other
     gae = delta + discount * gae_param * terminal_masks[t] * gae
-    return_values.insert(0, gae + values[t])
-  return onp.array(return_values) #jnp after vectorization
+    advantages.insert(0, gae)
+  return onp.array(advantages) #jnp after vectorization
 
 # @jax.jit
 def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff,
@@ -169,13 +170,12 @@ def train(
           # dones need to be 0 for terminal states
           dones[time_step, agent_id] = float(not exp_agent[5])
 
-      #calculate returns using GAE (needs to be vectorized instead of foor loop)
-      returns = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS))
+      #calculate advantages w. GAE (needs to be vectorized instead of foor loop)
+      advantages = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS))
       for i in range(NUM_AGENTS):
-        returns[:, i] = gae_advantages(rewards[:-1, i], dones[:-1, i],
+        advantages[:, i] = gae_advantages(rewards[:-1, i], dones[:-1, i],
                           values[:, i], DISCOUNT, GAE_PARAM)
-      advantages = returns - values[:-1, :]
-
+      returns = advantages + values[:-1, :]
       #getting rid of unnecessary data (one more value was needed for GAE)
       states = states[:-1, ...].copy()
       actions = actions[:-1, ...].copy()
