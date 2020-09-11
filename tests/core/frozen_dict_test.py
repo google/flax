@@ -24,7 +24,7 @@ class FrozenDictTest(absltest.TestCase):
 
   def test_frozen_dict_copies(self):
     xs = {'a': 1, 'b': {'c': 2}}
-    frozen = FrozenDict(xs)
+    frozen = freeze(xs)
     xs['a'] += 1
     xs['b']['c'] += 1
     self.assertEqual(unfreeze(frozen), {'a': 1, 'b': {'c': 2}})

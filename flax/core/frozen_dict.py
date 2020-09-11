@@ -29,8 +29,7 @@ class FrozenDict(Mapping[K, V]):
   __slots__ = ('_dict', '_hash')
 
   def __init__(self, *args, **kwargs):
-    xs = dict(*args, **kwargs)
-    self._dict = _freeze(xs)
+    self._dict = dict(*args, **kwargs)
     self._hash = None
     
   def __getitem__(self, key):
@@ -80,26 +79,18 @@ class FrozenDict(Mapping[K, V]):
     return cls(*data)
 
 
-def _freeze(xs: Mapping[K, V]) -> FrozenDict[K, V]:
-  if not isinstance(xs, (dict, FrozenDict)):
-    return xs
-  # Turn a nested FrozenDict into a dict. This way the internal data structure
-  # of FrozenDict does not contain any FrozenDicts.
-  # instead we create those lazily in `__getitem__`.
-  # As a result tree_flatten/unflatten will be fast
-  # because it operates on native dicts.
-  ys = {}
-  for key, value in xs.items():
-    ys[key] = _freeze(value)
-  return ys
-
-
 def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
   """Freeze a nested dict.
 
   Makes a nested `dict` immutable by transforming it into `FrozenDict`.
   """
-  return FrozenDict(_freeze(xs))
+  # Turn the nested FrozenDict into a dict. This way the internal data structure
+  # of FrozenDict does not contain any FrozenDicts.
+  # instead we create those lazily in `__getitem__`.
+  # As a result tree_flatten/unflatten will be fast
+  # because it operates on native dicts.
+  xs = unfreeze(xs)
+  return FrozenDict(xs)
 
 
 def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
