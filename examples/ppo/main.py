@@ -32,9 +32,8 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
     advantages.insert(0, gae)
   return onp.array(advantages) #jnp after vectorization
 
-# @jax.jit
-def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff,
-                batch_size):
+@jax.jit
+def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
   def loss_fn(model, minibatch, clip_param, vf_coeff, entropy_coeff):
     states, actions, old_log_probs, returns, advantages = minibatch
     probs, values = model(states)
@@ -53,6 +52,7 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff,
     value_loss = jnp.mean(jnp.square(returns - values))
     return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
 
+  batch_size = BATCH_SIZE
   iterations = trn_data[0].shape[0] // batch_size
   trn_data = jax.tree_map(
     lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trn_data)
@@ -191,7 +191,7 @@ def train(
         permutation = onp.random.permutation(NUM_AGENTS * STEPS_PER_ACTOR)
         trn_data = tuple(map(lambda x: x[permutation], trn_data))
         optimizer, _ = train_step(optimizer, trn_data, CLIP_PARAM, VF_COEFF,
-                              ENTROPY_COEFF, BATCH_SIZE)
+                              ENTROPY_COEFF)
     #end of PPO training
 
     #collect new data from the inference thread
