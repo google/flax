@@ -39,12 +39,11 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff,
     probs, values = model(states)
     log_probs = jnp.log(probs)
     entropy = jnp.sum(-probs*log_probs, axis=1).mean()
-    # from all probs from the forward pass, we need to choose ones
-    # corresponding to actually taken actions
+    # we need to choose probs corresponding to actually taken actions
     # log_probs_act_taken = log_probs[jnp.arange(probs.shape[0]), actions])
-    # above hits "Indexing mode not yet supported."
-    log_probs_act_taken = jnp.log(jnp.array(
-                        [probs[i, actions[i]]for i in range(actions.shape[0])]))
+    # above hits "Indexing mode not yet supported.", hence one hot solution
+    act_one_hot = jax.nn.one_hot(actions, num_classes=probs.shape[1])
+    log_probs_act_taken = jnp.log(jnp.sum(act_one_hot*probs, axis=1))
     ratios = jnp.exp(log_probs_act_taken - old_log_probs)
     PG_loss = ratios * advantages
     clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
