@@ -141,16 +141,13 @@ class DotProductAttention(Module):
 # Trying out a slightly more compact vmap notation:
 
 def concise_vmap(module, in_axes, out_axes, axis_size=None, **var_specs):
-  variable_in_axes = {k: v[0] for k, v in
+  variable_axes = {k: v[0] for k, v in
                       var_specs.items() if isinstance(v, Sequence)}
-  variable_out_axes = {k: v[1] for k, v in
-                       var_specs.items() if isinstance(v, Sequence)}
-  splits = {k: v[2] for k, v in var_specs.items() if isinstance(v, Sequence)}
+  splits = {k: v[1] for k, v in var_specs.items() if isinstance(v, Sequence)}
   return vmap(module,
               in_axes=in_axes,
               out_axes=out_axes,
-              variable_in_axes=variable_in_axes,
-              variable_out_axes=variable_out_axes,
+              variable_axes=variable_axes,
               split_rngs=splits,
               axis_size=axis_size)
 
@@ -171,14 +168,14 @@ class MultiHeadDotProductAttention(Module):
     # Now, vmap attn.__call__ along heads and spatial dims.
     Attn = concise_vmap(DotProductAttention,
                         (None, None, None), -2,
-                        param=(0, 0, True),
-                        dropout=(None, None, not self.broadcast_dropout),
+                        param=(0, True),
+                        dropout=(None, not self.broadcast_dropout),
                         axis_size=self.num_heads)
     for axis in reversed(sorted(self.batch_axes)):
         Attn = concise_vmap(Attn,
                             (axis, axis, axis), axis,
-                            param=(None, None, False),
-                            dropout=(None, None, not self.broadcast_dropout))
+                            param=(None, False),
+                            dropout=(None, not self.broadcast_dropout))
 
     attn = Attn(attn_module=self.attn_module,
                 qkv_features=qkv_features // self.num_heads,

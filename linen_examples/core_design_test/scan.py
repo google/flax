@@ -40,15 +40,13 @@ def mlp_scan(scope: Scope, xs: Array,
     carry, ys = lift.scan(
         body_fn,
         variable_carry='counter',
-        variable_in_axes={'param': lift.broadcast},
-        variable_out_axes={'param': lift.broadcast},
+        variable_axes={'param': lift.broadcast},
         split_rngs={'param': False})(scope, (), xs)
   else:
     carry, ys = lift.scan(
         body_fn,
         variable_carry='counter',
-        variable_in_axes={'param': 0},
-        variable_out_axes={'param': 0},
+        variable_axes={'param': 0},
         split_rngs={'param': True})(scope, (), xs)
 
   # output layer

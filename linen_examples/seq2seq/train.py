@@ -168,8 +168,7 @@ class EncoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_in_axes={'param': nn.broadcast},
-      variable_out_axes={'param': nn.broadcast},
+      variable_axes={'param': nn.broadcast},
       split_rngs={'param': False})
   @nn.compact
   def __call__(self, carry, x):
@@ -216,8 +215,7 @@ class DecoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_in_axes={'param': nn.broadcast},
-      variable_out_axes={'param': nn.broadcast},
+      variable_axes={'param': nn.broadcast},
       split_rngs={'param': False})
   @nn.compact
   def __call__(self, carry, x):

@@ -223,7 +223,15 @@ class ConvLSTM(RNNCellBase):
       the beginning of the training.
   """
 
-  def apply(self, carry, inputs, features, kernel_size):
+  def apply(self, 
+            carry, 
+            inputs, 
+            features, 
+            kernel_size, 
+            strides=None,
+            padding='SAME',
+            bias=True, 
+            dtype=jnp.float32):
     """Constructs a convolutional LSTM.
 
     Args:
@@ -232,15 +240,34 @@ class ConvLSTM(RNNCellBase):
       inputs: input data with dimensions (batch, spatial_dims..., features).
       features: number of convolution filters.
       kernel_size: shape of the convolutional kernel.
+      strides: a sequence of `n` integers, representing the inter-window
+        strides.
+      padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
+        of `n` `(low, high)` integer pairs that give the padding to apply before
+        and after each spatial dimension.
+      bias: whether to add a bias to the output (default: True).
+      dtype: the dtype of the computation (default: float32).
     Returns:
       A tuple with the new carry and the output.
     """
     c, h = carry
     input_to_hidden = linear.Conv.partial(
-        features=4*features, kernel_size=kernel_size, name="ih")
+        features=4*features, 
+        kernel_size=kernel_size, 
+        strides=strides,
+        padding=padding,
+        bias=bias, 
+        dtype=dtype,
+        name="ih")
 
     hidden_to_hidden = linear.Conv.partial(
-        features=4*features, kernel_size=kernel_size, name="hh")
+        features=4*features, 
+        kernel_size=kernel_size, 
+        strides=strides,
+        padding=padding,
+        bias=bias, 
+        dtype=dtype,
+        name="hh")
 
     gates = input_to_hidden(inputs) + hidden_to_hidden(h)
     i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
