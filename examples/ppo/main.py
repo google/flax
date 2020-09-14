@@ -29,7 +29,7 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
     # masks[t] to ensure that values before and after a terminal state
     # are independent of each other
     gae = delta + discount * gae_param * terminal_masks[t] * gae
-    advantages.insert(0, gae)
+    advantages = [gae] + advantages
   return onp.array(advantages) #jnp after vectorization
 
 @jax.jit
@@ -150,36 +150,38 @@ def train(
     # initial version, needs improvement in terms of speed & readability
     if s > 0: #avoid training when there's no data yet
       obs_shape = (84, 84, 4)
-      states = onp.zeros((STEPS_PER_ACTOR + 1, NUM_AGENTS) + obs_shape,
+      states = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS) + obs_shape,
                           dtype=onp.float32)
-      actions = onp.zeros((STEPS_PER_ACTOR + 1, NUM_AGENTS), dtype=onp.int32)
-      rewards = onp.zeros((STEPS_PER_ACTOR + 1, NUM_AGENTS), dtype=onp.float32)
+      actions = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.int32)
+      rewards = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.float32)
       values = onp.zeros((STEPS_PER_ACTOR + 1, NUM_AGENTS), dtype=onp.float32)
-      log_probs = onp.zeros((STEPS_PER_ACTOR + 1, NUM_AGENTS),
+      log_probs = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS),
                               dtype=onp.float32)
-      dones = onp.zeros((STEPS_PER_ACTOR + 1, NUM_AGENTS), dtype=onp.float32)
+      dones = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.float32)
 
       # experiences state, action, reward, value, log_prob, done)
-      for time_step, exp in enumerate(all_experiences):
-        for agent_id, exp_agent in enumerate(exp):
-          states[time_step, agent_id, ...] = exp_agent[0]
-          actions[time_step, agent_id] = exp_agent[1]
-          rewards[time_step, agent_id] =exp_agent[2]
-          values[time_step, agent_id] = exp_agent[3]
-          log_probs[time_step, agent_id] = exp_agent[4]
+      # for time_step, exp in enumerate(all_experiences):
+      for t in range(len(all_experiences) - 1): #last only for next_values
+        for agent_id, exp_agent in enumerate(all_experiences[t]):
+          states[t, agent_id, ...] = exp_agent[0]
+          actions[t, agent_id] = exp_agent[1]
+          rewards[t, agent_id] =exp_agent[2]
+          values[t, agent_id] = exp_agent[3]
+          log_probs[t, agent_id] = exp_agent[4]
           # dones need to be 0 for terminal states
-          dones[time_step, agent_id] = float(not exp_agent[5])
-
+          dones[t, agent_id] = float(not exp_agent[5])
+      for a in range(num_agents):
+        values[-1, a] = all_experiences[-1][a][3]
       #calculate advantages w. GAE (needs to be vectorized instead of foor loop)
       advantages = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS))
       for i in range(NUM_AGENTS):
-        advantages[:, i] = gae_advantages(rewards[:-1, i], dones[:-1, i],
+        advantages[:, i] = gae_advantages(rewards[:, i], dones[:, i],
                           values[:, i], DISCOUNT, GAE_PARAM)
       returns = advantages + values[:-1, :]
       #getting rid of unnecessary data (one more value was needed for GAE)
-      states = states[:-1, ...].copy()
-      actions = actions[:-1, ...].copy()
-      log_probs = log_probs[:-1, ...].copy()
+      # states = states[:-1, ...].copy()
+      # actions = actions[:-1, ...].copy()
+      # log_probs = log_probs[:-1, ...].copy()
       # after all the preprocessing, we discard the information
       # about from which agent the data comes by reshaping
       trn_data = (states, actions, log_probs, returns, advantages)
