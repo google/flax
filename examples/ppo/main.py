@@ -47,6 +47,8 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
     act_one_hot = jax.nn.one_hot(actions, num_classes=probs.shape[1])
     log_probs_act_taken = jnp.log(jnp.sum(act_one_hot*probs, axis=1))
     ratios = jnp.exp(log_probs_act_taken - old_log_probs)
+    # adv. normalization (following the OpenAI baselines)
+    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     PG_loss = ratios * advantages
     clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
                                                1. + clip_param)
