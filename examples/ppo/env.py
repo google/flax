@@ -5,8 +5,7 @@ import numpy as onp
 from seed_rl_atari_preprocessing import AtariPreprocessing
 
 class FrameStack:
-  '''
-  Class that wraps an AtariPreprocessing object and implements
+  '''Class that wraps an AtariPreprocessing object and implements
   stacking of `num_frames` last frames of the game
   '''
   def __init__(self, preproc: AtariPreprocessing, num_frames : int):

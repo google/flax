@@ -4,8 +4,7 @@ from env import create_env
 
 
 class RemoteSimulator:
-  """
-  Class that wraps basic functionality needed for an agent
+  """Class that wraps basic functionality needed for an agent
   emulating Atari in a separate process.
   An object of this class is created for every agent.
   """
@@ -18,8 +17,7 @@ class RemoteSimulator:
 
 
 def rcv_action_send_exp(conn):
-  """
-  Function running on remote agents. Receives action from
+  """Function running on remote agents. Receives action from
   the main learner, performs one step of simulation and
   sends back collected experience.
   """

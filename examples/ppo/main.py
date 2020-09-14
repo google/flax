@@ -19,11 +19,12 @@ from test_episodes import test
 @jax.jit
 def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   """Use Generalized Advantage Estimation (GAE) to compute advantages
-  Eqs. (11-12) in PPO paper arXiv: 1707.06347"""
+  Eqs. (11-12) in PPO paper arXiv: 1707.06347.
+  Uses key observation that A_{t} = \delta_t + \gamma*\lambda*A_{t+1}.
+  """
   assert rewards.shape[0] + 1 == values.shape[0], ("One more value needed; "
           "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate \delta_t")
   advantages, gae = [], 0
-  # Key observation: A_{t} = \delta_t + \gamma*\lambda*A_{t+1}
   for t in reversed(range(len(rewards))):
     # masks to set next state value to 0 for terminal states
     value_diff = discount * values[t + 1] * terminal_masks[t] - values[t]
@@ -77,7 +78,8 @@ def thread_inference(
   steps_per_actor : int):
   """Worker function for a separate thread used for inference and running
   the simulators in order to maximize the GPU/TPU usage. Runs
-  `steps_per_actor` time steps of the game for each of the `simulators`."""
+  `steps_per_actor` time steps of the game for each of the `simulators`.
+  """
 
   while(True):
     optimizer, step = q1.get()
@@ -92,7 +94,6 @@ def thread_inference(
 
       # perform inference
       # policy_optimizer, step = q1.get()
-      # print(f"states type {type(states)}")
       probs, values = policy_action(optimizer.target, states)
 
       probs = onp.array(probs)
@@ -163,8 +164,6 @@ def train(
                               dtype=onp.float32)
       dones = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.float32)
 
-      # experiences state, action, reward, value, log_prob, done)
-      # for time_step, exp in enumerate(all_experiences):
       for t in range(len(all_experiences) - 1): #last only for next_values
         for agent_id, exp_agent in enumerate(all_experiences[t]):
           states[t, agent_id, ...] = exp_agent[0]
@@ -179,12 +178,7 @@ def train(
       # calculate advantages w. GAE
       advantages = gae_advantages(rewards, dones, values, DISCOUNT, GAE_PARAM)
       returns = advantages + values[:-1, :]
-      #getting rid of unnecessary data (one more value was needed for GAE)
-      # states = states[:-1, ...].copy()
-      # actions = actions[:-1, ...].copy()
-      # log_probs = log_probs[:-1, ...].copy()
-      # after all the preprocessing, we discard the information
-      # about from which agent the data comes by reshaping
+      # after preprocessing, concatenate data from all agents
       trn_data = (states, actions, log_probs, returns, advantages)
       trn_data = tuple(map(
         lambda x: onp.reshape(x,
