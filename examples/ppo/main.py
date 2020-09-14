@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as onp
 import flax
 import time
+from functools import partial
 from typing import Tuple, List
 from queue import Queue
 import threading
@@ -14,7 +15,8 @@ from agent import policy_action
 from remote import RemoteSimulator
 from test_episodes import test
 
-# @jax.jit
+@partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
+@jax.jit
 def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   """Use Generalized Advantage Estimation (GAE) to compute advantages
   Eqs. (11-12) in PPO paper arXiv: 1707.06347"""
@@ -30,7 +32,7 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
     # are independent of each other
     gae = delta + discount * gae_param * terminal_masks[t] * gae
     advantages = [gae] + advantages
-  return onp.array(advantages) #jnp after vectorization
+  return jnp.array(advantages)
 
 @jax.jit
 def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
@@ -172,11 +174,8 @@ def train(
           dones[t, agent_id] = float(not exp_agent[5])
       for a in range(num_agents):
         values[-1, a] = all_experiences[-1][a][3]
-      #calculate advantages w. GAE (needs to be vectorized instead of foor loop)
-      advantages = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS))
-      for i in range(NUM_AGENTS):
-        advantages[:, i] = gae_advantages(rewards[:, i], dones[:, i],
-                          values[:, i], DISCOUNT, GAE_PARAM)
+      # calculate advantages w. GAE
+      advantages = gae_advantages(rewards, dones, values, DISCOUNT, GAE_PARAM)
       returns = advantages + values[:-1, :]
       #getting rid of unnecessary data (one more value was needed for GAE)
       # states = states[:-1, ...].copy()
