@@ -39,6 +39,9 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
 def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
   def loss_fn(model, minibatch, clip_param, vf_coeff, entropy_coeff):
     states, actions, old_log_probs, returns, advantages = minibatch
+    shapes = list(map(lambda x : x.shape, minibatch))
+    assert(shapes[0] == (BATCH_SIZE, 84, 84, 4))
+    assert(all(s == (BATCH_SIZE,) for s in shapes[1:]))
     probs, values = model(states)
     log_probs = jnp.log(probs)
     entropy = jnp.sum(-probs*log_probs, axis=1).mean()
@@ -121,8 +124,7 @@ def thread_inference(
 
 def train(
   optimizer : flax.optim.base.Optimizer,
-  # target_model : nn.base.Model,
-  steps_total : int, # maybe rename to frames_total
+  steps_total : int,
   num_agents : int,
   train_device,
   inference_device):
@@ -138,7 +140,7 @@ def train(
     print(f"training loop step {s}")
     #bookkeeping and testing
     if (s + 1) % (10000 // (num_agents*STEPS_PER_ACTOR)) == 0:
-      print(f"Frames processed {s*num_agents*STEPS_PER_ACTOR}" +
+      print(f"Frames processed {s*num_agents*STEPS_PER_ACTOR}, " +
             f"time elapsed {time.time()-t1}")
       t1 = time.time()
     if (s + 1) % (50000 // (num_agents*STEPS_PER_ACTOR)) == 0:
@@ -164,6 +166,8 @@ def train(
                               dtype=onp.float32)
       dones = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.float32)
 
+      assert(len(all_experiences) == STEPS_PER_ACTOR + 1)
+      assert(len(all_experiences[0]) == NUM_AGENTS)
       for t in range(len(all_experiences) - 1): #last only for next_values
         for agent_id, exp_agent in enumerate(all_experiences[t]):
           states[t, agent_id, ...] = exp_agent[0]
@@ -180,15 +184,21 @@ def train(
       returns = advantages + values[:-1, :]
       # after preprocessing, concatenate data from all agents
       trn_data = (states, actions, log_probs, returns, advantages)
+
       trn_data = tuple(map(
         lambda x: onp.reshape(x,
          (NUM_AGENTS * STEPS_PER_ACTOR , ) + x.shape[2:]), trn_data)
       )
-      for _ in range(NUM_EPOCHS): #possibly compile this loop inside a jit
+      print(f"Step {s}: rewards variance {rewards.var()}")
+      for e in range(NUM_EPOCHS): #possibly compile this loop inside a jit
+        shapes = list(map(lambda x : x.shape, trn_data))
+        assert(shapes[0] == (NUM_AGENTS * STEPS_PER_ACTOR, 84, 84, 4))
+        assert(all(s == (NUM_AGENTS * STEPS_PER_ACTOR,) for s in shapes[1:]))
         permutation = onp.random.permutation(NUM_AGENTS * STEPS_PER_ACTOR)
         trn_data = tuple(map(lambda x: x[permutation], trn_data))
-        optimizer, _ = train_step(optimizer, trn_data, CLIP_PARAM, VF_COEFF,
+        optimizer, loss = train_step(optimizer, trn_data, CLIP_PARAM, VF_COEFF,
                               ENTROPY_COEFF)
+        print(f"Step {s} epoch {e} loss {loss}")
     #end of PPO training
 
     #collect new data from the inference thread
