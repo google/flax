@@ -72,7 +72,7 @@ class AttentionTest(parameterized.TestCase):
         dropout_rate=0.1,
     )
     rng1, rng2 = random.split(rng)
-    rngs = {'param': rng1, 'dropout': rng2}
+    rngs = {'params': rng1, 'dropout': rng2}
     y, _ = sa_module.init_with_output(rngs, x, x)
     self.assertEqual(y.shape, x.shape)
 

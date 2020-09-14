@@ -168,8 +168,8 @@ class EncoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_axes={'param': nn.broadcast},
-      split_rngs={'param': False})
+      variable_axes={'params': nn.broadcast},
+      split_rngs={'params': False})
   @nn.compact
   def __call__(self, carry, x):
     lstm_state, is_eos = carry
@@ -215,8 +215,8 @@ class DecoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_axes={'param': nn.broadcast},
-      split_rngs={'param': False})
+      variable_axes={'params': nn.broadcast},
+      split_rngs={'params': False})
   @nn.compact
   def __call__(self, carry, x):
     rng, lstm_state, last_prediction = carry
@@ -303,8 +303,8 @@ def get_initial_params(key):
   vocab_size = CTABLE.vocab_size
   encoder_shape = jnp.ones((1, get_max_input_len(), vocab_size), jnp.float32)
   decoder_shape = jnp.ones((1, get_max_output_len(), vocab_size), jnp.float32)
-  return model().init({'param': key, 'lstm': key},
-                      encoder_shape, decoder_shape)['param']
+  return model().init({'params': key, 'lstm': key},
+                      encoder_shape, decoder_shape)['params']
 
 
 def get_examples(num_examples):
@@ -359,7 +359,7 @@ def train_step(optimizer, batch, lstm_key):
 
   def loss_fn(params):
     """Compute cross-entropy loss."""
-    logits, _ = model().apply({'param': params},
+    logits, _ = model().apply({'params': params},
                               batch['query'],
                               batch['answer'],
                               rngs={'lstm': lstm_key})
@@ -386,7 +386,7 @@ def decode(params, inputs, key):
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], get_max_output_len(), 1))
-  _, predictions = model(teacher_force=False).apply({'param': params},
+  _, predictions = model(teacher_force=False).apply({'params': params},
                                                     inputs,
                                                     init_decoder_inputs,
                                                     rngs={'lstm': key})

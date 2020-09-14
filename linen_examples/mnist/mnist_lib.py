@@ -55,7 +55,7 @@ class CNN(nn.Module):
 
 def get_initial_params(key):
   init_shape = jnp.ones((1, 28, 28, 1), jnp.float32)
-  initial_params = CNN().init(key, init_shape)["param"]
+  initial_params = CNN().init(key, init_shape)['params']
   return initial_params
 
 
@@ -88,7 +88,7 @@ def compute_metrics(logits, labels):
 def train_step(optimizer, batch):
   """Train for a single step."""
   def loss_fn(params):
-    logits = CNN().apply({'param': params}, batch['image'])
+    logits = CNN().apply({'params': params}, batch['image'])
     loss = cross_entropy_loss(logits, batch['label'])
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -100,7 +100,7 @@ def train_step(optimizer, batch):
 
 @jax.jit
 def eval_step(params, batch):
-  logits = CNN().apply({'param': params}, batch['image'])
+  logits = CNN().apply({'params': params}, batch['image'])
   return compute_metrics(logits, batch['label'])
 
 

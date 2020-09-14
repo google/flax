@@ -70,7 +70,7 @@ def resnet(scope: Scope, x,
       x = residual_block(block_scope, x, conv, norm, act, block_features, strides)
       # we can access parameters of the sub module by operating on the scope
       # Example:
-      # block_scope.get_kind('param')['conv_1']['kernel']
+      # block_scope.get_kind('params')['conv_1']['kernel']
   x = jnp.mean(x, (1, 2))
   x = scope.child(nn.dense, 'out')(x, num_classes)
   return x
