@@ -24,7 +24,7 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   """
   assert rewards.shape[0] + 1 == values.shape[0], ("One more value needed; "
           "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate \delta_t")
-  advantages, gae = [], 0
+  advantages, gae = [], 0.
   for t in reversed(range(len(rewards))):
     # masks to set next state value to 0 for terminal states
     value_diff = discount * values[t + 1] * terminal_masks[t] - values[t]
@@ -71,7 +71,8 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
     entropy_coeff)
     loss += l
     optimizer = optimizer.apply_gradient(grad)
-  return optimizer, loss
+    grad_norm = sum(jnp.square(g).sum() for g in jax.tree_leaves(grad))
+  return optimizer, loss, grad_norm
 
 
 def thread_inference(
@@ -137,10 +138,10 @@ def train(
   t1 = time.time()
 
   for s in range(steps_total // num_agents):
-    print(f"training loop step {s}")
+    print(f"\n training loop step {s}")
     #bookkeeping and testing
     if (s + 1) % (10000 // (num_agents*STEPS_PER_ACTOR)) == 0:
-      print(f"Frames processed {s*num_agents*STEPS_PER_ACTOR}, " +
+      print(f"      Frames processed {s*num_agents*STEPS_PER_ACTOR}, " +
             f"time elapsed {time.time()-t1}")
       t1 = time.time()
     if (s + 1) % (50000 // (num_agents*STEPS_PER_ACTOR)) == 0:
@@ -190,15 +191,17 @@ def train(
          (NUM_AGENTS * STEPS_PER_ACTOR , ) + x.shape[2:]), trn_data)
       )
       print(f"Step {s}: rewards variance {rewards.var()}")
+      dr = dones.ravel()
+      print(f"fraction of terminal states {1.-(dr.sum()/dr.shape[0])}")
       for e in range(NUM_EPOCHS): #possibly compile this loop inside a jit
         shapes = list(map(lambda x : x.shape, trn_data))
         assert(shapes[0] == (NUM_AGENTS * STEPS_PER_ACTOR, 84, 84, 4))
         assert(all(s == (NUM_AGENTS * STEPS_PER_ACTOR,) for s in shapes[1:]))
         permutation = onp.random.permutation(NUM_AGENTS * STEPS_PER_ACTOR)
         trn_data = tuple(map(lambda x: x[permutation], trn_data))
-        optimizer, loss = train_step(optimizer, trn_data, CLIP_PARAM, VF_COEFF,
-                              ENTROPY_COEFF)
-        print(f"Step {s} epoch {e} loss {loss}")
+        optimizer, loss, last_iter_grad_norm = train_step(optimizer, trn_data,
+            CLIP_PARAM, VF_COEFF, ENTROPY_COEFF)
+        print(f"Step {s} epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
     #end of PPO training
 
     #collect new data from the inference thread
@@ -206,7 +209,8 @@ def train(
 
   return None
 
-
+# PPO paper and openAI baselines 2
+# https://github.com/openai/baselines/blob/master/baselines/ppo2/defaults.py
 STEPS_PER_ACTOR = 128
 NUM_AGENTS = 8
 NUM_EPOCHS = 3
@@ -215,12 +219,29 @@ BATCH_SIZE = 32 * 8
 DISCOUNT = 0.99 #usually denoted with \gamma
 GAE_PARAM = 0.95 #usually denoted with \lambda
 
-VF_COEFF = 1 #weighs value function loss in total loss
+VF_COEFF = 0.5 #weighs value function loss in total loss
 ENTROPY_COEFF = 0.01 # weighs entropy bonus in the total loss
 
 LR = 2.5e-4
 
 CLIP_PARAM = 0.1
+
+# openAI baselines 1
+# https://github.com/openai/baselines/blob/master/baselines/ppo1/run_atari.py
+# STEPS_PER_ACTOR = 256
+# NUM_AGENTS = 8
+# NUM_EPOCHS = 4
+# BATCH_SIZE = 64
+
+# DISCOUNT = 0.99 #usually denoted with \gamma
+# GAE_PARAM = 0.95 #usually denoted with \lambda
+
+# VF_COEFF = 1. #weighs value function loss in total loss
+# ENTROPY_COEFF = 0.01 # weighs entropy bonus in the total loss
+
+# LR = 1e-3
+
+# CLIP_PARAM = 0.2
 
 key = jax.random.PRNGKey(0)
 key, subkey = jax.random.split(key)
@@ -233,7 +254,7 @@ def main():
   total_frames = 4000000
   train_device = jax.devices()[0]
   inference_device = jax.devices()[1]
-  jax.device_put(optimizer.target, device=train_device)
+  # jax.device_put(optimizer.target, device=train_device)
   train(optimizer, total_frames, num_agents, train_device, inference_device)
 
 if __name__ == '__main__':

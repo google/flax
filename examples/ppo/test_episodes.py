@@ -33,6 +33,6 @@ def test(n_episodes: int, model: flax.nn.base.Model, render: bool = False):
         next_state = None
       state = next_state
       if done:
-        print(f"Finished Episode {e} with reward {total_reward}")
+        print(f"------> TEST FINISHED: finished Episode {e} with reward {total_reward}")
         break
   del test_env
