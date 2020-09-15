@@ -43,17 +43,17 @@ index 63af6e8..29d512f 100644
      batch_metrics.append(metrics)
  
    # compute mean of metrics across each batch in epoch.
-@@ -165,16 +169,21 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+@@ -164,16 +169,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
    rng, init_rng = random.split(rng)
    model = create_model(init_rng)
-   optimizer = create_optimizer(model, learning_rate, momentum)
+   optimizer = create_optimizer(model, config.learning_rate, config.momentum)
 +  params_ema = model.params
  
-   for epoch in range(1, num_epochs + 1):
+   for epoch in range(1, config.num_epochs + 1):
      rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
--        optimizer, train_ds, batch_size, epoch, input_rng)
-+        optimizer, params_ema, train_ds, batch_size, epoch, input_rng)
+-        optimizer, train_ds, config.batch_size, epoch, input_rng)
++        optimizer, params_ema, train_ds, config.batch_size, epoch, input_rng)
      loss, accuracy = eval_model(optimizer.target, test_ds)
  
      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',

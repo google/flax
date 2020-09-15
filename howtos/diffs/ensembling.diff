@@ -89,20 +89,21 @@ index 63af6e8..ebf9f9b 100644
    return summary['loss'], summary['accuracy']
  
  
-@@ -163,22 +175,25 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+@@ -161,22 +174,25 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
    summary_writer = tensorboard.SummaryWriter(model_dir)
+   summary_writer.hparams(dict(config))
  
    rng, init_rng = random.split(rng)
 -  model = create_model(init_rng)
 +  model = create_model(random.split(init_rng, jax.device_count()))
-   optimizer = create_optimizer(model, learning_rate, momentum)
+   optimizer = create_optimizer(model, config.learning_rate, config.momentum)
  
 +  test_ds = jax_utils.replicate(test_ds)
 +
-   for epoch in range(1, num_epochs + 1):
+   for epoch in range(1, config.num_epochs + 1):
      rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
-         optimizer, train_ds, batch_size, epoch, input_rng)
+         optimizer, train_ds, config.batch_size, epoch, input_rng)
      loss, accuracy = eval_model(optimizer.target, test_ds)
  
 -    logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',

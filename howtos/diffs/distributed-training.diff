@@ -77,10 +77,10 @@ index 63af6e8..87c57b0 100644
      optimizer, metrics = train_step(optimizer, batch)
      batch_metrics.append(metrics)
  
-@@ -170,7 +185,8 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+@@ -169,7 +185,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
      rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
-         optimizer, train_ds, batch_size, epoch, input_rng)
+         optimizer, train_ds, config.batch_size, epoch, input_rng)
 -    loss, accuracy = eval_model(optimizer.target, test_ds)
 +    model = jax_utils.unreplicate(optimizer.target)  # Fetch from 1st device
 +    loss, accuracy = eval_model(model, test_ds)
