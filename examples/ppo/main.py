@@ -57,8 +57,10 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
     PG_loss = ratios * advantages
     clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
                                                1. + clip_param)
-    PPO_loss = -jnp.mean(jnp.minimum(PG_loss, clipped_loss))
-    value_loss = jnp.mean(jnp.square(returns - values))
+    assert(PG_loss.shape == clipped_loss.shape)
+    PPO_loss = -jnp.mean(jnp.minimum(PG_loss, clipped_loss), axis=0)
+    assert(values.shape == returns.shape)
+    value_loss = jnp.mean(jnp.square(returns - values), axis=0)
     return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
 
   batch_size = BATCH_SIZE
@@ -145,7 +147,7 @@ def train(
       print(f"      Frames processed {s*num_agents*STEPS_PER_ACTOR}, " +
             f"time elapsed {time.time()-t1}")
       t1 = time.time()
-    if (s + 1) % (50000 // (num_agents*STEPS_PER_ACTOR)) == 0:
+    if (s + 1) % (20000 // (num_agents*STEPS_PER_ACTOR)) == 0:
       test(1, optimizer.target, render=False)
 
 
@@ -184,9 +186,9 @@ def train(
       # calculate advantages w. GAE
       advantages = gae_advantages(rewards, dones, values, DISCOUNT, GAE_PARAM)
       returns = advantages + values[:-1, :]
+      assert(returns.shape == advantages.shape == (STEPS_PER_ACTOR, NUM_AGENTS))
       # after preprocessing, concatenate data from all agents
       trn_data = (states, actions, log_probs, returns, advantages)
-
       trn_data = tuple(map(
         lambda x: onp.reshape(x,
          (NUM_AGENTS * STEPS_PER_ACTOR , ) + x.shape[2:]), trn_data)
@@ -244,17 +246,18 @@ CLIP_PARAM = 0.1
 
 # CLIP_PARAM = 0.2
 
-key = jax.random.PRNGKey(0)
-key, subkey = jax.random.split(key)
-model = create_model(subkey)
-optimizer = create_optimizer(model, learning_rate=LR)
-del model
+
 
 def main():
   num_agents = NUM_AGENTS
   total_frames = 4000000
   train_device = jax.devices()[0]
   inference_device = jax.devices()[1]
+  key = jax.random.PRNGKey(0)
+  key, subkey = jax.random.split(key)
+  model = create_model(subkey)
+  optimizer = create_optimizer(model, learning_rate=LR)
+  del model
   # jax.device_put(optimizer.target, device=train_device)
   train(optimizer, total_frames, num_agents, train_device, inference_device)
 
