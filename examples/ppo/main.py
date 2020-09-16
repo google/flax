@@ -43,6 +43,7 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
     assert(shapes[0] == (BATCH_SIZE, 84, 84, 4))
     assert(all(s == (BATCH_SIZE,) for s in shapes[1:]))
     probs, values = model(states)
+    values = values[:, 0] # convert shapes: (batch, 1) to (batch, )
     log_probs = jnp.log(probs)
     entropy = jnp.sum(-probs*log_probs, axis=1).mean()
     # we need to choose probs corresponding to actually taken actions
@@ -111,7 +112,7 @@ def thread_inference(
         probabilities = probs[i] # / probs[i].sum()
         action = onp.random.choice(probs.shape[1], p=probabilities)
         #in principle, one could avoid sending value and log prob back and forth
-        sim.conn.send((action, values[i], onp.log(probs[i][action])))
+        sim.conn.send((action, values[i, 0], onp.log(probs[i][action])))
 
       # get experience from simulators
       experiences = []
