@@ -306,7 +306,7 @@ def train_and_evaluate(
   min_freq, max_seq_len, dropout, emb_dropout, word_dropout_rate,
   learning_rate, checkpoints_to_keep, l2_reg):
   """Executes model training and evaluation loop.
-  
+
   Args:
     seed: Random seed for network initialization.
     model_dir: Directory to store model data.
@@ -321,7 +321,7 @@ def train_and_evaluate(
     word_dropout_rate: Word dropout rate.
     learning_rate: The learning rate for the Adam optimizer.
     checkpoints_to_keep: Number of checkpoints to keep.
-    l2_reg: L2 regularization to keep. 
+    l2_reg: L2 regularization to keep.
   """
   # Prepare data.
   data_source = input_pipeline.SST2DataSource(min_freq=min_freq)
