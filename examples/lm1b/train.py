@@ -109,7 +109,7 @@ flags.DEFINE_bool(
 
 flags.DEFINE_integer(
     'checkpoint_freq', default=10000,
-    help='Whether to restore from existing model checkpoints.')
+    help='Save a checkpoint every these number of steps. Default=10000.')
 
 flags.DEFINE_integer(
     'random_seed', default=0,
@@ -127,13 +127,13 @@ def create_model(key, input_shape, model_kwargs):
   return model, cache_def
 
 
-def create_optimizer(model, learning_rate):
+def create_optimizer(model, learning_rate, weight_decay):
   optimizer_def = optim.Adam(
       learning_rate,
       beta1=0.9,
       beta2=0.98,
       eps=1e-9,
-      weight_decay=FLAGS.weight_decay)
+      weight_decay=weight_decay)
   optimizer = optimizer_def.create(model)
   return optimizer
 
@@ -290,10 +290,11 @@ def eval_step(model, inputs):
   return compute_metrics(logits, inputs, weights)
 
 
-def predict_step(inputs, model, cache, prng_key):
+def predict_step(inputs, model, cache, prng_key, max_predict_token_length,
+                 sampling_temperature, sampling_top_k):
   """Fast sampling of language model from prompt."""
   prefix_len = inputs.shape[1]
-  pad_len = FLAGS.max_predict_token_length - prefix_len
+  pad_len = max_predict_token_length - prefix_len
   padded_inputs = jnp.pad(inputs, jnp.array([[0, 0], [0, pad_len]]))
 
   def tokens_ids_to_logits(ids, cache):
@@ -310,8 +311,8 @@ def predict_step(inputs, model, cache, prng_key):
       cache,
       tokens_ids_to_logits,
       prng_key,
-      temperature=FLAGS.sampling_temperature,
-      topk=FLAGS.sampling_top_k,
+      temperature=sampling_temperature,
+      topk=sampling_top_k,
       eos_token=2**16)  # No EOS tokens used in default lm1b dataset encoding.
 
   return sampled_seqs
@@ -323,32 +324,46 @@ def tohost(x):
   return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
 
 
-def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
-
+def train_and_evaluate(
+  random_seed, batch_size, learning_rate, num_train_steps, num_eval_steps,
+  eval_freq, max_target_length, max_eval_target_length, weight_decay, data_dir,
+  model_dir, restore_checkpoints, save_checkpoints, checkpoint_freq,
+  max_predict_token_length, sampling_temperature, sampling_top_k, prompt_str):
+  """Executes model training and evaluation loop.
+  
+  Args:
+    random_seed: Seed for initializing PRNG random seed.
+    batch_size: Batch size for training.
+    learning_rate: Learning rate for the Adam optimizer.
+    num_train_steps: Number of training steps.
+    num_eval_steps: Number of evaluation steps.
+    eval_freq: Frequency of evaluation during training.
+    max_target_length: Maximum length of training examples.
+    max_eval_target_length: Maximum length of eval examples.
+    weight_decay: Decay factor for AdamW-style weight decay.
+    data_dir: Directory containing TFDS lm1b/subwords32k datasets.
+    model_dir: Directory where to store model data.
+    restore_checkpoints: Whether to restore from existing model checkpoints.
+    save_checkpoints: Whether to save model checkpoints.
+    checkpoint_freq: Save a checkpoint every these number of steps.
+    max_predict_token_length: Maximum example text inference token length.
+    sampling_temperature: Sampling temperature for language model inference.
+    sampling_top_k: Top k cutoff for logit sampling.
+    prompt_str: Prompt for language model sampling.
+  """
   tf.enable_v2_behavior()
-
-  batch_size = FLAGS.batch_size
-  learning_rate = FLAGS.learning_rate
-  num_train_steps = FLAGS.num_train_steps
-  num_eval_steps = FLAGS.num_eval_steps
-  eval_freq = FLAGS.eval_frequency
-  max_target_length = FLAGS.max_target_length
-  max_eval_target_length = FLAGS.max_eval_target_length
-  random_seed = FLAGS.random_seed
 
   if jax.host_id() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, 'train'))
+        os.path.join(model_dir, 'train'))
     eval_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, 'eval'))
+        os.path.join(model_dir, 'eval'))
 
   if batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
   train_ds, eval_ds, info_ds = input_pipeline.get_lm1b_datasets(
       n_devices=jax.local_device_count(),
-      data_dir=FLAGS.data_dir,
+      data_dir=data_dir,
       batch_size=batch_size,
       dynamic_batching=True,
       max_target_length=max_target_length,
@@ -377,12 +392,12 @@ def main(argv):
   dropout_rngs = random.split(rng, jax.local_device_count())
 
   model, cache_def = create_model(init_rng, input_shape, transformer_lm_kwargs)
-  optimizer = create_optimizer(model, learning_rate)
+  optimizer = create_optimizer(model, learning_rate, weight_decay)
   del model  # Don't keep a copy of the initial model.
   start_step = 0
-  if FLAGS.restore_checkpoints:
+  if restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
-    optimizer = checkpoints.restore_checkpoint(FLAGS.model_dir, optimizer)
+    optimizer = checkpoints.restore_checkpoint(model_dir, optimizer)
     # Grab last step.
     start_step = int(optimizer.state.step)
 
@@ -406,12 +421,12 @@ def main(argv):
     metrics_all.append(metrics)
 
     # Save a Checkpoint
-    if ((step % FLAGS.checkpoint_freq == 0 and step > 0) or
+    if ((step % checkpoint_freq == 0 and step > 0) or
         step == num_train_steps - 1):
-      if jax.host_id() == 0 and FLAGS.save_checkpoints:
+      if jax.host_id() == 0 and save_checkpoints:
         # Save unreplicated optimizer + model state.
         checkpoints.save_checkpoint(
-            FLAGS.model_dir, jax_utils.unreplicate(optimizer), step)
+            model_dir, jax_utils.unreplicate(optimizer), step)
 
     # Periodic metric handling.
     if step % eval_freq == 0 and step > 0:
@@ -467,12 +482,14 @@ def main(argv):
       # Fast inference of prompt extension using trained LM.
       rng, subrng = jax.random.split(rng)
       pred_rngs = random.split(subrng, jax.local_device_count())
-      prompt = jnp.array(encoder.encode(FLAGS.prompt))
+      prompt = jnp.array(encoder.encode(prompt_str))
       prompt = jax_utils.replicate(prompt)
       prompt = jnp.reshape(prompt, (prompt.shape[0], 1, prompt.shape[1]))
       cache = jax_utils.replicate(
-          cache_def.initialize_cache((1, FLAGS.max_predict_token_length)))
-      predicted = p_pred_step(prompt, optimizer.target, cache, pred_rngs)
+          cache_def.initialize_cache((1, max_predict_token_length)))
+      predicted = p_pred_step(
+        prompt, optimizer.target, cache, pred_rngs, max_predict_token_length,
+        sampling_temperature, sampling_top_k)
       predicted = tohost(predicted)
       exemplars = ''
       for n in range(predicted.shape[0]):
@@ -480,6 +497,25 @@ def main(argv):
       if jax.host_id() == 0:
         eval_summary_writer.text('samples', exemplars, step)
         eval_summary_writer.flush()
+
+
+def main(argv):
+  if len(argv) > 1:
+    raise app.UsageError('Too many command-line arguments.')
+
+  train_and_evaluate(
+    random_seed=FLAGS.random_seed, batch_size=FLAGS.batch_size,
+    learning_rate=FLAGS.learning_rate, num_train_steps=FLAGS.num_train_steps,
+    num_eval_steps=FLAGS.num_eval_steps, eval_freq=FLAGS.eval_frequency,
+    max_target_length=FLAGS.max_target_length,
+    max_eval_target_length=FLAGS.max_eval_target_length,
+    weight_decay=FLAGS.weight_decay, data_dir=FLAGS.data_dir,
+    model_dir=FLAGS.model_dir, restore_checkpoints=FLAGS.restore_checkpoints,
+    save_checkpoints=FLAGS.save_checkpoints,
+    checkpoint_freq=FLAGS.checkpoint_freq,
+    max_predict_token_length=FLAGS.max_predict_token_length,
+    sampling_temperature=FLAGS.sampling_temperature,
+    sampling_top_k=FLAGS.sampling_top_k, prompt_str=FLAGS.prompt)
 
 
 if __name__ == '__main__':
