@@ -28,7 +28,7 @@ from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
-from .scope import Scope, CollectionFilter, RNGFilter, in_filter, group_collections
+from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, group_collections
 from .named_call import named_call_p
 
 from . import unified_transforms
@@ -71,7 +71,7 @@ def _dup_scopes(orig_scopes, scopes, paths):
 def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[CollectionFilter],
          out_variable_filters: Sequence[CollectionFilter],
-         rng_filters: Sequence[RNGFilter]) -> Callable[..., Any]:
+         rng_filters: Sequence[PRNGSequenceFilter]) -> Callable[..., Any]:
   """Pack variables and rngs for functional transformations."""
   @functools.wraps(fn)
   def wrapper(scope: Scope, *args):
@@ -162,7 +162,7 @@ def transform_module(fn: Callable[..., Any],
                      trans_in_fn: Callable[..., Any] = id_fn,
                      trans_out_fn: Callable[..., Any] = id_fn,
                      init: bool = True, mutable: bool = False,
-                     rngs: RNGFilter = True,
+                     rngs: PRNGSequenceFilter = True,
                      variables: CollectionFilter = True):
   def wrapper(scope, *args, **kwargs):
     if init:
@@ -186,7 +186,7 @@ def transform(
     trans_in_fn: Callable[..., Any] = id_fn,
     trans_out_fn: Callable[..., Any] = id_fn,
     init: bool = False, mutable: bool = False,
-    rngs: RNGFilter = True, variables: CollectionFilter = True):
+    rngs: PRNGSequenceFilter = True, variables: CollectionFilter = True):
   def wrapper(scope_fn, repack, variable_groups_xs, rng_groups_xs, fn, *args):
     assert len(variable_groups_xs) == 1, 'transform does not support multi-scope lifting.'
     target, variables = variable_groups_xs[0]
@@ -244,7 +244,7 @@ InOutAxis = Union[Axis, In[Axis], Out[Axis]]
 
 def vmap(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutAxis],
-         split_rngs: Mapping[RNGFilter, bool],
+         split_rngs: Mapping[PRNGSequenceFilter, bool],
          in_axes=0, out_axes=0, axis_size=None) -> Callable[..., Any]:
   """Wraps jax.vmap."""
   variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
@@ -303,7 +303,7 @@ InOutScanAxis = Union[ScanAxis, In[ScanAxis], Out[ScanAxis]]
 def scan(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {},
          variable_carry: CollectionFilter = False,
-         split_rngs: Mapping[RNGFilter, bool] = {},
+         split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
          in_axes=0, out_axes=0,
          length: Optional[int] = None,
          reverse: bool = False) -> Callable[..., Any]:
@@ -410,7 +410,7 @@ def custom_vjp(module_fn: Callable[..., Any], backward_fn: Callable[..., Any],
 
 def remat(fn: Callable[..., Any],
           variables: CollectionFilter = True,
-          rngs: RNGFilter = True) -> Callable[..., Any]:
+          rngs: PRNGSequenceFilter = True) -> Callable[..., Any]:
   """Wraps jax.jit."""
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     @jax.remat
@@ -429,7 +429,7 @@ def jit(fn: Callable[..., Any],
         device=None,
         backend: Union[str, None] = None,
         variables: CollectionFilter = True,
-        rngs: RNGFilter = True) -> Callable[..., Any]:
+        rngs: PRNGSequenceFilter = True) -> Callable[..., Any]:
   """Wraps jax.jit."""
   if not isinstance(static_argnums, Iterable):
     static_argnums = (static_argnums,)
@@ -453,7 +453,7 @@ def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
                lengths: Sequence[int],
                variable_carry: CollectionFilter = False,
                variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {},
-               split_rngs: Mapping[RNGFilter, bool] = {}):
+               split_rngs: Mapping[PRNGSequenceFilter, bool] = {}):
   # TODO(jheek) should remat scan have scan inputs/outputs?
   if len(lengths) == 1:
     def wrapper(scope, carry):

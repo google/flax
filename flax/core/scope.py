@@ -36,7 +36,7 @@ Array = Any
 
 Filter = Union[bool, str, Sequence[str]]
 CollectionFilter = Filter
-RNGFilter = Filter
+PRNGSequenceFilter = Filter
 
 MaybeFrozenCollection = Union[Dict[str, Any], FrozenDict[str, Any]]
 
