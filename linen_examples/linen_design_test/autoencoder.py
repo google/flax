@@ -72,7 +72,7 @@ ae = AutoEncoder(
 # `ae.initialized` returnes a materialized copy of `ae` by
 # running through an input to create submodules defined lazily.
 params = ae.init(
-    {'param': random.PRNGKey(42)},
+    {'params': random.PRNGKey(42)},
     jnp.ones((1, 28, 28, 1)))
 
 
@@ -82,7 +82,7 @@ print("encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method=ae.
 
 
 # `ae.variables` is a frozen dict that looks like
-# {"param": {"decoder": {"Dense_0": {"bias": ..., "kernel": ...}, ...}}
+# {'params': {"decoder": {"Dense_0": {"bias": ..., "kernel": ...}, ...}}
 print("var shapes", jax.tree_map(jnp.shape, params))
 
 

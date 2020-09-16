@@ -25,9 +25,9 @@ class ScopeTest(absltest.TestCase):
 
   def test_rng(self):
     def f(scope):
-      self.assertTrue(scope.has_rng('param'))
+      self.assertTrue(scope.has_rng('params'))
       self.assertFalse(scope.has_rng('dropout'))
-      rng = scope.make_rng('param')
+      rng = scope.make_rng('params')
       self.assertTrue(np.all(rng == random.fold_in(random.PRNGKey(0), 1)))
 
     init(f)(random.PRNGKey(0))

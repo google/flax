@@ -192,7 +192,7 @@ class MultiHeadDotProductAttention(Module):
 if __name__ == '__main__':
 
   inputs = jnp.ones((8, 97, 256))
-  rngs = {'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
+  rngs = {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
   model = MultiHeadDotProductAttention(
       broadcast_dropout=False,
       qkv_features=256,

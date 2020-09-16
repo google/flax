@@ -40,7 +40,7 @@ class MnistLibTest(absltest.TestCase):
 
     # TODO(mohitreddy): Consider creating a testing module which
     # gives a parameters overview including number of parameters.
-    self.assertLen(variables['param'], 4)
+    self.assertLen(variables['params'], 4)
 
   def test_train_and_evaluate(self):
     """Tests training and evaluation code by running a single step with

@@ -168,7 +168,7 @@ class ModuleTest(absltest.TestCase):
     class SubModule(nn.Module):
 
       def apply(self):
-        self.param('param', (), initializers.zeros)
+        self.param('params', (), initializers.zeros)
 
     class UseSharedModule(nn.Module):
 
@@ -184,7 +184,7 @@ class ModuleTest(absltest.TestCase):
 
     _, params = TopLevel.init(random.PRNGKey(0))
     self.assertEqual({
-        'shared': {'param': jnp.zeros(())},
+        'shared': {'params': jnp.zeros(())},
         'use_shared': {},
     }, params)
 

@@ -124,8 +124,8 @@ class TransformTest(absltest.TestCase):
     def vmap(cls):
       return nn.vmap(cls,
                      in_axes=(0,),
-                     variable_axes={'param': None},
-                     split_rngs={'param': False})
+                     variable_axes={'params': None},
+                     split_rngs={'params': False})
     normal_model = TransformedMLP(features=[3, 4, 5])
     vmap_model = TransformedMLP(features=[3, 4, 5], transform=vmap)
     init_variables = normal_model.init(key2, x)
@@ -143,8 +143,8 @@ class TransformTest(absltest.TestCase):
     def vmap(fn):
       return nn.vmap(fn,
                      in_axes=(0,),
-                     variable_axes={'param': None},
-                     split_rngs={'param': False})
+                     variable_axes={'params': None},
+                     split_rngs={'params': False})
     normal_model = decorated_MLP()(features=[3, 4, 5])
     vmap_model = decorated_MLP(vmap)(features=[3, 4, 5])
     init_variables = normal_model.init(key2, x)
@@ -159,8 +159,8 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, c, xs):
         LSTM = nn.scan(nn.LSTMCell,
-                       variable_axes={'param': nn.broadcast},
-                       split_rngs={'param': False})
+                       variable_axes={'params': nn.broadcast},
+                       split_rngs={'params': False})
         return LSTM(name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
@@ -174,7 +174,7 @@ class TransformTest(absltest.TestCase):
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
-    lstmcell_variables = freeze({'param': init_variables['param']['lstm_cell']})
+    lstmcell_variables = freeze({'params': init_variables['params']['lstm_cell']})
     for i in range(xs.shape[0]):
       c, y = nn.LSTMCell().apply(lstmcell_variables, c, xs[i])
       ys.append(y[None, ...])
@@ -188,8 +188,8 @@ class TransformTest(absltest.TestCase):
   def test_scan_decorated(self):
     class SimpleScan(nn.Module):
       @partial(nn.scan,
-               variable_axes={'param': nn.broadcast},
-               split_rngs={'param': False})
+               variable_axes={'params': nn.broadcast},
+               split_rngs={'params': False})
       @nn.compact
       def __call__(self, c, xs):
         return nn.LSTMCell(name="lstm_cell")(c, xs)
@@ -205,7 +205,7 @@ class TransformTest(absltest.TestCase):
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
-    lstmcell_variables = freeze({'param': init_variables['param']['lstm_cell']})
+    lstmcell_variables = freeze({'params': init_variables['params']['lstm_cell']})
     for i in range(xs.shape[0]):
       c, y = nn.LSTMCell().apply(lstmcell_variables, c, xs[i])
       ys.append(y[None, ...])
@@ -430,8 +430,8 @@ class TransformTest(absltest.TestCase):
       outer_module: nn.Module
       @partial(nn.vmap,
                in_axes=(0,),
-               variable_axes={'param': 0},
-               split_rngs={'param': True})
+               variable_axes={'params': 0},
+               split_rngs={'params': True})
       @nn.jit
       @nn.compact
       def __call__(self, x):
@@ -450,10 +450,10 @@ class TransformTest(absltest.TestCase):
     init_vars = Test(None).init(rngs, x)
     y = Test(None).apply(init_vars, x)
     self.assertEqual(
-        init_vars['param']['outer']['Dense_0']['kernel'].shape,
+        init_vars['params']['outer']['Dense_0']['kernel'].shape,
         (3, 2, 5))
     self.assertEqual(
-        init_vars['param']['outer']['Dense_0']['bias'].shape,
+        init_vars['params']['outer']['Dense_0']['bias'].shape,
         (3, 5))
     self.assertEqual(y.shape, (3, 1, 5))
 
