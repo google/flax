@@ -52,16 +52,26 @@ class TestEnvironmentPreprocessing(absltest.TestCase):
       self.assertTrue(isinstance(done, bool))
       self.assertTrue(isinstance(info, dict))
 
-#test creation of the model and optimizer
+#test the model (creation and forward pass)
 from models import create_model, create_optimizer
-class TestCreation(absltest.TestCase):
-  def test_create(self):
+class TestModel(absltest.TestCase):
+  def test_model(self):
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
-    policy_model = create_model(subkey)
-    policy_optimizer = create_optimizer(policy_model, learning_rate=1e-3)
-    self.assertTrue(isinstance(policy_model, nn.base.Model))
-    self.assertTrue(isinstance(policy_optimizer, flax.optim.base.Optimizer))
+    model = create_model(subkey)
+    optimizer = create_optimizer(model, learning_rate=1e-3)
+    self.assertTrue(isinstance(model, nn.base.Model))
+    self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
+    test_batch_size, obs_shape = 10, (84, 84, 4)
+    random_input = onp.random.random(size=(test_batch_size,) + obs_shape)
+    probs, values = optimizer.target(random_input)
+    self.assertTrue(values.shape == (test_batch_size, 1))
+    sum_probs = onp.sum(probs, axis=1)
+    self.assertTrue(sum_probs.shape == (test_batch_size, ))
+    onp_testing.assert_almost_equal(sum_probs, onp.ones((test_batch_size, )))
+
+
+
 
 if __name__ == '__main__':
   absltest.main()
