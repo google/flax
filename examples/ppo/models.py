@@ -34,9 +34,9 @@ class ActorCritic(flax.nn.Module):
     # network used to both estimate policy (logits) and expected state value
     # see github.com/openai/baselines/blob/master/baselines/ppo1/cnn_policy.py
     logits = nn.Dense(x, features=4, name='logits', dtype=dtype)
-    policy_probabilities = nn.softmax(logits)
+    policy_log_probabilities = nn.log_softmax(logits)
     value = nn.Dense(x, features=1, name='value', dtype=dtype)
-    return policy_probabilities, value
+    return policy_log_probabilities, value
 
 def create_model(key):
   input_dims = (1, 84, 84, 4) #(minibatch, height, width, stacked frames)

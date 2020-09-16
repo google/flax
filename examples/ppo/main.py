@@ -42,15 +42,11 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
     shapes = list(map(lambda x : x.shape, minibatch))
     assert(shapes[0] == (BATCH_SIZE, 84, 84, 4))
     assert(all(s == (BATCH_SIZE,) for s in shapes[1:]))
-    probs, values = model(states)
+    log_probs, values = model(states)
     values = values[:, 0] # convert shapes: (batch, 1) to (batch, )
-    log_probs = jnp.log(probs)
+    probs = jnp.exp(log_probs)
     entropy = jnp.sum(-probs*log_probs, axis=1).mean()
-    # we need to choose probs corresponding to actually taken actions
-    # log_probs_act_taken = log_probs[jnp.arange(probs.shape[0]), actions])
-    # above hits "Indexing mode not yet supported.", hence one hot solution
-    act_one_hot = jax.nn.one_hot(actions, num_classes=probs.shape[1])
-    log_probs_act_taken = jnp.log(jnp.sum(act_one_hot*probs, axis=1))
+    log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
     ratios = jnp.exp(log_probs_act_taken - old_log_probs)
     # adv. normalization (following the OpenAI baselines)
     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
@@ -101,9 +97,9 @@ def thread_inference(
 
       # perform inference
       # policy_optimizer, step = q1.get()
-      probs, values = policy_action(optimizer.target, states)
+      log_probs, values = policy_action(optimizer.target, states)
 
-      probs = onp.array(probs)
+      probs = onp.exp(onp.array(log_probs))
       # print("probs after onp conversion", probs)
 
       for i, sim in enumerate(simulators):
@@ -114,7 +110,7 @@ def thread_inference(
         probabilities = probs[i] # / probs[i].sum()
         action = onp.random.choice(probs.shape[1], p=probabilities)
         #in principle, one could avoid sending value and log prob back and forth
-        sim.conn.send((action, values[i, 0], onp.log(probs[i][action])))
+        sim.conn.send((action, values[i, 0], log_probs[i][action]))
 
       # get experience from simulators
       experiences = []

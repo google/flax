@@ -64,9 +64,9 @@ class TestModel(absltest.TestCase):
     self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
     test_batch_size, obs_shape = 10, (84, 84, 4)
     random_input = onp.random.random(size=(test_batch_size,) + obs_shape)
-    probs, values = optimizer.target(random_input)
+    log_probs, values = optimizer.target(random_input)
     self.assertTrue(values.shape == (test_batch_size, 1))
-    sum_probs = onp.sum(probs, axis=1)
+    sum_probs = onp.sum(onp.exp(log_probs), axis=1)
     self.assertTrue(sum_probs.shape == (test_batch_size, ))
     onp_testing.assert_almost_equal(sum_probs, onp.ones((test_batch_size, )))
 

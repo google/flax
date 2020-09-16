@@ -18,10 +18,12 @@ def test(n_episodes: int, model: flax.nn.base.Model, render: bool = False):
     state = get_state(obs)
     total_reward = 0.0
     for t in itertools.count():
-      probs, _ = policy_action(model, state)
-      probs = onp.array(probs, dtype=onp.float64)
+      log_probs, _ = policy_action(model, state)
+      probs = onp.exp(onp.array(log_probs, dtype=onp.float32))
       probabilities = probs[0] / probs[0].sum()
+      print(f"probabilities {probabilities}")
       action = onp.random.choice(probs.shape[1], p=probabilities)
+      print(f"action {action}")
       obs, reward, done, _ = test_env.step(action)
       total_reward += reward
       if render:
@@ -33,6 +35,6 @@ def test(n_episodes: int, model: flax.nn.base.Model, render: bool = False):
         next_state = None
       state = next_state
       if done:
-        print(f"------> TEST FINISHED: finished Episode {e} with reward {total_reward}")
+        print(f"------> TEST FINISHED: finished Episode {e} with reward {total_reward} in {t} steps")
         break
   del test_env
