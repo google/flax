@@ -489,9 +489,6 @@ def main(argv):
     jax.config.FLAGS.jax_xla_backend = 'tpu_driver'
     jax.config.FLAGS.jax_backend_target = FLAGS.jax_backend_target
 
-  # This seems to be necessary even when importing TF2?
-  tf.enable_v2_behavior()
-
   # Number of local devices for this host.
   n_devices = jax.local_device_count()
 

@@ -332,8 +332,6 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
-
   train(FLAGS.model_dir, FLAGS.batch_size, FLAGS.num_epochs,
         FLAGS.learning_rate, FLAGS.momentum, FLAGS.l2_reg, FLAGS.rng)
 

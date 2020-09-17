@@ -297,8 +297,6 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
-
   pcnn_module = pixelcnn.PixelCNNPP.partial(depth=FLAGS.n_resnet,
                                             features=FLAGS.n_feature,
                                             k=FLAGS.n_logistic_mix)

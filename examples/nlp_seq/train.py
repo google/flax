@@ -269,8 +269,6 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
-
   batch_size = FLAGS.batch_size
   learning_rate = FLAGS.learning_rate
   num_train_steps = FLAGS.num_train_steps

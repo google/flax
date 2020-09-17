@@ -736,8 +736,6 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
-
   emb_size = FLAGS.emb_size
 
   if FLAGS.arch == 'resnet50':

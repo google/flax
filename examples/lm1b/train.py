@@ -353,8 +353,6 @@ def train_and_evaluate(
     sampling_top_k: Top k cutoff for logit sampling.
     prompt_str: Prompt for language model sampling.
   """
-  tf.enable_v2_behavior()
-
   if jax.host_id() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
         os.path.join(model_dir, 'train'))

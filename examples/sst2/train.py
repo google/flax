@@ -324,8 +324,6 @@ def train_and_evaluate(
     checkpoints_to_keep: Number of checkpoints to keep.
     l2_reg: L2 regularization to keep. 
   """
-  tf.enable_v2_behavior()
-
   # Prepare data.
   data_source = input_pipeline.SST2DataSource(min_freq=min_freq)
 
