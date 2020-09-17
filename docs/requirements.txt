@@ -1,5 +1,6 @@
 sphinx
 sphinx_rtd_theme
+Pygments>=2.6.1
 jax>=0.1.59
 jaxlib>=0.1.41
 ipykernel
