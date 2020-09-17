@@ -13,6 +13,7 @@ def test(n_episodes: int, model: flax.nn.base.Model, render: bool = False):
   if render:
     test_env = gym.wrappers.Monitor(
       test_env, "./rendered/" + "ddqn_pong_recording", force=True)
+  all_probabilities = []
   for e in range(n_episodes):
     obs = test_env.reset()
     state = get_state(obs)
@@ -21,9 +22,8 @@ def test(n_episodes: int, model: flax.nn.base.Model, render: bool = False):
       log_probs, _ = policy_action(model, state)
       probs = onp.exp(onp.array(log_probs, dtype=onp.float32))
       probabilities = probs[0] / probs[0].sum()
-      print(f"probabilities {probabilities}")
+      all_probabilities.append(probabilities)
       action = onp.random.choice(probs.shape[1], p=probabilities)
-      print(f"action {action}")
       obs, reward, done, _ = test_env.step(action)
       total_reward += reward
       if render:
@@ -35,6 +35,10 @@ def test(n_episodes: int, model: flax.nn.base.Model, render: bool = False):
         next_state = None
       state = next_state
       if done:
-        print(f"------> TEST FINISHED: finished Episode {e} with reward {total_reward} in {t} steps")
+        all_probabilities = onp.stack(all_probabilities, axis=0)
+        print(f"all_probabilities shape {all_probabilities.shape}")
+        vars = onp.var(all_probabilities, axis=0)
+        print(f"------> TEST FINISHED: reward {total_reward} in {t} steps")
+        print(f"Variance of probabilities across encuntered states {vars}")
         break
   del test_env
