@@ -225,8 +225,8 @@ class Seq2seq(nn.Module):
 
   def _create_modules(self, eos_id, hidden_size):
     encoder = Encoder.partial(
-        eos_id=eos_id, hidden_size=hidden_size).shared(name='encoder')
-    decoder = Decoder.shared(name='decoder')
+        eos_id=eos_id, hidden_size=hidden_size, name='encoder')
+    decoder = Decoder.partial(name='decoder')
     return encoder, decoder
 
   def apply(self,
