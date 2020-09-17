@@ -155,7 +155,8 @@ def train(
     # experience is a list of list of tuples, here we preprocess this data to
     # get required input for GAE and then for training
     # initial version, needs improvement in terms of speed & readability
-    if s > 0: #avoid training when there's no data yet
+    all_experiences = q2.get()
+    if s >= 0: #avoid training when there's no data yet
       obs_shape = (84, 84, 4)
       states = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS) + obs_shape,
                           dtype=onp.float32)
@@ -202,9 +203,6 @@ def train(
             CLIP_PARAM, VF_COEFF, ENTROPY_COEFF)
         print(f"Step {s} epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
     #end of PPO training
-
-    #collect new data from the inference thread
-    all_experiences = q2.get()
 
   return None
 
