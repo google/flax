@@ -420,7 +420,7 @@ class Module:
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args,
-            kind='param') -> T:
+            kind='params') -> T:
     """Declare a parameter in this Module.
 
     Args:
@@ -467,7 +467,7 @@ class Module:
     """Create initialized data for module and return it with output."""
     if not isinstance(rngs, dict):
       assert rngs.shape == (2,)
-      rngs = {'param': rngs}
+      rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 

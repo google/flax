@@ -55,9 +55,9 @@ class TiedAutoEncoder:
       return fn
 
     def trans(variables):
-      if 'param' not in variables:
+      if 'params' not in variables:
         return variables
-      params = variables['param']
+      params = variables['params']
       params['kernel'] = params['kernel'].T
       return variables
 

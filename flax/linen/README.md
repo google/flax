@@ -3,7 +3,7 @@
 | 🚧  NOTE: Linen is in alpha. Parts of the API will change. Some people have started using Linen, but we're still [collecting feedback](https://github.com/google/flax/discussions) before finalizing the API and moving more users over. 🚧 |
 | --- |
 
-Linen is a rewrite of Flax Modules based on learning from our users and the broader JAX community. Linen addresses many complaints with our current `flax.nn` API. 
+Linen is a rewrite of Flax Modules based on learning from our users and the broader JAX community. Linen improves on much of the current `flax.nn` API, such as submodule sharing and better support for non-trainable variables. 
 Moreover, Linen build on a new "functional core", enabling direct usage of JAX transformations such as `vmap`, `remat` or `scan` inside your modules.
   
 In Linen, Modules behave much closer to vanilla Python objects, while still letting you opt-in to the concise single-method pattern many of our users love.

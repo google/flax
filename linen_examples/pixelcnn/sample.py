@@ -53,9 +53,9 @@ def generate_sample():
   init_batch = jnp.zeros((1, 32, 32, 3))
 
   params = train.model().init({
-      'param': model_rng,
+      'params': model_rng,
       'dropout': dropout_rng
-  }, init_batch)['param']
+  }, init_batch)['params']
   optimizer_def = optim.Adam(
       learning_rate=FLAGS.learning_rate, beta1=0.95, beta2=0.9995)
   optimizer = optimizer_def.create(params)
@@ -102,7 +102,7 @@ def sample_iteration(rng, params, sample):
   """PixelCNN++ sampling expressed as a fixed-point iteration.
   """
   rng, dropout_rng = random.split(rng)
-  out = train.model().apply({'param': params}, sample, 
+  out = train.model().apply({'params': params}, sample, 
                             rngs={'dropout': dropout_rng})
   c_params = pixelcnn.conditional_params_from_outputs(out, sample)
   return conditional_params_to_sample(rng, c_params)

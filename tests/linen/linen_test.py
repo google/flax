@@ -188,7 +188,7 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(carry[0].shape, (2, 4))
     self.assertEqual(carry[1].shape, (2, 4))
     np.testing.assert_allclose(y, carry[1])
-    param_shapes = jax.tree_map(np.shape, initial_params['param'])
+    param_shapes = jax.tree_map(np.shape, initial_params['params'])
     self.assertEqual(param_shapes, {
         'ii': {'kernel': (3, 4)},
         'if': {'kernel': (3, 4)},
@@ -211,7 +211,7 @@ class RecurrentTest(absltest.TestCase):
     #gru = nn.Model(nn.GRUCell, initial_params)
     self.assertEqual(carry.shape, (2, 4))
     np.testing.assert_allclose(y, carry)
-    param_shapes = jax.tree_map(np.shape, initial_params['param'])
+    param_shapes = jax.tree_map(np.shape, initial_params['params'])
     self.assertEqual(param_shapes, {
         'ir': {'kernel': (3, 4), 'bias': (4,)},
         'iz': {'kernel': (3, 4), 'bias': (4,)},
