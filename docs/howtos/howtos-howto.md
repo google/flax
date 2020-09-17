@@ -114,9 +114,7 @@ a `howto` is the filename without the extension (e.g., the name for the
 
 ## Modifying an existing HOWTO
 
-TODO: Write this out. The summary is: apply a diff locally, make the
-changes, pack the diff again and commit. It would be good to show 
-this with an example. Note editing this diff is not a good idea 
-since it is extremely error-prone.
-
-The guidance above for resolving a conflict may also be helpful.
+1. Fetch upstream and rebase onto upstream/master (see above).
+1. Apply the HOWTO : `git apply howtos/diffs/$name.diff`
+2. Modify the modified files, without staging them.
+3. Re-pack the HOWTO (supplying same `$name`).
