@@ -250,8 +250,8 @@ class Seq2seq(nn.Module):
     Returns:
       Array of decoded logits.
     """
-    init_decoder_state = Encoder(encoder_inputs, eos_id=self.eos_id, 
-        hidden_size=self.hidden_size)
+    init_decoder_state = Encoder(encoder_inputs, eos_id=eos_id,
+        hidden_size=hidden_size)
     logits, predictions = Decoder(init_decoder_state, decoder_inputs[:, :-1], 
         teacher_force=teacher_force)
 
