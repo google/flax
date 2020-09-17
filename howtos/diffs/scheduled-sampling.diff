@@ -65,7 +65,7 @@ index 60b79b5..c3df5b1 100644
          hidden_size=hidden_size)
      logits, predictions = Decoder(init_decoder_state, decoder_inputs[:, :-1], 
 -        teacher_force=teacher_force)
-+        teacher_force=teacher_force, sample_probability=sample_probability)
++        sample_probability=sample_probability)
  
      return logits, predictions
  
