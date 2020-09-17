@@ -136,8 +136,3 @@ index b638d55..26fc7b8 100644
  
      self.assertLessEqual(train_metrics['loss'], 5)
      self.assertGreaterEqual(train_metrics['accuracy'], 0)
-@@ -113,3 +113,4 @@ class TrainTest(absltest.TestCase):
- 
- if __name__ == '__main__':
-   absltest.main()
-+
