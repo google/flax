@@ -1,7 +1,10 @@
 import multiprocessing
 import numpy as onp
+from collections import namedtuple
 from env import create_env
 
+exp_tuple = namedtuple('exp_tuple',
+                  ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
 
 class RemoteSimulator:
   """Class that wraps basic functionality needed for an agent
@@ -31,8 +34,7 @@ def rcv_action_send_exp(conn):
       action, value, log_prob = conn.recv()
       obs, reward, done, _ = env.step(action)
       next_state = get_state(obs) if not done else None
-      # maybe a dictionary instead of a tuple would be better?
-      experience = (state, action, reward, value, log_prob, done)
+      experience = exp_tuple(state, action, reward, value, log_prob, done)
       conn.send(experience)
       if done:
         break

@@ -171,15 +171,15 @@ def train(
       assert(len(all_experiences[0]) == NUM_AGENTS)
       for t in range(len(all_experiences) - 1): #last only for next_values
         for agent_id, exp_agent in enumerate(all_experiences[t]):
-          states[t, agent_id, ...] = exp_agent[0]
-          actions[t, agent_id] = exp_agent[1]
-          rewards[t, agent_id] =exp_agent[2]
-          values[t, agent_id] = exp_agent[3]
-          log_probs[t, agent_id] = exp_agent[4]
+          states[t, agent_id, ...] = exp_agent.state
+          actions[t, agent_id] = exp_agent.action
+          rewards[t, agent_id] = exp_agent.reward
+          values[t, agent_id] = exp_agent.value
+          log_probs[t, agent_id] = exp_agent.log_prob
           # dones need to be 0 for terminal states
-          dones[t, agent_id] = float(not exp_agent[5])
+          dones[t, agent_id] = float(not exp_agent.done)
       for a in range(num_agents):
-        values[-1, a] = all_experiences[-1][a][3]
+        values[-1, a] = all_experiences[-1][a].value
       # calculate advantages w. GAE
       advantages = gae_advantages(rewards, dones, values, DISCOUNT, GAE_PARAM)
       returns = advantages + values[:-1, :]
