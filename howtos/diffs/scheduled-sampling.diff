@@ -123,11 +123,3 @@ index 60b79b5..b1b8f18 100644
 +            metrics['accuracy'] * 100)
          decode_batch(optimizer.target, 5)
    return optimizer.target
- 
-@@ -390,4 +401,4 @@ def main(_):
- 
- 
- if __name__ == '__main__':
--  app.run(main)
-+  app.run(main)
-\ No newline at end of file
