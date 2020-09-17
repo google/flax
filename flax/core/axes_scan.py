@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 import functools
 
 import jax
@@ -26,10 +25,6 @@ from typing import Union, Optional, Callable, Any
 
 import numpy as np
 
-
-@dataclass(frozen=True)
-class Scan:
-  axis: int
 
 ScanAxis = Optional[int]
 
@@ -45,6 +40,41 @@ def scan(
     out_axes: Any,
     length: Optional[int] = None,
     reverse: bool = False):
+  """A wrapper around `jax.lax.scan` with in_axes/out_axes api.
+
+  Example::
+    def body_fn(b, c, x):
+      return b + 2, c + 1, 2 * x
+
+    loop = scan(body_fn, in_axes=0, out_axes=0)
+    broadcast_in = 1
+    carry = 2
+    xs = jnp.arange(3)
+    broadcast_out, carry, ys = loop(broadcast_in, carry, xs)
+    print(broadcast_out)  # prints: 3
+    print(carry)  # prints: 5
+    print(ys)  # prints: [0, 2, 4]
+
+
+  Args:
+    fn: the body function of the scan loop of the form
+      `(broadcast_in, carry, *args) -> (broadcast_out, carry, scan_out)`.
+      the broadcast argument allows for loop independent inputs/outputs to
+      be computed inside `fn`. `fn` will be called once to compute `broadcast_out`
+      The actual loop will receive `broadcast_out` as the new `broadcast_in`.
+      This is useful for initializing values inside the loop.
+    in_axes: specifies the axis along which arguments are scanned.
+      Use `broadcast` to use the same value across iterations.
+    out_axes: specifies the axis along which outputs are concatenated.
+      Use `broadcast` if a return value should not be concatenated and
+      is independent of the loop body.
+    length: number of iterations. Only needs to be specified if there
+      is no scan axis from which it can be derived.
+    reverse: scan in reverse order from end to start.
+   Returns:
+     the function that performs the scan of the form:
+     (broadcast_in, carry_in, *args) -> (broadcast_out, carry_out, scan_out).
+  """
 
   def transpose_to_front(ax, xs):
     if ax is broadcast:

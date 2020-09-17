@@ -14,6 +14,7 @@
 
 """Flax functional core."""
 
+import contextlib
 import enum
 import functools
 import hashlib
@@ -38,7 +39,8 @@ Filter = Union[bool, str, Sequence[str]]
 CollectionFilter = Filter
 PRNGSequenceFilter = Filter
 
-MaybeFrozenCollection = Union[Dict[str, Any], FrozenDict[str, Any]]
+FrozenCollection = FrozenDict[str, Any]
+MaybeFrozenCollection = Union[Dict[str, Any], FrozenCollection]
 
 Variables = Dict[str, MaybeFrozenCollection]
 
@@ -52,13 +54,17 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   return random.fold_in(rng, hash_int)
 
 
-def in_filter(filter: Filter, kind: str) -> bool:
-  if isinstance(filter, str):
-    return kind == filter
-  if isinstance(filter, Sequence) and not isinstance(filter, str):
-    return kind in filter
-  if isinstance(filter, bool):
-    return filter
+def in_filter(filter_like: Filter, kind: str) -> bool:
+  """Check whether a kind is part of a Filter.
+  
+  Used for both collection and rng sequence filters.
+  """
+  if isinstance(filter_like, str):
+    return kind == filter_like
+  if isinstance(filter_like, Sequence) and not isinstance(filter, str):
+    return kind in filter_like
+  if isinstance(filter_like, bool):
+    return filter_like
   raise TypeError('Invalid Filter')
 
 
@@ -81,6 +87,12 @@ def group_collections(xs: Variables,
 
 
 class Variable(Generic[T]):
+  """Scope Variable.
+  
+  Variable instances are obtained from `scope.variable`.
+  The value property gives access to the variable's content
+  and can be assigned to for mutation.
+  """
 
   def __init__(self, scope: 'Scope', collection: str, name: str):
     self.scope = scope
@@ -89,13 +101,14 @@ class Variable(Generic[T]):
 
   @property
   def value(self) -> T:
+    """Value of this Variable."""
     return self.scope.get_variable(self.collection, self.name)
 
   @value.setter
   def value(self, value: T):
+    """Updates the Variable."""
     self.scope.put_variable(self.collection, self.name, value)
 
-import contextlib
 
 class Scope:
   """Scope."""
@@ -121,7 +134,8 @@ class Scope:
     self._invalid = False
 
   @property
-  def invalid(self):
+  def invalid(self) -> bool:
+    """Check if this scope is invalidated as a result of `Scope.temporary`."""
     return self._invalid
 
   def _check_valid(self):
@@ -130,29 +144,26 @@ class Scope:
 
   @contextlib.contextmanager
   def temporary(self):
+    """Returns a context manager that will invalidate this Scope when leaving the context."""
     try:
       yield self
     finally:
       self.invalidate()
 
   def invalidate(self):
+    """Invalidate the Scope."""
     self._invalid = True
 
-  def variables(self):
+  def variables(self) -> FrozenCollection:
+    """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
     return freeze(self._variables)
 
   def _validate_trace_level(self):
     tracers.check_trace_level(self.trace_level)
 
-  def transformed(self, fn, kind):
-    variables = unfreeze(self.get_kind(kind))
-    variables = freeze(fn(variables))
-    scope = self.rewound(rewind_rngs=True)
-    scope._variables[kind] = variables
-    return scope
-
-  def rewound(self, rewind_rngs=False):
+  def rewound(self, rewind_rngs: bool = False) -> 'Scope':
+    """Returns a rewound version of this Scope."""
     self._check_valid()
     scope = Scope(self._variables, self.rngs, self.name, self.parent)
     if not rewind_rngs:
@@ -160,11 +171,13 @@ class Scope:
     return scope
 
   def reserve(self, name: str):
+    """Reserve a name for a child Scope or Variable."""
     if name in self.reservations:
       raise ValueError(f'Duplicate use of name: "{name}"')
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
+    """Generate an unreserved name with the given prefix."""
     i = 0
     while True:
       name = f'{prefix}{i}'
@@ -173,11 +186,22 @@ class Scope:
       i += 1
 
   def push(self, name: Optional[str] = None, prefix: str = '', reuse=False) -> 'Scope':
+    """Create a child Scope.
+    
+    Args:
+      name: Optinal name of the child.
+      prefix: prefix used for generating name if it is `None`.
+      reuse: If True will return a pre-existing child scope
+        with the given name instead of throwing an error.
+    Returns:
+      The child scope.
+    """
     self._check_valid()
     self._validate_trace_level()
     if name is None:
       name = self.default_name(prefix)
     if reuse and name in self._children:
+      assert not reuse
       return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
@@ -191,13 +215,28 @@ class Scope:
             prefix: Optional[str] = None,
             named_call: bool = True,
             **partial_kwargs) -> Callable[..., Any]:
-    """Partially applies a child scope to fn."""
+    """Partially applies a child scope to fn.
+
+    When calling the returned function multiple times variables will be
+    reused.
+    
+    Args:
+      fn: the function to partially apply the child Scope to.
+      name: Optinal name of the child.
+      prefix: prefix used for generating name if it is `None`.
+      named_call: If true, `fn` will be wrapped with `lift.named_call`.
+        The XLA profiler will use this to name tag the computation.
+      **partial_kwargs: additional kwargs partially applied to `fn`.
+    Returns:
+      The function with a partially applied scope.
+    """
     if name is None:
       if prefix is None:
         prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
       name = self.default_name(prefix)
     scope = self.push(name)
     if named_call:
+      # We import named_call at runtime to avoid a circular import issue.
       from . import lift
       fn = lift.named_call(fn, name)
     @functools.wraps(fn)
@@ -222,17 +261,20 @@ class Scope:
         return FrozenDict()
     return self._variables[col]
 
-  def has_rng(self, kind: str) -> bool:
-    return kind in self.rngs
+  def has_rng(self, name: str) -> bool:
+    """Check whether a PRNGSequence exists."""
+    return name in self.rngs
 
-  def make_rng(self, kind: str) -> PRNGKey:
-    assert self.has_rng(kind), f"Need RNG for kind {kind}"
+  def make_rng(self, name: str) -> PRNGKey:
+    """Generate A PRNGKey from a PRNGSequence."""
+    assert self.has_rng(name), f'Need PRNG for "{name}"'
     self._check_valid()
     self._validate_trace_level()
-    self.rng_counters[kind] += 1
-    return random.fold_in(self.rngs[kind], self.rng_counters[kind])
+    self.rng_counters[name] += 1
+    return random.fold_in(self.rngs[name], self.rng_counters[name])
 
   def get_variable(self, col: str, name: str, default: T = None) -> T:
+    """Retrieve the value of a Variable."""
     variables = self.collection(col)
     if name in variables:
       return variables[name]
@@ -240,10 +282,12 @@ class Scope:
       return default
 
   def has_variable(self, col: str, name: str) -> bool:
+    """Check whether a variable exists."""
     variables = self.collection(col)
     return name in variables
 
   def put_variable(self, col: str, name: str, value: Any):
+    """Update the value of a Variable."""
     self._check_valid()
     self._validate_trace_level()
     variables = self.collection(col, mutable=True)
@@ -251,6 +295,7 @@ class Scope:
 
   def variable(self, col: str, name: str, init_fn: Callable[..., T],
                *init_args) -> Variable[T]:
+    """Create a Variable."""
     self.reserve(name)
     if not self.has_variable(col, name):
       init_value = init_fn(*init_args)
@@ -258,6 +303,7 @@ class Scope:
     return Variable(self, col, name)
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+    """Create a paramater."""
     s_init_fn = lambda *args: init_fn(self.make_rng('params'), *init_args)
     v = self.variable('params', name, s_init_fn, *init_args)
     return v.value
@@ -279,7 +325,14 @@ def _unfreeze_variables(variables, mutable):
 
 def apply(fn: Callable[..., Any],
           mutable: CollectionFilter = False) -> Callable[..., Any]:
-  """Functionalize a module."""
+  """Functionalize a `Scope` function.
+
+  Args:
+    fn: a function taking a `Scope` as its first argument.
+    mutable: The filter determining which variable collections are mutable.
+  Returns:
+    `fn` with the scope partially applied.
+  """
   @functools.wraps(fn)
   def wrapper(variables, *args, rngs=None, **kwargs):
     new_variables = _unfreeze_variables(variables, mutable)
@@ -293,6 +346,14 @@ def apply(fn: Callable[..., Any],
 
 
 def init(fn: Callable[..., Any], mutable: CollectionFilter = True) -> Callable[..., Any]:
+  """Functionalize a `Scope` function for initialization.
+
+  Args:
+    fn: a function taking a `Scope` as its first argument.
+    mutable: The filter determining which variable collections are mutable.
+  Returns:
+    `fn` with the scope partially applied.
+  """
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs):
     if not isinstance(rngs, dict):
