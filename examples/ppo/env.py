@@ -6,7 +6,7 @@ from seed_rl_atari_preprocessing import AtariPreprocessing
 
 class FrameStack:
   '''Class that wraps an AtariPreprocessing object and implements
-  stacking of `num_frames` last frames of the game
+  stacking of `num_frames` last frames of the game.
   '''
   def __init__(self, preproc: AtariPreprocessing, num_frames : int):
     self.preproc = preproc
@@ -29,6 +29,8 @@ class FrameStack:
     return onp.concatenate(self.frames, axis=-1)
 
 def create_env():
+  '''Create a FrameStack object that serves as environment for the game.
+  '''
   env = gym.make("PongNoFrameskip-v4")
   preproc = AtariPreprocessing(env)
   stack = FrameStack(preproc, num_frames=4)

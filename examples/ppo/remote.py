@@ -42,5 +42,8 @@ def rcv_action_send_exp(conn):
 
 
 def get_state(observation):
+  """Covert observation from Atari environment into a NumPy array and add
+  a batch dimension.
+  """
   state = onp.array(observation)
   return state[None, ...]

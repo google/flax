@@ -37,6 +37,24 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
 
 @jax.jit
 def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
+  """Compilable train step. Runs an entire epoch of training (i.e. the loop over
+  minibatches within an epoch is included here for performance reasons.
+  Args:
+    optimizer: optimizer for the actor-critic model
+    trn_data: Tuple of the following five elements forming the experience:
+                  states: shape (steps_per_agent*num_agents, 84, 84, 4)
+                  actions: shape (steps_per_agent*num_agents, 84, 84, 4)
+                  old_log_probs: shape (steps_per_agent*num_agentss, )
+                  returns: shape (steps_per_agent*num_agentss, )
+                  advantages: (steps_per_agent*num_agents, )
+    clip_param: the PPO clipping parameter used to clamp ratios in loss function
+    vf_coeff: weighs value function loss in total loss
+    entropy_coeff: weighs entropy bonus in the total loss
+  Returns:
+    optimizer: new optimizer after the parameters update
+    loss: loss summed over training steps
+    grad_norm: gradient norm from last step (summed over parameters)
+  """
   def loss_fn(model, minibatch, clip_param, vf_coeff, entropy_coeff):
     states, actions, old_log_probs, returns, advantages = minibatch
     shapes = list(map(lambda x : x.shape, minibatch))
@@ -128,7 +146,16 @@ def train(
   num_agents : int,
   train_device,
   inference_device):
-
+  """Main training loop.
+  Args:
+    optimizer: optimizer for the actor-critic model
+    steps total: total number of frames (env steps) to train on
+    num_agents: number of separate processes with agents running the envs
+    train_device : device used for training
+    inference_device :  device used for inference
+  Returns:
+    None
+  """
   simulators = [RemoteSimulator() for i in range(num_agents)]
   q1, q2 = Queue(maxsize=1), Queue(maxsize=1)
   inference_thread = threading.Thread(target=thread_inference,

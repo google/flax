@@ -9,6 +9,14 @@ from remote import get_state
 from agent import policy_action
 
 def test(n_episodes: int, model: flax.nn.base.Model, render: bool = False):
+  """Perform a test of the policy in Atari environment.
+  Args:
+    n_episodes: number of full Atari episodes to test on
+    model: the actor-critic model being tested
+    render: whether to render the test environment
+  Returns:
+    None
+  """
   test_env = create_env()
   if render:
     test_env = gym.wrappers.Monitor(
