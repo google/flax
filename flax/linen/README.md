@@ -11,7 +11,7 @@ In Linen, Modules behave much closer to vanilla Python objects, while still lett
 We're still working on documentation, but here are some references we have available now:
 * 2-page intro to the [Linen Design Principles](https://docs.google.com/document/d/1ZlL_4bXCw5Xl0WstQw1GpnZqfb9JFOeUGAPcBVk-kn8)
 * [Slides from a talk to the JAX core team](https://docs.google.com/presentation/d/1ngKWUwsSqAwPRvATG8sAxMzu9ujv4N__cKsUofdNno0)
-* [Brief Intro to Linen](https://colab.sandbox.google.com/drive/1KPkQ_Hee9HlveynIF0FgPBzZDK79uoWL) in Colab
+* [Brief Intro to Linen](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) in Colab
 * An [upgrade guide](https://docs.google.com/document/d/1hYavTVPaKVVe9Be8pCB7yW7r6dDv3RALVNit8NZca4c) + some additional questions we're considering
 * Ported [examples](https://github.com/google/flax/tree/master/linen_examples)
 * "Design tests" used to ensure that our "functional core" supports [various advanced use-cases](https://github.com/google/flax/tree/master/linen_examples/core_design_test), and that the mostly-syntactic-sugar Module abstraction
