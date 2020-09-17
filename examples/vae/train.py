@@ -25,6 +25,7 @@ from flax import nn
 from flax import optim
 
 import tensorflow as tf
+tf.config.experimental.set_visible_devices([], "GPU")
 import tensorflow_datasets as tfds
 
 from utils import save_image

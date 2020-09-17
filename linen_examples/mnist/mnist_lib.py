@@ -28,6 +28,8 @@ config.enable_omnistaging()
 
 import numpy as onp
 
+import tensorflow as tf
+tf.config.experimental.set_visible_devices([], "GPU")
 import tensorflow_datasets as tfds
 
 from flax import linen as nn

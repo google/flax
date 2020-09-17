@@ -41,7 +41,8 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
+tf.config.experimental.set_visible_devices([], "GPU")
 
 # enable jax omnistaging
 from jax.config import config

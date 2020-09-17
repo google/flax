@@ -28,7 +28,8 @@ from jax import random
 import jax
 import jax.numpy as jnp
 import numpy as np
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
+tf.config.experimental.set_visible_devices([], "GPU")
 
 from flax import jax_utils
 from flax import linen as nn

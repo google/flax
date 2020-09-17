@@ -49,6 +49,7 @@ import jax.numpy as jnp
 from jax.config import config
 
 import tensorflow as tf
+tf.config.experimental.set_visible_devices([], "GPU")
 
 import input_pipeline
 import pixelcnn
