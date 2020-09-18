@@ -34,15 +34,23 @@ class TestGAE(absltest.TestCase):
 from remote import RemoteSimulator, rcv_action_send_exp
 from env import create_env
 class TestEnvironmentPreprocessing(absltest.TestCase):
+  def choose_random_game(self):
+    games = ['BeamRider', 'Breakout', 'Pong',
+              'Qbert', 'Seaquest', 'SpaceInvaders']
+    ind = onp.random.choice(len(games))
+    return games[ind] + "NoFrameskip-v4"
+
   def test_creation(self):
     frame_shape = (84, 84, 4)
-    env = create_env()
+    game = self.choose_random_game()
+    env = create_env(game)
     obs = env.reset()
     self.assertTrue(obs.shape == frame_shape)
 
   def test_step(self):
     frame_shape = (84, 84, 4)
-    env = create_env()
+    game = self.choose_random_game()
+    env = create_env(game)
     obs = env.reset()
     actions = [1, 2, 3, 0]
     for a in actions:
@@ -55,10 +63,14 @@ class TestEnvironmentPreprocessing(absltest.TestCase):
 #test the model (creation and forward pass)
 from models import create_model, create_optimizer
 class TestModel(absltest.TestCase):
+  def choose_random_outputs(self):
+    return onp.random.choice([4,5,6,7,8,9])
+
   def test_model(self):
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
-    model = create_model(subkey)
+    outputs = self.choose_random_outputs()
+    model = create_model(subkey, outputs)
     optimizer = create_optimizer(model, learning_rate=1e-3)
     self.assertTrue(isinstance(model, nn.base.Model))
     self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
@@ -69,8 +81,6 @@ class TestModel(absltest.TestCase):
     sum_probs = onp.sum(onp.exp(log_probs), axis=1)
     self.assertTrue(sum_probs.shape == (test_batch_size, ))
     onp_testing.assert_almost_equal(sum_probs, onp.ones((test_batch_size, )))
-
-
 
 
 if __name__ == '__main__':

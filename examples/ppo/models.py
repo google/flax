@@ -9,7 +9,7 @@ class ActorCritic(flax.nn.Module):
   Note that this is different than the one from  "Playing atari with deep
   reinforcement learning." arxiv.org/abs/1312.5602 (2013)
   '''
-  def apply(self, x):
+  def apply(self, x, num_outputs):
     x = x.astype(jnp.float32) / 255.
     dtype = jnp.float32
     x = nn.Conv(x, features=32, kernel_size=(8, 8),
@@ -33,15 +33,16 @@ class ActorCritic(flax.nn.Module):
     x = jnp.maximum(0, x)
     # network used to both estimate policy (logits) and expected state value
     # see github.com/openai/baselines/blob/master/baselines/ppo1/cnn_policy.py
-    logits = nn.Dense(x, features=4, name='logits', dtype=dtype)
+    logits = nn.Dense(x, features=num_outputs, name='logits', dtype=dtype)
     policy_log_probabilities = nn.log_softmax(logits)
     value = nn.Dense(x, features=1, name='value', dtype=dtype)
     return policy_log_probabilities, value
 
-def create_model(key):
+def create_model(key, num_outputs):
   input_dims = (1, 84, 84, 4) #(minibatch, height, width, stacked frames)
-  _, initial_par = ActorCritic.init_by_shape(key, [(input_dims, jnp.float32)])
-  model = flax.nn.Model(ActorCritic, initial_par)
+  module = ActorCritic.partial(num_outputs=num_outputs)
+  _, initial_par = module.init_by_shape(key, [(input_dims, jnp.float32)])
+  model = flax.nn.Model(module, initial_par)
   return model
 
 def create_optimizer(model, learning_rate):

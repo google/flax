@@ -4,6 +4,17 @@ import numpy as onp
 
 from seed_rl_atari_preprocessing import AtariPreprocessing
 
+class ClipRewardEnv(gym.RewardWrapper):
+  """This class is adatpted from OpenAI baselines
+  github.com/openai/baselines/blob/master/baselines/common/atari_wrappers.py
+  """
+  def __init__(self, env):
+    gym.RewardWrapper.__init__(self, env)
+
+  def reward(self, reward):
+    """Bin reward to {+1, 0, -1} by its sign."""
+    return onp.sign(reward)
+
 class FrameStack:
   '''Class that wraps an AtariPreprocessing object and implements
   stacking of `num_frames` last frames of the game.
@@ -28,10 +39,19 @@ class FrameStack:
     assert len(self.frames) == self.num_frames
     return onp.concatenate(self.frames, axis=-1)
 
-def create_env():
-  '''Create a FrameStack object that serves as environment for the game.
+def create_env(game : str):
+  '''Create a FrameStack object that serves as environment for the `game`.
   '''
-  env = gym.make("PongNoFrameskip-v4")
+  env = gym.make(game)
+  env = ClipRewardEnv(env) # bin rewards to {-1., 0., 1.}
   preproc = AtariPreprocessing(env)
   stack = FrameStack(preproc, num_frames=4)
   return stack
+
+def get_num_actions(game : str):
+  """Get the number of possible actions of a given Atari game. This determines
+  the number of outputs in the actor part of the actor-critic model.
+  """
+  env = gym.make(game)
+  return env.action_space.n
+

@@ -11,20 +11,20 @@ class RemoteSimulator:
   emulating Atari in a separate process.
   An object of this class is created for every agent.
   """
-  def __init__(self):
+  def __init__(self, game):
     parent_conn, child_conn = multiprocessing.Pipe()
     self.proc = multiprocessing.Process(
-      target=rcv_action_send_exp, args=(child_conn,))
+      target=rcv_action_send_exp, args=(child_conn, game))
     self.conn = parent_conn
     self.proc.start()
 
 
-def rcv_action_send_exp(conn):
+def rcv_action_send_exp(conn, game):
   """Function running on remote agents. Receives action from
   the main learner, performs one step of simulation and
   sends back collected experience.
   """
-  env = create_env()
+  env = create_env(game)
   while True:
     obs = env.reset()
     done = False

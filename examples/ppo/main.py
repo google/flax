@@ -14,6 +14,7 @@ from models import create_model, create_optimizer
 from agent import policy_action
 from remote import RemoteSimulator
 from test_episodes import test
+from env import get_num_actions
 
 @partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 @jax.jit
@@ -142,6 +143,7 @@ def thread_inference(
 
 def train(
   optimizer : flax.optim.base.Optimizer,
+  game  : str,
   steps_total : int,
   num_agents : int,
   train_device,
@@ -149,6 +151,7 @@ def train(
   """Main training loop.
   Args:
     optimizer: optimizer for the actor-critic model
+    game: string specifying the Atari game from Gym package
     steps total: total number of frames (env steps) to train on
     num_agents: number of separate processes with agents running the envs
     train_device : device used for training
@@ -156,7 +159,7 @@ def train(
   Returns:
     None
   """
-  simulators = [RemoteSimulator() for i in range(num_agents)]
+  simulators = [RemoteSimulator(game) for i in range(num_agents)]
   q1, q2 = Queue(maxsize=1), Queue(maxsize=1)
   inference_thread = threading.Thread(target=thread_inference,
                         args=(q1, q2, simulators, STEPS_PER_ACTOR), daemon=True)
@@ -170,8 +173,8 @@ def train(
       print(f"      Frames processed {s*num_agents*STEPS_PER_ACTOR}, " +
             f"time elapsed {time.time()-t1}")
       t1 = time.time()
-    if (s + 1) % (20000 // (num_agents*STEPS_PER_ACTOR)) == 0:
-      test(1, optimizer.target, render=False)
+    if (s + 1) % (2000 // (num_agents*STEPS_PER_ACTOR)) == 0:
+      test(1, optimizer.target, game, render=False)
 
 
     # send the up-to-date policy model and current step to inference thread
@@ -208,6 +211,7 @@ def train(
       for a in range(num_agents):
         values[-1, a] = all_experiences[-1][a].value
       # calculate advantages w. GAE
+      print(f"nonzero rewards {rewards[onp.nonzero(rewards)]}")
       advantages = gae_advantages(rewards, dones, values, DISCOUNT, GAE_PARAM)
       returns = advantages + values[:-1, :]
       assert(returns.shape == advantages.shape == (STEPS_PER_ACTOR, NUM_AGENTS))
@@ -270,17 +274,22 @@ CLIP_PARAM = 0.1
 
 
 def main():
+  game = "Pong"
+  game += "NoFrameskip-v4"
+  num_actions = get_num_actions(game)
+  print(f"Playing {game} with {num_actions} actions")
   num_agents = NUM_AGENTS
   total_frames = 4000000
   train_device = jax.devices()[0]
   inference_device = jax.devices()[1]
   key = jax.random.PRNGKey(0)
   key, subkey = jax.random.split(key)
-  model = create_model(subkey)
+  model = create_model(subkey, num_outputs=num_actions)
   optimizer = create_optimizer(model, learning_rate=LR)
   del model
   # jax.device_put(optimizer.target, device=train_device)
-  train(optimizer, total_frames, num_agents, train_device, inference_device)
+  train(optimizer, game, total_frames, num_agents, train_device,
+        inference_device)
 
 if __name__ == '__main__':
   main()
