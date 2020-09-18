@@ -7,6 +7,8 @@ import time
 from functools import partial
 from typing import Tuple, List
 from queue import Queue
+from absl import flags
+from absl import app
 import threading
 
 
@@ -15,6 +17,61 @@ from agent import policy_action
 from remote import RemoteSimulator
 from test_episodes import test
 from env import get_num_actions
+
+FLAGS = flags.FLAGS
+
+# default hyperparameters taken from PPO paper and openAI baselines 2
+# https://github.com/openai/baselines/blob/master/baselines/ppo2/defaults.py
+
+flags.DEFINE_float(
+    'learning_rate', default=2.5e-4,
+    help=('The learning rate for the Adam optimizer.')
+)
+
+flags.DEFINE_integer(
+    'batch_size', default=256,
+    help=('Batch size for training.')
+)
+
+flags.DEFINE_integer(
+    'num_agents', default=8,
+    help=('Number of agents playing in parallel.')
+)
+
+flags.DEFINE_integer(
+    'actor_steps', default=128,
+    help=('Batch size for training.')
+)
+
+flags.DEFINE_integer(
+    'num_epochs', default=3,
+    help=('Number of epochs per each unroll of the policy.')
+)
+
+flags.DEFINE_float(
+    'gamma', default=0.99,
+    help=('Discount parameter.')
+)
+
+flags.DEFINE_float(
+    'lambda_', default=0.95,
+    help=('Generalized Advantage Estimation parameter.')
+)
+
+flags.DEFINE_float(
+    'clip_param', default=0.1,
+    help=('The PPO clipping parameter used to clamp ratios in loss function.')
+)
+
+flags.DEFINE_float(
+    'vf_coeff', default=0.5,
+    help=('Weighs value function loss in the total loss.')
+)
+
+flags.DEFINE_float(
+    'entropy_coeff', default=0.01,
+    help=('Weighs entropy bonus in the total loss.')
+)
 
 @partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 @jax.jit
@@ -59,8 +116,6 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
   def loss_fn(model, minibatch, clip_param, vf_coeff, entropy_coeff):
     states, actions, old_log_probs, returns, advantages = minibatch
     shapes = list(map(lambda x : x.shape, minibatch))
-    assert(shapes[0] == (BATCH_SIZE, 84, 84, 4))
-    assert(all(s == (BATCH_SIZE,) for s in shapes[1:]))
     log_probs, values = model(states)
     values = values[:, 0] # convert shapes: (batch, 1) to (batch, )
     probs = jnp.exp(log_probs)
@@ -78,7 +133,7 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
     value_loss = jnp.mean(jnp.square(returns - values), axis=0)
     return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
 
-  batch_size = BATCH_SIZE
+  batch_size = FLAGS.batch_size
   iterations = trn_data[0].shape[0] // batch_size
   trn_data = jax.tree_map(
     lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trn_data)
@@ -163,18 +218,18 @@ def train(
   simulators = [RemoteSimulator(game) for i in range(num_agents)]
   q1, q2 = Queue(maxsize=1), Queue(maxsize=1)
   inference_thread = threading.Thread(target=thread_inference,
-                        args=(q1, q2, simulators, STEPS_PER_ACTOR), daemon=True)
+                        args=(q1, q2, simulators, FLAGS.actor_steps), daemon=True)
   inference_thread.start()
   t1 = time.time()
 
-  for s in range(steps_total // (num_agents * STEPS_PER_ACTOR)):
+  for s in range(steps_total // (num_agents * FLAGS.actor_steps)):
     print(f"\n training loop step {s}")
     #bookkeeping and testing
-    if (s + 1) % (10000 // (num_agents * STEPS_PER_ACTOR)) == 0:
-      print(f"      Frames processed {s * num_agents * STEPS_PER_ACTOR}, " +
+    if (s + 1) % (10000 // (num_agents * FLAGS.actor_steps)) == 0:
+      print(f"      Frames processed {s * num_agents * FLAGS.actor_steps}, " +
             f"time elapsed {time.time() - t1}")
       t1 = time.time()
-    if (s + 1) % (2000 // (num_agents * STEPS_PER_ACTOR)) == 0:
+    if (s + 1) % (20000 // (num_agents * FLAGS.actor_steps)) == 0:
       test(1, optimizer.target, game, render=False)
 
 
@@ -189,17 +244,16 @@ def train(
     all_experiences = q2.get()
     if s >= 0: #avoid training when there's no data yet
       obs_shape = (84, 84, 4)
-      states = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS) + obs_shape,
-                          dtype=onp.float32)
-      actions = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.int32)
-      rewards = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.float32)
-      values = onp.zeros((STEPS_PER_ACTOR + 1, NUM_AGENTS), dtype=onp.float32)
-      log_probs = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS),
-                              dtype=onp.float32)
-      dones = onp.zeros((STEPS_PER_ACTOR, NUM_AGENTS), dtype=onp.float32)
+      exp_dims = (FLAGS.actor_steps, FLAGS.num_agents)
+      values_dims = (FLAGS.actor_steps + 1, FLAGS.num_agents)
+      states = onp.zeros(exp_dims + obs_shape, dtype=onp.float32)
+      actions = onp.zeros(exp_dims, dtype=onp.int32)
+      rewards = onp.zeros(exp_dims, dtype=onp.float32)
+      values = onp.zeros(values_dims, dtype=onp.float32)
+      log_probs = onp.zeros(exp_dims, dtype=onp.float32)
+      dones = onp.zeros(exp_dims, dtype=onp.float32)
 
-      assert(len(all_experiences) == STEPS_PER_ACTOR + 1)
-      assert(len(all_experiences[0]) == NUM_AGENTS)
+      assert(len(all_experiences[0]) == FLAGS.num_agents)
       for t in range(len(all_experiences) - 1): #last only for next_values
         for agent_id, exp_agent in enumerate(all_experiences[t]):
           states[t, agent_id, ...] = exp_agent.state
@@ -212,85 +266,44 @@ def train(
       for a in range(num_agents):
         values[-1, a] = all_experiences[-1][a].value
       # calculate advantages w. GAE
-      print(f"nonzero rewards {rewards[onp.nonzero(rewards)]}")
-      advantages = gae_advantages(rewards, dones, values, DISCOUNT, GAE_PARAM)
+      advantages = gae_advantages(rewards, dones, values,
+                                  FLAGS.gamma, FLAGS.lambda_)
       returns = advantages + values[:-1, :]
-      assert(returns.shape == advantages.shape == (STEPS_PER_ACTOR, NUM_AGENTS))
       # after preprocessing, concatenate data from all agents
       trn_data = (states, actions, log_probs, returns, advantages)
       trn_data = tuple(map(
         lambda x: onp.reshape(x,
-         (NUM_AGENTS * STEPS_PER_ACTOR , ) + x.shape[2:]), trn_data)
+         (FLAGS.num_agents * FLAGS.actor_steps, ) + x.shape[2:]), trn_data)
       )
       print(f"Step {s}: rewards variance {rewards.var()}")
-      dr = dones.ravel()
-      print(f"fraction of terminal states {1.-(dr.sum()/dr.shape[0])}")
-      for e in range(NUM_EPOCHS): #possibly compile this loop inside a jit
+      for e in range(FLAGS.num_epochs): #possibly compile this loop inside a jit
         shapes = list(map(lambda x : x.shape, trn_data))
-        assert(shapes[0] == (NUM_AGENTS * STEPS_PER_ACTOR, 84, 84, 4))
-        assert(all(s == (NUM_AGENTS * STEPS_PER_ACTOR,) for s in shapes[1:]))
-        permutation = onp.random.permutation(NUM_AGENTS * STEPS_PER_ACTOR)
+        permutation = onp.random.permutation(num_agents * FLAGS.actor_steps)
         trn_data = tuple(map(lambda x: x[permutation], trn_data))
         optimizer, loss, last_iter_grad_norm = train_step(optimizer, trn_data,
-            CLIP_PARAM, VF_COEFF, ENTROPY_COEFF)
-        print(f"Step {s} epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
+            FLAGS.clip_param, FLAGS.vf_coeff, FLAGS.entropy_coeff)
+        print(f"epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
     #end of PPO training
 
   return None
 
-# PPO paper and openAI baselines 2
-# https://github.com/openai/baselines/blob/master/baselines/ppo2/defaults.py
-STEPS_PER_ACTOR = 128
-NUM_AGENTS = 8
-NUM_EPOCHS = 3
-BATCH_SIZE = 32 * 8
-
-DISCOUNT = 0.99 #usually denoted with \gamma
-GAE_PARAM = 0.95 #usually denoted with \lambda
-
-VF_COEFF = 0.5 #weighs value function loss in total loss
-ENTROPY_COEFF = 0.01 # weighs entropy bonus in the total loss
-
-LR = 2.5e-4
-
-CLIP_PARAM = 0.1
-
-# openAI baselines 1
-# https://github.com/openai/baselines/blob/master/baselines/ppo1/run_atari.py
-# STEPS_PER_ACTOR = 256
-# NUM_AGENTS = 8
-# NUM_EPOCHS = 4
-# BATCH_SIZE = 64
-
-# DISCOUNT = 0.99 #usually denoted with \gamma
-# GAE_PARAM = 0.95 #usually denoted with \lambda
-
-# VF_COEFF = 1. #weighs value function loss in total loss
-# ENTROPY_COEFF = 0.01 # weighs entropy bonus in the total loss
-
-# LR = 1e-3
-
-# CLIP_PARAM = 0.2
-
-
-
-def main():
+def main(argv):
   game = "Pong"
   game += "NoFrameskip-v4"
   num_actions = get_num_actions(game)
   print(f"Playing {game} with {num_actions} actions")
-  num_agents = NUM_AGENTS
+  num_agents = FLAGS.num_agents
   total_frames = 10000000
   train_device = jax.devices()[0]
   inference_device = jax.devices()[1]
   key = jax.random.PRNGKey(0)
   key, subkey = jax.random.split(key)
   model = create_model(subkey, num_outputs=num_actions)
-  optimizer = create_optimizer(model, learning_rate=LR)
+  optimizer = create_optimizer(model, learning_rate=FLAGS.learning_rate)
   del model
   # jax.device_put(optimizer.target, device=train_device)
   train(optimizer, game, total_frames, num_agents, train_device,
         inference_device)
 
 if __name__ == '__main__':
-  main()
+  app.run(main)
