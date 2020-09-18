@@ -7,6 +7,12 @@ This code follows [pytorch/examples/vae](https://github.com/pytorch/examples/blo
 pip install -r requirements.txt
 python train.py --config.batch_size=batch_size --config.learning_rate=lr 
 ```
+or
+set all hyperparameters manually(see `configs/default.py`) and pass them directly
+```bash
+pip install -r requirements.txt
+python train.py --config=configs/custom.py
+```
 
 ## Examples
 

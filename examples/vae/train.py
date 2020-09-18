@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 from absl import app
 from absl import flags
 
-import ml_collections
 from ml_collections.config_flags import config_flags
 
 import numpy as np
@@ -24,22 +25,19 @@ import jax.numpy as jnp
 import jax
 from jax import random
 
-from flax import nn
-from flax import optim
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
+from flax import nn
+from flax import optim
+
 from utils import save_image
 
-config = ml_collections.ConfigDict()
-config.learning_rate = 0.1
-config.batch_size = 128
-config.num_epochs = 30
-config.latents = 30
 
 FLAGS = flags.FLAGS
-config_flags.DEFINE_config_dict('config', config)
+config_flags.DEFINE_config_file(
+    'config', os.path.join(os.path.dirname(__file__), 'configs/default.py'),
+    'File path to the Training hyperparameter configuration.')
 
 
 class Encoder(nn.Module):
