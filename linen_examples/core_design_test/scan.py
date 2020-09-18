@@ -40,7 +40,7 @@ def mlp_scan(scope: Scope, xs: Array,
     carry, ys = lift.scan(
         body_fn,
         variable_carry='counter',
-        variable_axes={'params': lift.broadcast},
+        variable_broadcast='params',
         split_rngs={'params': False})(scope, (), xs)
   else:
     carry, ys = lift.scan(

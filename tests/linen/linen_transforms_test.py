@@ -159,7 +159,7 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, c, xs):
         LSTM = nn.scan(nn.LSTMCell,
-                       variable_axes={'params': nn.broadcast},
+                       variable_broadcast='params',
                        split_rngs={'params': False})
         return LSTM(name="lstm_cell")(c, xs)
 
@@ -188,7 +188,7 @@ class TransformTest(absltest.TestCase):
   def test_scan_decorated(self):
     class SimpleScan(nn.Module):
       @partial(nn.scan,
-               variable_axes={'params': nn.broadcast},
+               variable_broadcast='params',
                split_rngs={'params': False})
       @nn.compact
       def __call__(self, c, xs):
