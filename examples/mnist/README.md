@@ -14,4 +14,8 @@ I0527 09:46:50.714237 139989059204928 mnist_lib.py:178] eval epoch: 10, loss: 0.
 
 ### How to run
 
-`python mnist_main.py --config=configs/default.py --model_dir=/tmp/mnist`
+`python mnist_main.py --model_dir=/tmp/mnist`
+
+Optionally set `--config` flag value to a python file path which returns
+a hyperparameter configuration. This usually is an instance of [ConfigDict](https://github.com/google/ml_collections/tree/master#configdict).
+By default, this is set to `configs/default.py`.
