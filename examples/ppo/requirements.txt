@@ -1,0 +1,4 @@
+jax
+jaxlib
+gym
+atari-py
