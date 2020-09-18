@@ -166,14 +166,14 @@ def train(
   inference_thread.start()
   t1 = time.time()
 
-  for s in range(steps_total // num_agents):
+  for s in range(steps_total // (num_agents * STEPS_PER_ACTOR)):
     print(f"\n training loop step {s}")
     #bookkeeping and testing
-    if (s + 1) % (10000 // (num_agents*STEPS_PER_ACTOR)) == 0:
-      print(f"      Frames processed {s*num_agents*STEPS_PER_ACTOR}, " +
-            f"time elapsed {time.time()-t1}")
+    if (s + 1) % (10000 // (num_agents * STEPS_PER_ACTOR)) == 0:
+      print(f"      Frames processed {s * num_agents * STEPS_PER_ACTOR}, " +
+            f"time elapsed {time.time() - t1}")
       t1 = time.time()
-    if (s + 1) % (2000 // (num_agents*STEPS_PER_ACTOR)) == 0:
+    if (s + 1) % (2000 // (num_agents * STEPS_PER_ACTOR)) == 0:
       test(1, optimizer.target, game, render=False)
 
 
@@ -279,7 +279,7 @@ def main():
   num_actions = get_num_actions(game)
   print(f"Playing {game} with {num_actions} actions")
   num_agents = NUM_AGENTS
-  total_frames = 4000000
+  total_frames = 10000000
   train_device = jax.devices()[0]
   inference_device = jax.devices()[1]
   key = jax.random.PRNGKey(0)
