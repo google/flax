@@ -197,10 +197,28 @@ def sync_batch_stats(state):
   return state.replace(model_state=avg(state.model_state))
 
 
-def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
+                       learning_rate: float, momentum: float, cache: bool,
+                       half_precision: bool, num_train_steps: int = -1,
+                       num_eval_steps: int = -1):
+  """Runs model training and evaluation loop.
 
+  Args:
+    model_dir: Directory where the checkpoints and tensorboard summaries
+      should be written to.
+    batch_size: Batch size of the input.
+    num_epochs: Number of epochs to cycle through before stopping.
+    learning_rate: The learning rate in case you have batch size 256.
+      The effective learning rate is scaled linearly to the batch size.
+    momentum: Momentum value for the momentum optimizer.
+    cache: Determines whether the dataset should be cached.
+    half_precision: Determines whether bfloat16/float16 should be used
+      instead of float32.
+    num_train_steps: Number of trainings steps to be executed in a
+      single epoch. Default = -1 signifies using the entire TRAIN split.
+    num_eval_steps: Number of evaluation steps to be executed in a
+      single epoch. Default = -1 signifies using the entire VALIDATION split.
+  """
   if jax.host_id() == 0:
     summary_writer = tensorboard.SummaryWriter(model_dir)
 
