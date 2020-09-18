@@ -12,40 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.examples.mnist.mnist_lib."""
+# Lint as: python3
+"""Tests for flax.examples.lm1b.train."""
 
 import pathlib
 import tempfile
 
 from absl.testing import absltest
 
-import jax
-from jax import numpy as jnp
-
 import tensorflow_datasets as tfds
 
-import mnist_lib
+import train as lm1b_train
 
 
-class MnistLibTest(absltest.TestCase):
-  """Test cases for mnist_lib."""
-
-  def test_cnn(self):
-    """Tests CNN module used as the trainable model."""
-    rng = jax.random.PRNGKey(0)
-    inputs = jnp.ones((5, 224, 224, 3), jnp.float32)
-    output, variables = mnist_lib.CNN().init_with_output(rng, inputs)
-
-    self.assertEqual((5, 10), output.shape)
-
-    # TODO(mohitreddy): Consider creating a testing module which
-    # gives a parameters overview including number of parameters.
-    self.assertLen(variables['params'], 4)
+class Lm1bTrainTest(absltest.TestCase):
+  """Test cases for train.py."""
 
   def test_train_and_evaluate(self):
-    """Tests training and evaluation code by running a single step with
-       mocked data for MNIST dataset.
-    """
+    """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
     model_dir = tempfile.mkdtemp()
 
@@ -53,10 +37,15 @@ class MnistLibTest(absltest.TestCase):
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
-    with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      mnist_lib.train_and_evaluate(
-          model_dir=model_dir, num_epochs=1, batch_size=8,
-          learning_rate=0.1, momentum=0.9)
+    with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
+      lm1b_train.train_and_evaluate(
+          random_seed=0, batch_size=1, learning_rate=0.05, num_train_steps=1,
+          num_eval_steps=1, eval_freq=1, max_target_length=10,
+          max_eval_target_length=32, weight_decay=1e-1, data_dir=None,
+          model_dir=model_dir, restore_checkpoints=False,
+          save_checkpoints=False, checkpoint_freq=2,
+          max_predict_token_length=2, sampling_temperature=0.6,
+          sampling_top_k=4, prompt_str='unittest ')
 
 
 if __name__ == '__main__':

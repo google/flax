@@ -17,6 +17,7 @@ from contextlib import contextmanager
 import dataclasses
 import functools
 import inspect
+import os
 import threading
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
                     Set, Type, Union, TypeVar, Generic)
@@ -68,7 +69,7 @@ _unspecified_parent = _Sentinel()
 
 # Enable automatic named_call wrapping for labelling profile traces.
 # -----------------------------------------------------------------------------
-_use_named_call = False
+_use_named_call = True if os.getenv('FLAX_PROFILE', '') else False
 
 def enable_named_call():
   """Enables named call wrapping for labelling profile traces."""
@@ -260,11 +261,9 @@ class Module:
     for key in get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       if _use_named_call and key != 'setup':
-        printkey = f'.{key}' if key != '__call__' else ''
-        method_name = f'{cls.__name__}{printkey}'
         # We import named_call at runtime to avoid a circular import issue.
         from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
-        method = named_call(method, method_name)
+        method = named_call(method)
       setattr(cls, key, wrap_method(method))
     return cls
 
@@ -295,7 +294,8 @@ class Module:
                              "bound Modules from outside as an argument.")
           if submodule.name is not None:
             raise ValueError(
-                "In setup assign names via self.<name> assignment.")
+                "In setup, assign names of Modules via self.<name> and not "
+                "using keyword argument name=\"<name>\"")
           submodule.name = f'{name}{suffix}'
           submodule.__post_init__()
     # val is a parameter array or a Variable reference class.
@@ -420,7 +420,7 @@ class Module:
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args,
-            kind='param') -> T:
+            kind='params') -> T:
     """Declare a parameter in this Module.
 
     Args:
@@ -467,7 +467,7 @@ class Module:
     """Create initialized data for module and return it with output."""
     if not isinstance(rngs, dict):
       assert rngs.shape == (2,)
-      rngs = {'param': rngs}
+      rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 

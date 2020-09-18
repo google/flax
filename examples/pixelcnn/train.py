@@ -93,7 +93,7 @@ flags.DEFINE_integer(
     help=('Number of features in each conv layer.'))
 
 flags.DEFINE_integer(
-    'n_logistic_mix', default=5,
+    'n_logistic_mix', default=10,
     help=('Number of components in the output distribution.'))
 
 flags.DEFINE_string(
@@ -299,7 +299,8 @@ def main(argv):
   tf.enable_v2_behavior()
 
   pcnn_module = pixelcnn.PixelCNNPP.partial(depth=FLAGS.n_resnet,
-                                            features=FLAGS.n_feature)
+                                            features=FLAGS.n_feature,
+                                            k=FLAGS.n_logistic_mix)
 
   train(pcnn_module, FLAGS.model_dir, FLAGS.batch_size, FLAGS.init_batch_size,
         FLAGS.num_epochs, FLAGS.learning_rate, FLAGS.lr_decay, FLAGS.rng)

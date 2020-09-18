@@ -43,15 +43,15 @@ def standardize(x, axis, eps=1e-8):
 
 #   def __call__(self, x):
 #     # TODO: Think about how this modifies other state
-#     if not 'param' in self.module.variables:
+#     if not 'params' in self.module.variables:
 #       # initialize parameters
 #       self.module(x)
 
-#     param = self.module.variables['param']
+#     param = self.module.variables['params']
 #     # Make a copy because `param` is (and should be) frozen. We're only transforming
 #     # the parameters, not mutating them.
 #     std_param = param.copy(kernel=standardize(param['kernel'], axis=[0, 1]))
-#     return self.module.clone(parent=None).apply({"param": std_param}, x)
+#     return self.module.clone(parent=None).apply({'params': std_param}, x)
 
 # class MyModule(Module):
 #   def __call__(self, x):
@@ -59,5 +59,5 @@ def standardize(x, axis, eps=1e-8):
 #     std_module = StdWeight(module)
 #     return std_module(x)
 
-# m_variables = MyModule().init({'param': jax.random.PRNGKey(10)}, jnp.ones((1, 4)))
+# m_variables = MyModule().init({'params': jax.random.PRNGKey(10)}, jnp.ones((1, 4)))
 # print(m_variables)

@@ -17,7 +17,7 @@ import dataclasses
 import functools
 import inspect
 from flax.core import lift, Scope
-from flax.linen import Module
+from flax.linen.module import Module
 from flax.linen.module import wrap_method
 import jax
 
@@ -193,11 +193,35 @@ def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs)
         'Can only transform a Module subclass or decorate a function'
         ' in class definition.')
 
-# Used for annotating profiles.
-named_call = functools.partial(decorator_lift_transform, lift.named_call)
 
 # TODO: provide wrappers with annotated args/kwargs and docstrings.
 vmap = functools.partial(lift_transform, lift.vmap)
 jit = functools.partial(lift_transform, lift.jit)
 remat = functools.partial(lift_transform, lift.remat)
 scan = functools.partial(lift_transform, lift.scan)
+
+
+# Special case of decorator_lift_transform to handle named calls for profiling.
+def named_call(class_fn):
+  """Labels a method for labelled traces in profiles."""
+  # NB: due to the ordering of method decorators, we must re-wrap the class_fn
+  # to maintain Module state correctly for multiple invocations.  If we want to
+  # save another stacktrace entry we could instead replicate its logic below.
+  rewrapped_fn = wrap_method(class_fn)
+  @functools.wraps(class_fn)
+  def wrapped_fn(self, *args, **kwargs):
+    fn_name = class_fn.__name__
+    method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
+    module_name = self.name or self.__class__.__name__
+    full_name = f'{module_name}{method_suffix}'
+    # make a scope-function to transform
+    def core_fn(scopes, *args, **kwargs):
+      cloned = set_module_scopes(self, scopes)
+      res = rewrapped_fn(cloned, *args, **kwargs)
+      # preserve submodule-tree stripped of scopes/tracers for introspection
+      object.__setattr__(self, 'children', clean_clone(cloned).children)
+      return res
+    # here we apply the given lifting transform to the scope-ingesting fn
+    trafo_fn = lift.named_call(core_fn, full_name)
+    return trafo_fn(get_module_scopes(self), *args, **kwargs)
+  return wrapped_fn

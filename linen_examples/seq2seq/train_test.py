@@ -31,7 +31,7 @@ jax.config.enable_omnistaging()
 
 def create_test_optimizer():
   rng = random.PRNGKey(0)
-  param = train.get_param(rng)
+  param = train.get_initial_params(rng)
   return optim.Adam(learning_rate=0.003).create(param)
 
 

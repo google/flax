@@ -38,6 +38,7 @@ from flax import nn
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
@@ -148,8 +149,7 @@ def train_step(optimizer: Any, inputs: jnp.ndarray, lengths: jnp.ndarray,
 
     # L2 regularization
     l2_params = jax.tree_leaves(model.params['lstm_classifier'])
-    # TODO(mohitreddy): Convert list to a ndarray in outer jnp.sum().
-    l2_weight = jnp.sum([jnp.sum(p ** 2) for p in l2_params])
+    l2_weight = np.sum([jnp.sum(p ** 2) for p in l2_params])
     l2_penalty = l2_reg * l2_weight
 
     loss = loss + l2_penalty
