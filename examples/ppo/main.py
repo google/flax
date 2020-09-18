@@ -117,6 +117,7 @@ def thread_inference(
       # perform inference
       # policy_optimizer, step = q1.get()
       log_probs, values = policy_action(optimizer.target, states)
+      log_probs, values = jax.device_get((log_probs, values))
 
       probs = onp.exp(onp.array(log_probs))
       # print("probs after onp conversion", probs)
