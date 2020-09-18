@@ -13,18 +13,17 @@
 # limitations under the License.
 
 """Benchmark for the ImageNet example using fake data for quick perf results."""
-import itertools
+import pathlib
 import time
 
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-import train
+import imagenet_main
 from flax.testing import Benchmark
 import jax
-import numpy as np
-import input_pipeline
-from flax import jax_utils
+
+import tensorflow_datasets as tfds
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -34,41 +33,6 @@ FLAGS = flags.FLAGS
 class ImagenetBenchmarkFakeData(Benchmark):
   """Runs ImageNet using fake data for quickly measuring performance."""
 
-  def setUp(self):
-    super(ImagenetBenchmarkFakeData, self).setUp()
-
-    # TODO(mohitreddy): look into using TFDS mock data instead of generating
-    # ourselves here.
-    def create_input_iter(batch_size, image_size, dtype, train, cache):
-      image_shape = (batch_size, image_size, image_size, 3)
-      fake_image = np.random.rand(*image_shape)
-      fake_image = fake_image.astype(dtype.as_numpy_dtype)
-      fake_image = fake_image.reshape(
-          (jax.local_device_count(), -1) + fake_image.shape[1:])
-
-      fake_label = np.random.randint(1, 1000, (batch_size,))
-      fake_label = fake_label.astype(np.int32)
-      fake_label = fake_label.reshape((jax.local_device_count(), -1))
-
-      fake_batch = {'image': fake_image, 'label': fake_label}
-      it = itertools.repeat(fake_batch)
-      jax_utils.prefetch_to_device(it, 2)
-      return it
-
-    self._real_create_input_iter = train.create_input_iter
-    train.create_input_iter = create_input_iter
-
-    self._real_train_images = input_pipeline.TRAIN_IMAGES
-    input_pipeline.TRAIN_IMAGES = 1024
-    self._real_eval_images = input_pipeline.EVAL_IMAGES
-    input_pipeline.EVAL_IMAGES = 512
-
-  def tearDown(self):
-    super(ImagenetBenchmarkFakeData, self).tearDown()
-    train.create_input_iter = self._real_create_input_iter
-    input_pipeline.TRAIN_IMAGES = self._real_train_images
-    input_pipeline.EVAL_IMAGES = self._real_eval_images
-
   @flagsaver
   def test_fake_data(self):
     model_dir = self.get_tmp_model_dir()
@@ -77,8 +41,13 @@ class ImagenetBenchmarkFakeData(Benchmark):
     FLAGS.num_epochs = 5
     FLAGS.model_dir = model_dir
 
+    # Go two directories up to the root of the flax directory.
+    flax_root_dir = pathlib.Path(__file__).parents[2]
+    data_dir = str(flax_root_dir) + '/.tfds/metadata'
+
     start_time = time.time()
-    train.main([])
+    with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
+      imagenet_main.main([])
     benchmark_time = time.time() - start_time
 
     self.report_wall_time(benchmark_time)
