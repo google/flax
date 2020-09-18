@@ -12,40 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.examples.mnist.mnist_lib."""
+# Lint as: python3
+"""Tests for flax.examples.imagenet.imagenet_lib."""
 
+import os
 import pathlib
 import tempfile
 
 from absl.testing import absltest
 
-import jax
-from jax import numpy as jnp
-
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
-import mnist_lib
+import imagenet_lib
 
 
-class MnistLibTest(absltest.TestCase):
-  """Test cases for mnist_lib."""
+class ImageNetTest(absltest.TestCase):
+  """Test cases for imagenet_lib."""
 
-  def test_cnn(self):
-    """Tests CNN module used as the trainable model."""
-    rng = jax.random.PRNGKey(0)
-    inputs = jnp.ones((5, 224, 224, 3), jnp.float32)
-    output, variables = mnist_lib.CNN().init_with_output(rng, inputs)
-
-    self.assertEqual((5, 10), output.shape)
-
-    # TODO(mohitreddy): Consider creating a testing module which
-    # gives a parameters overview including number of parameters.
-    self.assertLen(variables['params'], 4)
+  def setUp(self):
+    super().setUp()
+    tf.config.experimental.set_visible_devices([], "GPU")
 
   def test_train_and_evaluate(self):
-    """Tests training and evaluation code by running a single step with
-       mocked data for MNIST dataset.
-    """
+    """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
     model_dir = tempfile.mkdtemp()
 
@@ -53,10 +43,11 @@ class MnistLibTest(absltest.TestCase):
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
-    with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      mnist_lib.train_and_evaluate(
-          model_dir=model_dir, num_epochs=1, batch_size=8,
-          learning_rate=0.1, momentum=0.9)
+    with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
+      imagenet_lib.train_and_evaluate(
+          model_dir=model_dir, batch_size=1, num_epochs=1,
+          learning_rate=0.1, momentum=0.9, cache=False, half_precision=False,
+          num_train_steps=1, num_eval_steps=1)
 
 
 if __name__ == '__main__':

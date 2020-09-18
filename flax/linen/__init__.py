@@ -20,8 +20,9 @@
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
                          softplus, swish, tanh)
-from .attention import (
-                        MultiHeadDotProductAttention, SelfAttention, dot_product_attention)
+from .attention import (MultiHeadDotProductAttention, SelfAttention,
+                        dot_product_attention, make_attention_mask,
+                        make_causal_mask, combine_masks)
 from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
 from .module import Module, compact, enable_named_call, disable_named_call
 from .normalization import BatchNorm, GroupNorm, LayerNorm

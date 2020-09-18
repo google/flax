@@ -61,19 +61,18 @@ class PixelCNNPP(nn.Module):
     conv_down = partial(ConvDown, features=self.features)
     conv_down_right = partial(ConvDownRight, features=self.features)
 
+    res_down = partial(ResDown, dropout_p=self.dropout_p)
+    res_down_right = partial(ResDownRight, dropout_p=self.dropout_p)
+
     # Conv Modules which halve or double the spatial dimensions
     halve_down = partial(conv_down, strides=(2, 2))
     halve_down_right = partial(conv_down_right, strides=(2, 2))
-
-    res_down = partial(ResDown, dropout_p=self.dropout_p)
-    res_down_right = partial(ResDownRight, dropout_p=self.dropout_p)
 
     double_down = partial(ConvTransposeDown, features=self.features)
     double_down_right = partial(ConvTransposeDownRight, features=self.features)
 
     # Add channel of ones to distinguish image from padding later on
-    images = jnp.pad(
-        images, ((0, 0), (0, 0), (0, 0), (0, 1)), constant_values=1)
+    images = jnp.pad(images, ((0, 0), (0, 0), (0, 0), (0, 1)), constant_values=1)
 
     # Stack of `(down, down_right)` pairs, where information flows downwards
     # through `down` and downwards and to the right through `down_right`.
@@ -84,8 +83,8 @@ class PixelCNNPP(nn.Module):
     # -------------------------- FORWARD PASS ----------------------------------
     down = shift_down(conv_down(kernel_size=(2, 3))(images))
     down_right = (
-        shift_down(conv_down(kernel_size=(1, 3))(images)) +
-        shift_right(conv_down_right(kernel_size=(2, 1))(images)))
+        shift_down(conv_down(kernel_size=(1, 3))(images))
+        + shift_right(conv_down_right(kernel_size=(2, 1))(images)))
 
     stack.append((down, down_right))
     for _ in range(self.depth):
@@ -121,8 +120,8 @@ class PixelCNNPP(nn.Module):
     for _ in range(self.depth):
       down_fwd, down_right_fwd = stack.pop()
       down = res_down()(down, down_fwd)
-      down_right = res_down_right()(down_right,
-                                    jnp.concatenate((down, down_right_fwd), -1))
+      down_right = res_down_right()(
+          down_right, jnp.concatenate((down, down_right_fwd), -1))
 
     # Resize spatial dims 8 x 8  -->  16 x 16
     down, down_right = double_down()(down), double_down_right()(down_right)
@@ -130,8 +129,8 @@ class PixelCNNPP(nn.Module):
     for _ in range(self.depth + 1):
       down_fwd, down_right_fwd = stack.pop()
       down = res_down()(down, down_fwd)
-      down_right = res_down_right()(down_right,
-                                    jnp.concatenate((down, down_right_fwd), -1))
+      down_right = res_down_right()(
+          down_right, jnp.concatenate((down, down_right_fwd), -1))
 
     # Resize spatial dims 16 x 16  -->  32 x 32
     down, down_right = double_down()(down), double_down_right()(down_right)
@@ -139,14 +138,14 @@ class PixelCNNPP(nn.Module):
     for _ in range(self.depth + 1):
       down_fwd, down_right_fwd = stack.pop()
       down = res_down()(down, down_fwd)
-      down_right = res_down_right()(down_right,
-                                    jnp.concatenate((down, down_right_fwd), -1))
+      down_right = res_down_right()(
+          down_right, jnp.concatenate((down, down_right_fwd), -1))
 
     assert not stack
 
     # Note init_scale=0.1 on this layer was not in the original implementation,
     # but seems to make training more stable.
-    return ConvOneByOne(10 * self.logistic_components, 
+    return ConvOneByOne(10 * self.logistic_components,
                         init_scale=0.1)(nn.elu(down_right))
 
 
@@ -155,7 +154,7 @@ def concat_elu(x):
 
 
 def spatial_pad(pad_vertical, pad_horizontal, operand):
-  """Wrapper around lax.pad which pads spatial dimensions (horizontal and 
+  """Wrapper around lax.pad which pads spatial dimensions (horizontal and
   vertical) with zeros, without any interior padding."""
   zero = (0, 0, 0)
   return lax.pad(operand, 0.,
@@ -175,7 +174,7 @@ def _l2_normalize(v):
 
 def _make_kernel(direction, scale):
   """Maps weightnorm parameterization (direction, scale) to standard
-  parameterization. The direction has shape (spatial..., in_features, 
+  parameterization. The direction has shape (spatial..., in_features,
   out_features), scale has shape (out_features,)."""
   return scale * _l2_normalize(direction)
 
@@ -184,7 +183,7 @@ def _make_kernel(direction, scale):
 class ConvWeightNorm(nn.Module):
   """2D convolution Modules with weightnorm."""
   features: int
-  kernel_size: Tuple[int, int] = (2, 3)
+  kernel_size: Tuple[int, int]
   strides: Tuple[int, int] = None
   padding: str = 'VALID'
   transpose: bool = False
@@ -198,25 +197,19 @@ class ConvWeightNorm(nn.Module):
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
     if self.transpose:
-      conv = partial(
-          lax.conv_transpose,
-          strides=strides,
-          padding=self.padding,
-          precision=self.precision)
+      conv = partial(lax.conv_transpose, strides=strides, padding=self.padding,
+                     precision=self.precision)
     else:
-      conv = partial(
-          lax.conv_general_dilated,
-          window_strides=strides,
-          padding=self.padding,
-          dimension_numbers=('NHWC', 'HWIO', 'NHWC'),
-          precision=self.precision)
+      conv = partial(lax.conv_general_dilated, window_strides=strides,
+                     padding=self.padding,
+                     dimension_numbers=('NHWC', 'HWIO', 'NHWC'),
+                     precision=self.precision)
 
     in_features = inputs.shape[-1]
     kernel_shape = self.kernel_size + (in_features, self.features)
 
     def initializer(key):
       # A weightnorm initializer generating a (direction, scale, bias) tuple.
-      # Note that the shape argument is not used.
       direction = nn.initializers.normal()(key, kernel_shape, self.dtype)
       unnormed_out = conv(inputs, _l2_normalize(direction))
       mean = jnp.mean(unnormed_out, (0, 1, 2))
@@ -247,8 +240,9 @@ class ConvDown(nn.Module):
     padding = ((k_h - 1, 0),          # Vertical padding
                (k_w // 2, k_w // 2))  # Horizontal padding
 
-    return ConvWeightNorm(self.features, self.kernel_size, self.strides, padding,
-                init_scale=self.init_scale)(inputs)
+    return ConvWeightNorm(
+        self.features, self.kernel_size, self.strides, padding,
+        init_scale=self.init_scale)(inputs)
 
 
 class ConvDownRight(nn.Module):
@@ -264,13 +258,13 @@ class ConvDownRight(nn.Module):
     padding = ((k_h - 1, 0),  # Vertical padding
                (k_w - 1, 0))  # Horizontal padding
 
-    return ConvWeightNorm(self.features, self.kernel_size, self.strides, padding, 
-                init_scale=self.init_scale)(inputs)
+    return ConvWeightNorm(
+        self.features, self.kernel_size, self.strides, padding,
+        init_scale=self.init_scale)(inputs)
 
 
 class ConvTransposeDown(nn.Module):
-  """Transpose convolution with output slicing so that information cannot flow.
-
+  """Transpose convolution with output slicing so that information cannot flow
   upwards.  Strides are (2, 2) by default which implies the spatial dimensions
   of the output shape are double those of the input shape.
   """
@@ -282,10 +276,8 @@ class ConvTransposeDown(nn.Module):
   def __call__(self, inputs):
     _, k_w = self.kernel_size
     out_h, out_w = onp.multiply(self.strides, inputs.shape[1:3])
-    return ConvTranspose(self.features, self.kernel_size,
-                         self.strides)(inputs)[:, :out_h, (k_w - 1) // 2:out_w +
-                                               (k_w - 1) // 2, :]
-
+    return ConvTranspose(self.features, self.kernel_size, self.strides)(inputs)[
+        :, :out_h, (k_w - 1) // 2:out_w + (k_w - 1) // 2, :]
 
 class ConvTransposeDownRight(nn.Module):
   """Transpose convolution with output slicing so that information cannot flow.
@@ -304,6 +296,7 @@ class ConvTransposeDownRight(nn.Module):
                          self.strides)(inputs)[:, :out_h, :out_w]
 
 
+# Resnet modules
 class GatedResnet(nn.Module):
   conv_module: Callable[..., Any]
   nonlinearity: Callable[..., Any] = concat_elu
@@ -331,7 +324,7 @@ ResDownRight = partial(GatedResnet, conv_module=ConvDownRight)
 
 # Logistic mixture distribution utils
 def conditional_params_from_outputs(theta, img):
-  """Maps an image `img` and the PixelCNN++ convnet output `theta` to 
+  """Maps an image `img` and the PixelCNN++ convnet output `theta` to
   conditional parameters for a mixture of k logistics over each pixel.
 
   Returns a tuple `(means, inverse_scales, logit_weights)` where `means` and
@@ -343,8 +336,8 @@ def conditional_params_from_outputs(theta, img):
     logit_weights.shape == (batch..., k, h, w)
 
   Args:
-    theta: outputs of PixelCNN++ neural net with shape (batch..., h, w, (1 + 3 *
-      c) * k)
+    theta: outputs of PixelCNN++ neural net with shape
+      (batch..., h, w, (1 + 3 * c) * k)
     img: an image with shape (batch..., h, w, c)
 
   Returns:
@@ -381,7 +374,7 @@ def conditional_params_from_outputs(theta, img):
 
 
 def logprob_from_conditional_params(images, means, inv_scales, logit_weights):
-  """Compute log-likelihoofd produced by `conditional_params_from_outputs`.
+  """Compute log-likelihoods.
 
   Computes the log-likelihoods of images given the conditional logistic mixture
   parameters produced by `conditional_params_from_outputs`. The 8-bit pixel

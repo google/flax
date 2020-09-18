@@ -140,7 +140,7 @@ def DenseLayer(x, features):
 
 ## A full ResNet implementation
 
-(from [examples/imagenet/models.py](examples/imagenet/models.py))
+(from [examples/imagenet/resnet_v1.py](examples/imagenet/resnet_v1.py))
 
 ```py
 class ResidualBlock(nn.Module):
