@@ -37,7 +37,7 @@ class MnistBenchmark(Benchmark):
     model_dir = self.get_tmp_model_dir()
     start_time = time.time()
     mnist_lib.train_and_evaluate(
-      config=config_lib.get_config(),model_dir=model_dir)
+      config=config_lib.get_config(), model_dir=model_dir)
     benchmark_time = time.time() - start_time
     summaries = self.read_summaries(model_dir)
 
