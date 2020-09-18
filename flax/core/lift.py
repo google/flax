@@ -32,7 +32,6 @@ from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, group
 from .named_call import named_call_p
 
 from . import unified_transforms
-from .unified_transforms import broadcast
 
 
 T = TypeVar('T')
@@ -296,12 +295,13 @@ def vmap(fn: Callable[..., Any],
       inner, variable_in_groups, variable_out_groups, rng_groups)
 
 
-ScanAxis = Union[unified_transforms._Broadcast, int]
+ScanAxis = int
 InOutScanAxis = Union[ScanAxis, In[ScanAxis], Out[ScanAxis]]
 
 
 def scan(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {},
+         variable_broadcast: CollectionFilter = False,
          variable_carry: CollectionFilter = False,
          split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
          in_axes=0, out_axes=0,
@@ -311,8 +311,10 @@ def scan(fn: Callable[..., Any],
   variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
   variable_out_groups, variable_out_axes = _unzip2(variable_out_axes.items())
+  assert all(isinstance(ax, int) for ax in variable_in_axes)
+  assert all(isinstance(ax, int) for ax in variable_out_axes)
   rng_groups, rng_splits = _unzip2(split_rngs.items())
-  rng_axes = tuple(0 if rng_split else broadcast for rng_split in rng_splits)
+  rng_axes = tuple(0 if rng_split else unified_transforms.broadcast for rng_split in rng_splits)
 
   def inner(scope_fn, repack_fn, variable_groups_xs, rng_groups_xs, init, *args):
     def find_length(axis, x):
@@ -337,34 +339,56 @@ def scan(fn: Callable[..., Any],
     rng_groups_xs = tuple(map(split_rngs, rng_groups_xs))
 
     n = len(variable_groups_xs)
-    variable_in_axes_xs = (variable_in_axes,) * n
-    variable_out_axes_xs = (variable_out_axes,) * n
+
+    variable_in_axes_xs = (variable_in_axes,) * n if variable_in_axes else ()
+    variable_out_axes_xs = (variable_out_axes,) * n if variable_out_axes else ()
     rng_axes_xs = (rng_axes,) * n
 
     @functools.partial(unified_transforms.scan,
                        in_axes=(variable_in_axes_xs, rng_axes_xs, in_axes),
                        out_axes=(out_axes, variable_out_axes_xs),
                        length=length, reverse=reverse)
-    def scanned(carry, variable_groups_xs, rng_groups_xs, args):
+    def scanned(broadcast_vars, carry, variable_groups_xs, rng_groups_xs, args):
       carry_vars, c = carry
+      in_vars_xs_t = tuple(zip(*variable_groups_xs))
+      in_vars_xs_t = (broadcast_vars, carry_vars) + in_vars_xs_t
+      variable_groups_xs = tuple(zip(*in_vars_xs_t))
       scope = scope_fn(variable_groups_xs, rng_groups_xs)
       c, y = fn(scope, c, *args)
       out_vars_xs = repack_fn(scope)
       out_vars_xs_t = tuple(zip(*out_vars_xs))
-      carry_vars = out_vars_xs_t[0]
-      scan_vars = out_vars_xs_t[1:]
-      return (carry_vars, c), (y, scan_vars)
+      broadcast_vars_out = out_vars_xs_t[0]
+      carry_vars = out_vars_xs_t[1]
+      scan_vars = out_vars_xs_t[2:]
+      # add immutable broadcast vars back to broadcast output
+      # otherwise they won't be fed to the actual scan body
+      for in_group, out_group in zip(broadcast_vars, broadcast_vars_out):
+        for col in in_group:
+          if col not in out_group:
+            out_group[col] = in_group[col]
+      return broadcast_vars_out, (carry_vars, c), (y, scan_vars)
 
     variable_groups_xs_t = tuple(zip(*variable_groups_xs))
-    carry_vars = variable_groups_xs_t[0]
-    scan_vars = variable_groups_xs_t[1:]
-    (carry_vars, c), (ys, scan_vars) = scanned((carry_vars, init), scan_vars, rng_groups_xs, args)
-    out_vars_xs_t = (carry_vars,) + scan_vars
+    broadcast_vars = variable_groups_xs_t[0]
+    carry_vars = variable_groups_xs_t[1]
+    scan_vars = tuple(zip(*variable_groups_xs_t[2:]))
+    broadcast_vars, (carry_vars, c), (ys, scan_vars) = scanned(
+        broadcast_vars, (carry_vars, init), scan_vars, rng_groups_xs, args)
+    # remove immutable broadcast vars otherwise they will be updated
+    # with their own value which will cause an error
+    for out_group in broadcast_vars:
+      for name, col in tuple(out_group.items()):
+        if isinstance(col, FrozenDict):
+          del out_group[name]
+    out_vars_xs_t = (broadcast_vars, carry_vars,) + scan_vars
     out_vars_xs = tuple(zip(*out_vars_xs_t))
     return (c, ys), out_vars_xs
 
   return pack(
-      inner, (variable_carry,) + variable_in_groups, (variable_carry,) + variable_out_groups, rng_groups)
+      inner,
+      (variable_broadcast, variable_carry) + variable_in_groups,
+      (variable_broadcast, variable_carry) + variable_out_groups,
+      rng_groups)
 
 
 def custom_vjp(module_fn: Callable[..., Any], backward_fn: Callable[..., Any],
