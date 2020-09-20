@@ -33,6 +33,7 @@ from flax import nn
 from flax import optim
 from flax.metrics import tensorboard
 
+
 class CNN(nn.Module):
   """A simple CNN model."""
 
@@ -156,7 +157,10 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
     batch_size: Batch size of the input.
     learning_rate: Learning rate for the momentum optimizer.
     momentum: Momentum value for the momentum optimizer.
-"""
+
+  Returns:
+    The trained optimizer.
+  """
   train_ds, test_ds = get_datasets()
   rng = random.PRNGKey(0)
 

@@ -124,7 +124,7 @@ index 60b79b5..2d946ca 100644
    return optimizer.target
  
 diff --git a/examples/seq2seq/train_test.py b/examples/seq2seq/train_test.py
-index b638d55..26fc7b8 100644
+index b638d55..006603b 100644
 --- a/examples/seq2seq/train_test.py
 +++ b/examples/seq2seq/train_test.py
 @@ -101,7 +101,7 @@ class TrainTest(absltest.TestCase):
@@ -136,8 +136,3 @@ index b638d55..26fc7b8 100644
  
      self.assertLessEqual(train_metrics['loss'], 5)
      self.assertGreaterEqual(train_metrics['accuracy'], 0)
-@@ -113,3 +113,4 @@ class TrainTest(absltest.TestCase):
- 
- if __name__ == '__main__':
-   absltest.main()
-+

@@ -1,5 +1,5 @@
 diff --git a/examples/mnist/mnist_lib.py b/examples/mnist/mnist_lib.py
-index 63af6e8..ebf9f9b 100644
+index 1ca49b2..1a5ed71 100644
 --- a/examples/mnist/mnist_lib.py
 +++ b/examples/mnist/mnist_lib.py
 @@ -20,6 +20,8 @@ The data is loaded using tensorflow_datasets.
@@ -11,15 +11,15 @@ index 63af6e8..ebf9f9b 100644
  import jax
  from jax import random
  
-@@ -29,6 +31,7 @@ import numpy as onp
- 
+@@ -31,6 +33,7 @@ import tensorflow as tf
+ tf.config.experimental.set_visible_devices([], "GPU")
  import tensorflow_datasets as tfds
  
 +from flax import jax_utils
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
-@@ -51,12 +54,14 @@ class CNN(nn.Module):
+@@ -53,12 +56,14 @@ class CNN(nn.Module):
      return x
  
  
@@ -34,7 +34,7 @@ index 63af6e8..ebf9f9b 100644
  def create_optimizer(model, learning_rate, beta):
    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
    optimizer = optimizer_def.create(model)
-@@ -82,7 +87,7 @@ def compute_metrics(logits, labels):
+@@ -84,7 +89,7 @@ def compute_metrics(logits, labels):
    return metrics
  
  
@@ -43,7 +43,7 @@ index 63af6e8..ebf9f9b 100644
  def train_step(optimizer, batch):
    """Train for a single step."""
    def loss_fn(model):
-@@ -96,7 +101,7 @@ def train_step(optimizer, batch):
+@@ -98,7 +103,7 @@ def train_step(optimizer, batch):
    return optimizer, metrics
  
  
@@ -52,7 +52,7 @@ index 63af6e8..ebf9f9b 100644
  def eval_step(model, batch):
    logits = model(batch['image'])
    return compute_metrics(logits, batch['label'])
-@@ -113,16 +118,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -115,16 +120,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
@@ -80,7 +80,7 @@ index 63af6e8..ebf9f9b 100644
                 epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
  
    return optimizer, epoch_metrics_np
-@@ -131,7 +143,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -133,7 +145,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
  def eval_model(model, test_ds):
    metrics = eval_step(model, test_ds)
    metrics = jax.device_get(metrics)
@@ -89,7 +89,7 @@ index 63af6e8..ebf9f9b 100644
    return summary['loss'], summary['accuracy']
  
  
-@@ -163,22 +175,25 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+@@ -165,22 +177,25 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
    summary_writer = tensorboard.SummaryWriter(model_dir)
  
    rng, init_rng = random.split(rng)

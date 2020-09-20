@@ -22,6 +22,7 @@ from absl.testing import absltest
 import jax
 from jax import numpy as jnp
 
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 import mnist_lib
@@ -29,6 +30,11 @@ import mnist_lib
 
 class MnistLibTest(absltest.TestCase):
   """Test cases for mnist_lib."""
+
+  def setUp(self):
+    super().setUp()
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
 
   def test_cnn(self):
     """Tests CNN module used as the trainable model."""
@@ -43,9 +49,7 @@ class MnistLibTest(absltest.TestCase):
     self.assertLen(init_params, 4)
 
   def test_train_and_evaluate(self):
-    """Tests training and evaluation code by running a single step with
-       mocked data for MNIST dataset.
-    """
+    """Runs a single train/eval step with mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
     model_dir = tempfile.mkdtemp()
 

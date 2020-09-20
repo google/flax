@@ -39,7 +39,8 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 import numpy as np
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
+
 
 FLAGS = flags.FLAGS
 
@@ -351,8 +352,6 @@ def train_and_evaluate(
     sampling_top_k: Top k cutoff for logit sampling.
     prompt_str: Prompt for language model sampling.
   """
-  tf.enable_v2_behavior()
-
   if jax.host_id() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
         os.path.join(model_dir, 'train'))
@@ -503,6 +502,8 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
   train_and_evaluate(
     random_seed=FLAGS.random_seed, batch_size=FLAGS.batch_size,
     learning_rate=FLAGS.learning_rate, num_train_steps=FLAGS.num_train_steps,

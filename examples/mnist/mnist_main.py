@@ -21,6 +21,8 @@ This script trains a simple Convolutional Neural Net on the MNIST dataset.
 from absl import app
 from absl import flags
 
+import tensorflow as tf
+
 import mnist_lib
 
 FLAGS = flags.FLAGS
@@ -47,6 +49,9 @@ flags.DEFINE_string(
 
 
 def main(_):
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   mnist_lib.train_and_evaluate(
       model_dir=FLAGS.model_dir, num_epochs=FLAGS.num_epochs,
       batch_size=FLAGS.batch_size, learning_rate=FLAGS.learning_rate,

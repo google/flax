@@ -24,6 +24,8 @@ from jax import random
 import jax.numpy as jnp
 
 import numpy as onp
+import tensorflow as tf
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -32,6 +34,11 @@ jax.config.enable_omnistaging()
 
 
 class TrainTest(absltest.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
 
   def test_create_model(self):
     variables = train.initialized(random.PRNGKey(0), 224)
