@@ -23,53 +23,59 @@ FLAGS = flags.FLAGS
 # https://github.com/openai/baselines/blob/master/baselines/ppo2/defaults.py
 
 flags.DEFINE_float(
-    'learning_rate', default=2.5e-4,
-    help=('The learning rate for the Adam optimizer.')
+  'learning_rate', default=2.5e-4,
+  help=('The learning rate for the Adam optimizer.')
 )
 
 flags.DEFINE_integer(
-    'batch_size', default=256,
-    help=('Batch size for training.')
+  'batch_size', default=256,
+  help=('Batch size for training.')
 )
 
 flags.DEFINE_integer(
-    'num_agents', default=8,
-    help=('Number of agents playing in parallel.')
+  'num_agents', default=8,
+  help=('Number of agents playing in parallel.')
 )
 
 flags.DEFINE_integer(
-    'actor_steps', default=128,
-    help=('Batch size for training.')
+  'actor_steps', default=128,
+  help=('Batch size for training.')
 )
 
 flags.DEFINE_integer(
-    'num_epochs', default=3,
-    help=('Number of epochs per each unroll of the policy.')
+  'num_epochs', default=3,
+  help=('Number of epochs per each unroll of the policy.')
 )
 
 flags.DEFINE_float(
-    'gamma', default=0.99,
-    help=('Discount parameter.')
+  'gamma', default=0.99,
+  help=('Discount parameter.')
 )
 
 flags.DEFINE_float(
-    'lambda_', default=0.95,
-    help=('Generalized Advantage Estimation parameter.')
+  'lambda_', default=0.95,
+  help=('Generalized Advantage Estimation parameter.')
 )
 
 flags.DEFINE_float(
-    'clip_param', default=0.1,
-    help=('The PPO clipping parameter used to clamp ratios in loss function.')
+  'clip_param', default=0.1,
+  help=('The PPO clipping parameter used to clamp ratios in loss function.')
 )
 
 flags.DEFINE_float(
-    'vf_coeff', default=0.5,
-    help=('Weighs value function loss in the total loss.')
+  'vf_coeff', default=0.5,
+  help=('Weighs value function loss in the total loss.')
 )
 
 flags.DEFINE_float(
-    'entropy_coeff', default=0.01,
-    help=('Weighs entropy bonus in the total loss.')
+  'entropy_coeff', default=0.01,
+  help=('Weighs entropy bonus in the total loss.')
+)
+
+flags.DEFINE_boolean(
+  'decaying_lr_and_clip_param', default=True,
+  help=(('Linearly decay learning rate and clipping parameter to zero during '
+          'the training.'))
 )
 
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
@@ -77,7 +83,7 @@ flags.DEFINE_float(
 def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   """Use Generalized Advantage Estimation (GAE) to compute advantages.
 
-  As defined by eqs. (11-12) in PPO paper arXiv: 1707.06347. Implementaion uses 
+  As defined by eqs. (11-12) in PPO paper arXiv: 1707.06347. Implementation uses
   key observation that A_{t} = delta_t + gamma*lambda*A_{t+1}.
   """
   assert rewards.shape[0] + 1 == values.shape[0], ("One more value needed; "
@@ -94,9 +100,9 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   return jnp.array(advantages)
 
 @jax.jit
-def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
+def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr):
   """Compilable train step.
-  
+
   Runs an entire epoch of training (i.e. the loop over
   minibatches within an epoch is included here for performance reasons).
 
@@ -111,6 +117,8 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
     clip_param: the PPO clipping parameter used to clamp ratios in loss function
     vf_coeff: weighs value function loss in total loss
     entropy_coeff: weighs entropy bonus in the total loss
+    lr: learning rate, varies between optimization steps
+        if decaying_lr_and_clip_param is set to true
 
   Returns:
     optimizer: new optimizer after the parameters update
@@ -144,10 +152,10 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
   loss = 0.
   for batch in zip(*trn_data):
     grad_fn = jax.value_and_grad(loss_fn)
-    l, grad = grad_fn(optimizer.target, batch, clip_param, vf_coeff, 
+    l, grad = grad_fn(optimizer.target, batch, clip_param, vf_coeff,
                       entropy_coeff)
     loss += l
-    optimizer = optimizer.apply_gradient(grad)
+    optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
     grad_norm = sum(jnp.square(g).sum() for g in jax.tree_leaves(grad))
   return optimizer, loss, grad_norm
 
@@ -158,7 +166,7 @@ def thread_inference(
   simulators: List[remote.RemoteSimulator],
   steps_per_actor: int):
   """Worker function for a separate inference thread.
-  
+
   Runs `steps_per_actor` time steps of the game for each of the `simulators`.
   """
   while(True):
@@ -229,8 +237,8 @@ def train(
     daemon=True)
   inference_thread.start()
   t1 = time.time()
-
-  for s in range(steps_total // (num_agents * FLAGS.actor_steps)):
+  loop_steps = steps_total // (num_agents * FLAGS.actor_steps)
+  for s in range(loop_steps):
     print(f"\n training loop step {s}")
     #bookkeeping and testing
     if (s + 1) % (10000 // (num_agents * FLAGS.actor_steps)) == 0:
@@ -240,7 +248,10 @@ def train(
     if (s + 1) % (20000 // (num_agents * FLAGS.actor_steps)) == 0:
       test_episodes.policy_test(1, optimizer.target, game, render=False)
 
-
+    if FLAGS.decaying_lr_and_clip_param:
+      alpha = 1. - s/loop_steps
+    else:
+      alpha = 1.
     # send the up-to-date policy model and current step to inference thread
     step = s*num_agents
     policy_q.put((optimizer, step))
@@ -283,12 +294,14 @@ def train(
         lambda x: onp.reshape(
           x, (FLAGS.num_agents * FLAGS.actor_steps, ) + x.shape[2:]), trn_data))
       print(f"Step {s}: rewards variance {rewards.var()}")
+      lr = FLAGS.learning_rate * alpha
+      clip_param = FLAGS.clip_param * alpha
       for e in range(FLAGS.num_epochs): #possibly compile this loop inside a jit
         shapes = list(map(lambda x : x.shape, trn_data))
         permutation = onp.random.permutation(num_agents * FLAGS.actor_steps)
         trn_data = tuple(map(lambda x: x[permutation], trn_data))
         optimizer, loss, last_iter_grad_norm = train_step(optimizer, trn_data,
-            FLAGS.clip_param, FLAGS.vf_coeff, FLAGS.entropy_coeff)
+          clip_param, FLAGS.vf_coeff, FLAGS.entropy_coeff, lr)
         print(f"epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
     #end of PPO training
 
@@ -300,7 +313,7 @@ def main(argv):
   num_actions = env_utils.get_num_actions(game)
   print(f"Playing {game} with {num_actions} actions")
   num_agents = FLAGS.num_agents
-  total_frames = 10000000
+  total_frames = 40000000
   train_device = jax.devices()[0]
   inference_device = jax.devices()[1]
   key = jax.random.PRNGKey(0)
