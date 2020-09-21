@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """A class implementing minimal Atari 2600 preprocessing.
-Adapted from Dopamine.
+Adapted from SEED RL, originally adapted from Dopamine.
 """
 
 from gym.spaces.box import Box

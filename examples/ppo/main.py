@@ -4,19 +4,18 @@ import jax.numpy as jnp
 import numpy as onp
 import flax
 import time
-from functools import partial
-from typing import Tuple, List
-from queue import Queue
+import functools
+import queue
 from absl import flags
 from absl import app
 import threading
+from typing import Tuple, List
 
-
-from models import create_model, create_optimizer
-from agent import policy_action
-from remote import RemoteSimulator
-from test_episodes import test
-from env import get_num_actions
+import models
+import agent
+import remote
+import test_episodes
+import env_utils
 
 FLAGS = flags.FLAGS
 
@@ -73,15 +72,16 @@ flags.DEFINE_float(
     help=('Weighs entropy bonus in the total loss.')
 )
 
-@partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
+@functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 @jax.jit
 def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
-  """Use Generalized Advantage Estimation (GAE) to compute advantages
-  Eqs. (11-12) in PPO paper arXiv: 1707.06347.
-  Uses key observation that A_{t} = \delta_t + \gamma*\lambda*A_{t+1}.
+  """Use Generalized Advantage Estimation (GAE) to compute advantages.
+
+  As defined by eqs. (11-12) in PPO paper arXiv: 1707.06347. Implementaion uses 
+  key observation that A_{t} = delta_t + gamma*lambda*A_{t+1}.
   """
   assert rewards.shape[0] + 1 == values.shape[0], ("One more value needed; "
-          "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate \delta_t")
+          "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate delta_t")
   advantages, gae = [], 0.
   for t in reversed(range(len(rewards))):
     # masks to set next state value to 0 for terminal states
@@ -95,19 +95,23 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
 
 @jax.jit
 def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
-  """Compilable train step. Runs an entire epoch of training (i.e. the loop over
-  minibatches within an epoch is included here for performance reasons.
+  """Compilable train step.
+  
+  Runs an entire epoch of training (i.e. the loop over
+  minibatches within an epoch is included here for performance reasons).
+
   Args:
     optimizer: optimizer for the actor-critic model
     trn_data: Tuple of the following five elements forming the experience:
                   states: shape (steps_per_agent*num_agents, 84, 84, 4)
                   actions: shape (steps_per_agent*num_agents, 84, 84, 4)
-                  old_log_probs: shape (steps_per_agent*num_agentss, )
-                  returns: shape (steps_per_agent*num_agentss, )
+                  old_log_probs: shape (steps_per_agent*num_agents, )
+                  returns: shape (steps_per_agent*num_agents, )
                   advantages: (steps_per_agent*num_agents, )
     clip_param: the PPO clipping parameter used to clamp ratios in loss function
     vf_coeff: weighs value function loss in total loss
     entropy_coeff: weighs entropy bonus in the total loss
+
   Returns:
     optimizer: new optimizer after the parameters update
     loss: loss summed over training steps
@@ -140,8 +144,8 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
   loss = 0.
   for batch in zip(*trn_data):
     grad_fn = jax.value_and_grad(loss_fn)
-    l, grad = grad_fn(optimizer.target, batch, clip_param, vf_coeff,
-    entropy_coeff)
+    l, grad = grad_fn(optimizer.target, batch, clip_param, vf_coeff, 
+                      entropy_coeff)
     loss += l
     optimizer = optimizer.apply_gradient(grad)
     grad_norm = sum(jnp.square(g).sum() for g in jax.tree_leaves(grad))
@@ -149,17 +153,16 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff):
 
 
 def thread_inference(
-  q1 : Queue,
-  q2: Queue,
-  simulators : List[RemoteSimulator],
-  steps_per_actor : int):
-  """Worker function for a separate thread used for inference and running
-  the simulators in order to maximize the GPU/TPU usage. Runs
-  `steps_per_actor` time steps of the game for each of the `simulators`.
+  policy_q: queue.Queue,
+  experience_q: queue.Queue,
+  simulators: List[remote.RemoteSimulator],
+  steps_per_actor: int):
+  """Worker function for a separate inference thread.
+  
+  Runs `steps_per_actor` time steps of the game for each of the `simulators`.
   """
-
   while(True):
-    optimizer, step = q1.get()
+    optimizer, step = policy_q.get()
     all_experience = []
     for _ in range(steps_per_actor + 1): # +1 to get one more value
                                          # needed for GAE
@@ -170,8 +173,8 @@ def thread_inference(
       states = onp.concatenate(states, axis=0)
 
       # perform inference
-      # policy_optimizer, step = q1.get()
-      log_probs, values = policy_action(optimizer.target, states)
+      # policy_optimizer, step = policy_q.get()
+      log_probs, values = agent.policy_action(optimizer.target, states)
       log_probs, values = jax.device_get((log_probs, values))
 
       probs = onp.exp(onp.array(log_probs))
@@ -194,17 +197,18 @@ def thread_inference(
         experiences.append(sample)
       all_experience.append(experiences)
 
-    q2.put(all_experience)
+    experience_q.put(all_experience)
 
 
 def train(
-  optimizer : flax.optim.base.Optimizer,
-  game  : str,
-  steps_total : int,
-  num_agents : int,
+  optimizer: flax.optim.base.Optimizer,
+  game: str,
+  steps_total: int,
+  num_agents: int,
   train_device,
   inference_device):
   """Main training loop.
+
   Args:
     optimizer: optimizer for the actor-critic model
     game: string specifying the Atari game from Gym package
@@ -212,13 +216,17 @@ def train(
     num_agents: number of separate processes with agents running the envs
     train_device : device used for training
     inference_device :  device used for inference
+
   Returns:
     None
   """
-  simulators = [RemoteSimulator(game) for i in range(num_agents)]
-  q1, q2 = Queue(maxsize=1), Queue(maxsize=1)
-  inference_thread = threading.Thread(target=thread_inference,
-                        args=(q1, q2, simulators, FLAGS.actor_steps), daemon=True)
+  simulators = [remote.RemoteSimulator(game) for i in range(num_agents)]
+  policy_q = queue.Queue(maxsize=1)
+  experience_q = queue.Queue(maxsize=1)
+  inference_thread = threading.Thread(
+    target=thread_inference,
+    args=(policy_q, experience_q, simulators, FLAGS.actor_steps),
+    daemon=True)
   inference_thread.start()
   t1 = time.time()
 
@@ -230,18 +238,18 @@ def train(
             f"time elapsed {time.time() - t1}")
       t1 = time.time()
     if (s + 1) % (20000 // (num_agents * FLAGS.actor_steps)) == 0:
-      test(1, optimizer.target, game, render=False)
+      test_episodes.test(1, optimizer.target, game, render=False)
 
 
     # send the up-to-date policy model and current step to inference thread
     step = s*num_agents
-    q1.put((optimizer, step))
+    policy_q.put((optimizer, step))
 
     # perform PPO training
     # experience is a list of list of tuples, here we preprocess this data to
     # get required input for GAE and then for training
     # initial version, needs improvement in terms of speed & readability
-    all_experiences = q2.get()
+    all_experiences = experience_q.get()
     if s >= 0: #avoid training when there's no data yet
       obs_shape = (84, 84, 4)
       exp_dims = (FLAGS.actor_steps, FLAGS.num_agents)
@@ -272,9 +280,8 @@ def train(
       # after preprocessing, concatenate data from all agents
       trn_data = (states, actions, log_probs, returns, advantages)
       trn_data = tuple(map(
-        lambda x: onp.reshape(x,
-         (FLAGS.num_agents * FLAGS.actor_steps, ) + x.shape[2:]), trn_data)
-      )
+        lambda x: onp.reshape(
+          x, (FLAGS.num_agents * FLAGS.actor_steps, ) + x.shape[2:]), trn_data))
       print(f"Step {s}: rewards variance {rewards.var()}")
       for e in range(FLAGS.num_epochs): #possibly compile this loop inside a jit
         shapes = list(map(lambda x : x.shape, trn_data))
@@ -290,7 +297,7 @@ def train(
 def main(argv):
   game = "Pong"
   game += "NoFrameskip-v4"
-  num_actions = get_num_actions(game)
+  num_actions = env_utils.get_num_actions(game)
   print(f"Playing {game} with {num_actions} actions")
   num_agents = FLAGS.num_agents
   total_frames = 10000000
@@ -298,8 +305,8 @@ def main(argv):
   inference_device = jax.devices()[1]
   key = jax.random.PRNGKey(0)
   key, subkey = jax.random.split(key)
-  model = create_model(subkey, num_outputs=num_actions)
-  optimizer = create_optimizer(model, learning_rate=FLAGS.learning_rate)
+  model = models.create_model(subkey, num_outputs=num_actions)
+  optimizer = models.create_optimizer(model, learning_rate=FLAGS.learning_rate)
   del model
   # jax.device_put(optimizer.target, device=train_device)
   train(optimizer, game, total_frames, num_agents, train_device,

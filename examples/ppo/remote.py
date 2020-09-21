@@ -1,16 +1,20 @@
+"""Utilities for running the agents in separate processes."""
+
 import multiprocessing
 import numpy as onp
-from collections import namedtuple
-from env import create_env
+import collections
 
-exp_tuple = namedtuple('exp_tuple',
-                  ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
+import env_utils
+
+exp_tuple = collections.namedtuple(
+  'exp_tuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
 
 class RemoteSimulator:
-  """Class that wraps basic functionality needed for an agent
-  emulating Atari in a separate process.
+  """Wrap functionality for an agent emulating Atari in a separate process.
+
   An object of this class is created for every agent.
   """
+  
   def __init__(self, game):
     parent_conn, child_conn = multiprocessing.Pipe()
     self.proc = multiprocessing.Process(
@@ -20,11 +24,12 @@ class RemoteSimulator:
 
 
 def rcv_action_send_exp(conn, game):
-  """Function running on remote agents. Receives action from
-  the main learner, performs one step of simulation and
-  sends back collected experience.
+  """Run the remote agents.
+  
+  Receive action from the main learner, perform one step of simulation and
+  send back collected experience.
   """
-  env = create_env(game)
+  env = env_utils.create_env(game)
   while True:
     obs = env.reset()
     done = False
@@ -42,8 +47,6 @@ def rcv_action_send_exp(conn, game):
 
 
 def get_state(observation):
-  """Covert observation from Atari environment into a NumPy array and add
-  a batch dimension.
-  """
+  """Convert Atari env observation into a NumPy array, add batch dimension."""
   state = onp.array(observation)
   return state[None, ...]

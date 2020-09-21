@@ -1,15 +1,20 @@
+"""Class and functions to define and initialize the actor-critic model."""
+
 import flax
 from flax import nn
 import jax.numpy as jnp
 
 class ActorCritic(flax.nn.Module):
-  '''
-  Architecture from "Human-level control through deep reinforcement learning."
-  Nature 518, no. 7540 (2015): 529-533.
-  Note that this is different than the one from  "Playing atari with deep
-  reinforcement learning." arxiv.org/abs/1312.5602 (2013)
-  '''
+  """Class defining the actor-critic model."""
+
   def apply(self, x, num_outputs):
+    """Define the convolutional network architecture.
+    
+    Architecture originates from "Human-level control through deep reinforcement 
+    learning.", Nature 518, no. 7540 (2015): 529-533.
+    Note that this is different than the one from  "Playing atari with deep
+    reinforcement learning." arxiv.org/abs/1312.5602 (2013)
+    """
     x = x.astype(jnp.float32) / 255.
     dtype = jnp.float32
     x = nn.Conv(x, features=32, kernel_size=(8, 8),
