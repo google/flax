@@ -10,7 +10,8 @@ import env_utils
 import remote
 import agent
 
-def test(n_episodes : int,
+def policy_test(
+  n_episodes : int,
   model : flax.nn.base.Model,
   game : str,
   render : bool = False):

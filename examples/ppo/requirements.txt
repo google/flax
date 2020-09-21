@@ -1,4 +1,5 @@
+atari-py
+gym
 jax
 jaxlib
-gym
-atari-py
+opencv-python

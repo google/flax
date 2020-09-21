@@ -4,7 +4,7 @@ Uses the Proximal Policy Optimization algorithm ([Schulman et al., 2017](https:/
 
 ## Requirements
 
-* This example depends on the `gym` and `atari-py` packages in addition to `jax` and `flax`.
+* This example depends on the `gym`, `opencv-python` and `atari-py` packages in addition to `jax` and `flax`.
 
 ## How to run
 

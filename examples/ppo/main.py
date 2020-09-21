@@ -238,7 +238,7 @@ def train(
             f"time elapsed {time.time() - t1}")
       t1 = time.time()
     if (s + 1) % (20000 // (num_agents * FLAGS.actor_steps)) == 0:
-      test_episodes.test(1, optimizer.target, game, render=False)
+      test_episodes.policy_test(1, optimizer.target, game, render=False)
 
 
     # send the up-to-date policy model and current step to inference thread
