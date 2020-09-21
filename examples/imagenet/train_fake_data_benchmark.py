@@ -46,7 +46,7 @@ class ImagenetBenchmarkFakeData(Benchmark):
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
     start_time = time.time()
-    with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
+    with tfds.testing.mock_data(num_examples=1024):
       imagenet_main.main([])
     benchmark_time = time.time() - start_time
 
