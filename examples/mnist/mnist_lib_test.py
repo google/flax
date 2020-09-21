@@ -25,6 +25,7 @@ from jax import numpy as jnp
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
+from configs import default as config_lib
 import mnist_lib
 
 
@@ -57,10 +58,13 @@ class MnistLibTest(absltest.TestCase):
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
+    # Define training configuration.
+    config = config_lib.get_config()
+    config.num_epochs = 1
+    config.batch_size = 8
+
     with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      mnist_lib.train_and_evaluate(
-          model_dir=model_dir, num_epochs=1, batch_size=8,
-          learning_rate=0.1, momentum=0.9)
+      mnist_lib.train_and_evaluate(config=config, model_dir=model_dir)
 
 
 if __name__ == '__main__':
