@@ -25,7 +25,7 @@ def test(n_episodes : int,
   Returns:
     None
   """
-  test_env = env_utils.create_env(game)
+  test_env = env_utils.create_env(game, clip_rewards=False)
   if render:
     test_env = gym.wrappers.Monitor(
       test_env, "./rendered/" + "ddqn_pong_recording", force=True)

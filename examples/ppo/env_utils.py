@@ -24,7 +24,7 @@ class FrameStack:
 
   Wraps an AtariPreprocessing object.
   """
-  
+
   def __init__(self,
     preproc: seed_rl_atari_preprocessing.AtariPreprocessing,
     num_frames: int):
@@ -47,18 +47,19 @@ class FrameStack:
     assert len(self.frames) == self.num_frames
     return onp.concatenate(self.frames, axis=-1)
 
-def create_env(game : str):
+def create_env(game: str, clip_rewards: bool):
   """Create a FrameStack object that serves as environment for the `game`."""
   env = gym.make(game)
-  env = ClipRewardEnv(env) # bin rewards to {-1., 0., 1.}
+  if clip_rewards:
+    env = ClipRewardEnv(env) # bin rewards to {-1., 0., 1.}
   preproc = seed_rl_atari_preprocessing.AtariPreprocessing(env)
   stack = FrameStack(preproc, num_frames=4)
   return stack
 
-def get_num_actions(game : str):
+def get_num_actions(game: str):
   """Get the number of possible actions of a given Atari game.
-  
-  This determines the number of outputs in the actor part of the 
+
+  This determines the number of outputs in the actor part of the
   actor-critic model.
   """
   env = gym.make(game)

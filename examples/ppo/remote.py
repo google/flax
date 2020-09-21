@@ -14,7 +14,7 @@ class RemoteSimulator:
 
   An object of this class is created for every agent.
   """
-  
+
   def __init__(self, game):
     parent_conn, child_conn = multiprocessing.Pipe()
     self.proc = multiprocessing.Process(
@@ -25,11 +25,11 @@ class RemoteSimulator:
 
 def rcv_action_send_exp(conn, game):
   """Run the remote agents.
-  
+
   Receive action from the main learner, perform one step of simulation and
   send back collected experience.
   """
-  env = env_utils.create_env(game)
+  env = env_utils.create_env(game, clip_rewards=True)
   while True:
     obs = env.reset()
     done = False
