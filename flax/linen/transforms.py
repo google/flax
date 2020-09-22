@@ -21,8 +21,6 @@ from flax.linen.module import Module
 from flax.linen.module import wrap_method
 import jax
 
-from flax.core.lift import broadcast
-
 # Utils
 # -----------------------------------------------------------------------------
 def clean_clone(x):

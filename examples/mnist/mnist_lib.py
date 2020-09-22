@@ -35,6 +35,7 @@ from flax import nn
 from flax import optim
 from flax.metrics import tensorboard
 
+
 class CNN(nn.Module):
   """A simple CNN model."""
 
@@ -154,6 +155,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   Args:
     config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory where the tensorboard summaries are written to.
+
+  Returns:
+    The trained optimizer.
   """
   train_ds, test_ds = get_datasets()
   rng = random.PRNGKey(0)

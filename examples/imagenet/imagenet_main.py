@@ -22,6 +22,8 @@ The data is loaded using tensorflow_datasets.
 from absl import app
 from absl import flags
 
+import tensorflow as tf
+
 import imagenet_lib
 
 
@@ -69,6 +71,9 @@ flags.DEFINE_integer(
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
+
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   imagenet_lib.train_and_evaluate(
       model_dir=FLAGS.model_dir, batch_size=FLAGS.batch_size,

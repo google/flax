@@ -24,6 +24,8 @@ from absl import app
 from absl import flags
 from ml_collections import config_flags
 
+import tensorflow as tf
+
 import mnist_lib
 
 FLAGS = flags.FLAGS
@@ -38,6 +40,9 @@ flags.DEFINE_string(
 
 
 def main(_):
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   mnist_lib.train_and_evaluate(config=FLAGS.config, model_dir=FLAGS.model_dir)
 
 

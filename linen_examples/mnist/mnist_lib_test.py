@@ -22,6 +22,7 @@ from absl.testing import absltest
 import jax
 from jax import numpy as jnp
 
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 import mnist_lib
@@ -29,6 +30,11 @@ import mnist_lib
 
 class MnistLibTest(absltest.TestCase):
   """Test cases for mnist_lib."""
+
+  def setUp(self):
+    super().setUp()
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
 
   def test_cnn(self):
     """Tests CNN module used as the trainable model."""

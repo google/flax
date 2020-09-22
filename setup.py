@@ -18,8 +18,6 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = "0.2.1"
-
 here = os.path.abspath(os.path.dirname(__file__))
 try:
   README = open(os.path.join(here, "README.md"), encoding='utf-8').read()
@@ -36,7 +34,6 @@ install_requires = [
 
 tests_require = [
     "jaxlib",
-    "ml-collections",
     "pytest",
     "pytest-cov",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
@@ -45,9 +42,14 @@ tests_require = [
     "tensorflow_datasets",
 ]
 
+__version__ = None
+
+with open('flax/version.py') as f:
+  exec(f.read(), globals())
+
 setup(
     name="flax",
-    version=version,
+    version=__version__,
     description="Flax: A neural network library for JAX designed for flexibility",
     long_description="\n\n".join([README]),
     long_description_content_type='text/markdown',

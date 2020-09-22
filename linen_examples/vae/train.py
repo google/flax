@@ -162,6 +162,10 @@ def prepare_image(x):
 
 def main(argv):
   del argv
+
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   rng = random.PRNGKey(0)
   rng, key = random.split(rng)
 
