@@ -34,6 +34,7 @@ install_requires = [
 
 tests_require = [
     "jaxlib",
+    "ml-collections",
     "pytest",
     "pytest-cov",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
