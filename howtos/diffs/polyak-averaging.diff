@@ -1,8 +1,8 @@
 diff --git a/examples/mnist/mnist_lib.py b/examples/mnist/mnist_lib.py
-index 63af6e8..29d512f 100644
+index dbe6254..0cecb1e 100644
 --- a/examples/mnist/mnist_lib.py
 +++ b/examples/mnist/mnist_lib.py
-@@ -83,7 +83,7 @@ def compute_metrics(logits, labels):
+@@ -86,7 +86,7 @@ def compute_metrics(logits, labels):
  
  
  @jax.jit

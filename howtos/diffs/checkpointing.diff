@@ -1,16 +1,15 @@
 diff --git a/examples/mnist/mnist_lib.py b/examples/mnist/mnist_lib.py
-index 63af6e8..59c0d1c 100644
+index dbe6254..fa2b795 100644
 --- a/examples/mnist/mnist_lib.py
 +++ b/examples/mnist/mnist_lib.py
-@@ -33,6 +33,7 @@ import tensorflow_datasets as tfds
-
+@@ -34,6 +34,7 @@ import tensorflow_datasets as tfds
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
 +from flax.training import checkpoints
  
+ 
  class CNN(nn.Module):
-   """A simple CNN model."""
 @@ -169,6 +170,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
    model = create_model(init_rng)
    optimizer = create_optimizer(model, config.learning_rate, config.momentum)
