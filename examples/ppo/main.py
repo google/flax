@@ -96,7 +96,8 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
     # masks[t] to ensure that values before and after a terminal state
     # are independent of each other
     gae = delta + discount * gae_param * terminal_masks[t] * gae
-    advantages = [gae] + advantages
+    advantages.append(gae)
+  advantages = advantages[::-1]
   return jnp.array(advantages)
 
 @jax.jit
