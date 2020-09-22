@@ -9,33 +9,29 @@ class ActorCritic(flax.nn.Module):
 
   def apply(self, x, num_outputs):
     """Define the convolutional network architecture.
-    
-    Architecture originates from "Human-level control through deep reinforcement 
+
+    Architecture originates from "Human-level control through deep reinforcement
     learning.", Nature 518, no. 7540 (2015): 529-533.
     Note that this is different than the one from  "Playing atari with deep
     reinforcement learning." arxiv.org/abs/1312.5602 (2013)
     """
-    x = x.astype(jnp.float32) / 255.
     dtype = jnp.float32
+    x = x.astype(dtype) / 255.
     x = nn.Conv(x, features=32, kernel_size=(8, 8),
                 strides=(4, 4), name='conv1',
                 dtype=dtype)
-    # x = nn.relu(x)
-    x = jnp.maximum(0, x)
+    x = nn.relu(x)
     x = nn.Conv(x, features=64, kernel_size=(4, 4),
                 strides=(2, 2), name='conv2',
                 dtype=dtype)
-    # x = nn.relu(x)
-    x = jnp.maximum(0, x)
+    x = nn.relu(x)
     x = nn.Conv(x, features=64, kernel_size=(3, 3),
                 strides=(1, 1), name='conv3',
                 dtype=dtype)
-    # x = nn.relu(x)
-    x = jnp.maximum(0, x)
+    x = nn.relu(x)
     x = x.reshape((x.shape[0], -1))  # flatten
     x = nn.Dense(x, features=512, name='hidden', dtype=dtype)
-    # x = nn.relu(x)
-    x = jnp.maximum(0, x)
+    x = nn.relu(x)
     # network used to both estimate policy (logits) and expected state value
     # see github.com/openai/baselines/blob/master/baselines/ppo1/cnn_policy.py
     logits = nn.Dense(x, features=num_outputs, name='logits', dtype=dtype)
