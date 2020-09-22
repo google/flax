@@ -11,15 +11,15 @@ index 1ca49b2..1a5ed71 100644
  import jax
  from jax import random
  
-@@ -31,6 +33,7 @@ import tensorflow as tf
- tf.config.experimental.set_visible_devices([], "GPU")
+@@ -31,6 +33,7 @@ import numpy as onp
+
  import tensorflow_datasets as tfds
  
 +from flax import jax_utils
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
-@@ -53,12 +56,14 @@ class CNN(nn.Module):
+@@ -54,12 +57,14 @@ class CNN(nn.Module):
      return x
  
  
@@ -34,7 +34,7 @@ index 1ca49b2..1a5ed71 100644
  def create_optimizer(model, learning_rate, beta):
    optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
    optimizer = optimizer_def.create(model)
-@@ -84,7 +89,7 @@ def compute_metrics(logits, labels):
+@@ -85,7 +90,7 @@ def compute_metrics(logits, labels):
    return metrics
  
  
@@ -43,7 +43,7 @@ index 1ca49b2..1a5ed71 100644
  def train_step(optimizer, batch):
    """Train for a single step."""
    def loss_fn(model):
-@@ -98,7 +103,7 @@ def train_step(optimizer, batch):
+@@ -99,7 +104,7 @@ def train_step(optimizer, batch):
    return optimizer, metrics
  
  
@@ -52,7 +52,7 @@ index 1ca49b2..1a5ed71 100644
  def eval_step(model, batch):
    logits = model(batch['image'])
    return compute_metrics(logits, batch['label'])
-@@ -115,16 +120,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -116,16 +121,23 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
    batch_metrics = []
    for perm in perms:
      batch = {k: v[perm] for k, v in train_ds.items()}
@@ -80,7 +80,7 @@ index 1ca49b2..1a5ed71 100644
                 epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
  
    return optimizer, epoch_metrics_np
-@@ -133,7 +145,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+@@ -134,7 +146,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
  def eval_model(model, test_ds):
    metrics = eval_step(model, test_ds)
    metrics = jax.device_get(metrics)
@@ -89,20 +89,21 @@ index 1ca49b2..1a5ed71 100644
    return summary['loss'], summary['accuracy']
  
  
-@@ -165,22 +177,25 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+@@ -165,22 +178,25 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
    summary_writer = tensorboard.SummaryWriter(model_dir)
+   summary_writer.hparams(dict(config))
  
    rng, init_rng = random.split(rng)
 -  model = create_model(init_rng)
 +  model = create_model(random.split(init_rng, jax.device_count()))
-   optimizer = create_optimizer(model, learning_rate, momentum)
+   optimizer = create_optimizer(model, config.learning_rate, config.momentum)
  
 +  test_ds = jax_utils.replicate(test_ds)
 +
-   for epoch in range(1, num_epochs + 1):
+   for epoch in range(1, config.num_epochs + 1):
      rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
-         optimizer, train_ds, batch_size, epoch, input_rng)
+         optimizer, train_ds, config.batch_size, epoch, input_rng)
      loss, accuracy = eval_model(optimizer.target, test_ds)
  
 -    logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
