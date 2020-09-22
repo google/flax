@@ -115,7 +115,7 @@ class Adafactor(OptimizerDef):
     if not self.hyper_params.factored or len(shape) < 2:
       return None
     sorted_dims = onp.argsort(shape)
-    if sorted_dims[-2] < self.hyper_params.min_dim_size_to_factor:
+    if shape[sorted_dims[-2]] < self.hyper_params.min_dim_size_to_factor:
       return None
     return int(sorted_dims[-2]), int(sorted_dims[-1])
 

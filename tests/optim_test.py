@@ -352,6 +352,29 @@ class AdafactorTest(absltest.TestCase):
             0.1 * onp.ones((3,2))))
     check_eq(new_state, expected_new_state, rtol=1e-6)
 
+  def test_factorizes(self):
+    params = onp.zeros((64, 64))
+    optimizer_def = optim.Adafactor(learning_rate=0.1,
+                                    decay_rate=0.8,
+                                    beta1=None,
+                                    min_dim_size_to_factor=32)
+    state = optimizer_def.init_state(params)
+    self.assertEqual(state.param_states.v.shape, (1,))
+    self.assertEqual(state.param_states.m.shape, (1,))
+    self.assertEqual(state.param_states.v_row.shape, (64,))
+    self.assertEqual(state.param_states.v_col.shape, (64,))
+
+    params = onp.zeros((31, 64))
+    optimizer_def = optim.Adafactor(learning_rate=0.1,
+                                    decay_rate=0.8,
+                                    beta1=None,
+                                    min_dim_size_to_factor=32)
+    state = optimizer_def.init_state(params)
+    self.assertEqual(state.param_states.v.shape, (31, 64))
+    self.assertEqual(state.param_states.m.shape, (1,))
+    self.assertEqual(state.param_states.v_row.shape, (1,))
+    self.assertEqual(state.param_states.v_col.shape, (1,))
+
 
 class AdagradTest(absltest.TestCase):
 
