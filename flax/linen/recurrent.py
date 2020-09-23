@@ -25,7 +25,7 @@ THe RNNCell modules are designed to fit in with the scan function in JAX::
 
 import abc
 from functools import partial
-from typing import (Any, Callable, Tuple)
+from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
 from .module import Module, compact
 from . import activation
@@ -220,3 +220,105 @@ class GRUCell(RNNCellBase):
     """
     mem_shape = batch_dims + (size,)
     return init_fn(rng, mem_shape)
+
+
+class ConvLSTM(RNNCellBase):
+  r"""A convolutional LSTM cell.
+
+  The implementation is based on xingjian2015convolutional.
+  Given x_t and the previous state (h_{t-1}, c_{t-1})
+  the core computes
+
+  .. math::
+
+     \begin{array}{ll}
+     i_t = \sigma(W_{ii} * x_t + W_{hi} * h_{t-1} + b_i) \\
+     f_t = \sigma(W_{if} * x_t + W_{hf} * h_{t-1} + b_f) \\
+     g_t = \tanh(W_{ig} * x_t + W_{hg} * h_{t-1} + b_g) \\
+     o_t = \sigma(W_{io} * x_t + W_{ho} * h_{t-1} + b_o) \\
+     c_t = f_t c_{t-1} + i_t g_t \\
+     h_t = o_t \tanh(c_t)
+     \end{array}
+
+  where * denotes the convolution operator;
+  i_t, f_t, o_t are input, forget and output gate activations,
+  and g_t is a vector of cell updates.
+
+  Notes:
+    Forget gate initialization:
+      Following jozefowicz2015empirical we add 1.0 to b_f
+      after initialization in order to reduce the scale of forgetting in
+      the beginning of the training.
+
+  Args:
+    features: number of convolution filters.
+    kernel_size: shape of the convolutional kernel.
+    strides: a sequence of `n` integers, representing the inter-window
+      strides.
+    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
+      of `n` `(low, high)` integer pairs that give the padding to apply before
+      and after each spatial dimension.
+    bias: whether to add a bias to the output (default: True).
+    dtype: the dtype of the computation (default: float32).
+  """
+
+  features: int
+  kernel_size: Sequence[int]
+  strides: Optional[Sequence[int]] = None
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  use_bias: bool = True
+  dtype: Dtype = jnp.float32
+
+  @compact
+  def __call__(self, carry, inputs):
+    """Constructs a convolutional LSTM.
+
+    Args:
+      carry: the hidden state of the Conv2DLSTM cell,
+        initialized using `Conv2DLSTM.initialize_carry`.
+      inputs: input data with dimensions (batch, spatial_dims..., features).
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    c, h = carry
+    input_to_hidden = partial(linear.Conv,
+                              features=4*self.features,
+                              kernel_size=self.kernel_size,
+                              strides=self.strides,
+                              padding=self.padding,
+                              use_bias=self.use_bias,
+                              dtype=self.dtype,
+                              name='ih')
+
+    hidden_to_hidden = partial(linear.Conv,
+                               features=4*self.features,
+                               kernel_size=self.kernel_size,
+                               strides=self.strides,
+                               padding=self.padding,
+                               use_bias=self.use_bias,
+                               dtype=self.dtype,
+                               name='hh')
+
+    gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)
+    i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
+
+    f = activation.sigmoid(f + 1)
+    new_c = f * c + activation.sigmoid(i) * jnp.tanh(g)
+    new_h = activation.sigmoid(o) * jnp.tanh(new_c)
+    return (new_c, new_h), new_h
+
+  @staticmethod
+  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+    """initialize the RNN cell carry.
+
+    Args:
+      rng: random number generator passed to the init_fn.
+      batch_dims: a tuple providing the shape of the batch dimensions.
+      size: the input_shape + (features,).
+      init_fn: initializer function for the carry.
+    Returns:
+      An initialized carry for the given RNN cell.
+    """
+    key1, key2 = random.split(rng)
+    mem_shape = batch_dims + size
+    return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
