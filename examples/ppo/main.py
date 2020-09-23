@@ -1,15 +1,15 @@
+import time
+import functools
+import queue
+from typing import Tuple, List
+import threading
+from absl import flags
+from absl import app
 import jax
 import jax.random
 import jax.numpy as jnp
 import numpy as onp
 import flax
-import time
-import functools
-import queue
-from absl import flags
-from absl import app
-import threading
-from typing import Tuple, List
 
 import models
 import agent
@@ -85,6 +85,17 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
 
   As defined by eqs. (11-12) in PPO paper arXiv: 1707.06347. Implementation uses
   key observation that A_{t} = delta_t + gamma*lambda*A_{t+1}.
+
+  Args:
+    rewards: array shaped (actor_steps, num_agents), rewards from the game
+    terminal_masks: array shaped (actor_steps, num_agents), zeros for terminal
+                    and ones for non-terminal states
+    values: array shaped (actor_steps, num_agents), values estimated by critic
+    discount: RL discount usually denoted with gamma
+    gae_param: GAE parameter usually denoted with lambda
+
+  Returns:
+    advantages: calculated advantages shaped (actor_steps, num_agents)
   """
   assert rewards.shape[0] + 1 == values.shape[0], ("One more value needed; "
           "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate delta_t")
@@ -101,7 +112,13 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   return jnp.array(advantages)
 
 @jax.jit
-def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr):
+def train_step(
+  optimizer: flax.optim.base.Optimizer,
+  trajectories: Tuple[onp.array, onp.array, onp.array, onp.array, onp.array],
+  clip_param: float,
+  vf_coeff: float,
+  entropy_coeff: float,
+  lr: float):
   """Compilable train step.
 
   Runs an entire epoch of training (i.e. the loop over
@@ -109,7 +126,7 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr):
 
   Args:
     optimizer: optimizer for the actor-critic model
-    trn_data: Tuple of the following five elements forming the experience:
+    trajectories: Tuple of the following five elements forming the experience:
                   states: shape (steps_per_agent*num_agents, 84, 84, 4)
                   actions: shape (steps_per_agent*num_agents, 84, 84, 4)
                   old_log_probs: shape (steps_per_agent*num_agents, )
@@ -128,7 +145,6 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr):
   """
   def loss_fn(model, minibatch, clip_param, vf_coeff, entropy_coeff):
     states, actions, old_log_probs, returns, advantages = minibatch
-    shapes = list(map(lambda x : x.shape, minibatch))
     log_probs, values = model(states)
     values = values[:, 0] # convert shapes: (batch, 1) to (batch, )
     probs = jnp.exp(log_probs)
@@ -147,11 +163,11 @@ def train_step(optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr):
     return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
 
   batch_size = FLAGS.batch_size
-  iterations = trn_data[0].shape[0] // batch_size
-  trn_data = jax.tree_map(
-    lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trn_data)
+  iterations = trajectories[0].shape[0] // batch_size
+  trajectories = jax.tree_map(
+    lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trajectories)
   loss = 0.
-  for batch in zip(*trn_data):
+  for batch in zip(*trajectories):
     grad_fn = jax.value_and_grad(loss_fn)
     l, grad = grad_fn(optimizer.target, batch, clip_param, vf_coeff,
                       entropy_coeff)
@@ -170,7 +186,7 @@ def thread_inference(
 
   Runs `steps_per_actor` time steps of the game for each of the `simulators`.
   """
-  while(True):
+  while True:
     optimizer, step = policy_q.get()
     all_experience = []
     for _ in range(steps_per_actor + 1): # +1 to get one more value
@@ -187,14 +203,9 @@ def thread_inference(
       log_probs, values = jax.device_get((log_probs, values))
 
       probs = onp.exp(onp.array(log_probs))
-      # print("probs after onp conversion", probs)
 
       for i, sim in enumerate(simulators):
-        # probs[i] should sum up to 1, but there are float round errors
-        # if using jnp.array directly, it required division by probs[i].sum()
-        # better solutions can be thought of
-        # issue might be a result of the network using jnp.int 32, , not 64
-        probabilities = probs[i] # / probs[i].sum()
+        probabilities = probs[i]
         action = onp.random.choice(probs.shape[1], p=probabilities)
         #in principle, one could avoid sending value and log prob back and forth
         sim.conn.send((action, values[i, 0], log_probs[i][action]))
@@ -258,9 +269,8 @@ def train(
     policy_q.put((optimizer, step))
 
     # perform PPO training
-    # experience is a list of list of tuples, here we preprocess this data to
-    # get required input for GAE and then for training
-    # initial version, needs improvement in terms of speed & readability
+    # all_experience is a list of list of namedtuples; preprocess this data to
+    # get required input (trajectories) for GAE and later for training
     all_experiences = experience_q.get()
     if s >= 0: #avoid training when there's no data yet
       obs_shape = (84, 84, 4)
@@ -290,19 +300,21 @@ def train(
                                   FLAGS.gamma, FLAGS.lambda_)
       returns = advantages + values[:-1, :]
       # after preprocessing, concatenate data from all agents
-      trn_data = (states, actions, log_probs, returns, advantages)
-      trn_data = tuple(map(
+      trajectories = (states, actions, log_probs, returns, advantages)
+      trajectories = tuple(map(
         lambda x: onp.reshape(
-          x, (FLAGS.num_agents * FLAGS.actor_steps, ) + x.shape[2:]), trn_data))
+          x, (FLAGS.num_agents * FLAGS.actor_steps,) + x.shape[2:]),
+          trajectories))
       print(f"Step {s}: rewards variance {rewards.var()}")
       lr = FLAGS.learning_rate * alpha
       clip_param = FLAGS.clip_param * alpha
-      for e in range(FLAGS.num_epochs): #possibly compile this loop inside a jit
-        shapes = list(map(lambda x : x.shape, trn_data))
+      for e in range(FLAGS.num_epochs):
+        shapes = list(map(lambda x: x.shape, trajectories))
         permutation = onp.random.permutation(num_agents * FLAGS.actor_steps)
-        trn_data = tuple(map(lambda x: x[permutation], trn_data))
-        optimizer, loss, last_iter_grad_norm = train_step(optimizer, trn_data,
-          clip_param, FLAGS.vf_coeff, FLAGS.entropy_coeff, lr)
+        trajectories = tuple(map(lambda x: x[permutation], trajectories))
+        optimizer, loss, last_iter_grad_norm = train_step(
+          optimizer, trajectories, clip_param, FLAGS.vf_coeff,
+          FLAGS.entropy_coeff, lr)
         print(f"epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
     #end of PPO training
 
@@ -322,7 +334,6 @@ def main(argv):
   model = models.create_model(subkey, num_outputs=num_actions)
   optimizer = models.create_optimizer(model, learning_rate=FLAGS.learning_rate)
   del model
-  # jax.device_put(optimizer.target, device=train_device)
   train(optimizer, game, total_frames, num_agents, train_device,
         inference_device)
 
