@@ -19,8 +19,12 @@ This script trains a ResNet-50 on the ImageNet dataset.
 The data is loaded using tensorflow_datasets.
 """
 
+import os
+
 from absl import app
 from absl import flags
+
+from ml_collections import config_flags
 
 import tensorflow as tf
 
@@ -29,43 +33,13 @@ import imagenet_lib
 
 FLAGS = flags.FLAGS
 
+config_flags.DEFINE_config_file(
+    'config', os.path.join(os.path.dirname(__file__), 'configs/default.py'),
+    'File path to the Training hyperparameter configuration.')
+
 flags.DEFINE_string(
     'model_dir', default=None,
     help=('Directory to store model data.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=90,
-    help=('Number of training epochs.'))
-
-flags.DEFINE_float(
-    'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
-
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
-
-flags.DEFINE_bool(
-    'cache', default=False,
-    help=('If True, cache the dataset.'))
-
-flags.DEFINE_bool(
-    'half_precision', default=False,
-    help=('If bfloat16/float16 should be used instead of float32.'))
-
-flags.DEFINE_integer(
-    'num_train_steps', default=-1,
-    help=('Number of training steps to be executed in a single epoch.'
-          'Default = -1 signifies using the entire TRAIN split.'))
-
-flags.DEFINE_integer(
-    'num_eval_steps', default=-1,
-    help=('Number of evaluation steps to be executed in a single epoch.'
-          'Default = -1 signifies using the entire VALIDATION split.'))
 
 
 def main(argv):
@@ -75,14 +49,10 @@ def main(argv):
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
 
-  imagenet_lib.train_and_evaluate(
-      model_dir=FLAGS.model_dir, batch_size=FLAGS.batch_size,
-      num_epochs=FLAGS.num_epochs, learning_rate=FLAGS.learning_rate,
-      momentum=FLAGS.momentum, cache=FLAGS.cache,
-      half_precision=FLAGS.half_precision,
-      num_train_steps=FLAGS.num_train_steps,
-      num_eval_steps=FLAGS.num_eval_steps)
+  imagenet_lib.train_and_evaluate(config=FLAGS.config,
+                                  model_dir=FLAGS.model_dir)
 
 
 if __name__ == '__main__':
+  flags.mark_flags_as_required(['model_dir'])
   app.run(main)

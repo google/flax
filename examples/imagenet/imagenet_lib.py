@@ -29,6 +29,8 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 
+import ml_collections
+
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -196,27 +198,13 @@ def sync_batch_stats(state):
   return state.replace(model_state=avg(state.model_state))
 
 
-def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
-                       learning_rate: float, momentum: float, cache: bool,
-                       half_precision: bool, num_train_steps: int = -1,
-                       num_eval_steps: int = -1):
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   """Runs model training and evaluation loop.
 
   Args:
+    config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory where the checkpoints and tensorboard summaries
       should be written to.
-    batch_size: Batch size of the input.
-    num_epochs: Number of epochs to cycle through before stopping.
-    learning_rate: The learning rate in case you have batch size 256.
-      The effective learning rate is scaled linearly to the batch size.
-    momentum: Momentum value for the momentum optimizer.
-    cache: Determines whether the dataset should be cached.
-    half_precision: Determines whether bfloat16/float16 should be used
-      instead of float32.
-    num_train_steps: Number of trainings steps to be executed in a
-      single epoch. Default = -1 signifies using the entire TRAIN split.
-    num_eval_steps: Number of evaluation steps to be executed in a
-      single epoch. Default = -1 signifies using the entire VALIDATION split.
   """
   if jax.host_id() == 0:
     summary_writer = tensorboard.SummaryWriter(model_dir)
@@ -225,15 +213,15 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
 
   image_size = 224
 
-  if batch_size % jax.device_count() > 0:
+  if config.batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
-  local_batch_size = batch_size // jax.host_count()
-  device_batch_size = batch_size // jax.device_count()
+  local_batch_size = config.batch_size // jax.host_count()
+  device_batch_size = config.batch_size // jax.device_count()
 
   platform = jax.local_devices()[0].platform
 
   dynamic_scale = None
-  if half_precision:
+  if config.half_precision:
     if platform == 'tpu':
       model_dtype = jnp.bfloat16
       input_dtype = tf.bfloat16
@@ -248,31 +236,31 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
   dataset_builder = tfds.builder('imagenet2012:5.*.*')
   train_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=True,
-      cache=cache)
+      cache=config.cache)
   eval_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=False,
-      cache=cache)
+      cache=config.cache)
 
-  if num_train_steps == -1:
+  if config.num_train_steps == -1:
     steps_per_epoch = \
-        dataset_builder.info.splits['train'].num_examples // batch_size
+        dataset_builder.info.splits['train'].num_examples // config.batch_size
   else:
-    steps_per_epoch = num_train_steps
+    steps_per_epoch = config.num_train_steps
 
-  if num_eval_steps == -1:
+  if config.num_eval_steps == -1:
     steps_per_eval = \
-        dataset_builder.info.splits['validation'].num_examples // batch_size
+        dataset_builder.info.splits['validation'].num_examples // config.batch_size
   else:
-    steps_per_eval = num_eval_steps
+    steps_per_eval = config.num_eval_steps
 
   steps_per_checkpoint = steps_per_epoch * 10
-  num_steps = steps_per_epoch * num_epochs
+  num_steps = steps_per_epoch * config.num_epochs
 
-  base_learning_rate = learning_rate * batch_size / 256.
+  base_learning_rate = config.learning_rate * config.batch_size / 256.
 
   model, model_state = create_model(
       rng, device_batch_size, image_size, model_dtype)
-  optimizer = optim.Momentum(beta=momentum, nesterov=True).create(model)
+  optimizer = optim.Momentum(beta=config.momentum, nesterov=True).create(model)
   state = TrainState(step=0, optimizer=optimizer, model_state=model_state,
                      dynamic_scale=dynamic_scale)
   del model, model_state  # do not keep a copy of the initial model
@@ -282,7 +270,7 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
   state = jax_utils.replicate(state)
 
   learning_rate_fn = create_learning_rate_fn(
-      base_learning_rate, steps_per_epoch, num_epochs)
+      base_learning_rate, steps_per_epoch, config.num_epochs)
 
   p_train_step = jax.pmap(
       functools.partial(train_step, learning_rate_fn=learning_rate_fn),

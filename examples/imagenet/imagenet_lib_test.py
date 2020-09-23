@@ -24,6 +24,7 @@ from absl.testing import absltest
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
+from configs import default as config_lib
 import imagenet_lib
 
 
@@ -44,11 +45,15 @@ class ImageNetTest(absltest.TestCase):
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
+    # Define training configuration.
+    config = config_lib.get_config()
+    config.batch_size = 1
+    config.num_epochs = 1
+    config.num_train_steps = 1
+    config.num_eval_steps = 1
+
     with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
-      imagenet_lib.train_and_evaluate(
-          model_dir=model_dir, batch_size=1, num_epochs=1,
-          learning_rate=0.1, momentum=0.9, cache=False, half_precision=False,
-          num_train_steps=1, num_eval_steps=1)
+      imagenet_lib.train_and_evaluate(config=config, model_dir=model_dir)
 
 
 if __name__ == '__main__':
