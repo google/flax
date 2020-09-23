@@ -181,13 +181,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   train_iter = iter(train_ds)
   eval_iter = iter(eval_ds)
 
+  steps_per_epoch = (
+    data_source.info.splits['train'].num_examples // config.batch_size
+  )
+
   # Compute steps per epoch and nb of eval steps
   if config.num_train_steps == -1:
-    steps_per_epoch = (
-      data_source.info.splits['train'].num_examples // config.batch_size
-    )
+    num_steps = steps_per_epoch * config.num_epochs
   else:
-    steps_per_epoch = config.num_train_steps
+    num_steps = config.num_train_steps
 
   if config.num_eval_steps == -1:
     steps_per_eval = (
@@ -197,7 +199,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
     steps_per_eval = config.num_eval_steps
 
   steps_per_checkpoint = steps_per_epoch * 10
-  num_steps = steps_per_epoch * config.num_epochs
 
   base_learning_rate = config.learning_rate
 

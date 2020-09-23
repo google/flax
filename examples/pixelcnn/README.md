@@ -24,10 +24,26 @@ The model should run with other configurations and hardware, but was tested on t
 | 8 x Nvidia V100 (16GB)  | 320  |  1d 14h | 2.92 | [2020-04-23](https://tensorboard.dev/experiment/t8fM3u2zSJG7tAx6YbXHkQ/) |
 
 ### How to run
-#### 8 x Nvidia V100 (16GB)
-To run training
+
+`python train.py --model_dir=./pixelcnn`
+
+#### Overriding Hyperparameter configurations
+
+MNIST example allows specifying a hyperparameter configuration by the means of
+setting `--config` flag. Configuration flag is defined using
+[config_flags](https://github.com/google/ml_collections/tree/master#config-flags).
+`config_flags` allows overriding configuration fields. This can be done as
+follows:
+
+```shell
+python train.py \
+--model_dir=./pixelcnn --config=configs/default.py \
+--config.batch_size=320
 ```
-python train.py --batch_size=320
+
+#### 8 x Nvidia V100 (16GB)
+```shell
+python train.py --config=configs/default.py --config.batch_size=320
 ```
 To run sampling (this will automatically load model parameters from the most recent trained checkpoint)
 ```
