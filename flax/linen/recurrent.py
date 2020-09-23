@@ -32,6 +32,7 @@ from . import activation
 from . import initializers
 from . import linear
 
+from jax import numpy as jnp
 from jax import random
 
 
