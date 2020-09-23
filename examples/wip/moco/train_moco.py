@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 
 # Copyright 2020 The Flax Authors.
 #
@@ -52,8 +51,7 @@ import jax
 from jax import lax
 import jax.nn
 import jax.numpy as jnp
-
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 FLAGS = flags.FLAGS
@@ -736,7 +734,8 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   emb_size = FLAGS.emb_size
 

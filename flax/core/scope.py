@@ -34,12 +34,13 @@ T = TypeVar('T')
 PRNGKey = Any
 Array = Any
 
+Filter = Union[bool, str, Sequence[str]]
+CollectionFilter = Filter
+PRNGSequenceFilter = Filter
 
-KindFilter = Union[bool, str, Sequence[str]]
+MaybeFrozenCollection = Union[Dict[str, Any], FrozenDict[str, Any]]
 
-MaybeFrozenKind = Union[Dict[str, Any], FrozenDict[str, Any]]
-
-Variables = Dict[str, MaybeFrozenKind]
+Variables = Dict[str, MaybeFrozenCollection]
 
 
 def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
@@ -51,48 +52,48 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   return random.fold_in(rng, hash_int)
 
 
-def in_kind_filter(kind_filter: KindFilter, kind: str) -> bool:
-  if isinstance(kind_filter, str):
-    return kind == kind_filter
-  if isinstance(kind_filter, Sequence) and not isinstance(kind_filter, str):
-    return kind in kind_filter
-  if isinstance(kind_filter, bool):
-    return kind_filter
-  raise TypeError('Invalid KindFilter')
+def in_filter(filter: Filter, kind: str) -> bool:
+  if isinstance(filter, str):
+    return kind == filter
+  if isinstance(filter, Sequence) and not isinstance(filter, str):
+    return kind in filter
+  if isinstance(filter, bool):
+    return filter
+  raise TypeError('Invalid Filter')
 
 
-def group_kinds(xs: Variables,
-                kind_filters: Sequence[KindFilter]) -> Sequence[Variables]:
+def group_collections(xs: Variables,
+                col_filters: Sequence[CollectionFilter]) -> Sequence[Variables]:
   """Group variables by kind filters."""
-  kinds = xs.keys()
+  cols = xs.keys()
   groups = []
-  for kind_filter in kind_filters:
-    remaining_kinds = []
+  for col_filter in col_filters:
+    remaining_cols = []
     group = {}
-    for kind in kinds:
-      if in_kind_filter(kind_filter, kind):
-        group[kind] = jax.tree_map(lambda x: x, xs[kind])
+    for col in cols:
+      if in_filter(col_filter, col):
+        group[col] = jax.tree_map(lambda x: x, xs[col])
       else:
-        remaining_kinds.append(kind)
-    kinds = remaining_kinds
+        remaining_cols.append(col)
+    cols = remaining_cols
     groups.append(group)
   return tuple(groups)
 
 
 class Variable(Generic[T]):
 
-  def __init__(self, scope: 'Scope', kind: str, name: str):
+  def __init__(self, scope: 'Scope', collection: str, name: str):
     self.scope = scope
-    self.kind = kind
+    self.collection = collection
     self.name = name
 
   @property
   def value(self) -> T:
-    return self.scope.get_variable(self.kind, self.name)
+    return self.scope.get_variable(self.collection, self.name)
 
   @value.setter
   def value(self, value: T):
-    self.scope.put_variable(self.kind, self.name, value)
+    self.scope.put_variable(self.collection, self.name, value)
 
 import contextlib
 
@@ -115,6 +116,8 @@ class Scope:
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = set()
 
+    self._children = {}
+
     self._invalid = False
 
   @property
@@ -136,7 +139,7 @@ class Scope:
     self._invalid = True
 
   def variables(self):
-    self._populate_kinds()
+    self._populate_collections()
     return freeze(self._variables)
 
   def _validate_trace_level(self):
@@ -169,14 +172,17 @@ class Scope:
         return name
       i += 1
 
-  def push(self, name: Optional[str] = None, prefix: str = '') -> 'Scope':
+  def push(self, name: Optional[str] = None, prefix: str = '', reuse=False) -> 'Scope':
     self._check_valid()
     self._validate_trace_level()
     if name is None:
       name = self.default_name(prefix)
+    if reuse and name in self._children:
+      return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
     scope = Scope({}, name=name, rngs=rngs, parent=self)
+    self._children[name] = scope
     return scope
 
   def child(self,
@@ -200,21 +206,21 @@ class Scope:
       return fn(scope.rewound(), *args, **kwargs)
     return wrapper
 
-  def get_kind(self, kind: str, mutable: bool = False) -> MaybeFrozenKind:
-    """Returns all variable of a given kind."""
-    if kind not in self._variables:
+  def collection(self, col: str, mutable: bool = False) -> MaybeFrozenCollection:
+    """Returns a collection of variables."""
+    if col not in self._variables:
       if self.parent:
-        parent_kind = self.parent.get_kind(kind, mutable)
-        if self.name not in parent_kind:
-          if isinstance(parent_kind, FrozenDict) or not mutable:
+        parent_col = self.parent.collection(col, mutable)
+        if self.name not in parent_col:
+          if isinstance(parent_col, FrozenDict) or not mutable:
             return FrozenDict()
-          parent_kind[self.name] = {}
-        self._variables[kind] = parent_kind[self.name]
+          parent_col[self.name] = {}
+        self._variables[col] = parent_col[self.name]
       elif mutable:
-        self._variables[kind] = {}
+        self._variables[col] = {}
       else:
         return FrozenDict()
-    return self._variables[kind]
+    return self._variables[col]
 
   def has_rng(self, kind: str) -> bool:
     return kind in self.rngs
@@ -226,45 +232,45 @@ class Scope:
     self.rng_counters[kind] += 1
     return random.fold_in(self.rngs[kind], self.rng_counters[kind])
 
-  def get_variable(self, kind: str, name: str, default: T = None) -> T:
-    variables = self.get_kind(kind)
+  def get_variable(self, col: str, name: str, default: T = None) -> T:
+    variables = self.collection(col)
     if name in variables:
       return variables[name]
     else:
       return default
 
-  def has_variable(self, kind: str, name: str) -> bool:
-    variables = self.get_kind(kind)
+  def has_variable(self, col: str, name: str) -> bool:
+    variables = self.collection(col)
     return name in variables
 
-  def put_variable(self, kind: str, name: str, value: Any):
+  def put_variable(self, col: str, name: str, value: Any):
     self._check_valid()
     self._validate_trace_level()
-    variables = self.get_kind(kind, mutable=True)
+    variables = self.collection(col, mutable=True)
     variables[name] = value
 
-  def variable(self, kind: str, name: str, init_fn: Callable[..., T],
+  def variable(self, col: str, name: str, init_fn: Callable[..., T],
                *init_args) -> Variable[T]:
     self.reserve(name)
-    if not self.has_variable(kind, name):
+    if not self.has_variable(col, name):
       init_value = init_fn(*init_args)
-      self.put_variable(kind, name, init_value)
-    return Variable(self, kind, name)
+      self.put_variable(col, name, init_value)
+    return Variable(self, col, name)
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    s_init_fn = lambda *args: init_fn(self.make_rng('param'), *init_args)
-    v = self.variable('param', name, s_init_fn, *init_args)
+    s_init_fn = lambda *args: init_fn(self.make_rng('params'), *init_args)
+    v = self.variable('params', name, s_init_fn, *init_args)
     return v.value
 
-  def _populate_kinds(self):
-    kinds = self.root._variables.keys()
-    for kind in kinds:
-      self.get_kind(kind)
+  def _populate_collections(self):
+    collections = self.root._variables.keys()
+    for col in collections:
+      self.collection(col)
 
 def _unfreeze_variables(variables, mutable):
   new_variables = {}
   for key, value in variables.items():
-    if in_kind_filter(mutable, key):
+    if in_filter(mutable, key):
       new_variables[key] = unfreeze(value)
     else:
       new_variables[key] = value
@@ -272,7 +278,7 @@ def _unfreeze_variables(variables, mutable):
 
 
 def apply(fn: Callable[..., Any],
-          mutable: KindFilter = False) -> Callable[..., Any]:
+          mutable: CollectionFilter = False) -> Callable[..., Any]:
   """Functionalize a module."""
   @functools.wraps(fn)
   def wrapper(variables, *args, rngs=None, **kwargs):
@@ -286,11 +292,11 @@ def apply(fn: Callable[..., Any],
   return wrapper
 
 
-def init(fn: Callable[..., Any], mutable: KindFilter = True) -> Callable[..., Any]:
+def init(fn: Callable[..., Any], mutable: CollectionFilter = True) -> Callable[..., Any]:
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs):
     if not isinstance(rngs, dict):
       assert rngs.shape == (2,)
-      rngs = {'param': rngs}
+      rngs = {'params': rngs}
     return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)
   return wrapper

@@ -22,6 +22,7 @@ from absl.testing import absltest
 
 import tensorflow_datasets as tfds
 
+from configs import testing as testing_lib
 import train as pixelcnn_train
 
 
@@ -37,12 +38,11 @@ class PixelCnnTest(absltest.TestCase):
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
-    with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      pixelcnn_train.train_and_evaluate(
-          n_resnet=1, n_feature=1, model_dir=model_dir, batch_size=8,
-          init_batch_size=8, num_epochs=1, learning_rate=0.001, decay_rate=0.9,
-          dropout_rate=0.9, polyak_decay=0.9, run_seed=0, num_train_steps=1,
-          num_eval_steps=1)
+    # Define training configuration.
+    config = testing_lib.get_config()
+
+    with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
+      pixelcnn_train.train_and_evaluate(config=config, model_dir=model_dir)
 
 
 if __name__ == '__main__':

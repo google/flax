@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """seq2seq addition example."""
 
 import random
@@ -169,8 +168,8 @@ class EncoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_modes={'param': 'broadcast'},
-      split_rngs={'param': False})
+      variable_broadcast='params',
+      split_rngs={'params': False})
   @nn.compact
   def __call__(self, carry, x):
     lstm_state, is_eos = carry
@@ -216,8 +215,8 @@ class DecoderLSTM(nn.Module):
 
   @functools.partial(
       nn.transforms.scan,
-      variable_modes={'param': 'broadcast'},
-      split_rngs={'param': False})
+      variable_broadcast='params',
+      split_rngs={'params': False})
   @nn.compact
   def __call__(self, carry, x):
     rng, lstm_state, last_prediction = carry
@@ -299,13 +298,13 @@ def model(teacher_force=True):
                  hidden_size=FLAGS.hidden_size)
 
 
-def get_param(key):
+def get_initial_params(key):
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size
   encoder_shape = jnp.ones((1, get_max_input_len(), vocab_size), jnp.float32)
   decoder_shape = jnp.ones((1, get_max_output_len(), vocab_size), jnp.float32)
-  return model().init({'param': key, 'lstm': key},
-                      encoder_shape, decoder_shape)['param']
+  return model().init({'params': key, 'lstm': key},
+                      encoder_shape, decoder_shape)['params']
 
 
 def get_examples(num_examples):
@@ -360,7 +359,7 @@ def train_step(optimizer, batch, lstm_key):
 
   def loss_fn(params):
     """Compute cross-entropy loss."""
-    logits, _ = model().apply({'param': params},
+    logits, _ = model().apply({'params': params},
                               batch['query'],
                               batch['answer'],
                               rngs={'lstm': lstm_key})
@@ -387,7 +386,7 @@ def decode(params, inputs, key):
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], get_max_output_len(), 1))
-  _, predictions = model(teacher_force=False).apply({'param': params},
+  _, predictions = model(teacher_force=False).apply({'params': params},
                                                     inputs,
                                                     init_decoder_inputs,
                                                     rngs={'lstm': key})
@@ -408,7 +407,7 @@ def decode_batch(params, batch_size, key):
 
 def train_model():
   """Train for a fixed number of steps and decode during training."""
-  param = get_param(jax.random.PRNGKey(0))
+  param = get_initial_params(jax.random.PRNGKey(0))
   optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(param)
   key = jax.random.PRNGKey(0)
   for step in range(FLAGS.num_train_steps):

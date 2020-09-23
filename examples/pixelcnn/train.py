@@ -30,6 +30,7 @@
 
 import functools
 import datetime
+import os
 
 from absl import app
 from absl import flags
@@ -47,7 +48,12 @@ from jax import random
 from jax import lax
 import jax.numpy as jnp
 
-import tensorflow.compat.v2 as tf
+import ml_collections
+from ml_collections import config_flags
+
+import numpy as np
+
+import tensorflow as tf
 
 import input_pipeline
 import pixelcnn
@@ -55,64 +61,13 @@ import pixelcnn
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float(
-    'learning_rate', default=0.001,
-    help=('The initial learning rate.'))
-
-flags.DEFINE_float(
-    'lr_decay', default='0.999995',
-    help=('Learning rate decay, applied each optimization step.'))
-
-flags.DEFINE_integer(
-    'init_batch_size', default=16,
-    help=('Batch size to use for data-dependent initialization.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=64,
-    help=('Batch size for training.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=200,
-    help=('Number of training epochs.'))
-
-flags.DEFINE_float(
-    'dropout_rate', default=0.5,
-    help=('DropOut rate.'))
-
-flags.DEFINE_integer(
-    'rng', default=0,
-    help=('Random seed for network initialization.'))
-
-flags.DEFINE_integer(
-    'n_resnet', default=5,
-    help=('Number of resnet layers per block.'))
-
-flags.DEFINE_integer(
-    'n_feature', default=160,
-    help=('Number of features in each conv layer.'))
-
-flags.DEFINE_integer(
-    'n_logistic_mix', default=5,
-    help=('Number of components in the output distribution.'))
+config_flags.DEFINE_config_file(
+    'config', os.path.join(os.path.dirname(__file__), 'configs/default.py'),
+    'File path to the Training hyperparameter configuration.')
 
 flags.DEFINE_string(
     'model_dir', default='./model_data',
     help=('Directory to store model data.'))
-
-flags.DEFINE_float(
-    'polyak_decay', default=0.9995,
-    help=('Exponential decay rate of the sum of previous model iterates '
-          'during Polyak averaging.'))
-
-flags.DEFINE_integer(
-    'num_train_steps', default=-1,
-    help=('Number of training steps to be executed in a single epoch.'
-          'Default = -1 signifies using the entire TRAIN split.'))
-
-flags.DEFINE_integer(
-    'num_eval_steps', default=-1,
-    help=('Number of evaluation steps to be executed in a single epoch.'
-          'Default = -1 signifies using the entire TEST split.'))
 
 
 def create_model(prng_key, example_images, module):
@@ -135,8 +90,7 @@ def neg_log_likelihood_loss(nn_out, images):
       pixelcnn.conditional_params_from_outputs(nn_out, images))
   log_likelihoods = pixelcnn.logprob_from_conditional_params(
       images, means, inv_scales, logit_weights)
-  # TODO(mohitreddy): jax.numpy reductions should accept ndarrays and not lists.
-  return -jnp.mean(log_likelihoods) / (jnp.log(2) * jnp.prod(images.shape[-3:]))
+  return -jnp.mean(log_likelihoods) / (jnp.log(2) * np.prod(images.shape[-3:]))
 
 
 def train_step(optimizer, ema, batch, prng_key, learning_rate_fn,
@@ -191,37 +145,23 @@ def save_checkpoint(model_dir, optimizer, ema):
   checkpoints.save_checkpoint(model_dir, (optimizer, ema), step, keep=3)
 
 
-def train_and_evaluate(
-  n_resnet, n_feature, model_dir, batch_size, init_batch_size, num_epochs,
-  learning_rate, decay_rate, dropout_rate, polyak_decay, run_seed=0,
-  num_train_steps=-1, num_eval_steps=-1):
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   """Executes model training and evaluation loop.
 
   Args:
-    n_resnet: Number of resnet layers per block.
-    n_feature: Number of features in each Conv layer.
+    config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory to store model data.
-    batch_size: Batch size for training.
-    init_batch_size: Batch size to use for data-dependent initialization.
-    num_epochs: Number of training epochs.
-    learning_rate: Initial learning rate.
-    decay_rate: Learning rate decay, applied at each optimization step.
-    dropout_rate: Dropout rate.
-    polyak_decay: Exponential decay rate of the sum of previous
-      model iterates during Polyak averaging.
-    run_seed: Random seed for network initialization.
-    num_train_steps: Number of training steps to be executed in a single epoch.
-      Default = -1 signifies using the entire TRAIN split.
-    num_eval_steps: Number of evaluation steps to be executed in a
-      single epoch. Default = -1 signifies using the entire TEST split.
   """
   if jax.host_count() > 1:
     raise ValueError('PixelCNN++ example should not be run on more than 1 host'
                      ' (for now)')
 
-  tf.enable_v2_behavior()
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
-  pcnn_module = pixelcnn.PixelCNNPP.partial(depth=n_resnet, features=n_feature)
+  pcnn_module = pixelcnn.PixelCNNPP.partial(depth=config.n_resnet,
+                                            features=config.n_feature,
+                                            k=config.n_logistic_mix)
 
   current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
   log_dir = model_dir + '/log/' + current_time
@@ -230,14 +170,14 @@ def train_and_evaluate(
   train_summary_writer = tensorboard.SummaryWriter(train_log_dir)
   eval_summary_writer = tensorboard.SummaryWriter(eval_log_dir)
 
-  rng = random.PRNGKey(run_seed)
+  rng = random.PRNGKey(config.rng)
 
-  if batch_size % jax.device_count() > 0:
+  if config.batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
 
   # Load dataset
   data_source = input_pipeline.DataSource(
-      train_batch_size=batch_size, eval_batch_size=batch_size)
+      train_batch_size=config.batch_size, eval_batch_size=config.batch_size)
   train_ds = data_source.train_ds
   eval_ds = data_source.eval_ds
 
@@ -246,27 +186,29 @@ def train_and_evaluate(
   eval_iter = iter(eval_ds)
 
   # Compute steps per epoch and nb of eval steps
-  if num_train_steps == -1:
+  if config.num_train_steps == -1:
     steps_per_epoch = (
-      data_source.info.splits['train'].num_examples // batch_size
+      data_source.info.splits['train'].num_examples // config.batch_size
     )
   else:
-    steps_per_epoch = num_train_steps
+    steps_per_epoch = config.num_train_steps
 
-  if num_eval_steps:
-    steps_per_eval = data_source.info.splits['test'].num_examples // batch_size
+  if config.num_eval_steps:
+    steps_per_eval = (
+      data_source.info.splits['test'].num_examples // config.batch_size
+    )
   else:
-    steps_per_eval = num_eval_steps
+    steps_per_eval = config.num_eval_steps
 
   steps_per_checkpoint = steps_per_epoch * 10
-  num_steps = steps_per_epoch * num_epochs
+  num_steps = steps_per_epoch * config.num_epochs
 
-  base_learning_rate = learning_rate
+  base_learning_rate = config.learning_rate
 
   # Create the model using data-dependent initialization. Don't shard the init
   # batch.
-  assert init_batch_size <= batch_size
-  init_batch = next(train_iter)['image']._numpy()[:init_batch_size]
+  assert config.init_batch_size <= config.batch_size
+  init_batch = next(train_iter)['image']._numpy()[:config.init_batch_size]
   model = create_model(rng, init_batch, pcnn_module)
   ema = model.params
   optimizer = create_optimizer(model, base_learning_rate)
@@ -277,13 +219,13 @@ def train_and_evaluate(
   optimizer, ema = jax_utils.replicate((optimizer, ema))
 
   # Learning rate schedule
-  learning_rate_fn = lambda step: base_learning_rate * decay_rate ** step
+  learning_rate_fn = lambda step: base_learning_rate * config.lr_decay ** step
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
       functools.partial(
         train_step, learning_rate_fn=learning_rate_fn,
-        dropout_rate=dropout_rate, polyak_decay=polyak_decay),
+        dropout_rate=config.dropout_rate, polyak_decay=config.polyak_decay),
       axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
@@ -344,12 +286,9 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  train_and_evaluate(
-    FLAGS.n_resnet, FLAGS.n_feature, FLAGS.model_dir, FLAGS.batch_size,
-    FLAGS.init_batch_size, FLAGS.num_epochs, FLAGS.learning_rate,
-    FLAGS.lr_decay, FLAGS.dropout_rate, FLAGS.polyak_decay, FLAGS.rng,
-    FLAGS.num_train_steps, FLAGS.num_eval_steps)
+  train_and_evaluate(config=FLAGS.config, model_dir=FLAGS.model_dir)
 
 
 if __name__ == '__main__':
+  flags.mark_flags_as_required(['config', 'model_dir'])
   app.run(main)

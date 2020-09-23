@@ -32,7 +32,7 @@ jax.config.enable_omnistaging()
 #   @property
 #   def decoder(self):
 #     return self.encoder.detached().attached(variables={
-#       "param": {"kernel": self.encoder.variables['param']['kernel'].T}})
+#       'params': {"kernel": self.encoder.variables['params']['kernel'].T}})
 
 #   def __call__(self, x):
 #     z = self.encoder(x)
@@ -41,7 +41,7 @@ jax.config.enable_omnistaging()
 
 # tae = TiedAutoEncoder(parent=None)
 # tae = tae.initialized(
-#   {'param': random.PRNGKey(42)},
+#   {'params': random.PRNGKey(42)},
 #   jnp.ones((1, 16)))
 # print("reconstruct", jnp.shape(tae(jnp.ones((1, 16)))))
 # print("var shapes", jax.tree_map(jnp.shape, tae.variables))

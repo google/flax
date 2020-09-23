@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """seq2seq addition example."""
 
 import random
@@ -224,12 +223,6 @@ class Decoder(nn.Module):
 class Seq2seq(nn.Module):
   """Sequence-to-sequence class using encoder/decoder architecture."""
 
-  def _create_modules(self, eos_id, hidden_size):
-    encoder = Encoder.partial(
-        eos_id=eos_id, hidden_size=hidden_size).shared(name='encoder')
-    decoder = Decoder.shared(name='decoder')
-    return encoder, decoder
-
   def apply(self,
             encoder_inputs,
             decoder_inputs,
@@ -257,14 +250,9 @@ class Seq2seq(nn.Module):
     Returns:
       Array of decoded logits.
     """
-    encoder, decoder = self._create_modules(eos_id, hidden_size)
-
-    # Encode inputs
-    init_decoder_state = encoder(encoder_inputs)
-    # Decode outputs.
-    logits, predictions = decoder(
-        init_decoder_state,
-        decoder_inputs[:, :-1],
+    init_decoder_state = Encoder(encoder_inputs, eos_id=eos_id,
+        hidden_size=hidden_size)
+    logits, predictions = Decoder(init_decoder_state, decoder_inputs[:, :-1], 
         teacher_force=teacher_force)
 
     return logits, predictions

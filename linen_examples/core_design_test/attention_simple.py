@@ -119,16 +119,14 @@ def multi_head_dot_product_attention(
       attn_fn,
       in_axes=(None, None, None), out_axes=-2,
       axis_size=num_heads,
-      variable_in_axes={'param': 0},
-      variable_out_axes={'param': 0},
-      split_rngs={'param': True, 'dropout': not broadcast_dropout})
+      variable_axes={'params': 0},
+      split_rngs={'params': True, 'dropout': not broadcast_dropout})
   for axis in reversed(sorted(batch_axes)):
     attn_fn = lift.vmap(
         attn_fn,
         in_axes=(axis, axis, axis), out_axes=axis,
-        variable_in_axes={'param': None},
-        variable_out_axes={'param': None},
-        split_rngs={'param': False, 'dropout': not broadcast_dropout})
+        variable_axes={'params': None},
+        split_rngs={'params': False, 'dropout': not broadcast_dropout})
 
   y = attn_fn(scope, inputs_q, inputs_kv, bias)
   return y.mean(axis=-2)
@@ -137,7 +135,7 @@ if __name__ == "__main__":
   inputs = jnp.ones((2, 7, 16))
 
   y, variables = init(multi_head_dot_product_attention)(
-      {'param': random.PRNGKey(0), 'dropout': random.PRNGKey(1)},
+      {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)},
       inputs, inputs,
       num_heads=2,
       batch_axes=(0,),
