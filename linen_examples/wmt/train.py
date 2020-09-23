@@ -516,6 +516,7 @@ def main(argv):
       n_devices=n_devices,
       dataset_name=FLAGS.dataset_name,
       eval_dataset_name=FLAGS.eval_dataset_name,
+      reverse_translation=FLAGS.reverse_translation,
       shard_idx=jax.host_id(),
       shard_count=jax.host_count(),
       data_dir=FLAGS.data_dir,

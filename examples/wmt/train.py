@@ -532,6 +532,7 @@ def main(argv):
       n_devices=n_devices,
       dataset_name=FLAGS.dataset_name,
       eval_dataset_name=FLAGS.eval_dataset_name,
+      reverse_translation=FLAGS.reverse_translation,
       shard_idx=jax.host_id(),
       shard_count=jax.host_count(),
       data_dir=FLAGS.data_dir,
@@ -560,6 +561,8 @@ def main(argv):
       'max_len': max(FLAGS.max_target_length, FLAGS.max_eval_target_length),
       'share_embeddings': FLAGS.share_embeddings,
       'logits_via_embedding': FLAGS.logits_via_embedding,
+      'dropout_rate': FLAGS.dropout_rate,
+      'attention_dropout_rate': FLAGS.attention_dropout_rate,
   }
 
   start_step = 0
