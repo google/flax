@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Attention core modules for Flax."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
@@ -34,99 +33,78 @@ from . import initializers
 
 PRNGKey = Any
 Shape = Tuple[int]
-Dtype = Any  # this could be a real type?
+Dtype = Any
 Array = Any
 
 
-def dot_product_attention(query,
-                          key,
-                          value,
-                          dtype=jnp.float32,
-                          bias=None,
-                          axis=None,
-                          broadcast_dropout=True,
-                          dropout_rng=None,
-                          dropout_rate=0.,
-                          deterministic=False,
-                          precision=None):
+def dot_product_attention(query: Array,
+                          key: Array,
+                          value: Array,
+                          bias: Optional[Array] = None,
+                          broadcast_dropout: bool = True,
+                          dropout_rng: Optional[PRNGKey] = None,
+                          dropout_rate: float = 0.,
+                          deterministic: bool = False,
+                          dtype: Dtype = jnp.float32,
+                          precision: Optional[lax.Precision] = None):
   """Computes dot-product attention given query, key, and value.
 
   This is the core function for applying attention based on
   https://arxiv.org/abs/1706.03762. It calculates the attention weights given
-  query and key and combines the values using the attention weights. This
-  function supports multi-dimensional inputs.
+  query and key and combines the values using the attention weights.
 
+  Note: query, key, value needn't have any batch dimensions.
 
   Args:
-    query: queries for calculating attention with shape of `[batch_size, dim1,
-      dim2, ..., dimN, num_heads, mem_channels]`.
-    key: keys for calculating attention with shape of `[batch_size, dim1, dim2,
-      ..., dimN, num_heads, mem_channels]`.
-    value: values to be used in attention with shape of `[batch_size, dim1,
-      dim2,..., dimN, num_heads, value_channels]`.
-    dtype: the dtype of the computation (default: float32)
-    bias: bias for the attention weights. This can be used for incorporating
-      autoregressive mask, padding mask, proximity bias.
-    axis: axises over which the attention is applied.
+    query: queries for calculating attention with shape of
+      `[batch..., q_length, num_heads, qk_depth_per_head]`.
+    key: keys for calculating attention with shape of
+      `[batch..., kv_length, num_heads, qk_depth_per_head]`.
+    value: values to be used in attention with shape of
+      `[batch..., kv_length, num_heads, v_depth_per_head]`.
+    bias: bias for the attention weights. This should be broadcastable to the
+      shape: `[batch..., num_heads, q_length, kv_length]`
+      This can be used for incorporating causal masks, padding masks,
+      proximity bias, etc.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
     deterministic: bool, deterministic or not (to apply dropout)
+    dtype: the dtype of the computation (default: float32)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
 
   Returns:
-    Output of shape `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]`.
+    Output of shape `[batch..., length, num_heads, v_depth_per_head]`.
   """
-  assert key.shape[:-1] == value.shape[:-1]
-  assert (query.shape[0:1] == key.shape[0:1] and
-          query.shape[-1] == key.shape[-1])
+  assert key.ndim == query.ndim == value.ndim, "q, k, v must have same rank."
+  assert query.shape[:-3] == key.shape[:-3] == value.shape[:-3], (
+      "q, k, v batch dims must match.")
+  assert query.shape[-2] == key.shape[-2] == value.shape[-2], (
+      "q, k, v num_heads must match.")
+  assert key.shape[-3] == value.shape[-3], "k, v lengths must match."
+  assert query.shape[-1] == key.shape[-1], "q, k depths must match."
 
-  if axis is None:
-    axis = tuple(range(1, key.ndim - 2))
-  if not isinstance(axis, Iterable):
-    axis = (axis,)
-  assert key.ndim == query.ndim
-  assert key.ndim == value.ndim
-  for ax in axis:
-    if not (query.ndim >= 3 and 1 <= ax < query.ndim - 2):
-      raise ValueError('Attention axis must be between the batch '
-                       'axis and the last-two axes.')
+  # calculate attention matrix
   depth = query.shape[-1]
-  n = key.ndim
-  # batch_dims is  <bs, <non-attention dims>, num_heads>
-  batch_dims = tuple(np.delete(range(n), axis + (n - 1,)))
-  # q & k -> (bs, <non-attention dims>, num_heads, <attention dims>, channels)
-  qk_perm = batch_dims + axis + (n - 1,)
-  key = key.transpose(qk_perm)
-  query = query.transpose(qk_perm)
-  # v -> (bs, <non-attention dims>, num_heads, channels, <attention dims>)
-  v_perm = batch_dims + (n - 1,) + axis
-  value = value.transpose(v_perm)
-
   query = query / jnp.sqrt(depth).astype(dtype)
-  batch_dims_t = tuple(range(len(batch_dims)))
-  attn_weights = lax.dot_general(
-      query,
-      key, (((n - 1,), (n - 1,)), (batch_dims_t, batch_dims_t)),
-      precision=precision)
+  # attn weight shape is (batch..., num_heads, q_length, kv_length)
+  attn_weights = jnp.einsum('...qhd,...khd->...hqk', query, key,
+                            precision=precision)
 
-  # apply attention bias: masking, droput, proximity bias, ect.
+  # apply attention bias: masking, dropout, proximity bias, etc.
   if bias is not None:
     attn_weights = attn_weights + bias
 
   # normalize the attention weights
-  norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))
-  attn_weights = jax.nn.softmax(attn_weights, axis=norm_dims)
-  attn_weights = attn_weights.astype(dtype)
+  attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
 
-  # apply dropout
+  # apply attention dropout
   if not deterministic and dropout_rate > 0.:
-    keep_prob = jax.lax.tie_in(attn_weights, 1.0 - dropout_rate)
+    keep_prob = 1.0 - dropout_rate
     if broadcast_dropout:
-      # dropout is broadcast across the batch+head+non-attention dimension
-      dropout_dims = attn_weights.shape[-(2 * len(axis)):]
-      dropout_shape = (tuple([1] * len(batch_dims_t)) + dropout_dims)
+      # dropout is broadcast across the batch + head dimensions
+      dropout_shape = tuple([1] * (key.ndim - 2)) + attn_weights.shape[-2:]
       keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
     else:
       keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
@@ -134,35 +112,13 @@ def dot_product_attention(query,
                   jnp.asarray(keep_prob, dtype=dtype))
     attn_weights = attn_weights * multiplier
 
-  # compute the new values given the attention weights
-  wv_contracting_dims = (norm_dims, range(value.ndim - len(axis), value.ndim))
-  y = lax.dot_general(
-      attn_weights,
-      value, (wv_contracting_dims, (batch_dims_t, batch_dims_t)),
-      precision=precision)
-
-  # back to (bs, dim1, dim2, ..., dimN, num_heads, channels)
-  perm_inv = _invert_perm(qk_perm)
-  y = y.transpose(perm_inv)
-  return y
-
-
-def _invert_perm(perm):
-  perm_inv = [0] * len(perm)
-  for i, j in enumerate(perm):
-    perm_inv[j] = i
-  return tuple(perm_inv)
+  # return weighted sum over values for each query position
+  return jnp.einsum('...hqk,...khd->...qhd', attn_weights, value,
+                    precision=precision)
 
 
 class MultiHeadDotProductAttention(Module):
   """Multi-head dot-product attention.
-
-    Projects the inputs into multi-headed query, key, and value vectors,
-    applies dot-product attention and project the results to an output vector.
-
-    This can be used for encoder-decoder attention by specifying both `inputs_q`
-    and `inputs_kv` orfor self-attention by only specifying `inputs_q` and
-    setting `inputs_kv` to None.
 
     Args:
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
@@ -170,11 +126,6 @@ class MultiHeadDotProductAttention(Module):
       dtype: the dtype of the computation (default: float32)
       qkv_features: dimension of the key, query, and value.
       out_features: dimension of the last projection
-      attention_axis: axes over which the attention is applied ( 'None' means
-        attention over all axes, but batch, heads, and features).
-      causal_mask: boolean specifying whether to apply a causal mask on the
-        attention weights. If True, the output at timestep `t` will not depend
-        on inputs at timesteps strictly greater than `t`.
       broadcast_dropout: bool: use a broadcasted dropout along batch dims.
       dropout_rate: dropout rate
       deterministic: bool, deterministic or not (to apply dropout)
@@ -192,8 +143,6 @@ class MultiHeadDotProductAttention(Module):
   dtype: Dtype = jnp.float32
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None
-  attention_axis: Optional[int] = None
-  causal_mask: bool = False
   broadcast_dropout: bool = True
   dropout_rate: float = 0.
   deterministic: bool = False
@@ -206,49 +155,27 @@ class MultiHeadDotProductAttention(Module):
 
   @compact
   def __call__(self,
-               inputs_q,
-               inputs_kv,
-               padding_mask=None,
-               key_padding_mask=None,
-               segmentation=None,
-               key_segmentation=None,
-               decode=False):
+               inputs_q: Array,
+               inputs_kv: Array,
+               mask: Optional[Array] = None):
     """Applies multi-head dot product attention on the input data.
 
     Projects the inputs into multi-headed query, key, and value vectors,
     applies dot-product attention and project the results to an output vector.
 
-    This can be used for encoder-decoder attention by specifying both `inputs_q`
-    and `inputs_kv` orfor self-attention by only specifying `inputs_q` and
-    setting `inputs_kv` to None.
-
     Args:
-      inputs_q: input queries of shape `[bs, dim1, dim2, ..., dimN, features]`.
-      inputs_kv: key/values of shape `[bs, dim1, dim2, ..., dimN, features]`
-        or None for self-attention, inn which case key/values will be derived
-        from inputs_q.
-      padding_mask: boolean specifying query tokens that are pad token.
-      key_padding_mask: boolean specifying key-value tokens that are pad token.
-      segmentation: segment indices for packed inputs_q data.
-      key_segmentation: segment indices for packed inputs_kv data.
+      inputs_q: input queries of shape
+        `[batch_sizes..., length, features]`.
+      inputs_kv: key/values of shape
+        `[batch_sizes..., length, features]`.
+      mask: attention mask of shape
+        `[batch_sizes..., num_heads, query_length, key/value_length]`.
 
     Returns:
-      output of shape `[bs, dim1, dim2, ..., dimN, features]`.
+      output of shape `[batch_sizes..., length, features]`.
     """
-
-    assert self.causal_mask or not self.decode, (
-        'Caching is only support for causal attention.')
-
-    if inputs_kv is None:
-      inputs_kv = inputs_q
-
-    attention_axis = self.attention_axis
-    if self.attention_axis is None:
-      attention_axis = tuple(range(1, inputs_q.ndim - 1))
-
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
-
     assert qkv_features % self.num_heads == 0, (
         'Memory dimension must be divisible by number of heads.')
     head_dim = qkv_features // self.num_heads
@@ -261,12 +188,13 @@ class MultiHeadDotProductAttention(Module):
                     use_bias=self.use_bias,
                     precision=self.precision)
     # project inputs_q to multi-headed q/k/v
-    # dimensions are then [bs, dims..., n_heads, n_features_per_head]
+    # dimensions are then [batch..., length, n_heads, n_features_per_head]
     query, key, value = (dense(dtype=self.dtype, name='query')(inputs_q),
                          dense(dtype=self.dtype, name='key')(inputs_kv),
                          dense(dtype=self.dtype, name='value')(inputs_kv))
 
-
+    # During fast autoregressive decoding, we feed one position at a time,
+    # and cache the keys and values step by step.
     if self.decode:
       # detect if we're initializing by absence of existing cache data.
       is_initialized = self.has_variable('cache', 'cached_key')
@@ -275,83 +203,41 @@ class MultiHeadDotProductAttention(Module):
       cached_value = self.variable('cache', 'cached_value',
                                    jnp.zeros, value.shape, value.dtype)
       cache_index = self.variable('cache', 'cache_index',
-                                  lambda: jnp.array(0, dtype=jnp.uint32))
+                                  lambda: jnp.array(0, dtype=jnp.int32))
       if is_initialized:
-        expected_shape = list(cached_key.value.shape[:-2])
-        for attn_dim in attention_axis:
-          expected_shape[attn_dim] = 1
-        expected_shape = tuple(expected_shape) + inputs_q.shape[-1:]
+        *batch_dims, max_length, num_heads, depth_per_head = (
+            cached_key.value.shape)
+        total_depth = num_heads * depth_per_head
+        # shape check of cached keys against query input
+        expected_shape = tuple(batch_dims) + (1, total_depth)
         if expected_shape != inputs_q.shape:
           raise ValueError('Invalid shape provided, '
                            'expected shape %s instead got %s.' %
                            (expected_shape, inputs_q.shape))
-
-        cshape = cached_key.value.shape
-        indices = [0] * len(cshape)
-        i = cache_index.value
-        attn_size = np.prod(np.take(cshape, attention_axis))
-        for attn_dim in attention_axis:
-          attn_size //= cshape[attn_dim]
-          indices[attn_dim] = i // attn_size
-          i = i % attn_size
-
+        # update key, value caches with our new 1d spatial slices
+        cur_index = cache_index.value
+        indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
         key = lax.dynamic_update_slice(cached_key.value, key, indices)
         value = lax.dynamic_update_slice(cached_value.value, value, indices)
         cached_key.value = key
         cached_value.value = value
         cache_index.value = cache_index.value + 1
+        # causal mask for cached decoder self-attention:
+        # our single query position should only attend to those key
+        # positions that have already been generated and cached,
+        # not the remaining zero elements.
+        mask = combine_masks(
+            mask,
+            jnp.broadcast_to(jnp.arange(max_length) <= cur_index,
+                             tuple(batch_dims) + (1, 1, max_length)))
 
-        # TODO(levskaya): verify this is still needed in translation decoding.
-        key_padding_mask = jnp.broadcast_to(
-            (jnp.arange(cshape[1]) < cache_index.value), cshape[:2])
-        key_padding_mask = key_padding_mask.astype(jnp.float32)[..., None]
-
-    # create attention masks
-    mask_components = []
-
-    if self.causal_mask:
-      if self.decode and is_initialized:
-        bias_pre_shape = (1,) * (key.ndim - 1)
-        attn_shape = tuple(np.take(key.shape, attention_axis))
-        attn_size = np.prod(attn_shape)
-        ii = jnp.arange(attn_size, dtype=jnp.uint32)
-        mask = ii < cache_index.value
-        mask_components.append(mask.reshape(bias_pre_shape + attn_shape))
-      else:
-        mask_components.append(_make_causal_mask(key, attention_axis))
-
-    if padding_mask is not None:
-      if key_padding_mask is None:
-        key_padding_mask = padding_mask
-      padding_mask = make_padding_mask(
-          padding_mask_query=padding_mask,
-          padding_mask_key=key_padding_mask,
-          query_shape=query.shape,
-          key_shape=key.shape,
-          attention_axis=attention_axis)
-      mask_components.append(padding_mask)
-
-    if segmentation is not None:
-      if key_segmentation is None:
-        key_segmentation = segmentation
-      segmentation_mask = make_padding_mask(
-          padding_mask_query=segmentation,
-          padding_mask_key=key_segmentation,
-          query_shape=query.shape,
-          key_shape=key.shape,
-          attention_axis=attention_axis,
-          segmentation_mask=True)
-      mask_components.append(segmentation_mask)
-
-    if mask_components:
-      attention_mask = mask_components[0]
-      for component in mask_components[1:]:
-        attention_mask = jnp.logical_and(attention_mask, component)
-
+    # Convert the boolean attention mask to an attention bias.
+    if mask is not None:
       # attention mask in the form of attention bias
       attention_bias = lax.select(
-          attention_mask > 0, jnp.full(attention_mask.shape, 0.).astype(self.dtype),
-          jnp.full(attention_mask.shape, -1e10).astype(self.dtype))
+          mask > 0,
+          jnp.full(mask.shape, 0.).astype(self.dtype),
+          jnp.full(mask.shape, -1e10).astype(self.dtype))
     else:
       attention_bias = None
 
@@ -364,14 +250,13 @@ class MultiHeadDotProductAttention(Module):
         query,
         key,
         value,
-        dtype=self.dtype,
-        axis=attention_axis,
         bias=attention_bias,
-        precision=self.precision,
         dropout_rng=dropout_rng,
         dropout_rate=self.dropout_rate,
         broadcast_dropout=self.broadcast_dropout,
-        deterministic=self.deterministic)
+        deterministic=self.deterministic,
+        dtype=self.dtype,
+        precision=self.precision)
 
     # back to the original inputs dimensions
     out = DenseGeneral(features=features,
@@ -382,7 +267,6 @@ class MultiHeadDotProductAttention(Module):
                        dtype=self.dtype,
                        precision=self.precision,
                        name='out')(x)
-
     return out
 
 
@@ -390,118 +274,80 @@ class SelfAttention(MultiHeadDotProductAttention):
   """Self-attention special case of multi-head dot-product attention."""
 
   @compact
-  def __call__(self,
-               inputs_q,
-               padding_mask=None,
-               segmentation=None):
-    return super().__call__(inputs_q,
-                            inputs_q,
-                            padding_mask=padding_mask,
-                            key_padding_mask=padding_mask,
-                            segmentation=segmentation,
-                            key_segmentation=segmentation)
+  def __call__(self, inputs_q: Array, mask: Optional[Array] = None):
+    return super().__call__(inputs_q, inputs_q, mask)
 
 
-def make_padding_mask(padding_mask_query,
-                      padding_mask_key,
-                      query_shape,
-                      key_shape,
-                      attention_axis=None,
-                      segmentation_mask=False):
-  """Makes padding mask for attention weights.
+# mask-making utility functions
 
-  In case of 1d inputs (i.e., `[bs, len, features]`, the attention weights will
-  be `[bs, len, len]` and this function makes a square matrix [len, len].
+
+def make_attention_mask(query_input: Array,
+                        key_input: Array,
+                        pairwise_fn: Callable = jnp.multiply,
+                        extra_batch_dims: int = 0,
+                        dtype: Dtype = jnp.float32):
+  """Mask-making helper for attention weights.
+
+  In case of 1d inputs (i.e., `[batch..., len_q]`, `[batch..., len_kv]`, the
+  attention weights will be `[batch..., heads, len_q, len_kv]` and this
+  function will produce `[batch..., 1, len_q, len_kv]`.
 
   Args:
-    padding_mask_query: padding mask of query <bs, qdim1,.., qdimn>
-    padding_mask_key: padding mask of query <bs, key1,.., keyn>
-    query_shape: shape of the query
-    key_shape: shape of the key, which is equal to the shape of value.
-    attention_axis: axis over which attention is applied.
-    segmentation_mask: bool: if true use equality on cartesian product rather
-      than outer product for constructing segmentation masks.
+    query_input: a batched, flat input of query_length size
+    key_input: a batched, flat input of key_length size
+    pairwise_fn: broadcasting elementwise comparison function
+    extra_batch_dims: number of extra batch dims to add singleton
+      axes for, none by default
+    dtype: mask return dtype
+
   Returns:
-    The padding mask for attention weights.
+    A `[batch..., 1, len_q, len_kv]` shaped mask for 1d attention.
   """
-  assert query_shape[0] == key_shape[0]
-  assert len(query_shape) == len(key_shape)
-
-  ndim = len(key_shape)
-  if attention_axis is None:
-    attention_axis = tuple(range(1, ndim - 2))
-  assert isinstance(attention_axis, tuple)
-  for ax in attention_axis:
-    if not (ndim >= 3 and 1 <= ax < ndim - 2):
-      raise ValueError(
-          'Attention axis must be between the batch axis and the last-two axes.'
-      )
-
-  mask_shape_final = (query_shape[0], 1)  #  batch_size, 1 (for all heads)s
-  for ax in attention_axis:
-    mask_shape_final += (query_shape[ax],)
-  for ax in attention_axis:
-    mask_shape_final += (key_shape[ax],)
-
-  padding_mask_query = padding_mask_query[..., None]
-  padding_mask_key = padding_mask_key[..., None]
-  perm = (0,) + tuple(np.flip(np.arange(padding_mask_key.ndim)))[:-1]
-  if segmentation_mask:
-    mask = jnp.equal(padding_mask_query, padding_mask_key.transpose(perm))
-  else:
-    mask = jnp.multiply(padding_mask_query, padding_mask_key.transpose(perm))
-
-  mask = mask.reshape(mask_shape_final)
-  mask = jax.lax.convert_element_type(mask, jnp.float32)
-  return mask
+  mask = pairwise_fn(jnp.expand_dims(query_input, axis=-1),
+                     jnp.expand_dims(key_input, axis=-2))
+  mask = jnp.expand_dims(mask, axis=-3)
+  mask = jnp.expand_dims(mask, axis=tuple(range(extra_batch_dims)))
+  return mask.astype(dtype)
 
 
-def _make_causal_mask(key, attention_axis=None, self_mask=False):
-  """Makes a causal mask, to be used for masking out the future for attention.
+def make_causal_mask(x: Array,
+                     extra_batch_dims: int = 0,
+                     dtype: Dtype = jnp.float32):
+  """Make a causal mask for self-attention.
 
-  In case of 1d inputs (i.e., `[bs, len, features]`, the attention weights will
-  be `[bs, len, len]` and this function makes a square matrix [len, len] with
-  zeros in upper triangle and ones in lower triangle.
+  In case of 1d inputs (i.e., `[batch..., len]`, the self-attention weights
+  will be `[batch..., heads, len, len]` and this function will produce a
+  causal mask of shape `[batch..., 1, len, len]`.
 
   Args:
-    key: shape of the key, which is equal to the shape of value and is
-      assumed to be equal to the shape of the query (since this is used in
-      self-attention when decoding).
-    attention_axis: axis over which attention is applied.
-    self_mask: if mask out the diagonal or not.
+    x: input array of shape `[batch..., len]`
+    extra_batch_dims: number of batch dims to add singleton axes for,
+      none by default
+    dtype: mask return dtype
 
   Returns:
-    A causal mask to be used to mask out future positions.
+    A `[batch..., 1, len, len]` shaped causal mask for 1d attention.
   """
-  if attention_axis is None:
-    attention_axis = tuple(range(1, key.ndim - 2))
-  assert isinstance(attention_axis, tuple)
-  for ax in attention_axis:
-    if not (key.ndim >= 3 and 1 <= ax < key.ndim - 2):
-      raise ValueError(
-          'Attention axis must be between the batch axis and the last-two axes.'
-      )
+  idxs = jnp.broadcast_to(jnp.arange(x.shape[-1], dtype=jnp.int32), x.shape)
+  return make_attention_mask(idxs, idxs, jnp.greater_equal,
+                             extra_batch_dims=extra_batch_dims, dtype=dtype)
 
-  mask_shape = tuple([1] * (key.ndim - len(attention_axis) - 1))
-  mask_shape_final = mask_shape
-  for _ in range(2):
-    flatten_dim = 1
-    for ax in attention_axis:
-      mask_shape_final += (key.shape[ax],)
-      flatten_dim *= key.shape[ax]
-    mask_shape += (flatten_dim,)
 
-  def tri(n, m, k=0):
-    # Tie in the key to avoid the mask becoming a constant.
-    # This way XLA can construct the mask during computation and fuse it
-    # with the attention ops.
-    x = lax.tie_in(key, jnp.arange(n, dtype=jnp.int32))
-    y = lax.tie_in(key, jnp.arange(m, dtype=jnp.int32))
-    mask = lax.ge(
-        (lax.broadcast_in_dim(x, shape=(n, m), broadcast_dimensions=(0,))) + k,
-        lax.broadcast(y, [n]))
-    return mask
+def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32):
+  """Combine attention masks.
 
-  k = -1 if self_mask else 0
-  mask = tri(*mask_shape[-2:], k=k).reshape(mask_shape_final)
-  return mask
+  Args:
+    *masks: set of attention mask arguments to combine, some can be None.
+
+  Returns:
+    Combined mask, reduced by logical and, returns None if no masks given.
+  """
+  masks = [m for m in masks if m is not None]
+  if not masks:
+    return None
+  assert all(map(lambda x: x.ndim == masks[0].ndim, masks)), (
+      f'masks must have same rank: {tuple(map(lambda x: x.ndim, masks))}')
+  mask, *other_masks = masks
+  for other_mask in other_masks:
+    mask = jnp.logical_and(mask, other_mask)
+  return mask.astype(dtype)

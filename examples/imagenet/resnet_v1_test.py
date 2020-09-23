@@ -13,35 +13,31 @@
 # limitations under the License.
 
 # Lint as: python3
-"""Tests for flax.examples.imagenet.train."""
+"""Tests for flax.examples.imagenet.resnet_v1."""
 
 from absl.testing import absltest
 
-from flax import nn
-import train
-
 import jax
-from jax import random
 import jax.numpy as jnp
 
-import numpy as onp
-
-# Parse absl flags test_srcdir and test_tmpdir.
-jax.config.parse_flags_with_absl()
+import resnet_v1 as models
 
 
-class TrainTest(absltest.TestCase):
+class ResNetV1Test(absltest.TestCase):
+  """Test cases for ResNet V1 model."""
 
-  def test_create_model(self):
-    model, state = train.create_model(
-        random.PRNGKey(0), 8, 224, jnp.float32)
-    x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
-    with nn.stateful(state) as new_state:
-      y = model(x)
-    state = jax.tree_map(onp.shape, state.as_dict())
-    new_state = jax.tree_map(onp.shape, new_state.as_dict())
-    self.assertEqual(state, new_state)
-    self.assertEqual(y.shape, (8, 1000))
+  def test_resnet_v1_module(self):
+    """Tests ResNet V1 model definition."""
+    rng = jax.random.PRNGKey(0)
+    model_def = models.ResNet50.partial(num_classes=10, dtype=jnp.float32)
+    output, init_params = model_def.init_by_shape(
+        rng, [((8, 224, 224, 3), jnp.float32)])
+
+    self.assertEqual((8, 10), output.shape)
+
+    # TODO(mohitreddy): Consider creating a testing module which
+    # gives a parameters overview including number of parameters.
+    self.assertLen(init_params, 19)
 
 
 if __name__ == '__main__':

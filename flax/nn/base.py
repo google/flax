@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """NN base modules for JAX."""
 
 import abc
@@ -262,7 +261,8 @@ class Module(metaclass=_ModuleMeta):
       name = cls.__name__ + '_' + parent.create_name()
     cls._check_name(name, parent)
     if parent.is_init and name not in parent.params:
-      rng = _fold_in_str(parent.rng, name)
+      with jax.core.eval_context():
+        rng = _fold_in_str(parent.rng, name)
       params = {}
       parent.params[name] = params
     else:  # apply
@@ -555,8 +555,9 @@ class Module(metaclass=_ModuleMeta):
       if name in frame.params:
         raise ValueError(
             "Name '%s' was already used for another parameter." % name)
-      key = _fold_in_str(frame.rng, name)
-      frame.params[name] = initializer(key, shape)
+      with jax.core.eval_context():
+        key = _fold_in_str(frame.rng, name)
+        frame.params[name] = initializer(key, shape)
     if name not in frame.params:
       raise ValueError("Parameter with name '%s' does not exist." % name)
     param = frame.params[name]
@@ -614,9 +615,10 @@ class Module(metaclass=_ModuleMeta):
     if initializer is not None and init_frames:
       # use the closest frame that is initializing to get an rng
       init_frame = init_frames[-1]
-      init_frame.rng, key = random.split(init_frame.rng)
-      init_value = initializer(key, shape)
-      state.value = init_value
+      with jax.core.eval_context():
+        init_frame.rng, key = random.split(init_frame.rng)
+        init_value = initializer(key, shape)
+        state.value = init_value
     return state
 
   def is_stateful(self):

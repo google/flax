@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +53,8 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 import numpy as np
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
+
 
 FLAGS = flags.FLAGS
 
@@ -308,7 +308,7 @@ def compute_weighted_cross_entropy(logits,
   loss = -jnp.sum(soft_targets * nn.log_softmax(logits), axis=-1)
   loss = loss - normalizing_constant
 
-  normalizing_factor = jnp.prod(targets.shape)
+  normalizing_factor = np.prod(targets.shape)
   if weights is not None:
     loss = loss * weights
     normalizing_factor = weights.sum()
@@ -331,7 +331,7 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
                      (str(logits.shape), str(targets.shape)))
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
-  normalizing_factor = jnp.prod(logits.shape[:-1])
+  normalizing_factor = np.prod(logits.shape[:-1])
   if weights is not None:
     loss = loss * weights
     normalizing_factor = weights.sum()
@@ -501,12 +501,12 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   if FLAGS.jax_backend_target:
     jax.config.FLAGS.jax_xla_backend = 'tpu_driver'
     jax.config.FLAGS.jax_backend_target = FLAGS.jax_backend_target
-
-  # This seems to be necessary even when importing TF2?
-  tf.enable_v2_behavior()
 
   # Number of local devices for this host.
   n_devices = jax.local_device_count()

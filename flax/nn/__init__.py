@@ -26,6 +26,6 @@ from .base import (Module, Model, Collection, capture_module_outputs,
 from .linear import Dense, DenseGeneral, Conv, ConvTranspose, Embed
 from .normalization import BatchNorm, LayerNorm, GroupNorm
 from .pooling import max_pool, avg_pool
-from .recurrent import LSTMCell, GRUCell
+from .recurrent import LSTMCell, GRUCell, ConvLSTM
 from .stochastic import make_rng, stochastic, dropout, is_stochastic
 # pylint: enable=g-multiple-import

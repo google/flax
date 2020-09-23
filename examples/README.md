@@ -13,15 +13,15 @@ Each examples is designed to be self-contained and easily forkable, while reprod
 
 | Example | Description | Features |
 | ------- | ----------- | -------- |
-| [cifar10](examples/cifar10/README.md) | Wideresnet & pyramidnet implementations with shake-shake / shake-drop regularization for CIFAR-10 classification | Single host SPMD, tfds `cifar10`, custom preprocessing |
-| [graph](examples/graph/README.md) | Graph convolutional network to label nodes in small toy dataset | Data inlined, simple code |
-| [imagenet](examples/imagenet/README.md) | Resnet-50 on imagenet with weight decay | Multi host SPMD, tfds `imagenet`, custom preprocessing, checkpointing, dynamic scaling, mixed precision |
-| [lm1b](examples/lm1b/README.md) | Transformer encoder for next token prediction | Single host SPMD, tfds `lm1b`, checkpointing, dynamic bucketing, attention cache, Colab |
-| [mnist](examples/mnist/README.md) | Convolutional neural network for MNIST classification | Tfds `mnist`, simple code |
-| [pixelcnn](examples/pixelcnn/README.md) | PixelCNN++ for CIFAR-10 generation | Single host SPMD, tfds `cifar10`, checkpointing, Polyak decay |
-| [seq2seq](examples/seq2seq/README.md) | LSTM encoder/decoder for completing `42+1234=` sequences | On the fly data generation, LSTM state handling, simple code |
-| [vae](examples/vae/README.md) | Variational auto-encoder for binarized MNIST images | Tfds `binarized_mnist`, vmap, simple code |
-| [wmt](examples/wmt/README.md) | Transformer for translating en/de | Multi host SPMD, tfds `wmt1{4,7}_translate`, SentencePiece tokenization, checkpointing, dynamic bucketing, attention cache, packed sequences, recipe for TPU training on GCP |
+| [cifar10](cifar10/README.md) | Wideresnet & pyramidnet implementations with shake-shake / shake-drop regularization for CIFAR-10 classification | Single host SPMD, tfds `cifar10`, custom preprocessing |
+| [graph](graph/README.md) | Graph convolutional network to label nodes in small toy dataset | Data inlined, simple code |
+| [imagenet](imagenet/README.md) | Resnet-50 on imagenet with weight decay | Multi host SPMD, tfds `imagenet`, custom preprocessing, checkpointing, dynamic scaling, mixed precision |
+| [lm1b](lm1b/README.md) | Transformer encoder for next token prediction | Single host SPMD, tfds `lm1b`, checkpointing, dynamic bucketing, attention cache, Colab |
+| [mnist](mnist/README.md) | Convolutional neural network for MNIST classification | Tfds `mnist`, simple code |
+| [pixelcnn](pixelcnn/README.md) | PixelCNN++ for CIFAR-10 generation | Single host SPMD, tfds `cifar10`, checkpointing, Polyak decay |
+| [seq2seq](seq2seq/README.md) | LSTM encoder/decoder for completing `42+1234=` sequences | On the fly data generation, LSTM state handling, simple code |
+| [vae](vae/README.md) | Variational auto-encoder for binarized MNIST images | Tfds `binarized_mnist`, vmap, simple code |
+| [wmt](wmt/README.md) | Transformer for translating en/de | Multi host SPMD, tfds `wmt1{4,7}_translate`, SentencePiece tokenization, checkpointing, dynamic bucketing, attention cache, packed sequences, recipe for TPU training on GCP |
 
 ## Flax examples from the community
  

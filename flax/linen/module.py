@@ -17,6 +17,7 @@ from contextlib import contextmanager
 import dataclasses
 import functools
 import inspect
+import os
 import threading
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
                     Set, Type, Union, TypeVar, Generic)
@@ -25,10 +26,11 @@ import jax
 from jax import tree_util
 import numpy as np
 
+import flax
 from flax import traverse_util
 from flax import serialization
-from flax.core import Scope, apply, init
-from flax.core.scope import _unfreeze_variables, Variable
+from flax.core import Scope, apply
+from flax.core.scope import Variable
 from flax.core.frozen_dict import freeze
 
 # from .dotgetter import DotGetter
@@ -46,9 +48,11 @@ def _check_omnistaging():
         "  from jax.config import config\n"
         "  config.enable_omnistaging()")
 
+
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
 class _DynamicContext:
+  # TODO: switch to using contextvars once minimum python version is 3.7
   def __init__(self):
     self._thread_data = threading.local()
   @property
@@ -61,6 +65,21 @@ _context = _DynamicContext()
 class _Sentinel:
   pass
 _unspecified_parent = _Sentinel()
+
+
+# Enable automatic named_call wrapping for labelling profile traces.
+# -----------------------------------------------------------------------------
+_use_named_call = True if os.getenv('FLAX_PROFILE', '') else False
+
+def enable_named_call():
+  """Enables named call wrapping for labelling profile traces."""
+  global _use_named_call
+  _use_named_call = True
+
+def disable_named_call():
+  """Disables named call wrapping."""
+  global _use_named_call
+  _use_named_call = False
 
 
 # Utilities for autonaming pytrees of Modules defined inside setup()
@@ -80,6 +99,7 @@ def is_module_tree(in_tree: Any) -> bool:
   reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
   return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
 
+
 def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
   """Helper for naming pytrees of submodules."""
   if isinstance(module_tree, Module):
@@ -88,6 +108,7 @@ def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
     flat_tree = traverse_util.flatten_dict(
         serialization.to_state_dict(module_tree))
     return [('_' + '_'.join(k), v) for k, v in flat_tree.items()]
+
 
 def all_names_on_object(obj: Any) -> Set[str]:
   """Get all names of attributes on self and its classes throughout MRO."""
@@ -104,6 +125,7 @@ def compact(fun: Callable) -> Callable:
   fun.compact = True
   return fun
 
+
 def get_local_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
   """Get method names of a class, excluding class and static methods."""
   true_methods = set()
@@ -113,6 +135,7 @@ def get_local_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
       if mtype != staticmethod and mtype != classmethod:
         true_methods.add(m)
   return tuple(true_methods.difference(set(exclude)))
+
 
 def wrap_method(fun: Callable) -> Callable:
   """Manages Module state for user-defined methods."""
@@ -140,6 +163,7 @@ def wrap_method(fun: Callable) -> Callable:
 
   return wrapped_module_method
 
+
 def get_unbound_fn(method_or_fn):
   """Return an unbound function from a bound method."""
   if inspect.ismethod(method_or_fn):
@@ -148,6 +172,7 @@ def get_unbound_fn(method_or_fn):
     return method_or_fn
   else:
     raise ValueError('Expect a function or method.')
+
 
 # Ephemeral Module Evaluation State
 # -----------------------------------------------------------------------------
@@ -234,7 +259,12 @@ class Module:
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__'])
     for key in get_local_method_names(cls, exclude=exclusions):
-      setattr(cls, key, wrap_method(getattr(cls, key)))
+      method = getattr(cls, key)
+      if _use_named_call and key != 'setup':
+        # We import named_call at runtime to avoid a circular import issue.
+        from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
+        method = named_call(method)
+      setattr(cls, key, wrap_method(method))
     return cls
 
   def __setattr__(self, name: str, val: Any):
@@ -251,14 +281,7 @@ class Module:
         pass
       # Modules have been passed in as dataclass args.
       elif name in self.__dataclass_fields__.keys():
-        for suffix, submodule in get_suffix_module_pairs(val):
-          if submodule.parent is _unspecified_parent:
-            submodule.parent = self
-            if submodule.name is not None:
-              raise ValueError(
-                  "In setup assign names via self.<name> assignment.")
-            submodule.name = f'{name}{suffix}'
-            submodule.__post_init__()
+        pass
       # Submodules are being defined and attached in setup()
       else:
         if not self._state.in_setup:
@@ -271,7 +294,8 @@ class Module:
                              "bound Modules from outside as an argument.")
           if submodule.name is not None:
             raise ValueError(
-                "In setup assign names via self.<name> assignment.")
+                "In setup, assign names of Modules via self.<name> and not "
+                "using keyword argument name=\"<name>\"")
           submodule.name = f'{name}{suffix}'
           submodule.__post_init__()
     # val is a parameter array or a Variable reference class.
@@ -341,12 +365,11 @@ class Module:
     else:
       raise ValueError("parent must be None, Module or Scope")
 
-    # Call the user-defined initialization function.
+    # Call the user-defined initialization setup() function.
     self.setup()
 
   def setup(self):
     """Called when Module instance receives variables and PRNGs.
-
     If you want to use PRNGs and/or read or write variables during module
     instance construction, override this method. It will be automatically
     called from the dataclass `__post_init__`.
@@ -397,7 +420,7 @@ class Module:
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args,
-            kind='param') -> T:
+            kind='params') -> T:
     """Declare a parameter in this Module.
 
     Args:
@@ -444,7 +467,7 @@ class Module:
     """Create initialized data for module and return it with output."""
     if not isinstance(rngs, dict):
       assert rngs.shape == (2,)
-      rngs = {'param': rngs}
+      rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 

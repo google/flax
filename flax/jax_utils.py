@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 
 # Copyright 2020 The Flax Authors.
 #
@@ -35,15 +34,14 @@ import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 import warnings
 
-import numpy as onp
-
 import jax
-from jax.interpreters import partial_eval as pe
-from jax import linear_util as lu
 from jax import lax
-import jax.numpy as jnp
-import jax.lib.xla_bridge as xb
+from jax import linear_util as lu
 from jax.config import config
+from jax.interpreters import partial_eval as pe
+import jax.lib.xla_bridge as xb
+import jax.numpy as jnp
+import numpy as onp
 
 
 def _replicate(x, devices=None):
@@ -57,9 +55,12 @@ def _replicate(x, devices=None):
           jax.device_count()) if d.host_id == jax.host_id()]
     else:
       devices = jax.local_devices()
-  aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
-  buffers = [jax.interpreters.xla.device_put(x, device=d) for d in devices]
-  return jax.pxla.ShardedDeviceArray(aval, buffers)
+  if hasattr(jax.api, "device_put_sharded"):  # jax >= 0.2.0
+    return jax.api.device_put_sharded(len(devices) * [x], devices)
+  else:
+    aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
+    buffers = [jax.interpreters.xla.device_put(x, device=d) for d in devices]
+    return jax.pxla.ShardedDeviceArray(aval, buffers)
 
 
 def replicate(tree, devices=None):
@@ -153,13 +154,16 @@ def prefetch_to_device(iterator, size, devices=None):
   if devices is None:
     devices = jax.local_devices()
   def _prefetch(xs):
-    aval = jax.xla.abstractify(xs)
-    assert xs.shape[0] == len(devices), (
-      "The first dimension of the iterator's ndarrays is not "
-      "equal to the number of devices.")
-    buffers = [jax.interpreters.xla.device_put(x, devices[i])
-               for i, x in enumerate(xs)]
-    return jax.pxla.ShardedDeviceArray(aval, buffers)
+    if hasattr(jax.api, "device_put_sharded"):  # jax>=0.2.0
+      return jax.api.device_put_sharded(list(xs), devices)
+    else:
+      aval = jax.xla.abstractify(xs)
+      assert xs.shape[0] == len(devices), (
+          "The first dimension of the iterator's ndarrays is not "
+          "equal to the number of devices.")
+      buffers = [jax.interpreters.xla.device_put(x, devices[i])
+                 for i, x in enumerate(xs)]
+      return jax.pxla.ShardedDeviceArray(aval, buffers)
   try:
     while len(queue) < size:
       queue.append(jax.tree_map(_prefetch, next(iterator)))

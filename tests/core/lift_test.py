@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, init, apply
+from flax.core import Scope, init, apply, lift
 
 from jax import random
+from jax import numpy as jnp
 
 import numpy as np
 
@@ -23,12 +24,15 @@ from absl.testing import absltest
 
 class ScopeTest(absltest.TestCase):
 
-  def test_rng(self):
+  def test_aliasing(self):
     def f(scope):
-      self.assertTrue(scope.has_rng('param'))
-      self.assertFalse(scope.has_rng('dropout'))
-      rng = scope.make_rng('param')
-      self.assertTrue(np.all(rng == random.fold_in(random.PRNGKey(0), 1)))
+      a = scope.push('a')
+
+      def g(scopes, _):
+        scope, a = scopes
+        self.assertEqual(a.parent, scope)
+      
+      lift.vmap(g, variable_axes={}, split_rngs={})((scope, a), jnp.ones((1,)))
 
     init(f)(random.PRNGKey(0))
 

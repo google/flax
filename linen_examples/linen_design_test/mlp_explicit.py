@@ -42,7 +42,7 @@ class MLP(Module):
 
     # explicit instances are materialized immediately at init
     pprint(self.dense2.variables)
-    # {'param': {'bias': DeviceArray([0.], dtype=float32),
+    # {'params': {'bias': DeviceArray([0.], dtype=float32),
     #            'kernel': DeviceArray([[ 0.6704609 ],
     #              [-0.90477365]], dtype=float32)}}
 
@@ -52,10 +52,10 @@ class MLP(Module):
 
 # Return an initialized instance of MLP by only calling `setup`.
 rngkey = jax.random.PRNGKey(10)
-init_variables = MLP().init({'param': rngkey}, jnp.ones((1, 3)))
+init_variables = MLP().init({'params': rngkey}, jnp.ones((1, 3)))
 
 pprint(init_variables)
-# {'param': {'dense1': {'bias': DeviceArray([0., 0.], dtype=float32),
+# {'params': {'dense1': {'bias': DeviceArray([0., 0.], dtype=float32),
 #                       'kernel': DeviceArray([[ 0.18307537, -0.38739476],
 #              [-0.902451  , -0.5190721 ],
 #              [ 0.51552075,  1.1169153 ]], dtype=float32)},

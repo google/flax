@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Tests for flax.examples.seq2seq.train."""
 
 import functools
@@ -32,7 +31,7 @@ jax.config.enable_omnistaging()
 
 def create_test_optimizer():
   rng = random.PRNGKey(0)
-  param = train.get_param(rng)
+  param = train.get_initial_params(rng)
   return optim.Adam(learning_rate=0.003).create(param)
 
 

@@ -45,7 +45,7 @@ model = MLP((2, 1))
 x = jnp.ones((1, 3))
 mlp_variables = model.init(rngkey, x)
 print(mlp_variables)
-# {'param': {'Dense_0': {'bias': DeviceArray([0.], dtype=float32),
+# {'params': {'Dense_0': {'bias': DeviceArray([0.], dtype=float32),
 #                        'kernel': DeviceArray([[-0.04267037],
 #              [-0.51097125]], dtype=float32)},
 #            'Dense_1': {'bias': DeviceArray([0., 0.], dtype=float32),
