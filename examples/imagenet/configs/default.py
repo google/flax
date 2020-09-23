@@ -27,6 +27,9 @@ def get_config():
   config.momentum = 0.9
   config.cache = False
   config.half_precision = False
+
+  # If num_train_steps==-1 then the number of training steps is calculated from
+  # num_epochs using the entire dataset. Similarly for num_eval_steps.
   config.num_train_steps = -1
   config.num_eval_steps = -1
 
