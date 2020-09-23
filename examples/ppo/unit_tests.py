@@ -9,9 +9,9 @@ import main
 import env_utils
 import models
 
-#test GAE
+# test GAE
 class TestGAE(absltest.TestCase):
-  def test_gae_random(self):
+  def test_gae_shape_on_random(self):
     # create random data, simulating 4 parallel envs and 20 time_steps
     envs, steps = 10, 100
     rewards = onp.random.choice([-1., 0., 1.], size=(steps, envs),
@@ -20,37 +20,40 @@ class TestGAE(absltest.TestCase):
     values = onp.random.random(size=(steps + 1, envs))
     discount = 0.99
     gae_param = 0.95
-    adv = main.gae_advantages(rewards, terminal_masks, values, discount, 
+    adv = main.gae_advantages(rewards, terminal_masks, values, discount,
                               gae_param)
     self.assertEqual(adv.shape, (steps, envs))
-    # test the property A_{t} = \delta_t + \gamma*\lambda*A_{t+1}
-    # for each agent separately
-    for e in range(envs):
-      for t in range(steps-1):
-        delta = rewards[t, e] + discount * values[t+1, e] - values[t, e]
-        lhs = adv[t, e]
-        rhs = delta + discount * gae_param * adv[t+1, e]
-        onp_testing.assert_almost_equal(lhs, rhs)
-
-#test environment and preprocessing
+  def test_gae_hardcoded(self):
+    #test on small example that can be verified by hand
+    rewards = onp.array([[1., 0.], [0., 0.], [-1., 1.]])
+    #one of the two episodes terminated in the middle
+    terminal_masks = onp.array([[1., 1.], [0., 1.], [1., 1.]])
+    values = onp.array([[1., 1.], [1., 1.], [1., 1.], [1., 1.]])
+    discount = 0.5
+    gae_param = 0.25
+    correct_gae = onp.array([[0.375, -0.5546875], [-1., -0.4375], [-1.5, 0.5]])
+    actual_gae = main.gae_advantages(rewards, terminal_masks, values, discount,
+                                     gae_param)
+    onp_testing.assert_allclose(actual_gae, correct_gae)
+# test environment and preprocessing
 class TestEnvironmentPreprocessing(absltest.TestCase):
   def choose_random_game(self):
     games = ['BeamRider', 'Breakout', 'Pong',
-              'Qbert', 'Seaquest', 'SpaceInvaders']
+            'Qbert', 'Seaquest', 'SpaceInvaders']
     ind = onp.random.choice(len(games))
     return games[ind] + "NoFrameskip-v4"
 
   def test_creation(self):
     frame_shape = (84, 84, 4)
     game = self.choose_random_game()
-    env = env_utils.create_env(game)
+    env = env_utils.create_env(game, clip_rewards=True)
     obs = env.reset()
     self.assertTrue(obs.shape == frame_shape)
 
   def test_step(self):
     frame_shape = (84, 84, 4)
     game = self.choose_random_game()
-    env = env_utils.create_env(game)
+    env = env_utils.create_env(game, clip_rewards=False)
     obs = env.reset()
     actions = [1, 2, 3, 0]
     for a in actions:
@@ -60,10 +63,10 @@ class TestEnvironmentPreprocessing(absltest.TestCase):
       self.assertTrue(isinstance(done, bool))
       self.assertTrue(isinstance(info, dict))
 
-#test the model (creation and forward pass)
+# test the model (creation and forward pass)
 class TestModel(absltest.TestCase):
   def choose_random_outputs(self):
-    return onp.random.choice([4,5,6,7,8,9])
+    return onp.random.choice([4, 5, 6, 7, 8, 9])
 
   def test_model(self):
     key = jax.random.PRNGKey(0)
@@ -79,8 +82,35 @@ class TestModel(absltest.TestCase):
     self.assertTrue(values.shape == (test_batch_size, 1))
     sum_probs = onp.sum(onp.exp(log_probs), axis=1)
     self.assertTrue(sum_probs.shape == (test_batch_size, ))
-    onp_testing.assert_almost_equal(sum_probs, onp.ones((test_batch_size, )))
+    onp_testing.assert_allclose(sum_probs, onp.ones((test_batch_size, )),
+                                atol=1e-6)
 
+# test one optimization step
+class TestOptimizationStep(absltest.TestCase):
+  def generate_random_data(self, num_actions):
+    data_len = 256 # equal to one default-sized batch
+    state_shape = (84, 84, 4)
+    states = onp.random.randint(0, 255, size=((data_len, ) + state_shape))
+    actions = onp.random.choice(num_actions, size=data_len)
+    old_log_probs = onp.random.random(size=data_len)
+    returns = onp.random.random(size=data_len)
+    advantages = onp.random.random(size=data_len)
+    return states, actions, old_log_probs, returns, advantages
+
+  def test_optimization_step(self):
+    num_outputs = 4
+    trn_data = self.generate_random_data(num_actions=num_outputs)
+    clip_param = 0.1
+    vf_coeff = 0.5
+    entropy_coeff = 0.01
+    lr = 2.5e-4
+    key = jax.random.PRNGKey(0)
+    key, subkey = jax.random.split(key)
+    model = models.create_model(subkey, num_outputs)
+    optimizer = models.create_optimizer(model, learning_rate=lr)
+    optimizer, _, _ = main.train_step(
+      optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr)
+    self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
 
 if __name__ == '__main__':
   absltest.main()
