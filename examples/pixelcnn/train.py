@@ -109,9 +109,8 @@ def train_step(optimizer, ema, batch, prng_key, learning_rate_fn,
   optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
   # Compute exponential moving average (aka Polyak decay)
-  ema_decay = polyak_decay
   ema = jax.tree_multimap(
-      lambda ema, p: ema * ema_decay + (1 - ema_decay) * p,
+      lambda ema, p: ema * polyak_decay + (1 - polyak_decay) * p,
       ema, optimizer.target.params)
 
   metrics = {'loss': lax.pmean(loss, 'batch'), 'learning_rate': lr}
@@ -156,9 +155,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
     raise ValueError('PixelCNN++ example should not be run on more than 1 host'
                      ' (for now)')
 
-  # Make sure tf does not allocate gpu memory.
-  tf.config.experimental.set_visible_devices([], 'GPU')
-
   pcnn_module = pixelcnn.PixelCNNPP.partial(depth=config.n_resnet,
                                             features=config.n_feature,
                                             k=config.n_logistic_mix)
@@ -170,7 +166,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   train_summary_writer = tensorboard.SummaryWriter(train_log_dir)
   eval_summary_writer = tensorboard.SummaryWriter(eval_log_dir)
 
-  rng = random.PRNGKey(config.rng)
+  rng = random.PRNGKey(config.random_seed)
 
   if config.batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
@@ -193,7 +189,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   else:
     steps_per_epoch = config.num_train_steps
 
-  if config.num_eval_steps:
+  if config.num_eval_steps == -1:
     steps_per_eval = (
       data_source.info.splits['test'].num_examples // config.batch_size
     )
@@ -291,4 +287,8 @@ def main(argv):
 
 if __name__ == '__main__':
   flags.mark_flags_as_required(['config', 'model_dir'])
+
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   app.run(main)

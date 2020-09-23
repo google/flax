@@ -28,7 +28,7 @@ def get_config():
   config.num_epochs = 200
   config.dropout_rate = 0.5
 
-  config.rng = 0
+  config.random_seed = 0
 
   config.n_resnet = 5
   config.n_feature = 160
@@ -36,6 +36,8 @@ def get_config():
 
   config.polyak_decay = 0.9995
 
+  # If num_train_steps==-1 then the number of training steps is calculated from
+  # num_epochs using the entire dataset. Similarly for num_eval_steps.
   config.num_train_steps = -1
   config.num_eval_steps = -1
 

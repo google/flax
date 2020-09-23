@@ -20,6 +20,7 @@ import tempfile
 
 from absl.testing import absltest
 
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
 from configs import testing as testing_lib
@@ -28,6 +29,11 @@ import train as pixelcnn_train
 
 class PixelCnnTest(absltest.TestCase):
   """Test cases for train."""
+
+  def setUp(self):
+    super().setUp()
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
 
   def test_train_and_evaluate(self):
     """Tests pixelcnn training and evaluation loop."""
