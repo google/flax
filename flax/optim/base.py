@@ -127,7 +127,7 @@ class OptimizerDef:
         of variables dicts, e.g. `(v1, v2)` and  `('var1': v1, 'var2': v2)`
         are valid inputs as well.
       focus: a `flax.traverse_util.Traversal` that selects which subset of
-        the target is optimized. See docstring of :class:`MultiOptimizer` 
+        the target is optimized. See docstring of :class:`MultiOptimizer`
         for an example of how to define a `Traversal` object.
     Returns:
       An instance of `Optimizer`.
@@ -177,10 +177,10 @@ class _NoAux:
 class Optimizer(struct.PyTreeNode):
   """
   Flax optimizers are created using the :class:`OptimizerDef` class. That class
-  specifies the initialization and gradient application logic. Creating an 
-  optimizer using the :meth:`OptimizerDef.create` method will result in an 
+  specifies the initialization and gradient application logic. Creating an
+  optimizer using the :meth:`OptimizerDef.create` method will result in an
   instance of the :class:`Optimizer` class, which encapsulates the optimization
-  target and state. The optimizer is updated using the method 
+  target and state. The optimizer is updated using the method
   :meth:`apply_gradient`.
 
   Example of constructing an optimizer for a model::
@@ -416,10 +416,10 @@ class ReplicatedOptimizer(OptimizerDef):
 
 
 class MultiOptimizer(OptimizerDef):
-  """ 
-  A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying 
-  separate optimizer algorithms to various subsets of the model parameters. 
-  
+  """
+  A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying
+  separate optimizer algorithms to various subsets of the model parameters.
+
   The example below creates two optimizers using :class:`ModelParamTraversal`:
   one to optimize ``kernel`` parameters and to optimize ``bias`` parameters.
   Note each optimizer is created with a different learning rate::
@@ -439,9 +439,9 @@ class MultiOptimizer(OptimizerDef):
   applying the gradient as follows::
 
     new_optimizer = optimizer.apply_gradient(
-        grads, 
+        grads,
         hyper_params=[
-          optimizer.optimizer_def.hyper_params[0].replace(learning_rate=0.2), 
+          optimizer.optimizer_def.hyper_params[0].replace(learning_rate=0.2),
           optimizer.optimizer_def.hyper_params[1].replace(learning_rate=0.4),
         ])
   """
@@ -508,16 +508,16 @@ def _sorted_items(x):
 
 class ModelParamTraversal(traverse_util.Traversal):
   """Select model parameters using a name filter.
-  
+
   This traversal operates on a nested dictionary of parameters and selects a
   subset based on the `filter_fn` argument.
 
-  See :class:`MultiOptimizer` for an example of how to use 
+  See :class:`MultiOptimizer` for an example of how to use
   :class:`ModelParamTraversal` to update subsets of the parameter tree with a
   specific optimizer.
 
   Backward compatibility:
-  When using the old api the parameters can be encapsulated in a 
+  When using the old api the parameters can be encapsulated in a
   :class:`flax.nn.Model` instance.
   """
 
