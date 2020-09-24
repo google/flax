@@ -95,7 +95,7 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
     advantages: calculated advantages shaped (actor_steps, num_agents)
   """
   assert rewards.shape[0] + 1 == values.shape[0], ("One more value needed; "
-          "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate delta_t")
+    "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate delta_t")
   advantages, gae = [], 0.
   for t in reversed(range(len(rewards))):
     # Masks used to set next state value to 0 for terminal states.
@@ -108,14 +108,15 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
   advantages = advantages[::-1]
   return jnp.array(advantages)
 
-@jax.jit
+@functools.partial(jax.jit, static_argnums=(6))
 def train_step(
   optimizer: flax.optim.base.Optimizer,
   trajectories: Tuple[onp.array, onp.array, onp.array, onp.array, onp.array],
   clip_param: float,
   vf_coeff: float,
   entropy_coeff: float,
-  lr: float):
+  lr: float,
+  batch_size: int):
   """Compilable train step.
 
   Runs an entire epoch of training (i.e. the loop over
@@ -134,6 +135,7 @@ def train_step(
     entropy_coeff: weighs entropy bonus in the total loss
     lr: learning rate, varies between optimization steps
         if decaying_lr_and_clip_param is set to true
+    batch_size: the minibatch size, static argument
 
   Returns:
     optimizer: new optimizer after the parameters update
@@ -157,7 +159,6 @@ def train_step(
     value_loss = jnp.mean(jnp.square(returns - values), axis=0)
     return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
 
-  batch_size = FLAGS.batch_size
   iterations = trajectories[0].shape[0] // batch_size
   trajectories = jax.tree_map(
     lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trajectories)
@@ -205,13 +206,17 @@ def get_experience(
 def process_experience(
   experience: List[List[remote.ExpTuple]],
   actor_steps: int,
-  num_agents: int):
+  num_agents: int,
+  gamma: float,
+  lambda_: float):
   """Process experience for training, including advantage estimation.
 
   Args:
     experience: collected from agents in the form of nested lists/namedtuple
     actor_steps: number of steps each agent has completed
     num_agents: number of agents that collected experience
+    gamma: dicount parameter
+    lambda_: GAE parameter
 
   Returns:
     trajectories: trajectories readily accessible for `train_step()` function
@@ -237,14 +242,13 @@ def process_experience(
       dones[t, agent_id] = float(not exp_agent.done)
   for a in range(num_agents):
     values[-1, a] = experience[-1][a].value
-  advantages = gae_advantages(rewards, dones, values,
-                              FLAGS.gamma, FLAGS.lambda_)
+  advantages = gae_advantages(rewards, dones, values, gamma, lambda_)
   returns = advantages + values[:-1, :]
   # After preprocessing, concatenate data from all agents.
   trajectories = (states, actions, log_probs, returns, advantages)
   trajectories = tuple(map(
     lambda x: onp.reshape(
-      x, (FLAGS.num_agents * FLAGS.actor_steps,) + x.shape[2:]),
+      x, (num_agents * actor_steps,) + x.shape[2:]),
       trajectories))
   return trajectories
 
@@ -252,7 +256,8 @@ def train(
   optimizer: flax.optim.base.Optimizer,
   game: str,
   steps_total: int,
-  num_agents: int):
+  num_agents: int,
+  flags_: flags._flagvalues.FlagValues):
   """Main training loop.
 
   Args:
@@ -265,32 +270,33 @@ def train(
     optimizer: the trained optimizer
   """
   simulators = [remote.RemoteSimulator(game) for i in range(num_agents)]
-  loop_steps = steps_total // (num_agents * FLAGS.actor_steps)
+  loop_steps = steps_total // (num_agents * flags_.actor_steps)
   for s in range(loop_steps):
     # Bookkeeping and testing.
     print(f"\n training loop step {s}")
 
-    if (s + 1) % (20000 // (num_agents * FLAGS.actor_steps)) == 0:
+    if (s + 1) % (20000 // (num_agents * flags_.actor_steps)) == 0:
       test_episodes.policy_test(1, optimizer.target, game)
 
-    if FLAGS.decaying_lr_and_clip_param:
+    if flags_.decaying_lr_and_clip_param:
       alpha = 1. - s/loop_steps
     else:
       alpha = 1.
 
     # Core training code.
     all_experiences = get_experience(optimizer.target, simulators,
-                                     FLAGS.actor_steps)
-    trajectories = process_experience(all_experiences, FLAGS.actor_steps,
-                                      FLAGS.num_agents)
-    lr = FLAGS.learning_rate * alpha
-    clip_param = FLAGS.clip_param * alpha
-    for e in range(FLAGS.num_epochs):
-      permutation = onp.random.permutation(num_agents * FLAGS.actor_steps)
+                                     flags_.actor_steps)
+    trajectories = process_experience(
+      all_experiences, flags_.actor_steps, flags_.num_agents, flags_.gamma,
+      flags_.lambda_)
+    lr = flags_.learning_rate * alpha
+    clip_param = flags_.clip_param * alpha
+    for e in range(flags_.num_epochs):
+      permutation = onp.random.permutation(num_agents * flags_.actor_steps)
       trajectories = tuple(map(lambda x: x[permutation], trajectories))
       optimizer, loss, last_iter_grad_norm = train_step(
-        optimizer, trajectories, clip_param, FLAGS.vf_coeff,
-        FLAGS.entropy_coeff, lr)
+        optimizer, trajectories, clip_param, flags_.vf_coeff,
+        flags_.entropy_coeff, lr, flags_.batch_size)
       print(f"epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
   return optimizer
 
@@ -306,7 +312,7 @@ def main(argv):
   model = models.create_model(subkey, num_outputs=num_actions)
   optimizer = models.create_optimizer(model, learning_rate=FLAGS.learning_rate)
   del model
-  optimizer = train(optimizer, game, total_frames, num_agents)
+  optimizer = train(optimizer, game, total_frames, num_agents, FLAGS)
 
 if __name__ == '__main__':
   app.run(main)
