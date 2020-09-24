@@ -29,21 +29,18 @@ The model should run with other configurations and hardware, but was tested on t
 
 #### Overriding Hyperparameter configurations
 
-MNIST example allows specifying a hyperparameter configuration by the means of
-setting `--config` flag. Configuration flag is defined using
+Specify a hyperparameter configuration by the means of setting `--config` flag. Configuration flag is defined using
 [config_flags](https://github.com/google/ml_collections/tree/master#config-flags).
 `config_flags` allows overriding configuration fields. This can be done as
 follows:
 
 ```shell
-python train.py \
---model_dir=./pixelcnn --config=configs/default.py \
---config.num_epochs=100
+python train.py --model_dir=./pixelcnn --config.num_epochs=100
 ```
 
 #### 8 x Nvidia V100 (16GB)
 ```shell
-python train.py --model_dir=./pixelcnn --config=configs/default.py --config.batch_size=320
+python train.py --model_dir=./pixelcnn --config=configs/v100_x8.py
 ```
 To run sampling (this will automatically load model parameters from the most recent trained checkpoint)
 ```
