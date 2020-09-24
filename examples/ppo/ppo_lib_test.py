@@ -5,7 +5,7 @@ import numpy as onp
 import numpy.testing as onp_testing
 from absl.testing import absltest
 
-import main
+import ppo_lib
 import env_utils
 import models
 
@@ -20,7 +20,7 @@ class TestGAE(absltest.TestCase):
     values = onp.random.random(size=(steps + 1, envs))
     discount = 0.99
     gae_param = 0.95
-    adv = main.gae_advantages(rewards, terminal_masks, values, discount,
+    adv = ppo_lib.gae_advantages(rewards, terminal_masks, values, discount,
                               gae_param)
     self.assertEqual(adv.shape, (steps, envs))
   def test_gae_hardcoded(self):
@@ -32,8 +32,8 @@ class TestGAE(absltest.TestCase):
     discount = 0.5
     gae_param = 0.25
     correct_gae = onp.array([[0.375, -0.5546875], [-1., -0.4375], [-1.5, 0.5]])
-    actual_gae = main.gae_advantages(rewards, terminal_masks, values, discount,
-                                     gae_param)
+    actual_gae = ppo_lib.gae_advantages(rewards, terminal_masks, values,
+                                        discount, gae_param)
     onp_testing.assert_allclose(actual_gae, correct_gae)
 # test environment and preprocessing
 class TestEnvironmentPreprocessing(absltest.TestCase):
@@ -104,12 +104,13 @@ class TestOptimizationStep(absltest.TestCase):
     vf_coeff = 0.5
     entropy_coeff = 0.01
     lr = 2.5e-4
+    batch_size = 256
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
     model = models.create_model(subkey, num_outputs)
     optimizer = models.create_optimizer(model, learning_rate=lr)
-    optimizer, _, _ = main.train_step(
-      optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr)
+    optimizer, _, _ = ppo_lib.train_step(
+      optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr, batch_size)
     self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
 
 if __name__ == '__main__':

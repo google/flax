@@ -33,6 +33,7 @@ install_requires = [
 ]
 
 tests_require = [
+    "atari-py",
     "gym",
     "jaxlib",
     "ml-collections",
