@@ -6,8 +6,8 @@ import collections
 
 import env_utils
 
-exp_tuple = collections.namedtuple(
-  'exp_tuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
+ExpTuple = collections.namedtuple(
+  'ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
 
 class RemoteSimulator:
   """Wrap functionality for an agent emulating Atari in a separate process.
@@ -39,7 +39,7 @@ def rcv_action_send_exp(conn, game):
       action, value, log_prob = conn.recv()
       obs, reward, done, _ = env.step(action)
       next_state = get_state(obs) if not done else None
-      experience = exp_tuple(state, action, reward, value, log_prob, done)
+      experience = ExpTuple(state, action, reward, value, log_prob, done)
       conn.send(experience)
       if done:
         break

@@ -1,8 +1,5 @@
-import time
 import functools
-import queue
 from typing import Tuple, List
-import threading
 from absl import flags
 from absl import app
 import jax
@@ -101,11 +98,11 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
           "Eq. (12) in PPO paper requires V(s_{t+1}) to calculate delta_t")
   advantages, gae = [], 0.
   for t in reversed(range(len(rewards))):
-    # masks to set next state value to 0 for terminal states
+    # Masks used to set next state value to 0 for terminal states.
     value_diff = discount * values[t + 1] * terminal_masks[t] - values[t]
     delta = rewards[t] + value_diff
-    # masks[t] to ensure that values before and after a terminal state
-    # are independent of each other
+    # Masks[t] used to ensure that values before and after a terminal state
+    # are independent of each other.
     gae = delta + discount * gae_param * terminal_masks[t] * gae
     advantages.append(gae)
   advantages = advantages[::-1]
@@ -146,19 +143,17 @@ def train_step(
   def loss_fn(model, minibatch, clip_param, vf_coeff, entropy_coeff):
     states, actions, old_log_probs, returns, advantages = minibatch
     log_probs, values = model(states)
-    values = values[:, 0] # convert shapes: (batch, 1) to (batch, )
+    values = values[:, 0]  # convert shapes: (batch, 1) to (batch, )
     probs = jnp.exp(log_probs)
     entropy = jnp.sum(-probs*log_probs, axis=1).mean()
     log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
     ratios = jnp.exp(log_probs_act_taken - old_log_probs)
-    # adv. normalization (following the OpenAI baselines)
+    # Advantage normalization (following the OpenAI baselines).
     advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
     PG_loss = ratios * advantages
     clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
                                                1. + clip_param)
-    assert(PG_loss.shape == clipped_loss.shape)
     PPO_loss = -jnp.mean(jnp.minimum(PG_loss, clipped_loss), axis=0)
-    assert(values.shape == returns.shape)
     value_loss = jnp.mean(jnp.square(returns - values), axis=0)
     return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
 
@@ -176,87 +171,105 @@ def train_step(
     grad_norm = sum(jnp.square(g).sum() for g in jax.tree_leaves(grad))
   return optimizer, loss, grad_norm
 
-
-def thread_inference(
-  policy_q: queue.Queue,
-  experience_q: queue.Queue,
+def get_experience(
+  model: flax.optim.base.Optimizer,
   simulators: List[remote.RemoteSimulator],
   steps_per_actor: int):
-  """Worker function for a separate inference thread.
+  """Collect experience from agents.
 
   Runs `steps_per_actor` time steps of the game for each of the `simulators`.
   """
-  while True:
-    optimizer, step = policy_q.get()
-    all_experience = []
-    for _ in range(steps_per_actor + 1): # +1 to get one more value
-                                         # needed for GAE
-      states = []
-      for sim in simulators:
-        state = sim.conn.recv()
-        states.append(state)
-      states = onp.concatenate(states, axis=0)
+  all_experience = []
+  # Range up to steps_per_actor + 1 to get one more value needed for GAE.
+  for _ in range(steps_per_actor + 1):
+    states = []
+    for sim in simulators:
+      state = sim.conn.recv()
+      states.append(state)
+    states = onp.concatenate(states, axis=0)
+    log_probs, values = agent.policy_action(model, states)
+    log_probs, values = jax.device_get((log_probs, values))
+    probs = onp.exp(onp.array(log_probs))
+    for i, sim in enumerate(simulators):
+      probabilities = probs[i]
+      action = onp.random.choice(probs.shape[1], p=probabilities)
+      # In principle, one could avoid sending value and log prob back and forth.
+      sim.conn.send((action, values[i, 0], log_probs[i][action]))
+    experiences = []
+    for sim in simulators:
+      sample = sim.conn.recv()
+      experiences.append(sample)
+    all_experience.append(experiences)
+  return all_experience
 
-      # perform inference
-      # policy_optimizer, step = policy_q.get()
-      log_probs, values = agent.policy_action(optimizer.target, states)
-      log_probs, values = jax.device_get((log_probs, values))
+def process_experience(
+  experience: List[List[remote.ExpTuple]],
+  actor_steps: int,
+  num_agents: int):
+  """Process experience for training, including advantage estimation.
 
-      probs = onp.exp(onp.array(log_probs))
+  Args:
+    experience: collected from agents in the form of nested lists/namedtuple
+    actor_steps: number of steps each agent has completed
+    num_agents: number of agents that collected experience
 
-      for i, sim in enumerate(simulators):
-        probabilities = probs[i]
-        action = onp.random.choice(probs.shape[1], p=probabilities)
-        #in principle, one could avoid sending value and log prob back and forth
-        sim.conn.send((action, values[i, 0], log_probs[i][action]))
+  Returns:
+    trajectories: trajectories readily accessible for `train_step()` function
+  """
+  obs_shape = (84, 84, 4)
+  exp_dims = (actor_steps, num_agents)
+  values_dims = (actor_steps + 1, num_agents)
+  states = onp.zeros(exp_dims + obs_shape, dtype=onp.float32)
+  actions = onp.zeros(exp_dims, dtype=onp.int32)
+  rewards = onp.zeros(exp_dims, dtype=onp.float32)
+  values = onp.zeros(values_dims, dtype=onp.float32)
+  log_probs = onp.zeros(exp_dims, dtype=onp.float32)
+  dones = onp.zeros(exp_dims, dtype=onp.float32)
 
-      # get experience from simulators
-      experiences = []
-      for sim in simulators:
-        sample = sim.conn.recv()
-        experiences.append(sample)
-      all_experience.append(experiences)
-
-    experience_q.put(all_experience)
-
+  for t in range(len(experience) - 1):  # experience[-1] only for next_values
+    for agent_id, exp_agent in enumerate(experience[t]):
+      states[t, agent_id, ...] = exp_agent.state
+      actions[t, agent_id] = exp_agent.action
+      rewards[t, agent_id] = exp_agent.reward
+      values[t, agent_id] = exp_agent.value
+      log_probs[t, agent_id] = exp_agent.log_prob
+      # Dones need to be 0 for terminal states.
+      dones[t, agent_id] = float(not exp_agent.done)
+  for a in range(num_agents):
+    values[-1, a] = experience[-1][a].value
+  advantages = gae_advantages(rewards, dones, values,
+                              FLAGS.gamma, FLAGS.lambda_)
+  returns = advantages + values[:-1, :]
+  # After preprocessing, concatenate data from all agents.
+  trajectories = (states, actions, log_probs, returns, advantages)
+  trajectories = tuple(map(
+    lambda x: onp.reshape(
+      x, (FLAGS.num_agents * FLAGS.actor_steps,) + x.shape[2:]),
+      trajectories))
+  return trajectories
 
 def train(
   optimizer: flax.optim.base.Optimizer,
   game: str,
   steps_total: int,
-  num_agents: int,
-  train_device,
-  inference_device):
+  num_agents: int):
   """Main training loop.
 
   Args:
     optimizer: optimizer for the actor-critic model
-    game: string specifying the Atari game from Gym package
+    game: string specifying the Atari game from gym package
     steps total: total number of frames (env steps) to train on
     num_agents: number of separate processes with agents running the envs
-    train_device : device used for training
-    inference_device :  device used for inference
 
   Returns:
-    None
+    optimizer: the trained optimizer
   """
   simulators = [remote.RemoteSimulator(game) for i in range(num_agents)]
-  policy_q = queue.Queue(maxsize=1)
-  experience_q = queue.Queue(maxsize=1)
-  inference_thread = threading.Thread(
-    target=thread_inference,
-    args=(policy_q, experience_q, simulators, FLAGS.actor_steps),
-    daemon=True)
-  inference_thread.start()
-  t1 = time.time()
   loop_steps = steps_total // (num_agents * FLAGS.actor_steps)
   for s in range(loop_steps):
+    # Bookkeeping and testing.
     print(f"\n training loop step {s}")
-    #bookkeeping and testing
-    if (s + 1) % (10000 // (num_agents * FLAGS.actor_steps)) == 0:
-      print(f"      Frames processed {s * num_agents * FLAGS.actor_steps}, " +
-            f"time elapsed {time.time() - t1}")
-      t1 = time.time()
+
     if (s + 1) % (20000 // (num_agents * FLAGS.actor_steps)) == 0:
       test_episodes.policy_test(1, optimizer.target, game)
 
@@ -264,61 +277,22 @@ def train(
       alpha = 1. - s/loop_steps
     else:
       alpha = 1.
-    # send the up-to-date policy model and current step to inference thread
-    step = s*num_agents
-    policy_q.put((optimizer, step))
 
-    # perform PPO training
-    # all_experience is a list of list of namedtuples; preprocess this data to
-    # get required input (trajectories) for GAE and later for training
-    all_experiences = experience_q.get()
-    if s >= 0: #avoid training when there's no data yet
-      obs_shape = (84, 84, 4)
-      exp_dims = (FLAGS.actor_steps, FLAGS.num_agents)
-      values_dims = (FLAGS.actor_steps + 1, FLAGS.num_agents)
-      states = onp.zeros(exp_dims + obs_shape, dtype=onp.float32)
-      actions = onp.zeros(exp_dims, dtype=onp.int32)
-      rewards = onp.zeros(exp_dims, dtype=onp.float32)
-      values = onp.zeros(values_dims, dtype=onp.float32)
-      log_probs = onp.zeros(exp_dims, dtype=onp.float32)
-      dones = onp.zeros(exp_dims, dtype=onp.float32)
-
-      assert(len(all_experiences[0]) == FLAGS.num_agents)
-      for t in range(len(all_experiences) - 1): #last only for next_values
-        for agent_id, exp_agent in enumerate(all_experiences[t]):
-          states[t, agent_id, ...] = exp_agent.state
-          actions[t, agent_id] = exp_agent.action
-          rewards[t, agent_id] = exp_agent.reward
-          values[t, agent_id] = exp_agent.value
-          log_probs[t, agent_id] = exp_agent.log_prob
-          # dones need to be 0 for terminal states
-          dones[t, agent_id] = float(not exp_agent.done)
-      for a in range(num_agents):
-        values[-1, a] = all_experiences[-1][a].value
-      # calculate advantages w. GAE
-      advantages = gae_advantages(rewards, dones, values,
-                                  FLAGS.gamma, FLAGS.lambda_)
-      returns = advantages + values[:-1, :]
-      # after preprocessing, concatenate data from all agents
-      trajectories = (states, actions, log_probs, returns, advantages)
-      trajectories = tuple(map(
-        lambda x: onp.reshape(
-          x, (FLAGS.num_agents * FLAGS.actor_steps,) + x.shape[2:]),
-          trajectories))
-      print(f"Step {s}: rewards variance {rewards.var()}")
-      lr = FLAGS.learning_rate * alpha
-      clip_param = FLAGS.clip_param * alpha
-      for e in range(FLAGS.num_epochs):
-        shapes = list(map(lambda x: x.shape, trajectories))
-        permutation = onp.random.permutation(num_agents * FLAGS.actor_steps)
-        trajectories = tuple(map(lambda x: x[permutation], trajectories))
-        optimizer, loss, last_iter_grad_norm = train_step(
-          optimizer, trajectories, clip_param, FLAGS.vf_coeff,
-          FLAGS.entropy_coeff, lr)
-        print(f"epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
-    #end of PPO training
-
-  return None
+    # Core training code.
+    all_experiences = get_experience(optimizer.target, simulators,
+                                     FLAGS.actor_steps)
+    trajectories = process_experience(all_experiences, FLAGS.actor_steps,
+                                      FLAGS.num_agents)
+    lr = FLAGS.learning_rate * alpha
+    clip_param = FLAGS.clip_param * alpha
+    for e in range(FLAGS.num_epochs):
+      permutation = onp.random.permutation(num_agents * FLAGS.actor_steps)
+      trajectories = tuple(map(lambda x: x[permutation], trajectories))
+      optimizer, loss, last_iter_grad_norm = train_step(
+        optimizer, trajectories, clip_param, FLAGS.vf_coeff,
+        FLAGS.entropy_coeff, lr)
+      print(f"epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
+  return optimizer
 
 def main(argv):
   game = "Pong"
@@ -327,15 +301,12 @@ def main(argv):
   print(f"Playing {game} with {num_actions} actions")
   num_agents = FLAGS.num_agents
   total_frames = 40000000
-  train_device = jax.devices()[0]
-  inference_device = jax.devices()[1]
   key = jax.random.PRNGKey(0)
   key, subkey = jax.random.split(key)
   model = models.create_model(subkey, num_outputs=num_actions)
   optimizer = models.create_optimizer(model, learning_rate=FLAGS.learning_rate)
   del model
-  train(optimizer, game, total_frames, num_agents, train_device,
-        inference_device)
+  optimizer = train(optimizer, game, total_frames, num_agents)
 
 if __name__ == '__main__':
   app.run(main)
