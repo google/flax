@@ -2,6 +2,8 @@
 
 Trains a simple convolutional network on the MNIST dataset.
 
+For an illustration, check out the Jupyter notebook : [mnist.ipynb](./mnist.ipynb).
+
 ### Requirements
 * TensorFlow dataset `mnist` will be downloaded and prepared automatically, if necessary
 
