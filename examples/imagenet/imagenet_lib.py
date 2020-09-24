@@ -241,20 +241,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
       dataset_builder, local_batch_size, image_size, input_dtype, train=False,
       cache=config.cache)
 
+  steps_per_epoch = (
+      dataset_builder.info.splits['train'].num_examples // config.batch_size
+  )
+
   if config.num_train_steps == -1:
-    steps_per_epoch = \
-        dataset_builder.info.splits['train'].num_examples // config.batch_size
+    num_steps = steps_per_epoch * config.num_epochs
   else:
-    steps_per_epoch = config.num_train_steps
+    num_steps = config.num_train_steps
 
   if config.num_eval_steps == -1:
-    steps_per_eval = \
-        dataset_builder.info.splits['validation'].num_examples // config.batch_size
+    num_eval_examples = dataset_builder.info.splits['validation'].num_examples
+    steps_per_eval = num_eval_examples // config.batch_size
   else:
     steps_per_eval = config.num_eval_steps
 
   steps_per_checkpoint = steps_per_epoch * 10
-  num_steps = steps_per_epoch * config.num_epochs
 
   base_learning_rate = config.learning_rate * config.batch_size / 256.
 
