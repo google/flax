@@ -19,6 +19,7 @@ The data is loaded using tensorflow_datasets.
 """
 
 import functools
+import os
 import time
 
 from absl import app
@@ -41,6 +42,8 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 
+from ml_collections import config_flags
+
 import tensorflow as tf
 
 # enable jax omnistaging
@@ -50,33 +53,13 @@ config.enable_omnistaging()
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float(
-    'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
-
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.'))
-
-flags.DEFINE_bool(
-    'cache', default=False,
-    help=('If True, cache the dataset.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=90,
-    help=('Number of training epochs.'))
+config_flags.DEFINE_config_file(
+    'config', os.path.join(os.path.dirname(__file__), 'configs/default.py'),
+    'File path to the Training hyperparameter configuration.')
 
 flags.DEFINE_string(
     'model_dir', default=None,
     help=('Directory to store model data.'))
-
-flags.DEFINE_bool(
-    'half_precision', default=False,
-    help=('If bfloat16/float16 should be used instead of float32.'))
 
 
 def model(**kwargs):
