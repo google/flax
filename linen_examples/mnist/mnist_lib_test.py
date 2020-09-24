@@ -66,7 +66,7 @@ class MnistLibTest(absltest.TestCase):
     config.batch_size = 8
 
     with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      mnist_lib.train_and_evaluate(hp_config=config, model_dir=model_dir)
+      mnist_lib.train_and_evaluate(config=config, model_dir=model_dir)
 
 
 if __name__ == '__main__':

@@ -23,8 +23,8 @@ from absl import logging
 import jax
 from jax import random
 import jax.numpy as jnp
-from jax.config import config
-config.enable_omnistaging()
+
+jax.config.enable_omnistaging()
 
 import ml_collections
 
@@ -150,11 +150,11 @@ def get_datasets():
   return train_ds, test_ds
 
 
-def train_and_evaluate(hp_config: ml_collections.ConfigDict, model_dir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   """Execute model training and evaluation loop.
 
   Args:
-    hp_config: Hyperparameter configuration for training and evaluation.
+    config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory where the tensorboard summaries are written to.
 
   Returns:
@@ -168,12 +168,12 @@ def train_and_evaluate(hp_config: ml_collections.ConfigDict, model_dir: str):
   rng, init_rng = random.split(rng)
   params = get_initial_params(init_rng)
   optimizer = create_optimizer(
-      params, hp_config.learning_rate, hp_config.momentum)
+      params, config.learning_rate, config.momentum)
 
-  for epoch in range(1, hp_config.num_epochs + 1):
+  for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = random.split(rng)
     optimizer, train_metrics = train_epoch(
-        optimizer, train_ds, hp_config.batch_size, epoch, input_rng)
+        optimizer, train_ds, config.batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
 
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
