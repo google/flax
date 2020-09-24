@@ -38,12 +38,12 @@ follows:
 ```shell
 python train.py \
 --model_dir=./pixelcnn --config=configs/default.py \
---config.batch_size=320
+--config.num_epochs=100
 ```
 
 #### 8 x Nvidia V100 (16GB)
 ```shell
-python train.py --config=configs/default.py --config.batch_size=320
+python train.py --model_dir=./pixelcnn --config=configs/default.py --config.batch_size=320
 ```
 To run sampling (this will automatically load model parameters from the most recent trained checkpoint)
 ```
