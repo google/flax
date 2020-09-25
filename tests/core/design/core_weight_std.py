@@ -12,16 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import partial
+from typing import Sequence
 
-from flax.core import Scope, init, apply, unfreeze, lift, nn
-from typing import Any, Sequence, Callable
+from flax.core import Scope, Array, init, apply, unfreeze, lift, nn
+
+from absl.testing import absltest
 
 import jax
-from jax import lax, random, numpy as jnp
-
-from functools import partial
-
-Array = Any
+from jax import random, numpy as jnp
 
 
 def weight_std(fn, kernel_name='kernel', eps=1e-8):
@@ -43,19 +42,28 @@ def weight_std(fn, kernel_name='kernel', eps=1e-8):
   return lift.transform_module(fn, trans_in_fn=std)
 
 def mlp(scope: Scope, x: Array,
-        sizes: Sequence[int] = (2, 4, 1),
-        act_fn: Callable[[Array], Array] = nn.relu):
-  std_dense = weight_std(partial(nn.dense, kernel_init=nn.initializers.normal(stddev=1e5)))
-  # hidden layers
+        sizes: Sequence[int] = (8, 1)):
+  std_dense = weight_std(partial(
+      nn.dense, kernel_init=nn.initializers.normal(stddev=1e5)))
   for size in sizes[:-1]:
     x = scope.child(std_dense, prefix='hidden_')(x, size)
-    # x = act_fn(x)
-
-  # output layer
   return scope.child(nn.dense, 'out')(x, sizes[-1])
 
-if __name__ == "__main__":
-  x = random.normal(random.PRNGKey(0), (1, 4,))
-  y, params = init(mlp)(random.PRNGKey(1), x)
-  print(y)
-  print(jax.tree_map(jnp.shape, unfreeze(params)))
+
+class WeightStdTest(absltest.TestCase):
+
+  def test_weight_std(self):
+    x = random.normal(random.PRNGKey(0), (1, 4,))
+    y, variables = init(mlp)(random.PRNGKey(1), x)
+
+    param_shapes = unfreeze(
+        jax.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(param_shapes, {
+        'hidden_0': {'kernel': (4, 8), 'bias': (8,)},
+        'out': {'kernel': (8, 1), 'bias': (1,)},
+    })
+    self.assertEqual(y.shape, (1, 1))
+    self.assertTrue(y.ravel() < 1.)
+
+    y2 = apply(mlp)(variables, x)
+    self.assertTrue(jnp.allclose(y, y2))

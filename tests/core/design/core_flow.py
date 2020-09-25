@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, init, apply, nn
+from dataclasses import dataclass
+from typing import Any, Callable, Sequence, NamedTuple, Any
+
+from absl.testing import absltest
+
+from flax.core import Scope, Array, init, apply, unfreeze, nn
+import jax
 from jax import numpy as jnp, random
 
 from jax.scipy.linalg import expm
 
-from dataclasses import dataclass
-from typing import Any, Callable, Sequence, NamedTuple, Any
 
-
-Initializer = Callable[..., Any]
-Array = Any
+Initializer = Any
 Flow = Any
-
 
 
 @dataclass
@@ -60,11 +61,20 @@ class StackFlow:
       x = scope.child(f.backward, name=str(i))(x)
     return x
 
-if __name__ == "__main__":
-  flow = StackFlow((DenseFlow(),) * 3)
-  # forward and backward are interchangeable here
-  # so shape inference and initialization can be done on the forward and backward pass of the flow
-  y, params = init(flow.forward)(random.PRNGKey(0), jnp.ones((1, 3)))
-  print(params)
-  x_restore = apply(flow.backward)(params, y)
-  print(x_restore)
+
+class FlowTest(absltest.TestCase):
+
+  def test_flow(self):
+    x = jnp.ones((1, 3))
+    flow = StackFlow((DenseFlow(),) * 3)
+    y, variables = init(flow.forward)(random.PRNGKey(0), x)
+    param_shapes = unfreeze(
+        jax.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(y.shape, (1, 3))
+    self.assertEqual(param_shapes, {
+        '0': {'kernel': (3, 3), 'bias': (3,)},
+        '1': {'kernel': (3, 3), 'bias': (3,)},
+        '2': {'kernel': (3, 3), 'bias': (3,)},
+    })
+    x_restored = apply(flow.backward)(variables, y)
+    self.assertTrue(jnp.allclose(x, x_restored))
