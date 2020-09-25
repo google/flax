@@ -69,8 +69,6 @@ We keep here a limited list of canonical examples maintained by the Flax team. I
 ### Image Classification
 ⟶ [MNIST](examples/mnist) (also see [annotated version](https://flax.readthedocs.io/en/latest/annotated_mnist.html))
 
-⟶ [CIFAR-10](examples/cifar10) (Wide ResNet w/ and w/o Shake-Shake, PyramidNet w/ShakeDrop)
-
 ⟶ [ResNet50 on ImageNet](examples/imagenet)
 
 ### Transformer Models
