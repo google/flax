@@ -318,7 +318,7 @@ def vmap(fn: Callable[..., Any],
     if axis_size is None and len(axis_sizes) == 1:
       d_axis_size, = axis_sizes
     elif len(axis_sizes) > 1:
-      raise ValueError(f'Incosistent batch axis sizes: {axis_sizes}')
+      raise ValueError(f'Inconsistent batch axis sizes: {axis_sizes}')
     elif axis_size is None:
       raise ValueError('axis_size should be specified manually.')
     else:
@@ -420,7 +420,7 @@ def scan(fn: Callable[..., Any],
     if length is None and len(lengths) == 1:
       d_length, = lengths
     elif len(lengths) > 1:
-      raise ValueError(f'Incosistent scan lengths: {lengths}')
+      raise ValueError(f'Inconsistent scan lengths: {lengths}')
     elif length is None:
       raise ValueError('length should be specified manually.')
     else:
