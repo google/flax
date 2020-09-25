@@ -32,7 +32,8 @@ class ImageNetTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
-    tf.config.experimental.set_visible_devices([], "GPU")
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
 
   def test_train_and_evaluate(self):
     """Tests training and evaluation loop using mocked data."""

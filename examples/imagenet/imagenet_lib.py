@@ -218,9 +218,6 @@ def train_and_evaluate(model_dir: str, batch_size: int, num_epochs: int,
     num_eval_steps: Number of evaluation steps to be executed in a
       single epoch. Default = -1 signifies using the entire VALIDATION split.
   """
-  # make sure tf does not allocate gpu memory
-  tf.config.experimental.set_visible_devices([], 'GPU')
-
   if jax.host_id() == 0:
     summary_writer = tensorboard.SummaryWriter(model_dir)
 

@@ -23,8 +23,10 @@ from absl import logging
 import jax
 from jax import random
 import jax.numpy as jnp
-from jax.config import config
-config.enable_omnistaging()
+
+jax.config.enable_omnistaging()
+
+import ml_collections
 
 import numpy as onp
 
@@ -148,17 +150,16 @@ def get_datasets():
   return train_ds, test_ds
 
 
-def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
-                       learning_rate: float, momentum: float):
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   """Execute model training and evaluation loop.
 
   Args:
+    config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory where the tensorboard summaries are written to.
-    num_epochs: Number of epochs to cycle through the dataset before stopping.
-    batch_size: Batch size of the input.
-    learning_rate: Learning rate for the momentum optimizer.
-    momentum: Momentum value for the momentum optimizer.
-"""
+
+  Returns:
+    The trained optimizer.
+  """
   train_ds, test_ds = get_datasets()
   rng = random.PRNGKey(0)
 
@@ -166,12 +167,13 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
 
   rng, init_rng = random.split(rng)
   params = get_initial_params(init_rng)
-  optimizer = create_optimizer(params, learning_rate, momentum)
+  optimizer = create_optimizer(
+      params, config.learning_rate, config.momentum)
 
-  for epoch in range(1, num_epochs + 1):
+  for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = random.split(rng)
     optimizer, train_metrics = train_epoch(
-        optimizer, train_ds, batch_size, epoch, input_rng)
+        optimizer, train_ds, config.batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
 
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',

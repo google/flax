@@ -28,7 +28,7 @@ from jax import random
 import jax
 import jax.numpy as jnp
 import numpy as np
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 from flax import jax_utils
 from flax import linen as nn
@@ -484,12 +484,12 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   if FLAGS.jax_backend_target:
     jax.config.FLAGS.jax_xla_backend = 'tpu_driver'
     jax.config.FLAGS.jax_backend_target = FLAGS.jax_backend_target
-
-  # This seems to be necessary even when importing TF2?
-  tf.enable_v2_behavior()
 
   # Number of local devices for this host.
   n_devices = jax.local_device_count()
