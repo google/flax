@@ -5,7 +5,6 @@ import flax
 import numpy as onp
 
 import env_utils
-import remote
 import agent
 
 def policy_test(
@@ -26,7 +25,7 @@ def policy_test(
   all_probabilities = []
   for _ in range(n_episodes):
     obs = test_env.reset()
-    state = remote.get_state(obs)
+    state = agent.get_state(obs)
     total_reward = 0.0
     for t in itertools.count():
       log_probs, _ = agent.policy_action(model, state)
@@ -37,7 +36,7 @@ def policy_test(
       obs, reward, done, _ = test_env.step(action)
       total_reward += reward
       if not done:
-        next_state = remote.get_state(obs)
+        next_state = agent.get_state(obs)
       else:
         next_state = None
       state = next_state

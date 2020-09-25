@@ -10,7 +10,6 @@ import numpy as onp
 import flax
 
 import agent
-import remote
 import test_episodes
 
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
@@ -112,7 +111,7 @@ def train_step(
 
 def get_experience(
   model: flax.optim.base.Optimizer,
-  simulators: List[remote.RemoteSimulator],
+  simulators: List[agent.RemoteSimulator],
   steps_per_actor: int):
   """Collect experience from agents.
 
@@ -142,7 +141,7 @@ def get_experience(
   return all_experience
 
 def process_experience(
-  experience: List[List[remote.ExpTuple]],
+  experience: List[List[agent.ExpTuple]],
   actor_steps: int,
   num_agents: int,
   gamma: float,
@@ -207,7 +206,7 @@ def train(
   Returns:
     optimizer: the trained optimizer
   """
-  simulators = [remote.RemoteSimulator(game) for i in range(num_agents)]
+  simulators = [agent.RemoteSimulator(game) for i in range(num_agents)]
   loop_steps = steps_total // (num_agents * flags_.actor_steps)
   for s in range(loop_steps):
     # Bookkeeping and testing.
