@@ -8,6 +8,8 @@ import jax.random
 import jax.numpy as jnp
 import numpy as onp
 import flax
+from flax.metrics import tensorboard
+from flax.training import checkpoints
 
 import agent
 import test_episodes
@@ -193,7 +195,6 @@ def train(
   optimizer: flax.optim.base.Optimizer,
   game: str,
   steps_total: int,
-  num_agents: int,
   flags_: flags._flagvalues.FlagValues):
   """Main training loop.
 
@@ -201,26 +202,28 @@ def train(
     optimizer: optimizer for the actor-critic model
     game: string specifying the Atari game from gym package
     steps total: total number of frames (env steps) to train on
-    num_agents: number of separate processes with agents running the envs
 
   Returns:
     optimizer: the trained optimizer
   """
-  simulators = [agent.RemoteSimulator(game) for i in range(num_agents)]
-  loop_steps = steps_total // (num_agents * flags_.actor_steps)
+  simulators = [agent.RemoteSimulator(game) for i in range(flags_.num_agents)]
+  model_dir = '/tmp/ppo_training/'
+  summary_writer = tensorboard.SummaryWriter(model_dir)
+  loop_steps = steps_total // (flags_.num_agents * flags_.actor_steps)
+  log_frequency = 40
+  checkpoint_frequency = 200
   for s in range(loop_steps):
     # Bookkeeping and testing.
-    print(f"\n training loop step {s}")
-
-    if (s + 1) % (20000 // (num_agents * flags_.actor_steps)) == 0:
-      test_episodes.policy_test(1, optimizer.target, game)
-
-    if flags_.decaying_lr_and_clip_param:
-      alpha = 1. - s/loop_steps
-    else:
-      alpha = 1.
+    if s % log_frequency == 0:
+      score = test_episodes.policy_test(1, optimizer.target, game)
+      frames = s * flags_.num_agents * flags_.actor_steps
+      summary_writer.scalar('game_score', score, frames)
+      print(f'Step {s}:\nframes seen {frames}\nscore {score}\n\n')
+    if s % checkpoint_frequency == 0:
+      checkpoints.save_checkpoint(model_dir, optimizer, s)
 
     # Core training code.
+    alpha = 1. - s/loop_steps if flags_.decaying_lr_and_clip_param else 1.
     all_experiences = get_experience(optimizer.target, simulators,
                                      flags_.actor_steps)
     trajectories = process_experience(
@@ -229,10 +232,10 @@ def train(
     lr = flags_.learning_rate * alpha
     clip_param = flags_.clip_param * alpha
     for e in range(flags_.num_epochs):
-      permutation = onp.random.permutation(num_agents * flags_.actor_steps)
+      permutation = onp.random.permutation(
+          flags_.num_agents * flags_.actor_steps)
       trajectories = tuple(map(lambda x: x[permutation], trajectories))
       optimizer, loss, last_iter_grad_norm = train_step(
         optimizer, trajectories, clip_param, flags_.vf_coeff,
         flags_.entropy_coeff, lr, flags_.batch_size)
-      print(f"epoch {e} loss {loss} grad norm {last_iter_grad_norm}")
   return optimizer

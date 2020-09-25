@@ -7,10 +7,7 @@ import numpy as onp
 import env_utils
 import agent
 
-def policy_test(
-  n_episodes: int,
-  model: flax.nn.base.Model,
-  game: str):
+def policy_test(n_episodes: int, model: flax.nn.base.Model, game: str):
   """Perform a test of the policy in Atari environment.
 
   Args:
@@ -19,10 +16,9 @@ def policy_test(
     game: defines the Atari game to test on
 
   Returns:
-    None
+    total_reward: obtained score
   """
   test_env = env_utils.create_env(game, clip_rewards=False)
-  all_probabilities = []
   for _ in range(n_episodes):
     obs = test_env.reset()
     state = agent.get_state(obs)
@@ -31,7 +27,6 @@ def policy_test(
       log_probs, _ = agent.policy_action(model, state)
       probs = onp.exp(onp.array(log_probs, dtype=onp.float32))
       probabilities = probs[0] / probs[0].sum()
-      all_probabilities.append(probabilities)
       action = onp.random.choice(probs.shape[1], p=probabilities)
       obs, reward, done, _ = test_env.step(action)
       total_reward += reward
@@ -41,9 +36,5 @@ def policy_test(
         next_state = None
       state = next_state
       if done:
-        all_probabilities = onp.stack(all_probabilities, axis=0)
-        vars = onp.var(all_probabilities, axis=0)
-        print(f"------> TEST FINISHED: reward {total_reward} in {t} steps")
-        print(f"Variance of probabilities across encuntered states {vars}")
         break
-  del test_env
+  return total_reward

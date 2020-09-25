@@ -68,6 +68,16 @@ flags.DEFINE_boolean(
           'the training.'))
 )
 
+flags.DEFINE_string(
+  'game', default='Pong',
+  help=('The Atari game used.')
+)
+
+flags.DEFINE_string(
+  'logdir', default='/tmp/ppo_training',
+  help=('Directory to set .')
+)
+
 def main(argv):
   game = "Pong"
   game += "NoFrameskip-v4"
@@ -80,7 +90,7 @@ def main(argv):
   model = models.create_model(subkey, num_outputs=num_actions)
   optimizer = models.create_optimizer(model, learning_rate=FLAGS.learning_rate)
   del model
-  optimizer = ppo_lib.train(optimizer, game, total_frames, num_agents, FLAGS)
+  optimizer = ppo_lib.train(optimizer, game, total_frames, FLAGS)
 
 if __name__ == '__main__':
   app.run(main)
