@@ -25,9 +25,10 @@ class FrameStack:
   Wraps an AtariPreprocessing object.
   """
 
-  def __init__(self,
-    preproc: seed_rl_atari_preprocessing.AtariPreprocessing,
-    num_frames: int):
+  def __init__(
+      self,
+      preproc: seed_rl_atari_preprocessing.AtariPreprocessing,
+      num_frames: int):
     self.preproc = preproc
     self.num_frames = num_frames
     self.frames = collections.deque(maxlen=num_frames)

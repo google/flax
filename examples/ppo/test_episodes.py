@@ -30,10 +30,7 @@ def policy_test(n_episodes: int, model: flax.nn.base.Model, game: str):
       action = onp.random.choice(probs.shape[1], p=probabilities)
       obs, reward, done, _ = test_env.step(action)
       total_reward += reward
-      if not done:
-        next_state = agent.get_state(obs)
-      else:
-        next_state = None
+      next_state = agent.get_state(obs) if not done else None
       state = next_state
       if done:
         break

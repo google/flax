@@ -32,15 +32,15 @@ class ActorCritic(flax.nn.Module):
     x = x.reshape((x.shape[0], -1))  # flatten
     x = nn.Dense(x, features=512, name='hidden', dtype=dtype)
     x = nn.relu(x)
-    # network used to both estimate policy (logits) and expected state value
-    # see github.com/openai/baselines/blob/master/baselines/ppo1/cnn_policy.py
+    # Network used to both estimate policy (logits) and expected state value.
+    # See github.com/openai/baselines/blob/master/baselines/ppo1/cnn_policy.py
     logits = nn.Dense(x, features=num_outputs, name='logits', dtype=dtype)
     policy_log_probabilities = nn.log_softmax(logits)
     value = nn.Dense(x, features=1, name='value', dtype=dtype)
     return policy_log_probabilities, value
 
 def create_model(key, num_outputs):
-  input_dims = (1, 84, 84, 4) #(minibatch, height, width, stacked frames)
+  input_dims = (1, 84, 84, 4)  # (minibatch, height, width, stacked frames)
   module = ActorCritic.partial(num_outputs=num_outputs)
   _, initial_par = module.init_by_shape(key, [(input_dims, jnp.float32)])
   model = flax.nn.Model(module, initial_par)

@@ -14,9 +14,8 @@ def policy_action(model, state):
   return out
 
 
-
 ExpTuple = collections.namedtuple(
-  'ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
+    'ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
 
 
 class RemoteSimulator:
@@ -28,7 +27,7 @@ class RemoteSimulator:
   def __init__(self, game):
     parent_conn, child_conn = multiprocessing.Pipe()
     self.proc = multiprocessing.Process(
-      target=rcv_action_send_exp, args=(child_conn, game))
+        target=rcv_action_send_exp, args=(child_conn, game))
     self.conn = parent_conn
     self.proc.start()
 

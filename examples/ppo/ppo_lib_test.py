@@ -21,7 +21,7 @@ class TestGAE(absltest.TestCase):
     discount = 0.99
     gae_param = 0.95
     adv = ppo_lib.gae_advantages(rewards, terminal_masks, values, discount,
-                              gae_param)
+                                 gae_param)
     self.assertEqual(adv.shape, (steps, envs))
   def test_gae_hardcoded(self):
     #test on small example that can be verified by hand
@@ -39,7 +39,7 @@ class TestGAE(absltest.TestCase):
 class TestEnvironmentPreprocessing(absltest.TestCase):
   def choose_random_game(self):
     games = ['BeamRider', 'Breakout', 'Pong',
-            'Qbert', 'Seaquest', 'SpaceInvaders']
+             'Qbert', 'Seaquest', 'SpaceInvaders']
     ind = onp.random.choice(len(games))
     return games[ind] + "NoFrameskip-v4"
 
@@ -109,8 +109,9 @@ class TestOptimizationStep(absltest.TestCase):
     key, subkey = jax.random.split(key)
     model = models.create_model(subkey, num_outputs)
     optimizer = models.create_optimizer(model, learning_rate=lr)
-    optimizer, _, _ = ppo_lib.train_step(
-      optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr, batch_size)
+    optimizer, _ = ppo_lib.train_step(
+        optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr,
+        batch_size)
     self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
 
 if __name__ == '__main__':
