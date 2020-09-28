@@ -35,7 +35,7 @@ config_flags.DEFINE_config_file(
     'File path to the Training hyperparameter configuration.')
 
 flags.DEFINE_string(
-    'model_dir', default=None,
+    'model_dir', default='/tmp/mnist',
     help=('Directory to store model data.'))
 
 

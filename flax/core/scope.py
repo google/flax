@@ -252,7 +252,12 @@ class Scope:
   def variable(self, col: str, name: str, init_fn: Callable[..., T],
                *init_args) -> Variable[T]:
     self.reserve(name)
-    if not self.has_variable(col, name):
+    variables = self.collection(col)
+    if isinstance(variables, FrozenDict) and (name not in variables):
+      raise ValueError(f"Cannot find variable: {name} in kind: {col} and "
+                       f"kind: {col} is not mutable.")
+
+    if name not in variables:
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)

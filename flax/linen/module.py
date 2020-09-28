@@ -455,8 +455,6 @@ class Module:
   def apply(self, variables, *args, rngs=None,
             method=None, mutable=False, **kwargs):
     """Apply module to variables and return output and modified variables."""
-    self_variables = self.variables()
-    
     if method is None:
       method = self.__class__.__call__
     else:

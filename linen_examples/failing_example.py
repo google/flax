@@ -2,6 +2,7 @@
 
 from absl import app
 
+import jax
 from jax.config import config
 config.enable_omnistaging()
 
@@ -18,7 +19,7 @@ def main(_):
   # The parameter "foo" is not present in this empty variable dict --
   # raise an error clarifying that that's the problem (missing "foo" parameter)
   # not something cryptic about RNGs.
-  MyModule().apply({'bar': lambda: 1})
+  MyModule().apply({})
 
 
 if __name__ == '__main__':
