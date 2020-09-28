@@ -20,7 +20,7 @@ from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
 import imagenet_main
-from configs import default as default_lib
+from configs import fake_data_benchmark as config_lib
 from flax.testing import Benchmark
 import jax
 
@@ -40,18 +40,8 @@ class ImagenetBenchmarkFakeData(Benchmark):
   @flagsaver
   def test_fake_data(self):
     model_dir = self.get_tmp_model_dir()
-    config = default_lib.get_config()
-    config.batch_size = 256 * jax.device_count()
-    config.half_precision = True
-    config.num_epochs = 5
 
-    # Previously the input pipeline computed:
-    # `steps_per_epoch` as input_pipeline.TRAIN_IMAGES // batch_size
-    config.num_train_steps = 1024 // config.batch_size
-    # and `steps_per_eval` as input_pipeline.EVAL_IMAGES // batch_size
-    config.steps_per_eval = 512 // config.batch_size
-
-    FLAGS.config = config
+    FLAGS.config = config_lib.get_config()
     FLAGS.model_dir = model_dir
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]
