@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.linen_examples.imagenet.resnet_v1."""
+"""Tests for flax.linen_examples.imagenet.models."""
 
 from absl.testing import absltest
 
 import jax
 from jax import numpy as jnp
 
-import resnet_v1 as models
+import models
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

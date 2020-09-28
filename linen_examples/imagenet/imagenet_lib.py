@@ -28,7 +28,7 @@ from flax import jax_utils
 from flax import optim
 
 import input_pipeline
-import resnet_v1 as models
+import models
 
 from flax.metrics import tensorboard
 from flax.training import checkpoints
