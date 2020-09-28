@@ -18,7 +18,8 @@ import time
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-import train
+import imagenet_main
+from configs import default as default_lib
 from flax.testing import Benchmark
 import jax
 import numpy as np
@@ -40,13 +41,16 @@ class ImagenetBenchmark(Benchmark):
   def test_8x_v100_half_precision(self):
     """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
     model_dir = self.get_tmp_model_dir()
-    FLAGS.batch_size = 2048
-    FLAGS.half_precision = True
-    FLAGS.num_epochs = 2
+    config = default_lib.get_config()
+    config.batch_size = 2048
+    config.half_precision = True
+    config.num_epochs = 2
+
+    FLAGS.config = config
     FLAGS.model_dir = model_dir
 
     start_time = time.time()
-    train.main([])
+    imagenet_main.main([])
     benchmark_time = time.time() - start_time
     summaries = self.read_summaries(model_dir)
 
