@@ -67,3 +67,7 @@ class WeightStdTest(absltest.TestCase):
 
     y2 = apply(mlp)(variables, x)
     self.assertTrue(jnp.allclose(y, y2))
+
+
+if __name__ == '__main__':
+  absltest.main()

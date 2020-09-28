@@ -88,3 +88,7 @@ class TiedAutoEncoderTest(absltest.TestCase):
         'kernel': (4, 2),
     })
     self.assertEqual(x_r.shape, (1, 4))
+
+
+if __name__ == '__main__':
+  absltest.main()

@@ -76,3 +76,7 @@ class BigResnetTest(absltest.TestCase):
         'bn_1': {'var': (10, 5, 8), 'mean': (10, 5, 8)},
         'bn_2': {'var': (10, 5, 8), 'mean': (10, 5, 8)}
     })
+
+
+if __name__ == '__main__':
+  absltest.main()

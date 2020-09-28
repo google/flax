@@ -154,3 +154,7 @@ class AttentionTest(absltest.TestCase):
         'query': {'kernel': (2, 16, 8)},
         'out': {'bias': (2, 16), 'kernel': (2, 8, 16)},
     })
+
+
+if __name__ == '__main__':
+  absltest.main()

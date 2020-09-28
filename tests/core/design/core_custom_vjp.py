@@ -73,3 +73,7 @@ class CustomVJPTest(absltest.TestCase):
     self.assertEqual(grad_shapes, expected_param_shapes)
     for g in jax.tree_leaves(grad):
       self.assertTrue(np.all(g == np.sign(g)))
+
+
+if __name__ == '__main__':
+  absltest.main()

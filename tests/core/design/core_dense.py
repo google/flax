@@ -139,3 +139,7 @@ class DenseTest(absltest.TestCase):
         'dense_0': {'kernel': (4, 3), 'bias': (3,)},
         'dense_1': {'kernel': (3, 1), 'bias': (1,)}
     })
+
+
+if __name__ == '__main__':
+  absltest.main()

@@ -79,3 +79,7 @@ class ScanTest(absltest.TestCase):
     })
     
     self.assertEqual(y[0], y[1])
+
+
+if __name__ == '__main__':
+  absltest.main()

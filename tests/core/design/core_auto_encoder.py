@@ -153,3 +153,7 @@ class AutoEncoderTest(absltest.TestCase):
             'out': {'kernel': (3, 4), 'bias': (4,)},
         },
     })
+
+
+if __name__ == '__main__':
+  absltest.main()

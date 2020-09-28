@@ -131,3 +131,7 @@ class ResNetTest(absltest.TestCase):
             'bn_3': {'bias': (128,), 'scale': (128,)},
         },
     })
+
+
+if __name__ == '__main__':
+  absltest.main()

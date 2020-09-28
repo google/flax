@@ -77,3 +77,7 @@ class VMapTest(absltest.TestCase):
     })
     self.assertEqual(y.shape, (2, 1))
     self.assertFalse(jnp.allclose(y[0], y[1]))
+
+
+if __name__ == '__main__':
+  absltest.main()

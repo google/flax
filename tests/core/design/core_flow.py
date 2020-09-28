@@ -78,3 +78,7 @@ class FlowTest(absltest.TestCase):
     })
     x_restored = apply(flow.backward)(variables, y)
     self.assertTrue(jnp.allclose(x, x_restored))
+
+
+if __name__ == '__main__':
+  absltest.main()
