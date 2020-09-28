@@ -23,26 +23,29 @@ python imagenet_main.py --model_dir=./imagenet
 
 #### Overriding Hyperparameter configurations
 
-Specify a hyperparameter configuration by the means of setting `--config` flag. Configuration flag is defined using
+Specify a hyperparameter configuration by the means of setting `--config` flag.
+Configuration flag is defined using
 [config_flags](https://github.com/google/ml_collections/tree/master#config-flags).
 `config_flags` allows overriding configuration fields. This can be done as
 follows:
 
 ```shell
-python imagenet_main.py --model_dir=./imagenet --config.num_epochs=100
+python imagenet_main.py --model_dir=./imagenet_default --config.num_epochs=100
 ```
 
 #### 8 x Nvidia V100 (16GB)
 ```shell
 python imagenet_main.py \
---model_dir=./imagenet_fp32_bs512 --config=configs/v100_x8.py
+--model_dir=./imagenet_v100_x8 --config=configs/v100_x8.py
 ```
 
 #### 8 x Nvidia V100 (16GB), mixed precision
 ```shell
 python imagenet_main.py \
---model_dir=./imagenet_fp16_bs2048 --config=configs/v100_x8_mixed_precision.py
+--model_dir=./imagenet_v100_x8_mixed_precision \
+--config=configs/v100_x8_mixed_precision.py
 ```
 
 ### Reproducibility
-Making the ImageNet classification example reproducible is WIP. For more details, follow [#291](https://github.com/google/flax/issues/291).
+Making the ImageNet classification example reproducible is WIP. 
+See: [#291](https://github.com/google/flax/issues/291).

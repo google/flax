@@ -42,6 +42,15 @@ class TrainTest(absltest.TestCase):
     # Make sure tf does not allocate gpu memory.
     tf.config.experimental.set_visible_devices([], 'GPU')
 
+  def test_create_model(self):
+    """Tests creating model."""
+    variables = imagenet_lib.initialized(random.PRNGKey(0), 224,
+                                         half_precision=False)
+    x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
+    y = imagenet_lib.model(
+        half_precision=False, train=False).apply(variables, x)
+    self.assertEqual(y.shape, (8, 1000))
+
   def test_train_and_evaluate(self):
     """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.

@@ -50,7 +50,7 @@ import tensorflow_datasets as tfds
 jax.config.enable_omnistaging()
 
 
-def model(half_precision, **kwargs):
+def model(*, half_precision, **kwargs):
   # TODO: Is this slow?
   platform = jax.local_devices()[0].platform
   if half_precision:
@@ -64,7 +64,7 @@ def model(half_precision, **kwargs):
 
 def initialized(key, image_size, half_precision):
   input_shape = (1, image_size, image_size, 3)
-  model_ = model(half_precision)
+  model_ = model(half_precision=half_precision)
   return model_.init({'params': key}, jnp.ones(input_shape, model_.dtype))
 
 
@@ -107,7 +107,7 @@ def train_step(state, batch, half_precision, learning_rate_fn):
   def loss_fn(params):
     """loss function used for training."""
     variables = {'params': params, 'batch_stats': state.batch_stats}
-    logits, new_variables = model(half_precision).apply(
+    logits, new_variables = model(half_precision=half_precision).apply(
         variables, batch['image'], mutable=['batch_stats'])
     loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_leaves(variables['params'])
@@ -156,7 +156,7 @@ def train_step(state, batch, half_precision, learning_rate_fn):
 def eval_step(state, batch, half_precision):
   params = state.optimizer.target
   variables = {'params': params, 'batch_stats': state.batch_stats}
-  logits = model(half_precision, train=False).apply(
+  logits = model(half_precision=half_precision, train=False).apply(
       variables, batch['image'], mutable=False)
   return compute_metrics(logits, batch['label'])
 
@@ -213,12 +213,12 @@ def sync_batch_stats(state):
   return state.replace(batch_stats=avg(state.batch_stats))
 
 
-def train_and_evaluate(model_dir: str, config: ml_collections.ConfigDict):
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   """Execute model training and evaluation loop.
 
   Args:
-    model_dir: Directory where the tensorboard summaries are written to.
     config: Hyperparameter configuration for training and evaluation.
+    model_dir: Directory where the tensorboard summaries are written to.
   """
 
   if jax.host_id() == 0:
