@@ -396,7 +396,7 @@ class Module:
     Args:
       kind: the variable kind.
       name: the variable name.
-      init_fn: a function taking any number of positiona arguments.
+      init_fn: a function taking any number of positional arguments.
       *init_args: the arguments to evaluate init_fn on lazily.
 
     Returns:
@@ -455,6 +455,8 @@ class Module:
   def apply(self, variables, *args, rngs=None,
             method=None, mutable=False, **kwargs):
     """Apply module to variables and return output and modified variables."""
+    self_variables = self.variables()
+    
     if method is None:
       method = self.__class__.__call__
     else:
