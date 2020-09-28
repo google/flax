@@ -211,7 +211,7 @@ def train(
   summary_writer = tensorboard.SummaryWriter(model_dir)
   loop_steps = flags_.total_frames // (flags_.num_agents * flags_.actor_steps)
   log_frequency = 40
-  checkpoint_frequency = 200
+  checkpoint_frequency = 500
 
 
   for s in range(loop_steps):
