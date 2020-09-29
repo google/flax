@@ -32,11 +32,9 @@ class ScopeTest(absltest.TestCase):
         scope, a = scopes
         self.assertEqual(a.parent, scope)
       
-      lift.vmap(g, variable_in_axes={}, variable_out_axes={}, split_rngs={})((scope, a), jnp.ones((1,)))
+      lift.vmap(g, variable_axes={}, split_rngs={})((scope, a), jnp.ones((1,)))
 
     init(f)(random.PRNGKey(0))
-
-  
 
 
 if __name__ == '__main__':

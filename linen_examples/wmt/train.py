@@ -28,7 +28,7 @@ from jax import random
 import jax
 import jax.numpy as jnp
 import numpy as np
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 from flax import jax_utils
 from flax import linen as nn
@@ -354,7 +354,7 @@ def train_step(optimizer,
   def loss_fn(params):
     """loss function used for training."""
     logits = models.Transformer(config).apply(
-        {'param': params},
+        {'params': params},
         inputs,
         targets,
         inputs_positions=inputs_positions,
@@ -385,7 +385,7 @@ def eval_step(params, batch, config, label_smoothing=0.0):
   inputs, targets = batch['inputs'], batch['targets']
   weights = jnp.where(targets > 0, 1.0, 0.0)
   logits = models.Transformer(config).apply(
-      {'param': params}, inputs, targets)
+      {'params': params}, inputs, targets)
 
   return compute_metrics(logits, targets, weights, label_smoothing)
 
@@ -411,7 +411,7 @@ def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
   # [el0, el1, el2] --> beamsize=2 --> [el0,el0,el1,el1,el2,el2]
   encoded_inputs = decode.flat_batch_beam_expand(
       models.Transformer(config).apply(
-        {'param': params}, inputs, method=models.Transformer.encode),
+        {'params': params}, inputs, method=models.Transformer.encode),
       beam_size)
   raw_inputs = decode.flat_batch_beam_expand(inputs, beam_size)
 
@@ -419,7 +419,7 @@ def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
     flat_logits, new_vars = models.Transformer(config).apply(
-        {'param': params, 'cache': flat_cache},
+        {'params': params, 'cache': flat_cache},
         encoded_inputs,
         raw_inputs,  # only needed for input padding mask
         flat_ids,
@@ -484,12 +484,12 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   if FLAGS.jax_backend_target:
     jax.config.FLAGS.jax_xla_backend = 'tpu_driver'
     jax.config.FLAGS.jax_backend_target = FLAGS.jax_backend_target
-
-  # This seems to be necessary even when importing TF2?
-  tf.enable_v2_behavior()
 
   # Number of local devices for this host.
   n_devices = jax.local_device_count()
@@ -578,7 +578,7 @@ def main(argv):
       beta2=0.98,
       eps=1e-9,
       weight_decay=FLAGS.weight_decay)
-  optimizer = optimizer_def.create(initial_variables['param'])
+  optimizer = optimizer_def.create(initial_variables['params'])
 
   # We access model params only from optimizer below via optimizer.target.
   del initial_variables

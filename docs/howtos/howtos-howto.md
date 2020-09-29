@@ -64,7 +64,9 @@ git rebase upstream/master
 If your local copy of `flax` isn't clean, you may need to stash your changes
 elsewhere (e.g., via `git stash`) or otherwise remove your changes.
 
-### Automatically apply as many diff hunks as possible
+### Option 1: Use vanilla `git apply`:
+
+#### Automatically apply as many diff hunks as possible
 The `--reject` flag tells `git apply` to apply whatever hunks in the supplied
 diff file it can and outputs the rejected hunks to a `*.rej` file in the same
 directory as the modified files (typically `examples/[EXAMPLE]`).
@@ -73,13 +75,26 @@ directory as the modified files (typically `examples/[EXAMPLE]`).
 git apply $diff_file --reject
 ```
 
-### Go through the remaining hunks manually
+#### Go through the remaining hunks manually
 Examine the changes in each `*.rej` diff file for all hunks that couldn't be
 merged automatically. If the example code hasn't changed significantly, the
 work typically involves just finding the right place to insert and remove the
 lines mentioned in the diff. If the example code _has_ changed significantly,
 the work may also involve understanding the intent of the `howto` or contacting
 the author(s) of the `howto`.
+
+### Option 2: Use 3-way merge:
+
+In case the vanilla apply doesn't work cleanly, you can use Git's 3-way merge,
+which lets you resolve conflicts like you would with normal git merges.
+
+```bash
+git apply -3 $diff_file
+```
+
+This should apply the diff, where merge conflicts appear in the files
+with `<<<`, `===`, `>>>` annotations. Edit the files that have a merge conflict
+like you would with a normal Git merge conflict.
 
 ### Re-pack the HOWTO
 Pack the changes on your branch into a `howto` via the script below. In this

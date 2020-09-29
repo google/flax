@@ -41,7 +41,7 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 # enable jax omnistaging
 from jax.config import config
@@ -94,7 +94,7 @@ def model(**kwargs):
 def initialized(key, image_size):
   input_shape = (1, image_size, image_size, 3)
   model_ = model()
-  return model_.init({"param": key}, jnp.ones(input_shape, model_.dtype))
+  return model_.init({'params': key}, jnp.ones(input_shape, model_.dtype))
 
 
 def cross_entropy_loss(logits, labels):
@@ -135,10 +135,10 @@ def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
   def loss_fn(params):
     """loss function used for training."""
-    variables = {'param': params, 'batch_stats': state.batch_stats}
+    variables = {'params': params, 'batch_stats': state.batch_stats}
     logits, new_variables = model().apply(variables, batch['image'], mutable=['batch_stats'])
     loss = cross_entropy_loss(logits, batch['label'])
-    weight_penalty_params = jax.tree_leaves(variables['param'])
+    weight_penalty_params = jax.tree_leaves(variables['params'])
     weight_decay = 0.0001
     weight_l2 = sum([jnp.sum(x ** 2)
                      for x in weight_penalty_params
@@ -183,7 +183,7 @@ def train_step(state, batch, learning_rate_fn):
 
 def eval_step(state, batch):
   params = state.optimizer.target
-  variables = {'param': params, 'batch_stats': state.batch_stats}
+  variables = {'params': params, 'batch_stats': state.batch_stats}
   logits = model(train=False).apply(variables, batch['image'], mutable=False)
   return compute_metrics(logits, batch['label'])
 
@@ -242,7 +242,6 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
   # make sure tf does not allocate gpu memory
   tf.config.experimental.set_visible_devices([], 'GPU')
 
@@ -285,7 +284,7 @@ def main(argv):
   base_learning_rate = FLAGS.learning_rate * batch_size / 256.
 
   variables = initialized(rng, image_size)
-  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(variables['param'])
+  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(variables['params'])
   state = TrainState(step=0, optimizer=optimizer, batch_stats=variables['batch_stats'],
                      dynamic_scale=dynamic_scale)
 

@@ -18,28 +18,21 @@ This script trains a simple Convolutional Neural Net on the MNIST dataset.
 
 """
 
+import os
+
 from absl import app
 from absl import flags
+from ml_collections import config_flags
+
+import tensorflow as tf
 
 import mnist_lib
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float(
-    'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
-
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=10,
-    help=('Number of training epochs.'))
+config_flags.DEFINE_config_file(
+    'config', os.path.join(os.path.dirname(__file__), 'configs/default.py'),
+    'File path to the Training hyperparameter configuration.')
 
 flags.DEFINE_string(
     'model_dir', default=None,
@@ -47,10 +40,11 @@ flags.DEFINE_string(
 
 
 def main(_):
-  mnist_lib.train_and_evaluate(
-      model_dir=FLAGS.model_dir, num_epochs=FLAGS.num_epochs,
-      batch_size=FLAGS.batch_size, learning_rate=FLAGS.learning_rate,
-      momentum=FLAGS.momentum)
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
+  mnist_lib.train_and_evaluate(config=FLAGS.config,
+                               model_dir=FLAGS.model_dir)
 
 
 if __name__ == '__main__':

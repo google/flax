@@ -1,8 +1,8 @@
 diff --git a/examples/seq2seq/train.py b/examples/seq2seq/train.py
-index 1597079..77449b7 100644
+index 60b79b5..2d946ca 100644
 --- a/examples/seq2seq/train.py
 +++ b/examples/seq2seq/train.py
-@@ -191,17 +191,19 @@ class Encoder(nn.Module):
+@@ -190,17 +190,19 @@ class Encoder(nn.Module):
  class Decoder(nn.Module):
    """LSTM decoder."""
  
@@ -27,7 +27,7 @@ index 1597079..77449b7 100644
        lstm_state, y = lstm_cell(lstm_state, x)
        logits = projection(y)
        predicted_tokens = jax.random.categorical(categorical_rng, logits)
-@@ -233,7 +235,7 @@ class Seq2seq(nn.Module):
+@@ -226,7 +228,7 @@ class Seq2seq(nn.Module):
    def apply(self,
              encoder_inputs,
              decoder_inputs,
@@ -36,7 +36,7 @@ index 1597079..77449b7 100644
              eos_id=1,
              hidden_size=512):
      """Run the seq2seq model.
-@@ -244,14 +246,15 @@ class Seq2seq(nn.Module):
+@@ -237,14 +239,15 @@ class Seq2seq(nn.Module):
          `[batch_size, max(encoder_input_lengths), vocab_size]`.
        decoder_inputs: padded batch of expected decoded sequences for teacher
          forcing, shaped `[batch_size, max(decoder_inputs_length), vocab_size]`.
@@ -60,16 +60,16 @@ index 1597079..77449b7 100644
        hidden_size: int, the number of hidden dimensions in the encoder and
          decoder LSTMs.
      Returns:
-@@ -265,7 +268,7 @@ class Seq2seq(nn.Module):
-     logits, predictions = decoder(
-         init_decoder_state,
-         decoder_inputs[:, :-1],
+@@ -253,7 +256,7 @@ class Seq2seq(nn.Module):
+     init_decoder_state = Encoder(encoder_inputs, eos_id=eos_id,
+         hidden_size=hidden_size)
+     logits, predictions = Decoder(init_decoder_state, decoder_inputs[:, :-1], 
 -        teacher_force=teacher_force)
 +        sample_probability=sample_probability)
  
      return logits, predictions
  
-@@ -335,14 +338,16 @@ def compute_metrics(logits, labels):
+@@ -323,14 +326,16 @@ def compute_metrics(logits, labels):
  
  
  @jax.jit
@@ -88,7 +88,7 @@ index 1597079..77449b7 100644
      loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
      return loss, logits
    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-@@ -366,7 +371,7 @@ def decode(model, inputs, rng):
+@@ -354,7 +359,7 @@ def decode(model, inputs, rng):
    init_decoder_inputs = jnp.tile(init_decoder_input,
                                   (inputs.shape[0], get_max_output_len(), 1))
    with nn.stochastic(rng):
@@ -97,7 +97,7 @@ index 1597079..77449b7 100644
    return predictions
  
  
-@@ -384,15 +389,22 @@ def decode_batch(model, batch_size):
+@@ -372,15 +377,22 @@ def decode_batch(model, batch_size):
  
  def train_model():
    """Train for a fixed number of steps and decode during training."""
@@ -124,10 +124,10 @@ index 1597079..77449b7 100644
    return optimizer.target
  
 diff --git a/examples/seq2seq/train_test.py b/examples/seq2seq/train_test.py
-index 5a8a24b..6df633e 100644
+index b638d55..006603b 100644
 --- a/examples/seq2seq/train_test.py
 +++ b/examples/seq2seq/train_test.py
-@@ -102,7 +102,7 @@ class TrainTest(absltest.TestCase):
+@@ -101,7 +101,7 @@ class TrainTest(absltest.TestCase):
        model = train.create_model()
        optimizer = train.create_optimizer(model, 0.003)
        optimizer, train_metrics = train.train_step(

@@ -45,7 +45,7 @@ rngkey = jax.random.PRNGKey(10)
 mlp_variables = MLP().init(rngkey, jnp.zeros((1, 3)))
 
 pprint(mlp_variables)
-# {'param': {'dense1': {'bias': DeviceArray([0., 0.], dtype=float32),
+# {'params': {'dense1': {'bias': DeviceArray([0., 0.], dtype=float32),
 #                       'kernel': DeviceArray([[ 0.18307537, -0.38739476],
 #              [-0.902451  , -0.5190721 ],
 #              [ 0.51552075,  1.1169153 ]], dtype=float32)},

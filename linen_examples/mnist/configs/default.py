@@ -12,7 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .frozen_dict import FrozenDict, freeze, unfreeze
-from .tracers import current_trace, trace_level, check_trace_level
-from .scope import Scope, Array, apply, init
-from .lift import scan, vmap, jit
+"""Default Hyperparameter configuration."""
+
+import ml_collections
+
+
+def get_config():
+  """Get the default hyperparameter configuration."""
+  config = ml_collections.ConfigDict()
+
+  config.learning_rate = 0.1
+  config.momentum = 0.9
+  config.batch_size = 128
+  config.num_epochs = 10
+  return config

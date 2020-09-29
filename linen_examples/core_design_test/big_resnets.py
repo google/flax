@@ -59,9 +59,8 @@ def big_resnet(scope: Scope, x, blocks=(10, 10), dtype=jnp.float32,
 
   return lift.remat_scan(
       body_fn, scope, x, lengths=blocks,
-      variable_in_axes={'param': 0, 'batch_stats': 0},
-      variable_out_axes={'param': 0, 'batch_stats': 0},
-      split_rngs={'param': True})
+      variable_axes={'params': 0, 'batch_stats': 0},
+      split_rngs={'params': True})
 
 if __name__ == "__main__":
   x = random.normal(random.PRNGKey(0), (1, 8, 8, 8))

@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax implementation of ResNet V1.
-"""
-
-
-from flax import nn
+# Lint as: python3
+"""Flax implementation of ResNet V1."""
 
 import jax.numpy as jnp
+
+from flax import nn
 
 
 class ResNetBlock(nn.Module):
@@ -65,7 +64,7 @@ class BottleneckResNetBlock(nn.Module):
 
 
 class ResNet(nn.Module):
-  """ResNetV1."""
+  """ResNet V1."""
 
   def apply(self, x, num_classes, *,
             stage_sizes,

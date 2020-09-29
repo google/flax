@@ -23,8 +23,10 @@ from absl import logging
 import jax
 from jax import random
 import jax.numpy as jnp
-from jax.config import config
-config.enable_omnistaging()
+
+jax.config.enable_omnistaging()
+
+import ml_collections
 
 import numpy as onp
 
@@ -55,7 +57,7 @@ class CNN(nn.Module):
 
 def get_initial_params(key):
   init_shape = jnp.ones((1, 28, 28, 1), jnp.float32)
-  initial_params = CNN().init(key, init_shape)["param"]
+  initial_params = CNN().init(key, init_shape)['params']
   return initial_params
 
 
@@ -88,7 +90,7 @@ def compute_metrics(logits, labels):
 def train_step(optimizer, batch):
   """Train for a single step."""
   def loss_fn(params):
-    logits = CNN().apply({'param': params}, batch['image'])
+    logits = CNN().apply({'params': params}, batch['image'])
     loss = cross_entropy_loss(logits, batch['label'])
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -100,7 +102,7 @@ def train_step(optimizer, batch):
 
 @jax.jit
 def eval_step(params, batch):
-  logits = CNN().apply({'param': params}, batch['image'])
+  logits = CNN().apply({'params': params}, batch['image'])
   return compute_metrics(logits, batch['label'])
 
 
@@ -148,17 +150,16 @@ def get_datasets():
   return train_ds, test_ds
 
 
-def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
-                       learning_rate: float, momentum: float):
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   """Execute model training and evaluation loop.
 
   Args:
+    config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory where the tensorboard summaries are written to.
-    num_epochs: Number of epochs to cycle through the dataset before stopping.
-    batch_size: Batch size of the input.
-    learning_rate: Learning rate for the momentum optimizer.
-    momentum: Momentum value for the momentum optimizer.
-"""
+
+  Returns:
+    The trained optimizer.
+  """
   train_ds, test_ds = get_datasets()
   rng = random.PRNGKey(0)
 
@@ -166,12 +167,13 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
 
   rng, init_rng = random.split(rng)
   params = get_initial_params(init_rng)
-  optimizer = create_optimizer(params, learning_rate, momentum)
+  optimizer = create_optimizer(
+      params, config.learning_rate, config.momentum)
 
-  for epoch in range(1, num_epochs + 1):
+  for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = random.split(rng)
     optimizer, train_metrics = train_epoch(
-        optimizer, train_ds, batch_size, epoch, input_rng)
+        optimizer, train_ds, config.batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
 
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',

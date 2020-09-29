@@ -48,7 +48,7 @@ from jax import lax
 import jax.numpy as jnp
 import numpy as np
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 import input_pipeline
 import pixelcnn
@@ -296,7 +296,8 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   pcnn_module = pixelcnn.PixelCNNPP.partial(depth=FLAGS.n_resnet,
                                             features=FLAGS.n_feature,

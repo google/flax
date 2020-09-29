@@ -18,18 +18,17 @@ import time
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-import train
+import imagenet_main
 from flax.testing import Benchmark
 import jax
+
 import numpy as np
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
-
 FLAGS = flags.FLAGS
-
 
 class ImagenetBenchmark(Benchmark):
   """Benchmarks for the ImageNet Flax example."""
@@ -45,7 +44,7 @@ class ImagenetBenchmark(Benchmark):
     FLAGS.model_dir = model_dir
 
     start_time = time.time()
-    train.main([])
+    imagenet_main.main([])
     benchmark_time = time.time() - start_time
     summaries = self.read_summaries(model_dir)
 

@@ -128,7 +128,7 @@ def model():
 @jax.jit
 def train_step(optimizer, batch, z_rng):
   def loss_fn(params):
-    recon_x, mean, logvar = model().apply({'param': params}, batch, z_rng)
+    recon_x, mean, logvar = model().apply({'params': params}, batch, z_rng)
 
     bce_loss = binary_cross_entropy_with_logits(recon_x, batch).mean()
     kld_loss = kl_divergence(mean, logvar).mean()
@@ -142,12 +142,12 @@ def train_step(optimizer, batch, z_rng):
 
 @jax.jit
 def eval(params, images, z, z_rng):
-  recon_images, mean, logvar = model().apply({'param': params}, images, z_rng)
+  recon_images, mean, logvar = model().apply({'params': params}, images, z_rng)
 
   comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
                                 recon_images[:8].reshape(-1, 28, 28, 1)])
 
-  generate_images = model().apply({'param': params}, z, method=VAE.generate)
+  generate_images = model().apply({'params': params}, z, method=VAE.generate)
   generate_images = generate_images.reshape(-1, 28, 28, 1)
   metrics = compute_metrics(recon_images, images, mean, logvar)
 
@@ -162,6 +162,10 @@ def prepare_image(x):
 
 def main(argv):
   del argv
+
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
+
   rng = random.PRNGKey(0)
   rng, key = random.split(rng)
 
@@ -181,7 +185,7 @@ def main(argv):
   test_ds = jax.device_put(test_ds)
 
   init_data = jnp.ones((FLAGS.batch_size, 784), jnp.float32)
-  params = model().init(key, init_data, rng)['param']
+  params = model().init(key, init_data, rng)['params']
 
   optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(params)
   optimizer = jax.device_put(optimizer)

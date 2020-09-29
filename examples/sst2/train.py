@@ -38,8 +38,9 @@ from flax import nn
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
 from tensorflow.io import gfile
 
@@ -148,8 +149,7 @@ def train_step(optimizer: Any, inputs: jnp.ndarray, lengths: jnp.ndarray,
 
     # L2 regularization
     l2_params = jax.tree_leaves(model.params['lstm_classifier'])
-    # TODO(mohitreddy): Convert list to a ndarray in outer jnp.sum().
-    l2_weight = jnp.sum([jnp.sum(p ** 2) for p in l2_params])
+    l2_weight = np.sum([jnp.sum(p ** 2) for p in l2_params])
     l2_penalty = l2_reg * l2_weight
 
     loss = loss + l2_penalty
@@ -323,8 +323,6 @@ def train_and_evaluate(
     checkpoints_to_keep: Number of checkpoints to keep.
     l2_reg: L2 regularization to keep. 
   """
-  tf.enable_v2_behavior()
-
   # Prepare data.
   data_source = input_pipeline.SST2DataSource(min_freq=min_freq)
 
@@ -366,6 +364,9 @@ def main(argv):
   """Main function."""
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
+
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   # TODO(mohitreddy): Change to flags.mark_flag_as_required('model_dir').
   assert FLAGS.model_dir is not None, 'Please provide model_dir.'

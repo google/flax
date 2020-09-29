@@ -36,8 +36,7 @@ import jax
 from jax import random
 import jax.nn
 import jax.numpy as jnp
-
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 
 FLAGS = flags.FLAGS
@@ -331,8 +330,8 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
-
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
   train(FLAGS.model_dir, FLAGS.batch_size, FLAGS.num_epochs,
         FLAGS.learning_rate, FLAGS.momentum, FLAGS.l2_reg, FLAGS.rng)
 

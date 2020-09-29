@@ -31,15 +31,13 @@ def mlp_vmap(scope: Scope, x: Array,
   if share_params:
     dense_vmap = lift.vmap(nn.dense,
                            in_axes=(0, None),
-                           variable_in_axes={'param': None},
-                           variable_out_axes={'param': None},
-                           split_rngs={'param': False})
+                           variable_axes={'params': None},
+                           split_rngs={'params': False})
   else:
     dense_vmap = lift.vmap(nn.dense,
                            in_axes=(0, None),
-                           variable_in_axes={'param': 0},
-                           variable_out_axes={'param': 0},
-                           split_rngs={'param': True})
+                           variable_axes={'params': 0},
+                           split_rngs={'params': True})
 
   # hidden layers
   for size in sizes[:-1]:

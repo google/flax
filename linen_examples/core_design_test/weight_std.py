@@ -26,7 +26,7 @@ Array = Any
 
 def weight_std(fn, kernel_name='kernel', eps=1e-8):
   def std(variables):
-    params = variables['param']
+    params = variables['params']
     assert kernel_name in params
     kernel = params[kernel_name]
     redux = tuple(range(kernel.ndim - 1))

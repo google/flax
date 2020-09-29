@@ -18,7 +18,10 @@ The model should run with other configurations and hardware, but explicitely tes
 ### How to run
 
 #### 8 x Nvidia V100 (16GB)
-`python train.py --batch_size=512 --cache=True --model_dir=./imagenet_fp32_bs512`
+`python imagenet_main.py --batch_size=512 --cache=True --model_dir=./imagenet_fp32_bs512`
 
 #### 8 x Nvidia V100 (16GB), mixed precision
-`python train.py --batch_size=2048 --cache=True --model_dir=./imagenet_fp16_bs2048 --half_precision=True`
+`python imagenet_main.py --batch_size=2048 --cache=True --model_dir=./imagenet_fp16_bs2048 --half_precision=True --loss_scaling=256.`
+
+### Reproducibility
+Making the ImageNet classification example reproducible is WIP. For more details, follow [#291](https://github.com/google/flax/issues/291).

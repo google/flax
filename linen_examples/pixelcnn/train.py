@@ -135,7 +135,7 @@ def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng):
   def loss_fn(params):
     """loss function used for training."""
     pcnn_out = model(dropout_p=FLAGS.dropout_rate).apply(
-        {'param': params}, batch['image'], rngs={'dropout': dropout_rng})
+        {'params': params}, batch['image'], rngs={'dropout': dropout_rng})
     return neg_log_likelihood_loss(pcnn_out, batch['image'])
 
   lr = learning_rate_fn(optimizer.state.step)
@@ -155,7 +155,7 @@ def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng):
 
 def eval_step(params, batch):
   images = batch['image']
-  pcnn_out = model(dropout_p=0.).apply({'param': params}, images)
+  pcnn_out = model(dropout_p=0.).apply({'params': params}, images)
   return {'loss': lax.pmean(neg_log_likelihood_loss(pcnn_out, images), 'batch')}
 
 
@@ -217,9 +217,9 @@ def train():
   rng, dropout_rng = random.split(rng)
 
   initial_variables = model().init({
-      'param': init_rng,
+      'params': init_rng,
       'dropout': dropout_rng
-  }, init_batch)['param']
+  }, init_batch)['params']
   optimizer_def = optim.Adam(
       learning_rate=FLAGS.learning_rate, beta1=0.95, beta2=0.9995)
   optimizer = optimizer_def.create(initial_variables)
@@ -294,6 +294,9 @@ def train():
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
+
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   train()
 
