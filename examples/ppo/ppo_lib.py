@@ -134,11 +134,13 @@ def get_experience(
     for i, sim in enumerate(simulators):
       probabilities = probs[i]
       action = onp.random.choice(probs.shape[1], p=probabilities)
-      # In principle, one could avoid sending value and log prob back and forth.
-      sim.conn.send((action, values[i, 0], log_probs[i][action]))
+      sim.conn.send(action)
     experiences = []
-    for sim in simulators:
-      sample = sim.conn.recv()
+    for i, sim in enumerate(simulators):
+      state, action, reward, done = sim.conn.recv()
+      value = values[i, 0]
+      log_prob = log_probs[i][action]
+      sample = agent.ExpTuple(state, action, reward, value, log_prob, done)
       experiences.append(sample)
     all_experience.append(experiences)
   return all_experience

@@ -45,10 +45,10 @@ def rcv_action_send_exp(conn, game):
     state = get_state(obs)
     while not done:
       conn.send(state)
-      action, value, log_prob = conn.recv()
+      action = conn.recv()
       obs, reward, done, _ = env.step(action)
       next_state = get_state(obs) if not done else None
-      experience = ExpTuple(state, action, reward, value, log_prob, done)
+      experience = (state, action, reward, done)
       conn.send(experience)
       if done:
         break
