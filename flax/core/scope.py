@@ -252,7 +252,7 @@ class Scope:
   def variable(self, col: str, name: str, init_fn: Callable[..., T],
                *init_args) -> Variable[T]:
     self.reserve(name)
-    variables = self.collection(col)
+    variables = self.collection(col, mutable=True)
     if isinstance(variables, FrozenDict) and (name not in variables):
       raise ValueError(f"Cannot find variable: {name} in kind: {col} and "
                        f"kind: {col} is not mutable.")
