@@ -115,6 +115,6 @@ a `howto` is the filename without the extension (e.g., the name for the
 ## Modifying an existing HOWTO
 
 1. Fetch upstream and rebase onto upstream/master (see above).
-1. Apply the HOWTO : `git apply howtos/diffs/$name.diff`
+1. Apply the HOWTO : `git apply howtos/diffs/$name.diff`.
 2. Modify the modified files, without staging them.
 3. Re-pack the HOWTO (supplying same `$name`).
