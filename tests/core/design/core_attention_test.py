@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Optional, Sequence
 from functools import partial
+
+from typing import Callable, Optional, Sequence
+
+from absl.testing import absltest
+
 
 import jax
 from jax import lax, random
 from jax import numpy as jnp
 
-from flax.core import Scope, init, apply, lift, Array, nn
-
+from flax.core import Scope, init, lift, Array, nn, unfreeze
 
 
 def softmax_attn(scope: Scope, weights: Array):
@@ -131,16 +134,27 @@ def multi_head_dot_product_attention(
   y = attn_fn(scope, inputs_q, inputs_kv, bias)
   return y.mean(axis=-2)
 
-if __name__ == "__main__":
-  inputs = jnp.ones((2, 7, 16))
 
-  y, variables = init(multi_head_dot_product_attention)(
-      {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)},
-      inputs, inputs,
-      num_heads=2,
-      batch_axes=(0,),
-      attn_fn=with_dropout(softmax_attn, 0.1, deterministic=False)
-      )
+class AttentionTest(absltest.TestCase):
 
-  print(y.shape)
-  print(jax.tree_map(jnp.shape, variables))
+  def test_attention(self):
+    inputs = jnp.ones((2, 7, 16))
+    model = partial(
+        multi_head_dot_product_attention, 
+        num_heads=2, batch_axes=(0,),
+        attn_fn=with_dropout(softmax_attn, 0.1, deterministic=False))
+
+    rngs = {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
+    y, variables = jax.jit(init(model))(rngs, inputs, inputs)
+    variable_shapes = jax.tree_map(jnp.shape, variables['params'])
+    self.assertEqual(y.shape, (2, 7, 16))
+    self.assertEqual(unfreeze(variable_shapes), {
+        'key': {'kernel': (2, 16, 8)},
+        'value': {'kernel': (2, 16, 8)},
+        'query': {'kernel': (2, 16, 8)},
+        'out': {'bias': (2, 16), 'kernel': (2, 8, 16)},
+    })
+
+
+if __name__ == '__main__':
+  absltest.main()

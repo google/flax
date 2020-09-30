@@ -12,18 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, init, apply, lift, nn
-from jax import numpy as jnp, random
-
-from flax import struct
-
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence, NamedTuple, Any
+
+from absl.testing import absltest
+
+from jax import numpy as jnp, random
+import jax
 
 
-
-Initializer = Callable[..., Any]
-Array = Any
+from flax.core import Scope, Array, init, unfreeze, lift, nn
 
 
 def mlp(scope: Scope, x: Array, hidden: int, out: int):
@@ -35,8 +32,8 @@ def mlp(scope: Scope, x: Array, hidden: int, out: int):
 @dataclass
 class TiedAutoEncoder:
 
-  latents: int = struct.field(False)
-  features: int = struct.field(False)
+  latents: int
+  features: int
 
   def __call__(self, scope, x):
     z = self.encode(scope, x)
@@ -48,8 +45,9 @@ class TiedAutoEncoder:
 
   def decode(self, scope, z):
     assert z.shape[-1] == self.latents
-    return self._tied(nn.dense, transpose=True)(scope, z, self.features, bias=False)
-  
+    return self._tied(nn.dense, transpose=True)(
+        scope, z, self.features, bias=False)
+
   def _tied(self, fn, transpose=False):
     if not transpose:
       return fn
@@ -64,19 +62,33 @@ class TiedAutoEncoder:
     return lift.transform_module(
         fn, trans_in_fn=trans, trans_out_fn=trans)
 
-if __name__ == "__main__":
-  ae = TiedAutoEncoder(latents=2, features=4)
-  x = jnp.ones((1, ae.features))
 
-  x_r, params = init(ae)(random.PRNGKey(0), x)
+class TiedAutoEncoderTest(absltest.TestCase):
 
-  print(x, x_r)
-  print(params)
+  def test_tied_auto_encoder(self):
+    ae = TiedAutoEncoder(latents=2, features=4)
+    x = jnp.ones((1, ae.features))
+    x_r, variables = init(ae)(random.PRNGKey(0), x)
+
+    param_shapes = unfreeze(
+        jax.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(param_shapes, {
+        'kernel': (4, 2),
+    })
+    self.assertEqual(x.shape, x_r.shape)
+
+  def test_init_from_decoder(self):
+    ae = TiedAutoEncoder(latents=2, features=4)
+    z = jnp.ones((1, ae.latents))
+    x_r, variables = init(ae.decode)(random.PRNGKey(0), z)
+
+    param_shapes = unfreeze(
+        jax.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(param_shapes, {
+        'kernel': (4, 2),
+    })
+    self.assertEqual(x_r.shape, (1, 4))
 
 
-  print('init from decoder:')
-  z = jnp.ones((1, ae.latents))
-  x_r, params = init(ae.decode)(random.PRNGKey(0), z)
-
-  print(apply(ae)(params, x))
-  print(params)
+if __name__ == '__main__':
+  absltest.main()
