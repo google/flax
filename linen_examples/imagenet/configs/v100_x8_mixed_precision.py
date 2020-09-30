@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, init, apply, nn
+"""Hyperparameter configuration to run the example on 8 x Nvidia V100 GPUs."""
 
-from jax import random
+from configs import default as default_lib
 
-# batch norm is in nn/normalization.py
 
-if __name__ == "__main__":
-  x = random.normal(random.PRNGKey(0), (2, 3))
-  y, params = init(nn.batch_norm)(random.PRNGKey(1), x)
-  print(y)
-  print(params)
+def get_config():
+  """Get the hyperparameter configuration to train on 8 x Nvidia V100 GPUs."""
+  # Override default configuration to avoid duplication of field definition.
+  config = default_lib.get_config()
+
+  config.batch_size = 2048
+  config.cache = True
+  config.half_precision = True
+
+  return config

@@ -21,15 +21,15 @@ The data is loaded using tensorflow_datasets.
 import functools
 import time
 
-from absl import app
-from absl import flags
 from absl import logging
 
 import flax
 from flax import jax_utils
 from flax import optim
+
 import input_pipeline
 import models
+
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import common_utils
@@ -38,51 +38,22 @@ import jax
 from jax import lax
 from jax import random
 
-import jax.nn
 import jax.numpy as jnp
 
+import ml_collections
+
 import tensorflow as tf
+import tensorflow_datasets as tfds
+
 
 # enable jax omnistaging
-from jax.config import config
-config.enable_omnistaging()
+jax.config.enable_omnistaging()
 
 
-FLAGS = flags.FLAGS
-
-flags.DEFINE_float(
-    'learning_rate', default=0.1,
-    help=('The learning rate for the momentum optimizer.'))
-
-flags.DEFINE_float(
-    'momentum', default=0.9,
-    help=('The decay rate used for the momentum optimizer.'))
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.'))
-
-flags.DEFINE_bool(
-    'cache', default=False,
-    help=('If True, cache the dataset.'))
-
-flags.DEFINE_integer(
-    'num_epochs', default=90,
-    help=('Number of training epochs.'))
-
-flags.DEFINE_string(
-    'model_dir', default=None,
-    help=('Directory to store model data.'))
-
-flags.DEFINE_bool(
-    'half_precision', default=False,
-    help=('If bfloat16/float16 should be used instead of float32.'))
-
-
-def model(**kwargs):
+def model(*, half_precision, **kwargs):
   # TODO: Is this slow?
   platform = jax.local_devices()[0].platform
-  if FLAGS.half_precision:
+  if half_precision:
     if platform == 'tpu':
       model_dtype = jnp.bfloat16
     else:
@@ -91,9 +62,9 @@ def model(**kwargs):
     model_dtype = jnp.float32
   return models.ResNet50(num_classes=1000, dtype=model_dtype, **kwargs)
 
-def initialized(key, image_size):
+def initialized(key, image_size, half_precision):
   input_shape = (1, image_size, image_size, 3)
-  model_ = model()
+  model_ = model(half_precision=half_precision)
   return model_.init({'params': key}, jnp.ones(input_shape, model_.dtype))
 
 
@@ -131,12 +102,13 @@ def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
   return step_fn
 
 
-def train_step(state, batch, learning_rate_fn):
+def train_step(state, batch, half_precision, learning_rate_fn):
   """Perform a single training step."""
   def loss_fn(params):
     """loss function used for training."""
     variables = {'params': params, 'batch_stats': state.batch_stats}
-    logits, new_variables = model().apply(variables, batch['image'], mutable=['batch_stats'])
+    logits, new_variables = model(half_precision=half_precision).apply(
+        variables, batch['image'], mutable=['batch_stats'])
     loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_leaves(variables['params'])
     weight_decay = 0.0001
@@ -181,10 +153,11 @@ def train_step(state, batch, learning_rate_fn):
   return new_state, metrics
 
 
-def eval_step(state, batch):
+def eval_step(state, batch, half_precision):
   params = state.optimizer.target
   variables = {'params': params, 'batch_stats': state.batch_stats}
-  logits = model(train=False).apply(variables, batch['image'], mutable=False)
+  logits = model(half_precision=half_precision, train=False).apply(
+      variables, batch['image'], mutable=False)
   return compute_metrics(logits, batch['label'])
 
 
@@ -202,9 +175,11 @@ def prepare_tf_data(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def create_input_iter(batch_size, image_size, dtype, train, cache):
-  ds = input_pipeline.load_split(
-      batch_size, image_size=image_size, dtype=dtype, train=train, cache=cache)
+def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
+                      cache):
+  ds = input_pipeline.create_split(
+      dataset_builder, batch_size, image_size=image_size, dtype=dtype,
+      train=train, cache=cache)
   it = map(prepare_tf_data, ds)
   it = jax_utils.prefetch_to_device(it, 2)
   return it
@@ -220,16 +195,16 @@ class TrainState:
   dynamic_scale: optim.DynamicScale
 
 
-def restore_checkpoint(state):
-  return checkpoints.restore_checkpoint(FLAGS.model_dir, state)
+def restore_checkpoint(state, model_dir):
+  return checkpoints.restore_checkpoint(model_dir, state)
 
 
-def save_checkpoint(state):
+def save_checkpoint(state, model_dir):
   if jax.host_id() == 0:
     # get train state from the first replica
     state = jax.device_get(jax.tree_map(lambda x: x[0], state))
     step = int(state.step)
-    checkpoints.save_checkpoint(FLAGS.model_dir, state, step, keep=3)
+    checkpoints.save_checkpoint(model_dir, state, step, keep=3)
 
 
 def sync_batch_stats(state):
@@ -238,30 +213,29 @@ def sync_batch_stats(state):
   return state.replace(batch_stats=avg(state.batch_stats))
 
 
-def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
+  """Execute model training and evaluation loop.
 
-  # make sure tf does not allocate gpu memory
-  tf.config.experimental.set_visible_devices([], 'GPU')
+  Args:
+    config: Hyperparameter configuration for training and evaluation.
+    model_dir: Directory where the tensorboard summaries are written to.
+  """
 
   if jax.host_id() == 0:
-    summary_writer = tensorboard.SummaryWriter(FLAGS.model_dir)
+    summary_writer = tensorboard.SummaryWriter(model_dir)
 
   rng = random.PRNGKey(0)
 
   image_size = 224
 
-  batch_size = FLAGS.batch_size
-  if batch_size % jax.device_count() > 0:
+  if config.batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
-  local_batch_size = batch_size // jax.host_count()
-  device_batch_size = batch_size // jax.device_count()
+  local_batch_size = config.batch_size // jax.host_count()
 
   platform = jax.local_devices()[0].platform
 
   dynamic_scale = None
-  if FLAGS.half_precision:
+  if config.half_precision:
     if platform == 'tpu':
       input_dtype = tf.bfloat16
     else:
@@ -270,33 +244,51 @@ def main(argv):
   else:
     input_dtype = tf.float32
 
+  dataset_builder = tfds.builder('imagenet2012:5.*.*')
   train_iter = create_input_iter(
-      local_batch_size, image_size, input_dtype, train=True, cache=FLAGS.cache)
+      dataset_builder, local_batch_size, image_size, input_dtype, train=True,
+      cache=config.cache)
   eval_iter = create_input_iter(
-      local_batch_size, image_size, input_dtype, train=False, cache=FLAGS.cache)
+      dataset_builder, local_batch_size, image_size, input_dtype, train=False,
+      cache=config.cache)
 
-  num_epochs = FLAGS.num_epochs
-  steps_per_epoch = input_pipeline.TRAIN_IMAGES // batch_size
-  steps_per_eval = input_pipeline.EVAL_IMAGES // batch_size
+  steps_per_epoch = (
+      dataset_builder.info.splits['train'].num_examples // config.batch_size
+  )
+
+  if config.num_train_steps == -1:
+    num_steps = steps_per_epoch * config.num_epochs
+  else:
+    num_steps = config.num_train_steps
+
+  if config.steps_per_eval == -1:
+    num_validation_examples = dataset_builder.info.splits['train'].num_examples
+    steps_per_eval = num_validation_examples // config.batch_size
+  else:
+    steps_per_eval = config.steps_per_eval
+
   steps_per_checkpoint = steps_per_epoch * 10
-  num_steps = steps_per_epoch * num_epochs
 
-  base_learning_rate = FLAGS.learning_rate * batch_size / 256.
+  base_learning_rate = config.learning_rate * config.batch_size / 256.
 
-  variables = initialized(rng, image_size)
-  optimizer = optim.Momentum(beta=FLAGS.momentum, nesterov=True).create(variables['params'])
-  state = TrainState(step=0, optimizer=optimizer, batch_stats=variables['batch_stats'],
-                     dynamic_scale=dynamic_scale)
+  variables = initialized(rng, image_size, config.half_precision)
+  optimizer = optim.Momentum(
+      beta=config.momentum, nesterov=True).create(variables['params'])
+  state = TrainState(
+      step=0, optimizer=optimizer, batch_stats=variables['batch_stats'],
+      dynamic_scale=dynamic_scale)
 
-  state = restore_checkpoint(state)
-  step_offset = int(state.step)  # step_offset > 0 if restarting from checkpoint
+  state = restore_checkpoint(state, model_dir)
+  # step_offset > 0 if restarting from checkpoint
+  step_offset = int(state.step)
   state = jax_utils.replicate(state)
 
   learning_rate_fn = create_learning_rate_fn(
-      base_learning_rate, steps_per_epoch, num_epochs)
+      base_learning_rate, steps_per_epoch, config.num_epochs)
 
   p_train_step = jax.pmap(
-      functools.partial(train_step, learning_rate_fn=learning_rate_fn),
+      functools.partial(train_step, half_precision=config.half_precision,
+                        learning_rate_fn=learning_rate_fn),
       axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
@@ -327,7 +319,7 @@ def main(argv):
       state = sync_batch_stats(state)
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
-        metrics = p_eval_step(state, eval_batch)
+        metrics = p_eval_step(state, eval_batch, config.half_precision)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
       summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
@@ -340,10 +332,7 @@ def main(argv):
         summary_writer.flush()
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
       state = sync_batch_stats(state)
-      save_checkpoint(state)
+      save_checkpoint(state, model_dir)
 
   # Wait until computations are done before exiting
   jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
-
-if __name__ == '__main__':
-  app.run(main)

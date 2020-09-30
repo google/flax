@@ -12,64 +12,51 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Benchmark for the ImageNet example."""
+"""Benchmark for the ImageNet example using fake data for quick perf results."""
+import pathlib
 import time
 
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-import train
+import imagenet_main
+from configs import fake_data_benchmark as config_lib
 from flax.testing import Benchmark
 import jax
-import numpy as np
 
+import tensorflow_datasets as tfds
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 
-
 FLAGS = flags.FLAGS
 
 
-class ImagenetBenchmark(Benchmark):
-  """Benchmarks for the ImageNet Flax example."""
+class ImagenetBenchmarkFakeData(Benchmark):
+  """Runs ImageNet using fake data for quickly measuring performance."""
 
   @flagsaver
-  def test_8x_v100_half_precision(self):
-    """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
+  def test_fake_data(self):
     model_dir = self.get_tmp_model_dir()
-    FLAGS.batch_size = 2048
-    FLAGS.half_precision = True
-    FLAGS.num_epochs = 2
+
+    FLAGS.config = config_lib.get_config()
     FLAGS.model_dir = model_dir
+    # Go two directories up to the root of the flax directory.
+    flax_root_dir = pathlib.Path(__file__).parents[2]
+    data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
     start_time = time.time()
-    train.main([])
+    with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
+      imagenet_main.main([])
     benchmark_time = time.time() - start_time
-    summaries = self.read_summaries(model_dir)
 
-    # Summaries contain all the information necessary for the regression
-    # metrics.
-    wall_time, _, eval_accuracy = zip(*summaries['eval_accuracy'])
-    wall_time = np.array(wall_time)
-    sec_per_epoch = np.mean(wall_time[1:] - wall_time[:-1])
-    end_accuracy = eval_accuracy[-1]
-
-    # Assertions are deferred until the test finishes, so the metrics are
-    # always reported and benchmark success is determined based on *all*
-    # assertions.
-    self.assertBetween(end_accuracy, 0.06, 0.09)
-
-    # Use the reporting API to report single or multiple metrics/extras.
     self.report_wall_time(benchmark_time)
-    self.report_metrics({'sec_per_epoch': sec_per_epoch,
-                         'accuracy': end_accuracy})
     self.report_extras({
-        'description': 'Toy 8 x V100 test for ImageNet ResNet50.',
+        'description': 'ImageNet ResNet50 with fake data',
         'model_name': 'resnet50',
-        'parameters': 'hp=true,bs=2048',
+        'parameters': f'hp=true,bs={FLAGS.batch_size}',
     })
 
 

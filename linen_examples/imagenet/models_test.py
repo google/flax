@@ -12,20 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.examples.imagenet.train."""
+"""Tests for flax.linen_examples.imagenet.models."""
 
 from absl.testing import absltest
 
-from flax import nn
-import train
-
 import jax
-from jax import random
-import jax.numpy as jnp
+from jax import numpy as jnp
 
-import numpy as onp
-import tensorflow as tf
-
+import models
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -33,19 +27,22 @@ jax.config.parse_flags_with_absl()
 jax.config.enable_omnistaging()
 
 
-class TrainTest(absltest.TestCase):
+class ResNetV1Test(absltest.TestCase):
+  """Test cases for ResNet v1 model definition."""
 
-  def setUp(self):
-    super().setUp()
-    # Make sure tf does not allocate gpu memory.
-    tf.config.experimental.set_visible_devices([], 'GPU')
+  def test_resnet_v1_model(self):
+    """Tests ResNet V1 model definition and output (variables)."""
+    rng = jax.random.PRNGKey(0)
+    model_def = models.ResNet50(num_classes=10, dtype=jnp.float32)
+    variables = model_def.init(
+        rng, jnp.ones((8, 224, 224, 3), jnp.float32))
 
-  def test_create_model(self):
-    variables = train.initialized(random.PRNGKey(0), 224)
-    x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
-    y = train.model(train=False).apply(variables, x)
-    self.assertEqual(y.shape, (8, 1000))
-
+    self.assertLen(variables, 2)
+    # Resnet50 model will create parameters for the following layers:
+    #   conv + batch_norm = 2
+    #   BottleneckResNetBlock in stages: [3, 4, 6, 3] = 16
+    #   Followed by a Dense layer = 1
+    self.assertLen(variables['params'], 19)
 
 if __name__ == '__main__':
   absltest.main()

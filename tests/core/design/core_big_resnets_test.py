@@ -12,23 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# this example demonstrates how to build big networks using rematerialzation and scan to reduce memory footprint compilation size. 
+from functools import partial
+
+from absl.testing import absltest
 
 import numpy as np
 
-from flax.core import Scope, init, apply, unfreeze, lift, nn
+from flax.core import Scope, Array, init, apply, unfreeze, lift, nn
 
 import jax
 from jax import lax, random, numpy as jnp
 
-from typing import Any
-from functools import partial
-
-
-Array = Any
-
 
 default_norm = partial(nn.batch_norm)
+
 
 def residual_block(scope: Scope, x: Array, conv, norm, act, features: int):
   residual = x
@@ -37,14 +34,9 @@ def residual_block(scope: Scope, x: Array, conv, norm, act, features: int):
   x = act(x)
   x = scope.child(conv, 'conv_2')(x, features, (3, 3))
   x = scope.child(norm, 'bn_2')(x)
-
-  if x.shape != residual.shape:
-    residual = scope.child(conv, 'proj_conv')(residual, 4 * features, (1, 1))
-    residual = scope.child(norm, 'proj_bn')(residual)
-
   return act(residual + x)
 
-def big_resnet(scope: Scope, x, blocks=(10, 10), dtype=jnp.float32,
+def big_resnet(scope: Scope, x, blocks=(10, 5), dtype=jnp.float32,
                norm=default_norm, act=nn.relu):
   conv = partial(nn.conv, bias=False, dtype=dtype)
   norm = partial(norm, dtype=dtype)
@@ -62,8 +54,29 @@ def big_resnet(scope: Scope, x, blocks=(10, 10), dtype=jnp.float32,
       variable_axes={'params': 0, 'batch_stats': 0},
       split_rngs={'params': True})
 
-if __name__ == "__main__":
-  x = random.normal(random.PRNGKey(0), (1, 8, 8, 8))
-  y, params = init(big_resnet)(random.PRNGKey(1), x)
-  print(y.shape)
-  print(jax.tree_map(jnp.shape, unfreeze(params)))
+
+class BigResnetTest(absltest.TestCase):
+
+  def test_big_resnet(self):
+    x = random.normal(random.PRNGKey(0), (1, 8, 8, 8))
+    y, variables = init(big_resnet)(random.PRNGKey(1), x)
+    self.assertEqual(y.shape, (1, 8, 8, 8))
+    param_shapes = unfreeze(
+        jax.tree_map(jnp.shape, variables['params']))
+    batch_stats_shapes = unfreeze(
+        jax.tree_map(jnp.shape, variables['batch_stats']))
+    print(param_shapes)
+    self.assertEqual(param_shapes, {
+        'conv_1': {'kernel': (10, 5, 3, 3, 8, 8)},
+        'conv_2': {'kernel': (10, 5, 3, 3, 8, 8)},
+        'bn_1': {'scale': (10, 5, 8), 'bias': (10, 5, 8)},
+        'bn_2': {'scale': (10, 5, 8), 'bias': (10, 5, 8)}
+    })
+    self.assertEqual(batch_stats_shapes, {
+        'bn_1': {'var': (10, 5, 8), 'mean': (10, 5, 8)},
+        'bn_2': {'var': (10, 5, 8), 'mean': (10, 5, 8)}
+    })
+
+
+if __name__ == '__main__':
+  absltest.main()

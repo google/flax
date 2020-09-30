@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax implementation of ResNet V1.
-"""
+"""Flax implementation of ResNet V1."""
 
 
 from flax import linen as nn
