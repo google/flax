@@ -17,12 +17,8 @@
 
 import jax
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
-
-
-TRAIN_IMAGES = 1281167
-EVAL_IMAGES = 50000
 
 
 IMAGE_SIZE = 224
@@ -60,7 +56,7 @@ def distorted_bounding_box_crop(image_bytes,
   Returns:
     cropped image `Tensor`
   """
-  shape = tf.image.extract_jpeg_shape(image_bytes)
+  shape = tf.io.extract_jpeg_shape(image_bytes)
   sample_distorted_bounding_box = tf.image.sample_distorted_bounding_box(
       shape,
       bounding_boxes=bbox,
@@ -75,7 +71,7 @@ def distorted_bounding_box_crop(image_bytes,
   offset_y, offset_x, _ = tf.unstack(bbox_begin)
   target_height, target_width, _ = tf.unstack(bbox_size)
   crop_window = tf.stack([offset_y, offset_x, target_height, target_width])
-  image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
+  image = tf.io.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
 
   return image
 
@@ -102,7 +98,7 @@ def _decode_and_random_crop(image_bytes, image_size):
       aspect_ratio_range=(3. / 4, 4. / 3.),
       area_range=(0.08, 1.0),
       max_attempts=10)
-  original_shape = tf.image.extract_jpeg_shape(image_bytes)
+  original_shape = tf.io.extract_jpeg_shape(image_bytes)
   bad = _at_least_x_are_equal(original_shape, tf.shape(image), 3)
 
   image = tf.cond(
@@ -115,7 +111,7 @@ def _decode_and_random_crop(image_bytes, image_size):
 
 def _decode_and_center_crop(image_bytes, image_size):
   """Crops to center of image with padding then scales image_size."""
-  shape = tf.image.extract_jpeg_shape(image_bytes)
+  shape = tf.io.extract_jpeg_shape(image_bytes)
   image_height = shape[0]
   image_width = shape[1]
 
@@ -128,7 +124,7 @@ def _decode_and_center_crop(image_bytes, image_size):
   offset_width = ((image_width - padded_center_crop_size) + 1) // 2
   crop_window = tf.stack([offset_height, offset_width,
                           padded_center_crop_size, padded_center_crop_size])
-  image = tf.image.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
+  image = tf.io.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
   image = _resize(image, image_size)
 
   return image
@@ -177,14 +173,12 @@ def preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   return image
 
 
-def load_split(batch_size,
-               train,
-               dtype=tf.float32,
-               image_size=IMAGE_SIZE,
-               cache=False):
+def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
+                 image_size=IMAGE_SIZE, cache=False):
   """Creates a split from the ImageNet dataset using TensorFlow Datasets.
 
   Args:
+    dataset_builder: TFDS dataset builder for ImageNet.
     batch_size: the batch size returned by the data pipeline.
     train: Whether to load the train or evaluation split.
     dtype: data type of the image.
@@ -194,11 +188,13 @@ def load_split(batch_size,
     A `tf.data.Dataset`.
   """
   if train:
-    split_size = TRAIN_IMAGES // jax.host_count()
+    train_examples = dataset_builder.info.splits['train'].num_examples
+    split_size = train_examples // jax.host_count()
     start = jax.host_id() * split_size
     split = 'train[{}:{}]'.format(start, start + split_size)
   else:
-    split_size = EVAL_IMAGES // jax.host_count()
+    validate_examples = dataset_builder.info.splits['validation'].num_examples
+    split_size = validate_examples // jax.host_count()
     start = jax.host_id() * split_size
     split = 'validation[{}:{}]'.format(start, start + split_size)
 
@@ -209,7 +205,7 @@ def load_split(batch_size,
       image = preprocess_for_eval(example['image'], dtype, image_size)
     return {'image': image, 'label': example['label']}
 
-  ds = tfds.load('imagenet2012:5.*.*', split=split, decoders={
+  ds = dataset_builder.as_dataset(split=split, decoders={
       'image': tfds.decode.SkipDecoding(),
   })
   ds.options().experimental_threading.private_threadpool_size = 48
