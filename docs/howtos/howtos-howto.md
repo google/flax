@@ -69,10 +69,11 @@ elsewhere (e.g., via `git stash`) or otherwise remove your changes.
 #### Automatically apply as many diff hunks as possible
 The `--reject` flag tells `git apply` to apply whatever hunks in the supplied
 diff file it can and outputs the rejected hunks to a `*.rej` file in the same
-directory as the modified files (typically `examples/[EXAMPLE]`).
+directory as the modified files (typically `examples/[EXAMPLE]`). The indices
+of the rejected hunks are also printed to stdout.
 
 ```bash
-git apply $diff_file --reject
+git apply howtos/diffs/$name.diff --reject
 ```
 
 #### Go through the remaining hunks manually
@@ -83,8 +84,14 @@ lines mentioned in the diff. If the example code _has_ changed significantly,
 the work may also involve understanding the intent of the `howto` or contacting
 the author(s) of the `howto`.
 
-### Option 2: Use 3-way merge:
+Tip: It's usually enough to insert/remove code from the hunks to match the
+updated file and make sure that there are three unchanged lines before and
+after the change (note that first line starts immediately after the `@@`
+marker). Don't bother to update all the line numbers manually. Rather try to
+reapply the patch (with command above) and once all hunks pass you can
+regenerate the patch from the modified file, as described in the next section.
 
+### Option 2: Use 3-way merge:
 In case the vanilla apply doesn't work cleanly, you can use Git's 3-way merge,
 which lets you resolve conflicts like you would with normal git merges.
 
@@ -107,9 +114,7 @@ a `howto` is the filename without the extension (e.g., the name for the
 
 ## Modifying an existing HOWTO
 
-TODO: Write this out. The summary is: apply a diff locally, make the
-changes, pack the diff again and commit. It would be good to show 
-this with an example. Note editing this diff is not a good idea 
-since it is extremely error-prone.
-
-The guidance above for resolving a conflict may also be helpful.
+1. Fetch upstream and rebase onto upstream/master (see above).
+1. Apply the HOWTO : `git apply howtos/diffs/$name.diff`.
+2. Modify the modified files, without staging them.
+3. Re-pack the HOWTO (supplying same `$name`).
