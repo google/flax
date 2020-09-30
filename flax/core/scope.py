@@ -297,7 +297,15 @@ class Scope:
                *init_args) -> Variable[T]:
     """Create a Variable."""
     self.reserve(name)
-    if not self.has_variable(col, name):
+    collection = self.collection(col=col, mutable=True)
+
+    # If the collection is immutable and the variable does not exist
+    # in it, we cannot initialize it.
+    if isinstance(collection, FrozenDict) and (name not in collection):
+      raise ValueError(f"Kind: {col} is immutable and "
+                       f"variable: {name} not found in it.")
+
+    if name not in collection:
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
