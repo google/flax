@@ -42,19 +42,15 @@ def rcv_action_send_exp(conn, game):
   while True:
     obs = env.reset()
     done = False
-    state = get_state(obs)
+    # Observations fetched from Atari env need additional batch dimension.
+    state = obs[None, ...]
     while not done:
       conn.send(state)
       action = conn.recv()
       obs, reward, done, _ = env.step(action)
-      next_state = get_state(obs) if not done else None
+      next_state = obs[None, ...] if not done else None
       experience = (state, action, reward, done)
       conn.send(experience)
       if done:
         break
       state = next_state
-
-def get_state(observation):
-  """Convert Atari env observation into a NumPy array, add batch dimension."""
-  state = onp.array(observation)
-  return state[None, ...]

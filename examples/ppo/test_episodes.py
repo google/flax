@@ -21,7 +21,7 @@ def policy_test(n_episodes: int, model: flax.nn.base.Model, game: str):
   test_env = env_utils.create_env(game, clip_rewards=False)
   for _ in range(n_episodes):
     obs = test_env.reset()
-    state = agent.get_state(obs)
+    state = obs[None, ...]  # add batch dimension
     total_reward = 0.0
     for t in itertools.count():
       log_probs, _ = agent.policy_action(model, state)
@@ -30,7 +30,7 @@ def policy_test(n_episodes: int, model: flax.nn.base.Model, game: str):
       action = onp.random.choice(probs.shape[1], p=probabilities)
       obs, reward, done, _ = test_env.step(action)
       total_reward += reward
-      next_state = agent.get_state(obs) if not done else None
+      next_state = obs[None, ...] if not done else None
       state = next_state
       if done:
         break
