@@ -207,13 +207,12 @@ class MultiHeadDotProductAttention(Module):
       if is_initialized:
         *batch_dims, max_length, num_heads, depth_per_head = (
             cached_key.value.shape)
-        total_depth = num_heads * depth_per_head
         # shape check of cached keys against query input
-        expected_shape = tuple(batch_dims) + (1, total_depth)
-        if expected_shape != inputs_q.shape:
-          raise ValueError('Invalid shape provided, '
-                           'expected shape %s instead got %s.' %
-                           (expected_shape, inputs_q.shape))
+        expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
+        if expected_shape != query.shape:
+          raise ValueError('Autoregressive cache shape error, '
+                           'expected query shape %s instead got %s.' %
+                           (expected_shape, query.shape))
         # update key, value caches with our new 1d spatial slices
         cur_index = cache_index.value
         indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
