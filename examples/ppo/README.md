@@ -5,7 +5,7 @@ to learn playing Atari games.
 
 ## Requirements
 
-This example depends on the `gym`, `opencv-python` and `atari-py` packages 
+This example depends on the `gym`, `opencv-python` and `atari-py` packages
 in addition to `jax` and `flax`.
 
 ## Supported setups
@@ -15,7 +15,7 @@ tested on the following:
 
 | Hardware | Game | Training time | Total frames seen | TensorBoard.dev |
 | --- | --- | --- | --- | --- |
-| 1x V100 GPU  | TBA  |  TBA | TBA | TBA |
+| 1x V100 GPU  | Qbert  |  9h 27m 8s | 40M | [2020-09-30](https://tensorboard.dev/experiment/1pacpbxxRz2di3NIOFkHoA/#scalars) |
 
 ## How to run
 
@@ -29,7 +29,7 @@ will train the model on 20M Seaquest frames with constant (i.e. not linearly
 decaying) learning rate and PPO clipping parameter. Checkpoints and tensorboard
 files will be saved in `/tmp/seaquest`.
 
-Unit tests can be run using `python ppo_lib_test.py`. 
+Unit tests can be run using `python ppo_lib_test.py`.
 
 ## How to run on Google Cloud TPU
 
