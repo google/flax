@@ -65,7 +65,8 @@ class MnistBenchmark(Benchmark):
     })
     self.report_extras({
         'model_name': 'MNIST',
-        'description': 'CPU test for MNIST.'
+        'description': 'CPU test for MNIST.',
+        'implementation': 'linen',
     })
 
 
