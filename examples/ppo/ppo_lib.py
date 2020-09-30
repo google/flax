@@ -17,7 +17,12 @@ import test_episodes
 
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 @jax.jit
-def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
+def gae_advantages(
+    rewards: onp.ndarray,
+    terminal_masks: onp.ndarray,
+    values: onp.ndarray,
+    discount: float,
+    gae_param: float):
   """Use Generalized Advantage Estimation (GAE) to compute advantages.
 
   As defined by eqs. (11-12) in PPO paper arXiv: 1707.06347. Implementation uses
@@ -53,7 +58,7 @@ def gae_advantages(rewards, terminal_masks, values, discount, gae_param):
 @functools.partial(jax.jit, static_argnums=(6))
 def train_step(
     optimizer: flax.optim.base.Optimizer,
-    trajectories: Tuple[onp.array, onp.array, onp.array, onp.array, onp.array],
+    trajectories: Tuple,
     clip_param: float,
     vf_coeff: float,
     entropy_coeff: float,
@@ -243,4 +248,3 @@ def train(
           optimizer, trajectories, clip_param, flags_.vf_coeff,
           flags_.entropy_coeff, lr, flags_.batch_size)
   return optimizer
-  

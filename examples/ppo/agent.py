@@ -24,7 +24,8 @@ class RemoteSimulator:
   An object of this class is created for every agent.
   """
 
-  def __init__(self, game):
+  def __init__(self, game: str):
+    """Start the remote process and create Pipe() to communicate with it."""
     parent_conn, child_conn = multiprocessing.Pipe()
     self.proc = multiprocessing.Process(
         target=rcv_action_send_exp, args=(child_conn, game))
@@ -32,7 +33,7 @@ class RemoteSimulator:
     self.proc.start()
 
 
-def rcv_action_send_exp(conn, game):
+def rcv_action_send_exp(conn, game: str):
   """Run the remote agents.
 
   Receive action from the main learner, perform one step of simulation and
