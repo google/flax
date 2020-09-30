@@ -2,7 +2,6 @@
 
 import functools
 from typing import Tuple, List
-from absl import flags
 import jax
 import jax.random
 import jax.numpy as jnp
@@ -11,6 +10,7 @@ import flax
 from flax import nn
 from flax.metrics import tensorboard
 from flax.training import checkpoints
+import ml_collections
 
 import agent
 import test_episodes
@@ -201,22 +201,23 @@ def process_experience(
 
 def train(
     optimizer: flax.optim.base.Optimizer,
-    flags_: flags._flagvalues.FlagValues):
+    config: ml_collections.ConfigDict,
+    model_dir: str):
   """Main training loop.
 
   Args:
     optimizer: optimizer for the actor-critic model
-    flags_: object holding hyperparameters and the training information
+    config: object holding hyperparameters and the training information
+    model_dir: path to dictionary where checkpoints and logging info are stored
 
   Returns:
     optimizer: the trained optimizer
   """
-  game = flags_.game + 'NoFrameskip-v4'
+  game = config.game + 'NoFrameskip-v4'
   simulators = [agent.RemoteSimulator(game)
-                for _ in range(flags_.num_agents)]
-  model_dir = '/tmp/ppo_training/'
+                for _ in range(config.num_agents)]
   summary_writer = tensorboard.SummaryWriter(model_dir)
-  loop_steps = flags_.total_frames // (flags_.num_agents * flags_.actor_steps)
+  loop_steps = config.total_frames // (config.num_agents * config.actor_steps)
   log_frequency = 40
   checkpoint_frequency = 500
 
@@ -225,26 +226,26 @@ def train(
     # Bookkeeping and testing.
     if s % log_frequency == 0:
       score = test_episodes.policy_test(1, optimizer.target, game)
-      frames = s * flags_.num_agents * flags_.actor_steps
+      frames = s * config.num_agents * config.actor_steps
       summary_writer.scalar('game_score', score, frames)
       print(f'Step {s}:\nframes seen {frames}\nscore {score}\n\n')
     if s % checkpoint_frequency == 0:
       checkpoints.save_checkpoint(model_dir, optimizer, s)
 
     # Core training code.
-    alpha = 1. - s/loop_steps if flags_.decaying_lr_and_clip_param else 1.
-    all_experiences = get_experience(optimizer.target, simulators,
-                                     flags_.actor_steps)
+    alpha = 1. - s/loop_steps if config.decaying_lr_and_clip_param else 1.
+    all_experiences = get_experience(
+        optimizer.target, simulators, config.actor_steps)
     trajectories = process_experience(
-        all_experiences, flags_.actor_steps, flags_.num_agents, flags_.gamma,
-        flags_.lambda_)
-    lr = flags_.learning_rate * alpha
-    clip_param = flags_.clip_param * alpha
-    for e in range(flags_.num_epochs):
+        all_experiences, config.actor_steps, config.num_agents, config.gamma,
+        config.lambda_)
+    lr = config.learning_rate * alpha
+    clip_param = config.clip_param * alpha
+    for e in range(config.num_epochs):
       permutation = onp.random.permutation(
-          flags_.num_agents * flags_.actor_steps)
+          config.num_agents * config.actor_steps)
       trajectories = tuple(map(lambda x: x[permutation], trajectories))
       optimizer, loss = train_step(
-          optimizer, trajectories, clip_param, flags_.vf_coeff,
-          flags_.entropy_coeff, lr, flags_.batch_size)
+          optimizer, trajectories, clip_param, config.vf_coeff,
+          config.entropy_coeff, lr, config.batch_size)
   return optimizer
