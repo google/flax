@@ -297,12 +297,22 @@ class Scope:
                *init_args) -> Variable[T]:
     """Create a Variable."""
     self.reserve(name)
-    variables = self.collection(col, mutable=True)
-    if isinstance(variables, FrozenDict) and (name not in variables):
+    collection = self.collection(col, mutable=True)
+
+    # If the collection is frozen and variable name doesn't exist in
+    # collection, we cannot initialize the variable.
+    if isinstance(collection, FrozenDict) and (name not in collection):
       raise ValueError(f"Cannot find variable: {name} in kind: {col} and "
                        f"kind: {col} is not mutable.")
 
-    if name not in variables:
+    # If the collection is mutable but doesn't have RNGs,
+    # we cannot initialize the variable.
+    if (name not in collection) and not self.has_rng(col):
+      raise ValueError(f"Cannot initialize variable: {name} in kind: {col} "
+                       f"without RNGs.")
+
+    # If the variable doesn't exist in collection, initialize the variable.
+    if name not in collection:
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
