@@ -92,7 +92,8 @@ class TrainTest(absltest.TestCase):
   def test_decode_batch(self):
     key = random.PRNGKey(0)
     optimizer = create_test_optimizer()
-    train.decode_batch(optimizer.target, 5, key)
+    batch, masks = train.get_batch(5)
+    train.decode_batch(optimizer.target, batch, masks, key)
 
 if __name__ == '__main__':
   absltest.main()
