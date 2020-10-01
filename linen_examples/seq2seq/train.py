@@ -46,7 +46,7 @@ flags.DEFINE_integer(
     'batch_size', default=128, help=('Batch size for training.'))
 
 flags.DEFINE_integer(
-    'hidden_size', default=128, help=('Hidden size of the LSTM.'))
+    'hidden_size', default=512, help=('Hidden size of the LSTM.'))
 
 flags.DEFINE_integer(
     'num_train_steps', default=10000, help=('Number of train steps.'))
@@ -253,8 +253,8 @@ def get_initial_params(key):
   vocab_size = CTABLE.vocab_size
   encoder_shape = jnp.ones((get_max_input_len(), vocab_size), jnp.float32)
   decoder_shape = jnp.ones((get_max_output_len(), vocab_size), jnp.float32)
-  return model().init({'param': key, 'lstm': key},
-                      encoder_shape, decoder_shape)['param']
+  return model().init({'params': key, 'lstm': key},
+                      encoder_shape, decoder_shape)['params']
 
 
 def get_examples(num_examples):
@@ -307,7 +307,7 @@ def loss_fn(params, batch, masks, labels, lstm_key):
   out_shape = f'(m +- 1, {CTABLE.vocab_size})'
   @functools.partial(jax.mask, in_shapes=in_shapes, out_shape=out_shape)
   def get_logits(example):
-    logits, _ = model().apply({'param': params}, example['query'],
+    logits, _ = model().apply({'params': params}, example['query'],
                               example['answer'], rngs={'lstm': lstm_key})
     return logits
   in_masks, out_masks = masks
@@ -339,7 +339,7 @@ def decode(params, inputs, key):
   """Decode inputs."""
   init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
   init_decoder_inputs = jnp.tile(init_decoder_input, (get_max_output_len(), 1))
-  _, predictions = model(teacher_force=False).apply({'param': params}, inputs,
+  _, predictions = model(teacher_force=False).apply({'params': params}, inputs,
                                                     init_decoder_inputs,
                                                     rngs={'lstm': key})
   return predictions
@@ -349,8 +349,8 @@ def decode_batch(params, batch_size, key):
   """Decode and log results for a batch."""
   batch, _ = get_batch(batch_size)
   inputs, outputs = batch['query'], batch['answer'][:, 1:]
-  keys = jax.random.split(key, num=batch_size)
-  inferred = jax.vmap(decode, in_axes=(None, 0, 0))(params, inputs, keys)
+  # keys = jax.random.split(key, num=batch_size)
+  inferred = jax.vmap(decode, in_axes=(None, 0, None))(params, inputs, key)
   questions = decode_onehot(inputs)
   infers = decode_onehot(inferred)
   goldens = decode_onehot(outputs)
