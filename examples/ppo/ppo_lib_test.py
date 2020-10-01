@@ -64,17 +64,17 @@ class TestEnvironmentPreprocessing(absltest.TestCase):
     game = self.choose_random_game()
     env = env_utils.create_env(game, clip_rewards=True)
     obs = env.reset()
-    self.assertTrue(obs.shape == frame_shape)
+    self.assertEqual(obs.shape, frame_shape)
 
   def test_step(self):
     frame_shape = (84, 84, 4)
     game = self.choose_random_game()
-    env = env_utils.create_env(game, clip_rewards=False)
+    env = env_utils.create_env(game, clip_rewards=True)
     obs = env.reset()
     actions = [1, 2, 3, 0]
     for a in actions:
       obs, reward, done, info = env.step(a)
-      self.assertTrue(obs.shape == frame_shape)
+      self.assertEqual(obs.shape, frame_shape)
       self.assertTrue(reward <= 1. and reward >= -1.)
       self.assertTrue(isinstance(done, bool))
       self.assertTrue(isinstance(info, dict))
@@ -95,9 +95,9 @@ class TestModel(absltest.TestCase):
     test_batch_size, obs_shape = 10, (84, 84, 4)
     random_input = onp.random.random(size=(test_batch_size,) + obs_shape)
     log_probs, values = optimizer.target(random_input)
-    self.assertTrue(values.shape == (test_batch_size, 1))
+    self.assertEqual(values.shape, (test_batch_size, 1))
     sum_probs = onp.sum(onp.exp(log_probs), axis=1)
-    self.assertTrue(sum_probs.shape == (test_batch_size, ))
+    self.assertEqual(sum_probs.shape, (test_batch_size, ))
     onp_testing.assert_allclose(sum_probs, onp.ones((test_batch_size, )),
                                 atol=1e-6)
 
