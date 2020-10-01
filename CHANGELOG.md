@@ -8,7 +8,7 @@ v0.2
  - BatchNorm added axis_index_groups for control in parallel training.
  - Optimizers broken out into separate directory with base class and implementations.
  - traverse_util added flatten_dict and unflatten_dict utility methods for nested dicts.
-
+ - Use "params" instead of "param" for Module parameters.
 
 v0.1
 ----
