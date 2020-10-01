@@ -55,7 +55,7 @@ def gae_advantages(
   advantages = advantages[::-1]
   return jnp.array(advantages)
 
-@functools.partial(jax.jit, static_argnums=(6))
+@functools.partial(jax.jit, static_argnums=6)
 def train_step(
     optimizer: flax.optim.base.Optimizer,
     trajectories: Tuple,
