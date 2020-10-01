@@ -302,28 +302,35 @@ def compute_metrics(logits, labels, lengths):
   return metrics
 
 
-def loss_fn(params, batch, masks, labels, lstm_key):
-  in_shapes = [{'query': '(n, _)', 'answer': '(m, _)'}]
-  out_shape = f'(m +- 1, {CTABLE.vocab_size})'
-  @functools.partial(jax.mask, in_shapes=in_shapes, out_shape=out_shape)
-  def get_logits(example):
-    logits, _ = model().apply({'params': params}, example['query'],
-                              example['answer'], rngs={'lstm': lstm_key})
-    return logits
-  in_masks, out_masks = masks
-  logits = jax.vmap(get_logits)([batch], dict(n=in_masks, m=out_masks))
-  loss = cross_entropy_loss(logits, labels, out_masks)
-  return loss, logits
+IN_SHAPES = [{'query': '(n, _)', 'answer': '(m, _)'}]
+OUT_ELEM = f'(m +- 1, {CTABLE.vocab_size})'
+OUT_SHAPE = (OUT_ELEM, OUT_ELEM)
+def apply_model(batch, in_masks, out_masks, params, key, teacher_force=True):
+  @functools.partial(jax.mask, in_shapes=IN_SHAPES, out_shape=OUT_SHAPE)
+  def model_fn(example):
+    logits, predictions = model(teacher_force=teacher_force).apply(
+        {'params': params}, example['query'], example['answer'], 
+        rngs={'lstm': key})
+    return logits, predictions
+  return jax.vmap(model_fn)([batch], dict(n=in_masks, m=out_masks))
 
 
 @jax.jit
-def train_step(optimizer, batch, masks, lstm_key):
+def train_step(optimizer, batch, masks, key):
   """Train one step."""
   labels = batch['answer'][:, 1:]
+  in_masks, out_masks = masks
+
+  def loss_fn(params):
+    logits, _ = apply_model(batch, in_masks, out_masks, params, key)
+    loss = cross_entropy_loss(logits, labels, out_masks)
+    return loss, logits
+
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grad = grad_fn(optimizer.target, batch, masks, labels, lstm_key)
+  (_, logits), grad = grad_fn(optimizer.target)
   optimizer = optimizer.apply_gradient(grad)
-  metrics = compute_metrics(logits, labels, masks[1]-1)
+  metrics = compute_metrics(logits, labels, out_masks-1)
+
   return optimizer, metrics
 
 
@@ -334,28 +341,15 @@ def log_decode(question, inferred, golden):
   logging.info('DECODE: %s = %s %s', question, inferred, suffix)
 
 
-@jax.jit
-def decode(params, inputs, key):
-  """Decode inputs."""
-  init_decoder_input = onehot(CTABLE.encode('=')[0:1], CTABLE.vocab_size)
-  init_decoder_inputs = jnp.tile(init_decoder_input, (get_max_output_len(), 1))
-  _, predictions = model(teacher_force=False).apply({'params': params}, inputs,
-                                                    init_decoder_inputs,
-                                                    rngs={'lstm': key})
-  return predictions
-
-
-def decode_batch(params, batch_size, key):
+def decode_batch(params, batch, masks, key):
   """Decode and log results for a batch."""
-  batch, _ = get_batch(batch_size)
-  inputs, outputs = batch['query'], batch['answer'][:, 1:]
-  # keys = jax.random.split(key, num=batch_size)
-  inferred = jax.vmap(decode, in_axes=(None, 0, None))(params, inputs, key)
-  questions = decode_onehot(inputs)
-  infers = decode_onehot(inferred)
-  goldens = decode_onehot(outputs)
+  _, predictions = apply_model(batch, *masks, params, key, teacher_force=False)
+
+  questions = decode_onehot(batch['query'])
+  infers = decode_onehot(predictions)
+  goldens = decode_onehot(batch['answer'])
   for question, inferred, golden in zip(questions, infers, goldens):
-    log_decode(question, inferred, golden)
+    log_decode(question, inferred, golden[1:])  # Remove '=' prefix.
 
 
 def train_model():
@@ -368,10 +362,11 @@ def train_model():
     batch, masks = get_batch(FLAGS.batch_size)
     optimizer, metrics = train_step(optimizer, batch, masks, lstm_key)
     if step % FLAGS.decode_frequency == 0:
-      key, decode_key = jax.random.split(key)
+      key, lstm_key = jax.random.split(key)
       logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
                    metrics['loss'], metrics['accuracy'] * 100)
-      decode_batch(optimizer.target, 5, decode_key)
+      batch, masks = get_batch(5)
+      decode_batch(optimizer.target, batch, masks, lstm_key)
 
   return optimizer.target
 
