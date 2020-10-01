@@ -193,10 +193,9 @@ def process_experience(
   returns = advantages + values[:-1, :]
   # After preprocessing, concatenate data from all agents.
   trajectories = (states, actions, log_probs, returns, advantages)
+  trajectory_len = num_agents * actor_steps
   trajectories = tuple(map(
-      lambda x: onp.reshape(
-          x, (num_agents * actor_steps,) + x.shape[2:]),
-          trajectories))
+      lambda x: onp.reshape(x, (trajectory_len,) + x.shape[2:]), trajectories))
   return trajectories
 
 def train(
