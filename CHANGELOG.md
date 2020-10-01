@@ -1,6 +1,11 @@
 Changelog
 ----------
 
+vNext
+----
+ (Please add entries here with your changes for the next version)
+ - ...
+
 v0.2.2
 ----
  - Added Reinforcement Learning example (examples/ppo).
@@ -9,7 +14,8 @@ v0.2.2
  - Fix initialization RNGs to work with omnistaging for jitted inits.
  - Replaces usage of 'param' kind to 'params' collection.
  - Fix LARS optimizer for zero param initialization.
- - Added various examples in Linen API (in directory linen_examples).
+ - Added various examples in Linen API. See [README.md](https://github.com/google/flax/blob/master/flax/linen/README.md) for more information.
+ - Full JAX omnistaging compatibility.
 
 v0.2
 ----
