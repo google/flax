@@ -1,6 +1,15 @@
 Changelog
 ----------
 
+v0.2.2
+----
+ - Added Reinforcement Learning example (examples/ppo).
+ - Fix Adafactor bug that prevented factorization.
+ - Fix scan broadcast issue in functional core.
+ - Fix initialization RNGs to work with omnistaging for jitted inits.
+ - Replaces usage of 'param' kind to 'params' collection.
+ - Fix LARS optimizer for zero param initialization.
+ - Added various examples in Linen API (in directory linen_examples).
 
 v0.2
 ----
@@ -8,7 +17,6 @@ v0.2
  - BatchNorm added axis_index_groups for control in parallel training.
  - Optimizers broken out into separate directory with base class and implementations.
  - traverse_util added flatten_dict and unflatten_dict utility methods for nested dicts.
- - Use "params" instead of "param" for Module parameters.
 
 v0.1
 ----
