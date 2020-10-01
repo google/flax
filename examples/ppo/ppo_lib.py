@@ -15,8 +15,8 @@ import ml_collections
 import agent
 import test_episodes
 
-@functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 @jax.jit
+@functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 def gae_advantages(
     rewards: onp.ndarray,
     terminal_masks: onp.ndarray,
