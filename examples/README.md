@@ -33,7 +33,7 @@ Here are some of the models that people have built with Flax:
 | [Gaussian Processes regression](https://github.com/danieljtait/ladax/tree/master/examples)  | @danieljtait | Regression | N/A |  |
 | [JAX-RL](https://github.com/henry-prior/jax-rl)  | @henry-prior  | Reinforcement learning | N/A |
 | [DQN](https://github.com/joaogui1/RL-JAX/tree/master/DQN)  | @joaogui1  | Reinforcement learning | N/A |
-| [Various CIFAR SOTA Models](https://github.com/google-research/google-research/tree/master/flax_cifar) | @PForet | Image Classification | N/A |
+| [Various CIFAR SOTA Models](https://github.com/google-research/google-research/tree/master/flax_models/cifar) | @PForet | Image Classification | N/A |
 
 If you are using Flax for your research, or have re-implemented interesting models in Flax, file a pull request against this README and add a link in the table.
  
