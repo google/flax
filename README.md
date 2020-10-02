@@ -234,6 +234,8 @@ pip install -e . .[testing]
 ./tests/run_all_tests.sh
 ```
 
+Alternatively, you can also develop inside a Docker container : See [`dev/README.md`](dev/README.md).
+
 We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
 
 ## Note
