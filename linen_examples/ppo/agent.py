@@ -14,18 +14,31 @@
 
 """Agent utilities, incl. choosing the move and running in separate process."""
 
+import functools
 import multiprocessing
 import collections
+import numpy as onp
 import jax
+import flax
 
 import env_utils
 import models
 
-@jax.jit
-def policy_action(params, state):
-  """Forward pass of the network."""
-  num_outputs = params['logits']['bias'].shape[0]
-  module = models.ActorCritic(num_outputs)
+@functools.partial(jax.jit, static_argnums=1)
+def policy_action(
+  params: flax.core.frozen_dict.FrozenDict,
+  module: models.ActorCritic,
+  state: onp.ndarray):
+  """Forward pass of the network.
+
+  Args:
+    params: the parameters of the actor-critic model
+    module: the actor-critic model
+    state: the input for the forward pass
+    
+  Returns:
+    out: a tuple (log_probabilities, values)
+  """
   out = module.apply({'params': params}, state)
   return out
 
