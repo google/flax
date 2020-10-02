@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 sh $(dirname "$0")/download_dataset_metadata.sh
 
 # Instead of using set -e, we have a manual error trap that

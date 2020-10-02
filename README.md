@@ -222,6 +222,18 @@ When working with large-scale input data, it is important to create large enough
 TODO: Add an example for running on Google Cloud.
 
 ## Getting involved
+
+Currently, you need to install Python 3.6 and `svn` for developing Flax. After installing these prerequisites, you can clone the repository, set up your local environement, and run all tests with the following commands:
+
+```
+git clone https://github.com/google/flax
+cd flax
+python3.6 -m virtualenv env
+. env/bin/activate
+pip install -e . .[testing]
+./tests/run_all_tests.sh
+```
+
 We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
 
 ## Note
