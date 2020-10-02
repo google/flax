@@ -1,8 +1,6 @@
 #!/bin/bash
 
-set -e
-
-sh $(dirname "$0")/download_dataset_metadata.sh
+sh $(dirname "$0")/download_dataset_metadata.sh || exit
 
 # Instead of using set -e, we have a manual error trap that
 # exits for any error code != 5 since pytest returns error code 5
