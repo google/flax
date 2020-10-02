@@ -223,7 +223,7 @@ TODO: Add an example for running on Google Cloud.
 
 ## Getting involved
 
-Currently, you need to install Python 3.6 and `svn` for developing Flax. After installing these prerequisites, you can clone the repository, set up your local environment, and run all tests with the following commands:
+Currently, you need to install Python 3.6 for developing Flax, and `svn` for running the `run_all_tests.sh` script. After installing these prerequisites, you can clone the repository, set up your local environment, and run all tests with the following commands:
 
 ```
 git clone https://github.com/google/flax
