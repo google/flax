@@ -136,7 +136,7 @@ def encode_onehot(batch_inputs, max_len):
     tokens = np.pad(tokens, [(0, max_len-len(tokens))], mode='constant')
     return onehot(tokens, CTABLE.vocab_size), unpadded_len
 
-  return np.array([encode_str(inp) for inp in batch_inputs], dtype=object)
+  return [encode_str(inp) for inp in batch_inputs]
 
 
 def decode_onehot(batch_inputs):
@@ -303,7 +303,7 @@ def compute_metrics(logits, labels, lengths):
 
 
 IN_SHAPES = [{'query': '(n, _)', 'answer': '(m, _)'}]
-OUT_ELEM = f'(m +- 1, {CTABLE.vocab_size})'
+OUT_ELEM = f'(m + -1, {CTABLE.vocab_size})'
 OUT_SHAPE = (OUT_ELEM, OUT_ELEM)
 def apply_model(batch, in_masks, out_masks, params, key, teacher_force=True):
   @functools.partial(jax.mask, in_shapes=IN_SHAPES, out_shape=OUT_SHAPE)
