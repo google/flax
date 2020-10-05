@@ -68,6 +68,13 @@ class ScopeTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
       apply(f)({'params': {'test': np.ones((2,))}})
 
+  def test_mutate_undefined_collection(self):
+    def f(scope):
+      scope.put_variable('test', 'test', 123)
+
+    with self.assertRaisesWithLiteralMatch(ValueError, 'Collection is not mutable: "test"'):
+      init(f, mutable='params')(random.PRNGKey(0))
+
 
 if __name__ == '__main__':
   absltest.main()
