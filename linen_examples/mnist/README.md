@@ -2,7 +2,10 @@
 
 Trains a simple convolutional network on the MNIST dataset.
 
-For an illustration, check out the Jupyter notebook : [mnist.ipynb](./mnist.ipynb).
+You can run this code and even modify it directly in Google Colab, no
+installation required:
+
+https://colab.research.google.com/github/google/flax/blob/master/linen_examples/mnist/mnist.ipynb
 
 ### Requirements
 * TensorFlow dataset `mnist` will be downloaded and prepared automatically, if necessary
