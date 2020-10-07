@@ -164,6 +164,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   rng = random.PRNGKey(0)
 
   summary_writer = tensorboard.SummaryWriter(model_dir)
+  summary_writer.hparams(dict(config))
 
   rng, init_rng = random.split(rng)
   params = get_initial_params(init_rng)
