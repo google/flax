@@ -223,6 +223,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
 
   if jax.host_id() == 0:
     summary_writer = tensorboard.SummaryWriter(model_dir)
+    summary_writer.hparams(dict(config))
 
   rng = random.PRNGKey(0)
 
