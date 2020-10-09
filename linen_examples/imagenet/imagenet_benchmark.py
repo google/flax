@@ -71,7 +71,8 @@ class ImagenetBenchmark(Benchmark):
     self.report_extras({
         'description': 'Toy 8 x V100 test for ImageNet ResNet50.',
         'model_name': 'resnet50',
-        'parameters': 'hp=true,bs=2048',
+        'parameters': 'hp=true,bs=2048,epochs=2',
+        'implementation': 'linen',
     })
 
 
