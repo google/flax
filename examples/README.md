@@ -34,7 +34,7 @@ Here are some of the models that people have built with Flax:
 | [JAX-RL](https://github.com/henry-prior/jax-rl)  | @henry-prior  | Reinforcement learning | N/A |
 | [DQN](https://github.com/joaogui1/RL-JAX/tree/master/DQN)  | @joaogui1  | Reinforcement learning | N/A |
 | [Various CIFAR SOTA Models](https://github.com/google-research/google-research/tree/master/flax_models/cifar) | @PForet | Image Classification | N/A |
-| [DCGAN](https://github.com/bkkaggle/jax-dcgan) | @bkkaggle | Image Synthesis | https://arxiv.org/abs/1511.06434 |
+| [DCGAN](https://github.com/bkkaggle/jax-dcgan) Colab | @bkkaggle | Image Synthesis | https://arxiv.org/abs/1511.06434 |
 
 If you are using Flax for your research, or have re-implemented interesting models in Flax, file a pull request against this README and add a link in the table.
  
