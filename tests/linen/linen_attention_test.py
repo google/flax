@@ -102,16 +102,17 @@ class AttentionTest(parameterized.TestCase):
     decode_module = module.clone(decode=True)
 
     initial_vars = decode_module.init(key2, inputs)
+    state, params = initial_vars.pop('params')
     causal_mask = nn.attention.make_causal_mask(jnp.ones((bs,) + spatial_shape))
     y_ref = jax.jit(lambda x, y: module.apply(initial_vars, x, y))(
         inputs, causal_mask)
     # feed the inputs sequentially to simulate decoding
-    def body_fn(vars_in, x):
-      y, vars_out = decode_module.apply(vars_in, x,
-                                        mutable=['cache'])
-      return vars_out, y
+    def body_fn(state, x):
+      y, state = decode_module.apply(
+          {'params': params, **state}, x, mutable=['cache'])
+      return state, y
     # scan_in_dim supports scanning multiple dims
-    _, y = jax_utils.scan_in_dim(body_fn, initial_vars, inputs,
+    _, y = jax_utils.scan_in_dim(body_fn, state, inputs,
                                  axis=attn_dims, keepdims=True)
 
     np.testing.assert_allclose(y_ref, y, atol=1e-5)

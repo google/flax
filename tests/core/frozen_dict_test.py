@@ -34,7 +34,13 @@ class FrozenDictTest(absltest.TestCase):
     frozen = FrozenDict(xs)
     frozen2 = jax.tree_map(lambda x: x + x, frozen)
     self.assertEqual(unfreeze(frozen2), {'a': 2, 'b': {'c': 4}})
-  
+
+  def test_frozen_dict_pop(self):
+    xs = {'a': 1, 'b': {'c': 2}}
+    b, a = FrozenDict(xs).pop('a')
+    self.assertEqual(a, 1)
+    self.assertEqual(unfreeze(b), {'b': {'c': 2}})
+
   def test_frozen_dict_partially_maps(self):
     x = jax.tree_multimap(
         lambda a, b: (a, b),

@@ -339,7 +339,10 @@ def apply(fn: Callable[..., Any],
     with Scope(new_variables, rngs=rngs).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable:
-      return y, freeze(new_variables)
+      mutated_variables = {k: v
+                           for k, v in new_variables.items()
+                           if in_filter(mutable, k)}
+      return y, freeze(mutated_variables)
     else:
       return y
   return wrapper

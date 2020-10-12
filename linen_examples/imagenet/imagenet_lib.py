@@ -20,6 +20,7 @@ The data is loaded using tensorflow_datasets.
 
 import functools
 import time
+from typing import Any
 
 from absl import logging
 
@@ -50,8 +51,7 @@ import tensorflow_datasets as tfds
 jax.config.enable_omnistaging()
 
 
-def model(*, half_precision, **kwargs):
-  # TODO: Is this slow?
+def create_model(*, half_precision, **kwargs):
   platform = jax.local_devices()[0].platform
   if half_precision:
     if platform == 'tpu':
@@ -62,10 +62,13 @@ def model(*, half_precision, **kwargs):
     model_dtype = jnp.float32
   return models.ResNet50(num_classes=1000, dtype=model_dtype, **kwargs)
 
-def initialized(key, image_size, half_precision):
+
+@functools.partial(jax.jit, static_argnums=(1, 2))
+def initialized(key, image_size, model):
   input_shape = (1, image_size, image_size, 3)
-  model_ = model(half_precision=half_precision)
-  return model_.init({'params': key}, jnp.ones(input_shape, model_.dtype))
+  variables = model.init({'params': key}, jnp.ones(input_shape, model.dtype))
+  model_state, params = variables.pop('params')
+  return params, model_state
 
 
 def cross_entropy_loss(logits, labels):
@@ -102,12 +105,12 @@ def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
   return step_fn
 
 
-def train_step(state, batch, half_precision, learning_rate_fn):
+def train_step(apply_fn, state, batch, learning_rate_fn):
   """Perform a single training step."""
   def loss_fn(params):
     """loss function used for training."""
-    variables = {'params': params, 'batch_stats': state.batch_stats}
-    logits, new_variables = model(half_precision=half_precision).apply(
+    variables = {'params': params, **state.model_state}
+    logits, new_model_state = apply_fn(
         variables, batch['image'], mutable=['batch_stats'])
     loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_leaves(variables['params'])
@@ -117,7 +120,7 @@ def train_step(state, batch, half_precision, learning_rate_fn):
                      if x.ndim > 1])
     weight_penalty = weight_decay * 0.5 * weight_l2
     loss = loss + weight_penalty
-    return loss, (new_variables, logits)
+    return loss, (new_model_state, logits)
 
   step = state.step
   optimizer = state.optimizer
@@ -134,8 +137,7 @@ def train_step(state, batch, half_precision, learning_rate_fn):
     aux, grad = grad_fn(optimizer.target)
     # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
     grad = lax.pmean(grad, axis_name='batch')
-  new_variables, logits = aux[1]
-  new_batch_stats = new_variables['batch_stats']
+  new_model_state, logits = aux[1]
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr
@@ -148,16 +150,16 @@ def train_step(state, batch, half_precision, learning_rate_fn):
     metrics['scale'] = dynamic_scale.scale
 
   new_state = state.replace(
-      step=step + 1, optimizer=new_optimizer, batch_stats=new_batch_stats,
+      step=step + 1, optimizer=new_optimizer, model_state=new_model_state,
       dynamic_scale=dynamic_scale)
   return new_state, metrics
 
 
-def eval_step(state, batch, half_precision):
+def eval_step(apply_fn, state, batch):
   params = state.optimizer.target
-  variables = {'params': params, 'batch_stats': state.batch_stats}
-  logits = model(half_precision=half_precision, train=False).apply(
-      variables, batch['image'], mutable=False)
+  variables = {'params': params, **state.model_state}
+  logits = apply_fn(
+      variables, batch['image'], train=False, mutable=False)
   return compute_metrics(logits, batch['label'])
 
 
@@ -191,7 +193,7 @@ def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
 class TrainState:
   step: int
   optimizer: optim.Optimizer
-  batch_stats: dict
+  model_state: Any
   dynamic_scale: optim.DynamicScale
 
 
@@ -210,7 +212,29 @@ def save_checkpoint(state, model_dir):
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
   avg = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
-  return state.replace(batch_stats=avg(state.batch_stats))
+
+  new_model_state = state.model_state.copy({
+      'batch_stats': avg(state.model_state['batch_stats'])})
+  return state.replace(model_state=new_model_state)
+
+
+def create_train_state(rng, config: ml_collections.ConfigDict,
+                       model, image_size):
+  """Create initial training state."""
+  dynamic_scale = None
+  platform = jax.local_devices()[0].platform
+  if config.half_precision and platform == 'gpu':
+    dynamic_scale = optim.DynamicScale()
+  else:
+    dynamic_scale = None
+
+  params, model_state = initialized(rng, image_size, model)
+  optimizer = optim.Momentum(
+      beta=config.momentum, nesterov=True).create(params)
+  state = TrainState(
+      step=0, optimizer=optimizer, model_state=model_state,
+      dynamic_scale=dynamic_scale)
+  return state
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
@@ -235,13 +259,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
 
   platform = jax.local_devices()[0].platform
 
-  dynamic_scale = None
   if config.half_precision:
     if platform == 'tpu':
       input_dtype = tf.bfloat16
     else:
       input_dtype = tf.float16
-      dynamic_scale = optim.DynamicScale()
   else:
     input_dtype = tf.float32
 
@@ -272,13 +294,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
 
   base_learning_rate = config.learning_rate * config.batch_size / 256.
 
-  variables = initialized(rng, image_size, config.half_precision)
-  optimizer = optim.Momentum(
-      beta=config.momentum, nesterov=True).create(variables['params'])
-  state = TrainState(
-      step=0, optimizer=optimizer, batch_stats=variables['batch_stats'],
-      dynamic_scale=dynamic_scale)
+  model = create_model(half_precision=config.half_precision)
 
+  state = create_train_state(rng, config, model, image_size)
   state = restore_checkpoint(state, model_dir)
   # step_offset > 0 if restarting from checkpoint
   step_offset = int(state.step)
@@ -288,10 +306,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
       base_learning_rate, steps_per_epoch, config.num_epochs)
 
   p_train_step = jax.pmap(
-      functools.partial(train_step, half_precision=config.half_precision,
+      functools.partial(train_step, model.apply,
                         learning_rate_fn=learning_rate_fn),
       axis_name='batch')
-  p_eval_step = jax.pmap(eval_step, axis_name='batch')
+  p_eval_step = jax.pmap(
+      functools.partial(eval_step, model.apply), axis_name='batch')
 
   epoch_metrics = []
   t_loop_start = time.time()
@@ -320,7 +339,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
       state = sync_batch_stats(state)
       for _ in range(steps_per_eval):
         eval_batch = next(eval_iter)
-        metrics = p_eval_step(state, eval_batch, config.half_precision)
+        metrics = p_eval_step(state, eval_batch)
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
       summary = jax.tree_map(lambda x: x.mean(), eval_metrics)

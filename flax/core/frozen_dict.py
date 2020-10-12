@@ -14,10 +14,11 @@
 
 """Frozen Dictionary."""
 
-from typing import TypeVar, Mapping, Dict
+from typing import TypeVar, Mapping, Dict, Tuple
 
-import jax
 from flax import serialization
+import jax
+
 
 K = TypeVar('K')
 V = TypeVar('V')
@@ -31,7 +32,7 @@ class FrozenDict(Mapping[K, V]):
   def __init__(self, *args, **kwargs):
     self._dict = dict(*args, **kwargs)
     self._hash = None
-    
+
   def __getitem__(self, key):
     v = self._dict[key]
     if isinstance(v, dict):
@@ -51,7 +52,7 @@ class FrozenDict(Mapping[K, V]):
     return len(self._dict)
 
   def __repr__(self):
-    return 'FrozenDict(%r)' % unfreeze(self._dict)
+    return 'FrozenDict(%r)' % self._dict
 
   def __hash__(self):
     if self._hash is None:
@@ -61,12 +62,31 @@ class FrozenDict(Mapping[K, V]):
       self._hash = h
     return self._hash
 
-  def copy(self, **add_or_replace):
-    return type(self)(self, **add_or_replace)
+  def copy(self, add_or_replace: Mapping[K, V]) -> 'FrozenDict[K, V]':
+    """Create a new FrozenDict with additional or replaced entries."""
+    return type(self)(self, **unfreeze(add_or_replace))
 
   def items(self):
     for key in self._dict:
       yield (key, self[key])
+
+  def pop(self, key: K) -> Tuple['FrozenDict[K, V]', V]:
+    """Create a new FrozenDict where one entry is removed.
+
+    Example::
+
+      state, params = variables.pop('params')
+
+    Args:
+      key: the key to remove from the dict
+    Returns:
+      A pair with the new FrozenDict and the removed value.
+    """
+    value = self[key]
+    new_dict = dict(self._dict)
+    new_dict.pop(key)
+    new_self = type(self)(new_dict)
+    return new_self, value
 
   def unfreeze(self) -> Dict[K, V]:
     return unfreeze(self)
@@ -113,8 +133,8 @@ def _frozen_dict_state_dict(xs):
 
 def _restore_frozen_dict(xs, states):
   return FrozenDict(
-    {key: serialization.from_state_dict(value, states[key])
-     for key, value in xs.items()})
+      {key: serialization.from_state_dict(value, states[key])
+       for key, value in xs.items()})
 
 
 serialization.register_serialization_state(

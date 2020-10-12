@@ -44,11 +44,11 @@ class TrainTest(absltest.TestCase):
 
   def test_create_model(self):
     """Tests creating model."""
-    variables = imagenet_lib.initialized(random.PRNGKey(0), 224,
-                                         half_precision=False)
+    model = imagenet_lib.create_model(half_precision=False)
+    params, state = imagenet_lib.initialized(random.PRNGKey(0), 224, model)
+    variables = {'params': params, **state}
     x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
-    y = imagenet_lib.model(
-        half_precision=False, train=False).apply(variables, x)
+    y = model.apply(variables, x, train=False)
     self.assertEqual(y.shape, (8, 1000))
 
   def test_train_and_evaluate(self):
