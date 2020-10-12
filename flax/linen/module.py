@@ -427,8 +427,7 @@ class Module:
     self.children[name] = kind
     return v
 
-  def param(self, name: str, init_fn: Callable[..., T], *init_args,
-            kind='params') -> T:
+  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
     """Declare a parameter in this Module.
 
     Args:
@@ -436,13 +435,24 @@ class Module:
       init_fn: a function taking a PRNGKey plus any other number of
         positional arguments.
       *init_args: the arguments to evaluate init_fn on lazily.
-      kind: an optional kind for the parameter.
-
     Returns:
       An initialized array.
     """
-    p_init_fn = lambda *args: init_fn(self.make_rng(kind), *args)
-    return self.variable(kind, name, p_init_fn, *init_args).value
+    if not self._initialization_allowed:
+      raise ValueError(
+          'Parameters must be initialized in `setup()` or in a method '
+          'wrapped in `@compact`')
+    if self._name_taken(name):
+      raise ValueError(
+          f'Name {name} already in use in {self.__class__.__name__}.')
+    self._state.reservations.add(name)
+    # ephemeral state for setattr name-equality-check
+    self._state.last_varname = name
+    v = self.scope.param(name, init_fn, *init_args)
+    # TODO: find cleaner way to opt-out of core name collision check
+    self.scope.reservations.remove(name)
+    self.children[name] = 'params'
+    return v
 
   def get_variable(self, kind: str, name: str, default: T = None) -> T:
     """Get raw value of variable on this Module."""

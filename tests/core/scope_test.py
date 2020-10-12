@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, init, apply
-from flax.core import scope
+from flax.core import Scope, scope, init, apply, nn
 
 from jax import random
 
@@ -60,6 +59,14 @@ class ScopeTest(absltest.TestCase):
     # False gets nothing and True retrieves all keys once.
     self.assertEqual(scope.group_collections(xs, [False, True, True]), 
                                              ({}, xs, {}))
+
+  def test_inconsistent_param_shapes(self):
+    def f(scope):
+      scope.param('test', nn.initializers.ones, (4,))
+    
+    msg = 'Inconsistent shapes between value and initializer for parameter "test": (2,), (4,)'
+    with self.assertRaisesWithLiteralMatch(ValueError, msg):
+      apply(f)({'params': {'test': np.ones((2,))}})
 
 
 if __name__ == '__main__':
