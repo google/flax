@@ -225,71 +225,8 @@ When working with large-scale input data, it is important to create large enough
 TODO: Add an example for running on Google Cloud.
 
 ## Frequently asked questions (FAQs)
-A small selection of FAQs:
 
-**Question: Is there something similar to `tf.keras.Sequential`?**
-
-**Answer:** We don’t have a `Sequential` combinator in flax at the moment, so you have to manually write the chain of layer function calls. In Flax `Sequential(Foo1, Foo2, Foo3)` just becomes something like:
-
-```python3
-class Foo(nn.Module):
-  def apply(self, x):
-    x = Foo1(x)
-    x = Foo2(x)
-    x = Foo3(x)
-    return x
-```
-(or can be made into 3 lines by applying all the function calls directly in one line). The benefit is that if you then want to add something between Foo2 and Foo3 you don’t need to rewrite the module – you can just “hack away”.
-
-**Question: When should I use Module.shared() and when not?**
-
-**Answer:** Iterating over a submodule in a module function may lead to errors if `Module.shared()` is not used:
-
-```python3
-class Test(nn.Module):
-  def apply(self, x):
-    return nn.Dense(x, features=5, name='dense')
-  
-  @nn.module_method
-  def apply2(self, x):
-    for _ in range(5):
-      x = nn.Dense(x, features=5, name='dense')
-    return x
-```
-The api guards you against accidentally sharing parameters. So you want to do something like this:
-```python3
-@nn.module_method
-  def apply2(self, x):
-    dense = nn.Dense.shared(features=5, name='dense')
-    for _ in range(5):
-      x = dense(x)
-    return x
-```
-
-**Question: How to get a submodule’s parameters?**
-
-**Answer:**
-
-Assuming you’re doing this within a module,
-
-```python3
-nn.Embed(.., name='vocab')
-embedding_matrix = self.get_param('vocab')['embedding']
-```
-Or alternatively
-
-```python3
-class MyEmbed(nn.Embed):
-  @nn.module_method
-  def get_embedding(self):
-    return self.get_param('embedding')
-
-embed_layer = MyEmbed.shared()
-...
-embed_layer.get_embedding()
-```
-
-**⟶ For more FAQs, refer to the [Flax FAQs](https://flax.readthedocs.io/en/latest/faq.html)**
+**⟶ Please refer to the [Flax FAQs](https://flax.readthedocs.io/en/latest/faq.html)**
 
 ## Getting involved
 
