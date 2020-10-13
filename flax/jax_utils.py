@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 
 # Copyright 2020 The Flax Authors.
 #
@@ -35,16 +34,18 @@ import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 import warnings
 
-import numpy as onp
-
 import jax
 from jax import lax
-import jax.numpy as jnp
+from jax import linear_util as lu
+from jax.config import config
+from jax.interpreters import partial_eval as pe
 import jax.lib.xla_bridge as xb
+import jax.numpy as jnp
+import numpy as onp
 
 
 def _replicate(x, devices=None):
-  x = jax.numpy.array(x)
+  x = jax.numpy.asarray(x)
   if devices is None:
     # match the default device assignments used in pmap:
     # for single-host, that's the XLA default device assignment
@@ -54,9 +55,12 @@ def _replicate(x, devices=None):
           jax.device_count()) if d.host_id == jax.host_id()]
     else:
       devices = jax.local_devices()
-  aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
-  buffers = [jax.interpreters.xla.device_put(x, device=d) for d in devices]
-  return jax.pxla.ShardedDeviceArray(aval, buffers)
+  if hasattr(jax.api, "device_put_sharded"):  # jax >= 0.2.0
+    return jax.api.device_put_sharded(len(devices) * [x], devices)
+  else:
+    aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
+    buffers = [jax.interpreters.xla.device_put(x, device=d) for d in devices]
+    return jax.pxla.ShardedDeviceArray(aval, buffers)
 
 
 def replicate(tree, devices=None):
@@ -103,28 +107,22 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   """
   # output cannot be returned in lazy_create because jax.eval_shape will only
   # return the shape and dtype.
-  output_traced = None
-  master = None
-  def lazy_fn(*inputs):
-    nonlocal output_traced, master
-    leaves = jax.tree_leaves(inputs)
-    if leaves:
-      master = leaves[0]._trace.master  # pylint: disable=protected-access
-    output = fn(*(inputs + args), **kwargs)
-    output_traced = output
-    return output
-
+  # TODO(mattjj,jheek): use a public JAX API
+  f = lambda *inputs: fn(*inputs, *args, **kwargs)
   input_structs = [_parse_spec(spec) for spec in input_spec]
-  output_shapes = jax.eval_shape(lazy_fn, *input_structs)
-  def merge_results(traced, shape):
-    # Only return the shape when an output depends on any unknown inputs.
-    # pylint: disable=protected-access
-    if isinstance(traced, jax.core.Tracer) and traced._trace.master == master:
-      return shape
-    else:
-      return traced
-    # pylint: enable=protected-access
-  return jax.tree_multimap(merge_results, output_traced, output_shapes)
+  inputs_flat, in_tree = jax.tree_flatten(input_structs)
+  f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(f), in_tree)
+  in_pvals = [pe.PartialVal.unknown(jax.ShapedArray(x.shape, x.dtype))
+              for x in inputs_flat]
+
+  if config.omnistaging_enabled:
+    _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
+  else:
+    with jax.core.initial_style_staging():
+      _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals, stage_out=True)
+  out_flat = [const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
+              for pv, const in out_pvals]
+  return jax.tree_unflatten(out_tree(), out_flat)
 
 
 def _parse_spec(spec):
@@ -156,11 +154,16 @@ def prefetch_to_device(iterator, size, devices=None):
   if devices is None:
     devices = jax.local_devices()
   def _prefetch(xs):
-    aval = jax.xla.abstractify(xs)
-    assert xs.shape[0] == len(devices)
-    buffers = [jax.interpreters.xla.device_put(x, devices[i])
-               for i, x in enumerate(xs)]
-    return jax.pxla.ShardedDeviceArray(aval, buffers)
+    if hasattr(jax.api, "device_put_sharded"):  # jax>=0.2.0
+      return jax.api.device_put_sharded(list(xs), devices)
+    else:
+      aval = jax.xla.abstractify(xs)
+      assert xs.shape[0] == len(devices), (
+          "The first dimension of the iterator's ndarrays is not "
+          "equal to the number of devices.")
+      buffers = [jax.interpreters.xla.device_put(x, devices[i])
+                 for i, x in enumerate(xs)]
+      return jax.pxla.ShardedDeviceArray(aval, buffers)
   try:
     while len(queue) < size:
       queue.append(jax.tree_map(_prefetch, next(iterator)))

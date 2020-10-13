@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 
 # Copyright 2020 The Flax Authors.
 #
@@ -45,32 +44,49 @@ import inspect
 import json
 from typing import Dict
 import os
+import tempfile
 from absl import flags
 from absl import logging
 from absl.testing import absltest
 
 from tensorboard.backend.event_processing import directory_watcher
 from tensorboard.backend.event_processing import event_file_loader
+from tensorboard.backend.event_processing import io_wrapper
+from tensorboard.summary import v1 as summary_lib
 from tensorboard.util import tensor_util
 
 
 flags.DEFINE_string(
-  'benchmark_output_dir', default=None, help='Benchmark output directory.')
+    'benchmark_output_dir', default=None, help='Benchmark output directory.')
 
 
 FLAGS = flags.FLAGS
+
+_SCALAR_PLUGIN_NAME = summary_lib.scalar_pb(
+    '', 0).value[0].metadata.plugin_data.plugin_name
 
 
 def _make_events_generator(path):
   """Makes a generator yielding TensorBoard events from files in `path`."""
   return directory_watcher.DirectoryWatcher(
-      path,
-      event_file_loader.EventFileLoader).Load()
+      path, event_file_loader.EventFileLoader,
+      io_wrapper.IsSummaryEventsFile).Load()
+
+
+def _is_scalar_value(value):
+  if value.HasField('metadata') and value.metadata.HasField('plugin_data'):
+    plugin_data = value.metadata.plugin_data
+    return plugin_data.plugin_name == _SCALAR_PLUGIN_NAME
+
+  return False
 
 
 def _process_event(event):
   """Parse TensorBoard scalars into a (tag, wall_time, step, scalar) tuple."""
   for value in event.summary.value:
+    if not _is_scalar_value(value):
+      continue
+
     if value.HasField('tensor'):
       yield (value.tag, event.wall_time,
              event.step, tensor_util.make_ndarray(value.tensor).item())
@@ -118,6 +134,10 @@ class Benchmark(absltest.TestCase):
             self._collect_assert_wrapper, func=func)
         setattr(self, func_name, patched_func)
 
+    # Create target directory if defined.
+    if FLAGS.benchmark_output_dir:
+      os.makedirs(FLAGS.benchmark_output_dir, exist_ok=True)
+
   # pylint: disable=invalid-name
   def _collect_assert_wrapper(self, *args, func=None, **kwargs):
     """Wrapper around assert methods that caputres and collects failures."""
@@ -141,6 +161,19 @@ class Benchmark(absltest.TestCase):
     self._report_benchmark_results()
     for message in self._outstanding_fails:
       raise self.failureException(message)
+
+  def get_tmp_model_dir(self):
+    """Returns an unique temporary directory for storing model data.
+
+    Returns path by appending Classname.testname to `benchmark_output_dir` flag
+    if defined else uses a temporary directory. This helps to export summary
+    files to tensorboard as multiple separate runs for each test method.
+    """
+    if FLAGS.benchmark_output_dir:
+      model_dir = FLAGS.benchmark_output_dir
+    else:
+      model_dir = tempfile.mkdtemp()
+    return os.path.join(model_dir, self._reported_name or self._get_test_name())
 
   def has_outstanding_fails(self):
     """Determine whether the benchmark failed, but the error is deferred."""
@@ -249,7 +282,6 @@ class Benchmark(absltest.TestCase):
     # Maybe save results as a file for pickup by CI / monitoring frameworks.
     benchmark_output_dir = FLAGS.benchmark_output_dir
     if benchmark_output_dir:
-      os.makedirs(benchmark_output_dir, exist_ok=True)
       filename = os.path.join(benchmark_output_dir, name + '.json')
       with open(filename, 'w') as fout:
         json.dump(results, fout)

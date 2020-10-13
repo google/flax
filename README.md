@@ -1,6 +1,5 @@
 # Flax: A neural network library for JAX designed for flexibility
 
-
 [![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
 
 **NOTE**: Flax is being actively improved and has a growing community
@@ -8,13 +7,15 @@ of researchers and engineers at Google who happily use Flax for their
 daily research. Flax is in "early release stage" -- if that's your style,
 now could be a good time to start using it.
 We want to smooth out any rough edges so please report
-any issues, questions or concerns as
-[GitHub issues](https://github.com/google/flax/issues). Expect changes to the
+any issues, questions or concerns in our 
+[discussion forum](https://github.com/google/flax/discussions), or just let us know 
+what you're working on!
+
+Expect changes to the
 API, but we'll use deprecation warnings when we can, and keep
 track of them in our [Changelog](CHANGELOG.md).
 
 In case you need to reach us directly, we're at flax-dev@google.com.
-
 
 ## Quickstart
 
@@ -51,7 +52,7 @@ comes with everything you need to start your research, including:
 
 * **Common layers** ([`flax.nn`](https://flax.readthedocs.io/en/latest/flax.nn.html)): [Dense](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.Dense.html), [Conv](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.Conv.html), [{Batch|Layer|Group} Norm](https://flax.readthedocs.io/en/latest/flax.nn.html#normalization), [Attention](https://flax.readthedocs.io/en/latest/flax.nn.html#attention-primitives), [Pooling](https://flax.readthedocs.io/en/latest/flax.nn.html#pooling), [{LSTM|GRU} Cell](https://flax.readthedocs.io/en/latest/flax.nn.html#rnn-primitives), [Dropout](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.dropout.html)
 
-* **Optimizers** ([`flax.optim`](https://flax.readthedocs.io/en/latest/flax.optim.html)): [SGD](flax/optim/sgd.py), [Momentum](flax/optim/momentum.py), [Adam](flax/optim/adam.py), [LARS](flax/optim/lars.py)
+* **Optimizers** ([`flax.optim`](https://flax.readthedocs.io/en/latest/flax.optim.html)): [SGD](flax/optim/sgd.py), [Momentum](flax/optim/momentum.py), [Adam](flax/optim/adam.py), [LARS](flax/optim/lars.py), [Adagrad](flax/optim/adagrad.py), [LAMB](flax/optim/lamb.py), [RMSprop](flax/optim/rmsprop.py)
 
 * **Utilities and patterns**: 
   - [Replicated training](https://flax.readthedocs.io/en/latest/flax.jax_utils.html#multi-device-utilities)
@@ -72,8 +73,6 @@ We keep here a limited list of canonical examples maintained by the Flax team. I
 
 ### Image Classification
 ⟶ [MNIST](examples/mnist) (also see [annotated version](https://flax.readthedocs.io/en/latest/annotated_mnist.html))
-
-⟶ [CIFAR-10](examples/cifar10) (Wide ResNet w/ and w/o Shake-Shake, PyramidNet w/ShakeDrop)
 
 ⟶ [ResNet50 on ImageNet](examples/imagenet)
 
@@ -144,7 +143,7 @@ def DenseLayer(x, features):
 
 ## A full ResNet implementation
 
-(from [examples/imagenet/models.py](examples/imagenet/models.py))
+(from [examples/imagenet/resnet_v1.py](examples/imagenet/resnet_v1.py))
 
 ```py
 class ResidualBlock(nn.Module):
@@ -293,6 +292,20 @@ embed_layer.get_embedding()
 **⟶ For more FAQs, refer to the [Flax FAQs](https://flax.readthedocs.io/en/latest/faq.html)**
 
 ## Getting involved
+
+Currently, you need to install Python 3.6 for developing Flax, and `svn` for running the `run_all_tests.sh` script. After installing these prerequisites, you can clone the repository, set up your local environment, and run all tests with the following commands:
+
+```
+git clone https://github.com/google/flax
+cd flax
+python3.6 -m virtualenv env
+. env/bin/activate
+pip install -e . .[testing]
+./tests/run_all_tests.sh
+```
+
+Alternatively, you can also develop inside a Docker container : See [`dev/README.md`](dev/README.md).
+
 We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
 
 ## Note

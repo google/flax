@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 from typing import Any
 
 from .. import struct
@@ -147,7 +146,7 @@ class WeightNorm(OptimizerDef):
       scale_grad = jnp.sum(
           grad * direction, axis=red_dims, keepdims=True)
       direction_grad = state.mult * (grad - scale_grad * direction)
-      if decay is not 0:
+      if decay != 0:
         direction_grad = direction_grad + decay * direction
       direction_info = direction, state.direction_state, direction_grad
       scale_info = scale, state.scale_state, scale_grad

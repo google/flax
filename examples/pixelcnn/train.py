@@ -46,8 +46,9 @@ import jax
 from jax import random
 from jax import lax
 import jax.numpy as jnp
+import numpy as np
 
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 import input_pipeline
 import pixelcnn
@@ -92,7 +93,7 @@ flags.DEFINE_integer(
     help=('Number of features in each conv layer.'))
 
 flags.DEFINE_integer(
-    'n_logistic_mix', default=5,
+    'n_logistic_mix', default=10,
     help=('Number of components in the output distribution.'))
 
 flags.DEFINE_string(
@@ -125,7 +126,7 @@ def neg_log_likelihood_loss(nn_out, images):
       pixelcnn.conditional_params_from_outputs(nn_out, images))
   log_likelihoods = pixelcnn.logprob_from_conditional_params(
       images, means, inv_scales, logit_weights)
-  return -jnp.mean(log_likelihoods) / (jnp.log(2) * jnp.prod(images.shape[-3:]))
+  return -jnp.mean(log_likelihoods) / (jnp.log(2) * np.prod(images.shape[-3:]))
 
 
 def train_step(optimizer, ema, batch, prng_key, learning_rate_fn):
@@ -295,10 +296,12 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   pcnn_module = pixelcnn.PixelCNNPP.partial(depth=FLAGS.n_resnet,
-                                            features=FLAGS.n_feature)
+                                            features=FLAGS.n_feature,
+                                            k=FLAGS.n_logistic_mix)
 
   train(pcnn_module, FLAGS.model_dir, FLAGS.batch_size, FLAGS.init_batch_size,
         FLAGS.num_epochs, FLAGS.learning_rate, FLAGS.lr_decay, FLAGS.rng)

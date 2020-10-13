@@ -17,6 +17,7 @@
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
 from .adam import Adam
+from .adafactor import Adafactor
 from .adagrad import Adagrad
 from .base import OptimizerState, OptimizerDef, Optimizer, MultiOptimizer, ModelParamTraversal
 from .dynamic_scale import DynamicScale
@@ -29,11 +30,14 @@ from .weight_norm import WeightNorm
 
 __all__ = [
     "Adam",
+    "Adafactor",
     "Adagrad",
     "OptimizerState",
     "OptimizerDef",
     "Optimizer",
     "MultiOptimizer",
+    "ModelParamTraversal",
+    "DynamicScale",
     "LAMB",
     "LARS",
     "Momentum",

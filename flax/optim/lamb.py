@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 from .. import struct
 
 from jax import lax
@@ -65,6 +64,7 @@ class LAMB(OptimizerDef):
     return _LAMBParamState(jnp.zeros_like(param), jnp.zeros_like(param))
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
+    assert hyper_params.learning_rate is not None, 'no learning rate provided.'
     beta1 = hyper_params.beta1
     beta2 = hyper_params.beta2
     weight_decay = hyper_params.weight_decay

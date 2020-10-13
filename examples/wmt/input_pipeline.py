@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +26,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Input pipeline for the wmt de-en dataset."""
+"""Input pipeline for a WMT dataset."""
 
 import os
 import tempfile
@@ -49,7 +48,7 @@ AUTOTUNE = tf.data.experimental.AUTOTUNE
 # -----------------------------------------------------------------------------
 def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
                      eval_dataset_name=None,
-                     reverse_translation=True,
+                     reverse_translation=False,
                      shard_idx=0,
                      shard_count=1,
                      data_dir=None):
@@ -84,7 +83,7 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
                                    shuffle_files=False)
   else:
     eval_dataset, *eval_split = eval_dataset_name.split(':')
-    if len(eval_split) == 0:
+    if not eval_split:
       eval_split = 'validation'
     else:
       eval_split = eval_split[0]

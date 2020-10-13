@@ -30,6 +30,10 @@
 
 """Flax API."""
 
+from .version import __version__
+
 # Allow `import flax`; `flax.nn.[...]`, and the same for `flax.optim.[...]`
+from . import core
+from . import linen
 from . import nn
 from . import optim

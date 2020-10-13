@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Flax Optimizer api.
 
 Flax optimizers are defined using the OptimizerDef class which specifies the
@@ -80,7 +79,7 @@ from ..nn import base
 
 @struct.dataclass
 class OptimizerState:
-  step: int
+  step: jnp.ndarray
   param_states: Any
 
 
@@ -142,7 +141,7 @@ class OptimizerDef:
 
   def init_state(self, params):
     param_states = jax.tree_map(self.init_param_state, params)
-    state = OptimizerState(0, param_states)
+    state = OptimizerState(jnp.asarray(0, dtype=jnp.int32), param_states)
     return state
 
   def update_hyper_params(self, **hyper_param_overrides):
