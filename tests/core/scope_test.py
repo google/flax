@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from flax.core import Scope, init, apply
+from flax.core import scope
 
 from jax import random
 
@@ -29,10 +30,36 @@ class ScopeTest(absltest.TestCase):
       self.assertFalse(scope.has_rng('dropout'))
       rng = scope.make_rng('params')
       self.assertTrue(np.all(rng == random.fold_in(random.PRNGKey(0), 1)))
-
     init(f)(random.PRNGKey(0))
 
-  
+  def test_in_filter(self):
+    filter_true = lambda x, y : self.assertTrue(scope.in_filter(x, y))
+    filter_false = lambda x, y : self.assertFalse(scope.in_filter(x, y))
+
+    filter_true(True, 'any_string1')
+    filter_false(False, 'any_string2')
+    filter_true('exact_match', 'exact_match')
+    filter_false('no_match1', 'no_match2')
+    filter_true(['one', 'two'], 'one')
+    filter_false(['one', 'two'], 'three')
+    filter_false([], 'one')
+    filter_false([], None)
+
+  def test_group_collections(self):
+    params = { 'dense1': { 'x': [10, 20] } }
+    batch_stats = { 'dense1': { 'ema': 5 } }
+    xs = { 'params': params, 'batch_stats': batch_stats }
+
+    # Retrieve all keys only once.
+    group = scope.group_collections(xs, ['params', 'params'])
+    self.assertEqual(group, ({'params': params}, {}))
+
+    # Ignore non-existing keys.
+    self.assertEqual(scope.group_collections(xs, ['vars']), ({},))
+
+    # False gets nothing and True retrieves all keys once.
+    self.assertEqual(scope.group_collections(xs, [False, True, True]), 
+                                             ({}, xs, {}))
 
 
 if __name__ == '__main__':

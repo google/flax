@@ -12,7 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax functional core."""
+"""Flax functional core: Scopes.
+
+The goal of the Flax functional core is to provide a purely functional 
+abstraction that takes care of various types of bookkeeping such as parameter
+and RNG management. The main abstraction is Scope, which contains parameters
+and RNGs, and which can be nested.
+
+TODO: elaborate.
+
+"""
 
 import contextlib
 import enum
@@ -46,7 +55,18 @@ Variables = Dict[str, MaybeFrozenCollection]
 
 
 def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
-  """Fold a string into a jax.random.PRNGKey using its SHA-1 hash."""
+  """Folds a string into a jax.random.PRNGKey using its SHA-1 hash.
+  
+  This is faster than splitting an PRNGKey because it allows generating new PRNG
+  keys in parellel that are independent of each other.
+
+  Args:
+   rng: The rng to fold the string into.
+   data: The string to be folded in.
+
+  Returns:
+   The newly generated PRNG key.
+  """
   m = hashlib.sha1()
   m.update(data.encode('utf-8'))
   d = m.digest()
@@ -54,15 +74,25 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   return random.fold_in(rng, hash_int)
 
 
-def in_filter(filter_like: Filter, kind: str) -> bool:
-  """Check whether a kind is part of a Filter.
+def in_filter(filter_like: Filter, col: str) -> bool:
+  """Checks whether a filter can be applied to a collection.
   
-  Used for both collection and rng sequence filters.
+  Used for both collections and rng sequence filters.
+
+  Args:
+    filter_like: A filter (either a boolean, a string, or a list of strings)
+      for a collection.
+    col: A collection, which is a string identifying a dictionary of data, for
+      instance "params" or "batch_stats".
+
+  Returns:
+    True if either `filter_like` is True, equal to `col`, or a sequence 
+    containing `col`.
   """
   if isinstance(filter_like, str):
-    return kind == filter_like
+    return col == filter_like
   if isinstance(filter_like, Sequence) and not isinstance(filter, str):
-    return kind in filter_like
+    return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
   raise TypeError('Invalid Filter')
@@ -70,7 +100,20 @@ def in_filter(filter_like: Filter, kind: str) -> bool:
 
 def group_collections(xs: Variables,
                 col_filters: Sequence[CollectionFilter]) -> Sequence[Variables]:
-  """Group variables by kind filters."""
+  """Groups variables by collection filters.
+
+  Iteratively applies the filters in `col_filters` to `xs`, and adds the result
+  of applying each filter to the output sequence. Each key in `xs` is only added
+  to the output once.
+  
+  Args:
+    xs: A dictionary of variables, keyed by collections (strings).
+    col_filters: A list of collection filters.
+    
+  Returns:
+    A sequence S with `len(S) == len(col_filters)`. Each `S[i]` is the result of
+    applying filter `col_filters[i]` to the remaining keys in `xs`.
+    """
   cols = xs.keys()
   groups = []
   for col_filter in col_filters:
@@ -88,25 +131,34 @@ def group_collections(xs: Variables,
 
 class Variable(Generic[T]):
   """Scope Variable.
-  
-  Variable instances are obtained from `scope.variable`.
-  The value property gives access to the variable's content
-  and can be assigned to for mutation.
+
+  A Variable is a dictionary of data. Variables are stored in Scopes, and 
+  identified by a collection (e.g., "params") and a name (e.g., "dense"). New
+  variable instances are obtained from a scope by applying `scope.variable()`.
+  The value property gives access to the variable's content and can be assigned
+  to for mutation.
   """
 
   def __init__(self, scope: 'Scope', collection: str, name: str):
+    """Initializes a variable.
+
+    Args:
+      scope: The scope in which the variable is stored.
+      collection: The collection of the variable (e.g., "params").
+      name: The name of the variable (e.g., "dense").
+    """
     self.scope = scope
     self.collection = collection
     self.name = name
 
   @property
   def value(self) -> T:
-    """Value of this Variable."""
+    """Returns the value of this Variable."""
     return self.scope.get_variable(self.collection, self.name)
 
   @value.setter
   def value(self, value: T):
-    """Updates the Variable."""
+    """Updates the value of this Variable."""
     self.scope.put_variable(self.collection, self.name, value)
 
 
@@ -118,6 +170,14 @@ class Scope:
                rngs: Optional[Dict[str, PRNGKey]] = None,
                name: Optional[str] = None,
                parent: Optional['Scope'] = None):
+    """Initializes a Scope.
+
+    Args:
+      variables: Variables to initialize the Scope with.
+      rngs: RNGs used in this scope or one of the child scopes.
+      name: Name of this scope.
+      parent: Parent scope.
+    """
     self._variables = variables
     self.parent = parent
     self.name = name
@@ -135,7 +195,7 @@ class Scope:
 
   @property
   def invalid(self) -> bool:
-    """Check if this scope is invalidated as a result of `Scope.temporary`."""
+    """Returns true if this scope is invalidated as a result of `Scope.temporary`."""
     return self._invalid
 
   def _check_valid(self):
@@ -151,7 +211,7 @@ class Scope:
       self.invalidate()
 
   def invalidate(self):
-    """Invalidate the Scope."""
+    """Invalidates the Scope."""
     self._invalid = True
 
   def variables(self) -> FrozenCollection:
@@ -163,7 +223,14 @@ class Scope:
     tracers.check_trace_level(self.trace_level)
 
   def rewound(self, rewind_rngs: bool = False) -> 'Scope':
-    """Returns a rewound version of this Scope."""
+    """Returns a rewound version of this Scope.
+
+    Args:
+      rewind_rngs: If true, reset the RNG counter of this scope.
+    Returns:
+      A rewound version of this scope, which means reservations and children are 
+      emptied, and the rng counter is optionally rewound.
+    """
     self._check_valid()
     scope = Scope(self._variables, self.rngs, self.name, self.parent)
     if not rewind_rngs:
@@ -171,13 +238,21 @@ class Scope:
     return scope
 
   def reserve(self, name: str):
-    """Reserve a name for a child Scope or Variable."""
+    """Reserves a name for a child Scope or Variable.
+    
+    Args:
+      name: The name to reserve.
+    """
     if name in self.reservations:
       raise ValueError(f'Duplicate use of name: "{name}"')
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
-    """Generate an unreserved name with the given prefix."""
+    """Generates an unreserved name with the given prefix.
+    
+    Args:
+      prefix: Prefix to use for generating an unreserved name.
+    """
     i = 0
     while True:
       name = f'{prefix}{i}'
@@ -186,13 +261,13 @@ class Scope:
       i += 1
 
   def push(self, name: Optional[str] = None, prefix: str = '', reuse=False) -> 'Scope':
-    """Create a child Scope.
+    """Creates a child Scope.
     
     Args:
-      name: Optinal name of the child.
-      prefix: prefix used for generating name if it is `None`.
-      reuse: If True will return a pre-existing child scope
-        with the given name instead of throwing an error.
+      name: Optional name of the child.
+      prefix: prefix used for generating the name if `name` is `None`.
+      reuse: If True will return a pre-existing child scope with the given name
+        instead of throwing an error.
     Returns:
       The child scope.
     """
@@ -201,7 +276,6 @@ class Scope:
     if name is None:
       name = self.default_name(prefix)
     if reuse and name in self._children:
-      assert not reuse
       return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
@@ -217,12 +291,11 @@ class Scope:
             **partial_kwargs) -> Callable[..., Any]:
     """Partially applies a child scope to fn.
 
-    When calling the returned function multiple times variables will be
-    reused.
+    When calling the returned function multiple times variables will be reused.
     
     Args:
       fn: the function to partially apply the child Scope to.
-      name: Optinal name of the child.
+      name: Optional name of the child.
       prefix: prefix used for generating name if it is `None`.
       named_call: If true, `fn` will be wrapped with `lift.named_call`.
         The XLA profiler will use this to name tag the computation.
