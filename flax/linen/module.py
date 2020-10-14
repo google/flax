@@ -222,6 +222,7 @@ class Module:
   @classmethod
   def _customized_dataclass_transform(cls):
     """Handle final optional dataclass attributes: `parent` and `name`."""
+    # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
