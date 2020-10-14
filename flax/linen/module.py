@@ -231,6 +231,8 @@ class Module:
     # We temporarily modify base class __dataclass_fields__ to force desired
     # argument behavior and ordering from dataclass class-transform.
     parent_dataclass_fields = dict(getattr(cls, '__dataclass_fields__', {}))
+    # Remove 'parent' and 'name' from parents because we always want parent and
+    # name to show up last in the dataclass args.
     if 'parent' in parent_dataclass_fields:
       cls.__dataclass_fields__.pop('parent')
     if 'name' in parent_dataclass_fields:
