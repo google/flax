@@ -27,7 +27,7 @@ from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
 from flax.linen import compact
-from flax.core import Scope
+from flax.core import Scope, freeze
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -458,6 +458,49 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(
         nn.module.get_local_method_names(Derived1, exclude=('bloop',)), ())
     self.assertEqual(nn.module.get_local_method_names(Derived2), ())
+
+  def test_inheritance_dataclass_attribs(self):
+    class Test(nn.Module):
+      bar: int
+      def __call__(self, x):
+        return x
+    class Test2(Test):
+      baz: int
+      def __call__(self, x):
+        return x
+    class Test3(Test):
+      baz: int
+      def __call__(self, x):
+        return x
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((5,))
+    test1 = Test(bar=4)
+    test2 = Test2(bar=4, baz=2)
+    test3 = Test3(bar=4, baz=2)
+    self.assertEqual(test1.init_with_output(key, x), (x, freeze({})))
+    self.assertEqual(test2.init_with_output(key, x), (x, freeze({})))
+    self.assertEqual(test3.init_with_output(key, x), (x, freeze({})))
+    self.assertTrue(hasattr(test1, 'bar'))
+    self.assertTrue(hasattr(test1, 'name'))
+    self.assertTrue(hasattr(test1, 'parent'))
+    self.assertTrue(hasattr(test2, 'bar'))
+    self.assertTrue(hasattr(test2, 'baz'))
+    self.assertTrue(hasattr(test2, 'name'))
+    self.assertTrue(hasattr(test2, 'parent'))
+    self.assertTrue(hasattr(test3, 'bar'))
+    self.assertTrue(hasattr(test3, 'baz'))
+    self.assertTrue(hasattr(test3, 'name'))
+    self.assertTrue(hasattr(test3, 'parent'))
+    self.assertEqual(
+        list(Test.__dataclass_fields__.keys()),
+        ['bar', 'parent', 'name'])
+    self.assertEqual(
+        list(Test2.__dataclass_fields__.keys()),
+        ['bar', 'baz', 'parent', 'name'])
+    self.assertEqual(
+        list(Test3.__dataclass_fields__.keys()),
+        ['bar', 'baz', 'parent', 'name'])
 
 
 if __name__ == '__main__':

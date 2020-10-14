@@ -210,8 +210,7 @@ class Module:
     # functional transformation.  Instead of using a python metaclass, we
     # automatically transform Modules into dataclasses at subclass creation
     # time, and we set the last dataclass arguments to `parent` and `name`.
-    cls._add_parent_and_name_attrs()
-    dataclasses.dataclass(cls)
+    cls._customized_dataclass_transform()
     # We wrap user-defined methods including setup and __call__ to enforce
     # a number of different checks and to provide clear error messages.
     cls._verify_single_or_no_compact()
@@ -221,25 +220,31 @@ class Module:
     cls.scope = None
 
   @classmethod
-  def _add_parent_and_name_attrs(cls):
-    """Add final optional dataclass attributes: `parent` and `name`."""
-    annotations = cls.__dict__.get('__annotations__', {})
+  def _customized_dataclass_transform(cls):
+    """Handle final optional dataclass attributes: `parent` and `name`."""
+    annotations = dict(cls.__dict__.get('__annotations__', {}))
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
           f'properties `parent` and `name` are reserved: {annotations}')
     # Add `parent` and `name` default fields at end.
-    new_annotations = {}
-    new_annotations.update(annotations)
-    if 'parent' in getattr(cls, '__dataclass_fields__', {}):
+    # We temporarily modify base class __dataclass_fields__ to force desired
+    # argument behavior and ordering from dataclass class-transform.
+    parent_dataclass_fields = dict(getattr(cls, '__dataclass_fields__', {}))
+    if 'parent' in parent_dataclass_fields:
       cls.__dataclass_fields__.pop('parent')
-    new_annotations['parent'] = Union[Type["Module"], Type["Scope"],
-                                      Type["_Sentinel"], None]
-    cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
-    if 'name' in getattr(cls, '__dataclass_fields__', {}):
+    if 'name' in parent_dataclass_fields:
       cls.__dataclass_fields__.pop('name')
-    new_annotations['name'] = str
-    cls.__annotations__ = new_annotations
+    annotations['parent'] = Union[Type["Module"], Type["Scope"],
+                                  Type["_Sentinel"], None]
+    cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
+    annotations['name'] = str
     cls.name = None  # default value of name is None.
+    cls.__annotations__ = annotations
+    # Now apply dataclass transform (which operates in-place).
+    dataclasses.dataclass(cls)
+    # Restore original base class __dataclass_fields__.
+    if dataclasses.is_dataclass(cls.__bases__[0]):
+     cls.__bases__[0].__dataclass_fields__ = parent_dataclass_fields
 
   @classmethod
   def _verify_single_or_no_compact(cls):
