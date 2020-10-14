@@ -96,8 +96,8 @@ def is_module_tree(in_tree: Any) -> bool:
   # reject trivial pytrees, {}, [], (), etc.
   if not tree_util.tree_leaves(in_tree):
     return False
-  reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
-  return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
+  reduce_fn = lambda prev, cur: prev or isinstance(cur, Module)
+  return jax.tree_util.tree_reduce(reduce_fn, in_tree, False)
 
 
 def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
@@ -107,7 +107,7 @@ def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
   else:
     flat_tree = traverse_util.flatten_dict(
         serialization.to_state_dict(module_tree))
-    return [('_' + '_'.join(k), v) for k, v in flat_tree.items()]
+    return [('_' + '_'.join(k), v) for k, v in flat_tree.items() if isinstance(v, Module)]
 
 
 def all_names_on_object(obj: Any) -> Set[str]:
