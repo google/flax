@@ -38,11 +38,12 @@ class ImagenetBenchmark(Benchmark):
   """Benchmarks for the ImageNet Flax example."""
 
   @flagsaver
-  def test_8x_v100_half_precision(self):
-    """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
+  def _test_8x_v100_half_precision(
+      self, num_epochs, min_accuracy, max_accuracy):
+    """Utility to benchmark ImageNet on 8xV100 GPUs. Use in your test func."""
     model_dir = self.get_tmp_model_dir()
     config = config_lib.get_config()
-    config.num_epochs = 2
+    config.num_epochs = num_epochs
 
     FLAGS.config = config
     FLAGS.model_dir = model_dir
@@ -62,16 +63,32 @@ class ImagenetBenchmark(Benchmark):
     # Assertions are deferred until the test finishes, so the metrics are
     # always reported and benchmark success is determined based on *all*
     # assertions.
-    self.assertBetween(end_accuracy, 0.06, 0.09)
+    self.assertBetween(end_accuracy, min_accuracy, max_accuracy)
 
     # Use the reporting API to report single or multiple metrics/extras.
     self.report_wall_time(benchmark_time)
     self.report_metrics({'sec_per_epoch': sec_per_epoch,
                          'accuracy': end_accuracy})
+
+  def test_8x_v100_half_precision_short(self):
+    """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
+    self._test_8x_v100_half_precision(
+        num_epochs=2, min_accuracy=0.06, max_accuracy=0.09)
     self.report_extras({
-        'description': 'Toy 8 x V100 test for ImageNet ResNet50.',
+        'description': 'Short (2 epochs) 8 x V100 test for ImageNet ResNet50.',
         'model_name': 'resnet50',
-        'parameters': 'hp=true,bs=2048,epochs=2',
+        'parameters': 'hp=true,bs=2048,num_epochs=2',
+        'implementation': 'linen',
+    })
+
+  def test_8x_v100_half_precision_full(self):
+    """Run ImageNet on 8x V100 GPUs in half precision for full 90 epochs."""
+    self._test_8x_v100_half_precision(
+        num_epochs=90, min_accuracy=0.76, max_accuracy=0.77)
+    self.report_extras({
+        'description': 'Full (90 epochs) 8 x V100 test for ImageNet ResNet50.',
+        'model_name': 'resnet50',
+        'parameters': 'hp=true,bs=2048,num_epochs=90',
         'implementation': 'linen',
     })
 
