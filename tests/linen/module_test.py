@@ -502,34 +502,23 @@ class ModuleTest(absltest.TestCase):
         list(Test3.__dataclass_fields__.keys()),
         ['bar', 'baz', 'parent', 'name'])
 
-  def test_is_module_tree(self):
-    for x in [(), [], {}, None]:
-      self.assertFalse(nn.module.is_module_tree(x))
-    self.assertFalse(
-        nn.module.is_module_tree(nn.relu))
-    self.assertTrue(
-        nn.module.is_module_tree(nn.Dense(3)))
-    self.assertTrue(
-        nn.module.is_module_tree([nn.Dense(3), nn.Dense(3)]))
-    self.assertTrue(
-        nn.module.is_module_tree([nn.Dense(3), nn.relu, nn.Dense(3)]))
-    self.assertFalse(
-        nn.module.is_module_tree([nn.swish, nn.relu, nn.gelu]))
-
-  def test_get_suffix_module_pairs(self):
-    for x in [(), [], {}]:
+  def test_get_suffix_value_pairs(self):
+    for x in [(), [], {}, None, 0, set()]:
       self.assertEqual(
-          nn.module.get_suffix_module_pairs(x), [])
+          nn.module.get_suffix_value_pairs(x), [('', x)])
     self.assertEqual(
-        nn.module.get_suffix_module_pairs({'a': 1, 'b': 2}), [])
+        nn.module.get_suffix_value_pairs(
+            {'a': 1, 'b': 2}), [('_a', 1), ('_b', 2)])
     self.assertEqual(
-        nn.module.get_suffix_module_pairs([1, 2, 3]), [])
+        nn.module.get_suffix_value_pairs(
+            [1, 2, 3]), [('_0', 1), ('_1', 2), ('_2', 3)])
     x1 = [nn.Dense(10), nn.relu, nn.Dense(10)]
-    y1 = nn.module.get_suffix_module_pairs(x1)
-    self.assertEqual(y1, [('_0', x1[0]), ('_2', x1[2])])
+    y1 = nn.module.get_suffix_value_pairs(x1)
+    self.assertEqual(y1, [('_0', x1[0]), ('_1', x1[1]), ('_2', x1[2])])
     x2 = {'a': 1, 'b': {'c': nn.Dense(10), 'd': nn.relu}}
-    y2 = nn.module.get_suffix_module_pairs(x2)
-    self.assertEqual(y2, [('_b_c', x2['b']['c']),])
+    y2 = nn.module.get_suffix_value_pairs(x2)
+    self.assertEqual(y2,
+        [('_a', 1), ('_b_c', x2['b']['c']), ('_b_d', x2['b']['d'])])
 
   def test_mixed_list_assignment_in_setup(self):
     class Test(nn.Module):

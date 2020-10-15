@@ -84,30 +84,15 @@ def disable_named_call():
 
 # Utilities for autonaming pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
-def is_module_tree(in_tree: Any) -> bool:
-  """Determine if in_tree is a pytree of subclasses of Module.
-
-  Args:
-    in_tree: python object, typically a python tree.
-
-  Returns:
-    False in_tree is empty or if any leaf is not a Module, True otherwise.
-  """
-  # reject trivial pytrees, {}, [], (), etc.
-  if not tree_util.tree_leaves(in_tree):
-    return False
-  reduce_fn = lambda prev, cur: prev or isinstance(cur, Module)
-  return jax.tree_util.tree_reduce(reduce_fn, in_tree, False)
-
-
-def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
+def get_suffix_value_pairs(
+    tree_or_leaf: Any) -> List[Tuple[str, Type["Module"]]]:
   """Helper for naming pytrees of submodules."""
-  if isinstance(module_tree, Module):
-    return [('', module_tree)]
+  dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
+  if dict_or_leaf == {} or not isinstance(dict_or_leaf, dict):
+    return [('', tree_or_leaf)]
   else:
-    flat_tree = traverse_util.flatten_dict(
-        serialization.to_state_dict(module_tree))
-    return [('_' + '_'.join(k), v) for k, v in flat_tree.items() if isinstance(v, Module)]
+    flat_dict = traverse_util.flatten_dict(dict_or_leaf)
+    return [('_' + '_'.join(k), v) for k, v in flat_dict.items()]
 
 
 def all_names_on_object(obj: Any) -> Set[str]:
@@ -247,7 +232,7 @@ class Module:
     dataclasses.dataclass(cls)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):
-     cls.__bases__[0].__dataclass_fields__ = parent_dataclass_fields
+      cls.__bases__[0].__dataclass_fields__ = parent_dataclass_fields
 
   @classmethod
   def _verify_single_or_no_compact(cls):
@@ -282,38 +267,39 @@ class Module:
     we also support lists and other general pytrees, e.g.:
       self.submodules = [MyModule0(..), MyModule1(..), ...]
     """
-    # val is a Module or pytree whose leaves are all Modules.
-    if is_module_tree(val):
-      # We don't mess with the parent module.
-      if name == 'parent':
-        pass
-      # Modules have been passed in as dataclass args.
-      elif name in self.__dataclass_fields__.keys():
-        pass
-      # Submodules are being defined and attached in setup()
-      else:
-        if not self._state.in_setup:
-          raise ValueError("You can only assign submodules to self in setup().")
-        for suffix, submodule in get_suffix_module_pairs(val):
-          if submodule.parent is _unspecified_parent:
-            submodule.parent = self
-          elif submodule.parent != self:
+    # We don't mess with the parent module.
+    if name == 'parent':
+      pass
+    # Modules have been passed in as dataclass args.
+    elif name in self.__dataclass_fields__.keys():
+      pass
+    # Submodules are being defined and attached in setup()
+    else:
+      for suffix, subvalue in get_suffix_value_pairs(val):
+        if isinstance(subvalue, Module):
+          if not self._state.in_setup:
+            raise ValueError(
+                "You can only assign submodules to self in setup().")
+          if subvalue.parent is _unspecified_parent:
+            subvalue.parent = self
+          elif subvalue.parent != self:
             raise ValueError("Can't attach to remote parent in setup, pass in "
                              "bound Modules from outside as an argument.")
-          if submodule.name is not None:
+          if subvalue.name is not None:
             raise ValueError(
                 "In setup, assign names of Modules via self.<name> and not "
                 "using keyword argument name=\"<name>\"")
-          submodule.name = f'{name}{suffix}'
-          submodule.__post_init__()
-    # val is a parameter array or a Variable reference class.
-    elif isinstance(val, (np.ndarray, jax.interpreters.xla.DeviceArray,
-                          Variable)) and self._state.in_setup:
-      # namecheck to ensure named variable matches self attribute name.
-      if self._state.last_varname and self._state.last_varname != name:
-        raise ValueError(f'Variable name {self._state.last_varname} must equal'
-                         f' attribute name {name}.')
-      self._state.last_varname = None
+          subvalue.name = f'{name}{suffix}'
+          subvalue.__post_init__()
+        # val is a parameter array or a Variable reference class.
+        elif isinstance(subvalue, (np.ndarray, jax.interpreters.xla.DeviceArray,
+                                   Variable)) and self._state.in_setup:
+          var_name = f'{name}{suffix}'
+          # namecheck to ensure named variable matches self attribute name.
+          if self._state.last_varname and self._state.last_varname != var_name:
+            raise ValueError(f'Variable name {self._state.last_varname} must '
+                             f'equal attribute name {var_name}.')
+          self._state.last_varname = None
     # Finally, always run default __setattr__ to attach to self.__dict__.
     object.__setattr__(self, name, val)
 
