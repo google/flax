@@ -129,7 +129,7 @@ def neg_log_likelihood_loss(nn_out, images):
   return -jnp.mean(log_likelihoods) / (jnp.log(2) * np.prod(images.shape[-3:]))
 
 
-def train_step(optimizer, ema, batch, learning_rate_fn, dropout_rng):
+def train_step(learning_rate_fn, optimizer, ema, batch, dropout_rng):
   """Perform a single training step."""
 
   def loss_fn(params):
@@ -220,8 +220,7 @@ def train():
       'params': init_rng,
       'dropout': dropout_rng
   }, init_batch)['params']
-  optimizer_def = optim.Adam(
-      learning_rate=FLAGS.learning_rate, beta1=0.95, beta2=0.9995)
+  optimizer_def = optim.Adam(beta1=0.95, beta2=0.9995)
   optimizer = optimizer_def.create(initial_variables)
 
   optimizer, ema = restore_checkpoint(optimizer, initial_variables)
@@ -235,7 +234,7 @@ def train():
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
-      partial(train_step, learning_rate_fn=learning_rate_fn), axis_name='batch')
+      partial(train_step, learning_rate_fn), axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   # Gather metrics
