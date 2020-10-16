@@ -224,7 +224,7 @@ class LinearTest(parameterized.TestCase):
     embed_module = nn.Embed(
         num_embeddings=4,
         features=3,
-        embedding_init=lambda rng, shape: dummy_embedding,
+        embedding_init=lambda rng, shape, dtype: dummy_embedding,
     )
     y, initial_params = embed_module.init_with_output(rng, x)
     np.testing.assert_allclose(y, dummy_embedding[None])

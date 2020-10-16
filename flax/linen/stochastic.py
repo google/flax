@@ -29,7 +29,7 @@ class Dropout(Module):
     """
   rate: float
   @compact
-  def __call__(self, inputs, deterministic=False, rng=None):
+  def __call__(self, inputs, deterministic=False, rng=None, broadcast_dims=()):
     """Applies a random dropout mask to the input.
 
     Args:
@@ -51,5 +51,9 @@ class Dropout(Module):
     else:
       if rng is None:
         rng = self.make_rng('dropout')
-      mask = random.bernoulli(rng, p=keep_prob, shape=inputs.shape)
+      broadcast_shape = list(inputs.shape)
+      for dim in broadcast_dims:
+        broadcast_shape[dim] = 1
+      mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
+      mask = jnp.broadcast_to(mask, inputs.shape)
       return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))

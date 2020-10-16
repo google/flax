@@ -130,9 +130,9 @@ class Adafactor(OptimizerDef):
       state['v_row'] = jnp.zeros(vr_shape, dtype=jnp.float32)
       state['v_col'] = jnp.zeros(vc_shape, dtype=jnp.float32)
     else:
-      state['v'] = jnp.zeros_like(param)
+      state['v'] = jnp.zeros(param.shape, dtype=jnp.float32)
     if self.hyper_params.beta1 is not None:
-      state['m'] = jnp.zeros_like(param)
+      state['m'] = jnp.zeros(param.shape, dtype=jnp.float32)
     return _AdafactorParamState(**state)
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
@@ -144,6 +144,8 @@ class Adafactor(OptimizerDef):
     weight_decay_rate = hyper_params.weight_decay_rate
     epsilon1 = hyper_params.epsilon1
     epsilon2 = hyper_params.epsilon2
+
+    grad = grad.astype(jnp.float32)
 
     updates = {k: jnp.zeros((1,)) for k in ['v_row', 'v_col', 'v', 'm']}
     decay_rate = self._decay_rate_pow(step, exponent=decay_rate)
