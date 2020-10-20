@@ -37,6 +37,7 @@ from .frozen_dict import unfreeze
 import jax
 from jax import lax
 from jax import random
+from jax import numpy as jnp
 
 T = TypeVar('T')
 
@@ -376,10 +377,27 @@ class Scope:
     return Variable(self, col, name)
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    """Create a paramater."""
-    s_init_fn = lambda *args: init_fn(self.make_rng('params'), *init_args)
-    v = self.variable('params', name, s_init_fn, *init_args)
-    return v.value
+    """Create a parameter."""
+    self.reserve(name)
+    if self.has_variable('params', name):
+      abs_rng = jax.ShapeDtypeStruct((2,), jnp.uint32)
+      value = self.get_variable('params', name)
+      # validate shape of init_fn output is the same as the shape of the existing
+      # parameter.
+      abs_value = jax.eval_shape(lambda rng: init_fn(rng, *init_args), abs_rng)
+      abs_value_flat = jax.tree_leaves(abs_value)
+      value_flat = jax.tree_leaves(value)
+      for val, abs_val in zip(value_flat, abs_value_flat):
+        # NOTE: we could check dtype consistency here as well but it's usefuleness is less obvious.
+        # we might intentionally change the dtype for inference to a half float type for example.
+        if jnp.shape(val) != jnp.shape(abs_val):
+          raise ValueError('Inconsistent shapes between value and initializer '
+                           f'for parameter "{name}": {jnp.shape(val)}, {jnp.shape(abs_val)}')
+      return value
+    else:
+      value = init_fn(self.make_rng('params'), *init_args)
+      self.put_variable('params', name, value)
+      return value
 
   def _populate_collections(self):
     collections = self.root._variables.keys()
