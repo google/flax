@@ -329,7 +329,8 @@
       },
       "source": [
         "import jax\n",
-        "import flax"
+        "import flax\n"
+        "from flax import nn"
       ],
       "execution_count": 0,
       "outputs": []

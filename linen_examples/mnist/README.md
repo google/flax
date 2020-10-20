@@ -2,6 +2,11 @@
 
 Trains a simple convolutional network on the MNIST dataset.
 
+You can run this code and even modify it directly in Google Colab, no
+installation required:
+
+https://colab.research.google.com/github/google/flax/blob/master/linen_examples/mnist/mnist.ipynb
+
 ### Requirements
 * TensorFlow dataset `mnist` will be downloaded and prepared automatically, if necessary
 
