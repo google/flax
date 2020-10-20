@@ -57,7 +57,7 @@ class ModuleTest(absltest.TestCase):
   def test_init_module(self):
     rngkey = jax.random.PRNGKey(0)
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = DummyModule(parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(parent=scope.rewound())(x)
@@ -68,7 +68,7 @@ class ModuleTest(absltest.TestCase):
   def test_arg_module(self):
     rngkey = jax.random.PRNGKey(0)
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = Dense(3, parent=scope)(x)
     params = scope.variables()['params']
     y2 = Dense(3, parent=scope.rewound())(x)
@@ -86,7 +86,7 @@ class ModuleTest(absltest.TestCase):
       def _mydense(self, x):
         return Dense(3)(x)
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
@@ -114,7 +114,7 @@ class ModuleTest(absltest.TestCase):
         z = mlp(x)
         return y + z
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = Top(parent=scope)(x)
     params = scope.variables()['params']
     y2 = Top(parent=scope.rewound())(x)
@@ -137,7 +137,7 @@ class ModuleTest(absltest.TestCase):
         #w = self.lyrs2[0](x)
         return z
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
@@ -175,7 +175,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self):
         return self.outer()
 
-    scope = Scope({'params': {}}, rngs={'params': rngkey})
+    scope = Scope({'params': {}}, rngs={'params': rngkey}, mutable=['params'])
     # Make sure this doesn't raise "Can't attach to remote parent"
     wrapper = Wrapper(parent=scope)
     wrapper()
@@ -193,7 +193,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = DummyModule(x.shape, parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(x.shape, parent=scope.rewound())(x)
@@ -208,7 +208,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       y = DummyModule(parent=scope)(x)
 
@@ -223,7 +223,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       y = Dummy(parent=scope).foo(x)
 
@@ -238,7 +238,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -252,7 +252,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -266,7 +266,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, self.xshape)
         return x + bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -279,7 +279,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'notbias.*must equal.*bias'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -293,7 +293,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'name bias exists already'):
       y = Dummy(x.shape, parent=scope)(x)
     class Dummy(nn.Module):
@@ -305,7 +305,7 @@ class ModuleTest(absltest.TestCase):
         bias = DummyModule(name='bias')
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'name bias exists already'):
       y = Dummy(x.shape, parent=scope)(x)
     class Dummy(nn.Module):
@@ -317,7 +317,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, self.xshape)
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -330,7 +330,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'In setup, assign names of Modules '
         'via self.<name> and not using keyword argument name="<name>"'):
       y = Dummy(x.shape, parent=scope)(x)
@@ -344,7 +344,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'Name bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -357,7 +357,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return self.bias(x)
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias exists already'):
       y = Dummy(x.shape, parent=scope)(x)
 

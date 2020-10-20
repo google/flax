@@ -27,7 +27,7 @@ import contextlib
 import enum
 import functools
 import hashlib
-from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic
+from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic
 
 from . import tracers
 from .frozen_dict import freeze
@@ -49,8 +49,9 @@ Filter = Union[bool, str, Sequence[str]]
 CollectionFilter = Filter
 PRNGSequenceFilter = Filter
 
+MutableCollection = Dict[str, Any]
 FrozenCollection = FrozenDict[str, Any]
-MaybeFrozenCollection = Union[Dict[str, Any], FrozenCollection]
+MaybeFrozenCollection = Union[MutableCollection, FrozenCollection]
 
 Variables = Dict[str, MaybeFrozenCollection]
 
@@ -87,16 +88,48 @@ def in_filter(filter_like: Filter, col: str) -> bool:
       instance "params" or "batch_stats".
 
   Returns:
-    True if either `filter_like` is True, equal to `col`, or a sequence 
+    True if either `filter_like` is True, equal to `col`, or a sequence
     containing `col`.
   """
   if isinstance(filter_like, str):
     return col == filter_like
-  if isinstance(filter_like, Sequence) and not isinstance(filter, str):
+  if isinstance(filter_like, Container):
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
+  raise TypeError(f'Invalid Filter: "{filter_like}"')
+
+
+def filter_to_set(x: Filter) -> Set[str]:
+  """Convert a Filter into a set of collections, fails on the infinite set."""
+  assert x is not True, 'Infinite set'
+  if x is False:
+    return set()
+  if isinstance(x, str):
+    return set([x])
+  if isinstance(x, Iterable):
+    return set(x)
   raise TypeError('Invalid Filter')
+
+
+def union_filters(a, b):
+  """Combine two filters like a logical or."""
+  if a is True or b is True:
+    return True
+  a = filter_to_set(a)
+  b = filter_to_set(b)
+  return a.union(b)
+
+
+def intersect_filters(a, b):
+  """Combine two filters like a logical and."""
+  if a is True:
+    return b
+  if b is True:
+    return a
+  a = filter_to_set(a)
+  b = filter_to_set(b)
+  return a.intersection(b)
 
 
 def group_collections(xs: Variables,
@@ -170,6 +203,7 @@ class Scope:
                variables: Variables,
                rngs: Optional[Dict[str, PRNGKey]] = None,
                name: Optional[str] = None,
+               mutable: CollectionFilter = False,
                parent: Optional['Scope'] = None):
     """Initializes a Scope.
 
@@ -183,6 +217,7 @@ class Scope:
     self.parent = parent
     self.name = name
     self.rngs = rngs if rngs else {}
+    self.mutable = mutable
 
     self.root = parent.root if parent else self
     self.trace_level = tracers.trace_level(tracers.current_trace())
@@ -233,7 +268,7 @@ class Scope:
       emptied, and the rng counter is optionally rewound.
     """
     self._check_valid()
-    scope = Scope(self._variables, self.rngs, self.name, self.parent)
+    scope = Scope(self._variables, self.rngs, self.name, self.mutable, self.parent)
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
     return scope
@@ -319,18 +354,32 @@ class Scope:
       return fn(scope.rewound(), *args, **kwargs)
     return wrapper
 
-  def collection(self, col: str, mutable: bool = False) -> MaybeFrozenCollection:
+  def is_mutable_collection(self, col: str) -> bool:
+    """Check whether a collection is mutable."""
+    return in_filter(self.root.mutable, col)
+
+
+  def _mutable_collection(self, col: str) -> MutableCollection:
+    if not self.is_mutable_collection(col):
+      raise ValueError(f'Collection is not mutable: "{col}"')
+    if col not in self._variables:
+      if self.parent:
+        parent_col = self.parent._mutable_collection(col)
+        if self.name not in parent_col:
+          parent_col[self.name] = {}
+        self._variables[col] = parent_col[self.name]
+      else:
+        self._variables[col] = {}
+    return self._variables[col]
+
+  def _collection(self, col: str) -> MaybeFrozenCollection:
     """Returns a collection of variables."""
     if col not in self._variables:
       if self.parent:
-        parent_col = self.parent.collection(col, mutable)
+        parent_col = self.parent._collection(col)
         if self.name not in parent_col:
-          if isinstance(parent_col, FrozenDict) or not mutable:
-            return FrozenDict()
-          parent_col[self.name] = {}
+          return FrozenDict()
         self._variables[col] = parent_col[self.name]
-      elif mutable:
-        self._variables[col] = {}
       else:
         return FrozenDict()
     return self._variables[col]
@@ -349,7 +398,7 @@ class Scope:
 
   def get_variable(self, col: str, name: str, default: T = None) -> T:
     """Retrieve the value of a Variable."""
-    variables = self.collection(col)
+    variables = self._collection(col)
     if name in variables:
       return variables[name]
     else:
@@ -357,14 +406,14 @@ class Scope:
 
   def has_variable(self, col: str, name: str) -> bool:
     """Check whether a variable exists."""
-    variables = self.collection(col)
+    variables = self._collection(col)
     return name in variables
 
   def put_variable(self, col: str, name: str, value: Any):
     """Update the value of a Variable."""
     self._check_valid()
     self._validate_trace_level()
-    variables = self.collection(col, mutable=True)
+    variables = self._mutable_collection(col)
     variables[name] = value
 
   def variable(self, col: str, name: str, init_fn: Callable[..., T],
@@ -402,7 +451,7 @@ class Scope:
   def _populate_collections(self):
     collections = self.root._variables.keys()
     for col in collections:
-      self.collection(col)
+      self._collection(col)
 
 def _unfreeze_variables(variables, mutable):
   new_variables = {}
@@ -427,7 +476,7 @@ def apply(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(variables, *args, rngs=None, **kwargs):
     new_variables = _unfreeze_variables(variables, mutable)
-    with Scope(new_variables, rngs=rngs).temporary() as root:
+    with Scope(new_variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable:
       mutated_variables = {k: v

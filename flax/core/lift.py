@@ -28,7 +28,7 @@ from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
-from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, group_collections
+from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, union_filters, intersect_filters, group_collections
 from .named_call import named_call_p
 
 from . import axes_scan
@@ -110,7 +110,10 @@ def pack(fn: Callable[..., Any],
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
       inner_scopes = []
-      for variable_groups, rng_groups in zip(variable_groups_xs, rng_groups_xs):
+      mutable = False
+      for out_filter in out_variable_filters:
+        mutable = union_filters(mutable, out_filter)
+      for variable_groups, rng_groups, scope in zip(variable_groups_xs, rng_groups_xs, scopes):
         variables = {}
         rngs = {}
         for variable_group in variable_groups:
@@ -119,7 +122,10 @@ def pack(fn: Callable[..., Any],
           rngs.update(rng_group)
         # make sure variable dicts are cloned and can't be manipulated by ref sharing.
         variables = jax.tree_map(lambda x: x, variables)
-        inner_scope = Scope(variables, name=scope.name, rngs=rngs, parent=None)
+        scope_mutable = intersect_filters(scope.root.mutable, mutable)
+        inner_scope = Scope(
+            variables, name=scope.name, rngs=rngs,
+            mutable=scope_mutable, parent=None)
         inner_scopes.append(inner_scope)
       inner_scopes = _dup_scopes(scopes, inner_scopes, paths)
       return treedef.unflatten(inner_scopes)
