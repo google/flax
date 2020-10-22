@@ -156,7 +156,7 @@ class ModelParamTraversalTest(absltest.TestCase):
 class MultiOptimizerTest(absltest.TestCase):
 
   def test_multi_optimizer(self):
-    params = {'a': 0., 'b': 0.}
+    params = {'a': 0., 'b': 0., 'c': {}}
     opt_a = optim.GradientDescent(learning_rate=1.)
     opt_b = optim.GradientDescent(learning_rate=10.)
     t_a = traverse_util.t_identity['a']
@@ -170,10 +170,10 @@ class MultiOptimizerTest(absltest.TestCase):
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = [optim.OptimizerState(0, [()])] * 2
     self.assertEqual(state, expected_state)
-    grads = {'a': -1., 'b': -2.}
+    grads = {'a': -1., 'b': -2., 'c': {}}
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
-    expected_params = {'a': 1., 'b': 20.}
+    expected_params = {'a': 1., 'b': 20., 'c': {}}
     expected_state = [optim.OptimizerState(1, [()])] * 2
     self.assertEqual(new_state, expected_state)
     self.assertEqual(new_params, expected_params)
@@ -181,7 +181,7 @@ class MultiOptimizerTest(absltest.TestCase):
     hp = optimizer_def.update_hyper_params(learning_rate=2.)
     new_params, new_state = optimizer_def.apply_gradient(
         hp, params, state, grads)
-    expected_params = {'a': 2., 'b': 4.}
+    expected_params = {'a': 2., 'b': 4., 'c': {}}
     self.assertEqual(new_params, expected_params)
 
 
