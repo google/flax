@@ -162,7 +162,7 @@ class LinearTest(parameterized.TestCase):
     target = onp.einsum(einsum_expr, x, dg_module.params['kernel']) + 1.
     onp.testing.assert_allclose(y, target, atol=1e-6)
 
-  def test_conv(self,):
+  def test_conv(self):
     rng = random.PRNGKey(0)
     x = jnp.ones((1, 8, 3))
     conv_module = nn.Conv.partial(
@@ -177,7 +177,7 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
     onp.testing.assert_allclose(y, onp.full((1, 6, 4), 10.))
 
-  def test_single_input_conv(self,):
+  def test_single_input_conv(self):
     rng = random.PRNGKey(0)
     x = jnp.ones((8, 3))
     conv_module = nn.Conv.partial(
