@@ -170,6 +170,14 @@ def _conv_dimension_numbers(input_shape):
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
 
+def _make_correct_length(kernel_size, ndim):
+  """Make kernel_size parameter match the number of spatial dims."""
+  if len(kernel_size) == 1:
+    return (kernel_size[0],) * (ndim - 2)
+  else:
+    return kernel_size
+
+
 class Conv(base.Module):
   """Convolution Module wrapping lax.conv_general_dilated."""
 
@@ -219,12 +227,16 @@ class Conv(base.Module):
     """
 
     inputs = jnp.asarray(inputs, dtype)
+    if isinstance(kernel_size, int):
+      kernel_size = (kernel_size,)
 
     is_single_input = False
     if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
-      
+
+    kernel_size = _make_correct_length(kernel_size, inputs.ndim)
+
     if strides is None:
       strides = (1,) * (inputs.ndim - 2)
 
@@ -296,12 +308,16 @@ class ConvTranspose(base.Module):
       The convolved data.
     """
     inputs = jnp.asarray(inputs, dtype)
+    if isinstance(kernel_size, int):
+      kernel_size = (kernel_size,)
     
     is_single_input = False
     if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
-    
+
+    kernel_size = _make_correct_length(kernel_size, inputs.ndim)
+
     strides = strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]

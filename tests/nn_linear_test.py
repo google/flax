@@ -162,7 +162,7 @@ class LinearTest(parameterized.TestCase):
     target = onp.einsum(einsum_expr, x, dg_module.params['kernel']) + 1.
     onp.testing.assert_allclose(y, target, atol=1e-6)
 
-  def test_conv(self):
+  def test_conv(self,):
     rng = random.PRNGKey(0)
     x = jnp.ones((1, 8, 3))
     conv_module = nn.Conv.partial(
@@ -176,8 +176,8 @@ class LinearTest(parameterized.TestCase):
     model = nn.Model(conv_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
     onp.testing.assert_allclose(y, onp.full((1, 6, 4), 10.))
-    
-  def test_single_input_conv(self):
+
+  def test_single_input_conv(self,):
     rng = random.PRNGKey(0)
     x = jnp.ones((8, 3))
     conv_module = nn.Conv.partial(
@@ -192,12 +192,13 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
     onp.testing.assert_allclose(y, onp.full((6, 4), 10.))
 
-  def test_group_conv(self):
+  @parameterized.parameters([((3,),), (3,)])
+  def test_group_conv(self, kernel_size):
     rng = random.PRNGKey(0)
     x = jnp.ones((1, 8, 4))
     conv_module = nn.Conv.partial(
         features=4,
-        kernel_size=(3,),
+        kernel_size=kernel_size,
         feature_group_count=2,
         padding='VALID',
         kernel_init=initializers.ones,
@@ -274,6 +275,30 @@ class LinearTest(parameterized.TestCase):
 
     z = model.attend(jnp.ones((3,)))
     onp.testing.assert_allclose(z, 3. * jnp.arange(4))
+
+  @parameterized.parameters([(nn.Conv, (8, 3), (3, 3, 4)),
+                             (nn.Conv, (1, 8, 3), (3, 3, 4)),
+                             (nn.Conv, (7, 8, 3), (3, 3, 4)),
+                             (nn.Conv, (1, 8, 8, 2), (3, 3, 2, 4)),
+                             (nn.Conv, (2, 7, 7, 7, 5), (3, 3, 3, 5, 4)),
+                             (nn.ConvTranspose, (8, 3), (3, 3, 4)),
+                             (nn.ConvTranspose, (1, 8, 3), (3, 3, 4)),
+                             (nn.ConvTranspose, (7, 8, 3), (3, 3, 4)),
+                             (nn.ConvTranspose, (1, 8, 8, 2), (3, 3, 2, 4)),
+                             (nn.ConvTranspose, (2, 7, 7, 7, 5), (3, 3, 3, 5, 4))])
+  def test_kernel_size_int(self, conv_class, input_shape, expected_shape):
+      rng = random.PRNGKey(0)
+      x = jnp.ones(input_shape)
+      conv_module = conv_class.partial(
+          features=4,
+          kernel_size=3,
+          padding='VALID',
+          kernel_init=initializers.ones,
+          bias_init=initializers.ones,
+      )
+      y, initial_params = conv_module.init(rng, x)
+      model = nn.Model(conv_module, initial_params)
+      self.assertEqual(model.params['kernel'].shape, expected_shape)
 
 
 if __name__ == '__main__':
