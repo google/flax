@@ -7,7 +7,7 @@ of researchers and engineers at Google who happily use Flax for their
 daily research. Flax is in "early release stage" -- if that's your style,
 now could be a good time to start using it.
 We want to smooth out any rough edges so please report
-any issues, questions or concerns in our 
+any feature requests, issues, questions or concerns in our 
 [discussion forum](https://github.com/google/flax/discussions), or just let us know 
 what you're working on!
 
