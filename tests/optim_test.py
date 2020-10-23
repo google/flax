@@ -126,6 +126,7 @@ class ModelParamTraversalTest(absltest.TestCase):
                 'kernel': 3,
                 'bias': 4,
             },
+            'z': {},
         },
     }
     names = []
@@ -147,6 +148,7 @@ class ModelParamTraversalTest(absltest.TestCase):
                 'kernel': 6,
                 'bias': 4,
             },
+            'z': {}
         },
     }
     expected_model = nn.Model(None, expected_params)

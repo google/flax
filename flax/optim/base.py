@@ -505,11 +505,10 @@ class ModelParamTraversal(traverse_util.Traversal):
     for key, value in _sorted_items(flat_dict):
       # empty_node is not an actual leave. It's just a stub for empty nodes
       # in the nested dict.
-      if value is traverse_util.empty_node:
-        continue
-      path = '/' + '/'.join(key)
-      if self._filter_fn(path, value):
-        value = fn(value)
+      if value is not traverse_util.empty_node:
+        path = '/' + '/'.join(key)
+        if self._filter_fn(path, value):
+          value = fn(value)
       new_dict[key] = value
     new_params = traverse_util.unflatten_dict(new_dict)
     return inputs.replace(params=new_params)
