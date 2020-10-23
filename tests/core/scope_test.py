@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, scope, init, apply, nn
+from flax.core import Scope, scope, freeze, init, apply, nn
 
 from jax import random
 
@@ -66,7 +66,7 @@ class ScopeTest(absltest.TestCase):
     
     msg = 'Inconsistent shapes between value and initializer for parameter "test": (2,), (4,)'
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
-      apply(f)({'params': {'test': np.ones((2,))}})
+      apply(f)(freeze({'params': {'test': np.ones((2,))}}))
 
   def test_mutate_undefined_collection(self):
     def f(scope):
