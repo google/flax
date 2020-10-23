@@ -17,6 +17,7 @@ from absl import flags
 from absl import app
 import jax
 import jax.random
+import tensorflow as tf
 from ml_collections import config_flags
 
 import ppo_lib
@@ -34,6 +35,8 @@ config_flags.DEFINE_config_file(
     'File path to the default configuration file.')
 
 def main(argv):
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
   config = FLAGS.config
   game = config.game + 'NoFrameskip-v4'
   num_actions = env_utils.get_num_actions(game)

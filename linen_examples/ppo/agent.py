@@ -58,6 +58,7 @@ class RemoteSimulator:
     parent_conn, child_conn = multiprocessing.Pipe()
     self.proc = multiprocessing.Process(
         target=rcv_action_send_exp, args=(child_conn, game))
+    self.proc.daemon = True
     self.conn = parent_conn
     self.proc.start()
 
