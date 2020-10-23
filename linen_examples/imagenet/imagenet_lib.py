@@ -63,10 +63,12 @@ def create_model(*, half_precision, **kwargs):
   return models.ResNet50(num_classes=1000, dtype=model_dtype, **kwargs)
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2))
 def initialized(key, image_size, model):
   input_shape = (1, image_size, image_size, 3)
-  variables = model.init({'params': key}, jnp.ones(input_shape, model.dtype))
+  @jax.jit
+  def init(*args):
+    return model.init(*args)
+  variables = init({'params': key}, jnp.ones(input_shape, model.dtype))
   model_state, params = variables.pop('params')
   return params, model_state
 
