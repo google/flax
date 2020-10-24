@@ -1,5 +1,7 @@
 #!/bin/bash
 
+export FLAX_PROFILE=1
+
 sh $(dirname "$0")/download_dataset_metadata.sh || exit
 
 # Instead of using set -e, we have a manual error trap that
