@@ -132,7 +132,7 @@ def _frozen_dict_state_dict(xs):
 
 
 def _restore_frozen_dict(xs, states):
-  return FrozenDict(
+  return freeze(
       {key: serialization.from_state_dict(value, states[key])
        for key, value in xs.items()})
 
