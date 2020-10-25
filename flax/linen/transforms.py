@@ -13,6 +13,7 @@
 # limitations under the License.
 
 """Lifting / Transforms of Modules."""
+import copy
 import dataclasses
 import functools
 import inspect
@@ -139,9 +140,11 @@ def module_class_lift_transform(
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
         cloned = set_module_scopes(cloned, scopes)
+        cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
         res = getattr(cloned, fn_name)(*args, **kwargs)
         # preserve submodule-tree stripped of scopes/tracers for introspection
         object.__setattr__(self, 'children', clean_clone(cloned).children)
+        self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
       trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
@@ -165,9 +168,11 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
       cloned = set_module_scopes(self, scopes)
+      cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
       res = rewrapped_fn(cloned, *args, **kwargs)
       # preserve submodule-tree stripped of scopes/tracers for introspection
       object.__setattr__(self, 'children', clean_clone(cloned).children)
+      self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
@@ -215,9 +220,11 @@ def named_call(class_fn):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
       cloned = set_module_scopes(self, scopes)
+      cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
       res = rewrapped_fn(cloned, *args, **kwargs)
       # preserve submodule-tree stripped of scopes/tracers for introspection
       object.__setattr__(self, 'children', clean_clone(cloned).children)
+      self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = lift.named_call(core_fn, full_name)
