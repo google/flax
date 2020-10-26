@@ -219,7 +219,7 @@ class Conv(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Sequence[int]
+  kernel_size: Union[int, Sequence[int]]
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   input_dilation: Optional[Sequence[int]] = None
@@ -252,9 +252,14 @@ class Conv(Module):
     if self.strides is None:
       self.strides = (1,) * (inputs.ndim - 2)
 
+    if isinstance(self.kernel_size, int):
+      kernel_size = (self.kernel_size,)
+    else:
+      kernel_size = self.kernel_size
+
     in_features = inputs.shape[-1]
     assert in_features % self.feature_group_count == 0
-    kernel_shape = self.kernel_size + (
+    kernel_shape = kernel_size + (
         in_features // self.feature_group_count, self.features)
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
@@ -332,8 +337,13 @@ class ConvTranspose(Module):
 
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
+    if isinstance(self.kernel_size, int):
+      kernel_size = (self.kernel_size,)
+    else:
+      kernel_size = self.kernel_size
+
     in_features = inputs.shape[-1]
-    kernel_shape = self.kernel_size + (in_features, self.features)
+    kernel_shape = kernel_size + (in_features, self.features)
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
 
