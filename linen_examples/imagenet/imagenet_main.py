@@ -37,6 +37,10 @@ flags.DEFINE_string(
     'model_dir', default=None,
     help=('Directory to store model data.'))
 
+flags.DEFINE_string(
+    'data_dir', default=None,
+    help='Tensorflow datasets directory.')
+
 config_flags.DEFINE_config_file(
     'config', os.path.join(os.path.dirname(__file__), 'configs/default.py'),
     'File path to the Training hyperparameter configuration.')
@@ -49,8 +53,8 @@ def main(argv):
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
 
-  imagenet_lib.train_and_evaluate(model_dir=FLAGS.model_dir,
-                                  config=FLAGS.config)
+  imagenet_lib.train_and_evaluate(
+      model_dir=FLAGS.model_dir, config=FLAGS.config, data_dir=FLAGS.data_dir)
 
 
 if __name__ == '__main__':

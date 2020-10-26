@@ -20,7 +20,7 @@ The data is loaded using tensorflow_datasets.
 
 import functools
 import time
-from typing import Any
+from typing import Any, Optional
 
 from absl import logging
 
@@ -239,12 +239,14 @@ def create_train_state(rng, config: ml_collections.ConfigDict,
   return state
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str,
+                       data_dir: Optional[str]):
   """Execute model training and evaluation loop.
 
   Args:
     config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory where the tensorboard summaries are written to.
+    data_dir: Tensorflow datasets directory.
   """
 
   if jax.host_id() == 0:
@@ -269,7 +271,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   else:
     input_dtype = tf.float32
 
-  dataset_builder = tfds.builder('imagenet2012:5.*.*')
+  dataset_builder = tfds.builder('imagenet2012:5.*.*', data_dir=data_dir)
   train_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=True,
       cache=config.cache)
