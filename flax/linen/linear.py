@@ -195,7 +195,9 @@ class Conv(Module):
 
   Args:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer. For all other cases, it must
+      be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -290,7 +292,9 @@ class ConvTranspose(Module):
 
   Args:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer. For all other cases, it must
+      be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -308,7 +312,7 @@ class ConvTranspose(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Sequence[int]
+  kernel_size: Union[int, Sequence[int]]
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
