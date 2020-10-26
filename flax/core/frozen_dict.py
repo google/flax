@@ -14,7 +14,7 @@
 
 """Frozen Dictionary."""
 
-from typing import TypeVar, Mapping, Dict, Tuple
+from typing import Any, TypeVar, Mapping, Dict, Tuple
 
 from flax import serialization
 import jax
@@ -30,7 +30,10 @@ class FrozenDict(Mapping[K, V]):
   __slots__ = ('_dict', '_hash')
 
   def __init__(self, *args, **kwargs):
-    self._dict = dict(*args, **kwargs)
+    # make sure the dict is as
+    xs = dict(*args, **kwargs)
+    self._dict = _prepare_freeze(xs)
+
     self._hash = None
 
   def __getitem__(self, key):
@@ -99,17 +102,24 @@ class FrozenDict(Mapping[K, V]):
     return cls(*data)
 
 
+def _prepare_freeze(xs: Any) -> Any:
+  """Deep copy unfrozen dicts to make the dictionary FrozenDict safe."""
+  if isinstance(xs, FrozenDict):
+    # we can safely ref share the internal state of a FrozenDict
+    # because it is immutable.
+    return xs._dict  # pylint: disable=protected-access
+  if not isinstance(xs, dict):
+    # return a leaf as is.
+    return xs
+  # recursively copy dictionary to avoid ref sharing
+  return {key: _prepare_freeze(val) for key, val in xs.items()}
+
+
 def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
   """Freeze a nested dict.
 
   Makes a nested `dict` immutable by transforming it into `FrozenDict`.
   """
-  # Turn the nested FrozenDict into a dict. This way the internal data structure
-  # of FrozenDict does not contain any FrozenDicts.
-  # instead we create those lazily in `__getitem__`.
-  # As a result tree_flatten/unflatten will be fast
-  # because it operates on native dicts.
-  xs = unfreeze(xs)
   return FrozenDict(xs)
 
 
@@ -132,7 +142,7 @@ def _frozen_dict_state_dict(xs):
 
 
 def _restore_frozen_dict(xs, states):
-  return freeze(
+  return FrozenDict(
       {key: serialization.from_state_dict(value, states[key])
        for key, value in xs.items()})
 
