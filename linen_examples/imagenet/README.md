@@ -13,7 +13,7 @@ The model should run with other configurations and hardware, but explicitely tes
 | Hardware | Batch size | Training time | Top-1 accuracy  | TensorBoard.dev |
 | --- | --- | --- | --- | --- |
 | 8 x Nvidia V100 (16GB)  | 512  |  13h 25m  | 76.63% | [2020-03-12](https://tensorboard.dev/experiment/jrvtbnlETgai0joLBXhASw/) |
-| 8 x Nvidia V100 (16GB), mixed precision  | 2048  | 6h 4m | 76.39% | [2020-03-11](https://tensorboard.dev/experiment/F5rM1GGQRpKNX207i30qGQ/) |
+| 8 x Nvidia V100 (16GB), mixed precision  | 2048  | 5h 51m | 76.39% | [2020-03-11](https://tensorboard.dev/experiment/F5rM1GGQRpKNX207i30qGQ/) |
 
 ### How to run
 
