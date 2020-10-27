@@ -15,6 +15,7 @@
 """Tests for flax.nn.linear."""
 
 import functools
+from itertools import product
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -177,6 +178,20 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 10.))
 
+  def test_single_input_conv(self):
+      rng = dict(params=random.PRNGKey(0))
+      x = jnp.ones((8, 3))
+      conv_module = nn.Conv(
+          features=4,
+          kernel_size=(3,),
+          padding='VALID',
+          kernel_init=initializers.ones,
+          bias_init=initializers.ones,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+      self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
+      np.testing.assert_allclose(y, np.full((6, 4), 10.))
+
   def test_group_conv(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 4))
@@ -214,6 +229,30 @@ class LinearTest(parameterized.TestCase):
                               [10., 10., 10., 10.],
                               [ 7.,  7.,  7.,  7.],
                               [ 4.,  4.,  4.,  4.]]])
+    np.testing.assert_allclose(y, correct_ans)
+
+  def test_single_input_conv_transpose(self):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((8, 3))
+    conv_transpose_module = nn.ConvTranspose(
+        features=4,
+        kernel_size=(3,),
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_transpose_module.init_with_output(rng, x)
+    self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
+    correct_ans = np.array([[ 4.,  4.,  4.,  4.],
+                              [ 7.,  7.,  7.,  7.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [ 7.,  7.,  7.,  7.],
+                              [ 4.,  4.,  4.,  4.]])
     np.testing.assert_allclose(y, correct_ans)
 
   def test_embed(self):

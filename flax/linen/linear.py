@@ -244,6 +244,11 @@ class Conv(Module):
 
     inputs = jnp.asarray(inputs, self.dtype)
 
+    is_single_input = False
+    if inputs.ndim == len(self.kernel_size) + 1:
+      is_single_input = True
+      inputs = jnp.expand_dims(inputs, axis=0)
+
     if self.strides is None:
       self.strides = (1,) * (inputs.ndim - 2)
 
@@ -266,6 +271,8 @@ class Conv(Module):
         feature_group_count=self.feature_group_count,
         precision=self.precision)
 
+    if is_single_input:
+      y = jnp.squeeze(y, axis=0)
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
@@ -318,6 +325,11 @@ class ConvTranspose(Module):
       The convolved data.
     """
     inputs = jnp.asarray(inputs, self.dtype)
+    is_single_input = False
+    if inputs.ndim == len(self.kernel_size) + 1:
+      is_single_input = True
+      inputs = jnp.expand_dims(inputs, axis=0)
+
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
@@ -332,6 +344,8 @@ class ConvTranspose(Module):
                            rhs_dilation=self.kernel_dilation,
                            precision=self.precision)
 
+    if is_single_input:
+      y = jnp.squeeze(y, axis=0)
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
