@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, init, apply, lift
+from flax.core import Scope, init, apply, lift, nn
 
 from jax import random
 from jax import numpy as jnp
@@ -35,6 +35,18 @@ class ScopeTest(absltest.TestCase):
       lift.vmap(g, variable_axes={}, split_rngs={})((scope, a), jnp.ones((1,)))
 
     init(f)(random.PRNGKey(0))
+
+  def test_undefined_param(self):
+    def f(scope):
+      dense = lift.vmap(nn.dense, 
+                        in_axes=(0, None), out_axes=0,
+                        variable_axes={'params': 0},
+                        split_rngs={'params': True})
+      dense(scope.push('dense'), np.ones((3, 2)), 2)
+
+    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/vmap(dense)".'):
+      apply(f)({})
+
 
 
 if __name__ == '__main__':

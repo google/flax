@@ -207,7 +207,8 @@ class Scope:
                rngs: Optional[Dict[str, PRNGKey]] = None,
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
-               parent: Optional['Scope'] = None):
+               parent: Optional['Scope'] = None,
+               path: Tuple[str] = ()):
     """Initializes a Scope.
 
     Args:
@@ -219,6 +220,7 @@ class Scope:
     self._variables = variables
     self.parent = parent
     self.name = name
+    self.path = path
     self.rngs = rngs if rngs else {}
     self.mutable = mutable
 
@@ -231,6 +233,12 @@ class Scope:
     self._children = {}
 
     self._invalid = False
+
+
+  @property
+  def path_text(self) -> str:
+    """Returns the path as a human readable string with slashes between parts."""
+    return '/' + '/'.join(self.path)
 
   @property
   def invalid(self) -> bool:
@@ -321,7 +329,7 @@ class Scope:
       return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
-    scope = Scope({}, name=name, rngs=rngs, parent=self)
+    scope = Scope({}, name=name, rngs=rngs, parent=self, path=self.path + (name,))
     self._children[name] = scope
     return scope
 
@@ -363,7 +371,6 @@ class Scope:
   def is_mutable_collection(self, col: str) -> bool:
     """Check whether a collection is mutable."""
     return in_filter(self.root.mutable, col)
-
 
   def _mutable_collection(self, col: str) -> MutableCollection:
     if not self.is_mutable_collection(col):
@@ -419,6 +426,10 @@ class Scope:
     """Update the value of a Variable."""
     self._check_valid()
     self._validate_trace_level()
+    if not self.is_mutable_collection(col):
+      raise ValueError(
+        f'Trying to update variable "{name}" in "{self.path_text}" '
+        f'but collection "{col}" is immutable.')
     variables = self._mutable_collection(col)
     variables[name] = value
 
@@ -427,6 +438,8 @@ class Scope:
     """Create a Variable."""
     self.reserve(name)
     if not self.has_variable(col, name):
+      if not self.is_mutable_collection('params'):
+        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
@@ -447,9 +460,11 @@ class Scope:
         # we might intentionally change the dtype for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
           raise ValueError('Inconsistent shapes between value and initializer '
-                           f'for parameter "{name}": {jnp.shape(val)}, {jnp.shape(abs_val)}')
+                           f'for parameter "{name}" in "{self.path_text}": {jnp.shape(val)}, {jnp.shape(abs_val)}')
       return value
     else:
+      if not self.is_mutable_collection('params'):
+        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
       return value
