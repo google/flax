@@ -533,7 +533,7 @@ def init(fn: Callable[..., Any], mutable: CollectionFilter = True) -> Callable[.
                        'or a dictionary mapping strings to `jax.PRNGKey`.') 
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
-    return apply(fn, mutable=mutable)(freeze({}), *args, rngs=rngs, **kwargs)
+    return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)
   return wrapper
 
 
