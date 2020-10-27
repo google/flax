@@ -354,12 +354,14 @@ class Embed(Module):
   """
   num_embeddings: int
   features: int
+  dtype: Dtype = jnp.float32
   embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
 
   def setup(self):
     self.embedding = self.param('embedding',
                                 self.embedding_init,
-                                (self.num_embeddings, self.features))
+                                (self.num_embeddings, self.features),
+                                self.dtype)
 
   def __call__(self, inputs):
     """Embeds the inputs along the last dimension.

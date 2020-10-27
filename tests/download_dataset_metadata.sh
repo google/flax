@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 # Download TFDS metadata to flax/.tdfs/metadata directory. 
 # This allows the tests to specify the `data_dir` when using tfds.testing.mock_data().
 cd "$( dirname "$0" )"

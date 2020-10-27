@@ -1,26 +1,26 @@
 diff --git a/examples/mnist/mnist_lib.py b/examples/mnist/mnist_lib.py
-index 63af6e8..59c0d1c 100644
+index dbe6254..fa2b795 100644
 --- a/examples/mnist/mnist_lib.py
 +++ b/examples/mnist/mnist_lib.py
-@@ -32,6 +32,7 @@ import tensorflow_datasets as tfds
+@@ -34,6 +34,7 @@ import tensorflow_datasets as tfds
  from flax import nn
  from flax import optim
  from flax.metrics import tensorboard
 +from flax.training import checkpoints
  
+ 
  class CNN(nn.Module):
-   """A simple CNN model."""
-@@ -166,6 +167,9 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+@@ -169,6 +170,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
    model = create_model(init_rng)
-   optimizer = create_optimizer(model, learning_rate, momentum)
+   optimizer = create_optimizer(model, config.learning_rate, config.momentum)
  
 +  # Restore saved model
 +  optimizer = checkpoints.restore_checkpoint(model_dir, optimizer)
 +
-   for epoch in range(1, num_epochs + 1):
+   for epoch in range(1, config.num_epochs + 1):
      rng, input_rng = random.split(rng)
      optimizer, train_metrics = train_epoch(
-@@ -180,5 +184,8 @@ def train_and_evaluate(model_dir: str, num_epochs: int, batch_size: int,
+@@ -183,5 +187,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
      summary_writer.scalar('eval_loss', loss, epoch)
      summary_writer.scalar('eval_accuracy', accuracy, epoch)
  

@@ -13,7 +13,6 @@ Each examples is designed to be self-contained and easily forkable, while reprod
 
 | Example | Description | Features |
 | ------- | ----------- | -------- |
-| [cifar10](cifar10/README.md) | Wideresnet & pyramidnet implementations with shake-shake / shake-drop regularization for CIFAR-10 classification | Single host SPMD, tfds `cifar10`, custom preprocessing |
 | [graph](graph/README.md) | Graph convolutional network to label nodes in small toy dataset | Data inlined, simple code |
 | [imagenet](imagenet/README.md) | Resnet-50 on imagenet with weight decay | Multi host SPMD, tfds `imagenet`, custom preprocessing, checkpointing, dynamic scaling, mixed precision |
 | [lm1b](lm1b/README.md) | Transformer encoder for next token prediction | Single host SPMD, tfds `lm1b`, checkpointing, dynamic bucketing, attention cache, Colab |
@@ -34,7 +33,8 @@ Here are some of the models that people have built with Flax:
 | [Gaussian Processes regression](https://github.com/danieljtait/ladax/tree/master/examples)  | @danieljtait | Regression | N/A |  |
 | [JAX-RL](https://github.com/henry-prior/jax-rl)  | @henry-prior  | Reinforcement learning | N/A |
 | [DQN](https://github.com/joaogui1/RL-JAX/tree/master/DQN)  | @joaogui1  | Reinforcement learning | N/A |
-| [Various CIFAR SOTA Models](https://github.com/google-research/google-research/tree/master/flax_cifar) | @PForet | Image Classification | N/A |
+| [Various CIFAR SOTA Models](https://github.com/google-research/google-research/tree/master/flax_models/cifar) | @PForet | Image Classification | N/A |
+| [DCGAN](https://github.com/bkkaggle/jax-dcgan) Colab | @bkkaggle | Image Synthesis | https://arxiv.org/abs/1511.06434 |
 
 If you are using Flax for your research, or have re-implemented interesting models in Flax, file a pull request against this README and add a link in the table.
  

@@ -22,13 +22,20 @@ from absl.testing import absltest
 import jax
 from jax import numpy as jnp
 
+import tensorflow as tf
 import tensorflow_datasets as tfds
 
+from configs import default as config_lib
 import mnist_lib
 
 
 class MnistLibTest(absltest.TestCase):
   """Test cases for mnist_lib."""
+
+  def setUp(self):
+    super().setUp()
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
 
   def test_cnn(self):
     """Tests CNN module used as the trainable model."""
@@ -43,9 +50,7 @@ class MnistLibTest(absltest.TestCase):
     self.assertLen(init_params, 4)
 
   def test_train_and_evaluate(self):
-    """Tests training and evaluation code by running a single step with
-       mocked data for MNIST dataset.
-    """
+    """Runs a single train/eval step with mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
     model_dir = tempfile.mkdtemp()
 
@@ -53,10 +58,13 @@ class MnistLibTest(absltest.TestCase):
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
+    # Define training configuration.
+    config = config_lib.get_config()
+    config.num_epochs = 1
+    config.batch_size = 8
+
     with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      mnist_lib.train_and_evaluate(
-          model_dir=model_dir, num_epochs=1, batch_size=8,
-          learning_rate=0.1, momentum=0.9)
+      mnist_lib.train_and_evaluate(config=config, model_dir=model_dir)
 
 
 if __name__ == '__main__':

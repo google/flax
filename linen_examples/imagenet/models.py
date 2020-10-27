@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax implementation of ResNet V1.
-"""
+"""Flax implementation of ResNet V1."""
 
 
 from flax import linen as nn
@@ -87,13 +86,12 @@ class ResNet(nn.Module):
   num_filters: int = 64
   dtype: Any = jnp.float32
   act: Callable = nn.relu
-  train: bool = True
 
   @nn.compact
-  def __call__(self, x):
+  def __call__(self, x, train: bool = True):
     conv = partial(nn.Conv, use_bias=False, dtype=self.dtype)
     norm = partial(nn.BatchNorm,
-                   use_running_average=not self.train,
+                   use_running_average=not train,
                    momentum=0.9,
                    epsilon=1e-5,
                    dtype=self.dtype)

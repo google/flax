@@ -176,6 +176,21 @@ class LinearTest(parameterized.TestCase):
     model = nn.Model(conv_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
     onp.testing.assert_allclose(y, onp.full((1, 6, 4), 10.))
+    
+  def test_single_input_conv(self):
+    rng = random.PRNGKey(0)
+    x = jnp.ones((8, 3))
+    conv_module = nn.Conv.partial(
+        features=4,
+        kernel_size=(3,),
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_module.init(rng, x)
+    model = nn.Model(conv_module, initial_params)
+    self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
+    onp.testing.assert_allclose(y, onp.full((6, 4), 10.))
 
   def test_group_conv(self):
     rng = random.PRNGKey(0)
@@ -216,6 +231,31 @@ class LinearTest(parameterized.TestCase):
                               [10., 10., 10., 10.],
                               [ 7.,  7.,  7.,  7.],
                               [ 4.,  4.,  4.,  4.]]])
+    onp.testing.assert_allclose(y, correct_ans)
+    
+  def test_single_input_conv_transpose(self):
+    rng = random.PRNGKey(0)
+    x = jnp.ones((8, 3))
+    conv_transpose_module = nn.ConvTranspose.partial(
+        features=4,
+        kernel_size=(3,),
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_transpose_module.init(rng, x)
+    model = nn.Model(conv_transpose_module, initial_params)
+    self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
+    correct_ans = onp.array([[ 4.,  4.,  4.,  4.],
+                              [ 7.,  7.,  7.,  7.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [ 7.,  7.,  7.,  7.],
+                              [ 4.,  4.,  4.,  4.]])
     onp.testing.assert_allclose(y, correct_ans)
 
   def test_embed(self):

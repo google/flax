@@ -69,8 +69,6 @@ We keep here a limited list of canonical examples maintained by the Flax team. I
 ### Image Classification
 ⟶ [MNIST](examples/mnist) (also see [annotated version](https://flax.readthedocs.io/en/latest/annotated_mnist.html))
 
-⟶ [CIFAR-10](examples/cifar10) (Wide ResNet w/ and w/o Shake-Shake, PyramidNet w/ShakeDrop)
-
 ⟶ [ResNet50 on ImageNet](examples/imagenet)
 
 ### Transformer Models
@@ -140,7 +138,7 @@ def DenseLayer(x, features):
 
 ## A full ResNet implementation
 
-(from [examples/imagenet/models.py](examples/imagenet/models.py))
+(from [examples/imagenet/resnet_v1.py](examples/imagenet/resnet_v1.py))
 
 ```py
 class ResidualBlock(nn.Module):
@@ -222,6 +220,20 @@ When working with large-scale input data, it is important to create large enough
 TODO: Add an example for running on Google Cloud.
 
 ## Getting involved
+
+Currently, you need to install Python 3.6 for developing Flax, and `svn` for running the `run_all_tests.sh` script. After installing these prerequisites, you can clone the repository, set up your local environment, and run all tests with the following commands:
+
+```
+git clone https://github.com/google/flax
+cd flax
+python3.6 -m virtualenv env
+. env/bin/activate
+pip install -e . .[testing]
+./tests/run_all_tests.sh
+```
+
+Alternatively, you can also develop inside a Docker container : See [`dev/README.md`](dev/README.md).
+
 We welcome pull requests, in particular for those issues [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open an Issue to discuss your planned contribution.
 
 ## Note

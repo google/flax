@@ -38,7 +38,7 @@ class _LARSParamState:
 
 class LARS(OptimizerDef):
   """Layerwise adaptive rate scaling (LARS) optimizer.
-  
+
   See https://arxiv.org/abs/1708.03888
   """
 
@@ -73,7 +73,7 @@ class LARS(OptimizerDef):
     trust_ratio = hyper_params.trust_coefficient * param_norm / (
         grad_norm + hyper_params.weight_decay * param_norm + hyper_params.eps)
     clipped_trust_ratio = jnp.where(
-        param_norm + grad_norm > 0., trust_ratio, 1.)
+        jnp.logical_or(grad_norm == 0., param_norm == 0.), 1., trust_ratio)
     scaled_lr = hyper_params.learning_rate * clipped_trust_ratio
     if hyper_params.weight_decay != 0:
       grad += hyper_params.weight_decay * param

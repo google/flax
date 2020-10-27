@@ -36,7 +36,8 @@ from jax import random
 import jax.nn
 import jax.numpy as jnp
 import numpy as np
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
+
 
 FLAGS = flags.FLAGS
 
@@ -194,7 +195,7 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
                      (str(logits.shape), str(targets.shape)))
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
-  normalizing_factor = jnp.prod(logits.shape[:-1])
+  normalizing_factor = np.prod(logits.shape[:-1])
   if weights is not None:
     loss = loss * weights
     normalizing_factor = weights.sum()
@@ -267,7 +268,8 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  tf.enable_v2_behavior()
+  # Make sure tf does not allocate gpu memory.
+  tf.config.experimental.set_visible_devices([], 'GPU')
 
   batch_size = FLAGS.batch_size
   learning_rate = FLAGS.learning_rate

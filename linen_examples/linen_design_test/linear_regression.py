@@ -27,7 +27,7 @@ model = Dense(features=5)
 
 @jit
 def predict(params):
-  return model.apply({'param': params}, X)
+  return model.apply({'params': params}, X)
 
 @jit
 def loss_fn(params):
@@ -35,8 +35,8 @@ def loss_fn(params):
 
 @jit
 def init_params(rng):
-  mlp_variables = model.init({'param': rng}, X)
-  return mlp_variables['param']
+  mlp_variables = model.init({'params': rng}, X)
+  return mlp_variables['params']
 
 # Get initial parameters
 params = init_params(jax.random.PRNGKey(42))

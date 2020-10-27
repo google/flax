@@ -1,6 +1,8 @@
 #!/bin/bash
 
-sh $(dirname "$0")/download_dataset_metadata.sh
+export FLAX_PROFILE=1
+
+sh $(dirname "$0")/download_dataset_metadata.sh || exit
 
 # Instead of using set -e, we have a manual error trap that
 # exits for any error code != 5 since pytest returns error code 5
@@ -29,6 +31,11 @@ pytest -n 4 tests $PYTEST_OPTS
 # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
 # /foo/bar and /baz/bleep aren't set up as packages.
 for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+    pytest $egd
+done
+
+# Per-example tests for linen examples.
+for egd in $(find linen_examples -maxdepth 1 -mindepth 1 -type d); do
     pytest $egd
 done
 
