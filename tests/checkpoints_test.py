@@ -122,6 +122,22 @@ class CheckpointsTest(absltest.TestCase):
     self.assertIn('test_2.0', os.listdir(tmp_dir))
     jtu.check_eq(new_object, test_object2)
 
+  def test_save_restore_checkpoints_target_none(self):
+    tmp_dir = self.create_tempdir().full_path
+    test_object0 = {'a': np.array([0, 0, 0], np.int32),
+                    'b': np.array([0, 0, 0], np.int32)}
+    # Target pytree is a dictionary, so it's equal to a restored state_dict.
+    checkpoints.save_checkpoint(tmp_dir, test_object0, 0)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
+    jtu.check_eq(new_object, test_object0)
+    # Target pytree it's a tuple, check the expected state_dict is recovered.
+    test_object1 = (np.array([0, 0, 0], np.int32),
+                    np.array([1, 1, 1], np.int32))
+    checkpoints.save_checkpoint(tmp_dir, test_object1, 1)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
+    expected_new_object = {str(k): v for k, v in enumerate(test_object1)}
+    jtu.check_eq(new_object, expected_new_object)
+
 
 if __name__ == '__main__':
   absltest.main()

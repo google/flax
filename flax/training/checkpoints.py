@@ -121,7 +121,8 @@ def restore_checkpoint(ckpt_dir, target, step=None, prefix='checkpoint_'):
 
   Args:
     ckpt_dir: str: directory of checkpoints to restore from.
-    target: matching object to rebuild via deserialized state-dict.
+    target: matching object to rebuild via deserialized state-dict. If None,
+      the deserialized state-dict is returned as-is.
     step: int: step number to load or None to load latest.
     prefix: str: name prefix of checkpoint files.
 
@@ -144,4 +145,7 @@ def restore_checkpoint(ckpt_dir, target, step=None, prefix='checkpoint_'):
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
   with gfile.GFile(ckpt_path, 'rb') as fp:
-    return serialization.from_bytes(target, fp.read())
+    if target is None:
+      return serialization.msgpack_restore(fp.read())
+    else:
+      return serialization.from_bytes(target, fp.read())
