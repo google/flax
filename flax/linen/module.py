@@ -169,17 +169,15 @@ class _ModuleInternalState:
   in_setup: bool = False
   last_varname: Optional[str] = None
   autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
-  reservations: Optional[set] = dataclasses.field(default_factory=set)
 
   def reset(self):
     self.in_compact_method = False
     self.in_setup = False
     self.last_varname = None
     self.autoname_cursor = dict()
-    self.reservations = set()
 
 _uninitialized_module_internal_state = _ModuleInternalState(
-    False, False, None, None, None)
+    False, False, None, None)
 
 
 # Base Module definition.
@@ -346,11 +344,8 @@ class Module:
             f"trying to share submodule {self.__class__.__name__} by name "
             f"{self.name}. To share submodules, store module instances as a"
             f" Python object or as an attribute on self and reuse.")
-      self.parent._state.reservations.add(self.name)
       self.parent.children[self.name] = self
       self.scope = self.parent.scope.push(self.name)
-      # TODO: find cleaner way to opt-out of core name collision check
-      self.parent.scope.reservations.remove(self.name)
 
     # Top-level invocation with a functional Scope.
     elif isinstance(self.parent, Scope):
@@ -371,17 +366,27 @@ class Module:
     pass
 
   def _name_taken(self, name):
-    return (name in self._state.reservations or
+    return (name in self.scope.reservations or
             name in all_names_on_object(self))
 
   @property
   def _initialization_allowed(self):
     return self._state.in_setup or self._state.in_compact_method
 
-  def clone(self, **updates):
-    """Create a clone of this Module, with optionally updated arguments."""
+  def clone(self, *,
+            parent: Optional[Union[Scope, 'Module']] = None,
+            **updates):
+    """Create a clone of this Module, with optionally updated arguments.
+    
+    Args:
+      parent: the parent of the clone. The clone will have no parent
+        if no explicit parent is specified.
+      **updates: attribute updates.
+    Returns:
+      A clone of the this Module with the updated attributes and parent.
+    """
     attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
-    attrs.update(**updates)
+    attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
   def variable(self, kind: str, name: str, init_fn, *init_args):
@@ -404,12 +409,9 @@ class Module:
     if self._name_taken(name):
       raise ValueError(
           f'Name {name} already in use in {self.__class__.__name__}.')
-    self._state.reservations.add(name)
     # ephemeral state for setattr name-equality-check
     self._state.last_varname = name
     v = self.scope.variable(kind, name, init_fn, *init_args)
-    # TODO: find cleaner way to opt-out of core name collision check
-    self.scope.reservations.remove(name)
     self.children[name] = kind
     return v
 
@@ -431,12 +433,9 @@ class Module:
     if self._name_taken(name):
       raise ValueError(
           f'Name {name} already in use in {self.__class__.__name__}.')
-    self._state.reservations.add(name)
     # ephemeral state for setattr name-equality-check
     self._state.last_varname = name
     v = self.scope.param(name, init_fn, *init_args)
-    # TODO: find cleaner way to opt-out of core name collision check
-    self.scope.reservations.remove(name)
     self.children[name] = 'params'
     return v
 
