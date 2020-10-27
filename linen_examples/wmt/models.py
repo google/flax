@@ -93,8 +93,10 @@ class AddPositionEmbs(nn.Module):
 
   Args:
     config: TransformerConfig dataclass containing hyperparameters.
+    decode: whether to run in single-position autoregressive mode.
   """
   config: TransformerConfig
+  decode: bool = False
 
   @nn.compact
   def __call__(self,
@@ -130,7 +132,7 @@ class AddPositionEmbs(nn.Module):
     pe = pos_embedding[:, :length, :]
 
     # We use a cache position index for tracking decoding position.
-    if cfg.decode:
+    if self.decode:
       is_initialized = self.has_variable('cache', 'cache_index')
       cache_index = self.variable('cache', 'cache_index',
                                   lambda: jnp.array(0, dtype=jnp.uint32))
@@ -337,7 +339,7 @@ class Encoder(nn.Module):
       input_embed = self.shared_embedding
     x = inputs.astype('int32')
     x = input_embed(x)
-    x = AddPositionEmbs(config=cfg, name='posembed_input')(
+    x = AddPositionEmbs(config=cfg, decode=False, name='posembed_input')(
         x, inputs_positions=inputs_positions)
     x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=cfg.deterministic)
@@ -401,7 +403,7 @@ class Decoder(nn.Module):
     if not cfg.decode:
       y = shift_right(y)
     y = output_embed(y)
-    y = AddPositionEmbs(config=cfg, name='posembed_output')(
+    y = AddPositionEmbs(config=cfg, decode=cfg.decode, name='posembed_output')(
         y, inputs_positions=targets_positions)
     y = nn.Dropout(rate=cfg.dropout_rate)(
         y, deterministic=cfg.deterministic)
