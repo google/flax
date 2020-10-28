@@ -15,7 +15,6 @@
 """Tests for flax.nn.linear."""
 
 import functools
-from itertools import product
 
 from absl.testing import absltest
 from absl.testing import parameterized
