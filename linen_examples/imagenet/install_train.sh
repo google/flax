@@ -11,6 +11,7 @@ GCS_LOGS_TEMP='gs://flax_us/logs_temp'
 GCS_LOGS='gs://flax_us/logs'
 # DATA_DIR='gs://tensorflow-datasets/datasets'
 DATA_DIR='gs://flax_us/datasets'
+DATASET='imagenet2012'
 NOW=$(date +%F_%H%M%S)
 NAME="imagenet_half_$NOW"
 NAME="imagenet_full_$NOW"
@@ -22,6 +23,10 @@ mv logs logs_$NOW
 tmux new-session -s train_imagenet -d htop ENTER
 tmux split-window
 tmux send "
+
+mkdir -p $HOME/datasets &&
+gsutil -m cp -R $DATA_DIR/$DATASET $HOME/datasets/ &&
+
 git clone -b $BRANCH $REPO &&
 cd flax &&
 
@@ -36,8 +41,8 @@ pip install -e . &&
 cd linen_examples/imagenet &&
 pip install -r requirements.txt &&
 
-python imagenet_main.py --model_dir=../../../logs/$NAME --data_dir=$DATA_DIR --config=$CONFIG &&
-gsutil cp -R ../../../logs/$NAME $GCS_LOGS/
+python imagenet_main.py --model_dir=../../../logs/$NAME --data_dir=$HOME/datasets --config=$CONFIG &&
+gsutil cp -R $HOME/logs/$NAME $GCS_LOGS/
 
 echo
 echo WILL SHUT DOWN IN 5 MIN ...
