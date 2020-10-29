@@ -20,6 +20,7 @@ import functools
 
 
 import jax
+from jax import lax
 from jax import random
 
 from typing import Any, Callable, Sequence, Union, Iterable, Optional, Mapping, TypeVar, Generic
@@ -29,7 +30,6 @@ from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
 from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, union_filters, intersect_filters, group_collections
-from .named_call import named_call_p
 
 from . import axes_scan
 
@@ -665,7 +665,7 @@ def _named_call(f, name):
   def named_f(*args, **kwargs):
     lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
     flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
-    out_flat = named_call_p.bind(flat_f, name=name)
+    out_flat = lax.named_call_p.bind(flat_f, name=name)
     return jax.tree_unflatten(out_tree(), out_flat)
   return named_f
 
