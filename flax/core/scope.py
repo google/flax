@@ -292,7 +292,6 @@ class Scope:
     """
     if not isinstance(name, str):
       raise ValueError('Variable and child scopes should have a string name.')
-    assert isinstance(name, str), 'v'
     if name in self.reservations:
       raise ValueError(f'Duplicate use of name: "{name}"')
     self.reservations.add(name)
