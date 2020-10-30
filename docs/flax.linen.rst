@@ -1,34 +1,18 @@
 
-*NOTE*: The `flax.nn` package is deprecated. See `flax.linen` for our new module API.
+flax.linen package
+==================
 
-flax.nn package
-=================
-
-.. currentmodule:: flax.nn
-.. automodule:: flax.nn
+.. currentmodule:: flax.linen
+.. automodule:: flax.linen
 
 
 Core: Module abstraction
 ------------------------
 
 .. autoclass:: Module
-   :members: init, init_by_shape, partial, shared, apply, param, get_param, state, is_stateful, is_initializing
+   :members: setup, variable, param, init, init_with_output, variables
 
-Core: Additional
-------------------------
-
-.. autosummary::
-  :toctree: _autosummary
-
-    module
-    Model
-    Collection
-    capture_module_outputs
-    stateful
-    get_state
-    module_method
-
-
+	     
 Linear modules
 ------------------------
 
@@ -80,18 +64,6 @@ Activation functions
     softmax
     softplus
     swish
-
-
-Stochastic functions
-------------------------
-
-.. autosummary::
-  :toctree: _autosummary
-
-    make_rng
-    stochastic
-    is_stochastic
-    dropout
 
 
 Attention primitives
