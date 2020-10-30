@@ -45,6 +45,8 @@ T = TypeVar('T')
 PRNGKey = Any
 Array = Any
 
+RNGSequences = Dict[str, PRNGKey]
+
 Filter = Union[bool, str, Sequence[str]]
 CollectionFilter = Filter
 PRNGSequenceFilter = Filter
@@ -54,6 +56,7 @@ FrozenCollection = FrozenDict[str, Any]
 MaybeFrozenCollection = Union[MutableCollection, FrozenCollection]
 
 Variables = Dict[str, MaybeFrozenCollection]
+FrozenVariables = Dict[str, FrozenCollection]
 
 
 def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
@@ -204,7 +207,8 @@ class Scope:
                rngs: Optional[Dict[str, PRNGKey]] = None,
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
-               parent: Optional['Scope'] = None):
+               parent: Optional['Scope'] = None,
+               path: Tuple[str] = ()):
     """Initializes a Scope.
 
     Args:
@@ -216,6 +220,7 @@ class Scope:
     self._variables = variables
     self.parent = parent
     self.name = name
+    self.path = path
     self.rngs = rngs if rngs else {}
     self.mutable = mutable
 
@@ -228,6 +233,12 @@ class Scope:
     self._children = {}
 
     self._invalid = False
+
+
+  @property
+  def path_text(self) -> str:
+    """Returns the path as a human readable string with slashes between parts."""
+    return '/' + '/'.join(self.path)
 
   @property
   def invalid(self) -> bool:
@@ -279,6 +290,8 @@ class Scope:
     Args:
       name: The name to reserve.
     """
+    if not isinstance(name, str):
+      raise ValueError('Variable and child scopes should have a string name.')
     if name in self.reservations:
       raise ValueError(f'Duplicate use of name: "{name}"')
     self.reservations.add(name)
@@ -315,7 +328,7 @@ class Scope:
       return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
-    scope = Scope({}, name=name, rngs=rngs, parent=self)
+    scope = Scope({}, name=name, rngs=rngs, parent=self, path=self.path + (name,))
     self._children[name] = scope
     return scope
 
@@ -357,7 +370,6 @@ class Scope:
   def is_mutable_collection(self, col: str) -> bool:
     """Check whether a collection is mutable."""
     return in_filter(self.root.mutable, col)
-
 
   def _mutable_collection(self, col: str) -> MutableCollection:
     if not self.is_mutable_collection(col):
@@ -413,6 +425,10 @@ class Scope:
     """Update the value of a Variable."""
     self._check_valid()
     self._validate_trace_level()
+    if not self.is_mutable_collection(col):
+      raise ValueError(
+        f'Trying to update variable "{name}" in "{self.path_text}" '
+        f'but collection "{col}" is immutable.')
     variables = self._mutable_collection(col)
     variables[name] = value
 
@@ -421,6 +437,8 @@ class Scope:
     """Create a Variable."""
     self.reserve(name)
     if not self.has_variable(col, name):
+      if not self.is_mutable_collection('params'):
+        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
@@ -441,9 +459,11 @@ class Scope:
         # we might intentionally change the dtype for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
           raise ValueError('Inconsistent shapes between value and initializer '
-                           f'for parameter "{name}": {jnp.shape(val)}, {jnp.shape(abs_val)}')
+                           f'for parameter "{name}" in "{self.path_text}": {jnp.shape(val)}, {jnp.shape(abs_val)}')
       return value
     else:
+      if not self.is_mutable_collection('params'):
+        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
       return value
@@ -474,7 +494,15 @@ def apply(fn: Callable[..., Any],
     `fn` with the scope partially applied.
   """
   @functools.wraps(fn)
-  def wrapper(variables, *args, rngs=None, **kwargs):
+  def wrapper(variables: FrozenVariables, *args,
+              rngs: Optional[RNGSequences] = None, **kwargs) -> (Any, FrozenVariables):
+    
+    if not _is_valid_variables(variables):
+      raise ValueError('The first argument passed to an apply function '
+                       'should be a dictionary of collections. '
+                       'Each collection should be a `FrozenDict` with string keys.')
+    if rngs is not None and not _is_valid_rngs(rngs):
+      raise ValueError('rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
     new_variables = _unfreeze_variables(variables, mutable)
     with Scope(new_variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
@@ -498,9 +526,52 @@ def init(fn: Callable[..., Any], mutable: CollectionFilter = True) -> Callable[.
     `fn` with the scope partially applied.
   """
   @functools.wraps(fn)
-  def wrapper(rngs, *args, **kwargs):
+  def wrapper(rngs, *args, **kwargs) -> (Any, FrozenVariables):
+    if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
+      raise ValueError('First argument passed to an init function should be a `jax.PRNGKey` '
+                       'or a dictionary mapping strings to `jax.PRNGKey`.') 
     if not isinstance(rngs, dict):
-      assert rngs.shape == (2,)
       rngs = {'params': rngs}
     return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)
   return wrapper
+
+
+def _is_valid_collection(col: FrozenCollection):
+  if not isinstance(col, FrozenDict):
+    return False
+  for name in col.keys():
+    # any value can be stored in a collection so
+    # only keys can be verified.
+    if not isinstance(name, str):
+      return False
+  return True
+
+
+def _is_valid_variables(variables: FrozenVariables):
+  if not isinstance(variables, (dict, FrozenDict)):
+    return False
+  for name, col in variables.items():
+    if not isinstance(name, str):
+      return False
+    if not _is_valid_collection(col):
+      return False
+  return True
+
+
+def _is_valid_rng(rng: Array):
+  if not isinstance(rng, jnp.ndarray):
+    return False
+  if rng.shape != (2,) or rng.dtype != jnp.uint32:
+    return False
+  return True
+
+
+def _is_valid_rngs(rngs: RNGSequences):
+  if not isinstance(rngs, dict):
+    return False
+  for key, val in rngs.items():
+    if not isinstance(key, str):
+      return False
+    if not _is_valid_rng(val):
+      return False
+  return True

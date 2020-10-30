@@ -70,7 +70,8 @@ def _dup_scopes(orig_scopes, scopes, paths):
 def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[CollectionFilter],
          out_variable_filters: Sequence[CollectionFilter],
-         rng_filters: Sequence[PRNGSequenceFilter]) -> Callable[..., Any]:
+         rng_filters: Sequence[PRNGSequenceFilter],
+         name=None) -> Callable[..., Any]:
   """Pack variables and rngs for functional transformations.
 
   The pack function is the building block for all other lifted transformations.
@@ -123,9 +124,16 @@ def pack(fn: Callable[..., Any],
         # make sure variable dicts are cloned and can't be manipulated by ref sharing.
         variables = jax.tree_map(lambda x: x, variables)
         scope_mutable = intersect_filters(scope.root.mutable, mutable)
+        new_path = scope.path
+        if name:
+          if new_path:
+            new_path = new_path[:-1] + (f'{name}({new_path[-1]})',)
+          else:
+            new_path = (f'{name}()',)
         inner_scope = Scope(
             variables, name=scope.name, rngs=rngs,
-            mutable=scope_mutable, parent=None)
+            mutable=scope_mutable, parent=None,
+            path=new_path)
         inner_scopes.append(inner_scope)
       inner_scopes = _dup_scopes(scopes, inner_scopes, paths)
       return treedef.unflatten(inner_scopes)
@@ -158,8 +166,8 @@ def pack(fn: Callable[..., Any],
     for scope, out_variable_groups in zip(scopes, out_variable_groups_xs):
       for out_variable_group in out_variable_groups:
         for col_name, collection in out_variable_group.items():
-          for name, value in collection.items():
-            scope.put_variable(col_name, name, value)
+          for var_name, value in collection.items():
+            scope.put_variable(col_name, var_name, value)
     return y
   return wrapper
 
@@ -205,7 +213,7 @@ def transform(
   is_target_out = mutable or init
   in_vars = (target, variables)
   out_vars = (target, variables) if is_target_out else ((), variables)
-  wrapper = pack(wrapper, in_vars, out_vars, (rngs,))
+  wrapper = pack(wrapper, in_vars, out_vars, (rngs,), name='transform')
   return wrapper
 
 
@@ -350,7 +358,8 @@ def vmap(fn: Callable[..., Any],
     return mapped(variable_groups_xs, rng_groups_xs, args)
 
   return pack(
-      inner, variable_in_groups, variable_out_groups, rng_groups)
+      inner, variable_in_groups, variable_out_groups, rng_groups,
+      name='vmap')
 
 
 ScanAxis = int
@@ -491,7 +500,8 @@ def scan(fn: Callable[..., Any],
       inner,
       (variable_broadcast, variable_carry) + variable_in_groups,
       (variable_broadcast, variable_carry) + variable_out_groups,
-      rng_groups)
+      rng_groups,
+      name='scan')
 
 
 def custom_vjp(fn: Callable[..., Any], backward_fn: Callable[..., Any],
@@ -560,7 +570,8 @@ def custom_vjp(fn: Callable[..., Any], backward_fn: Callable[..., Any],
   variable_out_groups = (grad_kind, True,)
   rng_groups = (True,)
   return pack(
-      inner, variable_in_groups, variable_out_groups, rng_groups)
+      inner, variable_in_groups, variable_out_groups, rng_groups,
+      name='custom_vjp')
 
 
 def remat(fn: Callable[..., Any],
@@ -576,7 +587,7 @@ def remat(fn: Callable[..., Any],
       return y, repack_fn(scope)
 
     return rematted(variable_groups, rng_groups, *args)
-  return pack(inner, (variables,), (variables,), (rngs,))
+  return pack(inner, (variables,), (variables,), (rngs,), name='remat')
 
 
 def jit(fn: Callable[..., Any],
@@ -601,7 +612,7 @@ def jit(fn: Callable[..., Any],
 
     return jitted(variable_groups_xs, rng_groups_xs, *args)
 
-  return pack(inner, (variables,), (variables,), (rngs,))
+  return pack(inner, (variables,), (variables,), (rngs,), name='jit')
 
 
 def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,

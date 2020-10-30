@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, scope, init, apply, nn
+from flax.core import Scope, scope, freeze, init, apply, nn
 
 from jax import random
 
@@ -64,16 +64,24 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       scope.param('test', nn.initializers.ones, (4,))
     
-    msg = 'Inconsistent shapes between value and initializer for parameter "test": (2,), (4,)'
+    msg = 'Inconsistent shapes between value and initializer for parameter "test" in "/": (2,), (4,)'
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
-      apply(f)({'params': {'test': np.ones((2,))}})
+      apply(f)(freeze({'params': {'test': np.ones((2,))}}))
 
   def test_mutate_undefined_collection(self):
     def f(scope):
-      scope.put_variable('test', 'test', 123)
+      scope.put_variable('state', 'test', 123)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'Collection is not mutable: "test"'):
+    msg = 'Trying to update variable "test" in "/" but collection "state" is immutable.'
+    with self.assertRaisesWithLiteralMatch(ValueError, msg):
       init(f, mutable='params')(random.PRNGKey(0))
+
+  def test_undefined_param(self):
+    def f(scope):
+      nn.dense(scope.push('dense'), np.ones((1, 2)), 2)
+
+    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/dense".'):
+      apply(f)({})
 
 
 if __name__ == '__main__':
