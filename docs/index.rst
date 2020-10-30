@@ -35,7 +35,7 @@ Flax is a neural network library for JAX that is designed for flexibility.
    :caption: API reference
 
    flax.linen
-   `flax.nn` (deprecated) <flax.nn>
+   flax.nn (deprecated) <flax.nn>
    flax.optim
    flax.serialization
    flax.struct

@@ -2,6 +2,8 @@
 flax.linen package
 ==================
 
+TODO: These docstrings need some love.
+
 .. currentmodule:: flax.linen
 .. automodule:: flax.linen
 
