@@ -31,6 +31,7 @@ from jax.nn import soft_sign
 from jax.nn import softmax
 from jax.nn import softplus
 from jax.nn import swish
+from jax.nn import silu
 from jax.nn import selu
 from jax.nn import hard_tanh
 from jax.nn import relu6
