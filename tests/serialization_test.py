@@ -173,6 +173,20 @@ class SerializationTest(absltest.TestCase):
         self.assertEqual(restored_arr.dtype, arr.dtype)
         onp.testing.assert_array_equal(restored_arr, arr)
 
+  def test_jax_numpy_serialization(self):
+    jax_dtypes = [jnp.bool_, jnp.uint8, jnp.uint16, jnp.uint32,
+                  jnp.int8, jnp.int16, jnp.int32,
+                  jnp.bfloat16, jnp.float16, jnp.float32,
+                  jnp.complex64]
+    for dtype in jax_dtypes:
+      for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
+        arr = jnp.array(
+            onp.random.uniform(-100, 100, size=shape)).astype(dtype)
+        restored_arr = serialization.msgpack_restore(
+            serialization.msgpack_serialize(arr))
+        self.assertEqual(restored_arr.dtype, arr.dtype)
+        onp.testing.assert_array_equal(restored_arr, arr)
+
   def test_complex_serialization(self):
     for x in [1j, 1+2j]:
       restored_x = serialization.msgpack_restore(
