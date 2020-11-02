@@ -18,7 +18,7 @@
 # re-export commonly used modules and functions
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
-                         softplus, swish, tanh)
+                         softplus, swish, silu, tanh)
 from .attention import (dot_product_attention, MultiHeadDotProductAttention,
                         SelfAttention)
 from .base import (Module, Model, Collection, capture_module_outputs,
