@@ -178,13 +178,13 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 10.))
 
-<<<<<<< HEAD
-  def test_single_input_conv(self):
+  @parameterized.parameters([((3,),), (3,)])
+  def test_single_input_conv(self, kernel_size):
       rng = dict(params=random.PRNGKey(0))
       x = jnp.ones((8, 3))
       conv_module = nn.Conv(
           features=4,
-          kernel_size=(3,),
+          kernel_size=kernel_size,
           padding='VALID',
           kernel_init=initializers.ones,
           bias_init=initializers.ones,
@@ -234,12 +234,13 @@ class LinearTest(parameterized.TestCase):
                               [ 4.,  4.,  4.,  4.]]])
     np.testing.assert_allclose(y, correct_ans)
 
-  def test_single_input_conv_transpose(self):
+  @parameterized.parameters([((3,),), (3,)])
+  def test_single_input_conv_transpose(self, kernel_size):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
-        kernel_size=(3,),
+        kernel_size=kernel_size,
         padding='VALID',
         kernel_init=initializers.ones,
         bias_init=initializers.ones,

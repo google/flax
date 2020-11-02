@@ -246,18 +246,18 @@ class Conv(Module):
 
     inputs = jnp.asarray(inputs, self.dtype)
 
+    if isinstance(self.kernel_size, int):
+      kernel_size = (self.kernel_size,)
+    else:
+      kernel_size = self.kernel_size
+
     is_single_input = False
-    if inputs.ndim == len(self.kernel_size) + 1:
+    if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
     if self.strides is None:
       self.strides = (1,) * (inputs.ndim - 2)
-
-    if isinstance(self.kernel_size, int):
-      kernel_size = (self.kernel_size,)
-    else:
-      kernel_size = self.kernel_size
 
     in_features = inputs.shape[-1]
     assert in_features % self.feature_group_count == 0
@@ -334,17 +334,18 @@ class ConvTranspose(Module):
       The convolved data.
     """
     inputs = jnp.asarray(inputs, self.dtype)
-    is_single_input = False
-    if inputs.ndim == len(self.kernel_size) + 1:
-      is_single_input = True
-      inputs = jnp.expand_dims(inputs, axis=0)
-
-    strides = self.strides or (1,) * (inputs.ndim - 2)
 
     if isinstance(self.kernel_size, int):
       kernel_size = (self.kernel_size,)
     else:
       kernel_size = self.kernel_size
+
+    is_single_input = False
+    if inputs.ndim == len(kernel_size) + 1:
+      is_single_input = True
+      inputs = jnp.expand_dims(inputs, axis=0)
+
+    strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
     kernel_shape = kernel_size + (in_features, self.features)
