@@ -348,7 +348,7 @@ class Embed(base.Module):
       Output which is embedded input data.  The output shape follows the input,
       with an additional `features` dimension appended.
     """
-    if inputs.dtype not in [jnp.int32, jnp.int64, jnp.uint32, jnp.uint64]:
+    if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
     embedding = self.param('embedding', (num_embeddings, features),
                            embedding_init)
