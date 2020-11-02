@@ -217,12 +217,16 @@ class _MsgpackExtType(enum.IntEnum):
   """Messagepack custom type ids."""
   ndarray = 1
   native_complex = 2
+  npscalar = 3
 
 
 def _msgpack_ext_pack(x):
   """Messagepack encoders for custom types."""
   if isinstance(x, (np.ndarray, jax.xla.DeviceArray)):
     return msgpack.ExtType(_MsgpackExtType.ndarray, _ndarray_to_bytes(x))
+  if np.issctype(type(x)):
+    # pack scalar as ndarray
+    return msgpack.ExtType(_MsgpackExtType.npscalar, _ndarray_to_bytes(np.asarray(x)))
   elif isinstance(x, complex):
     return msgpack.ExtType(_MsgpackExtType.native_complex,
                            msgpack.packb((x.real, x.imag)))
@@ -236,6 +240,9 @@ def _msgpack_ext_unpack(code, data):
   elif code == _MsgpackExtType.native_complex:
     complex_tuple = msgpack.unpackb(data)
     return complex(complex_tuple[0], complex_tuple[1])
+  elif code == _MsgpackExtType.npscalar:
+    ar = _ndarray_from_bytes(data)
+    return ar[()]  # unpack ndarray to scalar
   return msgpack.ExtType(code, data)
 
 
