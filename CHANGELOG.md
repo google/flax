@@ -6,6 +6,8 @@ vNext
  (Please add entries here with your changes for the next version)
  - `flax.core.apply` and linen `Module.apply` will now only return the variables
    collections that were specified as mutable.
+ - Remove `flax.training.prefetch_iterator` because the prefetch workaround
+   has been redundant for a while.
  - ...
 
 v0.2.2
