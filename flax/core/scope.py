@@ -234,7 +234,6 @@ class Scope:
 
     self._invalid = False
 
-
   @property
   def path_text(self) -> str:
     """Returns the path as a human readable string with slashes between parts."""

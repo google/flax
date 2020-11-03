@@ -79,12 +79,14 @@ flags.DEFINE_string('train', default='', help=('Path to training data.'))
 flags.DEFINE_string('dev', default='', help=('Path to development data.'))
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2))
 def create_model(key, input_shape, model_kwargs):
   module = models.Transformer.partial(train=False, **model_kwargs)
-  _, initial_params = module.init_by_shape(key, [(input_shape, jnp.float32)])
-  model = nn.Model(module, initial_params)
-  return model
+  @jax.jit
+  def init(key):
+    _, initial_params = module.init_by_shape(key, [(input_shape, jnp.float32)])
+    model = nn.Model(module, initial_params)
+    return model
+  return init(key)
 
 
 def create_optimizer(model, learning_rate):

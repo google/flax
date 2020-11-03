@@ -149,6 +149,15 @@ def wrap_method(fun: Callable) -> Callable:
   return wrapped_module_method
 
 
+def _wrap_hash(hash_fn: Callable) -> Callable:
+  @functools.wraps(hash_fn)
+  def wrapped(self):
+    if self.scope is not None:
+      raise ValueError('Can\'t call __hash__ on modules that hold variables.')
+    return hash_fn(self)
+  return wrapped
+
+
 def get_unbound_fn(method_or_fn):
   """Return an unbound function from a bound method."""
   if inspect.ismethod(method_or_fn):
@@ -227,7 +236,8 @@ class Module:
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
-    dataclasses.dataclass(cls)
+    dataclasses.dataclass(cls, unsafe_hash=True)
+    cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):
       cls.__bases__[0].__dataclass_fields__ = parent_dataclass_fields
@@ -248,7 +258,7 @@ class Module:
   def _wrap_module_methods(cls):
     # We only want to wrap user-defined non-inherited methods.
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
-                  ['__eq__', '__repr__', '__init__'])
+                  ['__eq__', '__repr__', '__init__', '__hash__'])
     for key in get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       if _use_named_call and key != 'setup':
