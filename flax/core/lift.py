@@ -57,6 +57,7 @@ def _dedup_scopes(scopes):
     paths.append((max_parent, max_parent_path))
   return tuple(minimal_set), tuple(paths)
 
+
 def _dup_scopes(orig_scopes, scopes, paths):
   mapping = dict(zip(orig_scopes, scopes))
   scopes = []
@@ -66,6 +67,9 @@ def _dup_scopes(orig_scopes, scopes, paths):
       scope = scope.push(name, reuse=True)
     scopes.append(scope)
   return scopes
+
+def _transpose(xs):
+  return tuple(zip(*xs))
 
 def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[CollectionFilter],
@@ -77,9 +81,9 @@ def pack(fn: Callable[..., Any],
   The pack function is the building block for all other lifted transformations.
   """
   @functools.wraps(fn)
-  def wrapper(scope: Scope, *args):
+  def wrapper(scope_tree: Scope, *args):
     # pylint: disable=protected-access
-    scopes, treedef = jax.tree_flatten(scope)
+    scopes, treedef = jax.tree_flatten(scope_tree)
     scopes, paths = _dedup_scopes(scopes)
 
     variable_groups_xs = []
@@ -87,10 +91,13 @@ def pack(fn: Callable[..., Any],
     for scope in scopes:
       scope._validate_trace_level()
       scope._populate_collections()
-      variable_groups_xs.append(group_collections(scope._variables, in_variable_filters))
+      variable_groups_xs.append(group_collections(
+          scope._variables, in_variable_filters))
+    variable_groups_xs_t = _transpose(variable_groups_xs)
+
     # Make sure in only variable collections are frozen
-    for variable_groups in variable_groups_xs:
-      for variable_group in variable_groups:
+    for variable_group_xs in variable_groups_xs_t:
+      for variable_group in variable_group_xs:
         for col_name, collection in variable_group.items():
           col_in_out = any(
               in_filter(col_filter, col_name)
@@ -104,9 +111,10 @@ def pack(fn: Callable[..., Any],
         for kind in rng_group:
           rng_group[kind] = scope.make_rng(kind)
       rng_groups_xs.append(rng_groups)
+    rng_groups_xs_t = _transpose(rng_groups_xs)
 
     inner_scopes = []
-    def scope_fn(variable_groups_xs, rng_groups_xs):
+    def scope_fn(variable_groups_xs_t, rng_groups_xs_t):
       nonlocal inner_scopes
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
@@ -114,12 +122,15 @@ def pack(fn: Callable[..., Any],
       mutable = False
       for out_filter in out_variable_filters:
         mutable = union_filters(mutable, out_filter)
+      variable_groups_xs = _transpose(variable_groups_xs_t)
+      rng_groups_xs = _transpose(rng_groups_xs_t)
       for variable_groups, rng_groups, scope in zip(variable_groups_xs, rng_groups_xs, scopes):
         variables = {}
         rngs = {}
         for variable_group in variable_groups:
           variables.update(variable_group)
         for rng_group in rng_groups:
+          print(rng_group)
           rngs.update(rng_group)
         # make sure variable dicts are cloned and can't be manipulated by ref sharing.
         variables = jax.tree_map(lambda x: x, variables)
@@ -156,13 +167,18 @@ def pack(fn: Callable[..., Any],
         if remainder:
           raise ValueError(f'unmapped output variables: {remainder}')
         out_variable_groups_xs.append(out_variable_groups[:-1])
-      return tuple(out_variable_groups_xs)
+
+      return _transpose(out_variable_groups_xs)
+
     try:
-      y, out_variable_groups_xs = fn(
-          scope_fn, repack, tuple(variable_groups_xs), tuple(rng_groups_xs), *args)
+      y, out_variable_groups_xs_t = fn(
+          scope_fn, repack,
+          variable_groups_xs_t, rng_groups_xs_t,
+          *args)
     finally:
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
+    out_variable_groups_xs = _transpose(out_variable_groups_xs_t)
     for scope, out_variable_groups in zip(scopes, out_variable_groups_xs):
       for out_variable_group in out_variable_groups:
         for col_name, collection in out_variable_group.items():
@@ -313,7 +329,7 @@ def vmap(fn: Callable[..., Any],
   rng_groups, rng_splits = _unzip2(split_rngs.items())
   rng_axes = tuple(0 if rng_split else None for rng_split in rng_splits)
 
-  def inner(scope_fn, repack_fn, variable_groups_xs, rng_groups_xs, *args):
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     def find_axis_size(axis, x):
       if axis is not None:
         leaves = jax.tree_leaves(x)
@@ -321,13 +337,8 @@ def vmap(fn: Callable[..., Any],
           return leaves[0].shape[axis]
       return ()
 
-    n = len(variable_groups_xs)
-    variable_in_axes_xs = (variable_in_axes,) * n
-    variable_out_axes_xs = (variable_out_axes,) * n
-    rng_axes_xs = (rng_axes,) * n
-
     # split rngs
-    axis_sizes = jax.tree_multimap(find_axis_size, (variable_in_axes_xs, in_axes), (variable_groups_xs, args))
+    axis_sizes = jax.tree_multimap(find_axis_size, (variable_in_axes, in_axes), (variable_groups, args))
     axis_sizes = set(jax.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
       d_axis_size, = axis_sizes
@@ -339,23 +350,20 @@ def vmap(fn: Callable[..., Any],
       d_axis_size = axis_size
     split_fn = lambda rng: random.split(rng, d_axis_size)
 
-    def split_rngs(rng_groups):
-      return tuple(
-          jax.tree_map(split_fn, rng_group) if split else rng_group
-          for rng_group, split in zip(rng_groups, rng_splits))
-
-    rng_groups_xs = tuple(map(split_rngs, rng_groups_xs))
+    rng_groups = tuple(
+        jax.tree_map(split_fn, rng_group) if split else rng_group
+        for rng_group, split in zip(rng_groups, rng_splits))
 
     @functools.partial(jax.vmap,
-                       in_axes=(variable_in_axes_xs, rng_axes_xs, in_axes),
-                       out_axes=(out_axes, variable_out_axes_xs))
+                       in_axes=(variable_in_axes, rng_axes, in_axes),
+                       out_axes=(out_axes, variable_out_axes))
     @functools.wraps(fn)
-    def mapped(variable_groups_xs, rng_groups_xs, args):
-      scope = scope_fn(variable_groups_xs, rng_groups_xs)
+    def mapped(variable_groups, rng_groups, args):
+      scope = scope_fn(variable_groups, rng_groups)
       y = fn(scope, *args)
       return y, repack_fn(scope)
 
-    return mapped(variable_groups_xs, rng_groups_xs, args)
+    return mapped(variable_groups, rng_groups, args)
 
   return pack(
       inner, variable_in_groups, variable_out_groups, rng_groups,
@@ -392,6 +400,7 @@ def scan(fn: Callable[..., Any],
         variable_carry='counter',
         variable_broadcast='params',
         split_rngs={'params': False})(scope, (), xs)
+
   Args:
     fn: the function to be transformed.
     variable_axes: the variable collections that are scannned over.
@@ -421,7 +430,7 @@ def scan(fn: Callable[..., Any],
                    for rng_split in rng_splits)
 
   def inner(scope_fn, repack_fn,
-            variable_groups_xs, rng_groups_xs,
+            variable_groups, rng_groups,
             init, *args):
     def find_length(axis, x):
       if axis is not None:
