@@ -245,8 +245,9 @@ class MultiHeadDotProductAttention(base.Module):
       causal_mask: boolean specifying whether to apply a causal mask on the
         attention weights. If True, the output at timestep `t` will not depend
         on inputs at timesteps strictly greater than `t`.
-      padding_mask: boolean specifying query tokens that are pad token.
-      key_padding_mask: boolean specifying key-value tokens that are pad token.
+      padding_mask: boolean specifying query tokens that are pad token w/ False.
+      key_padding_mask: boolean specifying key-value tokens that are pad token
+        w/ False.
       segmentation: segment indices for packed inputs_q data.
       key_segmentation: segment indices for packed inputs_kv data.
       cache: an instance of `flax.nn.attention.Cache` used for efficient
@@ -273,6 +274,8 @@ class MultiHeadDotProductAttention(base.Module):
 
     if inputs_kv is None:
       inputs_kv = inputs_q
+
+    is_self_attention = inputs_kv is inputs_q
 
     if attention_axis is None:
       attention_axis = tuple(range(1, inputs_q.ndim - 1))
@@ -332,11 +335,6 @@ class MultiHeadDotProductAttention(base.Module):
                                           value=value)
         cache.store(cache_entry)
 
-        # TODO(levskaya): verify this is still needed in translation decoding.
-        key_padding_mask = jnp.broadcast_to(
-            (jnp.arange(cshape[1]) < cache_entry.i), cshape[:2])
-        key_padding_mask = key_padding_mask.astype(jnp.float32)[..., None]
-
     # create attention masks
     mask_components = []
 
@@ -351,9 +349,20 @@ class MultiHeadDotProductAttention(base.Module):
       else:
         mask_components.append(_make_causal_mask(key, attention_axis))
 
-    if padding_mask is not None:
+    if (padding_mask is not None or key_padding_mask is not None) and not cache:
       if key_padding_mask is None:
-        key_padding_mask = padding_mask
+        if is_self_attention:
+          key_padding_mask = padding_mask
+        else:
+          key_padding_shape = [inputs_kv.shape[dim] for dim in attention_axis]
+          key_padding_mask = jnp.full(key_padding_shape, True)
+      if padding_mask is None:
+        if is_self_attention:
+          padding_mask = key_padding_mask
+        else:
+          padding_shape = [inputs_q.shape[dim] for dim in attention_axis]
+          padding_mask = jnp.full(padding_shape, True)
+
       padding_mask = make_padding_mask(
           padding_mask_query=padding_mask,
           padding_mask_key=key_padding_mask,
@@ -364,6 +373,7 @@ class MultiHeadDotProductAttention(base.Module):
 
     if segmentation is not None:
       if key_segmentation is None:
+        assert is_self_attention
         key_segmentation = segmentation
       segmentation_mask = make_padding_mask(
           padding_mask_query=segmentation,
