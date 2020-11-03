@@ -535,6 +535,17 @@ class ModuleTest(absltest.TestCase):
     m1 = variables['params']['layers_2']['kernel']
     self.assertTrue(jnp.all(y == jnp.dot(nn.relu(jnp.dot(x, m0)), m1)))
 
+  def test_module_is_hashable(self):
+    module_a = nn.Dense(10)
+    module_a_2 = nn.Dense(10)
+    module_b = nn.Dense(5)
+    self.assertEqual(hash(module_a), hash(module_a_2))
+    self.assertNotEqual(hash(module_a), hash(module_b))
+
+  def test_module_with_scope_is_not_hashable(self):
+    module_a = nn.Dense(10, parent=Scope({}))
+    with self.assertRaisesWithLiteralMatch(TypeError, 'unhashable type: \'Scope\''):
+      hash(module_a)
 
 if __name__ == '__main__':
   absltest.main()

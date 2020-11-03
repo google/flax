@@ -227,7 +227,7 @@ class Module:
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
-    dataclasses.dataclass(cls)
+    dataclasses.dataclass(cls, unsafe_hash=True)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):
       cls.__bases__[0].__dataclass_fields__ = parent_dataclass_fields
@@ -248,7 +248,7 @@ class Module:
   def _wrap_module_methods(cls):
     # We only want to wrap user-defined non-inherited methods.
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
-                  ['__eq__', '__repr__', '__init__'])
+                  ['__eq__', '__repr__', '__init__', '__hash__'])
     for key in get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       if _use_named_call and key != 'setup':
