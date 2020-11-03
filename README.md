@@ -77,7 +77,7 @@ We keep here a limited list of canonical examples maintained by the Flax team th
 
 ### Generative models
 
-* [Varational auto-encoder](linen_examples/vae/)
+* [Variational auto-encoder](linen_examples/vae/)
 
 
 ## What does Flax look like?
