@@ -14,13 +14,45 @@
 
 """Flax functional core: Scopes.
 
-The goal of the Flax functional core is to provide a purely functional 
-abstraction that takes care of various types of bookkeeping such as parameter
-and RNG management. The main abstraction is Scope, which contains parameters
-and RNGs, and which can be nested.
+Typical deep learning models have trainable parameters, which are generally
+represented as dictionaries, or trees. For instance, a model may represent its
+trainable parameters as follows: 
+```
+{
+  "Conv1": { "weight": ..., "bias": ... }, 
+  "BatchNorm1": { "scale": ..., "mean": ... }, 
+  "Conv2": {...}
+}
+```
 
-TODO: elaborate.
+We call such a tree a `collection`. 
 
+In addition, many types of models include other, non-parameter variables (also
+called "state" or "buffer"). We store such variables in collections as well.
+For example, a model using batch normalization may use the following collection:
+`{ "BatchNorm1": { "moving_mean": ..., "moving_average": ...} }`.
+
+The functional core Scopes defined below allow a programmer to have easy access
+to both trainable and non-trainable parameters within a specific (sub-)module.
+Scopes maintain "parallel pointers" to subtrees of different collections. For 
+instance within an instance of the BatchNorm layer, the programmer has easy 
+access to both the trainable parameters `scale` and `mean`, as well as the 
+non-trainable parameters `moving_mean` and `moving_average`.
+
+Conceretly, the top-level scope of the model described above has the following
+variable dict (that includes *all* collections):
+```
+{
+  "params": {
+    "Conv1": { "weight": ..., "bias": ... },
+    "BatchNorm1": { "scale": ..., "mean": ... },
+    "Conv2": {...}
+  },
+  "batch_stats": {
+    "BatchNorm1": { "moving_mean": ..., "moving_average": ...}
+  }
+}
+```
 """
 
 import contextlib
