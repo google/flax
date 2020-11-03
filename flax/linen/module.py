@@ -149,6 +149,15 @@ def wrap_method(fun: Callable) -> Callable:
   return wrapped_module_method
 
 
+def _wrap_hash(hash_fn: Callable) -> Callable:
+  @functools.wraps(hash_fn)
+  def wrapped(self):
+    if self.scope is not None:
+      raise ValueError('Can\'t call __hash__ on modules that hold variables.')
+    return hash_fn(self)
+  return wrapped
+
+
 def get_unbound_fn(method_or_fn):
   """Return an unbound function from a bound method."""
   if inspect.ismethod(method_or_fn):
@@ -228,6 +237,7 @@ class Module:
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
     dataclasses.dataclass(cls, unsafe_hash=True)
+    cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):
       cls.__bases__[0].__dataclass_fields__ = parent_dataclass_fields

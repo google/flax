@@ -202,8 +202,6 @@ class Variable(Generic[T]):
 class Scope:
   """Scope."""
 
-  __hash__ = None
-
   def __init__(self,
                variables: Variables,
                rngs: Optional[Dict[str, PRNGKey]] = None,

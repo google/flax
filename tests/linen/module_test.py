@@ -544,7 +544,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
-    with self.assertRaisesWithLiteralMatch(TypeError, 'unhashable type: \'Scope\''):
+    with self.assertRaisesWithLiteralMatch(ValueError, 'Can\'t call __hash__ on modules that hold variables.'):
       hash(module_a)
 
 if __name__ == '__main__':
