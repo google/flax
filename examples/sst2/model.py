@@ -28,7 +28,6 @@ import numpy as np
 # pylint: disable=arguments-differ,too-many-arguments
 
 
-@functools.partial(jax.jit, static_argnums=(0, 1, 2, 3))
 def create_model(seed: int, batch_size: int, max_len: int,
                  model_kwargs: Dict[Text, Any]):
   """Instantiates a new model."""

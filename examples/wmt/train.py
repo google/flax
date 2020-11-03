@@ -254,16 +254,18 @@ def create_learning_rate_scheduler(
   return step_fn
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2, 3))
 def create_model(key, input_shape, target_shape, model_kwargs):
   """Instantiate transformer model and associated autoregressive cache def."""
   model_def = models.Transformer.partial(**model_kwargs)
-  with nn.attention.Cache().mutate() as cache_def:
-    _, initial_params = model_def.init_by_shape(
-        key, [(input_shape, jnp.float32), (target_shape, jnp.float32)],
-        cache=cache_def)
-    model = nn.Model(model_def, initial_params)
-  return model, cache_def
+  @jax.jit
+  def init(key):
+    with nn.attention.Cache().mutate() as cache_def:
+      _, initial_params = model_def.init_by_shape(
+          key, [(input_shape, jnp.float32), (target_shape, jnp.float32)],
+          cache=cache_def)
+      model = nn.Model(model_def, initial_params)
+    return model, cache_def
+  return init(key)
 
 
 def create_optimizer(model, learning_rate, weight_decay):

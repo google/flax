@@ -117,15 +117,16 @@ flags.DEFINE_integer(
     help='Integer for PRNG random seed.')
 
 
-@functools.partial(jax.jit, static_argnums=(1, 2))
 def create_model(key, input_shape, model_kwargs):
   module = models.TransformerLM.partial(**model_kwargs)
-  with nn.attention.Cache().mutate() as cache_def:
-    _, initial_params = module.init_by_shape(key,
-                                         [(input_shape, jnp.float32)],
-                                         cache=cache_def)
-  model = nn.Model(module, initial_params)
-  return model, cache_def
+  @jax.jit
+  def init(key):
+    with nn.attention.Cache().mutate() as cache_def:
+      _, initial_params = module.init_by_shape(
+          key, [(input_shape, jnp.float32)], cache=cache_def)
+    model = nn.Model(module, initial_params)
+    return model, cache_def
+  return init(key)
 
 
 def create_optimizer(model, learning_rate, weight_decay):
