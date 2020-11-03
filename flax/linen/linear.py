@@ -195,7 +195,9 @@ class Conv(Module):
 
   Args:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer. For all other cases, it must
+      be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -219,7 +221,7 @@ class Conv(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Sequence[int]
+  kernel_size: Union[int, Sequence[int]]
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   input_dilation: Optional[Sequence[int]] = None
@@ -244,8 +246,13 @@ class Conv(Module):
 
     inputs = jnp.asarray(inputs, self.dtype)
 
+    if isinstance(self.kernel_size, int):
+      kernel_size = (self.kernel_size,)
+    else:
+      kernel_size = self.kernel_size
+
     is_single_input = False
-    if inputs.ndim == len(self.kernel_size) + 1:
+    if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
@@ -254,7 +261,7 @@ class Conv(Module):
 
     in_features = inputs.shape[-1]
     assert in_features % self.feature_group_count == 0
-    kernel_shape = self.kernel_size + (
+    kernel_shape = kernel_size + (
         in_features // self.feature_group_count, self.features)
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
@@ -285,7 +292,9 @@ class ConvTranspose(Module):
 
   Args:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer. For all other cases, it must
+      be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -303,7 +312,7 @@ class ConvTranspose(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Sequence[int]
+  kernel_size: Union[int, Sequence[int]]
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
@@ -325,15 +334,21 @@ class ConvTranspose(Module):
       The convolved data.
     """
     inputs = jnp.asarray(inputs, self.dtype)
+
+    if isinstance(self.kernel_size, int):
+      kernel_size = (self.kernel_size,)
+    else:
+      kernel_size = self.kernel_size
+
     is_single_input = False
-    if inputs.ndim == len(self.kernel_size) + 1:
+    if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
-    kernel_shape = self.kernel_size + (in_features, self.features)
+    kernel_shape = kernel_size + (in_features, self.features)
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
 

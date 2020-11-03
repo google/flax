@@ -192,7 +192,9 @@ class Conv(base.Module):
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
       features: number of convolution filters.
-      kernel_size: shape of the convolutional kernel.
+      kernel_size: shape of the convolutional kernel. For 1D convolution,
+        the kernel size can be passed as an integer. For all other cases, it must
+        be a sequence of integers.
       strides: a sequence of `n` integers, representing the inter-window
         strides.
       padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -219,12 +221,14 @@ class Conv(base.Module):
     """
 
     inputs = jnp.asarray(inputs, dtype)
+    if isinstance(kernel_size, int):
+      kernel_size = (kernel_size,)
 
     is_single_input = False
     if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
-      
+
     if strides is None:
       strides = (1,) * (inputs.ndim - 2)
 
@@ -276,7 +280,9 @@ class ConvTranspose(base.Module):
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
       features: number of convolution filters.
-      kernel_size: shape of the convolutional kernel.
+      kernel_size: shape of the convolutional kernel. For 1D convolution,
+        the kernel size can be passed as an integer. For all other cases, it must
+        be a sequence of integers.
       strides: a sequence of `n` integers, representing the inter-window
         strides.
       padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -296,12 +302,14 @@ class ConvTranspose(base.Module):
       The convolved data.
     """
     inputs = jnp.asarray(inputs, dtype)
+    if isinstance(kernel_size, int):
+      kernel_size = (kernel_size,)
     
     is_single_input = False
     if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
-    
+
     strides = strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
