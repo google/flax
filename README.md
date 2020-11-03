@@ -12,7 +12,7 @@
 **NOTE**: Flax is in use by a growing community
 of researchers and engineers at Google who happily use Flax for their
 daily research. The new Flax ["Linen" module API](https://github.com/google/flax/tree/master/flax/linen) is now stable and we recommend it for all new projects. The old `flax.nn` API will be deprecated. Please report
-any issues, questions or concerns in our 
+any feature requests, issues, questions or concerns in our 
 [discussion forum](https://github.com/google/flax/discussions), or just let us know 
 what you're working on!
 
