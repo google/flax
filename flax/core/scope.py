@@ -202,6 +202,8 @@ class Variable(Generic[T]):
 class Scope:
   """Scope."""
 
+  __hash__ = None
+
   def __init__(self,
                variables: Variables,
                rngs: Optional[Dict[str, PRNGKey]] = None,
@@ -233,7 +235,6 @@ class Scope:
     self._children = {}
 
     self._invalid = False
-
 
   @property
   def path_text(self) -> str:
