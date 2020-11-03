@@ -32,12 +32,15 @@ def create_model(seed: int, batch_size: int, max_len: int,
                  model_kwargs: Dict[Text, Any]):
   """Instantiates a new model."""
   module = TextClassifier.partial(train=False, **model_kwargs)
-  _, initial_params = module.init_by_shape(
-      jax.random.PRNGKey(seed),
-      [((batch_size, max_len), jnp.int32),
-       ((batch_size,), jnp.int32)])
-  model = nn.Model(module, initial_params)
-  return model
+  @jax.jit
+  def init(key):
+    _, initial_params = module.init_by_shape(
+        key,
+        [((batch_size, max_len), jnp.int32),
+        ((batch_size,), jnp.int32)])
+    model = nn.Model(module, initial_params)
+    return model
+  return init(jax.random.PRNGKey(seed))
 
 
 def word_dropout(inputs: jnp.ndarray, rate: float, unk_idx: int, 
