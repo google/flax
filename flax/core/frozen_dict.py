@@ -27,6 +27,8 @@ V = TypeVar('V')
 def _indent(x, num_spaces):
   indent_str = ' ' * num_spaces
   lines = x.split('\n')
+  assert lines[-1] == ''
+  # skip the final line because it's empty and should not be indented.
   return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
 
 
