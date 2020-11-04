@@ -49,6 +49,45 @@ def _check_omnistaging():
         "  config.enable_omnistaging()")
 
 
+def _indent(x: str, num_spaces: int):
+  indent_str = ' ' * num_spaces
+  lines = x.split('\n')
+  # skip last line because it is always empty and should not be indented.
+  assert lines[-1] == ''
+  return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
+
+
+def _attr_repr(value: Any):
+  if isinstance(value, Callable) and getattr(value, '__name__', None):
+    value_rep = value.__name__
+  else:
+    value_rep = repr(value)
+  return value_rep
+
+def module_repr(module: 'Module', num_spaces: int = 4):
+  """Returns a pretty printed representation of the module"""
+  cls = type(module)
+  cls_name = cls.__name__
+  rep = ''
+  attributes = {k: v for k, v in cls.__annotations__.items() if k not in ('parent', 'name')}
+  child_modules = {k: v for k, v in module.children.items() if isinstance(v, Module)}
+  if attributes:
+    rep += '# attributes\n'
+    for attr in attributes.keys():
+      # TODO(jheek): can we get a nice string representation of attribute types?
+      value = getattr(module, attr)
+      value_rep = _attr_repr(value)
+      rep += f'{attr} = {value_rep}\n'
+  if child_modules:
+    rep += '# children\n'
+    for name, child in child_modules.items():
+      child_rep = module_repr(child, num_spaces)
+      rep += f'{name} = {child_rep}\n'
+  if rep:
+    return f'{cls_name}(\n{_indent(rep, num_spaces)})'
+  else:
+    return f'{cls_name}()'
+
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
 class _DynamicContext:
@@ -236,7 +275,7 @@ class Module:
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
-    dataclasses.dataclass(cls, unsafe_hash=True)
+    dataclasses.dataclass(cls, unsafe_hash=True, repr=False)
     cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):
@@ -367,6 +406,9 @@ class Module:
     # Call the user-defined initialization setup() function.
     self.setup()
 
+  def __repr__(self):
+    return module_repr(self)
+
   def setup(self):
     """Called when Module instance receives variables and PRNGs.
     If you want to use PRNGs and/or read or write variables during module
@@ -488,6 +530,7 @@ class Module:
     """Create and return initialized data for module with rngs."""
     _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
     return v_out
+
 
   @property
   def variables(self):

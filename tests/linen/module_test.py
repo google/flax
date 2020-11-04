@@ -547,5 +547,49 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(ValueError, 'Can\'t call __hash__ on modules that hold variables.'):
       hash(module_a)
 
+  def test_module_trace(self):
+    class MLP(nn.Module):
+      act: Callable = nn.relu
+      sizes: Iterable[int] = (3, 2)
+
+      @nn.compact
+      def __call__(self, x):
+        for size in self.sizes:
+          x = nn.Dense(size)(x)
+          x = self.act(x)
+        return repr(self)
+    mlp = MLP()
+    expected_trace = (
+"""MLP(
+    # attributes
+    act = relu
+    sizes = (3, 2)
+    # children
+    Dense_0 = Dense(
+        # attributes
+        features = 3
+        use_bias = True
+        dtype = float32
+        precision = None
+        kernel_init = init
+        bias_init = zeros
+    )
+    Dense_1 = Dense(
+        # attributes
+        features = 2
+        use_bias = True
+        dtype = float32
+        precision = None
+        kernel_init = init
+        bias_init = zeros
+    )
+)""")
+    x = jnp.ones((1, 2))
+    trace, variables = mlp.init_with_output(random.PRNGKey(0), x)
+    self.assertEqual(trace, expected_trace)
+    trace = mlp.apply(variables, x)
+    self.assertEqual(trace, expected_trace)
+
+
 if __name__ == '__main__':
   absltest.main()
