@@ -59,5 +59,20 @@ class FrozenDictTest(absltest.TestCase):
     self.assertEqual(items, [('a', 1), ('b', freeze(xs['b']))])
 
 
+  def test_frozen_dict_repr(self):
+    expected = (
+"""FrozenDict({
+    a: 1,
+    b: {
+        c: 2,
+        d: {},
+    },
+})""")
+
+    xs = FrozenDict({'a': 1, 'b': {'c': 2, 'd': {}}})
+    self.assertEqual(repr(xs), expected)
+    self.assertEqual(repr(FrozenDict()), 'FrozenDict({})')
+
+
 if __name__ == '__main__':
   absltest.main()

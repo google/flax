@@ -24,6 +24,12 @@ K = TypeVar('K')
 V = TypeVar('V')
 
 
+def _indent(x, num_spaces):
+  indent_str = ' ' * num_spaces
+  lines = x.split('\n')
+  return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
+
+
 @jax.tree_util.register_pytree_node_class
 class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
@@ -55,7 +61,21 @@ class FrozenDict(Mapping[K, V]):
     return len(self._dict)
 
   def __repr__(self):
-    return 'FrozenDict(%r)' % self._dict
+    return self.pretty_repr()
+
+  def pretty_repr(self, num_spaces=4):
+    """Returns an indented representation of the nested dictionary."""
+    def pretty_dict(x):
+      if not isinstance(x, dict):
+        return repr(x)
+      rep = ''
+      for key, val in x.items():
+        rep += f'{key}: {pretty_dict(val)},\n'
+      if rep:
+        return '{\n' + _indent(rep, num_spaces) + '}'
+      else:
+        return '{}'
+    return f'FrozenDict({pretty_dict(self._dict)})'
 
   def __hash__(self):
     if self._hash is None:
