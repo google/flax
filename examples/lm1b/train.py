@@ -410,7 +410,12 @@ def train_and_evaluate(
       functools.partial(train_step, learning_rate_fn=learning_rate_fn),
       axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
-  p_pred_step = jax.pmap(predict_step, axis_name='batch')
+
+  def predict_step_fn(inputs, model, cache, prng_key):
+    return predict_step(
+        inputs, model, cache, prng_key,
+        max_predict_token_length, sampling_temperature, sampling_top_k)
+  p_pred_step = jax.pmap(predict_step_fn, axis_name='batch')
 
   metrics_all = []
   tick = time.time()
@@ -487,9 +492,7 @@ def train_and_evaluate(
       prompt = jnp.reshape(prompt, (prompt.shape[0], 1, prompt.shape[1]))
       cache = jax_utils.replicate(
           cache_def.initialize_cache((1, max_predict_token_length)))
-      predicted = p_pred_step(
-        prompt, optimizer.target, cache, pred_rngs, max_predict_token_length,
-        sampling_temperature, sampling_top_k)
+      predicted = p_pred_step(prompt, optimizer.target, cache, pred_rngs)
       predicted = tohost(predicted)
       exemplars = ''
       for n in range(predicted.shape[0]):
