@@ -14,45 +14,52 @@
 
 """Flax functional core: Scopes.
 
-Typical deep learning models have trainable parameters, which are generally
-represented as dictionaries, or trees. For instance, a model may represent its
-trainable parameters as follows: 
-```
-{
-  "Conv1": { "weight": ..., "bias": ... }, 
-  "BatchNorm1": { "scale": ..., "mean": ... }, 
-  "Conv2": {...}
-}
-```
-
-We call such a tree a `collection`. 
-
-In addition, many types of models include other, non-parameter variables (also
-called "state" or "buffer"). We store such variables in collections as well.
-For example, a model using batch normalization may use the following collection:
-`{ "BatchNorm1": { "moving_mean": ..., "moving_average": ...} }`.
-
-The functional core Scopes defined below allow a programmer to have easy access
-to both trainable and non-trainable parameters within a specific (sub-)module.
-Scopes maintain "parallel pointers" to subtrees of different collections. For 
-instance within an instance of the BatchNorm layer, the programmer has easy 
-access to both the trainable parameters `scale` and `mean`, as well as the 
-non-trainable parameters `moving_mean` and `moving_average`.
-
-Conceretly, the top-level scope of the model described above has the following
-variable dict (that includes *all* collections):
-```
-{
-  "params": {
-    "Conv1": { "weight": ..., "bias": ... },
-    "BatchNorm1": { "scale": ..., "mean": ... },
-    "Conv2": {...}
-  },
-  "batch_stats": {
-    "BatchNorm1": { "moving_mean": ..., "moving_average": ...}
+Flax deep learning models contain variables, which can be of different 
+categories such as trainable parameters, or internal state variables that aren't
+parameters (e.g., batch statistics). For instance, the top-level variable
+dictionary of a Flax model using batch normalization may look as follows::
+  {
+    "params": {
+      "Conv1": { "weight": ..., "bias": ... },
+      "BatchNorm1": { "scale": ..., "mean": ... },
+      "Conv2": {...}
+    },
+    "batch_stats": {
+      "BatchNorm1": { "moving_mean": ..., "moving_average": ...}
+    }
   }
-}
-```
+
+This variable dict has two so-called "collections": `params` (containing the 
+trainable parameters) and `batch_stats` (containing the --non-trainable-- batch
+statistics).
+
+The functional core Scope defined below allows easy access to all variables in a
+layer. For instance, from inside the BathcNorm1 layer, the variable "mean" is
+accessed as follows::
+  mean = scope.variable('batch_stats', 'moving_mean', jnp.zeros, (,))
+
+This will initialize it using `jnp.zeros` with shape `(,)`. The function 
+`scope.params` accesses variables of collection "params" directly::
+  weight = scope.params('scale', jnp.zeros, (3, 6))
+
+Scope are not constructed directly, but passed as a first argument to functions
+to which they should be applied. E.g., the scopes of the example above::
+  def conv(scope, x, ...)::
+    weight = scope.params('weight', ...)
+    ...
+
+  def module_fn(scope, x, ...):
+    conv = scope.child(conv, 'conv')(x, ...)
+    ...
+
+The function `init` is then used to initialize a Scope, which transforms it into
+a function that expects RNG keys for all collections::
+  vars = init(module_fn)({
+      'params': PRNGKey(0), 'batch_stats': PRNGKey(0)
+  }, input_shapes)
+
+Thus, the user provides rng seeds for all collections to the top-level scope,
+which are automatically split and propagated to lower-level scopes.
 """
 
 import contextlib
