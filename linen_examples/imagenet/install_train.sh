@@ -51,4 +51,6 @@ sleep 300 && sudo shutdown now
 tmux split-window -h
 tmux send "while true; do gsutil rsync -r logs $GCS_LOGS_TEMP; sleep 60; done" ENTER
 
+# >(logger -t "test")
+
 echo install_train.sh FINISHED
