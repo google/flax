@@ -60,6 +60,8 @@ class _DynamicContext:
     if not hasattr(self._thread_data, 'module_stack'):
       self._thread_data.module_stack = [None,]
     return self._thread_data.module_stack
+
+# The global context 
 _context = _DynamicContext()
 
 class _Sentinel:
@@ -85,13 +87,13 @@ def disable_named_call():
 # Utilities for autonaming pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
 def is_module_tree(in_tree: Any) -> bool:
-  """Determine if in_tree is a pytree of subclasses of Module.
+  """Determines if `in_tree` is a pytree of subclasses of Module.
 
   Args:
     in_tree: python object, typically a python tree.
 
   Returns:
-    False in_tree is empty or if any leaf is not a Module, True otherwise.
+    True if `in_tree` is non-empty and all leafs are Module, False otherwise.
   """
   # reject trivial pytrees, {}, [], (), etc.
   if not tree_util.tree_leaves(in_tree):
@@ -100,8 +102,15 @@ def is_module_tree(in_tree: Any) -> bool:
   return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
 
 
-def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
-  """Helper for naming pytrees of submodules."""
+def get_suffix_module_pairs(module_tree: Any) -> List[Tuple[str, Type["Module"]]]:
+  """Helper for naming pytrees of submodules.
+  
+  Args:
+    module_tree: a module tree.
+  Returns:
+    A list containing pairs `(module_name, module)` from `module_tree`, where
+    `module_name` is the concatenation of the module and all its submodules.
+  """
   if isinstance(module_tree, Module):
     return [('', module_tree)]
   else:
@@ -111,7 +120,13 @@ def get_suffix_module_pairs(module_tree) -> List[Tuple[str, Type["Module"]]]:
 
 
 def all_names_on_object(obj: Any) -> Set[str]:
-  """Get all names of attributes on self and its classes throughout MRO."""
+  """Gets all names of attributes on `obj` and its classes throughout MRO.
+  
+  Args:
+    obj: the object to get names for.
+  Returns:
+    A set of names of attributes of `obj` and its classes.
+  """
   nameset = set(obj.__dict__.keys())
   for cls in obj.__class__.__mro__:
     nameset = nameset.union(set(cls.__dict__.keys()))
@@ -121,13 +136,35 @@ def all_names_on_object(obj: Any) -> Set[str]:
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
 def compact(fun: Callable) -> Callable:
-  """Decorator to mark a single Module method as compact."""
+  """Decorator to mark a single Module method as compact. 
+  
+  Methods wrapped in @compact can define submodules directly within the method.
+  For instance::
+    @compact
+    __call__(self, x, features):
+      x = nn.Dense(features)(x)
+      ...
+  
+  At most one method in each Module may be wrapped with @compact.
+
+  Args:
+    fun: the Module method to mark as compact.
+  Returns:
+    The given function `fun` marked as compact.
+  """
   fun.compact = True
   return fun
 
 
 def get_local_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
-  """Get method names of a class, excluding class and static methods."""
+  """Gets method names of a class, excluding class and static methods.
+  
+  Args:
+    cls: the class to get method names for.
+    excludes: names to exclude from output.
+  Returns:
+    A list of method names.
+  """
   true_methods = set()
   for m in cls.__dict__:
     if callable(cls.__dict__[m]):
@@ -138,7 +175,13 @@ def get_local_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
 
 
 def wrap_method(fun: Callable) -> Callable:
-  """Manages Module state for user-defined methods."""
+  """Manages Module state for user-defined methods.
+  
+  Args:
+    fun: user-defined Module method to manage state for.
+  Returns:
+    Wrapped method.
+  """
   @functools.wraps(fun)
   def wrapped_module_method(self, *args, **kwargs):
     is_compact_method = hasattr(fun, 'compact')
@@ -164,8 +207,17 @@ def wrap_method(fun: Callable) -> Callable:
   return wrapped_module_method
 
 
-def get_unbound_fn(method_or_fn):
-  """Return an unbound function from a bound method."""
+def get_unbound_fn(method_or_fn: Callable[Any]) -> Callable[Any]:
+  """Return an unbound function from a method that is possibly bound.
+  
+  This means that the returned function does no longer depend on the instance
+  of the class, which is passed as it first argument. 
+
+  Args:
+    method_or_fn: a class method or function.
+  Returns:
+    An unbound version of input function.
+  """
   if inspect.ismethod(method_or_fn):
     return method_or_fn.__func__
   elif callable(method_or_fn):
@@ -174,12 +226,13 @@ def get_unbound_fn(method_or_fn):
     raise ValueError('Expect a function or method.')
 
 
-# Ephemeral Module Evaluation State
-# -----------------------------------------------------------------------------
-# For clarity, we collect all of the temporary flags and ephemeral
-# state used by Modules for autonaming and error messages here.
 @dataclasses.dataclass
 class _ModuleInternalState:
+  """Ephemeral Module Evaluation State.
+
+  For clarity, we collect all of the temporary flags and ephemeral state used by
+  Modules for autonaming and error messages here.
+  """.
   in_compact_method: bool = False
   in_setup: bool = False
   last_varname: Optional[str] = None
@@ -200,11 +253,11 @@ _uninitialized_module_internal_state = _ModuleInternalState(
 # Base Module definition.
 # -----------------------------------------------------------------------------
 class Module:
-  """Base Module Class"""
+  """Base Module Class."""
 
   @classmethod
   def __init_subclass__(cls):
-    """Automatically initialize all subclasses as custom dataclasses."""
+    """Automatically initializes all subclasses as custom dataclasses."""
     # All Flax Modules are dataclasses.  We force this convention since
     # it encourages the stateless behavior needed to clone module instances for
     # functional transformation.  Instead of using a python metaclass, we
@@ -222,7 +275,7 @@ class Module:
 
   @classmethod
   def _add_parent_and_name_attrs(cls):
-    """Add final optional dataclass attributes: `parent` and `name`."""
+    """Adds final optional dataclass attributes: `parent` and `name`."""
     annotations = cls.__dict__.get('__annotations__', {})
     if 'parent' in annotations or 'name' in annotations:
       raise ValueError(
@@ -243,7 +296,7 @@ class Module:
 
   @classmethod
   def _verify_single_or_no_compact(cls):
-    """Statically verify that at most a single method is labelled compact."""
+    """Statically verifies that at most a single method is labelled compact."""
     methods = [m[0] for m in inspect.getmembers(cls, predicate=callable)]
     n_compact_fns = len([method_name for method_name in methods
                          if hasattr(getattr(cls, method_name), 'compact')])
@@ -255,7 +308,7 @@ class Module:
 
   @classmethod
   def _wrap_module_methods(cls):
-    # We only want to wrap user-defined non-inherited methods.
+    """Wrap user-defined non-inherited methods with state management functions."""
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__'])
     for key in get_local_method_names(cls, exclude=exclusions):
@@ -268,11 +321,18 @@ class Module:
     return cls
 
   def __setattr__(self, name: str, val: Any):
-    """We overload setattr solely to support pythonic naming via
-    assignment of submodules in the special setup() function:
+    """Sets the an attribute on this Module.
+    
+    We overload setattr solely to support pythonic naming via assignment of 
+    submodules in the special setup() function::
       self.submodule_name = MyModule(...)
-    we also support lists and other general pytrees, e.g.:
+
+    We also support lists and other general pytrees, e.g.::
       self.submodules = [MyModule0(..), MyModule1(..), ...]
+
+    Args:
+      name: attribute to set.
+      val: value of the attribute.
     """
     # val is a Module or pytree whose leaves are all Modules.
     if is_module_tree(val):
@@ -312,10 +372,10 @@ class Module:
   def __post_init__(self):
     _check_omnistaging()
     # In dataclasses, __init__ is overridden to process dataclass arguments,
-    # and __post_init__ is called immediately afterwards.  Here, depending
-    # on the type of `parent` passed to initialize the Module, we either
-    # defer initialization, attach this Module as a submodule of a parent,
-    # or bind this Module at the top-level to variables and rngs.
+    # and __post_init__ is called immediately afterwards. Here, depending on the
+    # type of `parent` passed to initialize the Module, we either defer 
+    # initialization, attach this Module as a submodule of a parent, or bind
+    # this Module at the top-level to variables and rngs.
 
     self._state = _ModuleInternalState()
     self.children = dict()  # tracks child modules
@@ -370,13 +430,14 @@ class Module:
 
   def setup(self):
     """Called when Module instance receives variables and PRNGs.
+
     If you want to use PRNGs and/or read or write variables during module
     instance construction, override this method. It will be automatically
     called from the dataclass `__post_init__`.
     """
     pass
 
-  def _name_taken(self, name):
+  def _name_taken(self, name: str) -> bool:
     return (name in self._state.reservations or
             name in all_names_on_object(self))
 
@@ -384,8 +445,8 @@ class Module:
   def _initialization_allowed(self):
     return self._state.in_setup or self._state.in_compact_method
 
-  def clone(self, **updates):
-    """Create a clone of this Module, with optionally updated arguments."""
+  def clone(self, **updates) -> 'Module':
+    """Creates a clone of this Module, with optionally updated arguments."""
     attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
     attrs.update(**updates)
     return self.__class__(**attrs)
@@ -428,16 +489,25 @@ class Module:
       init_fn: a function taking a PRNGKey plus any other number of
         positional arguments.
       *init_args: the arguments to evaluate init_fn on lazily.
-      kind: an optional kind for the parameter.
+      kind: kind for the parameter.
 
     Returns:
-      An initialized array.
+      The value of the initialized parameter.
     """
     p_init_fn = lambda *args: init_fn(self.make_rng(kind), *args)
     return self.variable(kind, name, p_init_fn, *init_args).value
 
   def get_variable(self, kind: str, name: str, default: T = None) -> T:
-    """Get raw value of variable on this Module."""
+    """Get the value of a variable on this Module.
+    
+    Args:
+      kind: kind of the variable.
+      name: name of the variable.
+      default: default value to return if the variable doesn't exist.
+    
+    Returns:
+      The value of the input variable, or `default` if it doesn't exist.
+    """
     return self.scope.get_variable(kind, name, default)
 
   def has_variable(self, kind: str, name: str):
@@ -445,7 +515,7 @@ class Module:
     return self.scope.has_variable(kind, name)
 
   def put_variable(self, kind: str, name: str, value: Any):
-    """Direectly set value of a variable on this Module."""
+    """Directly set value of a variable on this Module."""
     return self.scope.put_variable(kind, name, value)
 
   def make_rng(self, kind: str) -> PRNGKey:
@@ -453,7 +523,7 @@ class Module:
     return self.scope.make_rng(kind)
 
   def apply(self, variables, *args, rngs=None,
-            method=None, mutable=False, **kwargs):
+            method: Callable[Any] = None, mutable=False, **kwargs):
     """Apply module to variables and return output and modified variables."""
     if method is None:
       method = self.__class__.__call__
