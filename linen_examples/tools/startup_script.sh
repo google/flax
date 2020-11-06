@@ -1,56 +1,64 @@
 #!/bin/bash
 
-# output in /var/log/syslog
+# Replaced by launch_gce.py
+REPO='__REPO__'
+BRANCH='__BRANCH__'
+EXAMPLE='__EXAMPLE__'
+TIMESTAMP='__TIMESTAMP__'
+NAME='__EXAMPLE__/__NAME__/__TIMESTAMP__'
+ARGS='__ARGS__'
+GCS_MODEL_DIR='__GCS_MODEL_DIR__'
 
-REPO=https://github.com/andsteing/flax
-BRANCH=imagenet
-CONFIG='configs/v100_x8_mixed_precision.py'
-CONFIG='configs/v100_x8.py'
+HOME=/train
 
-GCS_LOGS_TEMP='gs://flax_us/logs_temp'
-GCS_LOGS='gs://flax_us/logs'
-# DATA_DIR='gs://tensorflow-datasets/datasets'
-DATA_DIR='gs://flax_us/datasets'
-DATASET='imagenet2012'
-NOW=$(date +%F_%H%M%S)
-NAME="imagenet_half_$NOW"
-NAME="imagenet_full_$NOW"
+echo 'tmux a' > /attach.sh
+chmod a+x /attach.sh
 
-cd
-mv flax flax_$NOW
-mv logs logs_$NOW
+mkdir -p $HOME
+cd $HOME
 
-tmux new-session -s train_imagenet -d htop ENTER
+tmux new-session -s flax -d htop ENTER
 tmux split-window
 tmux send "
 
-mkdir -p $HOME/datasets &&
-gsutil -m cp -R $DATA_DIR/$DATASET $HOME/datasets/ &&
+(
 
-git clone -b $BRANCH $REPO &&
-cd flax &&
+  [ -d flax ] || (
+    git clone -b $BRANCH $REPO &&
+    cd flax &&
 
-python3 -m pip install virtualenv &&
-python3 -m virtualenv env &&
-. env/bin/activate &&
+    python3 -m pip install virtualenv &&
+    python3 -m virtualenv env &&
+    . env/bin/activate &&
 
-pip install -U pip &&
-pip install --upgrade jax jaxlib==0.1.55+cuda100 -f https://storage.googleapis.com/jax-releases/jax_releases.html &&
-pip install -e . &&
+    pip install -U pip &&
+    pip install --upgrade jax jaxlib==0.1.55+cuda100 -f https://storage.googleapis.com/jax-releases/jax_releases.html &&
+    pip install -e . &&
 
-cd linen_examples/imagenet &&
-pip install -r requirements.txt &&
+    cd linen_examples/$EXAMPLE &&
+    pip install -r requirements.txt &&
+    cd $HOME
+  ) &&
 
-python imagenet_main.py --model_dir=../../../logs/$NAME --data_dir=$HOME/datasets --config=$CONFIG &&
-gsutil cp -R $HOME/logs/$NAME $GCS_LOGS/
+  cd flax &&
+  . env/bin/activate &&
+  cd linen_examples/$EXAMPLE &&
+
+  python ${EXAMPLE}_main.py --model_dir=$HOME/model_dir/$NAME $ARGS &&
+
+  gsutil cp -R $HOME/model_dir/$NAME $GCS_MODEL_DIR
+
+
+) 2>&1 | tee -a setup_train_log_${TIMESTAMP}.txt >(logger -t flax)
 
 echo
 echo WILL SHUT DOWN IN 5 MIN ...
 sleep 300 && sudo shutdown now
 "
 tmux split-window -h
-tmux send "while true; do gsutil rsync -r logs $GCS_LOGS_TEMP; sleep 60; done" ENTER
-
-# >(logger -t "test")
-
-echo install_train.sh FINISHED
+tmux send "
+while true; do
+  gsutil rsync -x '*/checkpoint_*' -r model_dir $GCS_MODEL_DIR
+  sleep 60
+done 2>&1 | tee -a gcs_rsync_${TIMESTAMP}.txt >(logger -t flax)
+" ENTER
