@@ -66,8 +66,8 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   keys in parellel that are independent of each other.
 
   Args:
-   rng: The rng to fold the string into.
-   data: The string to be folded in.
+   rng: the rng to fold the string into.
+   data: the string to be folded in.
 
   Returns:
    The newly generated PRNG key.
@@ -85,9 +85,9 @@ def in_filter(filter_like: Filter, col: str) -> bool:
   Used for both collections and rng sequence filters.
 
   Args:
-    filter_like: A filter (either a boolean, a string, or a list of strings)
+    filter_like: a filter (either a boolean, a string, or a list of strings)
       for a collection.
-    col: A collection, which is a string identifying a dictionary of data, for
+    col: a collection, which is a string identifying a dictionary of data, for
       instance "params" or "batch_stats".
 
   Returns:
@@ -104,7 +104,14 @@ def in_filter(filter_like: Filter, col: str) -> bool:
 
 
 def filter_to_set(x: Filter) -> Set[str]:
-  """Convert a Filter into a set of collections, fails on the infinite set."""
+  """Converts a Filter into a set of collections, fails on the infinite set.
+  
+  Args:
+    x: a filter (boolean, string, or list of strings).
+    
+  Returns:
+    The input filter represented as a set of strings.
+  """
   assert x is not True, 'Infinite set'
   if x is False:
     return set()
@@ -115,8 +122,17 @@ def filter_to_set(x: Filter) -> Set[str]:
   raise TypeError('Invalid Filter')
 
 
-def union_filters(a, b):
-  """Combine two filters like a logical or."""
+def union_filters(a: Filter, b: Filter) -> Set[str]:
+  """Takes the union of two filters (similar to a logical or).
+  
+  Arguments:
+    a: a filter.
+    b: a filter.
+    
+  Returns:
+    The union of the two input filters. For instance, 
+    `union_filters('f1', ['f2']) = {'f1', 'f2'}`.
+  """
   if a is True or b is True:
     return True
   a = filter_to_set(a)
@@ -124,8 +140,17 @@ def union_filters(a, b):
   return a.union(b)
 
 
-def intersect_filters(a, b):
-  """Combine two filters like a logical and."""
+def intersect_filters(a: Filter, b: Filter) -> Set[str]:
+  """Take the intersection of two filters (similar to a logical and).
+  
+  Arguments:
+    a: a filter.
+    b: a filter.
+    
+  Returns:
+    The intersection of the two input filters. For instance, 
+    `intersect_filters('f1', ['f1', 'f2']) = {'f1'}`.
+  """
   if a is True:
     return b
   if b is True:
@@ -144,8 +169,8 @@ def group_collections(xs: Variables,
   to the output once.
   
   Args:
-    xs: A dictionary of variables, keyed by collections (strings).
-    col_filters: A list of collection filters.
+    xs: a dictionary of variables, keyed by collections (strings).
+    col_filters: a list of collection filters.
     
   Returns:
     A sequence S with `len(S) == len(col_filters)`. Each `S[i]` is the result of
@@ -180,9 +205,9 @@ class Variable(Generic[T]):
     """Initializes a variable.
 
     Args:
-      scope: The scope in which the variable is stored.
-      collection: The collection of the variable (e.g., "params").
-      name: The name of the variable (e.g., "dense").
+      scope: the scope in which the variable is stored.
+      collection: the collection of the variable (e.g., "params").
+      name: the name of the variable (e.g., "dense").
     """
     self.scope = scope
     self.collection = collection
@@ -200,7 +225,7 @@ class Variable(Generic[T]):
 
 
 class Scope:
-  """Scope."""
+  """The Scope class. See top-level docstring of this doc for a description."""
 
   def __init__(self,
                variables: Variables,
@@ -212,10 +237,10 @@ class Scope:
     """Initializes a Scope.
 
     Args:
-      variables: Variables to initialize the Scope with.
+      variables: variables to initialize the Scope with.
       rngs: RNGs used in this scope or one of the child scopes.
-      name: Name of this scope.
-      parent: Parent scope.
+      name: name of this scope.
+      parent: parent scope.
     """
     self._variables = variables
     self.parent = parent
@@ -272,7 +297,7 @@ class Scope:
     """Returns a rewound version of this Scope.
 
     Args:
-      rewind_rngs: If true, reset the RNG counter of this scope.
+      rewind_rngs: if true, reset the RNG counter of this scope.
     Returns:
       A rewound version of this scope, which means reservations and children are 
       emptied, and the rng counter is optionally rewound.
@@ -287,7 +312,7 @@ class Scope:
     """Reserves a name for a child Scope or Variable.
     
     Args:
-      name: The name to reserve.
+      name: the name to reserve.
     """
     if not isinstance(name, str):
       raise ValueError('Variable and child scopes should have a string name.')
@@ -299,7 +324,9 @@ class Scope:
     """Generates an unreserved name with the given prefix.
     
     Args:
-      prefix: Prefix to use for generating an unreserved name.
+      prefix: prefix to use for generating an unreserved name.
+    Returns:
+      The generated name.
     """
     i = 0
     while True:
@@ -312,9 +339,9 @@ class Scope:
     """Creates a child Scope.
     
     Args:
-      name: Optional name of the child.
+      name: optional name of the child.
       prefix: prefix used for generating the name if `name` is `None`.
-      reuse: If True will return a pre-existing child scope with the given name
+      reuse: if True will return a pre-existing child scope with the given name
         instead of throwing an error.
     Returns:
       The child scope.
@@ -343,9 +370,9 @@ class Scope:
     
     Args:
       fn: the function to partially apply the child Scope to.
-      name: Optional name of the child.
+      name: optional name of the child.
       prefix: prefix used for generating name if it is `None`.
-      named_call: If true, `fn` will be wrapped with `lift.named_call`.
+      named_call: if true, `fn` will be wrapped with `lift.named_call`.
         The XLA profiler will use this to name tag the computation.
       **partial_kwargs: additional kwargs partially applied to `fn`.
     Returns:
@@ -367,10 +394,11 @@ class Scope:
     return wrapper
 
   def is_mutable_collection(self, col: str) -> bool:
-    """Check whether a collection is mutable."""
+    """Returns true if the collection `col` is mutable."""
     return in_filter(self.root.mutable, col)
 
   def _mutable_collection(self, col: str) -> MutableCollection:
+    """Returns the collection `col` as a mutable object."""
     if not self.is_mutable_collection(col):
       raise ValueError(f'Collection is not mutable: "{col}"')
     if col not in self._variables:
@@ -384,7 +412,7 @@ class Scope:
     return self._variables[col]
 
   def _collection(self, col: str) -> MaybeFrozenCollection:
-    """Returns a collection of variables."""
+    """Returns a collection of variables of collection `col`."""
     if col not in self._variables:
       if self.parent:
         parent_col = self.parent._collection(col)
@@ -396,11 +424,11 @@ class Scope:
     return self._variables[col]
 
   def has_rng(self, name: str) -> bool:
-    """Check whether a PRNGSequence exists."""
+    """Returns true if a PRNGSequence with name `name` exists."""
     return name in self.rngs
 
   def make_rng(self, name: str) -> PRNGKey:
-    """Generate A PRNGKey from a PRNGSequence."""
+    """Generates A PRNGKey from a PRNGSequence with name `name`."""
     assert self.has_rng(name), f'Need PRNG for "{name}"'
     self._check_valid()
     self._validate_trace_level()
@@ -408,7 +436,18 @@ class Scope:
     return random.fold_in(self.rngs[name], self.rng_counters[name])
 
   def get_variable(self, col: str, name: str, default: T = None) -> T:
-    """Retrieve the value of a Variable."""
+    """Retrieves the value of a Variable.
+    
+    Args:
+      col: the variable collection.
+      name: the name of the variable.
+      default: the default value to return if the variable does not exist in
+        this scope.
+
+    Returns:
+      The value of the input variable, of the default value if the variable
+      doesn't exist in this scope.
+    """
     variables = self._collection(col)
     if name in variables:
       return variables[name]
@@ -416,12 +455,23 @@ class Scope:
       return default
 
   def has_variable(self, col: str, name: str) -> bool:
-    """Check whether a variable exists."""
+    """Returns true if the given variable exists in this scope.
+    
+    Args:
+      col: the collection of the variable.
+      name: the name of the varaible.
+    """
     variables = self._collection(col)
     return name in variables
 
   def put_variable(self, col: str, name: str, value: Any):
-    """Update the value of a Variable."""
+    """Updates the value of the given variable if it is mutable, or an error otherwise. 
+    
+    Args:
+      col: the collection of the variable.
+      name: the name of the variable.
+      value: the new value of the given variabele.
+    """
     self._check_valid()
     self._validate_trace_level()
     if not self.is_mutable_collection(col):
@@ -433,7 +483,17 @@ class Scope:
 
   def variable(self, col: str, name: str, init_fn: Callable[..., T],
                *init_args) -> Variable[T]:
-    """Create a Variable."""
+    """Creates a variable if it doesn't exist yet in this scope and returns it.
+    
+    Args:
+      col: the collection of the variable.
+      name: the name of the variable.
+      init_fn: a function taking a PRNGKey plus any other number of
+        positional arguments.
+      *init_args: the arguments to evaluate init_fn on lazily.
+    Returns:
+      The variable.
+    """
     self.reserve(name)
     if not self.has_variable(col, name):
       if not self.is_mutable_collection('params'):
@@ -443,19 +503,32 @@ class Scope:
     return Variable(self, col, name)
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    """Create a parameter."""
+    """Creates a parameter if it doesn't exist yet in this scope and returns it.
+    
+    Args:
+      name: the name of the parameter.
+      init_fn: a function taking a PRNGKey plus any other number of
+        positional arguments.
+      *init_args: the arguments to evaluate init_fn on lazily.
+    Returns:
+      The parameters.
+    """
     self.reserve(name)
     if self.has_variable('params', name):
       abs_rng = jax.ShapeDtypeStruct((2,), jnp.uint32)
       value = self.get_variable('params', name)
-      # validate shape of init_fn output is the same as the shape of the existing
-      # parameter.
+      # Validate that the shape of the init_fn output is the same as the shape
+      # of the existing parameter. This is to make sure that the hparams set up
+      # in a Flax Module match the shapes coming in during apply, and if not,
+      # catch it with an error message.
+      # NOTE: We could consider moving this to `self.`
       abs_value = jax.eval_shape(lambda rng: init_fn(rng, *init_args), abs_rng)
       abs_value_flat = jax.tree_leaves(abs_value)
       value_flat = jax.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
-        # NOTE: we could check dtype consistency here as well but it's usefuleness is less obvious.
-        # we might intentionally change the dtype for inference to a half float type for example.
+        # NOTE: We could check dtype consistency here as well but it's 
+        # usefuleness is less obvious. We might intentionally change the dtype
+        # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
           raise ValueError('Inconsistent shapes between value and initializer '
                            f'for parameter "{name}" in "{self.path_text}": {jnp.shape(val)}, {jnp.shape(abs_val)}')
@@ -488,7 +561,7 @@ def apply(fn: Callable[..., Any],
 
   Args:
     fn: a function taking a `Scope` as its first argument.
-    mutable: The filter determining which variable collections are mutable.
+    mutable: the filter determining which variable collections are mutable.
   Returns:
     `fn` with the scope partially applied.
   """
@@ -520,7 +593,7 @@ def init(fn: Callable[..., Any], mutable: CollectionFilter = True) -> Callable[.
 
   Args:
     fn: a function taking a `Scope` as its first argument.
-    mutable: The filter determining which variable collections are mutable.
+    mutable: the filter determining which variable collections are mutable.
   Returns:
     `fn` with the scope partially applied.
   """
