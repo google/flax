@@ -139,7 +139,7 @@ def _is_module_tree(in_tree: Any) -> bool:
   """Determines if `in_tree` is a pytree of subclasses of Module.
 
   Args:
-    in_tree: python object, typically a python tree.
+    in_tree: Python object, typically a python tree.
 
   Returns:
     True if `in_tree` is non-empty and all leafs are Module, False otherwise.
@@ -155,7 +155,7 @@ def _all_names_on_object(obj: Any) -> Set[str]:
   """Gets all names of attributes on `obj` and its classes throughout MRO.
   
   Args:
-    obj: the object to get names for.
+    obj: The object to get names for.
   Returns:
     A set of names of attributes of `obj` and its classes.
   """
@@ -181,7 +181,7 @@ def compact(fun: Callable) -> Callable:
   At most one method in each Module may be wrapped with @compact.
 
   Args:
-    fun: the Module method to mark as compact.
+    fun: The Module method to mark as compact.
   Returns:
     The given function `fun` marked as compact.
   """
@@ -193,8 +193,8 @@ def _get_local_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
   """Gets method names of a class, excluding class and static methods.
   
   Args:
-    cls: the class to get method names for.
-    excludes: names to exclude from output.
+    cls: The class to get method names for.
+    excludes: Names to exclude from output.
   Returns:
     A list of method names.
   """
@@ -211,7 +211,7 @@ def wrap_method(fun: Callable) -> Callable:
   """Manages Module state for user-defined methods.
   
   Args:
-    fun: user-defined Module method to manage state for.
+    fun: User-defined Module method to manage state for.
   Returns:
     Wrapped method.
   """
@@ -256,7 +256,7 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
   of the class, which is passed as it first argument. 
 
   Args:
-    method_or_fn: a class method or function.
+    method_or_fn: A class method or function.
   Returns:
     An unbound version of input function.
   """
@@ -297,8 +297,8 @@ class Module:
 
   Your layers and modules should subclass this class.
 
-  All Modules are Python 3.7 [dataclasses](https://docs.python.org/3/library/dataclasses.html),
-  which allow for setting attributes without `__init__` boilerplate. Since
+  Modules are Python 3.7 
+  `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_. Since
   dataclasses override `__init__`, you should instead implement `setup` in
   your modules (which we call automatically).
 
@@ -324,8 +324,9 @@ class Module:
       return self.dense2(nn.relu(self.dense1(x)))
   ```
 
-  Optionally, for more concise module implementaions where submodules definitions are
-  co-located with their usage, you can use the `@compact` wrapper.
+  Optionally, for more concise module implementaions where submodules 
+  definitions are co-located with their usage, you can use the 
+  :meth:`module.compact` wrapper.
   """
 
   @classmethod
@@ -413,8 +414,8 @@ class Module:
       self.submodules = [MyModule0(..), MyModule1(..), ...]
 
     Args:
-      name: attribute to set.
-      val: value of the attribute.
+      name: Attribute to set.
+      val: Value of the attribute.
     """
     # We don't mess with the parent module.
     if name == 'parent':
@@ -512,11 +513,12 @@ class Module:
     return _module_repr(self)
 
   def setup(self):
-    """Called when Module instance receives variables and PRNGs.
+    """Initializes a Module (similar to __init__ for non-dataclass Python classes).
 
-    If you want to use PRNGs and/or read or write variables during module
-    instance construction, override this method. It will be automatically
-    called from the dataclass `__post_init__`.
+    Override this method in your module subclasses to initialize submodules and
+    other attributes. This method is called after all dataclass attributes are
+    assigned and the module is ready for use. Variables and RNGs are guaranteed
+    to be available.
     """
     pass
 
@@ -534,8 +536,8 @@ class Module:
     """Create a clone of this Module, with optionally updated arguments.
     
     Args:
-      parent: the parent of the clone. The clone will have no parent
-        if no explicit parent is specified.
+      parent: The parent of the clone. The clone will have no parent if no 
+        explicit parent is specified.
       **updates: attribute updates.
     Returns:
       A clone of the this Module with the updated attributes and parent.
@@ -544,18 +546,27 @@ class Module:
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
-  def variable(self, kind: str, name: str, init_fn, *init_args):
-    """Declare a variable in this Module.
-
+  def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
+    """Declares a variable in this Module. Variables are mutable jax.numpy arrays
+    that are stored a variable dict associated with this Module. See also the
+    `variables` method.
+    
     Args:
-      kind: the variable kind.
-      name: the variable name.
-      init_fn: a function taking any number of positiona arguments.
-      *init_args: the arguments to evaluate init_fn on lazily.
+      col: The variable collection name. Each collection may or may not be
+        mutable and different collections can be treated differently in JAX
+        transformations.
+        TODO: Make "variable collection" design note, and link to it from here.
+      name: The variable name.
+      init_fn: The function that will be called to compute the initial value
+        of this variable. This function will only be called the first time
+        this variable is used in this module.
+      *init_args: The arguments to pass to init_fn.
 
     Returns:
-      A flax.core state Variable that can be read or set via ".value"
-      attribute.
+      A :class:`scope.Variable` that can be read or set via ".value" attribute.
+
+      TODO: Extract Variable into variable.py, link to that
+      from this docstring.
     """
     if not self._initialization_allowed:
       raise ValueError(
@@ -571,13 +582,16 @@ class Module:
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    """Declare a parameter in this Module.
+    """Declare a parameter in this Module. Parameters are read-only variables
+    in the collection named "params". See `variable` for more details on
+    module variables.
 
     Args:
-      name: the parameter name.
-      init_fn: a function taking a PRNGKey plus any other number of
-        positional arguments.
-      *init_args: the arguments to evaluate init_fn on lazily.
+      name: The parameter name.
+      init_fn: The function that will be called to compute the initial value
+        of this variable. This function will only be called the first time
+        this variable is used in this module.
+      *init_args: The arguments to pass to init_fn.
 
     Returns:
       The value of the initialized parameter.
@@ -595,26 +609,9 @@ class Module:
     self.children[name] = 'params'
     return v
 
-  def get_variable(self, kind: str, name: str, default: T = None) -> T:
-    """Get the value of a variable on this Module.
-    
-    Args:
-      kind: kind of the variable.
-      name: name of the variable.
-      default: default value to return if the variable doesn't exist.
-    
-    Returns:
-      The value of the input variable, or `default` if it doesn't exist.
-    """
-    return self.scope.get_variable(kind, name, default)
-
   def has_variable(self, kind: str, name: str):
     """Check if a variable of given kind and name exists in this Module."""
     return self.scope.has_variable(kind, name)
-
-  def put_variable(self, kind: str, name: str, value: Any):
-    """Directly set value of a variable on this Module."""
-    return self.scope.put_variable(kind, name, value)
 
   def make_rng(self, kind: str) -> PRNGKey:
     """Get a new rng key of a given kind from this Module."""
