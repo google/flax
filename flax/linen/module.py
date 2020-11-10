@@ -534,7 +534,13 @@ class Module:
 
   @property
   def variables(self):
-    return self.scope.variables()
+    variables = self.scope.variables()
+    if not variables:
+      raise RuntimeError("Variables dictionary is empty! This is probably because you have accessed the variables "
+                         "before shape inference. Apply your module on its expected input to define the variables. "
+                         "If you expect your module to not have any variables, then you should not subclass "
+                         "linen.Module.")
+    return variables
 
 
   # @contextmanager

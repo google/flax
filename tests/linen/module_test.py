@@ -590,6 +590,33 @@ class ModuleTest(absltest.TestCase):
     trace = mlp.apply(variables, x)
     self.assertEqual(trace, expected_trace)
 
+  def test_module_empty_variables_raises_exception(self):
+
+    x = jnp.ones((1, 2))
+
+    class NoVariables(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        bias = DummyModule()
+        _ = bias.variables
+        return bias(x)
+
+    no_variables = NoVariables()
+    with self.assertRaises(RuntimeError):
+      no_variables.init_with_output(random.PRNGKey(0), x)
+
+    class WithVariables(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        bias = DummyModule()
+        output = bias(x)
+        return output, bias.variables
+
+    with_variables = WithVariables()
+    with_variables.init_with_output(random.PRNGKey(0), x)
+
 
 if __name__ == '__main__':
   absltest.main()
