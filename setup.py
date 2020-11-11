@@ -34,6 +34,7 @@ install_requires = [
 
 tests_require = [
     "atari-py",
+    "clu",
     "gym",
     "jaxlib",
     "ml-collections",
@@ -43,6 +44,7 @@ tests_require = [
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
     "svn",
     "tensorflow",
+    "tensorflow_text",
     "tensorflow_datasets",
 ]
 
