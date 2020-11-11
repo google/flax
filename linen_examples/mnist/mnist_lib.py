@@ -18,6 +18,9 @@ Library file which executes the training and evaluation loop for MNIST.
 The data is loaded using tensorflow_datasets.
 """
 
+# See issue #620.
+# pytype: disable=wrong-keyword-args
+
 from absl import logging
 
 import jax

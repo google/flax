@@ -17,6 +17,9 @@
 This script trains a Transformer on a WMT dataset.
 """
 
+# pytype: disable=wrong-arg-count
+# pytype: disable=attribute-error
+
 import collections
 import functools
 import os
@@ -604,7 +607,7 @@ def main(argv):
           learning_rate_fn=learning_rate_fn,
           label_smoothing=FLAGS.label_smoothing),
       axis_name='batch',
-      donate_argnums=(0,))
+      donate_argnums=(0,))  # pytype: disable=wrong-arg-types
   p_eval_step = jax.pmap(
       functools.partial(
           eval_step,

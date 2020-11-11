@@ -21,6 +21,10 @@ from flax import optim
 import jax
 import jax.numpy as jnp
 
+# See issue #620.
+# pytype: disable=wrong-keyword-args
+
+
 class ActorCritic(nn.Module):
   """Class defining the actor-critic model."""
 
