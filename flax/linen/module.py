@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Linen: a refined Flax."""
+"""Flax Modules."""
 from contextlib import contextmanager
 import dataclasses
 import functools
@@ -83,7 +83,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
   if child_modules:
     rep += '# children\n'
     for name, child in child_modules.items():
-      child_rep = module_repr(child, num_spaces)
+      child_rep = _module_repr(child, num_spaces)
       rep += f'{name} = {child_rep}\n'
   if rep:
     return f'{cls_name}(\n{_indent(rep, num_spaces)})'
@@ -170,7 +170,7 @@ def _all_names_on_object(obj: Any) -> Set[str]:
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
 def compact(fun: Callable) -> Callable:
-  """Marks a single module method, allowing submodules inlining. 
+  """Marks the given module method allowing inlined submodules. 
   
   Methods wrapped in @compact can define submodules directly within the method.
 
@@ -253,7 +253,7 @@ def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
-  """Return an unbound function from a method that is possibly bound.
+  """Returns an unbound function from a method that is possibly bound.
   
   This means that the returned function does no longer depend on the instance
   of the class, which is passed as it first argument. 
@@ -347,7 +347,7 @@ class Module:
 
   @classmethod
   def _customized_dataclass_transform(cls):
-    """Handle final optional dataclass attributes: `parent` and `name`."""
+    """Handles final optional dataclass attributes: `parent` and `name`."""
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
     if 'parent' in annotations or 'name' in annotations:
@@ -403,7 +403,7 @@ class Module:
     return cls
 
   def __setattr__(self, name: str, val: Any):
-    """Sets the an attribute on this Module.
+    """Sets an attribute on this Module.
     
     We overload setattr solely to support pythonic naming via assignment of 
     submodules in the special setup() function::
@@ -426,7 +426,7 @@ class Module:
       pass
     # Submodules are being defined and attached in setup()
     else:
-      for suffix, subvalue in get_suffix_value_pairs(val):
+      for suffix, subvalue in _get_suffix_value_pairs(val):
         if isinstance(subvalue, Module):
           if not self._state.in_setup:
             raise ValueError(
@@ -550,11 +550,9 @@ class Module:
   def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
     """Declares and returns a variable in this Module. 
     
-    Variables are mutable jax.numpy arrays that are stored a variable dict
-    associated with this Module. See :mod:`flax.core.variables`.
-
-    See also :meth:`param`for a shorthand way to define read-only variables in
-    the "params" collection.
+    See :mod:`flax.core.variables` for more information. See also :meth:`param`
+    for a shorthand way to define read-only variables in the "params"
+    collection.
     
     Args:
       col: The variable collection name. 
@@ -565,8 +563,8 @@ class Module:
       *init_args: The arguments to pass to init_fn.
 
     Returns:
-      A :class:`scope.Variable` that can be read or set via ".value" attribute.
-      Throws an error if the variable exists already.
+      A :class:`variable.Variable` that can be read or set via ".value" 
+      attribute. Throws an error if the variable exists already.
     """
     if not self._initialization_allowed:
       raise ValueError(
@@ -577,8 +575,8 @@ class Module:
           f'Name {name} already in use in {self.__class__.__name__}.')
     # ephemeral state for setattr name-equality-check
     self._state.last_varname = name
-    v = self.scope.variable(kind, name, init_fn, *init_args)
-    self.children[name] = kind
+    v = self.scope.variable(col, name, init_fn, *init_args)
+    self.children[name] = col
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
@@ -611,7 +609,7 @@ class Module:
     return v
 
   def has_variable(self, col: str, name: str) -> bool:
-    """Check if a variable of given collection and name exists in this Module.
+    """Checks if a variable of given collection and name exists in this Module.
 
     See :mod:`flax.core.variables` for more explanation on variables and 
     collections.
@@ -622,7 +620,7 @@ class Module:
     Returns:
       True if the variable exists.
     """
-    return self.scope.has_variable(kind, name)
+    return self.scope.has_variable(col, name)
 
   def make_rng(self, col: str) -> PRNGKey:
     """Returns a new RNG key for a given collection for this Module. 
@@ -642,7 +640,7 @@ class Module:
 
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
             method: Callable[..., Any] = None, 
-            mutable: CollectionFilter = False,
+            mutable: Union[bool, str, Sequence[str]] = False,
             **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
     
@@ -653,10 +651,10 @@ class Module:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
         provided, applies the ``__call__`` method.
-      mutable: Specifies which collections should be treated as mutable:
-        * bool: If True (False), all (no) collections are mutable.
-        * str: The name of a single mutable collection.
-        * list: A list of names of multiple mutable collections.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable: ``bool``: all/no collections are mutable. ``str``:
+        The name of a single mutable collection. ``list``: A list of names of
+        mutable collections.
     Returns:
       If ``mutable`` is False, returns output. If any collections are 
       mutable, returns ``(output, vars)``, where ``vars`` are is a dict
@@ -671,15 +669,16 @@ class Module:
 
   def init_with_output(self, rngs: RNGSequences, *args, 
                        method: Optional[Callable[..., Any]] = None, 
-                       **kwargs):
-    """Creates initialized data for module and return it with output.
+                       **kwargs) -> Tuple[Any, VariableDict]:
+    """Initializes a module method with variables and returns output and modified variables.
 
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
         provided, applies the ``__call__`` method.
     Returns:
-      
+      `(output, vars)``, where ``vars`` are is a dict of the modified 
+      collections.
     """
     if not isinstance(rngs, dict):
       assert rngs.shape == (2,)
@@ -688,14 +687,24 @@ class Module:
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 
   def init(self, rngs: RNGSequences, *args, 
-           method: Optional[Callable[..., Any]] = None, **kwargs) -> VariableDict:
-    """Create and return initialized data for module with rngs."""
+           method: Optional[Callable[..., Any]] = None, 
+           **kwargs) -> VariableDict:
+    """Initializes a module method with variables and returns modified variables.
+
+      Args:
+      rngs: The rngs for the variable collections.
+      method: An optional method. If provided, applies this method. If not
+        provided, applies the ``__call__`` method.
+    Returns:
+      `(output, vars)``, where ``vars`` are is a dict of the modified 
+      collections.
+    """
     _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
     return v_out
 
   @property
   def variables(self) -> VariableDict:
-    """Returns the variables in this module. """
+    """Returns the variables in this module."""
     return self.scope.variables()
 
 

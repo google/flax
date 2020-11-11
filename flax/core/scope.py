@@ -33,7 +33,7 @@ from . import tracers
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
-from .variables import Variable, VariableDict, is_valid_variables
+from .variables import Variable, VariableDict
 
 import jax
 from jax import lax
@@ -462,9 +462,9 @@ def apply(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(variables: FrozenVariableDict, *args,
               rngs: Optional[RNGSequences] = None, 
-              **kwargs) -> Union[Any, Tuplel[Any, VariableDict]]:
+              **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
     
-    if not is_valid_variables(variables):
+    if not _is_valid_variables(variables):
       raise ValueError('The first argument passed to an apply function '
                        'should be a dictionary of collections. '
                        'Each collection should be a `FrozenDict` with string '
@@ -512,6 +512,22 @@ def _is_valid_collection(col: FrozenCollection):
   for name in col.keys():
     # Any value can be stored in a collection so only keys can be verified.
     if not isinstance(name, str):
+      return False
+  return True
+
+
+def _is_valid_variables(variables: VariableDict) -> bool:
+  """Checks whether the given variable dict is valid.
+
+  Args:
+    variables: A variable dict.
+  Returns:
+    True if `variables` is a valid variable dict.
+  """
+  for name, col in variables.items():
+    if not isinstance(name, str):
+      return False
+    if not _is_valid_collection(col):
       return False
   return True
 

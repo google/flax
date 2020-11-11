@@ -453,11 +453,11 @@ class ModuleTest(absltest.TestCase):
     class Derived2(Derived1):
       pass
 
-    self.assertEqual(nn.module.get_local_method_names(Base), ('bleep',))
-    self.assertEqual(nn.module.get_local_method_names(Derived1), ('bloop',))
+    self.assertEqual(nn.module._get_local_method_names(Base), ('bleep',))
+    self.assertEqual(nn.module._get_local_method_names(Derived1), ('bloop',))
     self.assertEqual(
-        nn.module.get_local_method_names(Derived1, exclude=('bloop',)), ())
-    self.assertEqual(nn.module.get_local_method_names(Derived2), ())
+        nn.module._get_local_method_names(Derived1, exclude=('bloop',)), ())
+    self.assertEqual(nn.module._get_local_method_names(Derived2), ())
 
   def test_inheritance_dataclass_attribs(self):
     class Test(nn.Module):
@@ -505,18 +505,18 @@ class ModuleTest(absltest.TestCase):
   def test_get_suffix_value_pairs(self):
     for x in [(), [], {}, None, 0, set()]:
       self.assertEqual(
-          nn.module.get_suffix_value_pairs(x), [('', x)])
+          nn.module._get_suffix_value_pairs(x), [('', x)])
     self.assertEqual(
-        nn.module.get_suffix_value_pairs(
+        nn.module._get_suffix_value_pairs(
             {'a': 1, 'b': 2}), [('_a', 1), ('_b', 2)])
     self.assertEqual(
-        nn.module.get_suffix_value_pairs(
+        nn.module._get_suffix_value_pairs(
             [1, 2, 3]), [('_0', 1), ('_1', 2), ('_2', 3)])
     x1 = [nn.Dense(10), nn.relu, nn.Dense(10)]
-    y1 = nn.module.get_suffix_value_pairs(x1)
+    y1 = nn.module._get_suffix_value_pairs(x1)
     self.assertEqual(y1, [('_0', x1[0]), ('_1', x1[1]), ('_2', x1[2])])
     x2 = {'a': 1, 'b': {'c': nn.Dense(10), 'd': nn.relu}}
-    y2 = nn.module.get_suffix_value_pairs(x2)
+    y2 = nn.module._get_suffix_value_pairs(x2)
     self.assertEqual(y2,
         [('_a', 1), ('_b_c', x2['b']['c']), ('_b_d', x2['b']['d'])])
 
