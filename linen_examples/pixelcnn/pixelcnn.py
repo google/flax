@@ -34,17 +34,19 @@ Based on the paper
 
 published at ICLR '17 (https://openreview.net/forum?id=BJrFC6ceg).
 """
+
+# See issue #620.
+# pytype: disable=wrong-arg-count
+
 from functools import partial
 from typing import Any, Callable, Tuple
 
-import numpy as onp
-
+import flax.linen as nn
+import jax
 from jax import lax
-from jax.scipy.special import logsumexp
 import jax.numpy as jnp
-from jax import custom_jvp
-
-from flax import linen as nn
+from jax.scipy.special import logsumexp
+import numpy as onp
 
 
 class PixelCNNPP(nn.Module):
@@ -417,7 +419,7 @@ def discretized_logistic_logpmf(images, means, inv_scales):
   return jnp.where(images == 1, top, jnp.where(images == -1, bottom, mid))
 
 
-@custom_jvp
+@jax.custom_jvp
 def log1mexp(x):
   """Accurate computation of log(1 - exp(-x)) for x > 0."""
 

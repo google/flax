@@ -14,13 +14,14 @@
 
 """Flax implementation of ResNet V1."""
 
-
-from flax import linen as nn
-
-import jax.numpy as jnp
+# See issue #620.
+# pytype: disable=wrong-arg-count
 
 from functools import partial
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Sequence, Tuple
+
+from flax import linen as nn
+import jax.numpy as jnp
 
 ModuleDef = Any
 
@@ -31,7 +32,7 @@ class ResNetBlock(nn.Module):
   conv: ModuleDef
   norm: ModuleDef
   act: Callable
-  strides: (int, int) = (1, 1)
+  strides: Tuple[int, int] = (1, 1)
 
   @nn.compact
   def __call__(self, x,):
@@ -56,7 +57,7 @@ class BottleneckResNetBlock(nn.Module):
   conv: ModuleDef
   norm: ModuleDef
   act: Callable
-  strides: (int, int) = (1, 1)
+  strides: Tuple[int, int] = (1, 1)
 
   @nn.compact
   def __call__(self, x):

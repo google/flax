@@ -14,6 +14,9 @@
 
 """seq2seq addition example."""
 
+# See issue #620.
+# pytype: disable=wrong-keyword-args
+
 import random
 from absl import app
 from absl import flags
@@ -182,8 +185,8 @@ class DecoderLSTM(nn.Module):
     lstm_state, y = nn.LSTMCell()(lstm_state, x)
     logits = nn.Dense(features=CTABLE.vocab_size)(y)
     predicted_token = jax.random.categorical(categorical_rng, logits)
-    prediction = jnp.array(predicted_token == jnp.arange(CTABLE.vocab_size), 
-                           dtype=jnp.float32)
+    prediction = jnp.array(
+        predicted_token == jnp.arange(CTABLE.vocab_size), dtype=jnp.float32)
     return (carry_rng, lstm_state, prediction), (logits, prediction)
 
 
@@ -237,8 +240,8 @@ class Seq2seq(nn.Module):
     init_decoder_state, _ = encoder(init_carry, encoder_inputs)
     # Decoder.
     decoder_inputs = jax.lax.slice_in_dim(decoder_inputs, 0, -1)
-    decoder = Decoder(init_state=init_decoder_state, 
-                      teacher_force=self.teacher_force)
+    decoder = Decoder(
+        init_state=init_decoder_state, teacher_force=self.teacher_force)
     logits, predictions = decoder(decoder_inputs)
 
     return logits, predictions
@@ -309,7 +312,9 @@ def apply_model(batch, in_masks, out_masks, params, key, teacher_force=True):
   @functools.partial(jax.mask, in_shapes=IN_SHAPES, out_shape=OUT_SHAPE)
   def model_fn(example):
     logits, predictions = model(teacher_force=teacher_force).apply(
-        {'params': params}, example['query'], example['answer'], 
+        {'params': params},
+        example['query'],
+        example['answer'],
         rngs={'lstm': key})
     return logits, predictions
   return jax.vmap(model_fn)([batch], dict(n=in_masks, m=out_masks))

@@ -97,7 +97,7 @@ class ModelTest(absltest.TestCase):
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 6, 4, 4))
     self.assert_mean_and_variance(out)
-    
+
 
   def test_conv_transpose_down(self):
     model = pixelcnn.ConvTransposeDown(features=4)
@@ -131,4 +131,4 @@ class ModelTest(absltest.TestCase):
 
 
 if __name__ == '__main__':
-  googletest.main()
+  absltest.main()

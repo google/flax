@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# See issue #620.
+# pytype: disable=wrong-keyword-args
+
 import os
 from absl import flags
 from absl import app

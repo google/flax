@@ -15,6 +15,10 @@
 """Transformer-based machine translation model."""
 
 # pylint: disable=attribute-defined-outside-init
+# See issue #620.
+# pytype: disable=wrong-arg-count
+# pytype: disable=wrong-keyword-args
+# pytype: disable=attribute-error
 
 from typing import Callable, Any, Optional
 
