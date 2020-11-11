@@ -547,14 +547,18 @@ class Module:
     return self.__class__(**attrs)
 
   def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
-    """Declares a variable in this Module. Variables are mutable jax.numpy arrays
+    """Declares and returns a variable in this Module. Variables are mutable jax.numpy arrays
     that are stored a variable dict associated with this Module. See also the
     `variables` method.
     
     Args:
       col: The variable collection name. Each collection may or may not be
         mutable and different collections can be treated differently in JAX
-        transformations.
+        transformations. Examples of commonly used variable collections are
+        "params" and "batch_stats" (for batch norm). See also the `param`
+        method for a shorthand
+        way to define read-only variables in the "params" collection.
+
         TODO: Make "variable collection" design note, and link to it from here.
       name: The variable name.
       init_fn: The function that will be called to compute the initial value
@@ -582,7 +586,7 @@ class Module:
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    """Declare a parameter in this Module. Parameters are read-only variables
+    """Declares and returns a parameter in this Module. Parameters are read-only variables
     in the collection named "params". See `variable` for more details on
     module variables.
 
@@ -590,7 +594,7 @@ class Module:
       name: The parameter name.
       init_fn: The function that will be called to compute the initial value
         of this variable. This function will only be called the first time
-        this variable is used in this module.
+        this parameter is used in this module.
       *init_args: The arguments to pass to init_fn.
 
     Returns:
@@ -614,7 +618,11 @@ class Module:
     return self.scope.has_variable(kind, name)
 
   def make_rng(self, kind: str) -> PRNGKey:
-    """Get a new rng key of a given kind from this Module."""
+    """Returns a new RNG key of a given kind from this Module. The new RNG key
+    is split from the previous one. Thus, every call to `make_rng` returns a new RNG key,
+    while still guaranteeing full reproducibility.
+    
+    TODO: Link to both Flax RNG design note."""
     return self.scope.make_rng(kind)
 
   def apply(self, variables, *args, rngs=None,

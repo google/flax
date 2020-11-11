@@ -2,8 +2,6 @@
 flax.linen package
 ==================
 
-TODO: These docstrings need some love.
-
 .. currentmodule:: flax.linen
 .. automodule:: flax.linen
 
@@ -13,6 +11,8 @@ Core: Module abstraction
 
 .. autoclass:: Module
    :members: setup, variable, param, init, init_with_output, variables
+
+.. autofunction:: compact
 
 	     
 Linear modules
