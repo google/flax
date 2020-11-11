@@ -33,6 +33,7 @@ from . import tracers
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
+from .variables import Variable, VariableDict, is_valid_variables
 
 import jax
 from jax import lax
@@ -55,8 +56,7 @@ MutableCollection = Dict[str, Any]
 FrozenCollection = FrozenDict[str, Any]
 MaybeFrozenCollection = Union[MutableCollection, FrozenCollection]
 
-Variables = Dict[str, MaybeFrozenCollection]
-FrozenVariables = Dict[str, FrozenCollection]
+FrozenVariableDict = Dict[str, FrozenCollection]
 
 
 def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
@@ -135,8 +135,8 @@ def intersect_filters(a, b):
   return a.intersection(b)
 
 
-def group_collections(xs: Variables,
-                col_filters: Sequence[CollectionFilter]) -> Sequence[Variables]:
+def group_collections(xs: VariableDict,
+                col_filters: Sequence[CollectionFilter]) -> Sequence[VariableDict]:
   """Groups variables by collection filters.
 
   Iteratively applies the filters in `col_filters` to `xs`, and adds the result
@@ -166,44 +166,11 @@ def group_collections(xs: Variables,
   return tuple(groups)
 
 
-class Variable(Generic[T]):
-  """Scope Variable.
-
-  A Variable is a dictionary of data. Variables are stored in Scopes, and 
-  identified by a collection (e.g., "params") and a name (e.g., "dense"). New
-  variable instances are obtained from a scope by applying `scope.variable()`.
-  The value property gives access to the variable's content and can be assigned
-  to for mutation.
-  """
-
-  def __init__(self, scope: 'Scope', collection: str, name: str):
-    """Initializes a variable.
-
-    Args:
-      scope: The scope in which the variable is stored.
-      collection: The collection of the variable (e.g., "params").
-      name: The name of the variable (e.g., "dense").
-    """
-    self.scope = scope
-    self.collection = collection
-    self.name = name
-
-  @property
-  def value(self) -> T:
-    """Returns the value of this Variable."""
-    return self.scope.get_variable(self.collection, self.name)
-
-  @value.setter
-  def value(self, value: T):
-    """Updates the value of this Variable."""
-    self.scope.put_variable(self.collection, self.name, value)
-
-
 class Scope:
   """Scope."""
 
   def __init__(self,
-               variables: Variables,
+               variables: VariableDict,
                rngs: Optional[Dict[str, PRNGKey]] = None,
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
@@ -212,7 +179,7 @@ class Scope:
     """Initializes a Scope.
 
     Args:
-      variables: Variables to initialize the Scope with.
+      variables: VariableDict to initialize the Scope with.
       rngs: RNGs used in this scope or one of the child scopes.
       name: Name of this scope.
       parent: Parent scope.
@@ -493,15 +460,18 @@ def apply(fn: Callable[..., Any],
     `fn` with the scope partially applied.
   """
   @functools.wraps(fn)
-  def wrapper(variables: FrozenVariables, *args,
-              rngs: Optional[RNGSequences] = None, **kwargs) -> (Any, FrozenVariables):
+  def wrapper(variables: FrozenVariableDict, *args,
+              rngs: Optional[RNGSequences] = None, 
+              **kwargs) -> Union[Any, Tuplel[Any, VariableDict]]:
     
-    if not _is_valid_variables(variables):
+    if not is_valid_variables(variables):
       raise ValueError('The first argument passed to an apply function '
                        'should be a dictionary of collections. '
-                       'Each collection should be a `FrozenDict` with string keys.')
+                       'Each collection should be a `FrozenDict` with string '
+                       'keys.')
     if rngs is not None and not _is_valid_rngs(rngs):
-      raise ValueError('rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
+      raise ValueError('rngs should be a dictionary mapping strings to '
+                       '`jax.PRNGKey`.')
     new_variables = _unfreeze_variables(variables, mutable)
     with Scope(new_variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
@@ -515,7 +485,8 @@ def apply(fn: Callable[..., Any],
   return wrapper
 
 
-def init(fn: Callable[..., Any], mutable: CollectionFilter = True) -> Callable[..., Any]:
+def init(fn: Callable[..., Any], 
+        mutable: CollectionFilter = True) -> Callable[..., Any]:
   """Functionalize a `Scope` function for initialization.
 
   Args:
@@ -525,7 +496,7 @@ def init(fn: Callable[..., Any], mutable: CollectionFilter = True) -> Callable[.
     `fn` with the scope partially applied.
   """
   @functools.wraps(fn)
-  def wrapper(rngs, *args, **kwargs) -> (Any, FrozenVariables):
+  def wrapper(rngs, *args, **kwargs) -> (Any, FrozenVariableDict):
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
       raise ValueError('First argument passed to an init function should be a `jax.PRNGKey` '
                        'or a dictionary mapping strings to `jax.PRNGKey`.') 
@@ -539,20 +510,8 @@ def _is_valid_collection(col: FrozenCollection):
   if not isinstance(col, FrozenDict):
     return False
   for name in col.keys():
-    # any value can be stored in a collection so
-    # only keys can be verified.
+    # Any value can be stored in a collection so only keys can be verified.
     if not isinstance(name, str):
-      return False
-  return True
-
-
-def _is_valid_variables(variables: FrozenVariables):
-  if not isinstance(variables, (dict, FrozenDict)):
-    return False
-  for name, col in variables.items():
-    if not isinstance(name, str):
-      return False
-    if not _is_valid_collection(col):
       return False
   return True
 

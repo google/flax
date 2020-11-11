@@ -20,7 +20,7 @@ import inspect
 import os
 import threading
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
-                    Set, Type, Union, TypeVar, Generic)
+                    Set, Type, Union, TypeVar, Generic, Dict)
 
 import jax
 from jax import tree_util
@@ -30,12 +30,14 @@ import flax
 from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
-from flax.core.scope import Variable
+from flax.core.scope import CollectionFilter, Variable
 from flax.core.frozen_dict import freeze
+from flax.core.variables import Variable, VariableDict
 
 # from .dotgetter import DotGetter
 
 PRNGKey = Any  # pylint: disable=invalid-name
+RNGSequences = Dict[str, PRNGKey]
 Array = Any    # pylint: disable=invalid-name
 T = TypeVar('T')
 
@@ -168,11 +170,12 @@ def _all_names_on_object(obj: Any) -> Set[str]:
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
 def compact(fun: Callable) -> Callable:
-  """Marks a single module method allowing inline submodules. 
+  """Marks a single module method, allowing submodules inlining. 
   
   Methods wrapped in @compact can define submodules directly within the method.
 
-  For instance:
+  For instance::
+
     @compact
     __call__(self, x, features):
       x = nn.Dense(features)(x)
@@ -207,8 +210,8 @@ def _get_local_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
   return tuple(true_methods.difference(set(exclude)))
 
 
-def wrap_method(fun: Callable) -> Callable:
-  """Manages Module state for user-defined methods.
+def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
+  """Manages Module state for a given user-defined method.
   
   Args:
     fun: User-defined Module method to manage state for.
@@ -293,40 +296,36 @@ _uninitialized_module_internal_state = _ModuleInternalState(
 # Base Module definition.
 # -----------------------------------------------------------------------------
 class Module:
-  """Base class for all neural network modules.
+  """Base class for all neural network modules. Layers and models should subclass this class.
 
-  Your layers and modules should subclass this class.
-
-  Modules are Python 3.7 
+  All Flax Modules are Python 3.7 
   `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_. Since
-  dataclasses override `__init__`, you should instead implement `setup` in
-  your modules (which we call automatically).
+  dataclasses take over ``__init__``, you should instead override :meth:`setup`,
+  which is automatically called to initialize the module.
 
   Modules can contain submodules, and in this way can be nested in a tree
-  structure. Submodels can be assigned as regular attributes using the
-  `setup` method.
+  structure. Submodels can be assigned as regular attributes inside the
+  :meth:`setup` method.
 
   You can define arbitrary "forward pass" methods on your Module subclass.
-  In particular, defining a `__call__` method allows for concise code when
-  using module instances.
+  While no methods are special-cased, ``__call__`` is a popular choice because
+  it allows you to use module instances as if they are functions::
 
-  ```
-  from flax import nn as linen
+    from flax import nn as linen
 
-  class Module(nn.Module):
-    features: int = [16, 4]
+    class Module(nn.Module):
+      features: Tuple[int] = [16, 4]
 
-    def setup(self):
-      self.dense1 = Dense(self.features[0])
-      self.dense2 = Dense(self.features[1])
+      def setup(self):
+        self.dense1 = Dense(self.features[0])
+        self.dense2 = Dense(self.features[1])
 
-    def __call__(self, x):
-      return self.dense2(nn.relu(self.dense1(x)))
-  ```
+      def __call__(self, x):
+        return self.dense2(nn.relu(self.dense1(x)))
 
   Optionally, for more concise module implementaions where submodules 
   definitions are co-located with their usage, you can use the 
-  :meth:`module.compact` wrapper.
+  :meth:`compact` wrapper.
   """
 
   @classmethod
@@ -391,7 +390,7 @@ class Module:
 
   @classmethod
   def _wrap_module_methods(cls):
-    """Wrap user-defined non-inherited methods with state management functions."""
+    """Wraps user-defined non-inherited methods with state management functions."""
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__', '__hash__'])
     for key in _get_local_method_names(cls, exclude=exclusions):
@@ -408,9 +407,11 @@ class Module:
     
     We overload setattr solely to support pythonic naming via assignment of 
     submodules in the special setup() function::
+
       self.submodule_name = MyModule(...)
 
     We also support lists and other general pytrees, e.g.::
+
       self.submodules = [MyModule0(..), MyModule1(..), ...]
 
     Args:
@@ -513,7 +514,7 @@ class Module:
     return _module_repr(self)
 
   def setup(self):
-    """Initializes a Module (similar to __init__ for non-dataclass Python classes).
+    """Initializes a Module (similar to ``__init__`` for non-dataclass Python classes).
 
     Override this method in your module subclasses to initialize submodules and
     other attributes. This method is called after all dataclass attributes are
@@ -533,12 +534,12 @@ class Module:
   def clone(self, *,
             parent: Optional[Union[Scope, 'Module']] = None,
             **updates) -> 'Module':
-    """Create a clone of this Module, with optionally updated arguments.
+    """Creates a clone of this Module, with optionally updated arguments.
     
     Args:
       parent: The parent of the clone. The clone will have no parent if no 
         explicit parent is specified.
-      **updates: attribute updates.
+      **updates: Attribute updates.
     Returns:
       A clone of the this Module with the updated attributes and parent.
     """
@@ -547,19 +548,16 @@ class Module:
     return self.__class__(**attrs)
 
   def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
-    """Declares and returns a variable in this Module. Variables are mutable jax.numpy arrays
-    that are stored a variable dict associated with this Module. See also the
-    `variables` method.
+    """Declares and returns a variable in this Module. 
+    
+    Variables are mutable jax.numpy arrays that are stored a variable dict
+    associated with this Module. See :mod:`flax.core.variables`.
+
+    See also :meth:`param`for a shorthand way to define read-only variables in
+    the "params" collection.
     
     Args:
-      col: The variable collection name. Each collection may or may not be
-        mutable and different collections can be treated differently in JAX
-        transformations. Examples of commonly used variable collections are
-        "params" and "batch_stats" (for batch norm). See also the `param`
-        method for a shorthand
-        way to define read-only variables in the "params" collection.
-
-        TODO: Make "variable collection" design note, and link to it from here.
+      col: The variable collection name. 
       name: The variable name.
       init_fn: The function that will be called to compute the initial value
         of this variable. This function will only be called the first time
@@ -568,9 +566,7 @@ class Module:
 
     Returns:
       A :class:`scope.Variable` that can be read or set via ".value" attribute.
-
-      TODO: Extract Variable into variable.py, link to that
-      from this docstring.
+      Throws an error if the variable exists already.
     """
     if not self._initialization_allowed:
       raise ValueError(
@@ -586,9 +582,10 @@ class Module:
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    """Declares and returns a parameter in this Module. Parameters are read-only variables
-    in the collection named "params". See `variable` for more details on
-    module variables.
+    """Declares and returns a parameter in this Module. 
+    
+    Parameters are read-only variables in the collection named "params". See 
+    :mod:`flax.core.variables` for more details on variables.
 
     Args:
       name: The parameter name.
@@ -613,45 +610,92 @@ class Module:
     self.children[name] = 'params'
     return v
 
-  def has_variable(self, kind: str, name: str):
-    """Check if a variable of given kind and name exists in this Module."""
+  def has_variable(self, col: str, name: str) -> bool:
+    """Check if a variable of given collection and name exists in this Module.
+
+    See :mod:`flax.core.variables` for more explanation on variables and 
+    collections.
+    
+    Args:
+      col: The variable collection name.
+      name: The name of the variable.
+    Returns:
+      True if the variable exists.
+    """
     return self.scope.has_variable(kind, name)
 
-  def make_rng(self, kind: str) -> PRNGKey:
-    """Returns a new RNG key of a given kind from this Module. The new RNG key
-    is split from the previous one. Thus, every call to `make_rng` returns a new RNG key,
-    while still guaranteeing full reproducibility.
+  def make_rng(self, col: str) -> PRNGKey:
+    """Returns a new RNG key for a given collection for this Module. 
     
-    TODO: Link to both Flax RNG design note."""
-    return self.scope.make_rng(kind)
+    The new RNG key is split from the previous one. Thus, every call to 
+    `make_rng` returns a new RNG key, while still guaranteeing full
+    reproducibility.
 
-  def apply(self, variables, *args, rngs=None,
-            method: Callable[..., Any] = None, mutable=False, **kwargs):
-    """Apply module to variables and return output and modified variables."""
+    TODO: Link to both Flax RNG design note.
+
+    Args:
+      col: The variable collection name.
+    Returns:
+      The newly generated RNG key.
+    """
+    return self.scope.make_rng(col)
+
+  def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
+            method: Callable[..., Any] = None, 
+            mutable: CollectionFilter = False,
+            **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
+    """Applies a module method to variables and returns output and modified variables.
+    
+    Args:
+      variables: A dictionary containing variables keyed by variable 
+        collections. See :mod:`flax.core.variables` for more details
+        about variables.
+      rngs: The rngs for the variable collections.
+      method: An optional method. If provided, applies this method. If not
+        provided, applies the ``__call__`` method.
+      mutable: Specifies which collections should be treated as mutable:
+        * bool: If True (False), all (no) collections are mutable.
+        * str: The name of a single mutable collection.
+        * list: A list of names of multiple mutable collections.
+    Returns:
+      If ``mutable`` is False, returns output. If any collections are 
+      mutable, returns ``(output, vars)``, where ``vars`` are is a dict
+      of the modified collections.
+    """
     if method is None:
       method = self.__class__.__call__
     else:
       method = _get_unbound_fn(method)
-    fn = lambda scope: method(self.clone(parent=scope),
-                              *args, **kwargs)
+    fn = lambda scope: method(self.clone(parent=scope), *args, **kwargs)
     return apply(fn, mutable=mutable)(variables, rngs=rngs)
 
-  def init_with_output(self, rngs, *args, method=None, **kwargs):
-    """Create initialized data for module and return it with output."""
+  def init_with_output(self, rngs: RNGSequences, *args, 
+                       method: Optional[Callable[..., Any]] = None, 
+                       **kwargs):
+    """Creates initialized data for module and return it with output.
+
+    Args:
+      rngs: The rngs for the variable collections.
+      method: An optional method. If provided, applies this method. If not
+        provided, applies the ``__call__`` method.
+    Returns:
+      
+    """
     if not isinstance(rngs, dict):
       assert rngs.shape == (2,)
       rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 
-  def init(self, rngs, *args, method=None, **kwargs):
+  def init(self, rngs: RNGSequences, *args, 
+           method: Optional[Callable[..., Any]] = None, **kwargs) -> VariableDict:
     """Create and return initialized data for module with rngs."""
     _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
     return v_out
 
-
   @property
-  def variables(self):
+  def variables(self) -> VariableDict:
+    """Returns the variables in this module. """
     return self.scope.variables()
 
 
@@ -710,3 +754,4 @@ class Module:
   #   assert self.scope is None, ("Can't attach a module twice."
   #                               " Maybe you want to clone first?")
   #   return self.clone(parent=Scope(variables, rngs))
+
