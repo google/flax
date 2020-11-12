@@ -14,14 +14,13 @@
 
 """Transformer-based langauge models."""
 
-from flax import linen as nn
-
 from typing import Callable, Any, Optional
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from flax import linen as nn
 from flax import struct
 
 
@@ -37,8 +36,8 @@ class TransformerConfig:
   qkv_dim: int = 512
   mlp_dim: int = 2048
   max_len: int = 2048
-  dropout_rate: float = 0.1
-  attention_dropout_rate: float = 0.1
+  dropout_rate: float = 0.3
+  attention_dropout_rate: float = 0.3
   kernel_init: Callable = nn.initializers.xavier_uniform()
   bias_init: Callable = nn.initializers.normal(stddev=1e-6)
   posemb_init: Optional[Callable] = None
@@ -79,8 +78,7 @@ class AddPositionEmbs(nn.Module):
 
   @nn.compact
   def __call__(self,
-               inputs,
-               inputs_positions=None):
+               inputs):
     """Applies AddPositionEmbs module.
 
     By default this layer uses a fixed sinusoidal embedding table. If a
@@ -89,7 +87,6 @@ class AddPositionEmbs(nn.Module):
 
     Args:
       inputs: input data.
-      inputs_positions: input position indices for packed sequences.
 
     Returns:
       output: `(bs, timesteps, in_dim)`
@@ -109,13 +106,7 @@ class AddPositionEmbs(nn.Module):
                                  cfg.posemb_init,
                                  pos_emb_shape)
     pe = pos_embedding[:, :length, :]
-
-    if inputs_positions is None:
-      # normal unpacked case:
-      return inputs + pe
-    else:
-      # for packed data we need to use known position indices:
-      return inputs + jnp.take(pe[0], inputs_positions, axis=0)
+    return inputs + pe
 
 
 class MlpBlock(nn.Module):
@@ -138,7 +129,7 @@ class MlpBlock(nn.Module):
                  dtype=cfg.dtype,
                  kernel_init=cfg.kernel_init,
                  bias_init=cfg.bias_init)(inputs)
-    x = nn.relu(x)
+    x = nn.elu(x)
     x = nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=deterministic)
     output = nn.Dense(actual_out_dim,
                       dtype=cfg.dtype,
@@ -160,13 +151,12 @@ class Encoder1DBlock(nn.Module):
   @nn.compact
   def __call__(self,
                inputs,
-               encoder_mask=None,
-               deterministic=True):
+               deterministic):
     """Applies Encoder1DBlock module.
 
     Args:
       inputs: input data.
-      encoder_mask: encoder self-attention mask.
+      deterministic: if true dropout is applied otherwise not.
 
     Returns:
       output after transformer encoder block.
@@ -185,7 +175,7 @@ class Encoder1DBlock(nn.Module):
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=cfg.attention_dropout_rate,
-        deterministic=deterministic)(x, encoder_mask)
+        deterministic=deterministic)(x)
 
     x = nn.Dropout(rate=cfg.dropout_rate)(
         x, deterministic=deterministic)
@@ -194,7 +184,6 @@ class Encoder1DBlock(nn.Module):
     # MLP block.
     y = nn.LayerNorm(dtype=cfg.dtype)(x)
     y = MlpBlock(config=cfg)(y, deterministic=deterministic)
-
     return x + y
 
 
@@ -205,14 +194,14 @@ class Transformer(nn.Module):
 
   @nn.compact
   def __call__(self,
-            inputs,
-            train=False,
-            dropout_rate=0.3):
+               *,
+               inputs,
+               train):
     """Applies Transformer model on the inputs.
 
     Args:
       inputs: input data
-      train: if it is training,
+      train: if it is training.
 
     Returns:
       output of a transformer decoder.
@@ -225,13 +214,15 @@ class Transformer(nn.Module):
 
     x = inputs.astype('int32')
     x = nn.Embed(num_embeddings=cfg.vocab_size, features=cfg.emb_dim, name='embed')(x)
-    x = nn.Dropout(rate=dropout_rate)(x, deterministic=not train)
+    x = nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=not train)
     x = AddPositionEmbs(cfg)(x)
-    for _ in range(cfg.num_layers):
+
+    for l in range(cfg.num_layers):
        x = Encoder1DBlock(cfg)(x, deterministic=not train)
+
     x = nn.LayerNorm(dtype=cfg.dtype)(x)
     logits = nn.Dense(
         cfg.output_vocab_size,
-        kernel_init=nn.initializers.xavier_uniform(),
-        bias_init=nn.initializers.normal(stddev=1e-6))(x)
+        kernel_init=cfg.kernel_init,
+        bias_init=cfg.bias_init)(x)
     return logits

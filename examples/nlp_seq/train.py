@@ -20,26 +20,25 @@ This script trains a Transformer on the Universal dependency dataset.
 import tensorflow as tf
 
 import functools
-import itertools
 import os
 import time
 from absl import app
 from absl import flags
 from absl import logging
-from flax import jax_utils
-from flax import linen as nn
-#from flax import nn
-from flax import optim
-import input_pipeline
-import models
-from flax.metrics import tensorboard
-from flax.training import common_utils
-import jax
 from jax import random
-import jax.nn
+import jax
 import jax.numpy as jnp
 import numpy as np
+import tensorflow as tf
 
+from flax import jax_utils
+from flax import linen as nn
+from flax import optim
+from flax.metrics import tensorboard
+from flax.training import common_utils
+
+import input_pipeline
+import models
 
 
 FLAGS = flags.FLAGS
@@ -204,7 +203,8 @@ def train_step(optimizer, batch, learning_rate_fn, model, dropout_rng=None):
   dropout_rng, new_dropout_rng = random.split(dropout_rng)
   def loss_fn(params):
     """Loss function used for training."""
-    logits = model.apply({'params': params}, inputs, train=True, rngs={'dropout': dropout_rng})
+    logits = model.apply({'params': params}, inputs=inputs, train=True,
+                         rngs={'dropout': dropout_rng})
     loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights)
     mean_loss = loss / weight_sum
     return mean_loss, logits
@@ -263,14 +263,7 @@ def main(argv):
   config = models.TransformerConfig(
       vocab_size=len(vocabs['forms']),
       output_vocab_size=len(vocabs['xpos']),
-      emb_dim=100,
-      num_heads=8,
-      num_layers=6,
-      qkv_dim=512,
-      mlp_dim=2048,
-      max_len=FLAGS.max_length,
-      dropout_rate=0.3,
-      attention_dropout_rate=0.3)
+      max_len=FLAGS.max_length)
 
   attributes_input = [input_pipeline.CoNLLAttributes.FORM]
   attributes_target = [input_pipeline.CoNLLAttributes.XPOS]
@@ -301,7 +294,7 @@ def main(argv):
   @jax.jit
   def initialize_variables(init_rng):
     init_batch = jnp.ones((config.max_len, 1), jnp.float32)
-    init_variables = model.init(init_rng, init_batch)
+    init_variables = model.init(init_rng, inputs=init_batch, train=False)
     return init_variables
   init_variables = initialize_variables(init_rng)
 
@@ -321,7 +314,7 @@ def main(argv):
     """Calculate evaluation metrics on a batch."""
     inputs, targets = batch['inputs'], batch['targets']
     weights = jnp.where(targets > 0, 1.0, 0.0)
-    logits = model.apply({'params': params}, inputs, train=False)
+    logits = model.apply({'params': params}, inputs=inputs, train=False)
     return compute_metrics(logits, targets, weights)
 
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
