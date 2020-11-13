@@ -8,7 +8,7 @@ rate schedule.
 ### Requirements
 * TensorFlow datasets `wmt17_translate/de-en` and `wmt14_translate/de-en` need to be
  downloaded and prepared. A sentencepiece tokenizer vocabulary will be automatically
- generated and saved on each training run. 
+ generated and saved on each training run.
 * This example additionally depends on the `sentencepiece` and `tensorflow-text` packages.
 
 ### Supported setups
@@ -19,7 +19,7 @@ The model should run with other configurations and hardware, but was explicitly 
 | TPU v3-8  | 256  |  1h 35m  | 25.13 | [2020-04-21](https://tensorboard.dev/experiment/9lsbEw7DQzKdv881v4nIQA/) |
 
 ### How to run
-  `python train.py --batch_size=256 --model_dir=./wmt_256 --reverse_translation=True`
+`python main.py --workdir=./wmt_256 --config.batch_size=256 --config.reverse_translation=True`
 
 ### How to run on Cloud TPUs
 
@@ -72,16 +72,16 @@ pip install -e flax
 ```
 
 Then, if your TPU is at IP `192.168.0.2`:
-  `python train.py --batch_size=256 --model_dir=./wmt_256 --jax_backend_target="grpc://192.168.0.2:8470"`
+`python main.py --workdir=./wmt_256 --config.batch_size=256 --jax_backend_target="grpc://192.168.0.2:8470"`
 
 A tensorboard instance can then be launched and viewed on your local 2222 port via the tunnel:
-  `tensorboard --logdir wmt_256 --port 8888`
+`tensorboard --logdir wmt_256 --port 8888`
 
 ### Downloading the WMT Datasets
 
 We recommend downloading and preparing the TFDS datasets beforehand.  For Cloud TPUs, we
 recommend using a cheap standard instance and saving the prepared TFDS data on a storage bucket,
-from where it can be loaded directly during training using the `--data_dir=gs://...` option.
+from where it can be loaded directly. Set the `TFDS_DATA_DIR` to your storage bucket path (`gs://<bucket name>`).
 
 You can download and prepare any of the WMT datasets using TFDS directly:
 ```

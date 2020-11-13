@@ -36,8 +36,7 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
                      eval_dataset_name=None,
                      reverse_translation=False,
                      shard_idx=0,
-                     shard_count=1,
-                     data_dir=None):
+                     shard_count=1):
   """Load raw WMT datasets and normalize feature keys.
 
   Args:
@@ -48,14 +47,13 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
       e.g. for 'de-en' this translates from english to german.
     shard_idx: int: for multihost training, index of this host.
     shard_count: int: for mulithost training, number of total hosts.
-    data_dir: str: location of TFDS data directory.
 
   Returns:
     training tf.dataset, evaluation tf.dataset, and training features_info
     source and target language features are mapped to 'inputs' and 'targets'
     keys.
   """
-  builder = tfds.builder(dataset_name, data_dir=data_dir)
+  builder = tfds.builder(dataset_name)
   shard_spec = (f'[{int(100 * shard_idx / shard_count)}%'
                 f':{int(100 * (shard_idx + 1) / shard_count)}%]')
   logging.info('Training on TFDS dataset %s with split %s',
@@ -75,7 +73,7 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
       eval_split = eval_split[0]
     logging.info('Evaluating on TFDS dataset %s with split %s',
                  eval_dataset, eval_split + shard_spec)
-    eval_builder = tfds.builder(eval_dataset, data_dir=data_dir)
+    eval_builder = tfds.builder(eval_dataset)
     eval_data = eval_builder.as_dataset(split=eval_split + shard_spec,
                                         shuffle_files=False)
 
@@ -497,7 +495,6 @@ def get_wmt_datasets(n_devices,
                      reverse_translation=True,
                      shard_idx=0,
                      shard_count=1,
-                     data_dir=None,
                      vocab_path=None,
                      target_vocab_size=2**15,  # 32000
                      max_corpus_chars=10**7,
@@ -519,8 +516,7 @@ def get_wmt_datasets(n_devices,
       eval_dataset_name=eval_dataset_name,
       reverse_translation=reverse_translation,
       shard_idx=shard_idx,
-      shard_count=shard_count,
-      data_dir=data_dir)
+      shard_count=shard_count)
 
   try:
     sp_tokenizer = load_sentencepiece_tokenizer(vocab_path, add_eos=True)
