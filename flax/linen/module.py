@@ -512,17 +512,17 @@ class Module:
          another module inside the other module's ``setup`` method
          (see :meth:`__setattr__`)::
 
-          class MyModule(nn.Module):
-            def setup(self):
-              submodule = Conv(...)
+           class MyModule(nn.Module):
+             def setup(self):
+               submodule = Conv(...)
 
-              # Accessing `submodule.variables` does not yet work here.
+               # Accessing `submodule.variables` does not yet work here.
 
-              # The following line invokes `self.__setattr__`, which gives
-              # `submodule` the name "conv1", which calls `submodule.setup`.
-              self.conv1 = submodule
+               # The following line invokes `self.__setattr__`, which gives
+               # `submodule` the name "conv1", which calls `submodule.setup`.
+               self.conv1 = submodule
 
-              # Accessing `submodule.variables` is now safe.
+               # Accessing `submodule.variables` is now safe.
 
       3. Immediately when a module is constructed inside a method wrapped with 
          :meth:`compact`.
