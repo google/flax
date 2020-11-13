@@ -194,8 +194,8 @@ class Transformer(nn.Module):
 
   @nn.compact
   def __call__(self,
-               *,
                inputs,
+               *,
                train):
     """Applies Transformer model on the inputs.
 
