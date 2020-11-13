@@ -50,9 +50,9 @@ T = TypeVar('T')
 class Variable(Generic[T]):
   """A Variable object allows mutable access to a variable in a VariableDict.
   
-  Variables are identified by a collection (e.g., "params") and a name (e.g.,
-  "dense"). The value property gives access to the variable's content and can be
-  assigned to for mutation.
+  Variables are identified by a collection (e.g., "batch_stats") and a name 
+  (e.g., "moving_mean"). The value property gives access to the variable's 
+  content and can be assigned to for mutation.
   """
 
   def __init__(self, scope: 'Scope', collection: str, name: str):

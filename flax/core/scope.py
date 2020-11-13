@@ -462,7 +462,7 @@ def apply(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(variables: FrozenVariableDict, *args,
               rngs: Optional[RNGSequences] = None, 
-              **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
+              **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
     
     if not _is_valid_variables(variables):
       raise ValueError('The first argument passed to an apply function '

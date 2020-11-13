@@ -137,21 +137,6 @@ def _get_suffix_value_pairs(
     flat_dict = traverse_util.flatten_dict(dict_or_leaf)
     return [('_' + '_'.join(k), v) for k, v in flat_dict.items()]
 
-def _is_module_tree(in_tree: Any) -> bool:
-  """Determines if `in_tree` is a pytree of subclasses of Module.
-
-  Args:
-    in_tree: Python object, typically a python tree.
-
-  Returns:
-    True if `in_tree` is non-empty and all leafs are Module, False otherwise.
-  """
-  # reject trivial pytrees, {}, [], (), etc.
-  if not tree_util.tree_leaves(in_tree):
-    return False
-  reduce_fn = lambda prev, cur: prev and isinstance(cur, Module)
-  return jax.tree_util.tree_reduce(reduce_fn, in_tree, True)
-
 
 def _all_names_on_object(obj: Any) -> Set[str]:
   """Gets all names of attributes on `obj` and its classes throughout MRO.
@@ -517,9 +502,16 @@ class Module:
     """Initializes a Module (similar to ``__init__`` for non-dataclass Python classes).
 
     Override this method in your module subclasses to initialize submodules and
-    other attributes. This method is called after all dataclass attributes are
-    assigned and the module is ready for use. Variables and RNGs are guaranteed
-    to be available.
+    other attributes. Example usage::
+
+      class MyModule(nn.Module):
+        def setup(self):
+          self.submodule = MySubModule()
+    
+    Here, ``setup`` is only called after the assignment of ``MySubModule()`` to
+    `self.submodule``, since after that the attribute name (``submodule``) is
+    known, hence the ```RNG`` and where the variables of ``MySubModule`` live in
+    the ``VariableDict`` of ``MyModule``.
     """
     pass
 
@@ -649,8 +641,8 @@ class Module:
         collections. See :mod:`flax.core.variables` for more details
         about variables.
       rngs: The rngs for the variable collections.
-      method: An optional method. If provided, applies this method. If not
-        provided, applies the ``__call__`` method.
+      method: The literal name of a method in this class. If provided, applies
+        this method. If not provided, applies the ``__call__`` method.
       mutable: Can be bool, str, or list. Specifies which collections should be
         treated as mutable: ``bool``: all/no collections are mutable. ``str``:
         The name of a single mutable collection. ``list``: A list of names of
@@ -696,8 +688,7 @@ class Module:
       method: An optional method. If provided, applies this method. If not
         provided, applies the ``__call__`` method.
     Returns:
-      `(output, vars)``, where ``vars`` are is a dict of the modified 
-      collections.
+      The initialized variable dict.
     """
     _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
     return v_out
