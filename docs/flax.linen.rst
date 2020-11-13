@@ -10,7 +10,7 @@ Module
 ------------------------
 
 .. autoclass:: Module
-   :members: setup, variable, param, apply, init, init_with_output, variables, Variable
+   :members: setup, variable, param, apply, init, init_with_output, variables, Variable, __setattr__
 
 Variables
 ----------------------

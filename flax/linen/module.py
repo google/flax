@@ -501,17 +501,32 @@ class Module:
   def setup(self):
     """Initializes a Module (similar to ``__init__`` for non-dataclass Python classes).
 
-    Override this method in your module subclasses to initialize submodules and
-    other attributes. Example usage::
-
-      class MyModule(nn.Module):
-        def setup(self):
-          self.submodule = MySubModule()
+    ``setup`` is called on a module instance at the moment it is safe to define
+    or access variables or submodules (once the module is "bound").
     
-    Here, ``setup`` is only called after the assignment of ``MySubModule()`` to
-    `self.submodule``, since after that the attribute name (``submodule``) is
-    known, hence the ```RNG`` and where the variables of ``MySubModule`` live in
-    the ``VariableDict`` of ``MyModule``.
+    This happens in three cases:
+      1. Immediately when invoking :meth:`apply`, :meth:`init` or 
+         :meth:`init_and_output`.
+
+      2. When the module is given a name by being assigned to an attribute of
+         another module inside the other module's ``setup`` method
+         (see :meth:`__setattr__`)::
+
+         class MyModule(nn.Module):
+           def setup(self):
+             submodule = Conv(...)
+
+             # Accessing `submodule.variables` does not yet work here.
+
+             # The following line invokes `self.__setattr__`, which gives
+             # `submodule` the name "conv1", which calls ``submodule.setup``.
+             self.conv1 = submodule
+
+             # Accessing `submodule.variables` is now safe.
+
+      3. Immediately when a module is constructed inside a method wrapped with 
+         :meth:`compact`.
+
     """
     pass
 
