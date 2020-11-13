@@ -201,7 +201,6 @@ def train_step(optimizer, batch, learning_rate_fn, model, dropout_rng=None):
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
   dropout_rng, new_dropout_rng = random.split(dropout_rng)
-
   def loss_fn(params):
     """Loss function used for training."""
     logits = model.apply({'params': params}, inputs=inputs, train=True,
@@ -221,6 +220,8 @@ def train_step(optimizer, batch, learning_rate_fn, model, dropout_rng=None):
   metrics['learning_rate'] = lr
 
   return new_optimizer, metrics, new_dropout_rng
+
+
 
 
 def pad_examples(x, desired_batch_size):
@@ -286,17 +287,16 @@ def main(argv):
 
   model = models.Transformer(config)
 
-  # jitting initialization avoids heap fragmentation
+  rng = random.PRNGKey(random_seed)
+  rng, init_rng = random.split(rng)
+
+  # call a jitted initialization function to get the initial parameter tree
   @jax.jit
   def initialize_variables(init_rng):
-    rng, dropout_rng = random.split(init_rng)
     init_batch = jnp.ones((config.max_len, 1), jnp.float32)
-    init_variables = model.init({'params': rng, 'dropout': dropout_rng},
-                                init_batch, train=True)
+    init_variables = model.init(init_rng, inputs=init_batch, train=False)
     return init_variables
-
-  rng = random.PRNGKey(random_seed)
-  init_variables = initialize_variables(rng)
+  init_variables = initialize_variables(init_rng)
 
   optimizer_def = optim.Adam(learning_rate, beta1=0.9, beta2=0.98,
       eps=1e-9, weight_decay=1e-1)
