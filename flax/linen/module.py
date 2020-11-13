@@ -512,17 +512,17 @@ class Module:
          another module inside the other module's ``setup`` method
          (see :meth:`__setattr__`)::
 
-         class MyModule(nn.Module):
-           def setup(self):
-             submodule = Conv(...)
+          class MyModule(nn.Module):
+            def setup(self):
+              submodule = Conv(...)
 
-             # Accessing `submodule.variables` does not yet work here.
+              # Accessing `submodule.variables` does not yet work here.
 
-             # The following line invokes `self.__setattr__`, which gives
-             # `submodule` the name "conv1", which calls `submodule.setup`.
-             self.conv1 = submodule
+              # The following line invokes `self.__setattr__`, which gives
+              # `submodule` the name "conv1", which calls `submodule.setup`.
+              self.conv1 = submodule
 
-             # Accessing `submodule.variables` is now safe.
+              # Accessing `submodule.variables` is now safe.
 
       3. Immediately when a module is constructed inside a method wrapped with 
          :meth:`compact`.
@@ -555,14 +555,14 @@ class Module:
     return self.__class__(**attrs)
 
   def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
-    """Declares and returns a variable in this Module. 
-    
+    """Declares and returns a variable in this Module.
+
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
     for a shorthand way to define read-only variables in the "params"
     collection.
-    
+
     Args:
-      col: The variable collection name. 
+      col: The variable collection name.
       name: The variable name.
       init_fn: The function that will be called to compute the initial value
         of this variable. This function will only be called the first time
@@ -570,8 +570,8 @@ class Module:
       *init_args: The arguments to pass to init_fn.
 
     Returns:
-      A :class:`variable.Variable` that can be read or set via ".value" 
-      attribute. Throws an error if the variable exists already.
+      A :class:`flax.core.variables.Variable` that can be read or set via 
+      ".value" attribute. Throws an error if the variable exists already.
     """
     if not self._initialization_allowed:
       raise ValueError(
@@ -587,9 +587,9 @@ class Module:
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
-    """Declares and returns a parameter in this Module. 
-    
-    Parameters are read-only variables in the collection named "params". See 
+    """Declares and returns a parameter in this Module.
+
+    Parameters are read-only variables in the collection named "params". See
     :mod:`flax.core.variables` for more details on variables.
 
     Args:
@@ -618,7 +618,7 @@ class Module:
   def has_variable(self, col: str, name: str) -> bool:
     """Checks if a variable of given collection and name exists in this Module.
 
-    See :mod:`flax.core.variables` for more explanation on variables and 
+    See :mod:`flax.core.variables` for more explanation on variables and
     collections.
     
     Args:
@@ -650,20 +650,20 @@ class Module:
             mutable: Union[bool, str, Sequence[str]] = False,
             **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
-    
+
     Args:
-      variables: A dictionary containing variables keyed by variable 
+      variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
         about variables.
       rngs: The rngs for the variable collections.
       method: The literal name of a method in this class. If provided, applies
         this method. If not provided, applies the ``__call__`` method.
       mutable: Can be bool, str, or list. Specifies which collections should be
-        treated as mutable: ``bool``: all/no collections are mutable. ``str``:
-        The name of a single mutable collection. ``list``: A list of names of
-        mutable collections.
+               treated as mutable: ``bool``: all/no collections are mutable.
+               ``str``: The name of a single mutable collection. ``list``: A
+               list of names of mutable collections.
     Returns:
-      If ``mutable`` is False, returns output. If any collections are 
+      If ``mutable`` is False, returns output. If any collections are
       mutable, returns ``(output, vars)``, where ``vars`` are is a dict
       of the modified collections.
     """
@@ -682,9 +682,9 @@ class Module:
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
-        provided, applies the ``__call__`` method.
+              provided, applies the ``__call__`` method.
     Returns:
-      `(output, vars)``, where ``vars`` are is a dict of the modified 
+      `(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
     """
     if not isinstance(rngs, dict):
@@ -698,10 +698,10 @@ class Module:
            **kwargs) -> VariableDict:
     """Initializes a module method with variables and returns modified variables.
 
-      Args:
+    Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
-        provided, applies the ``__call__`` method.
+              provided, applies the ``__call__`` method.
     Returns:
       The initialized variable dict.
     """
