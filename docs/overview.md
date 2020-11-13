@@ -1,27 +1,23 @@
-# Flax: A neural network ecosystem for JAX designed for flexibility
+# Overview
 
-[**Overview**](#overview)
-| [**What does Flax look like?**](#what-does-flax-look-like)
-| [**Documentation**](https://flax.readthedocs.io/)
+## Background: JAX
 
-[![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
+[JAX](https://github.com/google/jax) is NumPy + autodiff + GPU/TPU
 
-Please check our [full documentation](https://flax.readthedocs.io/) website to learn everything you need to know about Flax.
+It allows for fast scientific computing and machine learning
+with the normal NumPy API
+(+ additional APIs for special accelerator ops when needed)
 
-**NOTE**: Flax is in use by a growing community
-of researchers and engineers at Google who happily use Flax for their
-daily research. The new Flax ["Linen" module API](https://github.com/google/flax/tree/master/flax/linen) is now stable and we recommend it for all new projects. The old `flax.nn` API will be deprecated. Please report
-any feature requests, issues, questions or concerns in our 
-[discussion forum](https://github.com/google/flax/discussions), or just let us know 
-what you're working on!
+JAX comes with powerful primitives, which you can compose arbitrarily:
 
-Expect changes to the
-API, but we'll use deprecation warnings when we can, and keep
-track of them in our [Changelog](CHANGELOG.md).
+* Autodiff (`jax.grad`): Efficient any-order gradients w.r.t any variables
+* JIT compilation (`jax.jit`): Trace any function ⟶ fused accelerator ops
+* Vectorization (`jax.vmap`): Automatically batch code written for individual samples
+* Parallelization (`jax.pmap`): Automatically parallelize code across multiple accelerators (including across hosts, e.g. for TPU pods)
 
-In case you need to reach us directly, we're at flax-dev@google.com.
+If you don't know JAX but just want to learn what you need to use Flax, you can check our [JAX for the impatient](notebooks/jax_for_the_impatient) notebook.
 
-## Overview
+## Flax
 
 Flax is a high-performance neural network library for
 JAX that is **designed for flexibility**:
@@ -41,9 +37,9 @@ comes with everything you need to start your research, including:
 
 * **Fast, tuned large-scale end-to-end examples**: CIFAR10, ResNet on ImageNet, Transformer LM1b
 
-## What does Flax look like?
+## Code examples
 
-We provide here two examples using the Flax API: a simple multi-layer perceptron and a CNN. To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/).
+Flax enables you to write concise code for your models. Here we showcase multi-layer perceptron and a convolutional neural network (in their simplest form).
 
 ```py
 class SimpleMLP(nn.Module):
@@ -79,6 +75,13 @@ class CNN(nn.Module):
     return x
 ```
 
-## Note
+## TPU support
 
-This is not an official Google product.
+We currently have a [LM1b/Wikitext-2 language model with a Transformer architecture](https://colab.research.google.com/github/google/flax/blob/master/examples/lm1b/Colab_Language_Model.ipynb)
+that's been tuned. You can run it directly via Colab.
+
+At present, Cloud TPUs are network-attached, and Flax users typically feed in data from one or more additional VMs
+
+When working with large-scale input data, it is important to create large enough VMs with sufficient network bandwidth to avoid having the TPUs bottlenecked waiting for input
+
+TODO: Add an example for running on Google Cloud.

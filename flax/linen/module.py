@@ -519,7 +519,7 @@ class Module:
              # Accessing `submodule.variables` does not yet work here.
 
              # The following line invokes `self.__setattr__`, which gives
-             # `submodule` the name "conv1", which calls ``submodule.setup``.
+             # `submodule` the name "conv1", which calls `submodule.setup`.
              self.conv1 = submodule
 
              # Accessing `submodule.variables` is now safe.
