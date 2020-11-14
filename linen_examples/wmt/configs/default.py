@@ -30,10 +30,10 @@ def get_config():
   config.max_corpus_chars = 10**7
 
   # Name of TFDS translation dataset to use.
-  config.dataset_name = 'wmt17_translate/de-en'
+  config.dataset_name = "wmt17_translate/de-en"
 
   # Optional name of TFDS translation dataset to use for evaluation.
-  config.eval_dataset_name = 'wmt14_translate/de-en:test'
+  config.eval_dataset_name = "wmt14_translate/de-en:test"
 
   # Reverse the direction of translation.
   config.reverse_translation = False
