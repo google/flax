@@ -33,9 +33,10 @@ import hashlib
 from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic, Mapping
 
 from . import tracers
-from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
+from .frozen_dict import freeze
+from .frozen_variable_dict import freeze_variables
 
 import jax
 from jax import random
@@ -296,7 +297,7 @@ class Scope:
   def variables(self) -> Collection:
     """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
-    return freeze(self._variables)
+    return freeze_variables(self._variables)
 
   def _validate_trace_level(self):
     tracers.check_trace_level(self.trace_level)

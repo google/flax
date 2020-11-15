@@ -30,6 +30,7 @@ from typing import Any, Tuple, Iterable, Callable
 from flax import linen as nn
 from flax.linen import compact
 from flax.core import Scope, freeze
+from flax.core.frozen_variable_dict import FrozenVariableDict
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -627,6 +628,24 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(trace, expected_trace)
     trace = mlp.apply(variables, x)
     self.assertEqual(trace, expected_trace)
+
+
+  def test_module_variables_are_frozen_variable_dict(self):
+
+    class MyModule(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bias = DummyModule()
+        output = bias(x)
+        return output, bias.variables
+
+    with_variables = MyModule()
+    x = jnp.ones((1, 2))
+    (_, bias_variables), _ = with_variables.init_with_output(random.PRNGKey(0), x)
+    self.assertTrue(isinstance(bias_variables, FrozenVariableDict))
+    self.assertTrue(isinstance(bias_variables['params'], FrozenVariableDict))
+    with self.assertRaisesRegex(KeyError, "Variable bias_0 is not in the FrozenVariableDict."):
+      _ = bias_variables['params']['bias_0']
 
 
   def test_call_unbound_compact_module_methods(self):

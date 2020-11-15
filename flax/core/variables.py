@@ -38,5 +38,4 @@ as well as other non-trainable variables (the ``"batch_stats"`` collection)
 
 TODO: Make "variable dict" design note, and link to it from here.
 """
-
-from .scope import Variable
+from .scope import  Variable
