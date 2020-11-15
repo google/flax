@@ -1,4 +1,4 @@
-from typing import TypeVar, Dict
+from typing import TypeVar, Dict, Any
 import jax
 
 from .frozen_dict import FrozenDict
@@ -23,7 +23,7 @@ class FrozenVariableDict(FrozenDict[K, V]):
     return v
 
 
-def freeze_variables(xs: Dict[K, V]) -> FrozenVariableDict[K, V]:
+def freeze_variables(xs: Dict[Any, Any]) -> FrozenVariableDict[Any, Any]:
   """Freeze a nested dict of variables.
 
   Makes a nested `dict` immutable by transforming it into `FrozenVariableDict`.
