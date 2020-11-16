@@ -423,13 +423,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   target_shape = (config.batch_size, config.max_target_length)
 
   m = models.Transformer(eval_config)
-  # call a jitted initialization function to get the initial parameter tree
-  @jax.jit
-  def initialize_variables(rng):
-    return m.init(rng, jnp.ones(input_shape, jnp.float32),
+  initial_variables = jax.jit(m.init)(init_rng, jnp.ones(input_shape, jnp.float32),
                   jnp.ones(target_shape, jnp.float32))
-
-  initial_variables = initialize_variables(init_rng)
 
   # apply an optimizer to this tree
   optimizer_def = optim.Adam(
