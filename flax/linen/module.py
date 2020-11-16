@@ -503,8 +503,9 @@ class Module:
 
     ``setup`` is called on a module instance at the moment it is safe to define
     or access variables or submodules (once the module is "bound").
+
+    | This happens in three cases:
     
-    This happens in three cases:
       1. Immediately when invoking :meth:`apply`, :meth:`init` or 
          :meth:`init_and_output`.
 
