@@ -11,56 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-"""Flax functional core: Scopes.
-
-Flax deep learning models contain variables, which can be of different 
-categories such as trainable parameters, or internal state variables that aren't
-parameters (e.g., batch statistics). For instance, the top-level variable
-dictionary of a Flax model using batch normalization may look as follows::
-  {
-    "params": {
-      "Conv1": { "weight": ..., "bias": ... },
-      "BatchNorm1": { "scale": ..., "mean": ... },
-      "Conv2": {...}
-    },
-    "batch_stats": {
-      "BatchNorm1": { "moving_mean": ..., "moving_average": ...}
-    }
-  }
-
-This variable dict has two so-called "collections": `params` (containing the 
-trainable parameters) and `batch_stats` (containing the --non-trainable-- batch
-statistics).
-
-The functional core Scope defined below allows easy access to all variables in a
-layer. For instance, from inside the BathcNorm1 layer, the variable "mean" is
-accessed as follows::
-  mean = scope.variable('batch_stats', 'moving_mean', jnp.zeros, (,))
-
-This will initialize it using `jnp.zeros` with shape `(,)`. The function 
-`scope.params` accesses variables of collection "params" directly::
-  weight = scope.params('scale', jnp.zeros, (3, 6))
-
-Scope are not constructed directly, but passed as a first argument to functions
-to which they should be applied. E.g., the scopes of the example above::
-  def conv(scope, x, ...)::
-    weight = scope.params('weight', ...)
-    ...
-
-  def module_fn(scope, x, ...):
-    conv = scope.child(conv, 'conv')(x, ...)
-    ...
-
-The function `init` is then used to initialize a Scope, which transforms it into
-a function that expects RNG keys for all collections::
-  vars = init(module_fn)({
-      'params': PRNGKey(0), 'batch_stats': PRNGKey(0)
-  }, input_shapes)
-
-Thus, the user provides rng seeds for all collections to the top-level scope,
-which are automatically split and propagated to lower-level scopes.
-"""
+"""Flax functional core: Scopes."""
 
 import contextlib
 import enum
@@ -231,7 +182,15 @@ def group_collections(xs: VariableDict,
 
 
 class Scope:
-  """The Scope class. See top-level docstring of this doc for a description."""
+  """A Scope allows easy access to variables and manages RNGS of a neural network layer.
+  
+  Scopes are purely functional and encapsulated in 
+  :class:`flax.linen.module.Module`, so users writing neural network code 
+  usually generally do not interact with ``Scopes`` directly.
+
+  See `core design tests <https://github.com/google/flax/tree/master/tests/core/design>`_
+  for a number of examples using ``Scopes``.
+  """
 
   def __init__(self,
                variables: VariableDict,
