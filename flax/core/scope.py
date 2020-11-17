@@ -12,16 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax functional core: Scopes.
-
-The goal of the Flax functional core is to provide a purely functional 
-abstraction that takes care of various types of bookkeeping such as parameter
-and RNG management. The main abstraction is Scope, which contains parameters
-and RNGs, and which can be nested.
-
-TODO: elaborate.
-
-"""
+# Copyright 2020 The Flax Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Flax functional core: Scopes."""
 
 import contextlib
 import enum
@@ -192,7 +196,15 @@ def group_collections(xs: VariableDict,
 
 
 class Scope:
-  """The Scope class. See top-level docstring of this doc for a description."""
+  """A Scope allows easy access to variables and manages RNGS of a neural network layer.
+  
+  Scopes are purely functional and encapsulated in 
+  :class:`flax.linen.module.Module`, so users writing neural network code 
+  usually generally do not interact with ``Scopes`` directly.
+
+  See `core design tests <https://github.com/google/flax/tree/master/tests/core/design>`_
+  for a number of examples using ``Scopes``.
+  """
 
   def __init__(self,
                variables: VariableDict,
