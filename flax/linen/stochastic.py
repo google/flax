@@ -19,14 +19,14 @@ from jax import lax
 from jax import random
 import jax.numpy as jnp
 
-from flax.linen import Module, compact
+from .module import Module, compact  # pytype: disable=pyi-error
 
 class Dropout(Module):
   """Create a dropout layer.
 
     Args:
       rate: the dropout probability.  (_not_ the keep rate!)
-    """
+  """
   rate: float
   @compact
   def __call__(self, inputs, deterministic=False, rng=None, broadcast_dims=()):

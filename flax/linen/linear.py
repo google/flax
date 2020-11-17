@@ -18,8 +18,8 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 
 from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
-from .module import Module, compact
-from . import initializers
+from .module import Module, compact  # pytype: disable=pyi-error
+from . import initializers  # pytype: disable=pyi-error
 
 from jax import lax
 import jax.numpy as jnp

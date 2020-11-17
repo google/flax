@@ -30,6 +30,8 @@
 """Utilities for defining custom classes that can be used with jax transformations.
 """
 
+from typing import Type, TypeVar
+
 from . import serialization
 
 import dataclasses
@@ -37,7 +39,7 @@ import dataclasses
 import jax
 
 
-def dataclass(clz):
+def dataclass(clz: Type):
   """Create a class which can be passed to functional transformations.
 
   Jax transformations such as `jax.jit` and `jax.grad` require objects that are
@@ -133,3 +135,20 @@ def dataclass(clz):
 
 def field(pytree_node=True, **kwargs):
   return dataclasses.field(metadata={'pytree_node': pytree_node}, **kwargs)
+
+
+TNode = TypeVar('TNode', bound='PyTreeNode')
+
+
+class PyTreeNode():
+
+  def __init_subclass__(cls):
+    dataclass(cls)  # pytype: disable=wrong-arg-types
+
+  def __init__(self, *args, **kwargs):
+    # stub for pytype
+    raise NotImplementedError
+
+  def replace(self: TNode, **overrides) -> TNode:
+    # stub for pytype
+    raise NotImplementedError

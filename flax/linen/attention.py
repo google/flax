@@ -25,10 +25,10 @@ from jax import random
 import jax.numpy as jnp
 import numpy as np
 
-from .linear import default_kernel_init
-from .linear import DenseGeneral
-from .module import Module, compact
-from . import initializers
+from .linear import default_kernel_init  # pytype: disable=pyi-error
+from .linear import DenseGeneral  # pytype: disable=pyi-error
+from .module import Module, compact  # pytype: disable=pyi-error
+from . import initializers  # pytype: disable=pyi-error
 
 
 PRNGKey = Any

@@ -27,10 +27,10 @@ import abc
 from functools import partial
 from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
-from .module import Module, compact
-from . import activation
-from . import initializers
-from . import linear
+from .module import Module, compact  # pytype: disable=pyi-error
+from . import activation  # pytype: disable=pyi-error
+from . import initializers  # pytype: disable=pyi-error
+from . import linear  # pytype: disable=pyi-error
 
 from jax import numpy as jnp
 from jax import random

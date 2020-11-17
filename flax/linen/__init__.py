@@ -30,5 +30,6 @@ from .pooling import avg_pool, max_pool
 from .recurrent import GRUCell, LSTMCell, ConvLSTM
 from .stochastic import Dropout
 from .transforms import jit, named_call, remat, scan, vmap
+from .initializers import zeros, ones
 
 # pylint: enable=g-multiple-import

@@ -19,17 +19,19 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 import warnings
 
 from .. import jax_utils
-from . import base
-from . import initializers
-from . import stochastic
+from . import activation  # pytype: disable=pyi-error
+from . import base  # pytype: disable=pyi-error
+from . import initializers  # pytype: disable=pyi-error
+from . import stochastic  # pytype: disable=pyi-error
+from .linear import default_kernel_init  # pytype: disable=pyi-error
+from .linear import DenseGeneral  # pytype: disable=pyi-error
 from flax import struct
 
 import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
-from .linear import default_kernel_init
-from .linear import DenseGeneral
+
 import numpy as onp
 
 
@@ -112,7 +114,7 @@ def dot_product_attention(query,
 
   # normalize the attention weights
   norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))
-  attn_weights = jax.nn.softmax(attn_weights, axis=norm_dims)
+  attn_weights = activation.softmax(attn_weights, axis=norm_dims)
   attn_weights = attn_weights.astype(dtype)
 
   # apply dropout
