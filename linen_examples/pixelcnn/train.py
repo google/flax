@@ -27,6 +27,9 @@
 # limitations under the License.
 """PixelCNN++ example."""
 
+# See issue #620.
+# pytype: disable=wrong-keyword-args
+
 from functools import partial
 import datetime
 

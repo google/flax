@@ -453,11 +453,11 @@ class ModuleTest(absltest.TestCase):
     class Derived2(Derived1):
       pass
 
-    self.assertEqual(nn.module.get_local_method_names(Base), ('bleep',))
-    self.assertEqual(nn.module.get_local_method_names(Derived1), ('bloop',))
+    self.assertEqual(nn.module._get_local_method_names(Base), ('bleep',))
+    self.assertEqual(nn.module._get_local_method_names(Derived1), ('bloop',))
     self.assertEqual(
-        nn.module.get_local_method_names(Derived1, exclude=('bloop',)), ())
-    self.assertEqual(nn.module.get_local_method_names(Derived2), ())
+        nn.module._get_local_method_names(Derived1, exclude=('bloop',)), ())
+    self.assertEqual(nn.module._get_local_method_names(Derived2), ())
 
   def test_inheritance_dataclass_attribs(self):
     class Test(nn.Module):
@@ -505,18 +505,18 @@ class ModuleTest(absltest.TestCase):
   def test_get_suffix_value_pairs(self):
     for x in [(), [], {}, None, 0, set()]:
       self.assertEqual(
-          nn.module.get_suffix_value_pairs(x), [('', x)])
+          nn.module._get_suffix_value_pairs(x), [('', x)])
     self.assertEqual(
-        nn.module.get_suffix_value_pairs(
+        nn.module._get_suffix_value_pairs(
             {'a': 1, 'b': 2}), [('_a', 1), ('_b', 2)])
     self.assertEqual(
-        nn.module.get_suffix_value_pairs(
+        nn.module._get_suffix_value_pairs(
             [1, 2, 3]), [('_0', 1), ('_1', 2), ('_2', 3)])
     x1 = [nn.Dense(10), nn.relu, nn.Dense(10)]
-    y1 = nn.module.get_suffix_value_pairs(x1)
+    y1 = nn.module._get_suffix_value_pairs(x1)
     self.assertEqual(y1, [('_0', x1[0]), ('_1', x1[1]), ('_2', x1[2])])
     x2 = {'a': 1, 'b': {'c': nn.Dense(10), 'd': nn.relu}}
-    y2 = nn.module.get_suffix_value_pairs(x2)
+    y2 = nn.module._get_suffix_value_pairs(x2)
     self.assertEqual(y2,
         [('_a', 1), ('_b_c', x2['b']['c']), ('_b_d', x2['b']['d'])])
 
@@ -534,6 +534,61 @@ class ModuleTest(absltest.TestCase):
     m0 = variables['params']['layers_0']['kernel']
     m1 = variables['params']['layers_2']['kernel']
     self.assertTrue(jnp.all(y == jnp.dot(nn.relu(jnp.dot(x, m0)), m1)))
+
+  def test_module_is_hashable(self):
+    module_a = nn.Dense(10)
+    module_a_2 = nn.Dense(10)
+    module_b = nn.Dense(5)
+    self.assertEqual(hash(module_a), hash(module_a_2))
+    self.assertNotEqual(hash(module_a), hash(module_b))
+
+  def test_module_with_scope_is_not_hashable(self):
+    module_a = nn.Dense(10, parent=Scope({}))
+    with self.assertRaisesWithLiteralMatch(ValueError, 'Can\'t call __hash__ on modules that hold variables.'):
+      hash(module_a)
+
+  def test_module_trace(self):
+    class MLP(nn.Module):
+      act: Callable = nn.relu
+      sizes: Iterable[int] = (3, 2)
+
+      @nn.compact
+      def __call__(self, x):
+        for size in self.sizes:
+          x = nn.Dense(size)(x)
+          x = self.act(x)
+        return repr(self)
+    mlp = MLP()
+    expected_trace = (
+"""MLP(
+    # attributes
+    act = relu
+    sizes = (3, 2)
+    # children
+    Dense_0 = Dense(
+        # attributes
+        features = 3
+        use_bias = True
+        dtype = float32
+        precision = None
+        kernel_init = init
+        bias_init = zeros
+    )
+    Dense_1 = Dense(
+        # attributes
+        features = 2
+        use_bias = True
+        dtype = float32
+        precision = None
+        kernel_init = init
+        bias_init = zeros
+    )
+)""")
+    x = jnp.ones((1, 2))
+    trace, variables = mlp.init_with_output(random.PRNGKey(0), x)
+    self.assertEqual(trace, expected_trace)
+    trace = mlp.apply(variables, x)
+    self.assertEqual(trace, expected_trace)
 
 
 if __name__ == '__main__':

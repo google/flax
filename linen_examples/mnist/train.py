@@ -18,23 +18,19 @@ Library file which executes the training and evaluation loop for MNIST.
 The data is loaded using tensorflow_datasets.
 """
 
+# See issue #620.
+# pytype: disable=wrong-keyword-args
+
 from absl import logging
-
-import jax
-from jax import random
-import jax.numpy as jnp
-
-jax.config.enable_omnistaging()
-
-import ml_collections
-
-import numpy as onp
-
-import tensorflow_datasets as tfds
-
 from flax import linen as nn
 from flax import optim
 from flax.metrics import tensorboard
+import jax
+import jax.numpy as jnp
+import ml_collections
+import numpy as onp
+import tensorflow_datasets as tfds
+
 
 class CNN(nn.Module):
   """A simple CNN model."""
@@ -111,7 +107,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
 
-  perms = random.permutation(rng, len(train_ds['image']))
+  perms = jax.random.permutation(rng, len(train_ds['image']))
   perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
   perms = perms.reshape((steps_per_epoch, batch_size))
   batch_metrics = []
@@ -150,29 +146,29 @@ def get_datasets():
   return train_ds, test_ds
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   """Execute model training and evaluation loop.
 
   Args:
     config: Hyperparameter configuration for training and evaluation.
-    model_dir: Directory where the tensorboard summaries are written to.
+    workdir: Directory where the tensorboard summaries are written to.
 
   Returns:
     The trained optimizer.
   """
   train_ds, test_ds = get_datasets()
-  rng = random.PRNGKey(0)
+  rng = jax.random.PRNGKey(0)
 
-  summary_writer = tensorboard.SummaryWriter(model_dir)
+  summary_writer = tensorboard.SummaryWriter(workdir)
   summary_writer.hparams(dict(config))
 
-  rng, init_rng = random.split(rng)
+  rng, init_rng = jax.random.split(rng)
   params = get_initial_params(init_rng)
   optimizer = create_optimizer(
       params, config.learning_rate, config.momentum)
 
   for epoch in range(1, config.num_epochs + 1):
-    rng, input_rng = random.split(rng)
+    rng, input_rng = jax.random.split(rng)
     optimizer, train_metrics = train_epoch(
         optimizer, train_ds, config.batch_size, epoch, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)

@@ -17,26 +17,28 @@
 This script trains a Transformer on the Universal dependency dataset.
 """
 
+import tensorflow as tf
+
 import functools
-import itertools
 import os
 import time
 from absl import app
 from absl import flags
 from absl import logging
-from flax import jax_utils
-from flax import nn
-from flax import optim
-import input_pipeline
-import models
-from flax.metrics import tensorboard
-from flax.training import common_utils
-import jax
 from jax import random
-import jax.nn
+import jax
 import jax.numpy as jnp
 import numpy as np
 import tensorflow as tf
+
+from flax import jax_utils
+from flax import linen as nn
+from flax import optim
+from flax.metrics import tensorboard
+from flax.training import common_utils
+
+import input_pipeline
+import models
 
 
 FLAGS = flags.FLAGS
@@ -56,11 +58,6 @@ flags.DEFINE_integer(
 flags.DEFINE_integer(
     'num_train_steps', default=75000, help=('Number of train steps.'))
 
-flags.DEFINE_integer(
-    'num_eval_steps',
-    default=-1,
-    help=('Number of evaluation steps. If -1 use the whole evaluation set.'))
-
 flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
 
 flags.DEFINE_float(
@@ -77,26 +74,6 @@ flags.DEFINE_integer(
 flags.DEFINE_string('train', default='', help=('Path to training data.'))
 
 flags.DEFINE_string('dev', default='', help=('Path to development data.'))
-
-
-@functools.partial(jax.jit, static_argnums=(1, 2))
-def create_model(key, input_shape, model_kwargs):
-  module = models.Transformer.partial(train=False, **model_kwargs)
-  _, initial_params = module.init_by_shape(key, [(input_shape, jnp.float32)])
-  model = nn.Model(module, initial_params)
-  return model
-
-
-def create_optimizer(model, learning_rate):
-  optimizer_def = optim.Adam(
-      learning_rate,
-      beta1=0.9,
-      beta2=0.98,
-      eps=1e-9,
-      weight_decay=FLAGS.weight_decay)
-  optimizer = optimizer_def.create(model)
-  optimizer = jax_utils.replicate(optimizer)
-  return optimizer
 
 
 def create_learning_rate_scheduler(
@@ -216,22 +193,18 @@ def compute_metrics(logits, labels, weights):
   return metrics
 
 
-def train_step(optimizer, batch, learning_rate_fn, dropout_rng=None):
+def train_step(optimizer, batch, learning_rate_fn, model, dropout_rng=None):
   """Perform a single training step."""
+
   train_keys = ['inputs', 'targets']
   (inputs, targets) = [batch.get(k, None) for k in train_keys]
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
-
-  # It's very important to handle PRNG splitting inside the top pmap, rather
-  # than handling it outside in the training loop - doing the latter can add
-  # bad stalls to the input data transfer.
   dropout_rng, new_dropout_rng = random.split(dropout_rng)
-
-  def loss_fn(model):
+  def loss_fn(params):
     """Loss function used for training."""
-    with nn.stochastic(dropout_rng):
-      logits = model(inputs, train=True)
+    logits = model.apply({'params': params}, inputs=inputs, train=True,
+                         rngs={'dropout': dropout_rng})
     loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights)
     mean_loss = loss / weight_sum
     return mean_loss, logits
@@ -249,12 +222,6 @@ def train_step(optimizer, batch, learning_rate_fn, dropout_rng=None):
   return new_optimizer, metrics, new_dropout_rng
 
 
-def eval_step(model, batch):
-  """Calculate evaluation metrics on a batch."""
-  inputs, targets = batch['inputs'], batch['targets']
-  weights = jnp.where(targets > 0, 1.0, 0.0)
-  logits = model(inputs, train=False)
-  return compute_metrics(logits, targets, weights)
 
 
 def pad_examples(x, desired_batch_size):
@@ -274,29 +241,30 @@ def main(argv):
   batch_size = FLAGS.batch_size
   learning_rate = FLAGS.learning_rate
   num_train_steps = FLAGS.num_train_steps
-  num_eval_steps = FLAGS.num_eval_steps
   eval_freq = FLAGS.eval_frequency
-  max_length = FLAGS.max_length
   random_seed = FLAGS.random_seed
 
   if not FLAGS.dev:
     raise app.UsageError('Please provide path to dev set.')
   if not FLAGS.train:
     raise app.UsageError('Please provide path to training set.')
+  if batch_size % jax.device_count() > 0:
+    raise ValueError('Batch size must be divisible by the number of devices')
+  device_batch_size = batch_size // jax.device_count()
 
-  parameter_path = os.path.join(FLAGS.model_dir, FLAGS.experiment + '.params')
   if jax.host_id() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
         os.path.join(FLAGS.model_dir, FLAGS.experiment + '_train'))
     eval_summary_writer = tensorboard.SummaryWriter(
         os.path.join(FLAGS.model_dir, FLAGS.experiment + '_eval'))
 
-  if batch_size % jax.device_count() > 0:
-    raise ValueError('Batch size must be divisible by the number of devices')
-  device_batch_size = batch_size // jax.device_count()
-
   # create the training and development dataset
   vocabs = input_pipeline.create_vocabs(FLAGS.train)
+  config = models.TransformerConfig(
+      vocab_size=len(vocabs['forms']),
+      output_vocab_size=len(vocabs['xpos']),
+      max_len=FLAGS.max_length)
+
   attributes_input = [input_pipeline.CoNLLAttributes.FORM]
   attributes_target = [input_pipeline.CoNLLAttributes.XPOS]
   train_ds = input_pipeline.sentence_dataset_dict(
@@ -305,7 +273,8 @@ def main(argv):
       attributes_input,
       attributes_target,
       batch_size=batch_size,
-      bucket_size=max_length)
+      bucket_size=config.max_len)
+  train_iter = iter(train_ds)
 
   eval_ds = input_pipeline.sentence_dataset_dict(
       FLAGS.dev,
@@ -313,48 +282,53 @@ def main(argv):
       attributes_input,
       attributes_target,
       batch_size=batch_size,
-      bucket_size=max_length,
+      bucket_size=config.max_len,
       repeat=1)
-  train_iter = iter(train_ds)
-  bs = device_batch_size * jax.device_count()
+
+  model = models.Transformer(config)
 
   rng = random.PRNGKey(random_seed)
   rng, init_rng = random.split(rng)
-  input_shape = (bs, max_length)
-  transformer_kwargs = {
-      'vocab_size': len(vocabs['forms']),
-      'output_vocab_size': len(vocabs['xpos']),
-      'emb_dim': 512,
-      'num_heads': 8,
-      'num_layers': 6,
-      'qkv_dim': 512,
-      'mlp_dim': 2048,
-      'max_len': max_length,
-  }
-  model = create_model(init_rng, tuple(input_shape), transformer_kwargs)
 
-  optimizer = create_optimizer(model, learning_rate)
-  del model  # don't keep a copy of the initial model
+  # call a jitted initialization function to get the initial parameter tree
+  @jax.jit
+  def initialize_variables(init_rng):
+    init_batch = jnp.ones((config.max_len, 1), jnp.float32)
+    init_variables = model.init(init_rng, inputs=init_batch, train=False)
+    return init_variables
+  init_variables = initialize_variables(init_rng)
+
+  optimizer_def = optim.Adam(learning_rate, beta1=0.9, beta2=0.98,
+      eps=1e-9, weight_decay=1e-1)
+  optimizer = optimizer_def.create(init_variables['params'])
+  optimizer = jax_utils.replicate(optimizer)
+
   learning_rate_fn = create_learning_rate_scheduler(
       base_learning_rate=learning_rate)
 
   p_train_step = jax.pmap(
-      functools.partial(train_step, learning_rate_fn=learning_rate_fn),
+      functools.partial(train_step, model=model, learning_rate_fn=learning_rate_fn),
       axis_name='batch')
+
+  def eval_step(params, batch):
+    """Calculate evaluation metrics on a batch."""
+    inputs, targets = batch['inputs'], batch['targets']
+    weights = jnp.where(targets > 0, 1.0, 0.0)
+    logits = model.apply({'params': params}, inputs=inputs, train=False)
+    return compute_metrics(logits, targets, weights)
+
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   # We init the first set of dropout PRNG keys, but update it afterwards inside
   # the main pmap'd training update for performance.
   dropout_rngs = random.split(rng, jax.local_device_count())
-
   metrics_all = []
   tick = time.time()
   best_dev_score = 0
   for step, batch in zip(range(num_train_steps), train_iter):
     batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
 
-    optimizer, metrics, dropout_rngs = p_train_step(
-        optimizer, batch, dropout_rng=dropout_rngs)
+    optimizer, metrics, dropout_rngs = p_train_step(optimizer, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
 
     if (step + 1) % eval_freq == 0:
@@ -364,8 +338,6 @@ def main(argv):
       denominator = metrics_sums.pop('denominator')
       summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
       summary['learning_rate'] = lr
-      # Calculate (clipped) perplexity after averaging log-perplexities:
-      summary['perplexity'] = jnp.clip(jnp.exp(summary['loss']), a_max=1.0e4)
       logging.info('train in step: %d, loss: %.4f', step, summary['loss'])
       if jax.host_id() == 0:
         tock = time.time()
@@ -375,21 +347,18 @@ def main(argv):
         for key, val in summary.items():
           train_summary_writer.scalar(key, val, step)
         train_summary_writer.flush()
-      # reset metric accumulation for next evaluation cycle.
-      metrics_all = []
+
+      metrics_all = []  # reset metric accumulation for next evaluation cycle.
 
       eval_metrics = []
       eval_iter = iter(eval_ds)
-      if num_eval_steps == -1:
-        num_iter = itertools.repeat(1)
-      else:
-        num_iter = range(num_eval_steps)
-      for _, eval_batch in zip(num_iter, eval_iter):
+
+      for eval_batch in eval_iter:
         eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
         # Handle final odd-sized batch by padding instead of dropping it.
         cur_pred_batch_size = eval_batch['inputs'].shape[0]
         if cur_pred_batch_size != batch_size:
-          logging.info('Uneven batch size %d.', cur_pred_batch_size)
+          # pad up to batch size
           eval_batch = jax.tree_map(
               lambda x: pad_examples(x, batch_size), eval_batch)
         eval_batch = common_utils.shard(eval_batch)
@@ -403,9 +372,6 @@ def main(argv):
           lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
           eval_metrics_sums)
 
-      # Calculate (clipped) perplexity after averaging log-perplexities:
-      eval_summary['perplexity'] = jnp.clip(
-          jnp.exp(eval_summary['loss']), a_max=1.0e4)
       logging.info('eval in step: %d, loss: %.4f, accuracy: %.4f', step,
                    eval_summary['loss'], eval_summary['accuracy'])
 

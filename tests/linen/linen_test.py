@@ -238,3 +238,7 @@ class RecurrentTest(absltest.TestCase):
         'hh': {'bias': (6*4,), 'kernel': (3, 3, 6, 6*4)},
         'ih': {'bias': (6*4,), 'kernel': (3, 3, 3, 6*4)},
     })
+
+
+if __name__ == '__main__':
+  absltest.main()

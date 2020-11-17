@@ -12,24 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# See issue #620.
+# pytype: disable=attribute-error
+# pytype: disable=wrong-arg-count
+# pytype: disable=wrong-keyword-args
+
 from absl import app
 from absl import flags
-
 import numpy as np
 import jax.numpy as jnp
-
 import jax
 from jax import random
 from jax.config import config
 config.enable_omnistaging()
-
 from flax import linen as nn
 from flax import optim
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-from utils import save_image
+import utils as vae_utils
 
 
 FLAGS = flags.FLAGS
@@ -202,8 +203,9 @@ def main(argv):
       optimizer = train_step(optimizer, batch, key)
 
     metrics, comparison, sample = eval(optimizer.target, test_ds, z, eval_rng)
-    save_image(comparison, f'results/reconstruction_{epoch}.png', nrow=8)
-    save_image(sample, f'results/sample_{epoch}.png', nrow=8)
+    vae_utils.save_image(
+        comparison, f'results/reconstruction_{epoch}.png', nrow=8)
+    vae_utils.save_image(sample, f'results/sample_{epoch}.png', nrow=8)
 
     print('eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}'.format(
         epoch + 1, metrics['loss'], metrics['bce'], metrics['kld']

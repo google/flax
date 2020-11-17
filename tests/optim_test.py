@@ -285,7 +285,7 @@ class AdafactorTest(absltest.TestCase):
     state = optimizer_def.init_state(params)
 
     expected_hyper_params = _AdafactorHyperParams(0.1, True, True,
-                                                  None, 0.8, 1.0, None, 0,
+                                                  None, 0.8, 0, 1.0, None, 0,
                                                   1e-30, 1e-3)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
@@ -301,7 +301,7 @@ class AdafactorTest(absltest.TestCase):
     state = optimizer_def.init_state(params)
 
     expected_hyper_params = _AdafactorHyperParams(0.1, True, True,
-                                                  0.0, 0.8, 1.0, None, 32,
+                                                  0.0, 0.8, 0, 1.0, None, 32,
                                                   1e-30, 1e-3)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(

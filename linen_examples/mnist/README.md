@@ -13,13 +13,13 @@ https://colab.research.google.com/github/google/flax/blob/master/linen_examples/
 ### Example output
 
 ```
-I0828 08:51:41.821526 139971964110656 mnist_lib.py:130] train epoch: 10, loss: 0.0097, accuracy: 99.69
-I0828 08:51:42.248714 139971964110656 mnist_lib.py:180] eval epoch: 10, loss: 0.0299, accuracy: 99.14
+I0828 08:51:41.821526 139971964110656 train.py:130] train epoch: 10, loss: 0.0097, accuracy: 99.69
+I0828 08:51:42.248714 139971964110656 train.py:180] eval epoch: 10, loss: 0.0299, accuracy: 99.14
 ```
 
 ### How to run
 
-`python mnist_main.py --model_dir=/tmp/mnist`
+`python main.py --workdir=/tmp/mnist`
 
 #### Overriding Hyperparameter configurations
 
@@ -30,7 +30,7 @@ setting `--config` flag. Configuration flag is defined using
 follows:
 
 ```shell
-python mnist_main.py \
---model_dir=/tmp/mnist --config=configs/default.py \
+python main.py \
+--workdir=/tmp/mnist --config=configs/default.py \
 --config.learning_rate=0.05 --config.num_epochs=5
 ```

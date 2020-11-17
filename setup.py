@@ -26,7 +26,7 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.1.59",
+    "jax>=0.1.77",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses;python_version<'3.7'", # will only install on py3.6
     "msgpack",
@@ -34,6 +34,7 @@ install_requires = [
 
 tests_require = [
     "atari-py",
+    "clu",  # All examples.
     "gym",
     "jaxlib",
     "ml-collections",
@@ -41,8 +42,10 @@ tests_require = [
     "pytest",
     "pytest-cov",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
+    "sentencepiece",  # WMT example.
     "svn",
     "tensorflow",
+    "tensorflow_text",  # WMT example.
     "tensorflow_datasets",
 ]
 

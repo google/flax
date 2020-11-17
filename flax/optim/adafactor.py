@@ -35,6 +35,7 @@ class _AdafactorHyperParams:
   multiply_by_parameter_scale: bool
   beta1: Optional[float]
   decay_rate: float
+  step_offset: int
   clipping_threshold: Optional[float]
   weight_decay_rate: Optional[float]
   min_dim_size_to_factor: int
@@ -59,6 +60,7 @@ class Adafactor(OptimizerDef):
                multiply_by_parameter_scale: bool = True,
                beta1: Optional[float] = None,
                decay_rate: float = 0.8,
+               step_offset: int = 0,
                clipping_threshold: Optional[float] = 1.0,
                weight_decay_rate: Optional[float] = None,
                min_dim_size_to_factor: int = 128,
@@ -80,6 +82,8 @@ class Adafactor(OptimizerDef):
       beta1: an optional float value between 0 and 1, enables momentum and
         uses extra memory if non-None! None by default.
       decay_rate: float: controls second-moment exponential decay schedule.
+      step_offset: for finetuning, one may set this to the starting step-number
+        of the finetuning phase.
       clipping_threshold: an optional float >= 1, if None no update clipping.
       weight_decay_rate: optional rate at which to decay weights.
       min_dim_size_to_factor: only factor accumulator if two array dimensions
@@ -89,7 +93,7 @@ class Adafactor(OptimizerDef):
     """
     hyper_params = _AdafactorHyperParams(
         learning_rate, factored, multiply_by_parameter_scale,
-        beta1, decay_rate, clipping_threshold,
+        beta1, decay_rate, step_offset, clipping_threshold,
         weight_decay_rate, min_dim_size_to_factor, epsilon1, epsilon2)
     super().__init__(hyper_params)
 
@@ -140,6 +144,7 @@ class Adafactor(OptimizerDef):
     learning_rate = hyper_params.learning_rate
     beta1 = hyper_params.beta1
     decay_rate = hyper_params.decay_rate
+    step_offset = hyper_params.step_offset
     clipping_threshold = hyper_params.clipping_threshold
     weight_decay_rate = hyper_params.weight_decay_rate
     epsilon1 = hyper_params.epsilon1
@@ -148,7 +153,7 @@ class Adafactor(OptimizerDef):
     grad = grad.astype(jnp.float32)
 
     updates = {k: jnp.zeros((1,)) for k in ['v_row', 'v_col', 'v', 'm']}
-    decay_rate = self._decay_rate_pow(step, exponent=decay_rate)
+    decay_rate = self._decay_rate_pow(step - step_offset, exponent=decay_rate)
     update_scale = learning_rate
     if self.hyper_params.multiply_by_parameter_scale:
       update_scale *= jnp.maximum(

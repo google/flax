@@ -18,15 +18,12 @@ import pathlib
 import tempfile
 
 from absl.testing import absltest
-
+import train
+from configs import default
 import jax
 from jax import numpy as jnp
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
-from configs import default as config_lib
-import mnist_lib
 
 
 class MnistLibTest(absltest.TestCase):
@@ -35,39 +32,37 @@ class MnistLibTest(absltest.TestCase):
   def setUp(self):
     super().setUp()
     # Make sure tf does not allocate gpu memory.
-    tf.config.experimental.set_visible_devices([], 'GPU')
+    tf.config.experimental.set_visible_devices([], "GPU")
 
   def test_cnn(self):
     """Tests CNN module used as the trainable model."""
     rng = jax.random.PRNGKey(0)
     inputs = jnp.ones((5, 224, 224, 3), jnp.float32)
-    output, variables = mnist_lib.CNN().init_with_output(rng, inputs)
+    output, variables = train.CNN().init_with_output(rng, inputs)
 
     self.assertEqual((5, 10), output.shape)
 
     # TODO(mohitreddy): Consider creating a testing module which
     # gives a parameters overview including number of parameters.
-    self.assertLen(variables['params'], 4)
+    self.assertLen(variables["params"], 4)
 
   def test_train_and_evaluate(self):
-    """Tests training and evaluation code by running a single step with
-       mocked data for MNIST dataset.
-    """
+    """Tests training and evaluation code by running a single step."""
     # Create a temporary directory where tensorboard metrics are written.
-    model_dir = tempfile.mkdtemp()
+    workdir = tempfile.mkdtemp()
 
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]
-    data_dir = str(flax_root_dir) + '/.tfds/metadata'
+    data_dir = str(flax_root_dir) + "/.tfds/metadata"  # pylint: disable=unused-variable
 
     # Define training configuration.
-    config = config_lib.get_config()
+    config = default.get_config()
     config.num_epochs = 1
     config.batch_size = 8
 
     with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      mnist_lib.train_and_evaluate(config=config, model_dir=model_dir)
+      train.train_and_evaluate(config=config, workdir=workdir)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   absltest.main()
