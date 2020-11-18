@@ -14,7 +14,6 @@
 
 """Tests for flax.nn."""
 
-import logging
 import threading
 from absl.testing import absltest
 
@@ -709,8 +708,6 @@ class RecurrentTest(absltest.TestCase):
         name='LSTMCell').init(key2, (c0, h0), x)
     lstm_opt = nn.Model(nn.OptimizedLSTMCell.partial(name='LSTMCell'), 
       initial_params)
-
-    logging.warning(y)
     
     onp.testing.assert_allclose(y, y_opt, rtol=1e-6)
     jtu.check_eq(lstm.params, lstm_opt.params)
