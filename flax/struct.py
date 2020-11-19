@@ -30,7 +30,7 @@
 """Utilities for defining custom classes that can be used with jax transformations.
 """
 
-from typing import Type, TypeVar
+from typing import TypeVar
 
 from . import serialization
 
@@ -39,7 +39,7 @@ import dataclasses
 import jax
 
 
-def dataclass(clz: Type):
+def dataclass(clz: type):
   """Create a class which can be passed to functional transformations.
 
   Jax transformations such as `jax.jit` and `jax.grad` require objects that are
