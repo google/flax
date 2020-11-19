@@ -208,10 +208,10 @@ def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
     is_compact_method = hasattr(fun, 'compact')
     is_setup_method = fun.__name__ == 'setup'
 
-    if self.scope is None:
-      raise ValueError("Can't call methods on orphaned modules")
-
     if is_compact_method:
+      if self.scope is None:
+        raise ValueError("Can't call compact methods on unbound modules")
+
       self._state.in_compact_method = True
     elif is_setup_method:
       self._state.in_setup = True

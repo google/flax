@@ -590,6 +590,40 @@ class ModuleTest(absltest.TestCase):
     trace = mlp.apply(variables, x)
     self.assertEqual(trace, expected_trace)
 
+  def test_call_unbound_compact_module_methods(self):
+    dense = Dense(3)
+    with self.assertRaisesRegex(ValueError, "compact.*unbound module"):
+      dense(jnp.ones((1, )))
+
+
+  def test_call_unbound_noncompact_module_methods(self):
+    class EmptyModule(nn.Module):
+      foo: int = 3
+
+      def bar(self):
+        return self.foo
+
+    empty = EmptyModule()
+    # It's fine to call methods of unbound methods that don't depend on
+    # attributes defined during `setup`
+    self.assertEqual(empty.bar(), 3)
+
+
+  def test_call_unbound_noncompact_module_method_without_setup(self):
+    class EmptyModule(nn.Module):
+      def setup(self):
+        self.setup_called = True
+
+      def bar(self):
+        return self.setup_called
+
+    empty = EmptyModule()
+    # `empty.setup()` hasn't been called yet because it doesn't have a scope.
+    # it's fine to call methods but they won't have access to attributes defined
+    # in `setup()`
+    with self.assertRaisesRegex(AttributeError, "has no attribute 'setup_called'"):
+      empty.bar()
+
 
 if __name__ == '__main__':
   absltest.main()
