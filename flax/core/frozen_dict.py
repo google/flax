@@ -137,8 +137,6 @@ def _prepare_freeze(xs: Any) -> Any:
   return {key: _prepare_freeze(val) for key, val in xs.items()}
 
 
-# Why is the signature Dict[K, V] -> FrozenDict[K, V] not accepted here?
-
 def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
   """Freeze a nested dict.
 
