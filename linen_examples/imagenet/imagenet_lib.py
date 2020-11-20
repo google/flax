@@ -210,7 +210,7 @@ def save_checkpoint(state, model_dir):
     step = int(state.step)
     checkpoints.save_checkpoint(model_dir, state, step, keep=3)
 
-def avg_across_axis(axis_name='x')
+def avg_across_axis(axis_name='x'):
   return lax.pmean(x, axis_name)
 
 def sync_batch_stats(state):
