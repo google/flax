@@ -210,10 +210,12 @@ def save_checkpoint(state, model_dir):
     step = int(state.step)
     checkpoints.save_checkpoint(model_dir, state, step, keep=3)
 
+def avg_across_axis(axis_name='x')
+  return lax.pmean(x, axis_name)
 
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
-  avg = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
+  avg = jax.pmap(avg_across_axis, 'x')
 
   new_model_state = state.model_state.copy({
       'batch_stats': avg(state.model_state['batch_stats'])})
