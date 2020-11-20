@@ -590,10 +590,54 @@ class ModuleTest(absltest.TestCase):
     trace = mlp.apply(variables, x)
     self.assertEqual(trace, expected_trace)
 
+
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)
     with self.assertRaisesRegex(ValueError, "compact.*unbound module"):
       dense(jnp.ones((1, )))
+
+
+  def test_call_unbound_has_variable(self):
+    class EmptyModule(nn.Module):
+      def foo(self):
+        self.has_variable('bar', 'baz')
+
+    empty = EmptyModule()
+    with self.assertRaisesRegex(ValueError, "variable.*unbound module"):
+      empty.foo()
+
+
+  def test_call_unbound_make_rng(self):
+    class EmptyModule(nn.Module):
+      def foo(self):
+        self.make_rng('bar')
+
+    empty = EmptyModule()
+    with self.assertRaisesRegex(ValueError, "RNGs.*unbound module"):
+      empty.foo()
+
+
+  def test_call_unbound_variables(self):
+    class EmptyModule(nn.Module):
+      def foo(self):
+        self.variables
+
+    empty = EmptyModule()
+    with self.assertRaisesRegex(ValueError, "variables.*unbound module"):
+      empty.foo()
+
+
+  def test_call_unbound_noncompact_module_methods(self):
+    class EmptyModule(nn.Module):
+      foo: int = 3
+
+      def bar(self):
+        return self.foo
+
+    empty = EmptyModule()
+    # It's fine to call methods of unbound methods that don't depend on
+    # attributes defined during `setup`
+    self.assertEqual(empty.bar(), 3)
 
 
   def test_call_unbound_noncompact_module_methods(self):
