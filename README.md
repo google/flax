@@ -1,4 +1,4 @@
-# Flax: A neural network ecosystem for JAX designed for flexibility
+# Flax: A neural network library and ecosystem for JAX designed for flexibility
 
 [**Overview**](#overview)
 | [**What does Flax look like?**](#what-does-flax-look-like)
@@ -15,15 +15,13 @@ any feature requests, issues, questions or concerns in our
 [discussion forum](https://github.com/google/flax/discussions), or just let us know 
 what you're working on!
 
-Expect changes to the
-API, but we'll use deprecation warnings when we can, and keep
-track of them in our [Changelog](CHANGELOG.md).
+We expect to add some improvements to Flax, but we only expect minor API changes to the core API. We will use [Changelog](CHANGELOG.md) entries and deprecation warnings when possible.
 
-In case you need to reach us directly, we're at flax-dev@google.com.
+In case you want to reach us directly, we're at flax-dev@google.com.
 
 ## Overview
 
-Flax is a high-performance neural network library for
+Flax is a high-performance neural network library and ecosystem for
 JAX that is **designed for flexibility**:
 Try new forms of training by forking an example and by modifying the training
 loop, not by adding features to a framework.
@@ -43,26 +41,25 @@ comes with everything you need to start your research, including:
 
 ## What does Flax look like?
 
-We provide here two examples using the Flax API: a simple multi-layer perceptron and a CNN. To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/).
+We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
+
+To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/), or visit our
+[patterns](https://flax.readthedocs.io/en/latest/patterns/flax_patterns.html) page for additional concrete demonstrations of best practices.
 
 ```py
-class SimpleMLP(nn.Module):
-  """ A MLP model """
+class MLP(nn.Module):
   features: Sequence[int]
 
   @nn.compact
   def __call__(self, x):
-    for i, feat in enumerate(self.features):
-      x = nn.Dense(feat)(x)
-      if i != len(self.features) - 1:
-        x = nn.relu(x)
+    for feat in self.features[:-1]:
+      x = nn.relu(Dense(feat)(x))
+    x = Dense(self.features[-1])(x)
     return x
 ```
 
 ```py
 class CNN(nn.Module):
-  """A simple CNN model."""
-
   @nn.compact
   def __call__(self, x):
     x = nn.Conv(features=32, kernel_size=(3, 3))(x)
@@ -76,6 +73,30 @@ class CNN(nn.Module):
     x = nn.relu(x)
     x = nn.Dense(features=10)(x)
     x = nn.log_softmax(x)
+    return x
+```
+
+```py
+class AutoEncoder(Module):
+  encoder_widths: Iterable
+  decoder_widths: Iterable
+  input_shape: Tuple = None
+
+  def setup(self):
+    self.encoder = MLP(self.encoder_widths)
+    self.decoder = MLP(self.decoder_widths + (jnp.prod(self.input_shape, ))
+
+  def __call__(self, x):
+    return self.decode(self.encode(x))
+
+  def encode(self, x):
+    assert x.shape[-len(self.input_shape):] == self.input_shape
+    return self.encoder(jnp.reshape(x, (x.shape[0], -1)))
+
+  def decode(self, z):
+    z = self.decoder(z)
+    x = nn.sigmoid(z)
+    x = jnp.reshape(x, (x.shape[0],) + self.input_shape)
     return x
 ```
 
