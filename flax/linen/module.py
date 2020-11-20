@@ -208,10 +208,10 @@ def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
     is_compact_method = hasattr(fun, 'compact')
     is_setup_method = fun.__name__ == 'setup'
 
-    if self.scope is None:
-      raise ValueError("Can't call methods on orphaned modules")
-
     if is_compact_method:
+      if self.scope is None:
+        raise ValueError("Can't call compact methods on unbound modules")
+
       self._state.in_compact_method = True
     elif is_setup_method:
       self._state.in_setup = True
@@ -628,6 +628,8 @@ class Module:
     Returns:
       True if the variable exists.
     """
+    if self.scope is None:
+      raise ValueError("Can't access variables on unbound modules")
     return self.scope.has_variable(col, name)
 
   def make_rng(self, col: str) -> PRNGKey:
@@ -644,6 +646,8 @@ class Module:
     Returns:
       The newly generated RNG key.
     """
+    if self.scope is None:
+      raise ValueError("Can't use RNGs on unbound modules")
     return self.scope.make_rng(col)
 
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
@@ -712,6 +716,8 @@ class Module:
   @property
   def variables(self) -> VariableDict:
     """Returns the variables in this module."""
+    if self.scope is None:
+      raise ValueError("Can't access variables on unbound modules")
     return self.scope.variables()
 
 
