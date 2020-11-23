@@ -419,6 +419,20 @@ class RMSPropTest(absltest.TestCase):
     expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01, False)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
+        0, _RMSPropParamState(onp.zeros((1,)), None))
+    self.assertEqual(state, expected_state)
+
+  def test_init_state_centered(self):
+    params = onp.zeros((1,))
+    optimizer_def = optim.RMSProp(learning_rate=0.1,
+                                  beta2=0.9,
+                                  eps=0.01,
+                                  centered=True)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01, True)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
         0, _RMSPropParamState(onp.zeros((1,)), onp.zeros((1,))))
     self.assertEqual(state, expected_state)
 
@@ -428,15 +442,35 @@ class RMSPropTest(absltest.TestCase):
                                   eps=0.01)
     params = onp.array([1.])
     state = optim.OptimizerState(
-        1, _RMSPropParamState(onp.array([0.1]), onp.array([1.0])))
+        1, _RMSPropParamState(onp.array([0.1]), None))
     grads = onp.array([4.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        2, _RMSPropParamState(onp.array([1.69]), onp.array([1.0])))
+        2, _RMSPropParamState(onp.array([1.69]), None))
     expected_new_params = onp.array([0.6946565])
     onp.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
+
+  def test_apply_gradient_centered(self):
+    optimizer_def = optim.RMSProp(learning_rate=0.1,
+                                  beta2=0.9,
+                                  eps=0.01,
+                                  centered=True)
+    params = onp.array([1.])
+    state = optim.OptimizerState(
+        1, _RMSPropParamState(onp.array([0.1]), onp.array([0.1])))
+    grads = onp.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _RMSPropParamState(onp.array([1.69]), onp.array([0.49])))
+    expected_new_params = onp.array([0.670543], dtype=onp.float32)
+    onp.testing.assert_allclose(new_params, expected_new_params, rtol=1e-6)
+    onp.testing.assert_allclose(new_state.param_states.v,
+                                expected_new_state.param_states.v)
+    onp.testing.assert_allclose(new_state.param_states.mg,
+                                expected_new_state.param_states.mg)
 
 
 class WeightNormTest(absltest.TestCase):

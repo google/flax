@@ -58,7 +58,8 @@ class RMSProp(OptimizerDef):
 
   def init_param_state(self, param):
     """Initialize parameter state"""
-    return _RMSPropParamState(jnp.zeros_like(param), jnp.zeros_like(param))
+    mg = jnp.zeros_like(param) if self.hyper_params.centered else None
+    return _RMSPropParamState(jnp.zeros_like(param), mg)
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
     """Apply per-parameter gradients"""
