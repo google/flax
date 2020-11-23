@@ -47,7 +47,7 @@ class DenseGeneral(Module):
       features: tuple with numbers of output features.
       axis: tuple with axes to apply the transformation on.
       batch_dims: tuple with batch axes.
-      bias: whether to add a bias to the output (default: True).
+      use_bias: whether to add a bias to the output (default: True).
       dtype: the dtype of the computation (default: float32).
       kernel_init: initializer function for the weight matrix.
       bias_init: initializer function for the bias.
@@ -142,7 +142,7 @@ class Dense(Module):
 
   Args:
     features: the number of output features.
-    bias: whether to add a bias to the output (default: True).
+    use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
@@ -378,7 +378,8 @@ class Embed(Module):
 
   Args:
     num_embeddings: number of embeddings.
-    features: Number of feature dimensions for each embedding.
+    features: number of feature dimensions for each embedding.
+    dtype: the dtype of the embedding vectors (default: float32).
     embedding_init: embedding initializer.
   """
   num_embeddings: int
