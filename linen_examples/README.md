@@ -4,7 +4,12 @@
  
 This folder contains a collection of examples of implementations of various architectures and training procedures.
  
-Each examples is designed to be self-contained and easily forkable, while reproducing "key results" in different areas of machine learning. Official Flax examples come with significant maintenance expectations, including (but not limited to since guidelines are WIP - [#231](https://github.com/google/flax/issues/231)):
+Each example is designed to be self-contained and easily forkable, while
+reproducing "key results" in different areas of machine learning. Official Flax
+examples come with significant maintenance expectations, including (but not
+limited to since guidelines are WIP -
+[#231](https://github.com/google/flax/issues/231)):
+
 * Tested benchmarks on single-GPU, multi-GPU, and TPU configurations (e.g. [imagenet](imagenet/))
 * Unit tests (e.g. that one training step succeeds)
 * Adherence to Flax best practices and code updates as those best practices evolve
