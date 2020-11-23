@@ -159,7 +159,8 @@ def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
   if isinstance(x, FrozenDict):
     # deep copy internal state of a FrozenDict
     # the dict branch would also work here but
-    # it is much less performant.
+    # it is much less performant because jax.tree_map
+    # uses an optimized C implementation.
     return jax.tree_map(lambda y: y, x._dict)
   elif isinstance(x, dict):
     ys = {}
