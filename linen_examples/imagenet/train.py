@@ -47,10 +47,6 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
-# enable jax omnistaging
-jax.config.enable_omnistaging()
-
-
 def create_model(*, half_precision, **kwargs):
   platform = jax.local_devices()[0].platform
   if half_precision:
@@ -240,13 +236,13 @@ def create_train_state(rng, config: ml_collections.ConfigDict,
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str,
-                       data_dir: Optional[str]):
+                       data_dir: Optional[str] = None):
   """Execute model training and evaluation loop.
 
   Args:
     config: Hyperparameter configuration for training and evaluation.
     model_dir: Directory where the tensorboard summaries are written to.
-    data_dir: Tensorflow datasets directory.
+    data_dir: Tensorflow datasets directory, if different from default.
   """
 
   if jax.host_id() == 0:

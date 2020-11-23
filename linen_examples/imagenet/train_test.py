@@ -19,20 +19,19 @@ import tempfile
 
 from absl.testing import absltest
 
-import imagenet_lib
-from configs import default as default_lib
-
 import jax
 from jax import random
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
+# Local imports.
+import train
+from configs import default as default_lib
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class TrainTest(absltest.TestCase):
@@ -44,8 +43,8 @@ class TrainTest(absltest.TestCase):
 
   def test_create_model(self):
     """Tests creating model."""
-    model = imagenet_lib.create_model(half_precision=False)
-    params, state = imagenet_lib.initialized(random.PRNGKey(0), 224, model)
+    model = train.create_model(half_precision=False)
+    params, state = train.initialized(random.PRNGKey(0), 224, model)
     variables = {'params': params, **state}
     x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
     y = model.apply(variables, x, train=False)
@@ -68,7 +67,7 @@ class TrainTest(absltest.TestCase):
     config.steps_per_eval = 1
 
     with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
-      imagenet_lib.train_and_evaluate(model_dir=model_dir, config=config)
+      train.train_and_evaluate(model_dir=model_dir, config=config)
 
 
 if __name__ == '__main__':

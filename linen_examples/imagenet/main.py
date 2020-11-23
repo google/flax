@@ -28,7 +28,8 @@ from ml_collections import config_flags
 
 import tensorflow as tf
 
-import imagenet_lib
+# Local imports.
+import train
 
 
 FLAGS = flags.FLAGS
@@ -52,8 +53,10 @@ def main(argv):
 
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
+  # Require JAX omnistaging mode.
+  jax.config.enable_omnistaging()
 
-  imagenet_lib.train_and_evaluate(
+  train.train_and_evaluate(
       model_dir=FLAGS.model_dir, config=FLAGS.config, data_dir=FLAGS.data_dir)
 
 
