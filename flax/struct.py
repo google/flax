@@ -141,6 +141,12 @@ TNode = TypeVar('TNode', bound='PyTreeNode')
 
 
 class PyTreeNode():
+  """Base class for dataclasses that should act like a JAX pytree node.
+  
+  See `flax.struct.dataclass` for the `jax.tree_util` behavior.
+  This base class additionally avoids type checking errors when using
+  pytype.
+  """
 
   def __init_subclass__(cls):
     dataclass(cls)  # pytype: disable=wrong-arg-types
