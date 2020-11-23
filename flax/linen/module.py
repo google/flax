@@ -552,7 +552,7 @@ class Module:
     Returns:
       A clone of the this Module with the updated attributes and parent.
     """
-    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
+    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self) if f.init}
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
