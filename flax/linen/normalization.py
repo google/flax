@@ -20,7 +20,7 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-from .module import Module, compact  # pytype: disable=pyi-error
+from flax.linen.module import Module, compact
 
 
 PRNGKey = Any

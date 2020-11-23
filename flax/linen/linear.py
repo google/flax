@@ -15,11 +15,12 @@
 """Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
+from dataclasses import field
 
 from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
-from .module import Module, compact  # pytype: disable=pyi-error
-from . import initializers  # pytype: disable=pyi-error
+from flax.linen.module import Module, compact
+from flax.linen.initializers import lecun_normal, variance_scaling, zeros
 
 from jax import lax
 import jax.numpy as jnp
@@ -32,7 +33,7 @@ Dtype = Any  # this could be a real type?
 Array = Any
 
 
-default_kernel_init = initializers.lecun_normal()
+default_kernel_init = lecun_normal()
 
 
 def _normalize_axes(axes, ndim):
@@ -60,7 +61,7 @@ class DenseGeneral(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: Any = None
 
   def setup(self):
@@ -154,7 +155,7 @@ class Dense(Module):
   dtype: Any = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -231,7 +232,7 @@ class Conv(Module):
   dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -320,7 +321,7 @@ class ConvTranspose(Module):
   dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -368,9 +369,8 @@ class ConvTranspose(Module):
     return y
 
 
-default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
+default_embed_init = variance_scaling(1.0, 'fan_in', 'normal',
                                                    out_axis=0)
-
 
 class Embed(Module):
   """Embedding Module.
@@ -386,6 +386,8 @@ class Embed(Module):
   features: int
   dtype: Dtype = jnp.float32
   embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
+
+  embedding: Array = field(init=False)
 
   def setup(self):
     self.embedding = self.param('embedding',

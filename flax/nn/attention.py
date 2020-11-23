@@ -18,13 +18,12 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 
 import warnings
 
-from .. import jax_utils
-from . import activation  # pytype: disable=pyi-error
-from . import base  # pytype: disable=pyi-error
-from . import initializers  # pytype: disable=pyi-error
-from . import stochastic  # pytype: disable=pyi-error
-from .linear import default_kernel_init  # pytype: disable=pyi-error
-from .linear import DenseGeneral  # pytype: disable=pyi-error
+from flax import jax_utils
+from flax.nn.activation import softmax
+from flax.nn.base import Collection, Module, collection_from_iterable, iterate_collection
+from flax.nn.initializers import zeros
+from flax.nn.stochastic import make_rng
+from flax.nn.linear import DenseGeneral, default_kernel_init
 from flax import struct
 
 import jax
@@ -114,13 +113,13 @@ def dot_product_attention(query,
 
   # normalize the attention weights
   norm_dims = tuple(range(attn_weights.ndim - len(axis), attn_weights.ndim))
-  attn_weights = activation.softmax(attn_weights, axis=norm_dims)
+  attn_weights = softmax(attn_weights, axis=norm_dims)
   attn_weights = attn_weights.astype(dtype)
 
   # apply dropout
   if not deterministic and dropout_rate > 0.:
     if dropout_rng is None:
-      dropout_rng = stochastic.make_rng()
+      dropout_rng = make_rng()
     keep_prob = jax.lax.tie_in(attn_weights, 1.0 - dropout_rate)
     if broadcast_dropout:
       # dropout is broadcast across the batch+head+non-attention dimension
@@ -166,7 +165,7 @@ def scan_in_dim(*args, **kwargs):
   return jax_utils.scan_in_dim(*args, **kwargs)
 
 
-class Cache(base.Collection):
+class Cache(Collection):
   """Collect intermediate activations for efficient autoregressive decoding."""
 
   def initialize_cache(self, shape, dtype=None):
@@ -194,10 +193,10 @@ class Cache(base.Collection):
 
 
 jax.tree_util.register_pytree_node(
-    Cache, base.iterate_collection, base.collection_from_iterable)
+    Cache, iterate_collection, collection_from_iterable)
 
 
-class MultiHeadDotProductAttention(base.Module):
+class MultiHeadDotProductAttention(Module):
   """Multi-head dot-product attention."""
 
   def apply(self,
@@ -220,7 +219,7 @@ class MultiHeadDotProductAttention(base.Module):
             deterministic=False,
             precision=None,
             kernel_init=default_kernel_init,
-            bias_init=initializers.zeros,
+            bias_init=zeros,
             bias=True,
             attention_fn=dot_product_attention):
     """Applies multi-head dot product attention on the input data.

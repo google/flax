@@ -19,7 +19,7 @@ from jax import lax
 from jax import random
 import jax.numpy as jnp
 
-from .module import Module, compact  # pytype: disable=pyi-error
+from flax.linen.module import Module, compact
 
 class Dropout(Module):
   """Create a dropout layer.
