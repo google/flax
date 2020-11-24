@@ -28,13 +28,14 @@ from ml_collections import config_flags
 
 import tensorflow as tf
 
-import imagenet_lib
+# Local imports.
+import train
 
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-    'model_dir', default=None,
+    'workdir', default=None,
     help=('Directory to store model data.'))
 
 config_flags.DEFINE_config_file(
@@ -48,9 +49,10 @@ def main(argv):
 
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
+  # Require JAX omnistaging mode.
+  jax.config.enable_omnistaging()
 
-  imagenet_lib.train_and_evaluate(model_dir=FLAGS.model_dir,
-                                  config=FLAGS.config)
+  train.train_and_evaluate(workdir=FLAGS.workdir, config=FLAGS.config)
 
 
 if __name__ == '__main__':
