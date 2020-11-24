@@ -38,14 +38,14 @@ class ImagenetBenchmark(Benchmark):
   def _test_8x_v100_half_precision(
       self, num_epochs, min_accuracy, max_accuracy):
     """Utility to benchmark ImageNet on 8xV100 GPUs. Use in your test func."""
-    model_dir = self.get_tmp_model_dir()
+    workdir = self.get_tmp_workdir()
     config = config_lib.get_config()
     config.num_epochs = num_epochs
 
     start_time = time.time()
-    train.train_and_evaluate(config, model_dir)
+    train.train_and_evaluate(config, workdir)
     benchmark_time = time.time() - start_time
-    summaries = self.read_summaries(model_dir)
+    summaries = self.read_summaries(workdir)
 
     # Summaries contain all the information necessary for the regression
     # metrics.

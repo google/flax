@@ -39,7 +39,7 @@ class ImagenetBenchmarkFakeData(Benchmark):
   """Runs ImageNet using fake data for quickly measuring performance."""
 
   def test_fake_data(self):
-    model_dir = self.get_tmp_model_dir()
+    workdir = self.get_tmp_workdir()
     config = config_lib.get_config()
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]
@@ -47,7 +47,7 @@ class ImagenetBenchmarkFakeData(Benchmark):
 
     start_time = time.time()
     with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
-      train.train_and_evaluate(config, model_dir)
+      train.train_and_evaluate(config, workdir)
     benchmark_time = time.time() - start_time
 
     self.report_wall_time(benchmark_time)

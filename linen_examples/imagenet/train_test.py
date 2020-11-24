@@ -53,7 +53,7 @@ class TrainTest(absltest.TestCase):
   def test_train_and_evaluate(self):
     """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
-    model_dir = tempfile.mkdtemp()
+    workdir = tempfile.mkdtemp()
 
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]
@@ -67,7 +67,7 @@ class TrainTest(absltest.TestCase):
     config.steps_per_eval = 1
 
     with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
-      train.train_and_evaluate(model_dir=model_dir, config=config)
+      train.train_and_evaluate(workdir=workdir, config=config)
 
 
 if __name__ == '__main__':
