@@ -38,7 +38,10 @@ class _AdamParamState:
 
 
 class Adam(OptimizerDef):
-  """Adam optimizer."""
+  """Adam optimizer.
+  
+  See: http://arxiv.org/abs/1412.6980
+  """
 
   def __init__(self,
                learning_rate=None,

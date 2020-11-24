@@ -92,6 +92,8 @@ master_doc = 'index'
 
 autodoc_typehints = 'description'
 
+autoclass_content = 'both'
+
 
 # -- Options for HTML output -------------------------------------------------
 

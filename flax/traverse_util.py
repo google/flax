@@ -41,9 +41,9 @@ More complex traversals can be constructed using composition.
 It is often useful to start from the identity traversal and use a method chain
 to construct the intended Traversal::
 
-data = [{'foo': 1, 'bar': 2}, {'foo': 3, 'bar': 4}]
-traversal = traverse_util.t_identity.each()['foo']
-traversal.iterate(data) # [1, 3]
+  data = [{'foo': 1, 'bar': 2}, {'foo': 3, 'bar': 4}]
+  traversal = traverse_util.t_identity.each()['foo']
+  traversal.iterate(data) # [1, 3]
 
 Traversals can also be used to make changes using the `update` method::
 

@@ -54,5 +54,5 @@ In case you need to reach us directly, we're at flax-dev@google.com.
    flax.serialization
    flax.struct
    flax.jax_utils
+   flax.traverse_util
    flax.nn (deprecated) <flax.nn>
-
