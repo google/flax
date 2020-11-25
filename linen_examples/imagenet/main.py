@@ -31,6 +31,7 @@ import tensorflow as tf
 # Local imports.
 import train
 
+import jax
 
 FLAGS = flags.FLAGS
 

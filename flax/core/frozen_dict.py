@@ -142,7 +142,7 @@ def _prepare_freeze(xs: Any) -> Any:
   return {key: _prepare_freeze(val) for key, val in xs.items()}
 
 
-def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
+def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
   """Freeze a nested dict.
 
   Makes a nested `dict` immutable by transforming it into `FrozenDict`.
@@ -150,7 +150,7 @@ def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
   return FrozenDict(xs)
 
 
-def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
+def unfreeze(x: FrozenDict[Any, Any]) -> Dict[Any, Any]:
   """Unfreeze a FrozenDict.
 
   Makes a mutable copy of a `FrozenDict` mutable by transforming

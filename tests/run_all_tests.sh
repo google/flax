@@ -26,6 +26,9 @@ if [[ $1 == "--with-cov" ]]; then
 fi
 pytest -n 4 tests $PYTEST_OPTS
 
+# validate types
+pytype flax/
+
 # Per-example tests.
 # we apply pytest within each example to avoid pytest's annoying test-filename collision.
 # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when

@@ -57,7 +57,7 @@ def get_module_scopes(module):
       outer_scopes.append(x.scope)
     return x
   attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent'}
+           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
   jax.tree_map(get_scope, attrs)
   return outer_scopes + [module.scope,]
 
@@ -90,7 +90,7 @@ def set_module_scopes(module, scopes):
     else:
       return x
   attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent'}
+           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
   new_attrs = jax.tree_map(set_scope, attrs)
   new_module = module.clone(parent=scopes[idx], **new_attrs)
   idx += 1
