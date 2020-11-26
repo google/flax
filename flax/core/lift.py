@@ -275,7 +275,7 @@ def transform_module(fn: Callable[..., Any],
   return wrapper
 
 
-def swap_collection(col_a: str, col_b: str):
+def swap_collection(fn: Callable[..., Any], col_a: str, col_b: str):
   """Swap two collections."""
   def swap(target):
     a = target[col_a] if col_a in target else {}
@@ -283,7 +283,7 @@ def swap_collection(col_a: str, col_b: str):
     target[col_b], target[col_a] = a, b
     return target
 
-  return transform((col_a, col_b), swap, swap, mutable=True)
+  return transform(fn, (col_a, col_b), swap, swap, mutable=True)
 
 
 @dataclass(frozen=True)
