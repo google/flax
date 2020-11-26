@@ -47,7 +47,7 @@ def _track_outputs(x):
 
 
 class _ModuleFrame:
-  """A ModuleFrame the context needed to init or apply a Module.
+  """A ModuleFrame the context needed to initialize (init) or apply a Module.
 
   In particular, `self.params` is a dictionary where parameters are
   stored (during module init) and read from (during module application).
@@ -65,7 +65,7 @@ class _ModuleFrame:
   When the whole init process is complete, the top-level ModuleFrame'
   `params` are returned, which contain a nested dictionary of parameters.
 
-  During module application, a similer process happens but this time
+  During module application, a similar process happens but this time
   the parameters are only read from.
 
   Additional attributes on ModuleFrame track context needed to assist error
@@ -95,9 +95,9 @@ class _ModuleFrame:
 
   @property
   def path(self):
-    """Path of the the module scope.
+    """Returns the path of the Module scope.
 
-    paths are similar to unix file names (eg. '/module/nested/dense')
+    Paths are similar to Unix file names (e.g. '/module/nested/dense')
 
     Returns:
       The path of this Module scope.
@@ -116,7 +116,7 @@ class _ModuleFrame:
     return path
 
   def is_descendent_of(self, frame):
-    """Check whether this frame is a descendent of the given frame."""
+    """Checks whether this frame is a descendent of the given frame."""
     if frame is self.parent:
       return True
     elif self.parent:
@@ -172,7 +172,7 @@ def module_method(fn):
 
   cache = {}
 
-  # module method are just Module class instances.
+  # Module methods are just Module class instances.
   # But we want it to inherit from the class such that we can call other methods
   # of the module. We need a class property to find out which class the method
   # is defined on.
@@ -198,7 +198,7 @@ MODULE_CLASSMETHODS = [
 
 
 class _ModuleMeta(abc.ABCMeta):
-  """Meta class for automatically setting the doc of Modules."""
+  """A meta class for automatically setting the doc of Modules."""
 
   def __init__(cls, name, bases, attrs):
     super(_ModuleMeta, cls).__init__(name, bases, attrs)
@@ -210,10 +210,10 @@ class _ModuleMeta(abc.ABCMeta):
         parameters=apply_params[1:])
 
     if not bases:
-      return  # skip method signature overides for Module class.
+      return  # skip method signature overrides for Module class.
 
     def wrap_special_method(name):
-      """override the signature and docstring for one of Module's classmethods."""
+      """Overrides the signature and docstring for one of Module's class methods."""
       orig_fn = getattr(Module, name)  # pytype: disable=name-error
 
       @functools.wraps(orig_fn)
@@ -238,7 +238,7 @@ class _ModuleMeta(abc.ABCMeta):
 
 
 def _fold_in_str(rng, data):
-  """Fold a string into a jax.random.PRNGKey using its SHA-1 hash."""
+  """Folds a string into a jax.random.PRNGKey using its SHA-1 hash."""
   m = hashlib.sha1()
   m.update(data.encode('utf-8'))
   d = m.digest()
@@ -329,7 +329,7 @@ class Module(metaclass=_ModuleMeta):
 
   @classmethod
   def _get_construction_frame(cls):
-    """Return the ModuleFrame where this module was constructed.
+    """Returns the ModuleFrame where this module was constructed.
 
     Modules can be shared across different parts of a parameter tree.
     We need to ensure that the parameter object is the same in every instance
@@ -382,7 +382,7 @@ class Module(metaclass=_ModuleMeta):
 
   @classmethod
   def create(cls, _rng, *args, name=None, **kwargs):
-    """Create a module instance by evaluating the model.
+    """Creates a module instance by evaluating the model.
 
     DEPRECATION WARNING:
     `create()` is deprecated use `init()` to initialize parameters and
@@ -411,7 +411,7 @@ class Module(metaclass=_ModuleMeta):
 
   @classmethod
   def create_by_shape(cls, _rng, input_specs, *args, name=None, **kwargs):
-    """Create a module instance using only shape and dtype information.
+    """Creates a module instance using only shape and dtype information.
 
     DEPRECATION WARNING:
     `create_by_shape()` is deprecated use `init_by_shape()` to initialize
@@ -443,7 +443,7 @@ class Module(metaclass=_ModuleMeta):
 
   @classmethod
   def init(cls, _rng, *args, name=None, **kwargs):
-    """Initialize the module parameters.
+    """Initializes the module parameters.
 
     Args:
       _rng: the random number generator used to initialize parameters.
@@ -474,6 +474,12 @@ class Module(metaclass=_ModuleMeta):
 
     This method will initialize the module parameters without computation.
     Initializer functions can depend on the shape but not the value of inputs.
+    
+    Example::
+
+      input_shape = (batch_size, image_size, image_size, 3)
+      model_output, initial_params = model.init_by_shape(jax.random.PRNGKey(0),
+                                      input_specs=[(input_shape, jnp.float32)])
 
     Args:
       _rng: the random number generator used to initialize parameters.
@@ -483,12 +489,6 @@ class Module(metaclass=_ModuleMeta):
       **kwargs: keyword arguments passed to the module's apply function
     Returns:
       A pair consisting of the model output and the initialized parameters
-    Example:
-      ```
-      input_shape = (batch_size, image_size, image_size, 3)
-      model_output, initial_params = model.init_by_shape(jax.random.PRNGKey(0),
-                                      input_specs=[(input_shape, jnp.float32)])
-      ```
     """
     stochastic_rng = None
     try:
@@ -504,7 +504,7 @@ class Module(metaclass=_ModuleMeta):
       def init_fn():
         return cls.init(_rng, *(inputs + args), name=name, **kwargs)
       if stochastic_rng is not None:
-        # Create a new stochastic scope inside the lazy evalution
+        # Create a new stochastic scope inside the lazy evaluation
         # this way we can use a stochastic scope in combination
         # with init_by_shape.
         with stochastic.stochastic(stochastic_rng):
@@ -518,7 +518,7 @@ class Module(metaclass=_ModuleMeta):
     """Evaluate the module with the given parameters.
 
     Args:
-      params: the parameters of the module. Typically, inital parameter values
+      params: the parameters of the module. Typically, initial parameter values
         are constructed using `Module.init` or `Module.init_by_shape`.
       *args: arguments passed to the module's apply function
       name: name of this module.
@@ -594,7 +594,7 @@ class Module(metaclass=_ModuleMeta):
           ema.value = decay * ema.value + (1 - decay) * inputs
           return inputs
 
-    By default Modules are stateless. See `flax.nn.stateful` to enable stateful
+    By default, Modules are stateless. See `flax.nn.stateful` to enable stateful
     computations.
 
     Args:
@@ -633,7 +633,7 @@ class Module(metaclass=_ModuleMeta):
   @classmethod
   @contextlib.contextmanager
   def _with_instance(cls, frame):
-    """Private constructor for Module.
+    """A private constructor for Module.
 
     A module instance is constructed using a scope and is tied to a _ModuleFrame
     This way the methods on the Module instance can rely on the _ModuleFrame
@@ -728,7 +728,7 @@ def module(fun):
 
 # TODO(flax-dev) consider removing this...
 class TransparentModule(Module):
-  """Transparent module.
+  """A transparent module.
 
   A transparent module can only have one parameter named '0'.
   """
@@ -744,7 +744,7 @@ class TransparentModule(Module):
       raise ValueError('Transparent modules should have exactly one child.')
     key, value = entries[0]
     if key != '0':
-      raise ValueError('Transparent module should contain an unnamed child.')
+      raise ValueError('Transparent modules should contain an unnamed child.')
     return value
 
   @classmethod
@@ -755,12 +755,12 @@ class TransparentModule(Module):
 class TruncatedModule(TransparentModule):
   """Wraps a Module and returns the requested intermediate outputs instead.
 
-  See `Model.truncate_at` for a simple api to get the intermediate outputs of
+  Check `Model.truncate_at` for a simple APU to get the intermediate outputs of
   an existing Model.
   """
 
   def apply(self, *args, wrapped_module=None, truncate_path=None, **kwargs):
-    """Apply the wrapped module and return some of its intermediate outputs.
+    """Applies the wrapped module and return some of its intermediate outputs.
 
     Args:
       *args: the positional arguments for the wrapped module.
@@ -902,7 +902,7 @@ def _top_frame(call_name):
 
 @struct.dataclass
 class Model:
-  """A Model contains the model paramaters, state and definition."""
+  """A Model contains the model parameters, state and definition."""
 
   module: Type[Module] = struct.field(pytree_node=False)
   params: Any = struct.field(pytree_node=True)
@@ -911,10 +911,10 @@ class Model:
     return self.module.call(self.params, *args, **kwargs)
 
   def truncate_at(self, module_path):
-    """Truncate the model by returning the outputs of the given sub-module.
+    """Truncates the model by returning the outputs of the given sub-module.
 
     Args:
-      module_path: the full name of the module (eg. '/module/sub_module').
+      module_path: the full name of the module (e.g. '/module/sub_module').
         A list or dict of module paths can be provided to obtain the
         intermediate outputs of multiple modules.
     Returns:
@@ -935,8 +935,8 @@ class Model:
     raise AttributeError(f'No attribute named "{name}".')
 
   def __hash__(self):
-    # Jax will call hash when model is passed to a function transform.
-    # the compiled function should not be shared among model instances because
+    # Jax will call hash when the model is passed to a function transform.
+    # The compiled function should not be shared among model instances because
     # it closes over the specific parameters of this model instance.
     return id(self)
 
@@ -945,7 +945,7 @@ class Collection:
   """A collection of tensors useful for tracking state.
 
   A Collection can be used to associate data with the application of a Module.
-  For example a collection can be used to collect activations across modules.
+  For example, a collection can be used to collect activations across modules.
   Another common use case for collections is to track internal state.
   For example, the running averages in BatchNorm can be stored in a collection.
 
@@ -990,7 +990,8 @@ class Collection:
   def retrieve(self, default=None):
     """Retrieves a value from the Collection.
 
-    This functions should only be called with the apply function of a module.
+    This function should only be called with the apply function of a module.
+    
     Args:
       default: The default returned when nothing is stored (default: None)
     Returns:
@@ -1003,7 +1004,8 @@ class Collection:
   def store(self, value):
     """Stores a value in the Collection.
 
-    This functions should only be called with the apply function of a module.
+    This function should only be called with the apply function of a module.
+    
     Args:
       value: The value to be stored in the collection
     Returns:
@@ -1018,7 +1020,7 @@ class Collection:
     # In this case, we throw an error because transforming a stateful function
     # is ill-defined (eg. what does vmap of BatchNorm do?).
     # TODO(jheek): Add doc guide on combining jax transforms and state.
-    # TODO(jheek): Should some transformations be excempt from this error?
+    # TODO(jheek): Should some transformations be exempt from this error?
     value_level = utils._level_of_value(value)
     if value_level > self._master_level:
       raise ValueError('Stateful operations are not allowed when the Collection'
@@ -1061,10 +1063,10 @@ class Collection:
     return old_value
 
   def _find_root(self, frame):
-    """Find the root frame with respect to the anchor.
+    """Finds the root frame with respect to the anchor.
 
     The root frame is defined as the child of anchor
-    that is an ancestor of frame.
+    that is an ancestor of a frame.
     The root is used to verify that a Collection does not
     have multiple unnamed roots.
 
