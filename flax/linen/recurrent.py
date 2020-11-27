@@ -27,10 +27,10 @@ import abc
 from functools import partial
 from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
-from .module import Module, compact
-from . import activation
-from . import initializers
-from . import linear
+from flax.linen.module import Module, compact
+from flax.linen.activation import sigmoid, tanh
+from flax.linen.initializers import orthogonal, zeros
+from flax.linen.linear import Conv, Dense, default_kernel_init
 
 from jax import numpy as jnp
 from jax import random
@@ -47,7 +47,7 @@ class RNNCellBase(Module):
 
   @staticmethod
   @abc.abstractmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:
@@ -86,11 +86,11 @@ class LSTMCell(RNNCellBase):
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
   """
-  gate_fn: Callable = activation.sigmoid
-  activation_fn: Callable = activation.tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = linear.default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  gate_fn: Callable = sigmoid
+  activation_fn: Callable = tanh
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, carry, inputs):
@@ -108,12 +108,12 @@ class LSTMCell(RNNCellBase):
     c, h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(linear.Dense,
+    dense_h = partial(Dense,
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
-    dense_i = partial(linear.Dense,
+    dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
                       kernel_init=self.kernel_init)
@@ -126,7 +126,7 @@ class LSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:
@@ -165,13 +165,13 @@ class GRUCell(RNNCellBase):
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
   """
-  gate_fn: Callable = activation.sigmoid
-  activation_fn: Callable = activation.tanh
+  gate_fn: Callable = sigmoid
+  activation_fn: Callable = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      linear.default_kernel_init)
+      default_kernel_init)
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      initializers.orthogonal())
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+      orthogonal())
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, carry, inputs):
@@ -189,12 +189,12 @@ class GRUCell(RNNCellBase):
     h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(linear.Dense,
+    dense_h = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
-    dense_i = partial(linear.Dense,
+    dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.kernel_init,
@@ -208,7 +208,7 @@ class GRUCell(RNNCellBase):
     return new_h, new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:
@@ -282,7 +282,7 @@ class ConvLSTM(RNNCellBase):
       A tuple with the new carry and the output.
     """
     c, h = carry
-    input_to_hidden = partial(linear.Conv,
+    input_to_hidden = partial(Conv,
                               features=4*self.features,
                               kernel_size=self.kernel_size,
                               strides=self.strides,
@@ -291,7 +291,7 @@ class ConvLSTM(RNNCellBase):
                               dtype=self.dtype,
                               name='ih')
 
-    hidden_to_hidden = partial(linear.Conv,
+    hidden_to_hidden = partial(Conv,
                                features=4*self.features,
                                kernel_size=self.kernel_size,
                                strides=self.strides,
@@ -303,13 +303,13 @@ class ConvLSTM(RNNCellBase):
     gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)
     i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
 
-    f = activation.sigmoid(f + 1)
-    new_c = f * c + activation.sigmoid(i) * jnp.tanh(g)
-    new_h = activation.sigmoid(o) * jnp.tanh(new_c)
+    f = sigmoid(f + 1)
+    new_c = f * c + sigmoid(i) * jnp.tanh(g)
+    new_h = sigmoid(o) * jnp.tanh(new_c)
     return (new_c, new_h), new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:

@@ -140,6 +140,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       contains checkpoint training will be resumed from the latest checkpoint.
   """
   tf.io.gfile.makedirs(workdir)
+
   batch_size = config.batch_size
   n_devices = jax.device_count()
   if jax.host_count() > 1:
@@ -149,22 +150,16 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     raise ValueError('Batch size must be divisible by the number of devices')
 
   train_summary_writer, eval_summary_writer = get_summary_writers(workdir)
-
   # Load dataset
-  data_source = input_pipeline.DataSource(
-      train_batch_size=batch_size, eval_batch_size=batch_size)
+  data_source = input_pipeline.DataSource(config)
   train_ds = data_source.train_ds
   eval_ds = data_source.eval_ds
-
+  steps_per_epoch = data_source.ds_info.splits[
+      'train'].num_examples // config.batch_size
   # Create dataset batch iterators
   train_iter = iter(train_ds)
-  eval_iter = iter(eval_ds)
-
-  # Compute steps per epoch and nb of eval steps
-  steps_per_epoch = data_source.TRAIN_IMAGES // batch_size
-  steps_per_eval = data_source.EVAL_IMAGES // batch_size
-  steps_per_checkpoint = steps_per_epoch * 10
-  num_steps = steps_per_epoch * config.num_epochs
+  num_train_steps = train_ds.cardinality().numpy()
+  steps_per_checkpoint = 1000
 
   # Create the model using data-dependent initialization. Don't shard the init
   # batch.
@@ -201,7 +196,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # Gather metrics
   train_metrics = []
 
-  for step, batch in zip(range(step_offset, num_steps), train_iter):
+  for step, batch in zip(range(step_offset, num_train_steps), train_iter):
     # Load and shard the TF batch
     batch = load_and_shard_tf_batch(batch)
 
@@ -212,6 +207,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Train step
     optimizer, ema, metrics = p_train_step(optimizer, ema, batch, sharded_rngs)
     train_metrics.append(metrics)
+
+    # Quick indication that training is happening.
+    logging.log_first_n(logging.INFO, 'Finished training step %d.', 5, step)
 
     if (step + 1) % steps_per_epoch == 0:
       epoch = step // steps_per_epoch
@@ -228,8 +226,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
       # Evaluation
       eval_metrics = []
-      for _ in range(steps_per_eval):
-        eval_batch = next(eval_iter)
+      for eval_batch in eval_ds:
         # Load and shard the TF batch
         eval_batch = load_and_shard_tf_batch(eval_batch)
         # Step
@@ -247,5 +244,5 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       train_summary_writer.flush()
       eval_summary_writer.flush()
 
-    if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
+    if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_train_steps:
       save_checkpoint(workdir, optimizer, ema, step)

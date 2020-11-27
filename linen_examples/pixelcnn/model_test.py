@@ -31,7 +31,7 @@ config.enable_omnistaging()
 class ModelTest(absltest.TestCase):
 
   def setUp(self):
-    super(absltest.TestCase, self).setUp()
+    super().setUp()
     self.rng = random.PRNGKey(0)
     self.x = np.arange(24).reshape(1, 4, 3, 2)
 

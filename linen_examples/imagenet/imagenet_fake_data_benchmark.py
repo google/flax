@@ -13,43 +13,45 @@
 # limitations under the License.
 
 """Benchmark for the ImageNet example using fake data for quick perf results."""
+
 import pathlib
 import time
 
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-import imagenet_main
-from configs import fake_data_benchmark as config_lib
 from flax.testing import Benchmark
 import jax
 
 import tensorflow_datasets as tfds
+
+# Local imports.
+from configs import fake_data_benchmark as config_lib
+import train
+
+
+FLAGS = flags.FLAGS
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 
-FLAGS = flags.FLAGS
-
 
 class ImagenetBenchmarkFakeData(Benchmark):
   """Runs ImageNet using fake data for quickly measuring performance."""
 
-  @flagsaver
   def test_fake_data(self):
-    model_dir = self.get_tmp_model_dir()
-
-    FLAGS.config = config_lib.get_config()
-    FLAGS.model_dir = model_dir
+    workdir = self.get_tmp_workdir()
+    config = config_lib.get_config()
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
     start_time = time.time()
     with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
-      imagenet_main.main([])
+      train.train_and_evaluate(config, workdir)
     benchmark_time = time.time() - start_time
 
     self.report_wall_time(benchmark_time)

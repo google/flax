@@ -14,6 +14,8 @@
 
 """NN base modules for JAX."""
 
+from typing import Type
+
 import abc
 import contextlib
 import functools
@@ -200,7 +202,7 @@ class _ModuleMeta(abc.ABCMeta):
 
   def __init__(cls, name, bases, attrs):
     super(_ModuleMeta, cls).__init__(name, bases, attrs)
-    apply_fn = cls.apply
+    apply_fn = cls.apply  # pytype: disable=attribute-error
     apply_doc = apply_fn.__doc__
     cls.__doc__ = apply_doc
     apply_params = _fn_parameters(apply_fn)
@@ -212,7 +214,7 @@ class _ModuleMeta(abc.ABCMeta):
 
     def wrap_special_method(name):
       """override the signature and docstring for one of Module's classmethods."""
-      orig_fn = getattr(Module, name)
+      orig_fn = getattr(Module, name)  # pytype: disable=name-error
 
       @functools.wraps(orig_fn)
       def wrapper(class_, *args, **kwargs):
@@ -902,8 +904,8 @@ def _top_frame(call_name):
 class Model:
   """A Model contains the model paramaters, state and definition."""
 
-  module: Module = struct.field(pytree_node=False)
-  params: Any
+  module: Type[Module] = struct.field(pytree_node=False)
+  params: Any = struct.field(pytree_node=True)
 
   def __call__(self, *args, **kwargs):
     return self.module.call(self.params, *args, **kwargs)

@@ -25,11 +25,10 @@ from jax import random
 import jax.numpy as jnp
 import numpy as np
 
-from .linear import default_kernel_init
-from .linear import DenseGeneral
-from .module import Module, compact
-from . import initializers
-
+from flax.linen.linear import default_kernel_init
+from flax.linen.linear import DenseGeneral
+from flax.linen.module import Module, compact
+from flax.linen.initializers import zeros
 
 PRNGKey = Any
 Shape = Tuple[int]
@@ -148,7 +147,7 @@ class MultiHeadDotProductAttention(Module):
   deterministic: bool = False
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   use_bias: bool = True
   attention_fn: Callable[[Array, Array, Array], Array] = dot_product_attention
   decode: bool = False

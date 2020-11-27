@@ -39,6 +39,7 @@ from jax import lax
 from jax import linear_util as lu
 from jax.config import config
 from jax.interpreters import partial_eval as pe
+from jax.interpreters import xla
 import jax.lib.xla_bridge as xb
 import jax.numpy as jnp
 import numpy as onp
@@ -59,7 +60,7 @@ def _replicate(x, devices=None):
     return jax.api.device_put_sharded(len(devices) * [x], devices)
   else:
     aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
-    buffers = [jax.interpreters.xla.device_put(x, device=d) for d in devices]
+    buffers = [xla.device_put(x, device=d) for d in devices]
     return jax.pxla.ShardedDeviceArray(aval, buffers)
 
 
@@ -161,7 +162,7 @@ def prefetch_to_device(iterator, size, devices=None):
       assert xs.shape[0] == len(devices), (
           "The first dimension of the iterator's ndarrays is not "
           "equal to the number of devices.")
-      buffers = [jax.interpreters.xla.device_put(x, devices[i])
+      buffers = [xla.device_put(x, devices[i])
                  for i, x in enumerate(xs)]
       return jax.pxla.ShardedDeviceArray(aval, buffers)
   try:
