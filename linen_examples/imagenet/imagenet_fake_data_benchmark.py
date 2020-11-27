@@ -29,6 +29,10 @@ import tensorflow_datasets as tfds
 from configs import fake_data_benchmark as config_lib
 import train
 
+
+FLAGS = flags.FLAGS
+
+
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 # Require JAX omnistaging mode.
