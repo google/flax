@@ -126,7 +126,7 @@ class ModelTest(absltest.TestCase):
   def test_pcnn_shape(self):
     x = random.normal(self.rng, (2, 4, 4, 3))
     model = pixelcnn.PixelCNNPP(depth=0, features=2, dropout_p=0)
-    out, _ = model.init_with_output(self.rng, x)
+    out, _ = model.init_with_output(self.rng, x, train=False)
     self.assertEqual(out.shape, (2, 4, 4, 100))
 
 
