@@ -28,7 +28,7 @@ Reinforcement Learning
 
    -  `Proximal Policy
       Optimization <https://github.com/google/flax/tree/master/linen_examples/ppo/>`__ :
-      Learning to play Atari games (featuring singel host SPMD, RL setup).
+      Learning to play Atari games (featuring single host SPMD, RL setup).
 
 Natural language processing
 
@@ -57,8 +57,22 @@ community of people using Flax to build new types of machine learning models. We
 are happy to showcase any example built by the community here! If you want to
 submit your own example, we suggest that you start by forking one of the
 official Flax example, and start from there.
+
+Unfortunately we don't have any examples from the community using the new Linen
+API yet...
+
++--------------------------------+--------+-----------+-----------+
+|              Link              | Author | Task type | Reference |
++================================+========+===========+===========+
+| (waiting for first submission) |        |           |           |
++--------------------------------+--------+-----------+-----------+
  
-Here are some of the models that people have built with Flax:
+Using Deprecated API
+~~~~~~~~~~~~~~~~~~~~
+
+The following examples were created using the old pre-Linen API. You can still
+look at them for inspiration. Or maybe ask the authors if they would accept a
+pull request to the new API if you want to earn some Flax karma?
 
 +----------------------------------+-----------------+------------------------+----------------------------------+
 |               Link               |     Author      |       Task type        |            Reference             |
