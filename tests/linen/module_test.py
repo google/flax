@@ -675,16 +675,15 @@ class ModuleTest(absltest.TestCase):
       bar: nn.Dense = dataclasses.field(init=False)
 
       def setup(self):
-        self.bar = nn.Dense(2)
+        self.bar = nn.Dense(3)
       
-      @nn.compact
       def __call__(self, x):
         return self.bar(x)
 
     foo = Foo()
     x = jnp.ones((2,))
     variables = foo.init(random.PRNGKey(0), x)
-    self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 2))
+    self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
     
 
 
