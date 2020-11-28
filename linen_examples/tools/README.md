@@ -25,12 +25,47 @@ five minutes.
 Prerequisites:
 
 1. Create a Google Cloud account.
-2. Setup billing.
+2. Set up billing : https://console.cloud.google.com/billing
 3. Create a storage bucket (GCS).
 4. Optional : Get quota for accelerators. This is usually granted with a short
-   delay.
+   delay : https://console.cloud.google.com/iam-admin/quotas
 
-## Training the imagenet example.
+## Setting up your environment
+
+The commands below use the same set of pre-defined environment variables.
+
+Mandatory environment variables:
+
+- `$PROJECT` : The name of your Google Cloud project.
+- `$GCS_BUCKET` : The name of the Google Cloud Storage bucket where the model
+  output (artifacts, final checkpoint) are to be stored.
+- `$ZONE` : Compute zone (e.g. `central1-a`).
+
+Optional environment variables:
+
+- `$REPO` : Alternative repo to use instead of the default
+  https://github.com/google/flax - this is useful for development.
+- `$BRANCH` : Alternative branch to use instead of the default `master`.
+
+## Training the MNIST example
+
+Use the following command to launch the MNIST example on cloud (make sure to set
+`$PROJECT` and `$GCS_BUCKET` accordingly):
+
+```shell
+python launch_gce.py \
+  --project=$PROJECT \
+  --zone=us-central1-a \
+  --machine_type=n2-standard-2 \
+  --gcs_model_dir=gs://$GCS_BUCKET/model_dir \
+  --repo=${REPO:-https://github.com/google/flax} \
+  --branch=${BRANCH:-master} \
+  --example=mnist \
+  --args='--config=configs/default.py' \
+  --name=default
+```
+
+## Training the imagenet example
 
 Note that you need to first prepare `imagenet2012` dataset. For this, download
 the data from http://image-net.org/ as described in the
@@ -46,19 +81,24 @@ tfds.builder('imagenet2012').download_and_prepare(
 "
 ```
 
-Then copy the directory `~/tensorflow_datasets` to your storage bucket.
+Then copy the contents of the directory `~/tensorflow_datasets` into the
+directory `gs://$GCS_TFDS_BUCKET/datasets` (note that `$GCS_TFDS_BUCKET` and
+`$GCS_BUCKET` can be identical).
 
 After this preparation you can run the imagenet example with the following
-command (make sure to set `$PROJECT` and `$GCS_BUCKET` accordingly):
+command (make sure to set `$PROJECT`, `$GCS_BUCKET` and `$GCS_TFDS_BUCKET`
+accordingly):
 
 ```shell
 python launch_gce.py \
   --project=$PROJECT \
   --zone=us-central1-a \
+  --gpu_type=v100 --gpu_count=8 --machine_type=n1-standard-96 \
   --gcs_model_dir=gs://$GCS_BUCKET/model_dir \
+  --tfds_data_dir=gs://$GCS_TFDS_BUCKET/datasets \
   --repo=https://github.com/google/flax \
   --branch=master \
   --example=imagenet \
-  --args="--data_dir=gs://$GCS_BUCKET/tensorflow_datasets --config=configs/v100_x8_mixed_precision.py" \
+  --args='--config=configs/v100_x8_mixed_precision.py' \
   --name=mixed_precision
 ```

@@ -21,11 +21,9 @@ flags.DEFINE_bool(
 flags.DEFINE_string('project', None, help='Name of the Google Cloud project.')
 flags.DEFINE_string('zone', None, help='Zone in which the VM will be created.')
 flags.DEFINE_string(
-    'machine_type',
-    'n1-standard-96',
-    help='Zone in which the VM will be created.')
+    'machine_type', None, help='Zone in which the VM will be created.')
 flags.DEFINE_string(
-    'gpu_type', 'v100', help='Type of GPU to use. Leave empty for none.')
+    'gpu_type', '', help='Type of GPU to use. Leave empty for none.')
 flags.DEFINE_integer('gpu_count', 8, help='Number of GPUs to use.')
 
 # GCS configuration.
@@ -33,6 +31,12 @@ flags.DEFINE_string(
     'gcs_model_dir',
     None,
     help='GCS directory where the output of the model_dir should be copied to.')
+flags.DEFINE_string(
+    'tfds_data_dir',
+    '',
+    help='Optional tfds data directory. This can be useful to prepare datasets '
+    'on GCS and then point the jobs to this preloaded directory. Dataset will '
+    'be downloaded from the web if not specified.')
 
 # Repo configuration.
 flags.DEFINE_string(
@@ -58,7 +62,7 @@ flags.DEFINE_string(
 
 FLAGS = flags.FLAGS
 flags.mark_flags_as_required(
-    ['project', 'zone', 'gcs_model_dir', 'example', 'name'])
+    ['project', 'zone', 'machine_type', 'gcs_model_dir', 'example', 'name'])
 
 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -78,6 +82,7 @@ def generate_startup_file(vm_name: str) -> str:
       ('__NAME__', FLAGS.name),
       ('__ARGS__', FLAGS.args),
       ('__GCS_MODEL_DIR__', FLAGS.gcs_model_dir),
+      ('__TFDS_DATA_DIR__', FLAGS.tfds_data_dir),
   ):
     startup_script_content = startup_script_content.replace(from_str, to_str)
   with open(startup_script_dst, 'w', encoding='utf8') as f:

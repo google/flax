@@ -8,6 +8,7 @@ TIMESTAMP='__TIMESTAMP__'
 NAME='__EXAMPLE__/__NAME__/__TIMESTAMP__'
 ARGS='__ARGS__'
 GCS_MODEL_DIR='__GCS_MODEL_DIR__'
+TFDS_DATA_DIR='__TFDS_DATA_DIR__'
 
 HOME=/train
 
@@ -44,7 +45,7 @@ tmux send "
   . env/bin/activate &&
   cd linen_examples/$EXAMPLE &&
 
-  python ${EXAMPLE}_main.py --model_dir=$HOME/model_dir/$NAME $ARGS &&
+  TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$HOME/model_dir/$NAME $ARGS &&
 
   gsutil cp -R $HOME/model_dir/$NAME $GCS_MODEL_DIR
 
@@ -58,7 +59,7 @@ sleep 300 && sudo shutdown now
 tmux split-window -h
 tmux send "
 while true; do
-  gsutil rsync -x '*/checkpoint_*' -r model_dir $GCS_MODEL_DIR
+  gsutil rsync -x 'checkpoint_*' -r model_dir $GCS_MODEL_DIR
   sleep 60
 done 2>&1 | tee -a gcs_rsync_${TIMESTAMP}.txt >(logger -t flax)
 " ENTER
