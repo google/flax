@@ -57,7 +57,7 @@ python linen_examples/cloud/launch_gce.py \
   --project=$PROJECT \
   --zone=us-central1-a \
   --machine_type=n2-standard-2 \
-  --gcs_model_dir=gs://$GCS_BUCKET/model_dir \
+  --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --repo=${REPO:-https://github.com/google/flax} \
   --branch=${BRANCH:-master} \
   --example=mnist \
@@ -94,7 +94,7 @@ python linen_examples/cloud/launch_gce.py \
   --project=$PROJECT \
   --zone=us-central1-a \
   --gpu_type=v100 --gpu_count=8 --machine_type=n1-standard-96 \
-  --gcs_model_dir=gs://$GCS_BUCKET/model_dir \
+  --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --tfds_data_dir=gs://$GCS_TFDS_BUCKET/datasets \
   --repo=https://github.com/google/flax \
   --branch=master \

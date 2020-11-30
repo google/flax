@@ -28,9 +28,10 @@ flags.DEFINE_integer('gpu_count', 8, help='Number of GPUs to use.')
 
 # GCS configuration.
 flags.DEFINE_string(
-    'gcs_model_dir',
+    'gcs_workdir_base',
     None,
-    help='GCS directory where the output of the model_dir should be copied to.')
+    help='GCS base directory for model output. The --workdir argument will be '
+    'constructed from {gcs_workdir_base}/{example}/{name}/{timestamp} .')
 flags.DEFINE_string(
     'tfds_data_dir',
     '',
@@ -50,7 +51,7 @@ flags.DEFINE_string(
     'args',
     '',
     help='Any additional command line arguments for {example}_main.py, like '
-    'for example --config. Note that --model_dir will be provided by the '
+    'for example --config. Note that --workdir will be provided by the '
     'script.')
 
 # Run configuration.
@@ -62,7 +63,7 @@ flags.DEFINE_string(
 
 FLAGS = flags.FLAGS
 flags.mark_flags_as_required(
-    ['project', 'zone', 'machine_type', 'gcs_model_dir', 'example', 'name'])
+    ['project', 'zone', 'machine_type', 'gcs_workdir_base', 'example', 'name'])
 
 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -81,7 +82,7 @@ def generate_startup_file(vm_name: str) -> str:
       ('__TIMESTAMP__', timestamp),
       ('__NAME__', FLAGS.name),
       ('__ARGS__', FLAGS.args),
-      ('__GCS_MODEL_DIR__', FLAGS.gcs_model_dir),
+      ('__GCS_WORKDIR_BASE__', FLAGS.gcs_workdir_base),
       ('__TFDS_DATA_DIR__', FLAGS.tfds_data_dir),
   ):
     startup_script_content = startup_script_content.replace(from_str, to_str)
@@ -123,7 +124,7 @@ def launch_gce(*, vm_name: str, startup_script: str):
 
 
 def main(_):
-  for name in ('repo', 'branch', 'example', 'name', 'gcs_model_dir'):
+  for name in ('repo', 'branch', 'example', 'name', 'gcs_workdir_base'):
     value = getattr(FLAGS, name)
     if re.match(r'[^\w:/_-]', value):
       raise ValueError(f'Invalid flag value: --{name}="{value}"')
@@ -164,7 +165,7 @@ with the keystrokes 'CTRL-B A'. See "man tmux" for help about tmux.
 
 To observe the training via Tensorboard, simply run in your local computer:
 
-$ tensorboard --logdir={FLAGS.gcs_model_dir}
+$ tensorboard --logdir={FLAGS.gcs_workdir_base}
 
 ''')
 
