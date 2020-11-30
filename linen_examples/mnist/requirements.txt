@@ -1,5 +1,4 @@
 clu
-jaxlib
 flax
 ml_collections
 tensorboard
