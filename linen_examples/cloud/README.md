@@ -25,10 +25,10 @@ five minutes.
 Prerequisites:
 
 1. Create a Google Cloud account.
-2. Set up billing : https://console.cloud.google.com/billing
+2. Set up billing: https://console.cloud.google.com/billing
 3. Create a storage bucket (GCS).
-4. Optional : Get quota for accelerators. This is usually granted with a short
-   delay : https://console.cloud.google.com/iam-admin/quotas
+4. Optional: Get quota for accelerators. This is usually granted with a short
+   delay: https://console.cloud.google.com/iam-admin/quotas
 
 ## Setting up your environment
 
@@ -36,16 +36,16 @@ The commands below use the same set of pre-defined environment variables.
 
 Mandatory environment variables:
 
-- `$PROJECT` : The name of your Google Cloud project.
-- `$GCS_BUCKET` : The name of the Google Cloud Storage bucket where the model
+- `$PROJECT`: The name of your Google Cloud project.
+- `$GCS_BUCKET`: The name of the Google Cloud Storage bucket where the model
   output (artifacts, final checkpoint) are to be stored.
-- `$ZONE` : Compute zone (e.g. `central1-a`).
+- `$ZONE`: Compute zone (e.g. `central1-a`).
 
 Optional environment variables:
 
-- `$REPO` : Alternative repo to use instead of the default
+- `$REPO`: Alternative repo to use instead of the default
   https://github.com/google/flax - this is useful for development.
-- `$BRANCH` : Alternative branch to use instead of the default `master`.
+- `$BRANCH`: Alternative branch to use instead of the default `master`.
 
 ## Training the MNIST example
 
