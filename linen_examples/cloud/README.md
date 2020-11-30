@@ -53,7 +53,7 @@ Use the following command to launch the MNIST example on cloud (make sure to set
 `$PROJECT` and `$GCS_BUCKET` accordingly):
 
 ```shell
-python launch_gce.py \
+python linen_examples/cloud/launch_gce.py \
   --project=$PROJECT \
   --zone=us-central1-a \
   --machine_type=n2-standard-2 \
@@ -90,7 +90,7 @@ command (make sure to set `$PROJECT`, `$GCS_BUCKET` and `$GCS_TFDS_BUCKET`
 accordingly):
 
 ```shell
-python launch_gce.py \
+python linen_examples/cloud/launch_gce.py \
   --project=$PROJECT \
   --zone=us-central1-a \
   --gpu_type=v100 --gpu_count=8 --machine_type=n1-standard-96 \
