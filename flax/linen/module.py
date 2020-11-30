@@ -78,7 +78,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
     rep += '# attributes\n'
     for attr in attributes.keys():
       # TODO(jheek): can we get a nice string representation of attribute types?
-      value = getattr(module, attr)
+      value = getattr(module, attr, None)
       value_rep = _attr_repr(value)
       rep += f'{attr} = {value_rep}\n'
   if child_modules:
@@ -412,7 +412,7 @@ class Module:
     if name == 'parent':
       pass
     # Modules have been passed in as dataclass args.
-    elif name in self.__dataclass_fields__.keys():  # pytype: disable=attribute-error
+    elif name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init:  # pytype: disable=attribute-error
       pass
     # Submodules are being defined and attached in setup()
     else:
@@ -423,7 +423,7 @@ class Module:
                 "You can only assign submodules to self in setup().")
           if subvalue.parent is _unspecified_parent:
             subvalue.parent = self
-          elif subvalue.parent != self:
+          elif subvalue.parent is not self:
             raise ValueError("Can't attach to remote parent in setup, pass in "
                              "bound Modules from outside as an argument.")
           if subvalue.name is not None:
