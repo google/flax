@@ -684,7 +684,6 @@ class ModuleTest(absltest.TestCase):
     x = jnp.ones((2,))
     variables = foo.init(random.PRNGKey(0), x)
     self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
-    
 
 
 if __name__ == '__main__':
