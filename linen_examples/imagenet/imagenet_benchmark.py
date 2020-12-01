@@ -38,7 +38,7 @@ class ImagenetBenchmark(Benchmark):
   def _test_8x_v100_half_precision(
       self, num_epochs, min_accuracy, max_accuracy):
     """Utility to benchmark ImageNet on 8xV100 GPUs. Use in your test func."""
-    workdir = self.get_tmp_workdir()
+    workdir = self.get_tmp_model_dir()
     config = config_lib.get_config()
     config.num_epochs = num_epochs
 
