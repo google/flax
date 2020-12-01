@@ -33,12 +33,12 @@ class _AdadeltaParamState:
   """Adadelta parameter state"""
 
   sq_avg: onp.ndarray
-  accdelta: onp.ndarray
+  acc_delta: onp.ndarray
 
 
 class Adadelta(OptimizerDef):
   """Adadelta optimizer"""
-  def __init__(self, learning_rate: float = None, eps=1e-8):
+  def __init__(self, learning_rate: float = None, rho=0.9, eps=1e-8, weight_decay=0):
     """Constructor for the Adadelta optimizer.
         
     Args:
@@ -46,7 +46,7 @@ class Adadelta(OptimizerDef):
       rho: coefficient used for computing a running average
       eps: term added to the denominator to improve numerical stability
     """
-    hyper_params = _AdadeltaHyperParams(learning_rate, eps)
+    hyper_params = _AdadeltaHyperParams(learning_rate, rho, eps, weight_decay)
     super().__init__(hyper_params)
 
   def init_param_state(self, param):
@@ -71,7 +71,7 @@ class Adadelta(OptimizerDef):
     sq_avg = rho * (state.sq_avg + jnp.multiply(grad, grad) * (1- rho))
     std = jnp.sqrt(sq_avg + eps)
     delta = jnp.divide(jnp.sqrt(state.acc_delta+eps)/std)
-    
+
     new_param = param - hyper_params.learning_rate * grad * delta
     acc_delta = rho * (state.acc_delta + jnp.multiply(delta, delta)*(1 - rho))
     new_state = _AdadeltaParamState(sq_avg, acc_delta)
