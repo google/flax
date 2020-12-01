@@ -31,7 +31,7 @@ import tensorflow as tf
 FLAGS = flags.FLAGS
 
 config_flags.DEFINE_config_file(
-    "config", "configs/default.py", "Training configuration.", lock_config=True)
+    "config", None, "Training configuration.", lock_config=True)
 flags.DEFINE_string("workdir", None, "Work unit directory.")
 flags.DEFINE_string("jax_backend_target", None,
                     "JAX backend target to use. Can be used with UPTC.")
