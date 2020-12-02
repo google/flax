@@ -21,10 +21,17 @@ flags.DEFINE_bool(
 flags.DEFINE_string('project', None, help='Name of the Google Cloud project.')
 flags.DEFINE_string('zone', None, help='Zone in which the VM will be created.')
 flags.DEFINE_string(
-    'machine_type', None, help='Zone in which the VM will be created.')
+    'machine_type',
+    None,
+    help='Machine type to use for VM. See "gcloud compute machine-types list".')
 flags.DEFINE_string(
-    'gpu_type', '', help='Type of GPU to use. Leave empty for none.')
-flags.DEFINE_integer('gpu_count', 8, help='Number of GPUs to use.')
+    'accelerator_type',
+    '',
+    help='Type of accelerator to use, or empty. '
+    'See "gcloud compute accelerator-types list".'
+)
+flags.DEFINE_integer(
+    'accelerator_count', 8, help='Number of accelerators to use.')
 
 # GCS configuration.
 flags.DEFINE_string(
@@ -101,10 +108,10 @@ def launch_gce(*, vm_name: str, startup_script: str):
       '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
       f'--metadata-from-file=startup-script={startup_script}'
   ]
-  if FLAGS.gpu_type and FLAGS.gpu_count:
+  if FLAGS.accelerator_type and FLAGS.accelerator_count:
     args.extend([
         '--maintenance-policy=TERMINATE',
-        f'--accelerator=type=nvidia-tesla-{FLAGS.gpu_type},count={FLAGS.gpu_count}',
+        f'--accelerator=type={FLAGS.accelerator_type},count={FLAGS.accelerator_count}',
     ])
 
   if FLAGS.dry_run:

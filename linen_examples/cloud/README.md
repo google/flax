@@ -94,7 +94,8 @@ accordingly):
 python linen_examples/cloud/launch_gce.py \
   --project=$PROJECT \
   --zone=us-central1-a \
-  --gpu_type=v100 --gpu_count=8 --machine_type=n1-standard-96 \
+  --machine_type=n1-standard-96 \
+  --accelerator_type=nvidia-tesla-v100 --accelerator_count=8 \
   --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --tfds_data_dir=gs://$GCS_TFDS_BUCKET/datasets \
   --repo=https://github.com/google/flax \
