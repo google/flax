@@ -457,6 +457,18 @@ class TransformTest(absltest.TestCase):
         (3, 5))
     self.assertEqual(y.shape, (3, 1, 5))
 
+  def test_module_transform_with_setup(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.test = self.param('test', nn.initializers.ones, ())
+      
+      def __call__(self, x):
+        return x * self.test
+      
+    FooVmap = nn.vmap(Foo, in_axes=0, out_axes=0, variable_axes={'params': 0}, split_rngs={'params': True})
+    variables = FooVmap().init(random.PRNGKey(0), jnp.ones((4,)))
+    self.assertEqual(variables['params']['test'].shape, (4,))
+
 
 if __name__ == '__main__':
   absltest.main()

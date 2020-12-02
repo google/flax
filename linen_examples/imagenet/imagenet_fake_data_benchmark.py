@@ -43,7 +43,7 @@ class ImagenetBenchmarkFakeData(Benchmark):
   """Runs ImageNet using fake data for quickly measuring performance."""
 
   def test_fake_data(self):
-    workdir = self.get_tmp_workdir()
+    workdir = self.get_tmp_model_dir()
     config = config_lib.get_config()
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]

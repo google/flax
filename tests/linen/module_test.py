@@ -14,6 +14,8 @@
 
 """Tests for flax.linen."""
 
+import dataclasses
+
 from absl.testing import absltest
 
 import jax
@@ -667,6 +669,21 @@ class ModuleTest(absltest.TestCase):
     # in `setup()`
     with self.assertRaisesRegex(AttributeError, "has no attribute 'setup_called'"):
       empty.bar()
+
+  def test_module_with_attrs(self):
+    class Foo(nn.Module):
+      bar: nn.Dense = dataclasses.field(init=False)
+
+      def setup(self):
+        self.bar = nn.Dense(3)
+      
+      def __call__(self, x):
+        return self.bar(x)
+
+    foo = Foo()
+    x = jnp.ones((2,))
+    variables = foo.init(random.PRNGKey(0), x)
+    self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
 
 
 if __name__ == '__main__':

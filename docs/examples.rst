@@ -58,15 +58,17 @@ are happy to showcase any example built by the community here! If you want to
 submit your own example, we suggest that you start by forking one of the
 official Flax example, and start from there.
 
-Unfortunately we don't have any examples from the community using the new Linen
-API yet...
+Using Linen
+~~~~~~~~~~~~~~~~~~~~
 
-+--------------------------------+--------+-----------+-----------+
-|              Link              | Author | Task type | Reference |
-+================================+========+===========+===========+
-| (waiting for first submission) |        |           |           |
-+--------------------------------+--------+-----------+-----------+
++----------------------------------+-----------------+------------------------+----------------------------------+
+|               Link               |     Author      |       Task type        |            Reference             |
++==================================+=================+========================+==================================+
+| `JAX-RL`_                        | `@henry-prior`_ | Reinforcement learning | N/A                              |
++----------------------------------+-----------------+------------------------+----------------------------------+
  
+.. _`JAX-RL`: https://github.com/henry-prior/jax-rl
+
 Using Deprecated API
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -79,8 +81,6 @@ pull request to the new API if you want to earn some Flax karma?
 +==================================+=================+========================+==================================+
 | `Gaussian Processes regression`_ | `@danieljtait`_ | Regression             | N/A                              |
 +----------------------------------+-----------------+------------------------+----------------------------------+
-| `JAX-RL`_                        | `@henry-prior`_ | Reinforcement learning | N/A                              |
-+----------------------------------+-----------------+------------------------+----------------------------------+
 | `DQN`_                           | `@joaogui1`_    | Reinforcement learning | N/A                              |
 +----------------------------------+-----------------+------------------------+----------------------------------+
 | `Various CIFAR SOTA Models`_     | `@PForet`_      | Image Classification   | N/A                              |
@@ -89,7 +89,6 @@ pull request to the new API if you want to earn some Flax karma?
 +----------------------------------+-----------------+------------------------+----------------------------------+
 
 .. _`Gaussian Processes regression`: https://github.com/danieljtait/ladax/tree/master/examples
-.. _`JAX-RL`: https://github.com/henry-prior/jax-rl
 .. _`DQN`: https://github.com/joaogui1/RL-JAX/tree/master/DQN
 .. _`Various CIFAR SOTA Models`: https://github.com/google-research/google-research/tree/master/flax_models/cifar
 .. _`DCGAN`: https://github.com/bkkaggle/jax-dcgan

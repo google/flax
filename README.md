@@ -1,6 +1,7 @@
 # Flax: A neural network ecosystem for JAX designed for flexibility
 
 [**Overview**](#overview)
+| [**Quick install**](#quick-install)
 | [**What does Flax look like?**](#what-does-flax-look-like)
 | [**Documentation**](https://flax.readthedocs.io/)
 
@@ -40,6 +41,29 @@ comes with everything you need to start your research, including:
 * **Educational examples** that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
 
 * **Fast, tuned large-scale end-to-end examples**: CIFAR10, ResNet on ImageNet, Transformer LM1b
+
+## Quick install
+
+You will need Python 3.6 or later and a working [JAX](https://github.com/google/jax/blob/master/README.md)
+installation (with or without GPU support, see instructions there). For a
+CPU-only version:
+
+```
+> pip install --upgrade pip # To support manylinux2010 wheels.
+> pip install --upgrade jax jaxlib # CPU-only
+```
+
+Then install Flax from PyPi:
+
+```
+> pip install flax
+```
+
+To upgrade to the latest version of Flax, you can use:
+
+```
+> pip install --upgrade git+https://github.com/google/flax.git
+```
 
 ## What does Flax look like?
 

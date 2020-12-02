@@ -122,10 +122,7 @@ def module_class_lift_transform(
         all args must be passed via methods kwarg.""")
     class_trafo_args = {k: ((), v) for k, v in methods.items()}
 
-  # Build the actual transformed class.
-  transformed_fns = {}
-  # for each of the specified methods:
-  for fn_name, fn_trafo_args in class_trafo_args.items():
+  def create_trans_fn(fn_name, fn_trafo_args):
     # get existing unbound method from class
     fn = getattr(module_class, fn_name)
     trafo_args, trafo_kwargs = fn_trafo_args
@@ -141,7 +138,7 @@ def module_class_lift_transform(
         cloned = module_class(parent=None, **attrs)
         cloned = set_module_scopes(cloned, scopes)
         cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
-        res = getattr(cloned, fn_name)(*args, **kwargs)
+        res = fn(cloned, *args, **kwargs)
         # preserve submodule-tree stripped of scopes/tracers for introspection
         object.__setattr__(self, 'children', clean_clone(cloned).children)
         self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
@@ -150,11 +147,15 @@ def module_class_lift_transform(
       trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
       ret = trafo_fn(get_module_scopes(self), *args, **kwargs)
       return ret
-    transformed_fns[fn_name] = wrapped_fn
+    return wrapped_fn
+  transformed_fns = {fn_name: create_trans_fn(fn_name, fn_trafo_args)
+                     for fn_name, fn_trafo_args in class_trafo_args.items()}
+  transformed_fns['setup'] = lambda _: None
   # construct new dynamic class w. transformed methods
-  return type(transform.__name__.capitalize() + module_class.__name__,
-              (module_class,),
-              transformed_fns)
+  transformed_cls = type(transform.__name__.capitalize() + module_class.__name__,
+                         (module_class,),
+                         transformed_fns)
+  return transformed_cls
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
