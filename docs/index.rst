@@ -6,12 +6,13 @@
 Flax documentation
 ==================
 
-Flax is a neural network library and ecosystem for JAX that is designed for flexibility. Flax 
-is in use by a growing community
-of researchers and engineers at Google who happily use Flax for their
-daily research. 
+Flax is a neural network library and ecosystem for JAX that is
+designed for flexibility. Flax is in use by a growing community of
+researchers and engineers at Google who happily use Flax for their
+daily research.
 
-For a quick introduction and short example snippets, see our `README <https://github.com/google/flax/blob/master/README.md>`_.
+For a quick introduction and short example snippets, see our `README
+<https://github.com/google/flax/blob/master/README.md>`_.
 
 .. toctree::
    :maxdepth: 1

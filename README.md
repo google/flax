@@ -6,16 +6,39 @@
 
 [![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
 
-Please check our [full documentation](https://flax.readthedocs.io/) website to learn everything you need to know about Flax.
+**See our [full documentation](https://flax.readthedocs.io/)
+to learn everything you need to know about Flax.**
 
-**NOTE**: Flax is in use by a growing community
-of researchers and engineers at Google who happily use Flax for their
-daily research. The new Flax ["Linen" module API](https://github.com/google/flax/tree/master/flax/linen/README.md) is now stable and we recommend it for all new projects. The old `flax.nn` API will be deprecated. Please report
-any feature requests, issues, questions or concerns in our 
-[discussion forum](https://github.com/google/flax/discussions), or just let us know 
-what you're working on!
+Flax is developed by a group within the Brain Team in Google AI, in
+close collaboration with the JAX team. Flax is being used by a growing
+community of hundreds of folks in various Alphabet research departments
+for their daily work, as well as a [growing community
+of open source
+projects](https://github.com/google/flax/network/dependents?dependent_type=REPOSITORY).
 
-We expect to add some improvements to Flax, but we only expect minor API changes to the core API. We will use [Changelog](CHANGELOG.md) entries and deprecation warnings when possible.
+The Flax team's mission is to serve the growing JAX neural network
+research ecosystem -- both within Alphabet and with the broader , and to explore the use-cases where JAX shines. We
+use GitHub for almost all of our coordination and planning, as well as
+where we discuss upcoming design changes. We welcome feedback on any
+of our discussion, issue and pull request thread. We are in the
+process of moving some remaining internal design docs and conversation
+threads to GitHub discussions, issues and pull requests. We hope to
+increasingly engage with the needs and clarifications of the broader
+ecosystem. Please let us know how we can help!
+
+**NOTE**: The new Flax ["Linen" module
+API](https://github.com/google/flax/tree/master/flax/linen/README.md)
+is now stable and we recommend it for all new projects. The old
+`flax.nn` API will be deprecated.
+
+Please report any feature requests,
+issues, questions or concerns in our [discussion
+forum](https://github.com/google/flax/discussions), or just let us
+know what you're working on!
+
+We expect to add some improvements to Flax, but we only expect minor
+API changes to the core API. We will use [Changelog](CHANGELOG.md)
+entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
 
@@ -43,7 +66,7 @@ comes with everything you need to start your research, including:
 
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
 
-To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/), or visit our
+To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) or visit our
 [patterns](https://flax.readthedocs.io/en/latest/patterns/flax_patterns.html) page for additional concrete demonstrations of best practices.
 
 ```py
@@ -78,9 +101,9 @@ class CNN(nn.Module):
 
 ```py
 class AutoEncoder(Module):
-  encoder_widths: Iterable
-  decoder_widths: Iterable
-  input_shape: Tuple = None
+  encoder_widths: Sequence[int]
+  decoder_widths: Sequence[int]
+  input_shape: Tuple[int] = None
 
   def setup(self):
     self.encoder = MLP(self.encoder_widths)
@@ -90,7 +113,7 @@ class AutoEncoder(Module):
     return self.decode(self.encode(x))
 
   def encode(self, x):
-    assert x.shape[-len(self.input_shape):] == self.input_shape
+    assert x.shape[1:] == self.input_shape
     return self.encoder(jnp.reshape(x, (x.shape[0], -1)))
 
   def decode(self, z):
