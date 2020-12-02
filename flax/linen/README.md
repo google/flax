@@ -5,7 +5,7 @@ Moreover, Linen builds on a new "functional core", enabling direct usage of JAX 
   
 In Linen, Modules behave much closer to vanilla Python objects, while still letting you opt-in to the concise single-method pattern many of our users love.
 
-The Linen Module API is stable and currently recommended for new projects. We are already supporting users in the OSS community and within Google. Minor changes may come to the top-level `apply` and `init` patterns, which we will communicate clearly. We plan a few improvements, including writing up short design notes, adding more [design tests], and an API for interactive module instances.
+The Linen Module API is stable and currently recommended for new projects. We are already supporting users in the OSS community and within Google. Minor changes may come to the top-level `apply` and `init` patterns, which we will communicate clearly. We plan a few improvements, including writing up short design notes, adding more design tests (see last link below), and an API for interactive module instances.
 
 Please open a [discussion](https://github.com/google/flax/discussions) if you have any questions or thoughts.
 

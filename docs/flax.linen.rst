@@ -3,7 +3,9 @@ flax.linen package
 ==================
 
 .. currentmodule:: flax.linen
-.. automodule:: flax.linen
+
+Linen is the Flax Module system. Read more about our design goals in the `Linen README <https://github.com/google/flax/blob/master/flax/linen/README.md>`_.
+
 
 
 Module

@@ -19,7 +19,7 @@ If you don't know JAX but just want to learn what you need to use Flax, you can 
 
 ## Flax
 
-Flax is a high-performance neural network library for
+[Flax](https://github.com/google/flax) is a high-performance neural network library for
 JAX that is **designed for flexibility**:
 Try new forms of training by forking an example and by modifying the training
 loop, not by adding features to a framework.
@@ -37,43 +37,10 @@ comes with everything you need to start your research, including:
 
 * **Fast, tuned large-scale end-to-end examples**: CIFAR10, ResNet on ImageNet, Transformer LM1b
 
-## Code examples
+## Code Examples
 
-Flax enables you to write concise code for your models. Here we showcase multi-layer perceptron and a convolutional neural network (in their simplest form).
+See the [What does Flax look like](https://github.com/google/flax#what-does-flax-look-like) section of our README.
 
-```py
-class SimpleMLP(nn.Module):
-  """ A MLP model """
-  features: Sequence[int]
-
-  @nn.compact
-  def __call__(self, x):
-    for i, feat in enumerate(self.features):
-      x = nn.Dense(feat)(x)
-      if i != len(self.features) - 1:
-        x = nn.relu(x)
-    return x
-```
-
-```py
-class CNN(nn.Module):
-  """A simple CNN model."""
-
-  @nn.compact
-  def __call__(self, x):
-    x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-    x = nn.relu(x)
-    x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-    x = x.reshape((x.shape[0], -1))  # flatten
-    x = nn.Dense(features=256)(x)
-    x = nn.relu(x)
-    x = nn.Dense(features=10)(x)
-    x = nn.log_softmax(x)
-    return x
-```
 
 ## TPU support
 
