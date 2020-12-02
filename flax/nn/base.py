@@ -755,7 +755,7 @@ class TransparentModule(Module):
 class TruncatedModule(TransparentModule):
   """Wraps a Module and returns the requested intermediate outputs instead.
 
-  Check `Model.truncate_at` for a simple APU to get the intermediate outputs of
+  Check `Model.truncate_at` for a simple API to get the intermediate outputs of
   an existing Model.
   """
 
