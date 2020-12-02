@@ -67,10 +67,11 @@ python linen_examples/cloud/launch_gce.py \
 
 ## Training the imagenet example
 
-Note that you need to first prepare `imagenet2012` dataset. For this, download
-the data from http://image-net.org/ as described in the
-[tensorflow_datasets catalog](https://www.tensorflow.org/datasets/catalog/imagenet2012)
-and then prepare the dataset by running
+Note that you need to first prepare the `imagenet2012` dataset. For this,
+download the data from http://image-net.org/ as described in the
+[tensorflow_datasets catalog](https://www.tensorflow.org/datasets/catalog/imagenet2012).
+Then point the environment variable `$IMAGENET_DOWNLOAD_PATH` to the directory
+where the downloads are stored and prepare the dataset by running
 
 ```shell
 python -c "
