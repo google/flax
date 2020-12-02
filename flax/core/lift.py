@@ -29,7 +29,6 @@ from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
 from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, union_filters, intersect_filters, group_collections
-from .named_call import named_call_p
 
 from . import axes_scan
 
@@ -663,22 +662,13 @@ def named_call(fn: Callable[..., Any], name: str) -> Callable[..., Any]:
       scope = scope_fn(variable_groups, rng_groups)
       y = fn(scope, *args, **kwargs)
       return y, repack_fn(scope)
-    named = _named_call(named, name)
+    named = jax.named_call(named, name=name)
     return named(variable_groups, rng_groups)
   lifted = pack(inner, (True,), (True,), (True,))
   def wrapper(scope, *args, **kwargs):
     return lifted(scope, args, kwargs)
   return wrapper
 
-
-def _named_call(f, name):
-  _, in_tree = jax.tree_flatten(())
-  def named_f(*args, **kwargs):
-    lu_f = jax.linear_util.wrap_init(lambda: f(*args, **kwargs))
-    flat_f, out_tree = jax.api_util.flatten_fun_nokwargs(lu_f, in_tree)
-    out_flat = named_call_p.bind(flat_f, name=name)
-    return jax.tree_unflatten(out_tree(), out_flat)
-  return named_f
 
 def _unzip2(xs):
   ys = tuple(zip(*xs))
