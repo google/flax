@@ -148,8 +148,7 @@ def module_class_lift_transform(
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
       trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
-      ret = trafo_fn(get_module_scopes(self), *args, **kwargs)
-      return ret
+      return trafo_fn(get_module_scopes(self), *args, **kwargs)
     transformed_fns[fn_name] = wrapped_fn
   # construct new dynamic class w. transformed methods
   return type(transform.__name__.capitalize() + module_class.__name__,

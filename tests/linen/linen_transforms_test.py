@@ -34,6 +34,9 @@ jax.config.enable_omnistaging()
 id_fn = lambda x: x
 
 
+
+
+
 class TransformedMLP(nn.Module):
   features: Sequence[int]
   transform: Callable = id_fn
@@ -134,6 +137,58 @@ class TransformTest(absltest.TestCase):
                      for i in np.arange(x2.shape[0])])
     y2 = vmap_model.apply(init_variables, x2)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
+
+  def test_vmap_setup(self):
+    class SimpleModuleWithSetupParameters(nn.Module):
+      def setup(self):
+        self.foo = self.param('foo', nn.initializers.ones, (2, 3))
+
+      def __call__(self, x):
+        return self.foo
+
+    def vmap(cls):
+      return nn.vmap(cls,
+                     in_axes=0,
+                     out_axes=None,
+                     variable_axes={'params': None},
+                     split_rngs={'params': False})
+
+    key = random.PRNGKey(3)
+    x = jnp.ones((4,))
+    vmapped_model = vmap(SimpleModuleWithSetupParameters)()
+    
+    init_variables = vmapped_model.init(key, x)
+    np.testing.assert_allclose(init_variables['params']['foo'], np.ones((2, 3)))
+
+    returned = vmapped_model.apply(init_variables, x)
+    np.testing.assert_allclose(returned, np.ones((2, 3)))
+
+
+  def test_vmap_setup_variable_axis(self):
+    class SimpleModuleWithSetupParameters(nn.Module):
+      def setup(self):
+        self.foo = self.param('foo', nn.initializers.ones, (2, 3))
+
+      def __call__(self, x):
+        return self.foo
+
+    def vmap(cls):
+      return nn.vmap(cls,
+                     in_axes=0,
+                     out_axes=0,
+                     variable_axes={'params': 0},
+                     split_rngs={'params': True})
+
+    key = random.PRNGKey(3)
+    x = jnp.ones((4,))
+    vmapped_model = vmap(SimpleModuleWithSetupParameters)()
+    
+    init_variables = vmapped_model.init(key, x)
+    np.testing.assert_allclose(init_variables['params']['foo'], np.ones((4, 2, 3)))
+
+    returned = vmapped_model.apply(init_variables, x)
+    np.testing.assert_allclose(returned, np.ones((4, 2, 3)))
+
 
   def test_vmap_decorated(self):
     key1, key2 = random.split(random.PRNGKey(3), 2)
