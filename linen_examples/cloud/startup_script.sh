@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -x
-
 # Replaced by launch_gce.py
 REPO='__REPO__'
 BRANCH='__BRANCH__'
@@ -26,6 +24,7 @@ tmux split-window
 tmux send "
 
 (
+  set -x
 
   [ -d flax ] || (
     git clone -b $BRANCH $REPO &&
@@ -37,10 +36,9 @@ tmux send "
 
     pip install -U pip &&
     pip install -e . &&
-    ( [[ $ACCELERATOR_TYPE =~ ^nvidia- ]] &&
-      pip install --upgrade jax jaxlib==0.1.55+cuda100 -f https://storage.googleapis.com/jax-releases/jax_releases.html ||
-      true
-    ) &&
+    if [[ $ACCELERATOR_TYPE =~ ^nvidia- ]]; then
+      pip install --upgrade jax jaxlib==0.1.57+cuda110 -f https://storage.googleapis.com/jax-releases/jax_releases.html
+    fi &&
 
     cd linen_examples/$EXAMPLE &&
     pip install -r requirements.txt &&
@@ -54,7 +52,6 @@ tmux send "
   TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$HOME/workdir_base/$NAME $ARGS &&
 
   gsutil cp -R $HOME/workdir_base/$NAME $GCS_WORKDIR_BASE
-
 
 ) 2>&1 | tee -a setup_train_log_${TIMESTAMP}.txt >(logger -t flax)
 

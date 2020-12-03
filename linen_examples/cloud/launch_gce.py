@@ -100,10 +100,12 @@ def generate_startup_file(vm_name: str) -> str:
 
 
 def launch_gce(*, vm_name: str, startup_script: str):
+  # Note : Use `gcloud compute images list --project ml-images` to get a list
+  # of available VM images.
   args = [
       'gcloud', 'compute', 'instances', 'create', vm_name,
       f'--project={FLAGS.project}', f'--zone={FLAGS.zone}',
-      '--image=c1-deeplearning-common-cu100-v20201015-ubuntu-1804',
+      '--image=c6-deeplearning-tf2-ent-2-3-cu110-v20201112-debian-10',
       '--image-project=ml-images', f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full', '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
