@@ -11,6 +11,7 @@ NAME='__EXAMPLE__/__NAME__/__TIMESTAMP__'
 ARGS='__ARGS__'
 GCS_WORKDIR_BASE='__GCS_WORKDIR_BASE__'
 TFDS_DATA_DIR='__TFDS_DATA_DIR__'
+ACCELERATOR_TYPE='__ACCELERATOR_TYPE__'
 
 HOME=/train
 
@@ -35,8 +36,11 @@ tmux send "
     . env/bin/activate &&
 
     pip install -U pip &&
-    pip install --upgrade jax jaxlib==0.1.55+cuda100 -f https://storage.googleapis.com/jax-releases/jax_releases.html &&
     pip install -e . &&
+    ( [[ $ACCELERATOR_TYPE =~ ^nvidia- ]] &&
+      pip install --upgrade jax jaxlib==0.1.55+cuda100 -f https://storage.googleapis.com/jax-releases/jax_releases.html ||
+      true
+    ) &&
 
     cd linen_examples/$EXAMPLE &&
     pip install -r requirements.txt &&

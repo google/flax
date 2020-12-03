@@ -91,6 +91,7 @@ def generate_startup_file(vm_name: str) -> str:
       ('__ARGS__', FLAGS.args),
       ('__GCS_WORKDIR_BASE__', FLAGS.gcs_workdir_base),
       ('__TFDS_DATA_DIR__', FLAGS.tfds_data_dir),
+      ('__ACCELERATOR_TYPE__', FLAGS.accelerator_type),
   ):
     startup_script_content = startup_script_content.replace(from_str, to_str)
   with open(startup_script_dst, 'w', encoding='utf8') as f:
