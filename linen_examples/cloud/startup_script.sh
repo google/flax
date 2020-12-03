@@ -36,7 +36,7 @@ tmux send "
 
     pip install -U pip &&
     pip install -e . &&
-    if [[ $ACCELERATOR_TYPE =~ ^nvidia- ]]; then
+    if [[ '$ACCELERATOR_TYPE' =~ ^nvidia- ]]; then
       pip install --upgrade jax jaxlib==0.1.57+cuda110 -f https://storage.googleapis.com/jax-releases/jax_releases.html
     fi &&
 
