@@ -102,5 +102,5 @@ python linen_examples/cloud/launch_gce.py \
   --branch=master \
   --example=imagenet \
   --args='--config=configs/v100_x8_mixed_precision.py' \
-  --name=mixed_precision
+  --name=v100_x8_mixed_precision
 ```
