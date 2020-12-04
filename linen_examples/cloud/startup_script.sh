@@ -49,9 +49,7 @@ tmux send "
   . env/bin/activate &&
   cd linen_examples/$EXAMPLE &&
 
-  TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$HOME/workdir_base/$NAME $ARGS &&
-
-  gsutil cp -R $HOME/workdir_base/$NAME $GCS_WORKDIR_BASE
+  TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$HOME/workdir_base/$NAME $ARGS
 
 ) 2>&1 | tee -a setup_train_log_${TIMESTAMP}.txt >(logger -t flax)
 
@@ -62,7 +60,7 @@ sleep 300 && sudo shutdown now
 tmux split-window -h
 tmux send "
 while true; do
-  gsutil rsync -x 'checkpoint_*' -r workdir_base $GCS_WORKDIR_BASE
+  gsutil rsync -r workdir_base $GCS_WORKDIR_BASE
   sleep 60
 done 2>&1 | tee -a gcs_rsync_${TIMESTAMP}.txt >(logger -t flax)
 " ENTER
