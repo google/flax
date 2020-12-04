@@ -13,8 +13,12 @@ ACCELERATOR_TYPE='__ACCELERATOR_TYPE__'
 
 HOME=/train
 
-echo 'tmux a' > /attach.sh
-chmod a+x /attach.sh
+# Login directly with:
+# gcloud compute ssh $VM -- /sudo_tmux_a.sh
+echo -e '#!/bin/bash\nsudo /tmux_a.sh' > /sudo_tmux_a.sh
+chmod a+x /sudo_tmux_a.sh
+echo -e '#!/bin/bash\ntmux a' > /tmux_a.sh
+chmod a+x /tmux_a.sh
 
 mkdir -p $HOME
 cd $HOME
