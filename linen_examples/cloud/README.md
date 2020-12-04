@@ -104,3 +104,15 @@ python linen_examples/cloud/launch_gce.py \
   --args='--config=configs/v100_x8_mixed_precision.py' \
   --name=v100_x8_mixed_precision
 ```
+
+## Tips
+
+You can add `--connect` to above commands to directly land in the training
+session once the VM is ready. This is very helpful for debugging when changing
+things. Note that the VM automatically shuts down after 5 minutes of inactivity,
+both in case of success as in case of failure.
+
+When tweaking the startup script or individual arguments, it is often helpful to
+connect to the VM, stop the scripts and end the tmux session, and then copy and
+paste the contents of the generated `flax-...-startup_script.sh`, after
+modifying these contents accordingly.
