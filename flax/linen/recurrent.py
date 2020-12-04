@@ -196,7 +196,7 @@ class OptimizedLSTMCell(RNNCellBase):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
-  def __call__(self, carry: Tuple[Array], 
+  def __call__(self, carry: Tuple[Array, Array], 
                inputs: Array) -> Tuple[Tuple[Array, Array], Array]:
     r"""A long short-term memory (LSTM) cell.
 
