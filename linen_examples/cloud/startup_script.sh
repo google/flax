@@ -1,5 +1,7 @@
 #!/bin/bash
 
+HOME=/train
+
 # Replaced by launch_gce.py
 REPO='__REPO__'
 BRANCH='__BRANCH__'
@@ -10,8 +12,8 @@ ARGS='__ARGS__'
 GCS_WORKDIR_BASE='__GCS_WORKDIR_BASE__'
 TFDS_DATA_DIR='__TFDS_DATA_DIR__'
 ACCELERATOR_TYPE='__ACCELERATOR_TYPE__'
+WORKDIR="$HOME/workdir_base/$NAME"
 
-HOME=/train
 
 # Login directly with:
 # gcloud compute ssh $VM -- /sudo_tmux_a.sh
@@ -53,9 +55,9 @@ tmux send "
   . env/bin/activate &&
   cd linen_examples/$EXAMPLE &&
 
-  TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$HOME/workdir_base/$NAME $ARGS
+  TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$WORKDIR $ARGS
 
-) 2>&1 | tee -a setup_train_log_${TIMESTAMP}.txt >(logger -t flax)
+) 2>&1 | tee -a $WORKDIR/setup_train_log_${TIMESTAMP}.txt
 
 echo
 echo WILL SHUT DOWN IN 5 MIN ...
@@ -66,5 +68,5 @@ tmux send "
 while true; do
   gsutil rsync -r workdir_base $GCS_WORKDIR_BASE
   sleep 60
-done 2>&1 | tee -a gcs_rsync_${TIMESTAMP}.txt >(logger -t flax)
+done 2>&1 | tee -a $WORKDIR/gcs_rsync_${TIMESTAMP}.txt
 " ENTER
