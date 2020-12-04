@@ -149,7 +149,7 @@ class DummyDense(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   precision: Any = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = linear.default_kernel_init
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
   @compact
