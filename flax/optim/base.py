@@ -62,7 +62,6 @@ Distributed training only requires a few extra additions::
 
 """
 
-import abc
 from typing import Any
 import warnings
 
@@ -79,7 +78,7 @@ from ..nn import base
 
 @struct.dataclass
 class OptimizerState:
-  step: int
+  step: jnp.ndarray
   param_states: Any
 
 
@@ -89,7 +88,6 @@ class OptimizerDef:
   def __init__(self, hyper_params):
     self.hyper_params = hyper_params
 
-  @abc.abstractmethod
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
     """Apply a gradient for a single parameter.
 
@@ -102,9 +100,8 @@ class OptimizerDef:
     Returns:
       A tuple containing the new parameter and the new state.
     """
-    pass
+    raise NotImplementedError()
 
-  @abc.abstractmethod
   def init_param_state(self, param):
     """Initializes the state for a parameter.
 
@@ -113,7 +110,7 @@ class OptimizerDef:
     Returns:
       A named tuple containing the initial optimization state for the parameter.
     """
-    pass
+    raise NotImplementedError()
 
   def apply_gradient(self, hyper_params, params, state, grads):
     """Applies a gradient for a set of parameters.
@@ -141,7 +138,7 @@ class OptimizerDef:
 
   def init_state(self, params):
     param_states = jax.tree_map(self.init_param_state, params)
-    state = OptimizerState(0, param_states)
+    state = OptimizerState(jnp.asarray(0, dtype=jnp.int32), param_states)
     return state
 
   def update_hyper_params(self, **hyper_param_overrides):
@@ -215,13 +212,12 @@ class _NoAux:
   pass
 
 
-@struct.dataclass
-class Optimizer:
+class Optimizer(struct.PyTreeNode):
   """Wraps an optimizer with its hyper_params, state, and model parameters."""
 
   optimizer_def: OptimizerDef = struct.field(pytree_node=False)
-  state: Any
-  target: Any
+  state: Any = struct.field(pytree_node=True)
+  target: Any = struct.field(pytree_node=True)
 
   def apply_gradient(self, grads, **hyper_param_overrides):
     """Applies a pytree of gradients to the target.
@@ -500,12 +496,15 @@ class ModelParamTraversal(traverse_util.Traversal):
 
   def update(self, fn, inputs):
     self._check_inputs(inputs)
-    flat_dict = traverse_util.flatten_dict(inputs.params)
+    flat_dict = traverse_util.flatten_dict(inputs.params, keep_empty_nodes=True)
     new_dict = {}
     for key, value in _sorted_items(flat_dict):
-      path = '/' + '/'.join(key)
-      if self._filter_fn(path, value):
-        value = fn(value)
+      # empty_node is not an actual leave. It's just a stub for empty nodes
+      # in the nested dict.
+      if value is not traverse_util.empty_node:
+        path = '/' + '/'.join(key)
+        if self._filter_fn(path, value):
+          value = fn(value)
       new_dict[key] = value
     new_params = traverse_util.unflatten_dict(new_dict)
     return inputs.replace(params=new_params)

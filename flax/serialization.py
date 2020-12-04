@@ -178,7 +178,7 @@ register_serialization_state(_NamedTuple,
 # https://github.com/msgpack/msgpack/blob/master/spec.md
 #
 # - ndarrays and DeviceArrays are serialized to nested msgpack-encoded string
-#   of (shape-tuple, full-dtype-string (e.g. '<i8'), row-major array-bytes).
+#   of (shape-tuple, dtype-name (e.g. 'float32'), row-major array-bytes).
 #   Note: only simple ndarray types are supported, no objects or fields.
 #
 # - native complex scalars are converted to nested msgpack-encoded tuples
@@ -192,15 +192,23 @@ def _ndarray_to_bytes(arr):
   if arr.dtype.hasobject or arr.dtype.isalignedstruct:
     raise ValueError('Object and structured dtypes not supported '
                      'for serialization of ndarrays.')
-  tpl = (arr.shape, arr.dtype.str, arr.tobytes('C'))
+  tpl = (arr.shape, arr.dtype.name, arr.tobytes('C'))
   return msgpack.packb(tpl, use_bin_type=True)
+
+
+def _dtype_from_name(name):
+  """Handle JAX bfloat16 dtype correctly."""
+  if name == b'bfloat16':
+    return jax.numpy.bfloat16
+  else:
+    return np.dtype(name)
 
 
 def _ndarray_from_bytes(data):
   """Load ndarray from simple msgpack encoding."""
-  shape, dtype_str, buffer = msgpack.unpackb(data, raw=True)
+  shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
   return np.frombuffer(buffer,
-                       dtype=dtype_str,
+                       dtype=_dtype_from_name(dtype_name),
                        count=-1,
                        offset=0).reshape(shape, order='C')
 
@@ -209,12 +217,16 @@ class _MsgpackExtType(enum.IntEnum):
   """Messagepack custom type ids."""
   ndarray = 1
   native_complex = 2
+  npscalar = 3
 
 
 def _msgpack_ext_pack(x):
   """Messagepack encoders for custom types."""
   if isinstance(x, (np.ndarray, jax.xla.DeviceArray)):
     return msgpack.ExtType(_MsgpackExtType.ndarray, _ndarray_to_bytes(x))
+  if np.issctype(type(x)):
+    # pack scalar as ndarray
+    return msgpack.ExtType(_MsgpackExtType.npscalar, _ndarray_to_bytes(np.asarray(x)))
   elif isinstance(x, complex):
     return msgpack.ExtType(_MsgpackExtType.native_complex,
                            msgpack.packb((x.real, x.imag)))
@@ -228,6 +240,9 @@ def _msgpack_ext_unpack(code, data):
   elif code == _MsgpackExtType.native_complex:
     complex_tuple = msgpack.unpackb(data)
     return complex(complex_tuple[0], complex_tuple[1])
+  elif code == _MsgpackExtType.npscalar:
+    ar = _ndarray_from_bytes(data)
+    return ar[()]  # unpack ndarray to scalar
   return msgpack.ExtType(code, data)
 
 

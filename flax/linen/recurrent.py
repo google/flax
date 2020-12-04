@@ -25,12 +25,12 @@ THe RNNCell modules are designed to fit in with the scan function in JAX::
 
 import abc
 from functools import partial
-from typing import (Any, Callable, Tuple)
+from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
-from .module import Module, compact
-from . import activation
-from . import initializers
-from . import linear
+from flax.linen.module import Module, compact
+from flax.linen.activation import sigmoid, tanh
+from flax.linen.initializers import orthogonal, zeros
+from flax.linen.linear import Conv, Dense, default_kernel_init
 
 from jax import numpy as jnp
 from jax import lax
@@ -47,7 +47,7 @@ class RNNCellBase(Module):
 
   @staticmethod
   @abc.abstractmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:
@@ -86,11 +86,11 @@ class LSTMCell(RNNCellBase):
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
   """
-  gate_fn: Callable = activation.sigmoid
-  activation_fn: Callable = activation.tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = linear.default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  gate_fn: Callable = sigmoid
+  activation_fn: Callable = tanh
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, carry, inputs):
@@ -108,12 +108,12 @@ class LSTMCell(RNNCellBase):
     c, h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(linear.Dense,
+    dense_h = partial(Dense,
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
-    dense_i = partial(linear.Dense,
+    dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
                       kernel_init=self.kernel_init)
@@ -126,7 +126,7 @@ class LSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:
@@ -305,13 +305,13 @@ class GRUCell(RNNCellBase):
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
   """
-  gate_fn: Callable = activation.sigmoid
-  activation_fn: Callable = activation.tanh
+  gate_fn: Callable = sigmoid
+  activation_fn: Callable = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      linear.default_kernel_init)
+      default_kernel_init)
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      initializers.orthogonal())
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+      orthogonal())
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, carry, inputs):
@@ -329,12 +329,12 @@ class GRUCell(RNNCellBase):
     h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(linear.Dense,
+    dense_h = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
-    dense_i = partial(linear.Dense,
+    dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.kernel_init,
@@ -348,7 +348,7 @@ class GRUCell(RNNCellBase):
     return new_h, new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:
@@ -361,3 +361,105 @@ class GRUCell(RNNCellBase):
     """
     mem_shape = batch_dims + (size,)
     return init_fn(rng, mem_shape)
+
+
+class ConvLSTM(RNNCellBase):
+  r"""A convolutional LSTM cell.
+
+  The implementation is based on xingjian2015convolutional.
+  Given x_t and the previous state (h_{t-1}, c_{t-1})
+  the core computes
+
+  .. math::
+
+     \begin{array}{ll}
+     i_t = \sigma(W_{ii} * x_t + W_{hi} * h_{t-1} + b_i) \\
+     f_t = \sigma(W_{if} * x_t + W_{hf} * h_{t-1} + b_f) \\
+     g_t = \tanh(W_{ig} * x_t + W_{hg} * h_{t-1} + b_g) \\
+     o_t = \sigma(W_{io} * x_t + W_{ho} * h_{t-1} + b_o) \\
+     c_t = f_t c_{t-1} + i_t g_t \\
+     h_t = o_t \tanh(c_t)
+     \end{array}
+
+  where * denotes the convolution operator;
+  i_t, f_t, o_t are input, forget and output gate activations,
+  and g_t is a vector of cell updates.
+
+  Notes:
+    Forget gate initialization:
+      Following jozefowicz2015empirical we add 1.0 to b_f
+      after initialization in order to reduce the scale of forgetting in
+      the beginning of the training.
+
+  Args:
+    features: number of convolution filters.
+    kernel_size: shape of the convolutional kernel.
+    strides: a sequence of `n` integers, representing the inter-window
+      strides.
+    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
+      of `n` `(low, high)` integer pairs that give the padding to apply before
+      and after each spatial dimension.
+    bias: whether to add a bias to the output (default: True).
+    dtype: the dtype of the computation (default: float32).
+  """
+
+  features: int
+  kernel_size: Sequence[int]
+  strides: Optional[Sequence[int]] = None
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  use_bias: bool = True
+  dtype: Dtype = jnp.float32
+
+  @compact
+  def __call__(self, carry, inputs):
+    """Constructs a convolutional LSTM.
+
+    Args:
+      carry: the hidden state of the Conv2DLSTM cell,
+        initialized using `Conv2DLSTM.initialize_carry`.
+      inputs: input data with dimensions (batch, spatial_dims..., features).
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    c, h = carry
+    input_to_hidden = partial(Conv,
+                              features=4*self.features,
+                              kernel_size=self.kernel_size,
+                              strides=self.strides,
+                              padding=self.padding,
+                              use_bias=self.use_bias,
+                              dtype=self.dtype,
+                              name='ih')
+
+    hidden_to_hidden = partial(Conv,
+                               features=4*self.features,
+                               kernel_size=self.kernel_size,
+                               strides=self.strides,
+                               padding=self.padding,
+                               use_bias=self.use_bias,
+                               dtype=self.dtype,
+                               name='hh')
+
+    gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)
+    i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
+
+    f = sigmoid(f + 1)
+    new_c = f * c + sigmoid(i) * jnp.tanh(g)
+    new_h = sigmoid(o) * jnp.tanh(new_c)
+    return (new_c, new_h), new_h
+
+  @staticmethod
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+    """initialize the RNN cell carry.
+
+    Args:
+      rng: random number generator passed to the init_fn.
+      batch_dims: a tuple providing the shape of the batch dimensions.
+      size: the input_shape + (features,).
+      init_fn: initializer function for the carry.
+    Returns:
+      An initialized carry for the given RNN cell.
+    """
+    key1, key2 = random.split(rng)
+    mem_shape = batch_dims + size
+    return init_fn(key1, mem_shape), init_fn(key2, mem_shape)

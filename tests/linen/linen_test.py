@@ -221,6 +221,24 @@ class RecurrentTest(absltest.TestCase):
         'hz': {'kernel': (4, 4)},
         'hn': {'kernel': (4, 4), 'bias': (4,)},
     })
+
+  def test_convlstm(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (2, 4, 4, 3))
+    c0, h0 = nn.ConvLSTM.initialize_carry(rng, (2,), (4, 4, 6))
+    self.assertEqual(c0.shape, (2, 4, 4, 6))
+    self.assertEqual(h0.shape, (2, 4, 4, 6))
+    lstm = nn.ConvLSTM(features=6, kernel_size=(3, 3))
+    (carry, y), initial_params = lstm.init_with_output(key2, (c0, h0), x)
+    self.assertEqual(carry[0].shape, (2, 4, 4, 6))
+    self.assertEqual(carry[1].shape, (2, 4, 4, 6))
+    np.testing.assert_allclose(y, carry[1])
+    param_shapes = jax.tree_map(np.shape, initial_params['params'])
+    self.assertEqual(param_shapes, {
+        'hh': {'bias': (6*4,), 'kernel': (3, 3, 6, 6*4)},
+        'ih': {'bias': (6*4,), 'kernel': (3, 3, 3, 6*4)},
+    })
     
   def test_optimized_lstm_cell_matches_regular(self):
 
@@ -245,4 +263,8 @@ class RecurrentTest(absltest.TestCase):
     (_, y_opt), lstm_opt_params = lstm_opt.init_with_output(key2, (c0, h0), x)    
     
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)
-    jtu.check_eq(lstm_params, lstm_opt_params)    
+    jtu.check_eq(lstm_params, lstm_opt_params)      
+
+
+if __name__ == '__main__':
+  absltest.main()

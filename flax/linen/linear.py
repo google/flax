@@ -15,11 +15,12 @@
 """Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
+from dataclasses import field
 
 from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
 
-from .module import Module, compact
-from . import initializers
+from flax.linen.module import Module, compact
+from flax.linen.initializers import lecun_normal, variance_scaling, zeros
 
 from jax import lax
 import jax.numpy as jnp
@@ -32,7 +33,7 @@ Dtype = Any  # this could be a real type?
 Array = Any
 
 
-default_kernel_init = initializers.lecun_normal()
+default_kernel_init = lecun_normal()
 
 
 def _normalize_axes(axes, ndim):
@@ -47,7 +48,7 @@ class DenseGeneral(Module):
       features: tuple with numbers of output features.
       axis: tuple with axes to apply the transformation on.
       batch_dims: tuple with batch axes.
-      bias: whether to add a bias to the output (default: True).
+      use_bias: whether to add a bias to the output (default: True).
       dtype: the dtype of the computation (default: float32).
       kernel_init: initializer function for the weight matrix.
       bias_init: initializer function for the bias.
@@ -60,7 +61,7 @@ class DenseGeneral(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: Any = None
 
   def setup(self):
@@ -142,7 +143,7 @@ class Dense(Module):
 
   Args:
     features: the number of output features.
-    bias: whether to add a bias to the output (default: True).
+    use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
@@ -154,7 +155,7 @@ class Dense(Module):
   dtype: Any = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -195,7 +196,9 @@ class Conv(Module):
 
   Args:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer. For all other cases, it must
+      be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -219,7 +222,7 @@ class Conv(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Sequence[int]
+  kernel_size: Union[int, Sequence[int]]
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   input_dilation: Optional[Sequence[int]] = None
@@ -229,7 +232,7 @@ class Conv(Module):
   dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -244,12 +247,22 @@ class Conv(Module):
 
     inputs = jnp.asarray(inputs, self.dtype)
 
+    if isinstance(self.kernel_size, int):
+      kernel_size = (self.kernel_size,)
+    else:
+      kernel_size = self.kernel_size
+
+    is_single_input = False
+    if inputs.ndim == len(kernel_size) + 1:
+      is_single_input = True
+      inputs = jnp.expand_dims(inputs, axis=0)
+
     if self.strides is None:
       self.strides = (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
     assert in_features % self.feature_group_count == 0
-    kernel_shape = self.kernel_size + (
+    kernel_shape = kernel_size + (
         in_features // self.feature_group_count, self.features)
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
@@ -266,6 +279,8 @@ class Conv(Module):
         feature_group_count=self.feature_group_count,
         precision=self.precision)
 
+    if is_single_input:
+      y = jnp.squeeze(y, axis=0)
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
@@ -278,7 +293,9 @@ class ConvTranspose(Module):
 
   Args:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer. For all other cases, it must
+      be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
@@ -296,7 +313,7 @@ class ConvTranspose(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Sequence[int]
+  kernel_size: Union[int, Sequence[int]]
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
@@ -304,7 +321,7 @@ class ConvTranspose(Module):
   dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -318,10 +335,21 @@ class ConvTranspose(Module):
       The convolved data.
     """
     inputs = jnp.asarray(inputs, self.dtype)
+
+    if isinstance(self.kernel_size, int):
+      kernel_size = (self.kernel_size,)
+    else:
+      kernel_size = self.kernel_size
+
+    is_single_input = False
+    if inputs.ndim == len(kernel_size) + 1:
+      is_single_input = True
+      inputs = jnp.expand_dims(inputs, axis=0)
+
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
-    kernel_shape = self.kernel_size + (in_features, self.features)
+    kernel_shape = kernel_size + (in_features, self.features)
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
 
@@ -332,6 +360,8 @@ class ConvTranspose(Module):
                            rhs_dilation=self.kernel_dilation,
                            precision=self.precision)
 
+    if is_single_input:
+      y = jnp.squeeze(y, axis=0)
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
@@ -339,9 +369,8 @@ class ConvTranspose(Module):
     return y
 
 
-default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
+default_embed_init = variance_scaling(1.0, 'fan_in', 'normal',
                                                    out_axis=0)
-
 
 class Embed(Module):
   """Embedding Module.
@@ -349,17 +378,22 @@ class Embed(Module):
 
   Args:
     num_embeddings: number of embeddings.
-    features: Number of feature dimensions for each embedding.
+    features: number of feature dimensions for each embedding.
+    dtype: the dtype of the embedding vectors (default: float32).
     embedding_init: embedding initializer.
   """
   num_embeddings: int
   features: int
+  dtype: Dtype = jnp.float32
   embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
+
+  embedding: Array = field(init=False)
 
   def setup(self):
     self.embedding = self.param('embedding',
                                 self.embedding_init,
-                                (self.num_embeddings, self.features))
+                                (self.num_embeddings, self.features),
+                                self.dtype)
 
   def __call__(self, inputs):
     """Embeds the inputs along the last dimension.
@@ -371,7 +405,7 @@ class Embed(Module):
       Output which is embedded input data.  The output shape follows the input,
       with an additional `features` dimension appended.
     """
-    if inputs.dtype not in [jnp.int32, jnp.int64, jnp.uint32, jnp.uint64]:
+    if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
     return self.embedding[inputs]
 

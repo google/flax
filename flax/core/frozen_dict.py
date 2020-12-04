@@ -14,13 +14,22 @@
 
 """Frozen Dictionary."""
 
-from typing import TypeVar, Mapping, Dict
+from typing import Any, TypeVar, Mapping, Dict, Tuple
 
-import jax
 from flax import serialization
+import jax
+
 
 K = TypeVar('K')
 V = TypeVar('V')
+
+
+def _indent(x, num_spaces):
+  indent_str = ' ' * num_spaces
+  lines = x.split('\n')
+  assert lines[-1] == ''
+  # skip the final line because it's empty and should not be indented.
+  return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
 
 
 @jax.tree_util.register_pytree_node_class
@@ -28,10 +37,16 @@ class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
   __slots__ = ('_dict', '_hash')
 
-  def __init__(self, *args, **kwargs):
-    self._dict = dict(*args, **kwargs)
+  def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):
+    # make sure the dict is as
+    xs = dict(*args, **kwargs)
+    if __unsafe_skip_copy__:
+      self._dict = xs
+    else:
+      self._dict = _prepare_freeze(xs)
+
     self._hash = None
-    
+
   def __getitem__(self, key):
     v = self._dict[key]
     if isinstance(v, dict):
@@ -51,7 +66,21 @@ class FrozenDict(Mapping[K, V]):
     return len(self._dict)
 
   def __repr__(self):
-    return 'FrozenDict(%r)' % unfreeze(self._dict)
+    return self.pretty_repr()
+
+  def pretty_repr(self, num_spaces=4):
+    """Returns an indented representation of the nested dictionary."""
+    def pretty_dict(x):
+      if not isinstance(x, dict):
+        return repr(x)
+      rep = ''
+      for key, val in x.items():
+        rep += f'{key}: {pretty_dict(val)},\n'
+      if rep:
+        return '{\n' + _indent(rep, num_spaces) + '}'
+      else:
+        return '{}'
+    return f'FrozenDict({pretty_dict(self._dict)})'
 
   def __hash__(self):
     if self._hash is None:
@@ -61,12 +90,31 @@ class FrozenDict(Mapping[K, V]):
       self._hash = h
     return self._hash
 
-  def copy(self, **add_or_replace):
-    return type(self)(self, **add_or_replace)
+  def copy(self, add_or_replace: Mapping[K, V]) -> 'FrozenDict[K, V]':
+    """Create a new FrozenDict with additional or replaced entries."""
+    return type(self)(self, **unfreeze(add_or_replace))
 
   def items(self):
     for key in self._dict:
       yield (key, self[key])
+
+  def pop(self, key: K) -> Tuple['FrozenDict[K, V]', V]:
+    """Create a new FrozenDict where one entry is removed.
+
+    Example::
+
+      state, params = variables.pop('params')
+
+    Args:
+      key: the key to remove from the dict
+    Returns:
+      A pair with the new FrozenDict and the removed value.
+    """
+    value = self[key]
+    new_dict = dict(self._dict)
+    new_dict.pop(key)
+    new_self = type(self)(new_dict)
+    return new_self, value
 
   def unfreeze(self) -> Dict[K, V]:
     return unfreeze(self)
@@ -76,35 +124,51 @@ class FrozenDict(Mapping[K, V]):
 
   @classmethod
   def tree_unflatten(cls, _, data):
-    return cls(*data)
+    # data is already deep copied due to tree map mechanism
+    # we can skip the deep copy in the constructor
+    return cls(*data, __unsafe_skip_copy__=True)
 
 
-def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
+def _prepare_freeze(xs: Any) -> Any:
+  """Deep copy unfrozen dicts to make the dictionary FrozenDict safe."""
+  if isinstance(xs, FrozenDict):
+    # we can safely ref share the internal state of a FrozenDict
+    # because it is immutable.
+    return xs._dict  # pylint: disable=protected-access
+  if not isinstance(xs, dict):
+    # return a leaf as is.
+    return xs
+  # recursively copy dictionary to avoid ref sharing
+  return {key: _prepare_freeze(val) for key, val in xs.items()}
+
+
+def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
   """Freeze a nested dict.
 
   Makes a nested `dict` immutable by transforming it into `FrozenDict`.
   """
-  # Turn the nested FrozenDict into a dict. This way the internal data structure
-  # of FrozenDict does not contain any FrozenDicts.
-  # instead we create those lazily in `__getitem__`.
-  # As a result tree_flatten/unflatten will be fast
-  # because it operates on native dicts.
-  xs = unfreeze(xs)
   return FrozenDict(xs)
 
 
-def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
+def unfreeze(x: FrozenDict[Any, Any]) -> Dict[Any, Any]:
   """Unfreeze a FrozenDict.
 
   Makes a mutable copy of a `FrozenDict` mutable by transforming
   it into (nested) dict.
   """
-  if not isinstance(x, (FrozenDict, dict)):
+  if isinstance(x, FrozenDict):
+    # deep copy internal state of a FrozenDict
+    # the dict branch would also work here but
+    # it is much less performant because jax.tree_map
+    # uses an optimized C implementation.
+    return jax.tree_map(lambda y: y, x._dict)
+  elif isinstance(x, dict):
+    ys = {}
+    for key, value in x.items():
+      ys[key] = unfreeze(value)
+    return ys
+  else:
     return x
-  ys = {}
-  for key, value in x.items():
-    ys[key] = unfreeze(value)
-  return ys
 
 
 def _frozen_dict_state_dict(xs):
@@ -113,8 +177,8 @@ def _frozen_dict_state_dict(xs):
 
 def _restore_frozen_dict(xs, states):
   return FrozenDict(
-    {key: serialization.from_state_dict(value, states[key])
-     for key, value in xs.items()})
+      {key: serialization.from_state_dict(value, states[key])
+       for key, value in xs.items()})
 
 
 serialization.register_serialization_state(

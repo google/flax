@@ -166,8 +166,35 @@ class SerializationTest(absltest.TestCase):
                      'complex', 'bool']
     onp.random.seed(0)
     for dtype in normal_dtypes:
+      v = onp.random.uniform(-100, 100, size=()).astype(dtype)[()]
+      restored_v = serialization.msgpack_restore(
+            serialization.msgpack_serialize(v))
+      self.assertEqual(restored_v.dtype, v.dtype)
+      onp.testing.assert_array_equal(restored_v, v)
+
       for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
         arr = onp.random.uniform(-100, 100, size=shape).astype(dtype)
+        restored_arr = serialization.msgpack_restore(
+            serialization.msgpack_serialize(arr))
+        self.assertEqual(restored_arr.dtype, arr.dtype)
+        onp.testing.assert_array_equal(restored_arr, arr)
+
+  def test_jax_numpy_serialization(self):
+    jax_dtypes = [jnp.bool_, jnp.uint8, jnp.uint16, jnp.uint32,
+                  jnp.int8, jnp.int16, jnp.int32,
+                  jnp.bfloat16, jnp.float16, jnp.float32,
+                  jnp.complex64]
+    for dtype in jax_dtypes:
+      v = jnp.array(
+            onp.random.uniform(-100, 100, size=())).astype(dtype)[()]
+      restored_v = serialization.msgpack_restore(
+          serialization.msgpack_serialize(v))
+      self.assertEqual(restored_v.dtype, v.dtype)
+      onp.testing.assert_array_equal(restored_v, v)
+
+      for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
+        arr = jnp.array(
+            onp.random.uniform(-100, 100, size=shape)).astype(dtype)
         restored_arr = serialization.msgpack_restore(
             serialization.msgpack_serialize(arr))
         self.assertEqual(restored_arr.dtype, arr.dtype)

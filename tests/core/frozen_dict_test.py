@@ -34,7 +34,13 @@ class FrozenDictTest(absltest.TestCase):
     frozen = FrozenDict(xs)
     frozen2 = jax.tree_map(lambda x: x + x, frozen)
     self.assertEqual(unfreeze(frozen2), {'a': 2, 'b': {'c': 4}})
-  
+
+  def test_frozen_dict_pop(self):
+    xs = {'a': 1, 'b': {'c': 2}}
+    b, a = FrozenDict(xs).pop('a')
+    self.assertEqual(a, 1)
+    self.assertEqual(unfreeze(b), {'b': {'c': 2}})
+
   def test_frozen_dict_partially_maps(self):
     x = jax.tree_multimap(
         lambda a, b: (a, b),
@@ -51,6 +57,21 @@ class FrozenDictTest(absltest.TestCase):
     items = list(freeze(xs).items())
 
     self.assertEqual(items, [('a', 1), ('b', freeze(xs['b']))])
+
+
+  def test_frozen_dict_repr(self):
+    expected = (
+"""FrozenDict({
+    a: 1,
+    b: {
+        c: 2,
+        d: {},
+    },
+})""")
+
+    xs = FrozenDict({'a': 1, 'b': {'c': 2, 'd': {}}})
+    self.assertEqual(repr(xs), expected)
+    self.assertEqual(repr(FrozenDict()), 'FrozenDict({})')
 
 
 if __name__ == '__main__':

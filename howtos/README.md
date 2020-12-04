@@ -1,4 +1,3 @@
-# FLAX HOWTOs
+# FLAX HOWTOs (deprecated)
 
-See here:
-https://flax.readthedocs.io/en/latest/howtos/index.html
+[TODO](https://github.com/google/flax/issues/660): Rewrite these as [Flax Patterns](https://flax.readthedocs.io/en/latest/patterns/flax_patterns.html)

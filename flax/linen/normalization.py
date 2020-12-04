@@ -20,7 +20,7 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-from flax.linen import Module, compact
+from flax.linen.module import Module, compact
 
 
 PRNGKey = Any

@@ -23,11 +23,14 @@ def is_leaf(x):
   return tree_util.treedef_is_leaf(tree_util.tree_flatten(x)[1])
 
 
+# TODO(jheek): remove pytype hack, probably the MutableMapping
+#              inheritance should be dropped.
+
 # We subclass MutableMapping for automatic dict-like utility fns.
 # We subclass dict so that freeze, unfreeze work transparently:
 # i.e freeze(DotGetter(d)) == freeze(d)
 #     unfreeze(DotGetter(d)) == unfreeze(d)
-class DotGetter(MutableMapping, dict):
+class DotGetter(MutableMapping, dict):  # pytype: disable=mro-error
   """Dot-notation helper for interactive access of variable trees."""
   __slots__ = ('_data',)
 

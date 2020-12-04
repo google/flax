@@ -126,6 +126,7 @@ class ModelParamTraversalTest(absltest.TestCase):
                 'kernel': 3,
                 'bias': 4,
             },
+            'z': {},
         },
     }
     names = []
@@ -147,6 +148,7 @@ class ModelParamTraversalTest(absltest.TestCase):
                 'kernel': 6,
                 'bias': 4,
             },
+            'z': {}
         },
     }
     expected_model = nn.Model(None, expected_params)
@@ -156,7 +158,7 @@ class ModelParamTraversalTest(absltest.TestCase):
 class MultiOptimizerTest(absltest.TestCase):
 
   def test_multi_optimizer(self):
-    params = {'a': 0., 'b': 0.}
+    params = {'a': 0., 'b': 0., 'c': {}}
     opt_a = optim.GradientDescent(learning_rate=1.)
     opt_b = optim.GradientDescent(learning_rate=10.)
     t_a = traverse_util.t_identity['a']
@@ -170,10 +172,10 @@ class MultiOptimizerTest(absltest.TestCase):
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = [optim.OptimizerState(0, [()])] * 2
     self.assertEqual(state, expected_state)
-    grads = {'a': -1., 'b': -2.}
+    grads = {'a': -1., 'b': -2., 'c': {}}
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
-    expected_params = {'a': 1., 'b': 20.}
+    expected_params = {'a': 1., 'b': 20., 'c': {}}
     expected_state = [optim.OptimizerState(1, [()])] * 2
     self.assertEqual(new_state, expected_state)
     self.assertEqual(new_params, expected_params)
@@ -181,7 +183,7 @@ class MultiOptimizerTest(absltest.TestCase):
     hp = optimizer_def.update_hyper_params(learning_rate=2.)
     new_params, new_state = optimizer_def.apply_gradient(
         hp, params, state, grads)
-    expected_params = {'a': 2., 'b': 4.}
+    expected_params = {'a': 2., 'b': 4., 'c': {}}
     self.assertEqual(new_params, expected_params)
 
 
@@ -283,7 +285,7 @@ class AdafactorTest(absltest.TestCase):
     state = optimizer_def.init_state(params)
 
     expected_hyper_params = _AdafactorHyperParams(0.1, True, True,
-                                                  None, 0.8, 1.0, None, 0,
+                                                  None, 0.8, 0, 1.0, None, 0,
                                                   1e-30, 1e-3)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
@@ -299,7 +301,7 @@ class AdafactorTest(absltest.TestCase):
     state = optimizer_def.init_state(params)
 
     expected_hyper_params = _AdafactorHyperParams(0.1, True, True,
-                                                  0.0, 0.8, 1.0, None, 32,
+                                                  0.0, 0.8, 0, 1.0, None, 32,
                                                   1e-30, 1e-3)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
@@ -410,13 +412,28 @@ class RMSPropTest(absltest.TestCase):
     params = onp.zeros((1,))
     optimizer_def = optim.RMSProp(learning_rate=0.1,
                                   beta2=0.9,
-                                  eps=0.01)
+                                  eps=0.01,
+                                  centered=False)
     state = optimizer_def.init_state(params)
 
-    expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01)
+    expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01, False)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _RMSPropParamState(onp.zeros((1,))))
+        0, _RMSPropParamState(onp.zeros((1,)), None))
+    self.assertEqual(state, expected_state)
+
+  def test_init_state_centered(self):
+    params = onp.zeros((1,))
+    optimizer_def = optim.RMSProp(learning_rate=0.1,
+                                  beta2=0.9,
+                                  eps=0.01,
+                                  centered=True)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01, True)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
+        0, _RMSPropParamState(onp.zeros((1,)), onp.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
@@ -425,15 +442,35 @@ class RMSPropTest(absltest.TestCase):
                                   eps=0.01)
     params = onp.array([1.])
     state = optim.OptimizerState(
-        1, _RMSPropParamState(onp.array([0.1])))
+        1, _RMSPropParamState(onp.array([0.1]), None))
     grads = onp.array([4.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        2, _RMSPropParamState(onp.array([1.69])))
+        2, _RMSPropParamState(onp.array([1.69]), None))
     expected_new_params = onp.array([0.6946565])
     onp.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
+
+  def test_apply_gradient_centered(self):
+    optimizer_def = optim.RMSProp(learning_rate=0.1,
+                                  beta2=0.9,
+                                  eps=0.01,
+                                  centered=True)
+    params = onp.array([1.])
+    state = optim.OptimizerState(
+        1, _RMSPropParamState(onp.array([0.1]), onp.array([0.1])))
+    grads = onp.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _RMSPropParamState(onp.array([1.69]), onp.array([0.49])))
+    expected_new_params = onp.array([0.670543], dtype=onp.float32)
+    onp.testing.assert_allclose(new_params, expected_new_params, rtol=1e-6)
+    onp.testing.assert_allclose(new_state.param_states.v,
+                                expected_new_state.param_states.v)
+    onp.testing.assert_allclose(new_state.param_states.mg,
+                                expected_new_state.param_states.mg)
 
 
 class WeightNormTest(absltest.TestCase):

@@ -163,12 +163,13 @@ class LinearTest(parameterized.TestCase):
     target = np.einsum(einsum_expr, x, initial_params['params']['kernel']) + 1.
     np.testing.assert_allclose(y, target, atol=1e-6)
 
-  def test_conv(self):
+  @parameterized.parameters([((3,),), (3,)])
+  def test_conv(self, kernel_size):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_module = nn.Conv(
         features=4,
-        kernel_size=(3,),
+        kernel_size=kernel_size,
         padding='VALID',
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -177,12 +178,28 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 10.))
 
-  def test_group_conv(self):
+  @parameterized.parameters([((3,),), (3,)])
+  def test_single_input_conv(self, kernel_size):
+      rng = dict(params=random.PRNGKey(0))
+      x = jnp.ones((8, 3))
+      conv_module = nn.Conv(
+          features=4,
+          kernel_size=kernel_size,
+          padding='VALID',
+          kernel_init=initializers.ones,
+          bias_init=initializers.ones,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+      self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
+      np.testing.assert_allclose(y, np.full((6, 4), 10.))
+
+  @parameterized.parameters([((3,),), (3,)])
+  def test_group_conv(self, kernel_size):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 4))
     conv_module = nn.Conv(
         features=4,
-        kernel_size=(3,),
+        kernel_size=kernel_size,
         feature_group_count=2,
         padding='VALID',
         kernel_init=initializers.ones,
@@ -192,12 +209,13 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 2, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 7.))
 
-  def test_conv_transpose(self):
+  @parameterized.parameters([((3,),), (3,)])
+  def test_conv_transpose(self, kernel_size):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
-        kernel_size=(3,),
+        kernel_size=kernel_size,
         padding='VALID',
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -216,6 +234,31 @@ class LinearTest(parameterized.TestCase):
                               [ 4.,  4.,  4.,  4.]]])
     np.testing.assert_allclose(y, correct_ans)
 
+  @parameterized.parameters([((3,),), (3,)])
+  def test_single_input_conv_transpose(self, kernel_size):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((8, 3))
+    conv_transpose_module = nn.ConvTranspose(
+        features=4,
+        kernel_size=kernel_size,
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_transpose_module.init_with_output(rng, x)
+    self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
+    correct_ans = np.array([[ 4.,  4.,  4.,  4.],
+                              [ 7.,  7.,  7.,  7.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [10., 10., 10., 10.],
+                              [ 7.,  7.,  7.,  7.],
+                              [ 4.,  4.,  4.,  4.]])
+    np.testing.assert_allclose(y, correct_ans)
+
   def test_embed(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.arange(4)[None]
@@ -224,7 +267,7 @@ class LinearTest(parameterized.TestCase):
     embed_module = nn.Embed(
         num_embeddings=4,
         features=3,
-        embedding_init=lambda rng, shape: dummy_embedding,
+        embedding_init=lambda rng, shape, dtype: dummy_embedding,
     )
     y, initial_params = embed_module.init_with_output(rng, x)
     np.testing.assert_allclose(y, dummy_embedding[None])

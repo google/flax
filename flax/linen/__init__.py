@@ -12,23 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Linen Neural Network api."""
+"""The Flax Module system."""
 
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
-                         softplus, swish, tanh)
+                         softplus, swish, silu, tanh)
 from .attention import (MultiHeadDotProductAttention, SelfAttention,
                         dot_product_attention, make_attention_mask,
                         make_causal_mask, combine_masks)
 from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
-from .module import Module, compact, enable_named_call, disable_named_call
+from .module import Module, compact, enable_named_call, disable_named_call, Variable
 from .normalization import BatchNorm, GroupNorm, LayerNorm
 from .pooling import avg_pool, max_pool
-from .recurrent import GRUCell, LSTMCell, OptimizedLSTMCell
+from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell
 from .stochastic import Dropout
 from .transforms import jit, named_call, remat, scan, vmap
+from .initializers import zeros, ones
 
 # pylint: enable=g-multiple-import

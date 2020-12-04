@@ -164,6 +164,17 @@ class TraversalTest(absltest.TestCase):
       'bar': {'a': 2}
     })
 
+  def test_flatten_dict_keep_empty(self):
+    xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
+    flat_xs = traverse_util.flatten_dict(xs, keep_empty_nodes=True)
+    self.assertEqual(flat_xs, {
+      ('foo',): 1,
+      ('bar', 'a'): 2,
+      ('bar', 'b'): traverse_util.empty_node,
+    })
+    xs_restore = traverse_util.unflatten_dict(flat_xs)
+    self.assertEqual(xs, xs_restore)
+
 
 if __name__ == '__main__':
   absltest.main()

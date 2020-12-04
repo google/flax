@@ -68,3 +68,7 @@ class ModuleTopLevelTest(absltest.TestCase):
   #   d = d.initialized(rngs={'params': random.PRNGKey(0)})
   #   with self.assertRaises(BaseException):
   #     d.initialized(rngs={'params': random.PRNGKey(0)})
+
+
+if __name__ == '__main__':
+  absltest.main()

@@ -14,6 +14,8 @@
 
 """Tests for flax.linen."""
 
+import dataclasses
+
 from absl.testing import absltest
 
 import jax
@@ -27,7 +29,7 @@ from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
 from flax.linen import compact
-from flax.core import Scope
+from flax.core import Scope, freeze
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -57,7 +59,7 @@ class ModuleTest(absltest.TestCase):
   def test_init_module(self):
     rngkey = jax.random.PRNGKey(0)
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = DummyModule(parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(parent=scope.rewound())(x)
@@ -68,7 +70,7 @@ class ModuleTest(absltest.TestCase):
   def test_arg_module(self):
     rngkey = jax.random.PRNGKey(0)
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = Dense(3, parent=scope)(x)
     params = scope.variables()['params']
     y2 = Dense(3, parent=scope.rewound())(x)
@@ -86,7 +88,7 @@ class ModuleTest(absltest.TestCase):
       def _mydense(self, x):
         return Dense(3)(x)
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
@@ -114,7 +116,7 @@ class ModuleTest(absltest.TestCase):
         z = mlp(x)
         return y + z
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = Top(parent=scope)(x)
     params = scope.variables()['params']
     y2 = Top(parent=scope.rewound())(x)
@@ -137,7 +139,7 @@ class ModuleTest(absltest.TestCase):
         #w = self.lyrs2[0](x)
         return z
     x = jnp.ones((10,))
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
@@ -175,7 +177,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self):
         return self.outer()
 
-    scope = Scope({'params': {}}, rngs={'params': rngkey})
+    scope = Scope({'params': {}}, rngs={'params': rngkey}, mutable=['params'])
     # Make sure this doesn't raise "Can't attach to remote parent"
     wrapper = Wrapper(parent=scope)
     wrapper()
@@ -193,7 +195,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = DummyModule(x.shape, parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(x.shape, parent=scope.rewound())(x)
@@ -208,7 +210,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       y = DummyModule(parent=scope)(x)
 
@@ -223,7 +225,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       y = Dummy(parent=scope).foo(x)
 
@@ -238,7 +240,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -252,7 +254,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -266,7 +268,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, self.xshape)
         return x + bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -279,9 +281,45 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'notbias.*must equal.*bias'):
       y = Dummy(x.shape, parent=scope)(x)
+
+  def test_setattr_name_var_disagreement_allowed_in_lists(self):
+    rngkey = jax.random.PRNGKey(0)
+    class Dummy(nn.Module):
+      xshape: Tuple[int]
+      def setup(self):
+        self.biases = [
+          self.param(f'bias_{i}', initializers.ones, self.xshape)
+          for i in range(4)]
+      def __call__(self, x):
+        return x + self.biases[0]
+
+    x = jnp.array([1.])
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    y = Dummy(x.shape, parent=scope)(x)
+    self.assertEqual(y, jnp.array([2.]))
+
+  def test_setattr_name_var_disagreement_allowed_in_dicts(self):
+    rngkey = jax.random.PRNGKey(0)
+    class Dummy(nn.Module):
+      xshape: Tuple[int]
+      def setup(self):
+        self.biases = {
+          # NOTE that keys still must be strings. This is to make a possible
+          # future transition to automatically derived parameter names when assigned
+          # as a dict easier (like we currently have with submodules).
+          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853 
+          str(i): self.param(f'bias_{i}', initializers.ones, self.xshape)
+          for i in range(4)}
+      def __call__(self, x):
+        return x + self.biases['0']
+
+    x = jnp.array([1.])
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    y = Dummy(x.shape, parent=scope)(x)
+    self.assertEqual(y, jnp.array([2.]))
 
   def test_submodule_var_collision(self):
     rngkey = jax.random.PRNGKey(0)
@@ -293,7 +331,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'name bias exists already'):
       y = Dummy(x.shape, parent=scope)(x)
     class Dummy(nn.Module):
@@ -305,7 +343,7 @@ class ModuleTest(absltest.TestCase):
         bias = DummyModule(name='bias')
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'name bias exists already'):
       y = Dummy(x.shape, parent=scope)(x)
     class Dummy(nn.Module):
@@ -317,7 +355,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, self.xshape)
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias already'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -330,7 +368,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'In setup, assign names of Modules '
         'via self.<name> and not using keyword argument name="<name>"'):
       y = Dummy(x.shape, parent=scope)(x)
@@ -344,7 +382,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'Name bias already in use'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -357,7 +395,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return self.bias(x)
     x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey})
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'bias exists already'):
       y = Dummy(x.shape, parent=scope)(x)
 
@@ -453,11 +491,235 @@ class ModuleTest(absltest.TestCase):
     class Derived2(Derived1):
       pass
 
-    self.assertEqual(nn.module.get_local_method_names(Base), ('bleep',))
-    self.assertEqual(nn.module.get_local_method_names(Derived1), ('bloop',))
+    self.assertEqual(nn.module._get_local_method_names(Base), ('bleep',))
+    self.assertEqual(nn.module._get_local_method_names(Derived1), ('bloop',))
     self.assertEqual(
-        nn.module.get_local_method_names(Derived1, exclude=('bloop',)), ())
-    self.assertEqual(nn.module.get_local_method_names(Derived2), ())
+        nn.module._get_local_method_names(Derived1, exclude=('bloop',)), ())
+    self.assertEqual(nn.module._get_local_method_names(Derived2), ())
+
+  def test_inheritance_dataclass_attribs(self):
+    class Test(nn.Module):
+      bar: int
+      def __call__(self, x):
+        return x
+    class Test2(Test):
+      baz: int
+      def __call__(self, x):
+        return x
+    class Test3(Test):
+      baz: int
+      def __call__(self, x):
+        return x
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((5,))
+    test1 = Test(bar=4)
+    test2 = Test2(bar=4, baz=2)
+    test3 = Test3(bar=4, baz=2)
+    self.assertEqual(test1.init_with_output(key, x), (x, freeze({})))
+    self.assertEqual(test2.init_with_output(key, x), (x, freeze({})))
+    self.assertEqual(test3.init_with_output(key, x), (x, freeze({})))
+    self.assertTrue(hasattr(test1, 'bar'))
+    self.assertTrue(hasattr(test1, 'name'))
+    self.assertTrue(hasattr(test1, 'parent'))
+    self.assertTrue(hasattr(test2, 'bar'))
+    self.assertTrue(hasattr(test2, 'baz'))
+    self.assertTrue(hasattr(test2, 'name'))
+    self.assertTrue(hasattr(test2, 'parent'))
+    self.assertTrue(hasattr(test3, 'bar'))
+    self.assertTrue(hasattr(test3, 'baz'))
+    self.assertTrue(hasattr(test3, 'name'))
+    self.assertTrue(hasattr(test3, 'parent'))
+    self.assertEqual(
+        list(Test.__dataclass_fields__.keys()),
+        ['bar', 'parent', 'name'])
+    self.assertEqual(
+        list(Test2.__dataclass_fields__.keys()),
+        ['bar', 'baz', 'parent', 'name'])
+    self.assertEqual(
+        list(Test3.__dataclass_fields__.keys()),
+        ['bar', 'baz', 'parent', 'name'])
+
+  def test_get_suffix_value_pairs(self):
+    for x in [(), [], {}, None, 0, set()]:
+      self.assertEqual(
+          nn.module._get_suffix_value_pairs(x), [('', x)])
+    self.assertEqual(
+        nn.module._get_suffix_value_pairs(
+            {'a': 1, 'b': 2}), [('_a', 1), ('_b', 2)])
+    self.assertEqual(
+        nn.module._get_suffix_value_pairs(
+            [1, 2, 3]), [('_0', 1), ('_1', 2), ('_2', 3)])
+    x1 = [nn.Dense(10), nn.relu, nn.Dense(10)]
+    y1 = nn.module._get_suffix_value_pairs(x1)
+    self.assertEqual(y1, [('_0', x1[0]), ('_1', x1[1]), ('_2', x1[2])])
+    x2 = {'a': 1, 'b': {'c': nn.Dense(10), 'd': nn.relu}}
+    y2 = nn.module._get_suffix_value_pairs(x2)
+    self.assertEqual(y2,
+        [('_a', 1), ('_b_c', x2['b']['c']), ('_b_d', x2['b']['d'])])
+
+  def test_mixed_list_assignment_in_setup(self):
+    class Test(nn.Module):
+      def setup(self):
+        self.layers = [nn.Dense(10), nn.relu, nn.Dense(10)]
+      def __call__(self, x):
+        for lyr in self.layers:
+          x = lyr(x)
+        return x
+    x = random.uniform(random.PRNGKey(0), (5,5))
+    variables = Test().init(random.PRNGKey(0), jnp.ones((5,5)))
+    y = Test().apply(variables, x)
+    m0 = variables['params']['layers_0']['kernel']
+    m1 = variables['params']['layers_2']['kernel']
+    self.assertTrue(jnp.all(y == jnp.dot(nn.relu(jnp.dot(x, m0)), m1)))
+
+  def test_module_is_hashable(self):
+    module_a = nn.Dense(10)
+    module_a_2 = nn.Dense(10)
+    module_b = nn.Dense(5)
+    self.assertEqual(hash(module_a), hash(module_a_2))
+    self.assertNotEqual(hash(module_a), hash(module_b))
+
+  def test_module_with_scope_is_not_hashable(self):
+    module_a = nn.Dense(10, parent=Scope({}))
+    with self.assertRaisesWithLiteralMatch(ValueError, 'Can\'t call __hash__ on modules that hold variables.'):
+      hash(module_a)
+
+  def test_module_trace(self):
+    class MLP(nn.Module):
+      act: Callable = nn.relu
+      sizes: Iterable[int] = (3, 2)
+
+      @nn.compact
+      def __call__(self, x):
+        for size in self.sizes:
+          x = nn.Dense(size)(x)
+          x = self.act(x)
+        return repr(self)
+    mlp = MLP()
+    expected_trace = (
+"""MLP(
+    # attributes
+    act = relu
+    sizes = (3, 2)
+    # children
+    Dense_0 = Dense(
+        # attributes
+        features = 3
+        use_bias = True
+        dtype = float32
+        precision = None
+        kernel_init = init
+        bias_init = zeros
+    )
+    Dense_1 = Dense(
+        # attributes
+        features = 2
+        use_bias = True
+        dtype = float32
+        precision = None
+        kernel_init = init
+        bias_init = zeros
+    )
+)""")
+    x = jnp.ones((1, 2))
+    trace, variables = mlp.init_with_output(random.PRNGKey(0), x)
+    self.assertEqual(trace, expected_trace)
+    trace = mlp.apply(variables, x)
+    self.assertEqual(trace, expected_trace)
+
+
+  def test_call_unbound_compact_module_methods(self):
+    dense = Dense(3)
+    with self.assertRaisesRegex(ValueError, "compact.*unbound module"):
+      dense(jnp.ones((1, )))
+
+
+  def test_call_unbound_has_variable(self):
+    class EmptyModule(nn.Module):
+      def foo(self):
+        self.has_variable('bar', 'baz')
+
+    empty = EmptyModule()
+    with self.assertRaisesRegex(ValueError, "variable.*unbound module"):
+      empty.foo()
+
+
+  def test_call_unbound_make_rng(self):
+    class EmptyModule(nn.Module):
+      def foo(self):
+        self.make_rng('bar')
+
+    empty = EmptyModule()
+    with self.assertRaisesRegex(ValueError, "RNGs.*unbound module"):
+      empty.foo()
+
+
+  def test_call_unbound_variables(self):
+    class EmptyModule(nn.Module):
+      def foo(self):
+        self.variables
+
+    empty = EmptyModule()
+    with self.assertRaisesRegex(ValueError, "variables.*unbound module"):
+      empty.foo()
+
+
+  def test_call_unbound_noncompact_module_methods(self):
+    class EmptyModule(nn.Module):
+      foo: int = 3
+
+      def bar(self):
+        return self.foo
+
+    empty = EmptyModule()
+    # It's fine to call methods of unbound methods that don't depend on
+    # attributes defined during `setup`
+    self.assertEqual(empty.bar(), 3)
+
+
+  def test_call_unbound_noncompact_module_methods(self):
+    class EmptyModule(nn.Module):
+      foo: int = 3
+
+      def bar(self):
+        return self.foo
+
+    empty = EmptyModule()
+    # It's fine to call methods of unbound methods that don't depend on
+    # attributes defined during `setup`
+    self.assertEqual(empty.bar(), 3)
+
+
+  def test_call_unbound_noncompact_module_method_without_setup(self):
+    class EmptyModule(nn.Module):
+      def setup(self):
+        self.setup_called = True
+
+      def bar(self):
+        return self.setup_called
+
+    empty = EmptyModule()
+    # `empty.setup()` hasn't been called yet because it doesn't have a scope.
+    # it's fine to call methods but they won't have access to attributes defined
+    # in `setup()`
+    with self.assertRaisesRegex(AttributeError, "has no attribute 'setup_called'"):
+      empty.bar()
+
+  def test_module_with_attrs(self):
+    class Foo(nn.Module):
+      bar: nn.Dense = dataclasses.field(init=False)
+
+      def setup(self):
+        self.bar = nn.Dense(3)
+      
+      def __call__(self, x):
+        return self.bar(x)
+
+    foo = Foo()
+    x = jnp.ones((2,))
+    variables = foo.init(random.PRNGKey(0), x)
+    self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
 
 
 if __name__ == '__main__':

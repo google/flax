@@ -1,4 +1,4 @@
-sphinx
+sphinx>=3.3.1
 sphinx_rtd_theme
 Pygments>=2.6.1
 jax>=0.1.59
@@ -9,5 +9,5 @@ recommonmark
 # The next packages are for notebooks
 matplotlib
 sklearn
-# Must install flax itself for notebook execution to work
+# Must install flax itself for notebook execution and auotdocs to work
 .

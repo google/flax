@@ -61,8 +61,18 @@ import dataclasses
 
 import jax
 
+from . import struct
 
-def flatten_dict(xs):
+
+# the empty node is a struct.dataclass to 
+# be compatible with JAX.
+@struct.dataclass
+class _EmptyNode:
+  pass
+
+empty_node = _EmptyNode()
+
+def flatten_dict(xs, keep_empty_nodes=False):
   """Flatten a nested dictionary.
 
   The nested keys are flattened to a tuple.
@@ -84,6 +94,10 @@ def flatten_dict(xs):
 
   Args:
     xs: a nested dictionary
+    keep_empty_nodes: replaces empty dictionaries
+      with `traverse_util.empty_node`. This must
+      be set to `True` for `unflatten_dict` to
+      correctly restore empty dictionaries.
   Returns:
     The flattened dictionary.
   """
@@ -92,9 +106,13 @@ def flatten_dict(xs):
     if not isinstance(xs, dict):
       return {prefix: xs}
     result = {}
+    is_empty = True
     for key, value in xs.items():
+      is_empty = False
       path = prefix + (key,)
       result.update(_flatten(value, path))
+    if keep_empty_nodes and is_empty:
+      return {prefix: empty_node}
     return result
   return _flatten(xs, ())
 
@@ -125,6 +143,8 @@ def unflatten_dict(xs):
   assert isinstance(xs, dict), 'input is not a dict'
   result = {}
   for path, value in xs.items():
+    if value is empty_node:
+      value = {}
     cursor = result
     for key in path[:-1]:
       if key not in cursor:
@@ -134,7 +154,7 @@ def unflatten_dict(xs):
   return result
 
 
-class Traversal(object):
+class Traversal(abc.ABC):
   """Base class for all traversals."""
 
   @abc.abstractmethod
