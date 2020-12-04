@@ -32,8 +32,9 @@ from . import activation
 from . import initializers
 from . import linear
 
+from jax import numpy as jnp
+from jax import lax
 from jax import random
-
 
 PRNGKey = Any
 Shape = Tuple[int]
@@ -133,6 +134,146 @@ class LSTMCell(RNNCellBase):
       batch_dims: a tuple providing the shape of the batch dimensions.
       size: the size or number of features of the memory.
       init_fn: initializer function for the carry.
+    Returns:
+      An initialized carry for the given RNN cell.
+    """
+    key1, key2 = random.split(rng)
+    mem_shape = batch_dims + (size,)
+    return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
+
+
+class DummyDense(Module):
+  """Dummy module for creating parameters matching `flax.nn.Dense`."""
+
+  features: int
+  use_bias: bool = True
+  dtype: Dtype = jnp.float32
+  precision: Any = None
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = linear.default_kernel_init
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+
+  @compact
+  def __call__(self, inputs: Array) -> Tuple[Array]:
+    k = self.param('kernel', self.kernel_init, (inputs.shape[-1], self.features))
+    b = (self.param('bias', self.bias_init, (self.features,))
+         if self.use_bias else jnp.zeros((self.features,)))
+    return k, b
+
+
+class OptimizedLSTMCell(RNNCellBase):
+  r"""More efficient LSTM Cell that concatenates state components before matmul.
+
+  The parameters are compatible with `LSTMCell`. Note that this cell is often
+  faster than `LSTMCell` as long as the hidden size is roughly <= 2048 units.
+  
+  The mathematical definition of the cell is as follows
+  .. math::
+      \begin{array}{ll}
+      i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
+      f = \sigma(W_{if} x + W_{hf} h + b_{hf}) \\
+      g = \tanh(W_{ig} x + W_{hg} h + b_{hg}) \\
+      o = \sigma(W_{io} x + W_{ho} h + b_{ho}) \\
+      c' = f * c + i * g \\
+      h' = o * \tanh(c') \\
+      \end{array}
+  where x is the input, h is the output of the previous time step, and c is
+  the memory.
+
+  Args:
+    gate_fn: activation function used for gates (default: sigmoid)
+    activation_fn: activation function used for output and memory update
+      (default: tanh).
+    kernel_init: initializer function for the kernels that transform
+      the input (default: lecun_normal).
+    recurrent_kernel_init: initializer function for the kernels that transform
+      the hidden state (default: orthogonal).
+    bias_init: initializer for the bias parameters (default: zeros)
+  """
+  gate_fn: Callable = activation.sigmoid
+  activation_fn: Callable = activation.tanh
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = linear.default_kernel_init
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.orthogonal()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+
+  @compact
+  def __call__(self, carry: Tuple[Array], 
+               inputs: Array) -> Tuple[Tuple[Array], Array]:
+    r"""A long short-term memory (LSTM) cell.
+
+    the mathematical definition of the cell is as follows
+    .. math::
+        \begin{array}{ll}
+        i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
+        f = \sigma(W_{if} x + W_{hf} h + b_{hf}) \\
+        g = \tanh(W_{ig} x + W_{hg} h + b_{hg}) \\
+        o = \sigma(W_{io} x + W_{ho} h + b_{ho}) \\
+        c' = f * c + i * g \\
+        h' = o * \tanh(c') \\
+        \end{array}
+    where x is the input, h is the output of the previous time step, and c is
+    the memory.
+
+    Args:
+      carry: the hidden state of the LSTM cell, initialized using
+        `LSTMCell.initialize_carry`.
+      inputs: an ndarray with the input for the current time step. All
+        dimensions except the final are considered batch dimensions.
+
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    c, h = carry
+    hidden_features = h.shape[-1]
+
+    def _concat_dense(inputs, params, use_bias=True):
+      kernels, biases = zip(*params.values())
+      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), jnp.float32)
+
+      y = lax.dot_general(
+          inputs, kernel,
+          (((inputs.ndim - 1,), (0,)), ((), ())))
+      if use_bias:
+        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
+        y = y + bias
+      ys = jnp.split(y, jnp.cumsum(
+          jnp.array([b.shape[0] for b in biases[:-1]])), axis=-1)
+      return dict(zip(params.keys(), ys))
+
+    # Create the params in the same order as LSTMCell for initialization
+    # compatibility.
+    dense_params_h = {}
+    dense_params_i = {}
+    for component in ['i', 'f', 'g', 'o']:
+      dense_params_i[component] = DummyDense(
+          features=hidden_features, use_bias=False,
+          kernel_init=self.kernel_init, bias_init=self.bias_init,
+          name=f'i{component}')(inputs)
+      dense_params_h[component] = DummyDense(
+          features=hidden_features, use_bias=True,
+          kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
+          name=f'h{component}')(h)
+    dense_h = _concat_dense(h, dense_params_h, use_bias=True)
+    dense_i = _concat_dense(inputs, dense_params_i, use_bias=False)
+
+    i = self.gate_fn(dense_h['i'] + dense_i['i'])
+    f = self.gate_fn(dense_h['f'] + dense_i['f'])
+    g = self.activation_fn(dense_h['g'] + dense_i['g'])
+    o = self.gate_fn(dense_h['o'] + dense_i['o'])
+
+    new_c = f * c + i * g
+    new_h = o * self.activation_fn(new_c)
+    return (new_c, new_h), new_h
+
+  @staticmethod
+  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+    """initialize the RNN cell carry.
+
+    Args:
+      rng: random number generator passed to the init_fn.
+      batch_dims: a tuple providing the shape of the batch dimensions.
+      size: the size or number of features of the memory.
+      init_fn: initializer function for the carry.
+    
     Returns:
       An initialized carry for the given RNN cell.
     """
