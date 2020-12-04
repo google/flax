@@ -10,10 +10,10 @@ This example uses linear learning rate warmup and cosine learning rate schedule.
 ### Supported setups
 The model should run with other configurations and hardware, but explicitely tested on the following.
 
-| Hardware | Batch size | Training time | Top-1 accuracy  | TensorBoard.dev |
-| --- | --- | --- | --- | --- |
-| 8 x Nvidia V100 (16GB)  | 512  |  13h 25m  | 76.63% | [2020-03-12](https://tensorboard.dev/experiment/jrvtbnlETgai0joLBXhASw/) |
-| 8 x Nvidia V100 (16GB), mixed precision  | 2048  | 5h 51m | 76.39% | [2020-03-11](https://tensorboard.dev/experiment/F5rM1GGQRpKNX207i30qGQ/) |
+| Name                    |   Steps | Walltime   | Top-1 accuracy   | Metrics                                                                                                                               | Workdir                                                                                                                                                              |
+|:------------------------|--------:|:-----------|:-----------------|:--------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| v100_x8                 |  250199 | 18.0h      | 76.62%           | [tfhub.dev](https://tensorboard.dev/experiment/6yEYynrdRS2HZqHAD2ejPQ/#scalars&_smoothingWeight=0&regexInput=v100_x8)                 | [gs://flax_public/examples/imagenet/v100_x8](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/v100_x8)                                 |
+| v100_x8_mixed_precision |   62499 | 9.2h       | 76.42%           | [tfhub.dev](https://tensorboard.dev/experiment/6yEYynrdRS2HZqHAD2ejPQ/#scalars&_smoothingWeight=0&regexInput=v100_x8_mixed_precision) | [gs://flax_public/examples/imagenet/v100_x8_mixed_precision](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/v100_x8_mixed_precision) |
 
 ### How to run
 
