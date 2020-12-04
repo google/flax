@@ -150,7 +150,7 @@ class DummyDense(Module):
   dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array]:
@@ -189,11 +189,11 @@ class OptimizedLSTMCell(RNNCellBase):
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
   """
-  gate_fn: Callable = activation.sigmoid
-  activation_fn: Callable = activation.tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = linear.default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  gate_fn: Callable = sigmoid
+  activation_fn: Callable = tanh
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, carry: Tuple[Array], 
@@ -265,7 +265,7 @@ class OptimizedLSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """initialize the RNN cell carry.
 
     Args:
