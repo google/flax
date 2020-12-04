@@ -153,7 +153,7 @@ class DummyDense(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
-  def __call__(self, inputs: Array) -> Tuple[Array]:
+  def __call__(self, inputs: Array) -> Tuple[Array, Array]:
     k = self.param('kernel', self.kernel_init, (inputs.shape[-1], self.features))
     b = (self.param('bias', self.bias_init, (self.features,))
          if self.use_bias else jnp.zeros((self.features,)))
@@ -197,7 +197,7 @@ class OptimizedLSTMCell(RNNCellBase):
 
   @compact
   def __call__(self, carry: Tuple[Array], 
-               inputs: Array) -> Tuple[Tuple[Array], Array]:
+               inputs: Array) -> Tuple[Tuple[Array, Array], Array]:
     r"""A long short-term memory (LSTM) cell.
 
     the mathematical definition of the cell is as follows
