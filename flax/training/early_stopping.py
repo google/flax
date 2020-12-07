@@ -47,10 +47,7 @@ class EarlyStopping:
   def stop(self):
       return self.should_stop
 
-  def save_checkpoint(self,
-                      target, 
-                      step,
-                      metric):
+  def save_checkpoint(self, target, step, metric):
     """Save a checkpoint of the model.
 
     Args:
