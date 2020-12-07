@@ -60,14 +60,14 @@ class EarlyStopping:
       Filename of saved checkpoint or None if there was no improvement.
     """
     output = None
-    if self.best_loss - val_loss > self.min_delta:
+    if self.best_loss - metric > self.min_delta:
         output = checkpoints.save_checkpoint(self.ckpt_dir,
                                              target=target,
                                              step=step,
                                              prefix=self.prefix,
                                              keep=self.keep)
         self.count = 0
-        self.best_loss = val_loss
+        self.best_loss = metric
     else:
         self.count += 1
         if self.count >= self.patience:
