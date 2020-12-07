@@ -53,8 +53,9 @@ class EarlyStopping:
       step: int or float: training step number or other metric number.
       metric: int or float: metric (i.e. validation loss) to determine 
           improvement. 
+
     Returns:
-        Filename of saved checkpoint.
+      Filename of saved checkpoint or None if there was no improvement.
     """
     output = None
     if self.best_loss - val_loss > self.min_delta:
