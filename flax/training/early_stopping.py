@@ -27,7 +27,12 @@ class EarlyStopping:
     patience: number of steps of no improvement before stopping.
     keep: number of past checkpoint files to keep.
   """
-  def __init__(self, ckpt_dir, prefix='checkpoint_', min_delta=0, patience=0, keep=1):
+  def __init__(self, 
+               ckpt_dir, 
+               prefix='checkpoint_', 
+               min_delta=0, 
+               patience=0, 
+               keep=1):
     self.ckpt_dir = ckpt_dir
     self.min_delta = min_delta
     self.patience = patience
