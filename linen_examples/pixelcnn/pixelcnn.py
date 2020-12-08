@@ -186,7 +186,7 @@ class ConvWeightNorm(nn.Module):
   """2D convolution Modules with weightnorm."""
   features: int
   kernel_size: Tuple[int, int]
-  strides: Tuple[int, int] = None
+  strides: Tuple[int, int] = None  # pytype: disable=annotation-type-mismatch
   padding: str = 'VALID'
   transpose: bool = False
   init_scale: float = 1.
@@ -232,7 +232,7 @@ class ConvDown(nn.Module):
   """Convolution with padding so that information cannot flow upwards."""
   features: int
   kernel_size: Tuple[int, int] = (2, 3)
-  strides: Tuple[int, int] = None
+  strides: Tuple[int, int] = None  # pytype: disable=annotation-type-mismatch
   init_scale: float = 1.
 
   @nn.compact
@@ -244,14 +244,14 @@ class ConvDown(nn.Module):
 
     return ConvWeightNorm(
         self.features, self.kernel_size, self.strides, padding,
-        init_scale=self.init_scale)(inputs)
+        init_scale=self.init_scale)(inputs)  # pytype: disable=wrong-arg-types
 
 
 class ConvDownRight(nn.Module):
   """Convolution with padding so that information cannot flow left/upwards."""
   features: Any
   kernel_size: Tuple[int, int] = (2, 2)
-  strides: Tuple[int, int] = None
+  strides: Tuple[int, int] = None  # pytype: disable=annotation-type-mismatch
   init_scale: float = 1.0
 
   @nn.compact
@@ -262,7 +262,7 @@ class ConvDownRight(nn.Module):
 
     return ConvWeightNorm(
         self.features, self.kernel_size, self.strides, padding,
-        init_scale=self.init_scale)(inputs)
+        init_scale=self.init_scale)(inputs)  # pytype: disable=wrong-arg-types
 
 
 class ConvTransposeDown(nn.Module):
