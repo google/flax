@@ -250,7 +250,7 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
     lstm = nn.LSTMCell()
-    (carry, y), lstm_params = lstm.init_with_output(key2, (c0, h0), x)    
+    (_, y), lstm_params = lstm.init_with_output(key2, (c0, h0), x)    
     
     # Create OptimizedLSTMCell.
     rng = random.PRNGKey(0)

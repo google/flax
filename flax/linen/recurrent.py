@@ -166,7 +166,7 @@ class OptimizedLSTMCell(RNNCellBase):
   The parameters are compatible with `LSTMCell`. Note that this cell is often
   faster than `LSTMCell` as long as the hidden size is roughly <= 2048 units.
   
-  The mathematical definition of the cell is as follows
+  The mathematical definition of the cell is the same as `LSTMCell` and as follows
   .. math::
       \begin{array}{ll}
       i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
@@ -180,14 +180,14 @@ class OptimizedLSTMCell(RNNCellBase):
   the memory.
 
   Args:
-    gate_fn: activation function used for gates (default: sigmoid)
+    gate_fn: activation function used for gates (default: sigmoid).
     activation_fn: activation function used for output and memory update
       (default: tanh).
     kernel_init: initializer function for the kernels that transform
       the input (default: lecun_normal).
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
-    bias_init: initializer for the bias parameters (default: zeros)
+    bias_init: initializer for the bias parameters (default: zeros).
   """
   gate_fn: Callable = sigmoid
   activation_fn: Callable = tanh
@@ -198,20 +198,7 @@ class OptimizedLSTMCell(RNNCellBase):
   @compact
   def __call__(self, carry: Tuple[Array, Array], 
                inputs: Array) -> Tuple[Tuple[Array, Array], Array]:
-    r"""A long short-term memory (LSTM) cell.
-
-    the mathematical definition of the cell is as follows
-    .. math::
-        \begin{array}{ll}
-        i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
-        f = \sigma(W_{if} x + W_{hf} h + b_{hf}) \\
-        g = \tanh(W_{ig} x + W_{hg} h + b_{hg}) \\
-        o = \sigma(W_{io} x + W_{ho} h + b_{ho}) \\
-        c' = f * c + i * g \\
-        h' = o * \tanh(c') \\
-        \end{array}
-    where x is the input, h is the output of the previous time step, and c is
-    the memory.
+    r"""An optimized long short-term memory (LSTM) cell.
 
     Args:
       carry: the hidden state of the LSTM cell, initialized using
