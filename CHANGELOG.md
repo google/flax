@@ -2,11 +2,40 @@ Changelog
 ----------
 
 vNext
-----
- (Please add entries here with your changes for the next version)
+------
+Add new changes here
+
+v0.3
+-----
+Linen is now out of Alpha (flax.nn is being deprecated)!
+
  - `flax.core.apply` and linen `Module.apply` will now only return the variables
    collections that were specified as mutable.
- - ...
+ - Fixed handling of multiple separate subclasses of a Module.
+ - We now allow assignment of mixed Module pytrees in setup.
+ - Refactored collection creation to fail early when modifying an undefined collection as
+   before an non-existing non-mutable collection would just be silently ignored.
+ - Added the silu activation function.
+ - Add offset argument to Adafactor optimizer for fine-tuning schedules.
+ - Relaxed limit on calling methods on unbound modules.
+ - Relaxed parameter attribute check
+ - Added centered version of RMSProp.
+ - Added GCE getting started kit.
+ - Renamed -gpu_type to -accelerator_type.
+ - Fixed bug in MultiOptimizer causing it to throw away empty dictionary
+
+### Improvements
+ - Made FrozenDict constructor freeze correctly.
+ - Made freeze a synonym of the FrozenDict constructor
+ - Optimize freezing FrozenDicts by sharing immutable internal state.
+ - We simplified __setattr__ handling of trees with Modules.
+ - Minor improvements in dtype handling, broadcast option for dropout.
+ - Added a dtype specification to Embed layer, made Adafactor use float32
+   state consistently, and added a broadcasting option to the Dropout layer.
+ - Improved frozen dict performance.
+ - (Massive) docs improvements
+ - End to end benchmarks added.
+ - Examples were updated to Linen.
 
 v0.2.2
 ----
