@@ -142,7 +142,7 @@ class LSTMCell(RNNCellBase):
     return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
 
 
-class DummyDense(Module):
+class DenseParams(Module):
   """Dummy module for creating parameters matching `flax.nn.Dense`."""
 
   features: int
@@ -151,12 +151,13 @@ class DummyDense(Module):
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-
+  
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Array]:
-    k = self.param('kernel', self.kernel_init, (inputs.shape[-1], self.features))
-    b = (self.param('bias', self.bias_init, (self.features,))
-         if self.use_bias else jnp.zeros((self.features,)))
+    k = self.param(
+        'kernel', self.kernel_init, (inputs.shape[-1], self.features))
+    b = (self.param('bias', self.bias_init, (self.features,)) 
+        if self.use_bias else jnp.zeros((self.features,)))
     return k, b
 
 
@@ -213,6 +214,11 @@ class OptimizedLSTMCell(RNNCellBase):
     hidden_features = h.shape[-1]
 
     def _concat_dense(inputs, params, use_bias=True):
+      """
+      Concatenates the individual kernels and biases, given in params, into a 
+      single kernel and single bias for efficiency before applying them using 
+      dot_general.
+      """
       kernels, biases = zip(*params.values())
       kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), jnp.float32)
 
@@ -222,20 +228,21 @@ class OptimizedLSTMCell(RNNCellBase):
       if use_bias:
         bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
         y = y + bias
-      ys = jnp.split(y, jnp.cumsum(
-          jnp.array([b.shape[0] for b in biases[:-1]])), axis=-1)
+      
+      # Split the result back into individual (i, f, g, o) outputs.
+      split_indices = jnp.cumsum(jnp.array([b.shape[0] for b in biases[:-1]]))
+      ys = jnp.split(y, split_indices, axis=-1)
       return dict(zip(params.keys(), ys))
 
-    # Create the params in the same order as LSTMCell for initialization
-    # compatibility.
+    # Create params with the same names/shapes as `LSTMCell` for compatibility.
     dense_params_h = {}
     dense_params_i = {}
     for component in ['i', 'f', 'g', 'o']:
-      dense_params_i[component] = DummyDense(
+      dense_params_i[component] = DenseParams(
           features=hidden_features, use_bias=False,
           kernel_init=self.kernel_init, bias_init=self.bias_init,
           name=f'i{component}')(inputs)
-      dense_params_h[component] = DummyDense(
+      dense_params_h[component] = DenseParams(
           features=hidden_features, use_bias=True,
           kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
           name=f'h{component}')(h)
