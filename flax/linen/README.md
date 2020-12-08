@@ -15,5 +15,5 @@ We're still working on documentation, but here are some references we have avail
 * [Brief Intro to Linen](https://colab.research.google.com/github/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) in Colab
 * An [upgrade guide](https://docs.google.com/document/d/1hYavTVPaKVVe9Be8pCB7yW7r6dDv3RALVNit8NZca4c) + some additional questions we're considering
 * Ported [examples](https://github.com/google/flax/tree/master/linen_examples)
-* "Design tests" used to ensure that our "functional core" supports [various advanced use-cases](https://github.com/google/flax/tree/master/linen_examples/core_design_test), and that the mostly-syntactic-sugar Module abstraction
+* "Design tests" used to ensure that our "functional core" supports [various advanced use-cases](https://github.com/google/flax/tree/master/tests/core/design), and that the mostly-syntactic-sugar Module abstraction
   [doesn't get in the way](https://github.com/google/flax/tree/master/linen_examples/linen_design_test)
