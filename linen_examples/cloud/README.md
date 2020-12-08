@@ -98,8 +98,8 @@ python linen_examples/cloud/launch_gce.py \
   --accelerator_type=nvidia-tesla-v100 --accelerator_count=8 \
   --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --tfds_data_dir=gs://$GCS_TFDS_BUCKET/datasets \
-  --repo=https://github.com/google/flax \
-  --branch=master \
+  --repo=${REPO:-https://github.com/google/flax} \
+  --branch=${BRANCH:-master} \
   --example=imagenet \
   --args='--config=configs/v100_x8_mixed_precision.py' \
   --name=v100_x8_mixed_precision
