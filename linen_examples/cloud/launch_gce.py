@@ -35,8 +35,12 @@ flags.DEFINE_bool(
 flags.DEFINE_bool(
     'connect',
     False,
-    help='If set, then the script will try to connect to the VM after '
-    'launching it.')
+    help='Same as --wait, but directly connect to VM once it is ready.')
+flags.DEFINE_bool(
+    'wait', False,
+    help='If set, then the script will wait until VM is ready. If VM_READY_CMD '
+    'is set in environment, then that command will be executed once the VM '
+    'is ready. Useful for sending a notification, e.g. "osascript"')
 
 # Machine configuration.
 flags.DEFINE_string('project', None, help='Name of the Google Cloud project.')
@@ -214,7 +218,7 @@ def main(_):
 
   print_howto(login_args)
 
-  if FLAGS.connect:
+  if FLAGS.connect or FLAGS.wait:
     login_true_args = login_args[:-1] + ['true']
     while True:
       try:
@@ -223,9 +227,12 @@ def main(_):
       except subprocess.TimeoutExpired:
         print('(Not ready yet - waiting a little longer...)')
         time.sleep(20)
-    result = subprocess.run(login_args)
-    # SSH session has cleared previous message, print it again.
-    print_howto(login_args)
+    if 'VM_READY_CMD' in os.environ:
+      os.system(os.environ['VM_READY_CMD'])
+    if FLAGS.connect:
+      result = subprocess.run(login_args)
+      # SSH session has cleared previous message, print it again.
+      print_howto(login_args)
 
 
 if __name__ == '__main__':

@@ -110,7 +110,9 @@ python linen_examples/cloud/launch_gce.py \
 You can add `--connect` to above commands to directly land in the training
 session once the VM is ready. This is very helpful for debugging when changing
 things. Note that the VM automatically shuts down after 5 minutes of inactivity,
-both in case of success as in case of failure.
+both in case of success as in case of failure. On OS X this could be combined
+with `VM_READY_CMD="osascript -e 'display notification \"VM ready\"'"` so get
+undistracted when the VM is up and running.
 
 When tweaking the startup script or individual arguments, it is often helpful to
 connect to the VM, stop the scripts and end the tmux session, and then copy and
