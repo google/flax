@@ -1,11 +1,11 @@
 
-*NOTE*: The `flax.nn` package is deprecated. See `flax.linen` for our new module API.
+.. warning::
+    **This package is deprecated**. See :mod:`flax.linen` for our new module API.
 
-flax.nn package
+flax.nn package (deprecated)
 =================
 
 .. currentmodule:: flax.nn
-.. automodule:: flax.nn
 
 
 Core: Module abstraction

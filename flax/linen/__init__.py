@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Linen Neural Network api."""
+"""The Flax Module system."""
 
 
 # pylint: disable=g-multiple-import

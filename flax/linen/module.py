@@ -437,7 +437,8 @@ class Module:
                                    Variable)) and self._state.in_setup:
           var_name = f'{name}{suffix}'
           # namecheck to ensure named variable matches self attribute name.
-          if self._state.last_varname and self._state.last_varname != var_name:
+          if (suffix == '' and  # not when assigning lists or dicts
+              self._state.last_varname and self._state.last_varname != var_name):
             raise ValueError(f'Variable name {self._state.last_varname} must '
                              f'equal attribute name {var_name}.')
           self._state.last_varname = None

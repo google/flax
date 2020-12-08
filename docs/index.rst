@@ -6,20 +6,13 @@
 Flax documentation
 ==================
 
-Flax is a neural network library for JAX that is designed for flexibility and
-is in use by a growing community
-of researchers and engineers at Google who happily use Flax for their
-daily research. The new Flax `"Linen" module API <https://github.com/google/flax/tree/master/flax/linen>`_ is 
-now stable and we recommend it for all new projects. The old `flax.nn` API will be deprecated. Please report
-any feature requests, issues, questions or concerns in our 
-`discussion forum <https://github.com/google/flax/discussions>`_ , or just let us know 
-what you're working on!
+Flax is a neural network library and ecosystem for JAX that is
+designed for flexibility. Flax is in use by a growing community of
+researchers and engineers at Google who happily use Flax for their
+daily research.
 
-Expect changes to the
-API, but we'll use deprecation warnings when we can, and keep
-track of them in our `Changelog <https://github.com/google/flax/CHANGELOG.md>`_.
-
-In case you need to reach us directly, we're at flax-dev@google.com.
+For a quick introduction and short example snippets, see our `README
+<https://github.com/google/flax/blob/master/README.md>`_.
 
 .. toctree::
    :maxdepth: 1
@@ -43,7 +36,6 @@ In case you need to reach us directly, we're at flax-dev@google.com.
 
    philosophy
    contributing
-   faq
 
 .. toctree::
    :maxdepth: 2
@@ -54,5 +46,10 @@ In case you need to reach us directly, we're at flax-dev@google.com.
    flax.serialization
    flax.struct
    flax.jax_utils
+
+.. toctree::
+   :maxdepth: 1
+   :caption: (deprecated)
+
    flax.nn (deprecated) <flax.nn>
 
