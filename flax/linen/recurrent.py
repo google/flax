@@ -36,6 +36,8 @@ from jax import numpy as jnp
 from jax import lax
 from jax import random
 
+import numpy as np
+
 PRNGKey = Any
 Shape = Tuple[int]
 Dtype = Any  # this could be a real type?
@@ -228,7 +230,7 @@ class OptimizedLSTMCell(RNNCellBase):
         y = y + bias
       
       # Split the result back into individual (i, f, g, o) outputs.
-      split_indices = jnp.cumsum(jnp.array([b.shape[0] for b in biases[:-1]]))
+      split_indices = np.cumsum([b.shape[0] for b in biases[:-1]])
       ys = jnp.split(y, split_indices, axis=-1)
       return dict(zip(params.keys(), ys))
 

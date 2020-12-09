@@ -33,6 +33,7 @@ from . import linear
 from jax import numpy as jnp
 from jax import random
 from jax import lax
+import numpy as np
 
 
 class RNNCellBase(base.Module):
@@ -200,7 +201,7 @@ class OptimizedLSTMCell(RNNCellBase):
         y = y + bias
 
       # Split the result back into individual (i, f, g, o) outputs.
-      split_indices = jnp.cumsum(jnp.array([b.shape[0] for b in biases[:-1]]))
+      split_indices = np.cumsum([b.shape[0] for b in biases[:-1]])
       ys = jnp.split(y, split_indices, axis=-1)
       return dict(zip(params.keys(), ys))
 
