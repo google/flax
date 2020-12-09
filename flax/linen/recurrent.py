@@ -153,12 +153,12 @@ class DenseParams(Module):
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  
+
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Array]:
     k = self.param(
         'kernel', self.kernel_init, (inputs.shape[-1], self.features))
-    b = (self.param('bias', self.bias_init, (self.features,)) 
+    b = (self.param('bias', self.bias_init, (self.features,))
         if self.use_bias else jnp.zeros((self.features,)))
     return k, b
 
@@ -168,7 +168,7 @@ class OptimizedLSTMCell(RNNCellBase):
 
   The parameters are compatible with `LSTMCell`. Note that this cell is often
   faster than `LSTMCell` as long as the hidden size is roughly <= 2048 units.
-  
+
   The mathematical definition of the cell is the same as `LSTMCell` and as follows
   .. math::
       \begin{array}{ll}
@@ -199,7 +199,7 @@ class OptimizedLSTMCell(RNNCellBase):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
-  def __call__(self, carry: Tuple[Array, Array], 
+  def __call__(self, carry: Tuple[Array, Array],
                inputs: Array) -> Tuple[Tuple[Array, Array], Array]:
     r"""An optimized long short-term memory (LSTM) cell.
 
@@ -228,7 +228,7 @@ class OptimizedLSTMCell(RNNCellBase):
       if use_bias:
         bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
         y = y + bias
-      
+
       # Split the result back into individual (i, f, g, o) outputs.
       split_indices = np.cumsum([b.shape[0] for b in biases[:-1]])
       ys = jnp.split(y, split_indices, axis=-1)
@@ -267,7 +267,7 @@ class OptimizedLSTMCell(RNNCellBase):
       batch_dims: a tuple providing the shape of the batch dimensions.
       size: the size or number of features of the memory.
       init_fn: initializer function for the carry.
-    
+
     Returns:
       An initialized carry for the given RNN cell.
     """
