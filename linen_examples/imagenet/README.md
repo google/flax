@@ -1,14 +1,21 @@
 ## ImageNet classification
-Trains a ResNet50 model (He *et al.*, 2015) for the ImageNet classification task (Russakovsky *et al.*, 2015).
+
+Trains a ResNet50 model ([He *et al.*, 2015]) for the ImageNet classification task
+([Russakovsky *et al.*, 2015]).
 
 This example uses linear learning rate warmup and cosine learning rate schedule.
 
+[He *et al.*, 2015]: https://www.cv-foundation.org/openaccess/content_iccv_2015/papers/He_Delving_Deep_into_ICCV_2015_paper.pdf
+[Russakovsky *et al.*, 2015]: https://arxiv.org/pdf/1409.0575.pdf
+
 ### Requirements
+
 * TensorFlow dataset `imagenet2012:5.*.*`
 * `≈180GB` of RAM if you want to cache the dataset in memory for faster IO
 
 ### Supported setups
-The model should run with other configurations and hardware, but explicitely tested on the following.
+
+While the example should run on a variety of hardware, we have tested the different configurations on a 8x V100 (16GB) and got the following results:
 
 | Name                    |   Steps | Walltime   | Top-1 accuracy   | Metrics                                                                                                                               | Workdir                                                                                                                                                              |
 |:------------------------|--------:|:-----------|:-----------------|:--------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
