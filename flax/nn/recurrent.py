@@ -194,14 +194,14 @@ class OptimizedLSTMCell(RNNCellBase):
       kernels, biases = zip(*params.values())
       kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), jnp.float32)
 
-      y = lax.dot_general(
-          inputs, kernel,
-          (((inputs.ndim - 1,), (0,)), ((), ())))
+      y = jnp.dot(inputs, kernel)
       if use_bias:
         bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
         y = y + bias
-      ys = jnp.split(y, jnp.cumsum(
-          jnp.array([b.shape[0] for b in biases[:-1]])), axis=-1)
+
+      # Split the result back into individual (i, f, g, o) outputs.
+      split_indices = jnp.cumsum(jnp.array([b.shape[0] for b in biases[:-1]]))
+      ys = jnp.split(y, split_indices, axis=-1)
       return dict(zip(params.keys(), ys))
 
     # Create the params in the same order as LSTMCell for initialization

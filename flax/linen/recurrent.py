@@ -222,9 +222,7 @@ class OptimizedLSTMCell(RNNCellBase):
       kernels, biases = zip(*params.values())
       kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), jnp.float32)
 
-      y = lax.dot_general(
-          inputs, kernel,
-          (((inputs.ndim - 1,), (0,)), ((), ())))
+      y = jnp.dot(inputs, kernel)
       if use_bias:
         bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
         y = y + bias
