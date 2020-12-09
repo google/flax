@@ -283,7 +283,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     num_steps = config.num_train_steps
 
   if config.steps_per_eval == -1:
-    num_validation_examples = dataset_builder.info.splits['train'].num_examples
+    num_validation_examples = dataset_builder.info.splits[
+        'validation'].num_examples
     steps_per_eval = num_validation_examples // config.batch_size
   else:
     steps_per_eval = config.steps_per_eval
