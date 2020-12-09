@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Simple syntactic wrapper for nested dictionaries to allow dot traversal."""
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping  # pylint: disable=g-importing-member
 from flax import serialization
 from flax.core.frozen_dict import FrozenDict
 from jax import tree_util

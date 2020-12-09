@@ -25,7 +25,7 @@ THe RNNCell modules are designed to fit in with the scan function in JAX::
 
 import abc
 from functools import partial
-from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
+from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
 
 from flax.linen.module import Module, compact
 from flax.linen.activation import sigmoid, tanh
@@ -76,7 +76,7 @@ class LSTMCell(RNNCellBase):
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
-  Args:
+  Attributes:
     gate_fn: activation function used for gates (default: sigmoid)
     activation_fn: activation function used for output and memory update
       (default: tanh).
@@ -86,8 +86,8 @@ class LSTMCell(RNNCellBase):
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
   """
-  gate_fn: Callable = sigmoid
-  activation_fn: Callable = tanh
+  gate_fn: Callable[..., Any] = sigmoid
+  activation_fn: Callable[..., Any] = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
@@ -155,7 +155,7 @@ class GRUCell(RNNCellBase):
       \end{array}
   where x is the input and h, is the output of the previous time step.
 
-  Args:
+  Attributes:
     gate_fn: activation function used for gates (default: sigmoid)
     activation_fn: activation function used for output and memory update
       (default: tanh).
@@ -165,8 +165,8 @@ class GRUCell(RNNCellBase):
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
   """
-  gate_fn: Callable = sigmoid
-  activation_fn: Callable = tanh
+  gate_fn: Callable[..., Any] = sigmoid
+  activation_fn: Callable[..., Any] = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       default_kernel_init)
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
@@ -251,7 +251,7 @@ class ConvLSTM(RNNCellBase):
       after initialization in order to reduce the scale of forgetting in
       the beginning of the training.
 
-  Args:
+  Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
     strides: a sequence of `n` integers, representing the inter-window
@@ -264,9 +264,9 @@ class ConvLSTM(RNNCellBase):
   """
 
   features: int
-  kernel_size: Sequence[int]
-  strides: Optional[Sequence[int]] = None
-  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  kernel_size: Iterable[int]
+  strides: Optional[Iterable[int]] = None
+  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
   use_bias: bool = True
   dtype: Dtype = jnp.float32
 

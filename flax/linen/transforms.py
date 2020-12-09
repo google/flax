@@ -94,7 +94,7 @@ def set_module_scopes(module, scopes):
   new_attrs = jax.tree_map(set_scope, attrs)
   new_module = module.clone(parent=scopes[idx], **new_attrs)
   idx += 1
-  assert len(scopes) == idx, f"scope list mismatch {len(scopes)} != {idx}"
+  assert len(scopes) == idx, f'scope list mismatch {len(scopes)} != {idx}'
   return new_module
 
 
@@ -106,7 +106,7 @@ def module_class_lift_transform(
     *trafo_args,
     methods=None,
     **trafo_kwargs):
-  # TODO (levskaya): find nicer argument convention for multi-method case?
+  # TODO(levskaya): find nicer argument convention for multi-method case?
 
   # Prepare per-method transform args, kwargs.
   if methods is None:
@@ -156,6 +156,7 @@ def module_class_lift_transform(
                          (module_class,),
                          transformed_fns)
   return transformed_cls
+
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
