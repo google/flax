@@ -19,6 +19,8 @@ import datetime
 import os
 import re
 import subprocess
+import time
+from typing import Sequence
 
 from absl import app
 from absl import flags
@@ -30,6 +32,15 @@ flags.DEFINE_bool(
     False,
     help='If set, then the command to launch the GCE instance will only be '
     'printed to stdout.')
+flags.DEFINE_bool(
+    'connect',
+    False,
+    help='Same as --wait, but directly connect to VM once it is ready.')
+flags.DEFINE_bool(
+    'wait', False,
+    help='If set, then the script will wait until VM is ready. If VM_READY_CMD '
+    'is set in environment, then that command will be executed once the VM '
+    'is ready. Useful for sending a notification, e.g. "osascript"')
 
 # Machine configuration.
 flags.DEFINE_string('project', None, help='Name of the Google Cloud project.')
@@ -114,10 +125,12 @@ def generate_startup_file(vm_name: str) -> str:
 
 
 def launch_gce(*, vm_name: str, startup_script: str):
+  # Note : Use `gcloud compute images list --project ml-images` to get a list
+  # of available VM images.
   args = [
       'gcloud', 'compute', 'instances', 'create', vm_name,
       f'--project={FLAGS.project}', f'--zone={FLAGS.zone}',
-      '--image=c1-deeplearning-common-cu100-v20201015-ubuntu-1804',
+      '--image=c6-deeplearning-tf2-ent-2-3-cu110-v20201112-debian-10',
       '--image-project=ml-images', f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full', '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
@@ -145,6 +158,25 @@ def launch_gce(*, vm_name: str, startup_script: str):
     raise RuntimeError('Could not create VM!')
 
 
+def print_howto(login_args: Sequence[str]):
+  print(f'''
+You can start/stop the instace via the web UI:
+https://console.cloud.google.com/compute/instances?project={FLAGS.project}
+
+Once the VM has started, you can login and connect to the training session:
+
+{' '.join(login_args)}
+
+Note that you can disconnect from the tmux session without stopping the training
+with the keystrokes 'CTRL-B A'. See "man tmux" for help about tmux.
+
+To observe the training via Tensorboard, simply run in your local computer:
+
+$ tensorboard --logdir={FLAGS.gcs_workdir_base}
+
+''')
+
+
 def main(_):
   for name in ('repo', 'branch', 'example', 'name', 'gcs_workdir_base'):
     value = getattr(FLAGS, name)
@@ -156,6 +188,8 @@ def main(_):
   )
   if not os.path.isdir(os.path.join(example_base_directory, FLAGS.example)):
     raise ValueError(f'Could not find --example={FLAGS.example}')
+  if FLAGS.connect and FLAGS.dry_run:
+    raise ValueError('Cannot --connect to VM with --dry_run')
 
   vm_name = '-'.join([
       'flax',
@@ -167,29 +201,38 @@ def main(_):
   startup_script = generate_startup_file(vm_name)
   launch_gce(vm_name=vm_name, startup_script=startup_script)
 
-  print(f'''
-Your instance is being started...
+  login_args = [
+      'gcloud',
+      'compute',
+      'ssh',
+      '--project',
+      FLAGS.project,
+      '--zone',
+      FLAGS.zone,
+      vm_name,
+      '--',
+      '/sudo_tmux_a.sh',
+  ]
 
-You can start/stop the instace via the web UI:
-https://console.cloud.google.com/compute/instances?project={FLAGS.project}
+  print('Your instance is being started...')
 
-After some minutes you can also SSH into the vm with:
+  print_howto(login_args)
 
-gcloud compute ssh --project {FLAGS.project} --zone {FLAGS.zone} {vm_name}
-
-Once logged into the machine, you can connect to the tmux session via:
-
-$ sudo su
-$ tmux a
-
-Note that you can disconnect from the tmux session without stopping the training
-with the keystrokes 'CTRL-B A'. See "man tmux" for help about tmux.
-
-To observe the training via Tensorboard, simply run in your local computer:
-
-$ tensorboard --logdir={FLAGS.gcs_workdir_base}
-
-''')
+  if FLAGS.connect or FLAGS.wait:
+    login_true_args = login_args[:-1] + ['true']
+    while True:
+      try:
+        result = subprocess.run(login_true_args, timeout=10)
+        break
+      except subprocess.TimeoutExpired:
+        print('(Not ready yet - waiting a little longer...)')
+        time.sleep(20)
+    if 'VM_READY_CMD' in os.environ:
+      os.system(os.environ['VM_READY_CMD'])
+    if FLAGS.connect:
+      result = subprocess.run(login_args)
+      # SSH session has cleared previous message, print it again.
+      print_howto(login_args)
 
 
 if __name__ == '__main__':

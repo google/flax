@@ -98,9 +98,23 @@ python linen_examples/cloud/launch_gce.py \
   --accelerator_type=nvidia-tesla-v100 --accelerator_count=8 \
   --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --tfds_data_dir=gs://$GCS_TFDS_BUCKET/datasets \
-  --repo=https://github.com/google/flax \
-  --branch=master \
+  --repo=${REPO:-https://github.com/google/flax} \
+  --branch=${BRANCH:-master} \
   --example=imagenet \
   --args='--config=configs/v100_x8_mixed_precision.py' \
-  --name=mixed_precision
+  --name=v100_x8_mixed_precision
 ```
+
+## Tips
+
+You can add `--connect` to above commands to directly land in the training
+session once the VM is ready. This is very helpful for debugging when changing
+things. Note that the VM automatically shuts down after 5 minutes of inactivity,
+both in case of success as in case of failure. On OS X this could be combined
+with `VM_READY_CMD="osascript -e 'display notification \"VM ready\"'"` so get
+undistracted when the VM is up and running.
+
+When tweaking the startup script or individual arguments, it is often helpful to
+connect to the VM, stop the scripts and end the tmux session, and then copy and
+paste the contents of the generated `flax-...-startup_script.sh`, after
+modifying these contents accordingly.
