@@ -3,7 +3,8 @@ Changelog
 
 vNext
 ------
-Add new changes here
+
+ - Added OptimizedLSTM: ~33% faster than the original LSTM when using <=1024 units
 
 v0.3
 -----
