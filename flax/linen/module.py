@@ -297,7 +297,7 @@ class Module:
   While no methods are special-cased, ``__call__`` is a popular choice because
   it allows you to use module instances as if they are functions::
 
-    from flax import nn as linen
+    from flax import linen as nn
 
     class Module(nn.Module):
       features: Tuple[int] = [16, 4]
