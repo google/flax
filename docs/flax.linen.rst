@@ -98,4 +98,5 @@ RNN primitives
   :toctree: _autosummary
 
     LSTMCell
+    OptimizedLSTMCell
     GRUCell
