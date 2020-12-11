@@ -91,6 +91,15 @@ Attention primitives
     SelfAttention
 
 
+Stochastic
+------------------------
+
+.. autosummary::
+  :toctree: _autosummary
+  
+    Dropout
+    
+
 RNN primitives
 ------------------------
 
