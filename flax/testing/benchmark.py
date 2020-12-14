@@ -133,7 +133,7 @@ class Benchmark(absltest.TestCase):
       if func_name.startswith('assert'):
         func = getattr(self, func_name)
         patched_func = functools.partial(
-            self._collect_assert_wrapper, func=func)
+            self._collect_assert_wrapper, fn=func)
         setattr(self, func_name, patched_func)
 
     # Create target directory if defined.
@@ -142,10 +142,10 @@ class Benchmark(absltest.TestCase):
       tf.io.gfile.makedirs(FLAGS.benchmark_output_dir)
 
   # pylint: disable=invalid-name
-  def _collect_assert_wrapper(self, *args, func=None, **kwargs):
+  def _collect_assert_wrapper(self, *args, fn=None, **kwargs):
     """Wrapper around assert methods that caputres and collects failures."""
     try:
-      return func(*args, **kwargs)
+      return fn(*args, **kwargs)
     except self.failureException as ex:
       self._outstanding_fails.append(ex)
 

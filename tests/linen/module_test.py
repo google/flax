@@ -14,6 +14,8 @@
 
 """Tests for flax.linen."""
 
+import dataclasses
+
 from absl.testing import absltest
 
 import jax
@@ -282,6 +284,42 @@ class ModuleTest(absltest.TestCase):
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'notbias.*must equal.*bias'):
       y = Dummy(x.shape, parent=scope)(x)
+
+  def test_setattr_name_var_disagreement_allowed_in_lists(self):
+    rngkey = jax.random.PRNGKey(0)
+    class Dummy(nn.Module):
+      xshape: Tuple[int]
+      def setup(self):
+        self.biases = [
+          self.param(f'bias_{i}', initializers.ones, self.xshape)
+          for i in range(4)]
+      def __call__(self, x):
+        return x + self.biases[0]
+
+    x = jnp.array([1.])
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    y = Dummy(x.shape, parent=scope)(x)
+    self.assertEqual(y, jnp.array([2.]))
+
+  def test_setattr_name_var_disagreement_allowed_in_dicts(self):
+    rngkey = jax.random.PRNGKey(0)
+    class Dummy(nn.Module):
+      xshape: Tuple[int]
+      def setup(self):
+        self.biases = {
+          # NOTE that keys still must be strings. This is to make a possible
+          # future transition to automatically derived parameter names when assigned
+          # as a dict easier (like we currently have with submodules).
+          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853 
+          str(i): self.param(f'bias_{i}', initializers.ones, self.xshape)
+          for i in range(4)}
+      def __call__(self, x):
+        return x + self.biases['0']
+
+    x = jnp.array([1.])
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    y = Dummy(x.shape, parent=scope)(x)
+    self.assertEqual(y, jnp.array([2.]))
 
   def test_submodule_var_collision(self):
     rngkey = jax.random.PRNGKey(0)
@@ -667,6 +705,21 @@ class ModuleTest(absltest.TestCase):
     # in `setup()`
     with self.assertRaisesRegex(AttributeError, "has no attribute 'setup_called'"):
       empty.bar()
+
+  def test_module_with_attrs(self):
+    class Foo(nn.Module):
+      bar: nn.Dense = dataclasses.field(init=False)
+
+      def setup(self):
+        self.bar = nn.Dense(3)
+      
+      def __call__(self, x):
+        return self.bar(x)
+
+    foo = Foo()
+    x = jnp.ones((2,))
+    variables = foo.init(random.PRNGKey(0), x)
+    self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
 
 
 if __name__ == '__main__':

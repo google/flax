@@ -14,12 +14,12 @@
 
 """Linear modules."""
 
-from collections.abc import Iterable  # pylint: disable=g-importing-member
+from dataclasses import field
 
-from typing import (Any, Callable, Sequence, Optional, Tuple, Union)
+from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
 
-from .module import Module, compact
-from . import initializers
+from flax.linen.module import Module, compact
+from flax.linen.initializers import lecun_normal, variance_scaling, zeros
 
 from jax import lax
 import jax.numpy as jnp
@@ -32,7 +32,7 @@ Dtype = Any  # this could be a real type?
 Array = Any
 
 
-default_kernel_init = initializers.lecun_normal()
+default_kernel_init = lecun_normal()
 
 
 def _normalize_axes(axes, ndim):
@@ -43,9 +43,10 @@ def _normalize_axes(axes, ndim):
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
 
-    Args:
-      features: tuple with numbers of output features.
-      axis: tuple with axes to apply the transformation on.
+    Attributes:
+      features: int or tuple with number of output features.
+      axis: int or tuple with axes to apply the transformation on. For instance,
+        (-2, -1) will apply the transformation to the last two axes.
       batch_dims: tuple with batch axes.
       use_bias: whether to add a bias to the output (default: True).
       dtype: the dtype of the computation (default: float32).
@@ -54,13 +55,13 @@ class DenseGeneral(Module):
       precision: numerical precision of the computation see `jax.lax.Precision`
         for details.
   """
-  features: int
-  axis: int = -1
-  batch_dims: Sequence[int] = ()
+  features: Union[int, Iterable[int]]
+  axis: Union[int, Iterable[int]] = -1
+  batch_dims: Iterable[int] = ()
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: Any = None
 
   def setup(self):
@@ -140,7 +141,7 @@ class DenseGeneral(Module):
 class Dense(Module):
   """A linear transformation applied over the last dimension of the input.
 
-  Args:
+  Attributes:
     features: the number of output features.
     use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: float32).
@@ -154,7 +155,7 @@ class Dense(Module):
   dtype: Any = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -193,7 +194,7 @@ def _conv_dimension_numbers(input_shape):
 class Conv(Module):
   """Convolution Module wrapping lax.conv_general_dilated.
 
-  Args:
+  Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
@@ -221,17 +222,17 @@ class Conv(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Union[int, Sequence[int]]
-  strides: Optional[Sequence[int]] = None
-  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
-  input_dilation: Optional[Sequence[int]] = None
-  kernel_dilation: Optional[Sequence[int]] = None
+  kernel_size: Union[int, Iterable[int]]
+  strides: Optional[Iterable[int]] = None
+  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
+  input_dilation: Optional[Iterable[int]] = None
+  kernel_dilation: Optional[Iterable[int]] = None
   feature_group_count: int = 1
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -290,7 +291,7 @@ class Conv(Module):
 class ConvTranspose(Module):
   """Convolution Module wrapping lax.conv_general_dilated.
 
-  Args:
+  Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
@@ -312,15 +313,15 @@ class ConvTranspose(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Union[int, Sequence[int]]
-  strides: Optional[Sequence[int]] = None
-  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
-  kernel_dilation: Optional[Sequence[int]] = None
+  kernel_size: Union[int, Iterable[int]]
+  strides: Optional[Iterable[int]] = None
+  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
+  kernel_dilation: Optional[Iterable[int]] = None
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -368,15 +369,15 @@ class ConvTranspose(Module):
     return y
 
 
-default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
-                                                   out_axis=0)
+default_embed_init = variance_scaling(1.0, 'fan_in', 'normal', out_axis=0)
 
 
 class Embed(Module):
   """Embedding Module.
+
   A parameterized function from integers [0, n) to d-dimensional vectors.
 
-  Args:
+  Attributes:
     num_embeddings: number of embeddings.
     features: number of feature dimensions for each embedding.
     dtype: the dtype of the embedding vectors (default: float32).
@@ -386,6 +387,8 @@ class Embed(Module):
   features: int
   dtype: Dtype = jnp.float32
   embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
+
+  embedding: Array = field(init=False)
 
   def setup(self):
     self.embedding = self.param('embedding',

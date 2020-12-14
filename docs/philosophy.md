@@ -20,7 +20,8 @@
 * If we expose an abstraction to our developers, we own the mental
   overhead.
 
-* Avoid developer-facing functional programming abstractions.
+* Developer-facing functional programming abstractions confuse some users,
+  expose them where the benefit is high.
 
 * "Read the manual" is not an appropriate response to developer confusion.
   The framework should guide developers

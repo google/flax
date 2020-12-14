@@ -37,10 +37,13 @@ class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
   __slots__ = ('_dict', '_hash')
 
-  def __init__(self, *args, **kwargs):
+  def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):
     # make sure the dict is as
     xs = dict(*args, **kwargs)
-    self._dict = _prepare_freeze(xs)
+    if __unsafe_skip_copy__:
+      self._dict = xs
+    else:
+      self._dict = _prepare_freeze(xs)
 
     self._hash = None
 
@@ -121,7 +124,9 @@ class FrozenDict(Mapping[K, V]):
 
   @classmethod
   def tree_unflatten(cls, _, data):
-    return cls(*data)
+    # data is already deep copied due to tree map mechanism
+    # we can skip the deep copy in the constructor
+    return cls(*data, __unsafe_skip_copy__=True)
 
 
 def _prepare_freeze(xs: Any) -> Any:
@@ -137,7 +142,7 @@ def _prepare_freeze(xs: Any) -> Any:
   return {key: _prepare_freeze(val) for key, val in xs.items()}
 
 
-def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
+def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
   """Freeze a nested dict.
 
   Makes a nested `dict` immutable by transforming it into `FrozenDict`.
@@ -145,18 +150,25 @@ def freeze(xs: Dict[K, V]) -> FrozenDict[K, V]:
   return FrozenDict(xs)
 
 
-def unfreeze(x: FrozenDict[K, V]) -> Dict[K, V]:
+def unfreeze(x: FrozenDict[Any, Any]) -> Dict[Any, Any]:
   """Unfreeze a FrozenDict.
 
   Makes a mutable copy of a `FrozenDict` mutable by transforming
   it into (nested) dict.
   """
-  if not isinstance(x, (FrozenDict, dict)):
+  if isinstance(x, FrozenDict):
+    # deep copy internal state of a FrozenDict
+    # the dict branch would also work here but
+    # it is much less performant because jax.tree_map
+    # uses an optimized C implementation.
+    return jax.tree_map(lambda y: y, x._dict)
+  elif isinstance(x, dict):
+    ys = {}
+    for key, value in x.items():
+      ys[key] = unfreeze(value)
+    return ys
+  else:
     return x
-  ys = {}
-  for key, value in x.items():
-    ys[key] = unfreeze(value)
-  return ys
 
 
 def _frozen_dict_state_dict(xs):

@@ -14,8 +14,6 @@
 
 """Attention core modules for Flax."""
 
-from collections.abc import Iterable  # pylint: disable=g-importing-member
-
 from functools import partial
 from typing import (Any, Callable, Tuple, Optional)
 
@@ -25,11 +23,10 @@ from jax import random
 import jax.numpy as jnp
 import numpy as np
 
-from .linear import default_kernel_init
-from .linear import DenseGeneral
-from .module import Module, compact
-from . import initializers
-
+from flax.linen.linear import default_kernel_init
+from flax.linen.linear import DenseGeneral
+from flax.linen.module import Module, compact
+from flax.linen.initializers import zeros
 
 PRNGKey = Any
 Shape = Tuple[int]
@@ -63,7 +60,7 @@ def dot_product_attention(query: Array,
     value: values to be used in attention with shape of
       `[batch..., kv_length, num_heads, v_depth_per_head]`.
     bias: bias for the attention weights. This should be broadcastable to the
-      shape: `[batch..., num_heads, q_length, kv_length]`
+      shape `[batch..., num_heads, q_length, kv_length]`.
       This can be used for incorporating causal masks, padding masks,
       proximity bias, etc.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
@@ -77,13 +74,13 @@ def dot_product_attention(query: Array,
   Returns:
     Output of shape `[batch..., length, num_heads, v_depth_per_head]`.
   """
-  assert key.ndim == query.ndim == value.ndim, "q, k, v must have same rank."
+  assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert query.shape[:-3] == key.shape[:-3] == value.shape[:-3], (
-      "q, k, v batch dims must match.")
+      'q, k, v batch dims must match.')
   assert query.shape[-2] == key.shape[-2] == value.shape[-2], (
-      "q, k, v num_heads must match.")
-  assert key.shape[-3] == value.shape[-3], "k, v lengths must match."
-  assert query.shape[-1] == key.shape[-1], "q, k depths must match."
+      'q, k, v num_heads must match.')
+  assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
+  assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
 
   # calculate attention matrix
   depth = query.shape[-1]
@@ -120,7 +117,7 @@ def dot_product_attention(query: Array,
 class MultiHeadDotProductAttention(Module):
   """Multi-head dot-product attention.
 
-    Args:
+    Attributes:
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
       dtype: the dtype of the computation (default: float32)
@@ -148,7 +145,7 @@ class MultiHeadDotProductAttention(Module):
   deterministic: bool = False
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   use_bias: bool = True
   attention_fn: Callable[[Array, Array, Array], Array] = dot_product_attention
   decode: bool = False
@@ -282,7 +279,7 @@ class SelfAttention(MultiHeadDotProductAttention):
 
 def make_attention_mask(query_input: Array,
                         key_input: Array,
-                        pairwise_fn: Callable = jnp.multiply,
+                        pairwise_fn: Callable[..., Any] = jnp.multiply,
                         extra_batch_dims: int = 0,
                         dtype: Dtype = jnp.float32):
   """Mask-making helper for attention weights.
@@ -337,6 +334,7 @@ def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32):
 
   Args:
     *masks: set of attention mask arguments to combine, some can be None.
+    dtype: dtype for the returned mask.
 
   Returns:
     Combined mask, reduced by logical and, returns None if no masks given.

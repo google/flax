@@ -28,19 +28,16 @@
 """Flax functional core: Scopes."""
 
 import contextlib
-import enum
 import functools
 import hashlib
-from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic
+from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic, Mapping
 
 from . import tracers
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
-from .variables import Variable, VariableDict
 
 import jax
-from jax import lax
 from jax import random
 from jax import numpy as jnp
 
@@ -52,15 +49,15 @@ Array = Any
 
 RNGSequences = Dict[str, PRNGKey]
 
-Filter = Union[bool, str, Sequence[str]]
+Filter = Union[bool, str, Container[str]]
 CollectionFilter = Filter
 PRNGSequenceFilter = Filter
 
+Collection = Mapping[str, Any]
 MutableCollection = Dict[str, Any]
-FrozenCollection = FrozenDict[str, Any]
-MaybeFrozenCollection = Union[MutableCollection, FrozenCollection]
 
-FrozenVariableDict = Dict[str, FrozenCollection]
+VariableDict = Mapping[str, Collection]
+MutableVariableDict = Dict[str, MutableCollection]
 
 
 def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
@@ -126,7 +123,7 @@ def filter_to_set(x: Filter) -> Set[str]:
   raise TypeError('Invalid Filter')
 
 
-def union_filters(a: Filter, b: Filter) -> Set[str]:
+def union_filters(a: Filter, b: Filter) -> Filter:
   """Takes the union of two filters (similar to a logical or).
   
   Arguments:
@@ -144,7 +141,7 @@ def union_filters(a: Filter, b: Filter) -> Set[str]:
   return a.union(b)
 
 
-def intersect_filters(a: Filter, b: Filter) -> Set[str]:
+def intersect_filters(a: Filter, b: Filter) -> Filter:
   """Take the intersection of two filters (similar to a logical and).
   
   Arguments:
@@ -165,7 +162,7 @@ def intersect_filters(a: Filter, b: Filter) -> Set[str]:
 
 
 def group_collections(xs: VariableDict,
-                col_filters: Sequence[CollectionFilter]) -> Sequence[VariableDict]:
+                col_filters: Sequence[CollectionFilter]) -> Sequence[MutableVariableDict]:
   """Groups variables by collection filters.
 
   Iteratively applies the filters in `col_filters` to `xs`, and adds the result
@@ -195,6 +192,38 @@ def group_collections(xs: VariableDict,
   return tuple(groups)
 
 
+T = TypeVar('T')
+class Variable(Generic[T]):
+  """A Variable object allows mutable access to a variable in a VariableDict.
+
+  Variables are identified by a collection (e.g., "batch_stats") and a name
+  (e.g., "moving_mean"). The value property gives access to the variable's
+  content and can be assigned to for mutation.
+  """
+
+  def __init__(self, scope: 'Scope', collection: str, name: str):
+    """Initializes a variable.
+
+    Args:
+      scope: The scope in which the variable is stored.
+      collection: The collection of the variable (e.g., "params").
+      name: The name of the variable (e.g., "dense").
+    """
+    self.scope = scope
+    self.collection = collection
+    self.name = name
+
+  @property
+  def value(self) -> T:
+    """Returns the value of this Variable."""
+    return self.scope.get_variable(self.collection, self.name)
+
+  @value.setter
+  def value(self, value: T):
+    """Updates the value of this Variable."""
+    self.scope.put_variable(self.collection, self.name, value)
+
+
 class Scope:
   """A Scope allows easy access to variables and manages RNGS of a neural network layer.
   
@@ -207,7 +236,7 @@ class Scope:
   """
 
   def __init__(self,
-               variables: VariableDict,
+               variables: MutableVariableDict,
                rngs: Optional[Dict[str, PRNGKey]] = None,
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
@@ -264,7 +293,7 @@ class Scope:
     """Invalidates the Scope."""
     self._invalid = True
 
-  def variables(self) -> FrozenCollection:
+  def variables(self) -> Collection:
     """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
     return freeze(self._variables)
@@ -364,7 +393,7 @@ class Scope:
     scope = self.push(name)
     if named_call:
       # We import named_call at runtime to avoid a circular import issue.
-      from . import lift
+      from . import lift  # type: ignore
       fn = lift.named_call(fn, name)
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -390,7 +419,7 @@ class Scope:
         self._variables[col] = {}
     return self._variables[col]
 
-  def _collection(self, col: str) -> MaybeFrozenCollection:
+  def _collection(self, col: str) -> Collection:
     """Returns a collection of variables of collection `col`."""
     if col not in self._variables:
       if self.parent:
@@ -545,9 +574,9 @@ def apply(fn: Callable[..., Any],
     `fn` with the scope partially applied.
   """
   @functools.wraps(fn)
-  def wrapper(variables: FrozenVariableDict, *args,
+  def wrapper(variables: VariableDict, *args,
               rngs: Optional[RNGSequences] = None, 
-              **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
+              **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
     
     if not _is_valid_variables(variables):
       raise ValueError('The first argument passed to an apply function '
@@ -581,7 +610,7 @@ def init(fn: Callable[..., Any],
     `fn` with the scope partially applied.
   """
   @functools.wraps(fn)
-  def wrapper(rngs, *args, **kwargs) -> (Any, FrozenVariableDict):
+  def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
       raise ValueError('First argument passed to an init function should be a `jax.PRNGKey` '
                        'or a dictionary mapping strings to `jax.PRNGKey`.') 
@@ -591,7 +620,7 @@ def init(fn: Callable[..., Any],
   return wrapper
 
 
-def _is_valid_collection(col: FrozenCollection):
+def _is_valid_collection(col: VariableDict):
   if not isinstance(col, FrozenDict):
     return False
   for name in col.keys():

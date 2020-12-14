@@ -9,5 +9,5 @@ recommonmark
 # The next packages are for notebooks
 matplotlib
 sklearn
-# Must install flax itself for notebook execution to work
+# Must install flax itself for notebook execution and auotdocs to work
 .

@@ -20,7 +20,7 @@ The data is loaded using tensorflow_datasets.
 
 import functools
 import time
-from typing import Any
+from typing import Any, Optional
 
 from absl import logging
 
@@ -45,10 +45,6 @@ import ml_collections
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
-
-# enable jax omnistaging
-jax.config.enable_omnistaging()
 
 
 def create_model(*, half_precision, **kwargs):
@@ -199,16 +195,16 @@ class TrainState:
   dynamic_scale: optim.DynamicScale
 
 
-def restore_checkpoint(state, model_dir):
-  return checkpoints.restore_checkpoint(model_dir, state)
+def restore_checkpoint(state, workdir):
+  return checkpoints.restore_checkpoint(workdir, state)
 
 
-def save_checkpoint(state, model_dir):
+def save_checkpoint(state, workdir):
   if jax.host_id() == 0:
     # get train state from the first replica
     state = jax.device_get(jax.tree_map(lambda x: x[0], state))
     step = int(state.step)
-    checkpoints.save_checkpoint(model_dir, state, step, keep=3)
+    checkpoints.save_checkpoint(workdir, state, step, keep=3)
 
 
 def sync_batch_stats(state):
@@ -239,16 +235,16 @@ def create_train_state(rng, config: ml_collections.ConfigDict,
   return state
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   """Execute model training and evaluation loop.
 
   Args:
     config: Hyperparameter configuration for training and evaluation.
-    model_dir: Directory where the tensorboard summaries are written to.
+    workdir: Directory where the tensorboard summaries are written to.
   """
 
   if jax.host_id() == 0:
-    summary_writer = tensorboard.SummaryWriter(model_dir)
+    summary_writer = tensorboard.SummaryWriter(workdir)
     summary_writer.hparams(dict(config))
 
   rng = random.PRNGKey(0)
@@ -287,7 +283,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
     num_steps = config.num_train_steps
 
   if config.steps_per_eval == -1:
-    num_validation_examples = dataset_builder.info.splits['train'].num_examples
+    num_validation_examples = dataset_builder.info.splits[
+        'validation'].num_examples
     steps_per_eval = num_validation_examples // config.batch_size
   else:
     steps_per_eval = config.steps_per_eval
@@ -299,7 +296,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
   model = create_model(half_precision=config.half_precision)
 
   state = create_train_state(rng, config, model, image_size)
-  state = restore_checkpoint(state, model_dir)
+  state = restore_checkpoint(state, workdir)
   # step_offset > 0 if restarting from checkpoint
   step_offset = int(state.step)
   state = jax_utils.replicate(state)
@@ -354,7 +351,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, model_dir: str):
         summary_writer.flush()
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
       state = sync_batch_stats(state)
-      save_checkpoint(state, model_dir)
+      save_checkpoint(state, workdir)
 
   # Wait until computations are done before exiting
   jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()

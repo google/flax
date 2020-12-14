@@ -62,7 +62,6 @@ Distributed training only requires a few extra additions::
 
 """
 
-import abc
 from typing import Any
 import warnings
 
@@ -89,7 +88,6 @@ class OptimizerDef:
   def __init__(self, hyper_params):
     self.hyper_params = hyper_params
 
-  @abc.abstractmethod
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
     """Apply a gradient for a single parameter.
 
@@ -102,9 +100,8 @@ class OptimizerDef:
     Returns:
       A tuple containing the new parameter and the new state.
     """
-    pass
+    raise NotImplementedError()
 
-  @abc.abstractmethod
   def init_param_state(self, param):
     """Initializes the state for a parameter.
 
@@ -113,7 +110,7 @@ class OptimizerDef:
     Returns:
       A named tuple containing the initial optimization state for the parameter.
     """
-    pass
+    raise NotImplementedError()
 
   def apply_gradient(self, hyper_params, params, state, grads):
     """Applies a gradient for a set of parameters.
@@ -215,13 +212,12 @@ class _NoAux:
   pass
 
 
-@struct.dataclass
-class Optimizer:
+class Optimizer(struct.PyTreeNode):
   """Wraps an optimizer with its hyper_params, state, and model parameters."""
 
   optimizer_def: OptimizerDef = struct.field(pytree_node=False)
-  state: Any
-  target: Any
+  state: Any = struct.field(pytree_node=True)
+  target: Any = struct.field(pytree_node=True)
 
   def apply_gradient(self, grads, **hyper_param_overrides):
     """Applies a pytree of gradients to the target.

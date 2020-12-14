@@ -30,9 +30,8 @@ import flax
 from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
-from flax.core.scope import CollectionFilter, Variable
+from flax.core.scope import CollectionFilter, Variable, VariableDict
 from flax.core.frozen_dict import freeze
-from flax.core.variables import Variable, VariableDict
 
 # from .dotgetter import DotGetter
 
@@ -71,13 +70,15 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
   cls = type(module)
   cls_name = cls.__name__
   rep = ''
-  attributes = {k: v for k, v in cls.__annotations__.items() if k not in ('parent', 'name')}
-  child_modules = {k: v for k, v in module.children.items() if isinstance(v, Module)}
+  attributes = {k: v for k, v in cls.__annotations__.items()
+                if k not in ('parent', 'name')}
+  child_modules = {k: v for k, v in module.children.items()  # pytype: disable=attribute-error
+                   if isinstance(v, Module)}
   if attributes:
     rep += '# attributes\n'
     for attr in attributes.keys():
       # TODO(jheek): can we get a nice string representation of attribute types?
-      value = getattr(module, attr)
+      value = getattr(module, attr, None)
       value_rep = _attr_repr(value)
       rep += f'{attr} = {value_rep}\n'
   if child_modules:
@@ -177,7 +178,7 @@ def compact(fun: Callable) -> Callable:
   return fun
 
 
-def _get_local_method_names(cls: Any, exclude: Tuple[str] = ()) -> Tuple[str]:
+def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]:
   """Gets method names of a class, excluding class and static methods.
   
   Args:
@@ -249,7 +250,7 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
     An unbound version of input function.
   """
   if inspect.ismethod(method_or_fn):
-    return method_or_fn.__func__
+    return method_or_fn.__func__  # pytype: disable=attribute-error
   elif callable(method_or_fn):
     return method_or_fn
   else:
@@ -296,7 +297,7 @@ class Module:
   While no methods are special-cased, ``__call__`` is a popular choice because
   it allows you to use module instances as if they are functions::
 
-    from flax import nn as linen
+    from flax import linen as nn
 
     class Module(nn.Module):
       features: Tuple[int] = [16, 4]
@@ -312,6 +313,10 @@ class Module:
   definitions are co-located with their usage, you can use the 
   :meth:`compact` wrapper.
   """
+
+  def __init__(*args, **kwargs):
+    # this stub makes sure pytype accepts constructor arguments.
+    pass
 
   @classmethod
   def __init_subclass__(cls):
@@ -345,9 +350,9 @@ class Module:
     # Remove 'parent' and 'name' from parents because we always want parent and
     # name to show up last in the dataclass args.
     if 'parent' in parent_dataclass_fields:
-      cls.__dataclass_fields__.pop('parent')
+      cls.__dataclass_fields__.pop('parent')  # pytype: disable=attribute-error
     if 'name' in parent_dataclass_fields:
-      cls.__dataclass_fields__.pop('name')
+      cls.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
     annotations['parent'] = Union[Type["Module"], Type["Scope"],
                                   Type["_Sentinel"], None]
     cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
@@ -355,7 +360,7 @@ class Module:
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
-    dataclasses.dataclass(cls, unsafe_hash=True, repr=False)
+    dataclasses.dataclass(cls, unsafe_hash=True, repr=False)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):
@@ -407,7 +412,7 @@ class Module:
     if name == 'parent':
       pass
     # Modules have been passed in as dataclass args.
-    elif name in self.__dataclass_fields__.keys():
+    elif name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init:  # pytype: disable=attribute-error
       pass
     # Submodules are being defined and attached in setup()
     else:
@@ -418,7 +423,7 @@ class Module:
                 "You can only assign submodules to self in setup().")
           if subvalue.parent is _unspecified_parent:
             subvalue.parent = self
-          elif subvalue.parent != self:
+          elif subvalue.parent is not self:
             raise ValueError("Can't attach to remote parent in setup, pass in "
                              "bound Modules from outside as an argument.")
           if subvalue.name is not None:
@@ -432,7 +437,8 @@ class Module:
                                    Variable)) and self._state.in_setup:
           var_name = f'{name}{suffix}'
           # namecheck to ensure named variable matches self attribute name.
-          if self._state.last_varname and self._state.last_varname != var_name:
+          if (suffix == '' and  # not when assigning lists or dicts
+              self._state.last_varname and self._state.last_varname != var_name):
             raise ValueError(f'Variable name {self._state.last_varname} must '
                              f'equal attribute name {var_name}.')
           self._state.last_varname = None
@@ -451,7 +457,7 @@ class Module:
     self.children = dict()  # tracks child modules
 
     # Typically we set the parent based on the dynamic module context.
-    if self.parent is _unspecified_parent:
+    if self.parent is _unspecified_parent:  # pytype: disable=attribute-error
       self.parent = _context.module_stack[-1]
 
     # Initialization is deferred for top level Modules or any other "orphan"
@@ -464,14 +470,14 @@ class Module:
       # When initializing an unnamed Module inside setup()
       # initialization is deferred until attachment by __setattr__
       # i.e. self.mymodule = MyModule(...)
-      if self.parent._state.in_setup and self.name is None:
+      if self.parent._state.in_setup and self.name is None:  # pytype: disable=attribute-error
         return
       if not self.parent._initialization_allowed:
         raise ValueError(
             'Submodules must be defined in `setup()` or in a method wrapped '
             'in `@compact`')
       # Autonaming of submodules.
-      if self.name is None:
+      if self.name is None:  # pytype: disable=attribute-error
         prefix = f"{self.__class__.__name__}"
         cursor = self.parent._state.autoname_cursor.get(prefix, 0)
         self.name = f"{prefix}_{cursor}"
@@ -551,7 +557,7 @@ class Module:
     Returns:
       A clone of the this Module with the updated attributes and parent.
     """
-    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)}
+    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self) if f.init}
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
@@ -679,7 +685,7 @@ class Module:
     fn = lambda scope: method(self.clone(parent=scope), *args, **kwargs)
     return apply(fn, mutable=mutable)(variables, rngs=rngs)
 
-  def init_with_output(self, rngs: RNGSequences, *args, 
+  def init_with_output(self, rngs: Union[PRNGKey, RNGSequences], *args,
                        method: Optional[Callable[..., Any]] = None, 
                        **kwargs) -> Tuple[Any, VariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
@@ -698,7 +704,7 @@ class Module:
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 
-  def init(self, rngs: RNGSequences, *args, 
+  def init(self, rngs: Union[PRNGKey, RNGSequences], *args,
            method: Optional[Callable[..., Any]] = None, 
            **kwargs) -> VariableDict:
     """Initializes a module method with variables and returns modified variables.

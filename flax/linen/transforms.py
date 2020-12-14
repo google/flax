@@ -57,7 +57,7 @@ def get_module_scopes(module):
       outer_scopes.append(x.scope)
     return x
   attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent'}
+           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
   jax.tree_map(get_scope, attrs)
   return outer_scopes + [module.scope,]
 
@@ -90,11 +90,11 @@ def set_module_scopes(module, scopes):
     else:
       return x
   attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent'}
+           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
   new_attrs = jax.tree_map(set_scope, attrs)
   new_module = module.clone(parent=scopes[idx], **new_attrs)
   idx += 1
-  assert len(scopes) == idx, f"scope list mismatch {len(scopes)} != {idx}"
+  assert len(scopes) == idx, f'scope list mismatch {len(scopes)} != {idx}'
   return new_module
 
 
@@ -106,7 +106,7 @@ def module_class_lift_transform(
     *trafo_args,
     methods=None,
     **trafo_kwargs):
-  # TODO (levskaya): find nicer argument convention for multi-method case?
+  # TODO(levskaya): find nicer argument convention for multi-method case?
 
   # Prepare per-method transform args, kwargs.
   if methods is None:
@@ -122,10 +122,7 @@ def module_class_lift_transform(
         all args must be passed via methods kwarg.""")
     class_trafo_args = {k: ((), v) for k, v in methods.items()}
 
-  # Build the actual transformed class.
-  transformed_fns = {}
-  # for each of the specified methods:
-  for fn_name, fn_trafo_args in class_trafo_args.items():
+  def create_trans_fn(fn_name, fn_trafo_args):
     # get existing unbound method from class
     fn = getattr(module_class, fn_name)
     trafo_args, trafo_kwargs = fn_trafo_args
@@ -141,7 +138,7 @@ def module_class_lift_transform(
         cloned = module_class(parent=None, **attrs)
         cloned = set_module_scopes(cloned, scopes)
         cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
-        res = getattr(cloned, fn_name)(*args, **kwargs)
+        res = fn(cloned, *args, **kwargs)
         # preserve submodule-tree stripped of scopes/tracers for introspection
         object.__setattr__(self, 'children', clean_clone(cloned).children)
         self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
@@ -150,11 +147,16 @@ def module_class_lift_transform(
       trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
       ret = trafo_fn(get_module_scopes(self), *args, **kwargs)
       return ret
-    transformed_fns[fn_name] = wrapped_fn
+    return wrapped_fn
+  transformed_fns = {fn_name: create_trans_fn(fn_name, fn_trafo_args)
+                     for fn_name, fn_trafo_args in class_trafo_args.items()}
+  transformed_fns['setup'] = lambda _: None
   # construct new dynamic class w. transformed methods
-  return type(transform.__name__.capitalize() + module_class.__name__,
-              (module_class,),
-              transformed_fns)
+  transformed_cls = type(transform.__name__.capitalize() + module_class.__name__,
+                         (module_class,),
+                         transformed_fns)
+  return transformed_cls
+
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------

@@ -154,7 +154,7 @@ def unflatten_dict(xs):
   return result
 
 
-class Traversal(object):
+class Traversal(abc.ABC):
   """Base class for all traversals."""
 
   @abc.abstractmethod

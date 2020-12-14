@@ -23,8 +23,6 @@ import models
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class ResNetV1Test(absltest.TestCase):

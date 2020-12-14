@@ -21,8 +21,10 @@ from flax import nn
 
 import jax
 from jax import random
+from jax import test_util as jtu
 from jax.nn import initializers
 import jax.numpy as jnp
+
 
 import numpy as onp
 
@@ -682,6 +684,33 @@ class RecurrentTest(absltest.TestCase):
         'hh': {'bias': (6*4,), 'kernel': (3, 3, 6, 6*4)},
         'ih': {'bias': (6*4,), 'kernel': (3, 3, 3, 6*4)},
     })
+
+  def test_optimized_lstm_cell_matches_regular(self):
+
+    # Create regular LSTMCell.
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (2, 3))
+    c0, h0 = nn.LSTMCell.initialize_carry(rng, (2,), 4)
+    self.assertEqual(c0.shape, (2, 4))
+    self.assertEqual(h0.shape, (2, 4))
+    (carry, y), initial_params = nn.LSTMCell.init(key2, (c0, h0), x)
+    lstm = nn.Model(nn.LSTMCell, initial_params)      
+    
+    # Create OptimizedLSTMCell.
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (2, 3))
+    c0, h0 = nn.OptimizedLSTMCell.initialize_carry(rng, (2,), 4)
+    self.assertEqual(c0.shape, (2, 4))
+    self.assertEqual(h0.shape, (2, 4))
+    (carry, y_opt), initial_params = nn.OptimizedLSTMCell.partial(
+        name='LSTMCell').init(key2, (c0, h0), x)
+    lstm_opt = nn.Model(nn.OptimizedLSTMCell.partial(name='LSTMCell'), 
+      initial_params)
+    
+    onp.testing.assert_allclose(y, y_opt, rtol=1e-6)
+    jtu.check_eq(lstm.params, lstm_opt.params)
 
 
 class StochasticTest(absltest.TestCase):

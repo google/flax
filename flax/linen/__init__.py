@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Linen Neural Network api."""
+"""The Flax Module system."""
 
 
 # pylint: disable=g-multiple-import
@@ -27,8 +27,9 @@ from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
 from .module import Module, compact, enable_named_call, disable_named_call, Variable
 from .normalization import BatchNorm, GroupNorm, LayerNorm
 from .pooling import avg_pool, max_pool
-from .recurrent import GRUCell, LSTMCell, ConvLSTM
+from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell
 from .stochastic import Dropout
 from .transforms import jit, named_call, remat, scan, vmap
+from .initializers import zeros, ones
 
 # pylint: enable=g-multiple-import
