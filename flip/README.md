@@ -1,6 +1,6 @@
 # FLIP : Flax Improvement Process
 
-Most changes can be discussed in issues/discussions and with pull requests.
+Most changes can be discussed with simple issues/discussions and pull requests.
 
 Some changes though are a bit larger in scope or require more discussion, and
 these should be implemented as FLIPs. This allows for writing longer documents
@@ -22,9 +22,12 @@ be extended later on.
 
 ## How to start a FLIP
 
-First, create an issue with the [FLIP label].
+First, create an issue with the [FLIP label]. All pull requests that relate to
+the FLIP (i.e. adding the FLIP itself as well as any implementing pull requests)
+should be linked to this issue.
 
-Make a copy of `0000-template.md` and rename it to `0000-your-flip.md` - the
-number will later be changed to the pull request that dded the FLIP.
+Then create a pull request that consists of a copy of the `0000-template.md`
+renamed to `0000-your-flip.md` - the number changed should match the pull
+request that adds the FLIP.
 
 [FLIP label]: https://github.com/google/flax/issues?q=label%3A%22Type%3A+FLIP%22
