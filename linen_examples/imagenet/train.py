@@ -47,7 +47,7 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
-def create_model(*, half_precision, **kwargs):
+def create_model(*, model_cls, half_precision, **kwargs):
   platform = jax.local_devices()[0].platform
   if half_precision:
     if platform == 'tpu':
@@ -56,7 +56,7 @@ def create_model(*, half_precision, **kwargs):
       model_dtype = jnp.float16
   else:
     model_dtype = jnp.float32
-  return models.ResNet50(num_classes=1000, dtype=model_dtype, **kwargs)
+  return model_cls(num_classes=1000, dtype=model_dtype, **kwargs)
 
 
 def initialized(key, image_size, model):
@@ -293,7 +293,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   base_learning_rate = config.learning_rate * config.batch_size / 256.
 
-  model = create_model(half_precision=config.half_precision)
+  model_cls = getattr(models, config.model)
+  model = create_model(
+      model_cls=model_cls, half_precision=config.half_precision)
 
   state = create_train_state(rng, config, model, image_size)
   state = restore_checkpoint(state, workdir)
@@ -313,6 +315,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   epoch_metrics = []
   t_loop_start = time.time()
+  logging.info('Initial compilation, this might take some minutes...')
   for step, batch in zip(range(step_offset, num_steps), train_iter):
     state, metrics = p_train_step(state, batch)
     epoch_metrics.append(metrics)
