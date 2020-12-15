@@ -1,4 +1,4 @@
-# FLIP : Flax Improvement Process
+# FLIP: Flax Improvement Process
 
 Most changes can be discussed with simple issues/discussions and pull requests.
 
