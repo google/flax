@@ -24,6 +24,9 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
+jax.config.update('jax_disable_most_optimizations', True)
+
+
 class TrainTest(absltest.TestCase):
   """Test cases for WMT library."""
 

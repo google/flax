@@ -22,6 +22,9 @@ from jax import numpy as jnp
 import models
 
 
+jax.config.update('jax_disable_most_optimizations', True)
+
+
 class ResNetV1Test(absltest.TestCase):
   """Test cases for ResNet v1 model definition."""
 

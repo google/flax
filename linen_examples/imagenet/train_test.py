@@ -19,6 +19,7 @@ import tempfile
 
 from absl.testing import absltest
 
+import jax
 from jax import random
 
 import tensorflow as tf
@@ -28,6 +29,9 @@ import tensorflow_datasets as tfds
 import models
 import train
 from configs import default as default_lib
+
+
+jax.config.update('jax_disable_most_optimizations', True)
 
 
 class TrainTest(absltest.TestCase):
