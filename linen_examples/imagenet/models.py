@@ -130,3 +130,7 @@ ResNet152 = partial(ResNet, stage_sizes=[3, 8, 36, 3],
                     block_cls=BottleneckResNetBlock)
 ResNet200 = partial(ResNet, stage_sizes=[3, 24, 36, 3],
                     block_cls=BottleneckResNetBlock)
+
+
+# Used for testing only.
+_ResNet1 = partial(ResNet, stage_sizes=[1], block_cls=ResNetBlock)

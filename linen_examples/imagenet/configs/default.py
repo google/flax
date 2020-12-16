@@ -34,6 +34,9 @@ def get_config():
   """Get the default hyperparameter configuration."""
   config = ml_collections.ConfigDict()
 
+  # As defined in the `models` module.
+  config.model = 'ResNet50'
+
   config.learning_rate = 0.1
   config.momentum = 0.9
   config.batch_size = 128

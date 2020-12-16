@@ -21,9 +21,6 @@ from jax import numpy as jnp
 
 import models
 
-# Parse absl flags test_srcdir and test_tmpdir.
-jax.config.parse_flags_with_absl()
-
 
 class ResNetV1Test(absltest.TestCase):
   """Test cases for ResNet v1 model definition."""

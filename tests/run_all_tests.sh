@@ -2,6 +2,29 @@
 
 export FLAX_PROFILE=1
 
+ALL_EXAMPLES=false
+PYTEST_OPTS=
+for flag in "$@"; do
+case $flag in
+  --all)
+  ALL_EXAMPLES=true
+  ;;
+  --with-cov)
+  PYTEST_OPTS+="--cov=flax --cov-report=xml --cov-report=term --cov-config=setup.cfg"
+  ;;
+  --help)
+  echo "Usage:"
+  echo "  --all: Also run tests for deprecated examples."
+  echo "  --with-cov: Also generate pytest coverage."
+  exit
+  ;;
+  *)
+  echo "Unknown flag: $flag"
+  exit 1
+  ;;
+esac
+done
+
 sh $(dirname "$0")/download_dataset_metadata.sh || exit
 
 # Instead of using set -e, we have a manual error trap that
@@ -20,24 +43,26 @@ handle_errors () {
 }
 
 # Run battery of core FLAX API tests.
-PYTEST_OPTS=
-if [[ $1 == "--with-cov" ]]; then
-    PYTEST_OPTS+="--cov=flax --cov-report=xml --cov-report=term --cov-config=setup.cfg"
-fi
 pytest -n 4 tests $PYTEST_OPTS
 
 # validate types
-pytype flax/
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo "Pytype is currently not working on MacOS, see https://github.com/google/pytype/issues/661"
+else
+  pytype flax/
+fi
 
 # Per-example tests.
-# we apply pytest within each example to avoid pytest's annoying test-filename collision.
-# In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
-# /foo/bar and /baz/bleep aren't set up as packages.
-for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-    pytest $egd
-done
+if [[ $ALL_EXAMPLES == 'true' ]]; then
+  # we apply pytest within each example to avoid pytest's annoying test-filename collision.
+  # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
+  # /foo/bar and /baz/bleep aren't set up as packages.
+  for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+      pytest $egd
+  done
+fi
 
-# Per-example tests for linen examples.
+# Per-example tests for Linen examples.
 for egd in $(find linen_examples -maxdepth 1 -mindepth 1 -type d); do
     pytest $egd
     # use cd to make sure pytpe cache lives in example dir and doesn't name clash

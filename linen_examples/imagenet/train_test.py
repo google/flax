@@ -19,19 +19,15 @@ import tempfile
 
 from absl.testing import absltest
 
-import jax
 from jax import random
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
 # Local imports.
+import models
 import train
 from configs import default as default_lib
-
-
-# Parse absl flags test_srcdir and test_tmpdir.
-jax.config.parse_flags_with_absl()
 
 
 class TrainTest(absltest.TestCase):
@@ -43,7 +39,7 @@ class TrainTest(absltest.TestCase):
 
   def test_create_model(self):
     """Tests creating model."""
-    model = train.create_model(half_precision=False)
+    model = train.create_model(model_cls=models._ResNet1, half_precision=False)  # pylint: disable=protected-access
     params, state = train.initialized(random.PRNGKey(0), 224, model)
     variables = {'params': params, **state}
     x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
@@ -61,6 +57,7 @@ class TrainTest(absltest.TestCase):
 
     # Define training configuration
     config = default_lib.get_config()
+    config.model = '_ResNet1'
     config.batch_size = 1
     config.num_epochs = 1
     config.num_train_steps = 1
