@@ -20,7 +20,7 @@ The data is loaded using tensorflow_datasets.
 
 import functools
 import time
-from typing import Any, Optional
+from typing import Any
 
 from absl import logging
 
