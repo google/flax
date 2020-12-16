@@ -1,7 +1,8 @@
-- Feature Name: (fill me in with a unique ident, `my_awesome_feature`)
 - Start Date: (fill me in with today's date, YYYY-MM-DD)
 - FLIP PR: [#0000](https://github.com/google/flax/pull/0000)
-- Flax Issue: [#0000](https://github.com/google/flax/issues/0000)
+- FLIP Issue: [#0000](https://github.com/google/flax/issues/0000)
+
+(Below sections are just a possible structure - please adapt to your FLIP.)
 
 # Summary
 [summary]: #summary
