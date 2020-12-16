@@ -29,8 +29,8 @@ from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
 from flax.linen import compact
-from flax.core import Scope, freeze
-from flax.core.frozen_variable_dict import FrozenVariableDict
+from flax.core import Scope, freeze, FrozenDict
+from flax.core.non_final_variables_dict import NonFinalVariablesDict
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -630,7 +630,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(trace, expected_trace)
 
 
-  def test_module_variables_are_frozen_variable_dict(self):
+  def test_module_variables_are_non_final(self):
 
     class MyModule(nn.Module):
       @nn.compact
@@ -641,10 +641,11 @@ class ModuleTest(absltest.TestCase):
 
     with_variables = MyModule()
     x = jnp.ones((1, 2))
-    (_, bias_variables), _ = with_variables.init_with_output(random.PRNGKey(0), x)
-    self.assertTrue(isinstance(bias_variables, FrozenVariableDict))
-    self.assertTrue(isinstance(bias_variables['params'], FrozenVariableDict))
-    with self.assertRaisesRegex(KeyError, "Variable bias_0 is not in the FrozenVariableDict."):
+    (_, bias_variables), all_variables = with_variables.init_with_output(random.PRNGKey(0), x)
+    self.assertTrue(isinstance(bias_variables, NonFinalVariablesDict))
+    self.assertTrue(isinstance(all_variables, FrozenDict))
+    self.assertTrue(isinstance(bias_variables['params'], NonFinalVariablesDict))
+    with self.assertRaisesRegex(KeyError, "Variable bias_0 is not in the NonFinalVariablesDict."):
       _ = bias_variables['params']['bias_0']
 
 
