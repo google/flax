@@ -53,6 +53,19 @@ class PoolTest(absltest.TestCase):
     ]).reshape((1, 3, 3, 1))
     np.testing.assert_allclose(y_grad, expected_grad)
 
+  def test_avg_pool_no_batch(self):
+    x = jnp.full((3, 3, 1), 2.)
+    pool = lambda x: nn.avg_pool(x, (2, 2))
+    y = pool(x)
+    np.testing.assert_allclose(y, np.full((2, 2, 1), 2.))
+    y_grad = jax.grad(lambda x: pool(x).sum())(x)
+    expected_grad = jnp.array([
+        [0.25, 0.5, 0.25],
+        [0.5, 1., 0.5],
+        [0.25, 0.5, 0.25],
+    ]).reshape((3, 3, 1))
+    np.testing.assert_allclose(y_grad, expected_grad)
+
   def test_max_pool(self):
     x = jnp.arange(9).reshape((1, 3, 3, 1)).astype(jnp.float32)
     pool = lambda x: nn.max_pool(x, (2, 2))
