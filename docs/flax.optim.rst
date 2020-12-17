@@ -2,7 +2,7 @@
 flax.optim package
 ===================
 
-Optimizers utilities
+Optimizer core
 ------------------------
 
 .. currentmodule:: flax.optim
