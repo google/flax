@@ -45,8 +45,8 @@ tests_require = [
     "pytype",
     "sentencepiece",  # WMT example.
     "svn",
-    "tensorflow-cpu",
-    "tensorflow_text",  # WMT example.
+    "tensorflow-cpu>=2.4.0",
+    "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
 ]
 
