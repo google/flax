@@ -19,6 +19,7 @@ from absl.testing import absltest
 from flax import nn
 from flax import optim
 from flax import traverse_util
+from flax.optim.adadelta import _AdadeltaHyperParams, _AdadeltaParamState
 from flax.optim.adafactor import _AdafactorHyperParams, _AdafactorParamState
 from flax.optim.adagrad import _AdagradHyperParams, _AdagradParamState
 from flax.optim.adam import _AdamHyperParams, _AdamParamState
@@ -272,6 +273,41 @@ class AdamTest(absltest.TestCase):
     expected_new_params = onp.array([0.906085])
     onp.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
+
+class AdadeltaTest(abls.TestCase):
+  def test_init_state(self):
+    params = onp.zeros((1,))
+    optimizer_def = optim.Adadelta(learning_rate=0.1,
+                                    rho=0.9
+                                    eps=1e-6,
+                                    weight_decay=0.1)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _AdadeltaHyperParams(0.1, 0.9, 1e-8, 0.1)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
+      0, _AdadeltaParamState(onp.zeros((1,)), onp.zeros((1,)))
+    )
+    self.assertEqual(state, expected_state)
+  def test_apply_gradient(self):
+    optimizer_def = optim.Adadelta(learning_rate=0.1,
+                                    rho=0.9
+                                    eps=1e-6,
+                                    weight_decay=0.1)
+    params = onp.array([1.])
+    state = optim.OptimizerState(
+      1, _AdadeltaParamState(onp.zeros((1,)), onp.zeros((1,)))
+    )
+    grads = onp.array([1.])
+    new_param, new_state = optimizer_def.apply_param_gradient(
+      optimizer_def.hyper_params, params, state, grads
+    )
+    expected_new_state = optim.OptimizerState(
+      2, _AdadeltaParamState(onp.array([0.1]), onp.array([9.9856e-7]))
+    )
+    expected_new_params = onp.array([0.989684])
+    onp.testing.assert_allclose(new_params, expected_new_params)
+    self.assertEqual(state, expected_new_state)
 
 
 class AdafactorTest(absltest.TestCase):
