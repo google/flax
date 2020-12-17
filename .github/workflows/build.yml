@@ -28,8 +28,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        pip install -v .
-        pip install -v .[testing]
+        pip install .
+        pip install .[testing]
         pip install -r docs/requirements.txt
     - name: Build documentation
       run: |
