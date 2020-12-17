@@ -11,7 +11,7 @@ Traversal objects
 .. autoclass:: Traversal
     :members:
 
-.. autoclass::TraverseId
+.. autoclass:: TraverseId
     :members:
 
 .. autoclass:: TraverseMerge
