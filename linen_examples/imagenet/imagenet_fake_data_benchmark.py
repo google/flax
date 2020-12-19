@@ -17,7 +17,6 @@
 import pathlib
 import time
 
-from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
 from flax.testing import Benchmark
@@ -29,14 +28,8 @@ import tensorflow_datasets as tfds
 from configs import fake_data_benchmark as config_lib
 import train
 
-
-FLAGS = flags.FLAGS
-
-
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class ImagenetBenchmarkFakeData(Benchmark):
@@ -58,7 +51,7 @@ class ImagenetBenchmarkFakeData(Benchmark):
     self.report_extras({
         'description': 'ImageNet ResNet50 with fake data',
         'model_name': 'resnet50',
-        'parameters': f'hp=true,bs={FLAGS.config.batch_size}',
+        'parameters': f'hp=true,bs={config.batch_size}',
     })
 
 

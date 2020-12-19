@@ -16,40 +16,37 @@
 
 import time
 
-from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
 
+# Local imports.
+import train
+from configs import v100_x8_mixed_precision as config_lib
 from flax.testing import Benchmark
+
 import jax
 import numpy as np
-
-# Local imports.
-import main
-from configs import v100_x8_mixed_precision as config_lib
+import tensorflow as tf
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-
-FLAGS = flags.FLAGS
 
 
 class ImagenetBenchmark(Benchmark):
   """Benchmarks for the ImageNet Flax example."""
 
   @flagsaver
-  def _test_8x_v100_half_precision(
-      self, num_epochs, min_accuracy, max_accuracy):
+  def _test_8x_v100_half_precision(self, num_epochs: int, min_accuracy,
+                                   max_accuracy):
     """Utility to benchmark ImageNet on 8xV100 GPUs. Use in your test func."""
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
+
     workdir = self.get_tmp_model_dir()
     config = config_lib.get_config()
     config.num_epochs = num_epochs
-
-    FLAGS.config = config
-    FLAGS.workdir = workdir
-
     start_time = time.time()
-    main.main([])
+    train.train_and_evaluate(config=config, workdir=workdir)
     benchmark_time = time.time() - start_time
     summaries = self.read_summaries(workdir)
 
