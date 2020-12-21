@@ -32,6 +32,9 @@ class EarlyStoppingTests(absltest.TestCase):
     iterator = early_stopping.EarlyStopping(steps=100)
     self.assertEqual(list(iterator), list(range(100)))
 
+    # Verify that iterator is reusable.
+    self.assertEqual(list(iterator), list(range(100)))
+
   def test_update(self):
     iterator = early_stopping.EarlyStopping(steps=100,
                                             min_delta=0, 
