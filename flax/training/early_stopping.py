@@ -12,65 +12,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Early stopping for model training."""
-
-import numpy as np
-from flax.training import checkpoints
+"""Early stopping iterator."""
 
 class EarlyStopping:
   """Prevents overfitting by ending training early if validation loss
   does not improve.
 
   Attributes:
-    ckpt_dir: str: path to store checkpoint files in.
-    prefix: str: checkpoint file name prefix.
     patience: number of steps of no improvement before stopping.
     keep: number of past checkpoint files to keep.
   """
   def __init__(self, 
-               ckpt_dir, 
-               prefix='checkpoint_', 
+               steps=0,
                min_delta=0, 
-               patience=0, 
-               keep=1):
-    self.ckpt_dir = ckpt_dir
+               patience=0):
+    self.max_steps = steps
     self.min_delta = min_delta
     self.patience = patience
-    self.prefix = prefix
-    self.keep = keep
+    self.reset()
 
+  def reset(self):
     self.count = 0
-    self.best_loss = np.Inf
-    self._should_stop = False
+    self.patience_count = 0
+    self.best_loss = None
+    self.should_stop = False
 
-  @property
-  def stop(self):
-      return self.should_stop
+  def __iter__(self):
+    self.reset()
+    return self
 
-  def save_checkpoint(self, target, step, metric):
-    """Save a checkpoint of the model.
+  def __next__(self):
+    if self.count >= self.max_steps or self.should_stop:
+      raise StopIteration
+    
+    iteration = self.count
+    self.count += 1
+    return iteration
+
+  def update(self, metric):
+    """Update iterator state.
 
     Args:
-      target: serializable flax object, usually a flax optimizer.
-      step: int or float: training step number or other metric number.
       metric: int or float: metric (i.e. validation loss) to determine 
-          improvement. 
-
-    Returns:
-      Filename of saved checkpoint or None if there was no improvement.
+          improvement.
     """
-    output = None
-    if self.best_loss - metric > self.min_delta:
-        output = checkpoints.save_checkpoint(self.ckpt_dir,
-                                             target=target,
-                                             step=step,
-                                             prefix=self.prefix,
-                                             keep=self.keep)
-        self.count = 0
-        self.best_loss = metric
+    if self.best_loss is None or \
+      self.best_loss - metric > self.min_delta:
+      self.patience_count = 0
+      self.best_loss = metric
     else:
-        self.count += 1
-        if self.count >= self.patience:
-            self.should_stop = True
-    
-    return output
+      self.patience_count += 1
+      if self.patience_count > self.patience:
+          self.should_stop = True
