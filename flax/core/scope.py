@@ -504,8 +504,8 @@ class Scope:
     """
     self.reserve(name)
     if not self.has_variable(col, name):
-      if not self.is_mutable_collection('params'):
-        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
+      if not self.is_mutable_collection(col):
+        raise ValueError(f'No Variable named "{name}" for collection "{col}" exists in "{self.path_text}".')
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
