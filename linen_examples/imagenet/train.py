@@ -23,6 +23,7 @@ import time
 from typing import Any
 
 from absl import logging
+from clu import periodic_actions
 
 import flax
 from flax import jax_utils
@@ -314,10 +315,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       functools.partial(eval_step, model.apply), axis_name='batch')
 
   epoch_metrics = []
+  hooks = []
+  if jax.host_id() == 0:
+    hooks += [periodic_actions.Profile(num_profile_steps=5)]
   t_loop_start = time.time()
   logging.info('Initial compilation, this might take some minutes...')
   for step, batch in zip(range(step_offset, num_steps), train_iter):
     state, metrics = p_train_step(state, batch)
+    for h in hooks:
+      h(step)
     epoch_metrics.append(metrics)
     if (step + 1) % steps_per_epoch == 0:
       epoch = step // steps_per_epoch

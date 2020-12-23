@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """ImageNet example.
 
 This script trains a ResNet-50 on the ImageNet dataset.
@@ -23,37 +22,42 @@ import os
 
 from absl import app
 from absl import flags
-
-from ml_collections import config_flags
-
-import tensorflow as tf
-
-# Local imports.
+from absl import logging
+from clu import platform
 import train
-
 import jax
+from ml_collections import config_flags
+import tensorflow as tf
 
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-    'workdir', default=None,
-    help=('Directory to store model data.'))
-
+    'workdir', default=None, help='Directory to store model data.')
 config_flags.DEFINE_config_file(
     'config', os.path.join(os.path.dirname(__file__), 'configs/default.py'),
-    'File path to the Training hyperparameter configuration.')
+    'File path to the training hyperparameter configuration.')
+flags.mark_flags_as_required(['workdir'])
 
 
 def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  # Make sure tf does not allocate gpu memory.
+  # Hide any GPUs form TensorFlow. Otherwise TF might reserve memory and make
+  # it unavailable to JAX.
   tf.config.experimental.set_visible_devices([], 'GPU')
-  # Require JAX omnistaging mode.
-  jax.config.enable_omnistaging()
 
-  train.train_and_evaluate(workdir=FLAGS.workdir, config=FLAGS.config)
+  logging.info('JAX host: %d / %d', jax.host_id(), jax.host_count())
+  logging.info('JAX local devices: %r', jax.local_devices())
+
+  # Add a note so that we can tell which task is which JAX host.
+  # (Depending on the platform task 0 is not guaranteed to be host 0)
+  platform.work_unit().set_task_status(
+      f'host_id: {jax.host_id()}, host_count: {jax.host_count()}')
+  platform.work_unit().create_artifact(platform.ArtifactType.DIRECTORY,
+                                       FLAGS.workdir, 'workdir')
+
+  train.train_and_evaluate(config=FLAGS.config, workdir=FLAGS.workdir)
 
 
 if __name__ == '__main__':
