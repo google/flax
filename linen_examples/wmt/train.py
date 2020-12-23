@@ -24,7 +24,10 @@ import collections
 import functools
 import os
 import time
+
 from absl import logging
+from clu import metric_writers
+from clu import periodic_actions
 from jax import random
 import jax
 import jax.numpy as jnp
@@ -35,7 +38,6 @@ import tensorflow as tf
 from flax import jax_utils
 from flax import linen as nn
 from flax import optim
-from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import common_utils
 
@@ -351,13 +353,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # Number of local devices for this host.
   n_devices = jax.local_device_count()
 
-  if jax.host_id() == 0:
-    tf.io.gfile.makedirs(workdir)
-    train_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(workdir, "train"))
-    eval_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(workdir, "eval"))
-
   if config.batch_size % n_devices:
     raise ValueError("Batch size must be divisible by the number of devices")
 
@@ -444,6 +439,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     # Grab last step.
     start_step = int(optimizer.state.step)
 
+  writer = metric_writers.create_default_writer(
+      workdir, just_logging=jax.host_id() > 0)
+  if start_step == 1:
+    writer.write_hparams(dict(config))
+
   # Replicate optimizer.
   optimizer = jax_utils.replicate(optimizer)
 
@@ -484,110 +484,103 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   dropout_rngs = random.split(rng, n_devices)
 
   logging.info("Starting training loop.")
+  hooks = []
+  report_progress = periodic_actions.ReportProgress(
+      num_train_steps=config.num_train_steps, writer=writer)
+  if jax.host_id() == 0:
+    hooks += [report_progress, periodic_actions.Profile(num_profile_steps=5)]
   metrics_all = []
-  t_loop_start = time.time()
-  for step, batch in zip(range(start_step, config.num_train_steps), train_iter):
-    # Shard data to devices and do a training step.
-    batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
-    optimizer, metrics, dropout_rngs = p_train_step(
-        optimizer, batch, dropout_rng=dropout_rngs)
-    metrics_all.append(metrics)
+  with metric_writers.ensure_flushes(writer):
+    for step, batch in zip(
+        range(start_step, config.num_train_steps), train_iter):
+      # Shard data to devices and do a training step.
+      batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
+      optimizer, metrics, dropout_rngs = p_train_step(
+          optimizer, batch, dropout_rng=dropout_rngs)
+      metrics_all.append(metrics)
 
-    # Quick indication that training is happening.
-    logging.log_first_n(logging.INFO, "Finished training step %d.", 5, step)
+      # Quick indication that training is happening.
+      logging.log_first_n(logging.INFO, "Finished training step %d.", 5, step)
+      for h in hooks:
+        h(step)
 
-    # Save a checkpoint on one host after every checkpoint_freq steps.
-    if (config.save_checkpoints and step % config.checkpoint_freq == 0 and
-        step > 0 and jax.host_id() == 0):
-      checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(optimizer),
-                                  step)
+      # Save a checkpoint on one host after every checkpoint_freq steps.
+      if (config.save_checkpoints and step % config.checkpoint_freq == 0 and
+          step > 0 and jax.host_id() == 0):
+        checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(optimizer),
+                                    step)
 
-    # Periodic metric handling.
-    if step % config.eval_frequency != 0 and step > 0:
-      continue
+      # Periodic metric handling.
+      if step % config.eval_frequency != 0 and step > 0:
+        continue
 
-    # Training Metrics
-    logging.info("Gathering training metrics.")
-    metrics_all = common_utils.get_metrics(metrics_all)
-    lr = metrics_all.pop("learning_rate").mean()
-    metrics_sums = jax.tree_map(jnp.sum, metrics_all)
-    denominator = metrics_sums.pop("denominator")
-    summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
-    summary["learning_rate"] = lr
-    steps_per_eval = config.eval_frequency if step != 0 else 1
-    steps_per_sec = steps_per_eval / (time.time() - t_loop_start)
-    t_loop_start = time.time()
-    if jax.host_id() == 0:
-      train_summary_writer.scalar("steps per second", steps_per_sec, step)
-      for key, val in summary.items():
-        train_summary_writer.scalar(key, val, step)
-      train_summary_writer.flush()
-    metrics_all = []
-    logging.info("train in step: %d, loss: %.4f", step, summary["loss"])
+      # Training Metrics
+      logging.info("Gathering training metrics.")
+      metrics_all = common_utils.get_metrics(metrics_all)
+      lr = metrics_all.pop("learning_rate").mean()
+      metrics_sums = jax.tree_map(jnp.sum, metrics_all)
+      denominator = metrics_sums.pop("denominator")
+      summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
+      summary["learning_rate"] = lr
+      summary = {"train_" + k: v for k, v in summary.items()}
+      writer.write_scalars(step, summary)
+      metrics_all = []
 
-    # Eval Metrics
-    logging.info("Gathering evaluation metrics.")
-    t_eval_start = time.time()
-    eval_metrics = []
-    eval_iter = iter(eval_ds)
-    for _, eval_batch in zip(range(config.num_eval_steps), eval_iter):
-      eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
-      eval_batch = common_utils.shard(eval_batch)
-      metrics = p_eval_step(optimizer.target, eval_batch)
-      eval_metrics.append(metrics)
-    eval_metrics = common_utils.get_metrics(eval_metrics)
-    eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
-    eval_denominator = eval_metrics_sums.pop("denominator")
-    eval_summary = jax.tree_map(
-        lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
-        eval_metrics_sums)
-    if jax.host_id() == 0:
-      for key, val in eval_summary.items():
-        eval_summary_writer.scalar(key, val, step)
-      eval_summary_writer.flush()
-    logging.info("eval in step: %d, loss: %.4f", step, eval_summary["loss"])
-    logging.info("eval time: %.4f s step %d", time.time() - t_eval_start, step)
+      # Eval Metrics
+      logging.info("Gathering evaluation metrics.")
+      eval_metrics = []
+      eval_iter = iter(eval_ds)
+      for _, eval_batch in zip(range(config.num_eval_steps), eval_iter):
+        eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
+        eval_batch = common_utils.shard(eval_batch)
+        metrics = p_eval_step(optimizer.target, eval_batch)
+        eval_metrics.append(metrics)
+      eval_metrics = common_utils.get_metrics(eval_metrics)
+      eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
+      eval_denominator = eval_metrics_sums.pop("denominator")
+      eval_summary = jax.tree_map(
+          lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
+          eval_metrics_sums)
+      eval_summary = {"eval_" + k: v for k, v in eval_summary.items()}
+      writer.write_scalars(step, eval_summary)
 
-    # Translation and BLEU Score.
-    logging.info("Translating evaluation dataset.")
-    t_inference_start = time.time()
-    sources, references, predictions = [], [], []
-    for pred_batch in predict_ds:
-      pred_batch = jax.tree_map(lambda x: x._numpy(), pred_batch)  # pylint: disable=protected-access
-      # Handle final odd-sized batch by padding instead of dropping it.
-      cur_pred_batch_size = pred_batch["inputs"].shape[0]
-      if cur_pred_batch_size % n_devices:
-        padded_size = int(
-            np.ceil(cur_pred_batch_size / n_devices) * n_devices)
-        pred_batch = jax.tree_map(
-            lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
-      pred_batch = common_utils.shard(pred_batch)
-      cache = p_init_cache(pred_batch["inputs"])
-      predicted = p_pred_step(pred_batch["inputs"], optimizer.target, cache,
-                              eos_id, config.max_predict_length)
-      predicted = tohost(predicted)
-      inputs = tohost(pred_batch["inputs"])
-      targets = tohost(pred_batch["targets"])
-      # Iterate through non-padding examples of batch.
-      for i, s in enumerate(predicted[:cur_pred_batch_size]):
-        sources.append(decode_tokens(inputs[i]))
-        references.append(decode_tokens(targets[i]))
-        predictions.append(decode_tokens(s))
-    logging.info("Translation: %d predictions %d references %d sources.",
-                 len(predictions), len(references), len(sources))
-    logging.info("Translation time: %.4f s step %d.",
-                 time.time() - t_inference_start, step)
+      # Translation and BLEU Score.
+      logging.info("Translating evaluation dataset.")
+      t_inference_start = time.time()
+      sources, references, predictions = [], [], []
+      for pred_batch in predict_ds:
+        pred_batch = jax.tree_map(lambda x: x._numpy(), pred_batch)  # pylint: disable=protected-access
+        # Handle final odd-sized batch by padding instead of dropping it.
+        cur_pred_batch_size = pred_batch["inputs"].shape[0]
+        if cur_pred_batch_size % n_devices:
+          padded_size = int(
+              np.ceil(cur_pred_batch_size / n_devices) * n_devices)
+          pred_batch = jax.tree_map(lambda x: pad_examples(x, padded_size),  # pylint: disable=cell-var-from-loop
+                                    pred_batch)
+        pred_batch = common_utils.shard(pred_batch)
+        cache = p_init_cache(pred_batch["inputs"])
+        predicted = p_pred_step(pred_batch["inputs"], optimizer.target, cache,
+                                eos_id, config.max_predict_length)
+        predicted = tohost(predicted)
+        inputs = tohost(pred_batch["inputs"])
+        targets = tohost(pred_batch["targets"])
+        # Iterate through non-padding examples of batch.
+        for i, s in enumerate(predicted[:cur_pred_batch_size]):
+          sources.append(decode_tokens(inputs[i]))
+          references.append(decode_tokens(targets[i]))
+          predictions.append(decode_tokens(s))
+      logging.info("Translation: %d predictions %d references %d sources.",
+                   len(predictions), len(references), len(sources))
+      logging.info("Translation time: %.4f s step %d.",
+                   time.time() - t_inference_start, step)
 
-    # Calculate BLEU score for translated eval corpus against reference.
-    bleu_matches = bleu.bleu_partial(references, predictions)
-    all_bleu_matches = per_host_sum_pmap(bleu_matches)
-    bleu_score = bleu.complete_bleu(*all_bleu_matches)
-    # Save translation samples for tensorboard.
-    exemplars = ""
-    for n in np.random.choice(np.arange(len(predictions)), 8):
-      exemplars += f"{sources[n]}\n\n{references[n]}\n\n{predictions[n]}\n\n"
-    if jax.host_id() == 0:
-      eval_summary_writer.scalar("bleu", bleu_score, step)
-      eval_summary_writer.text("samples", exemplars, step)
-      eval_summary_writer.flush()
-    logging.info("Translation BLEU Score %.4f", bleu_score)
+      # Calculate BLEU score for translated eval corpus against reference.
+      bleu_matches = bleu.bleu_partial(references, predictions)
+      all_bleu_matches = per_host_sum_pmap(bleu_matches)
+      bleu_score = bleu.complete_bleu(*all_bleu_matches)
+      # Save translation samples for tensorboard.
+      exemplars = ""
+      for n in np.random.choice(np.arange(len(predictions)), 8):
+        exemplars += f"{sources[n]}\n\n{references[n]}\n\n{predictions[n]}\n\n"
+      writer.write_scalars(step, {"bleu": bleu_score})
+      writer.write_texts(step, {"samples": exemplars})
