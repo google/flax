@@ -87,6 +87,7 @@ def cross_entropy_loss(logits, labels):
 ```
 
 2. Define a function for your optimizer that takes the model parameters, the learning rate, and a beta argument (for the [Momentum optimizer](http://www.columbia.edu/~nq6/publications/momentum.pdf)):
+
   - Choose `Momentum` from the [`flax.optim`](https://flax.readthedocs.io/en/latest/flax.optim.html) package; and
   - Wrap the model parameters (`params`) with the [`flax.optim.OptimizerDef.create`](https://flax.readthedocs.io/en/latest/flax.optim.html#flax.optim.OptimizerDef.create) method and initialize with parameter dicts.
 
@@ -99,8 +100,9 @@ def create_optimizer(params, learning_rate, beta):
 ```
 
 3. Create a function for parameter initialization:
+
   - Set the initial shape of the kernel (note that JAX and Flax are [row-based](https://flax.readthedocs.io/en/latest/notebooks/flax_basics.html#Model-parameters-&-initialization)); and
-  - Initialize the module parameters of your network (`CNN`) with the [`flax.linen.Module.init`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init) method using the PRNGKey and parameters (note that the weights aren't stored with the models). 
+  - Initialize the module parameters of your network (`CNN`) with the [`flax.linen.Module.init`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init) method using the PRNGKey and parameters (note that the weights aren't stored with the models).
 
 
 ```python
@@ -182,6 +184,7 @@ def eval_step(params, batch):
 ```
 
 3. Define a training function for one epoch that:
+
   - Shuffles the training data before each epoch using [`jax.random.permutation`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.permutation.html) that takes a PRNGKey as a parameter (discussed in more detail later in this tutorial and in [JAX - the sharp bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG)).
   - Runs an optimization step for each batch.
   - Retrieves the training metrics from the device with `jax.device_get` and computes their mean across each batch in an epoch.
@@ -303,6 +306,7 @@ batch_size = 32
 ```
 
 2. Finally, begin training and evaluating the model:
+
   - Similar to the parameter initialization stage, [split](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG) the PRNG key to get a new subkey—`input_rng`—with [`jax.random.split`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split). `input_rng` will be used to permute image data during the shuffling stage when training.
   - Run an optimization step over a training batch (`train_epoch`).
   - Evaluate on the test set after each training epoch (`eval_model`).
