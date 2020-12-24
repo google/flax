@@ -242,24 +242,6 @@ Download the dataset and preprocess it with `get_datasets` you defined earlier:
 train_ds, test_ds = get_datasets()
 ```
 
-    WARNING:absl:Dataset mnist is hosted on GCS. It will automatically be downloaded to your
-    local data directory. If you'd instead prefer to read directly from our public
-    GCS bucket (recommended if you're running on GCP), you can instead pass
-    `try_gcs=True` to `tfds.load` or set `data_dir=gs://tfds-data/datasets`.
-    
-
-
-    [1mDownloading and preparing dataset mnist/3.0.1 (download: 11.06 MiB, generated: 21.00 MiB, total: 32.06 MiB) to /root/tensorflow_datasets/mnist/3.0.1...[0m
-
-
-
-    HBox(children=(FloatProgress(value=0.0, description='Dl Completed...', max=4.0, style=ProgressStyle(descriptio…
-
-
-    
-    
-    [1mDataset mnist downloaded and prepared to /root/tensorflow_datasets/mnist/3.0.1. Subsequent calls will reuse this data.[0m
-
 
 ## Initialize the weights and instantiate the optimizer
 
