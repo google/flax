@@ -2,7 +2,7 @@
 
 This tutorial uses Flax—a high-performance deep learning library for JAX designed for flexibility—to show you how to construct a simple convolutional neural network (CNN) using the Linen API and train the network for image classification on the MNIST dataset.
 
-If you're new to JAX, check out [JAX quickstart](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) and [JAX for the impatient](https://flax.readthedocs.io/en/latest/notebooks/jax_for_the_impatient.html). To learn more about Flax and its Linen API, refer to [Flax basics](https://flax.readthedocs.io/en/latest/notebooks/flax_basics.html), [Flax patterns: Managing state and parameters](https://flax.readthedocs.io/en/latest/patterns/state_params.html), and [Linen design principles](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html).
+If you're new to JAX, check out [JAX quickstart](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) and [JAX for the impatient](https://flax.readthedocs.io/en/latest/notebooks/jax_for_the_impatient.html). To learn more about Flax and its Linen API, refer to [Flax basics](https://flax.readthedocs.io/en/latest/notebooks/flax_basics.html), [Flax patterns: Managing state and parameters](https://flax.readthedocs.io/en/latest/patterns/state_params.html), [Linen design principles](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html), and the [Linen introduction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) notebook.
 
 This tutorial has the following workflow:
 
