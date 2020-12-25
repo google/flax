@@ -102,7 +102,7 @@ def create_optimizer(params, learning_rate, beta):
 3. Create a function for parameter initialization:
 
   - Set the initial shape of the kernel (note that JAX and Flax are [row-based](https://flax.readthedocs.io/en/latest/notebooks/flax_basics.html#Model-parameters-&-initialization)); and
-  - Initialize the module parameters of your network (`CNN`) with the [`flax.linen.Module.init`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init) method using the PRNGKey and parameters (note that the weights aren't stored with the models).
+  - Initialize the module parameters of your network (`CNN`) with the [`flax.linen.Module.init`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init) method using the PRNGKey and parameters (note that the parameters aren't stored with the models).
 
 
 ```python
@@ -156,7 +156,7 @@ def get_datasets():
   - Applies a [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions) of gradients ([`flax.optim.Optimizer.apply_gradient`](https://flax.readthedocs.io/en/latest/flax.optim.html#flax.optim.Optimizer.apply_gradient)) to the optimizer to update the model's parameters.
   - Computes the metrics using `compute_metrics` (defined earlier).
 
-  Use the `@jit` decorator—the entire function is now just-in-time([`jit`](https://jax.readthedocs.io/en/latest/jax.html#jax.jit))-compiled with [XLA](https://www.tensorflow.org/xla) to make your code run faster and more efficiently.
+  Use JAX's [`@jit`](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator to trace the entire `train_step` function` and just-in-time([`jit`]-compile with [XLA](https://www.tensorflow.org/xla) into fused device operations that run faster and more efficiently on hardware accelerators.
 
 
 ```python
@@ -243,9 +243,9 @@ train_ds, test_ds = get_datasets()
 ```
 
 
-## Initialize the weights and instantiate the optimizer
+## Initialize the parameters and instantiate the optimizer
 
-1. Before you start training the model, you need to randomly initialize the weights/parameters.
+1. Before you start training the model, you need to randomly initialize the parameters.
 
   In NumPy, you would usually use the stateful pseudorandom number generators (PRNG). JAX, however, uses an explicit PRNG (refer to [JAX - the sharp bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG) for details):
 
@@ -260,7 +260,7 @@ rng = jax.random.PRNGKey(0)
 rng, init_rng = jax.random.split(rng)
 ```
 
-2. You can now use the PRNG subkey—`init_rng`—to initialize the model's weights by calling the predefined `get_initial_params` function:
+2. You can now use the PRNG subkey—`init_rng`—to initialize the model's parameters by calling the predefined `get_initial_params` function:
 
 
 ```python
