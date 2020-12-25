@@ -252,7 +252,7 @@ train_ds, test_ds = get_datasets()
   - Start by getting two unsigned 32-bit integers with [`jax.random.PRNGKey`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.PRNGKey.html#jax.random.PRNGKey) as one key (`rng`).
   - Then, split the PRNG to obtain a usable subkey for parameter initialization (`init_rng` below) using [`jax.random.split`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split). 
 
-  Note that in JAX and Flax you can have [separate PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables) (with different names, such as `rng` and `init_rng` below) inside `Module`s for different applications.
+  Note that in JAX and Flax you can have [separate PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables) (with different names, such as `rng` and `init_rng` below) inside `Module`s for different applications. (Find out more about [JAX PRNG design](https://github.com/google/jax/blob/master/design_notes/prng.md).)
 
 
 ```python
@@ -287,9 +287,9 @@ num_epochs = 10
 batch_size = 32
 ```
 
-2. Finally, begin training and evaluating the model:
+2. Finally, begin training and evaluating the model over 10 epochs:
 
-  - Similar to the parameter initialization stage, [split](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG) the PRNG key to get a new subkey—`input_rng`—with [`jax.random.split`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split). `input_rng` will be used to permute image data during the shuffling stage when training.
+  - For your training function (`train_epoch`), you need to pass a PRNG key used to permute image data during shuffling. Since you have created a PRNG key when initializing the parameters in your nework, you just need to [split](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG) or "fork" the PRNG state into two (while maintaining the usual desirable PRNG properties) to get a new subkey (`input_rng`, in this example) and the previous key (`rng`). Use [`jax.random.split`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split) to carry this out. (Learn more about [JAX PRNG design](https://github.com/google/jax/blob/master/design_notes/prng.md).)
   - Run an optimization step over a training batch (`train_epoch`).
   - Evaluate on the test set after each training epoch (`eval_model`).
   - Retrieve the metrics from the device and print them.
