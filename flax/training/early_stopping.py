@@ -12,55 +12,55 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Early stopping iterator."""
+"""Early stopping."""
 
+from flax import struct
+
+
+@struct.dataclass
 class EarlyStopping:
-  """Prevents overfitting by ending training early if validation loss
-  does not improve.
-
+  """Early stopping to avoid overfitting during training.
+  
   Attributes:
-    patience: number of steps of no improvement before stopping.
-    keep: number of past checkpoint files to keep.
+    min_delta: Minimum delta between updates to be considered an
+        improvement.
+    patience: Number of steps of no improvement before stopping.
+    best_metric: Current best metric value.
+    patience_count: Number of steps since last improving update.
+    should_stop: Whether the training loop should stop to avoid 
+        overfitting.
   """
-  def __init__(self, 
-               steps=0,
-               min_delta=0, 
-               patience=0):
-    self.max_steps = steps
-    self.min_delta = min_delta
-    self.patience = patience
-    self.reset()
+  min_delta: float = 0
+  patience: int = 0
+  best_metric: float = None
+  patience_count: int = 0
+  should_stop: bool = False
 
   def reset(self):
-    self.count = 0
-    self.patience_count = 0
-    self.best_loss = None
-    self.should_stop = False
-
-  def __iter__(self):
-    self.reset()
-    return self
-
-  def __next__(self):
-    if self.count >= self.max_steps or self.should_stop:
-      raise StopIteration
-    
-    iteration = self.count
-    self.count += 1
-    return iteration
+    return self.replace(min_delta=self.min_delta,
+                        patience=self.patience,
+                        best_metric=None,
+                        patience_count=0,
+                        should_stop=False)
 
   def update(self, metric):
-    """Update iterator state.
-
-    Args:
-      metric: int or float: metric (i.e. validation loss) to determine 
-          improvement.
+    """Update the state based on metric.
+    
+    Returns:
+      Whether there was an improvement greater than min_delta from
+          the previous best_metric and the updated EarlyStop object.
     """
-    if self.best_loss is None or \
-      self.best_loss - metric > self.min_delta:
-      self.patience_count = 0
-      self.best_loss = metric
+
+    if self.best_metric is None or self.best_metric - metric > self.min_delta:
+      return True, self.replace(min_delta=self.min_delta,
+                                patience=self.patience,
+                                best_metric=metric,
+                                patience_count=0,
+                                should_stop=self.should_stop)
     else:
-      self.patience_count += 1
-      if self.patience_count > self.patience:
-          self.should_stop = True
+      should_stop = self.patience_count >= self.patience or self.should_stop
+      return False, self.replace(min_delta=self.min_delta,
+                                patience=self.patience,
+                                best_metric=self.best_metric,
+                                patience_count=self.patience_count + 1,
+                                should_stop=should_stop)
