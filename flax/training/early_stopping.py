@@ -14,6 +14,7 @@
 
 """Early stopping."""
 
+import math
 from flax import struct
 
 
@@ -32,14 +33,14 @@ class EarlyStopping:
   """
   min_delta: float = 0
   patience: int = 0
-  best_metric: float = None
+  best_metric: float = float('inf')
   patience_count: int = 0
   should_stop: bool = False
 
   def reset(self):
     return self.replace(min_delta=self.min_delta,
                         patience=self.patience,
-                        best_metric=None,
+                        best_metric=float('inf'),
                         patience_count=0,
                         should_stop=False)
 
@@ -51,7 +52,7 @@ class EarlyStopping:
           the previous best_metric and the updated EarlyStop object.
     """
 
-    if self.best_metric is None or self.best_metric - metric > self.min_delta:
+    if math.isinf(self.best_metric) or self.best_metric - metric > self.min_delta:
       return True, self.replace(min_delta=self.min_delta,
                                 patience=self.patience,
                                 best_metric=metric,
