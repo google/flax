@@ -71,19 +71,13 @@ class CNN(nn.Module):
 
 ## Create a loss function, an optimizer, a parameter initializer, and a metrics function
 
-1. Next, create a loss function—such as [cross-entropy](https://en.wikipedia.org/wiki/Cross_entropy)—using just [`jax.numpy`](https://jax.readthedocs.io/en/latest/jax.numpy.html) that takes the model's logits and label vectors and returns a scalar loss. The labels need to be one-hot encoded, so define a separate function for that task, as demonstrated below.
-
-
-```python
-def onehot(labels, num_classes=10): # There are 10 classes in MNIST
-  x = (labels[..., None] == jnp.arange(num_classes)[None])
-  return x.astype(jnp.float32) # Convert to float32 data type (JAX's default `dtype`)
-```
+1. Next, create a loss function—such as [cross-entropy](https://en.wikipedia.org/wiki/Cross_entropy)—using just [`jax.numpy`](https://jax.readthedocs.io/en/latest/jax.numpy.html) that takes the model's logits and label vectors and returns a scalar loss. The labels can be one-hot encoded with [`jax.nn.one_hot`](https://jax.readthedocs.io/en/latest/_autosummary/jax.nn.one_hot.html), as demonstrated below.
 
 
 ```python
 def cross_entropy_loss(logits, labels):
-  return -jnp.mean(jnp.sum(onehot(labels) * logits, axis=-1))
+  one_hot_labels = jax.nn.one_hot(labels, num_classes=10)
+  return -jnp.mean(jnp.sum(one_hot_labels * logits, axis=-1))
 ```
 
 2. Define a function for your optimizer that takes the model parameters, the learning rate, and a beta argument (for the [Momentum optimizer](http://www.columbia.edu/~nq6/publications/momentum.pdf)):
