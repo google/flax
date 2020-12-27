@@ -24,11 +24,6 @@ If you're using [Google Colaboratory](https://colab.research.google.com/notebook
 !pip install --upgrade -q pip jax jaxlib flax tensorflow-datasets
 ```
 
-    [K     |████████████████████████████████| 1.5MB 15.7MB/s 
-    [K     |████████████████████████████████| 163kB 53.2MB/s 
-    [K     |████████████████████████████████| 3.6MB 55.6MB/s 
-    [?25h
-
 2. Import JAX, [JAX NumPy](https://jax.readthedocs.io/en/latest/jax.numpy.html) (which lets you run code on GPUs and TPUs), Flax, ordinary NumPy, and TFDS. Flax can use any data-loading pipeline and this example demonstrates how to utilize TFDS.
 
 
@@ -150,7 +145,7 @@ def get_datasets():
   - Applies a [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions) of gradients ([`flax.optim.Optimizer.apply_gradient`](https://flax.readthedocs.io/en/latest/flax.optim.html#flax.optim.Optimizer.apply_gradient)) to the optimizer to update the model's parameters.
   - Computes the metrics using `compute_metrics` (defined earlier).
 
-  Use JAX's [`@jit`](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator to trace the entire `train_step` function` and just-in-time([`jit`]-compile with [XLA](https://www.tensorflow.org/xla) into fused device operations that run faster and more efficiently on hardware accelerators.
+  Use JAX's [`@jit`](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator to trace the entire `train_step` function and just-in-time([`jit`]-compile with [XLA](https://www.tensorflow.org/xla) into fused device operations that run faster and more efficiently on hardware accelerators.
 
 
 ```python
