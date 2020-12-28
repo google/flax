@@ -38,9 +38,7 @@ class EarlyStopping:
   should_stop: bool = False
 
   def reset(self):
-    return self.replace(min_delta=self.min_delta,
-                        patience=self.patience,
-                        best_metric=float('inf'),
+    return self.replace(best_metric=float('inf'),
                         patience_count=0,
                         should_stop=False)
 
@@ -53,15 +51,9 @@ class EarlyStopping:
     """
 
     if math.isinf(self.best_metric) or self.best_metric - metric > self.min_delta:
-      return True, self.replace(min_delta=self.min_delta,
-                                patience=self.patience,
-                                best_metric=metric,
-                                patience_count=0,
-                                should_stop=self.should_stop)
+      return True, self.replace(best_metric=metric,
+                                patience_count=0)
     else:
       should_stop = self.patience_count >= self.patience or self.should_stop
-      return False, self.replace(min_delta=self.min_delta,
-                                patience=self.patience,
-                                best_metric=self.best_metric,
-                                patience_count=self.patience_count + 1,
-                                should_stop=should_stop)
+      return False, self.replace(patience_count=self.patience_count + 1,
+                                 should_stop=should_stop)
