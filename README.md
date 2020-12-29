@@ -91,7 +91,7 @@ To upgrade to the latest version of Flax, you can use:
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
 
 To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) or visit our
-[patterns](https://flax.readthedocs.io/en/latest/patterns/flax_patterns.html) page for additional concrete demonstrations of best practices.
+[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html) page for additional concrete demonstrations of best practices.
 
 ```py
 class MLP(nn.Module):

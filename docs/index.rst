@@ -25,10 +25,19 @@ For a quick introduction and short example snippets, see our `README
 
 .. toctree::
    :maxdepth: 1
-   :caption: Flax Design Notes
+   :caption: How do I ...?
+   :glob:
+   :titlesonly:
 
-   patterns/flax_patterns
-   design_notes/design_notes
+   howtos/*
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Design Notes
+   :glob:
+   :titlesonly:
+
+   design_notes/*
 
 .. toctree::
    :maxdepth: 1
