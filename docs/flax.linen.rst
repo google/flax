@@ -12,7 +12,7 @@ Module
 ------------------------
 
 .. autoclass:: Module
-   :members: setup, variable, param, apply, init, init_with_output, variables, Variable, __setattr__
+   :members: setup, variable, param, apply, init, init_with_output, make_rng, variables, Variable, __setattr__
 
 Variables
 ----------------------
