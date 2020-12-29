@@ -422,6 +422,10 @@ class Module:
             raise ValueError(
                 "You can only assign submodules to self in setup().")
           if subvalue.parent is _unspecified_parent:
+            raise ValueError("Unexpected -- parent should have been assigned during __post_init__")
+          elif subvalue.parent is None:
+            # Attaching unbound modules -- this pattern is used
+            # for "model surgery" on `nn.Sequential` type models.
             subvalue.parent = self
           elif subvalue.parent is not self:
             raise ValueError("Can't attach to remote parent in setup, pass in "
@@ -442,6 +446,7 @@ class Module:
             raise ValueError(f'Variable name {self._state.last_varname} must '
                              f'equal attribute name {var_name}.')
           self._state.last_varname = None
+
     # Finally, always run default __setattr__ to attach to self.__dict__.
     object.__setattr__(self, name, val)
 
@@ -593,6 +598,14 @@ class Module:
     self.children[name] = col
     return v
 
+  def put_variable(self, col: str, name: str, val: Any):
+    if col in self.variables:
+      # Going through `variable()` ensures that we are "reserving"
+      # the variable name -- meaning that you can't accidentally
+      # both use `variable()` and `put_variable()`, or call
+      # `put_variable()` twice, in the same compact method.
+      self.variable(col, name, lambda: val).value = val
+
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
     """Declares and returns a parameter in this Module.
 
@@ -667,8 +680,8 @@ class Module:
         collections. See :mod:`flax.core.variables` for more details
         about variables.
       rngs: The rngs for the variable collections.
-      method: The literal name of a method in this class. If provided, applies
-        this method. If not provided, applies the ``__call__`` method.
+      method: An optional method. If provided, applies this method. If not
+              provided, applies the ``__call__`` method.
       mutable: Can be bool, str, or list. Specifies which collections should be
                treated as mutable: ``bool``: all/no collections are mutable.
                ``str``: The name of a single mutable collection. ``list``: A
