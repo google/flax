@@ -20,8 +20,14 @@ For a quick introduction and short example snippets, see our `README
 
    overview
    installation
-   notebooks/index
    examples
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Guided Tour
+
+   notebooks/jax_for_the_impatient
+   notebooks/flax_basics
 
 .. toctree::
    :maxdepth: 1
