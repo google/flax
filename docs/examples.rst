@@ -1,4 +1,4 @@
-Flax examples
+Examples
 =============
 
 Core examples
@@ -49,7 +49,7 @@ Generative models
       Trained on cifar10 (featuring single host SPMD, checkpointing, Polyak decay).
 
 
-Flax examples from the community
+Community Examples
 --------------------------------
 
 In addition to the curated list of official Flax examples, there is a growing
@@ -69,7 +69,7 @@ Using Linen
  
 .. _`JAX-RL`: https://github.com/henry-prior/jax-rl
 
-Using Deprecated API
+Using the Deprecated ``flax.nn`` API
 ~~~~~~~~~~~~~~~~~~~~
 
 The following examples were created using the old pre-Linen API. You can still

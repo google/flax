@@ -1,4 +1,4 @@
-Managing state and parameters
+Managing State and Parameters
 ===============================
 
 This pattern will show you:

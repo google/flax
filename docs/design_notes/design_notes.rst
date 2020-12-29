@@ -1,4 +1,4 @@
-Design notes
+Design Notes
 ==================
 
 Our design notes share explanations and rationale about design choices that were made by the Flax team so that
