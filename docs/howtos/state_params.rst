@@ -1,10 +1,10 @@
-Managing State and Parameters
-===============================
+Managing Parameters and State
+=============================
 
-This pattern will show you:
+We will show you how to...
 
-* How to manage the variables from initialization to updates.
-* How to split and re-assemble parameters and state.
+* manage the variables from initialization to updates.
+* split and re-assemble parameters and state.
 
 .. code-block:: python
 
