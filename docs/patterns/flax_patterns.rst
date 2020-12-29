@@ -1,4 +1,4 @@
-Flax patterns
+Flax Patterns
 ==================
 
 Flax is flexible, and its functional roots creates different ways of achieving the same result.

@@ -1,4 +1,4 @@
-Linen design principles
+Linen Design Principles
 =======================
 
 Flax is a neural network library built on JAX that has been adopted by a

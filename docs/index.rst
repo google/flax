@@ -25,7 +25,7 @@ For a quick introduction and short example snippets, see our `README
 
 .. toctree::
    :maxdepth: 1
-   :caption: Flax design notes
+   :caption: Flax Design Notes
 
    patterns/flax_patterns
    design_notes/design_notes
