@@ -111,8 +111,8 @@ def compute_weighted_cross_entropy(logits,
    logits: [batch, length, num_classes] float array.
    targets: categorical targets [batch, length] int array.
    weights: None or array of shape [batch, length].
-   label_smoothing: label smoothing constant, used to determine the on and
-     off values.
+   label_smoothing: label smoothing constant, used to determine the on and off
+     values.
 
   Returns:
     Tuple of scalar loss and batch normalizing factor.
@@ -124,8 +124,8 @@ def compute_weighted_cross_entropy(logits,
   confidence = 1.0 - label_smoothing
   low_confidence = (1.0 - confidence) / (vocab_size - 1)
   normalizing_constant = -(
-      confidence * jnp.log(confidence) + (vocab_size - 1) *
-      low_confidence * jnp.log(low_confidence + 1e-20))
+      confidence * jnp.log(confidence) +
+      (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20))
   soft_targets = common_utils.onehot(
       targets, vocab_size, on_value=confidence, off_value=low_confidence)
 
@@ -197,10 +197,8 @@ def train_step(optimizer,
       "inputs", "targets", "inputs_position", "targets_position",
       "inputs_segmentation", "targets_segmentation"
   ]
-  (inputs, targets,
-   inputs_positions, targets_positions,
-   inputs_segmentation, targets_segmentation) = [
-       batch.get(k, None) for k in train_keys]
+  (inputs, targets, inputs_positions, targets_positions, inputs_segmentation,
+   targets_segmentation) = [batch.get(k, None) for k in train_keys]
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
 
@@ -219,8 +217,8 @@ def train_step(optimizer,
         targets_segmentation=targets_segmentation,
         rngs={"dropout": dropout_rng})
 
-    loss, weight_sum = compute_weighted_cross_entropy(
-        logits, targets, weights, label_smoothing)
+    loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights,
+                                                      label_smoothing)
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
@@ -249,13 +247,17 @@ def initialize_cache(inputs, max_decode_len, config):
   """Initialize a cache for a given input shape and max decode length."""
   target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
   initial_variables = models.Transformer(config).init(
-      jax.random.PRNGKey(0),
-      jnp.ones(inputs.shape, config.dtype),
+      jax.random.PRNGKey(0), jnp.ones(inputs.shape, config.dtype),
       jnp.ones(target_shape, config.dtype))
   return initial_variables["cache"]
 
 
-def predict_step(inputs, params, cache, eos_id, max_decode_len, config,
+def predict_step(inputs,
+                 params,
+                 cache,
+                 eos_id,
+                 max_decode_len,
+                 config,
                  beam_size=4):
   """Predict translation with fast decoding beam search on a batch."""
   # Prepare transformer fast-decoder call for beam search: for beam search, we

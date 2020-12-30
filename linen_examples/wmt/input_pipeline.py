@@ -25,7 +25,6 @@ import tensorflow_text as tftxt
 
 from sentencepiece import SentencePieceTrainer
 
-
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 
 
@@ -41,8 +40,8 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
 
   Args:
     dataset_name: str: TFDS WMT dataset name.
-    eval_dataset_name: Optional[str]: separate dataset name for evaluation.
-      e.g. for specifying the standard academic WMT14 test set.
+    eval_dataset_name: Optional[str]: separate dataset name for evaluation. e.g.
+      for specifying the standard academic WMT14 test set.
     reverse_translation: bool: whether to reverse the translation direction.
       e.g. for 'de-en' this translates from english to german.
     shard_idx: int: for multihost training, index of this host.
@@ -56,26 +55,26 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
   builder = tfds.builder(dataset_name)
   shard_spec = (f'[{int(100 * shard_idx / shard_count)}%'
                 f':{int(100 * (shard_idx + 1) / shard_count)}%]')
-  logging.info('Training on TFDS dataset %s with split %s',
-               dataset_name, 'train' + shard_spec)
-  train_data = builder.as_dataset(split='train' + shard_spec,
-                                  shuffle_files=True)
+  logging.info('Training on TFDS dataset %s with split %s', dataset_name,
+               'train' + shard_spec)
+  train_data = builder.as_dataset(
+      split='train' + shard_spec, shuffle_files=True)
   if eval_dataset_name is None:
-    logging.info('Evaluating on TFDS dataset %s with split %s',
-                 dataset_name, 'validation' + shard_spec)
-    eval_data = builder.as_dataset(split='validation' + shard_spec,
-                                   shuffle_files=False)
+    logging.info('Evaluating on TFDS dataset %s with split %s', dataset_name,
+                 'validation' + shard_spec)
+    eval_data = builder.as_dataset(
+        split='validation' + shard_spec, shuffle_files=False)
   else:
     eval_dataset, *eval_split = eval_dataset_name.split(':')
     if not eval_split:
       eval_split = 'validation'
     else:
       eval_split = eval_split[0]
-    logging.info('Evaluating on TFDS dataset %s with split %s',
-                 eval_dataset, eval_split + shard_spec)
+    logging.info('Evaluating on TFDS dataset %s with split %s', eval_dataset,
+                 eval_split + shard_spec)
     eval_builder = tfds.builder(eval_dataset)
-    eval_data = eval_builder.as_dataset(split=eval_split + shard_spec,
-                                        shuffle_files=False)
+    eval_data = eval_builder.as_dataset(
+        split=eval_split + shard_spec, shuffle_files=False)
 
   features_info = builder.info
 
@@ -84,8 +83,10 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
   target_lang = features_info.supervised_keys[1]
   if reverse_translation:
     input_lang, target_lang = target_lang, input_lang
+
   def to_features_dict(x):
     return {'inputs': x[input_lang], 'targets': x[target_lang]}
+
   train_data = train_data.map(to_features_dict, num_parallel_calls=AUTOTUNE)
   eval_data = eval_data.map(to_features_dict, num_parallel_calls=AUTOTUNE)
 
@@ -110,8 +111,8 @@ def dump_chars_to_textfile(dataset,
   """
   char_count = 0
   ds_iter = dataset.as_numpy_iterator()
-  with tempfile.NamedTemporaryFile(delete=False,
-                                   prefix='/tmp/ds_chars') as outfp:
+  with tempfile.NamedTemporaryFile(
+      delete=False, prefix='/tmp/ds_chars') as outfp:
     while char_count < maxchars:
       example = next(ds_iter)
       for k in data_keys:
@@ -134,9 +135,9 @@ def train_sentencepiece(dataset,
     dataset: tf.dataset
     vocab_size: int: size of vocab tokens to train.
     maxchars: int: number of characters to use for sentencepiece training.
-    character_coverage: amount of characters covered by the model, good
-      defaults are 0.9995 for languages with rich character set like Japanese
-      or Chinese and 1.0 for other languages with small character set.
+    character_coverage: amount of characters covered by the model, good defaults
+      are 0.9995 for languages with rich character set like Japanese or Chinese
+      and 1.0 for other languages with small character set.
     model_path: str: path of model file to save vocab model to.
     model_type: str: type of sentencepiece vocab to train.
     data_keys: Tuple[str]: keys of dataset to use for training.
@@ -145,18 +146,16 @@ def train_sentencepiece(dataset,
     path to the trained sentencepiece vocabulary model.
   """
   abs_model_path = os.path.abspath(os.path.expanduser(model_path))
-  fname, _ = dump_chars_to_textfile(dataset,
-                                    maxchars=maxchars,
-                                    data_keys=data_keys)
-  with tempfile.NamedTemporaryFile(delete=False,
-                                   prefix='/tmp/sp_tmp') as model_fp:
+  fname, _ = dump_chars_to_textfile(
+      dataset, maxchars=maxchars, data_keys=data_keys)
+  with tempfile.NamedTemporaryFile(
+      delete=False, prefix='/tmp/sp_tmp') as model_fp:
     pass  # we just want a prefix'd tmp-filename
-  argstr = ' '.join(
-      [f'--input={fname}',
-       f'--vocab_size={vocab_size}',
-       f'--character_coverage={character_coverage}',
-       f'--model_prefix={model_fp.name}',
-       f'--model_type={model_type}'])
+  argstr = ' '.join([
+      f'--input={fname}', f'--vocab_size={vocab_size}',
+      f'--character_coverage={character_coverage}',
+      f'--model_prefix={model_fp.name}', f'--model_type={model_type}'
+  ])
   SentencePieceTrainer.Train(argstr)
   if jax.host_id() == 0:
     # Use an intermediate filename that is renamed to the target name to address
@@ -164,7 +163,7 @@ def train_sentencepiece(dataset,
     copy_rename_path = abs_model_path + '.rntmp'
     tf.io.gfile.copy(model_fp.name + '.model', copy_rename_path, overwrite=True)
     tf.io.gfile.rename(copy_rename_path, abs_model_path, overwrite=True)
-    logging.info('copied %s to %s', model_fp.name+'.model', abs_model_path)
+    logging.info('copied %s to %s', model_fp.name + '.model', abs_model_path)
   else:
     while not tf.io.gfile.exists(abs_model_path):
       time.sleep(1)
@@ -172,8 +171,10 @@ def train_sentencepiece(dataset,
   return abs_model_path
 
 
-def load_sentencepiece_tokenizer(
-    model_path, add_bos=False, add_eos=True, reverse=False):
+def load_sentencepiece_tokenizer(model_path,
+                                 add_bos=False,
+                                 add_eos=True,
+                                 reverse=False):
   """Load a tf-text SentencePiece tokenizer from given model filepath."""
   with tf.io.gfile.GFile(model_path, 'rb') as model_fp:
     sp_model = model_fp.read()
@@ -218,9 +219,8 @@ def bin_and_batch(dataset,
         bucket_length * 16
     ]
     bucket_batch_sizes = [
-        batch_size * 4, batch_size * 2, batch_size,
-        batch_size // 2, batch_size // 4, batch_size // 8,
-        batch_size // 16
+        batch_size * 4, batch_size * 2, batch_size, batch_size // 2,
+        batch_size // 4, batch_size // 8, batch_size // 16
     ]
     # TF.data's bucket_by_sequence_length pads to (bucket_boundary - 1):
     # we add 1 here to pad to the correct specified length.
@@ -235,8 +235,9 @@ def bin_and_batch(dataset,
 
   def example_length(example):
     """The length function used by bucket_by_sequence_length to bucket."""
-    return tf.maximum(tf.shape(example['inputs'])[0],
-                      tf.shape(example['targets'])[0])
+    return tf.maximum(
+        tf.shape(example['inputs'])[0],
+        tf.shape(example['targets'])[0])
 
   boundaries, batch_sizes = buckets
   # bucket_by_sequence_length expects a final dummy 1 batch_size.
@@ -296,8 +297,8 @@ def pack_dataset(dataset, length, keys=None):
     keys = list(shapes.keys())
   for k in keys:
     if k not in shapes:
-      raise ValueError('Key %s not found in dataset.  Available keys are %s'
-                       % (k, shapes.keys()))
+      raise ValueError('Key %s not found in dataset.  Available keys are %s' %
+                       (k, shapes.keys()))
     if not shapes[k].is_compatible_with(tf.TensorShape([None])):
       raise ValueError('Tensors to be packed must be one-dimensional.')
   # make sure that the length dictionary contains all keys as well as the
@@ -309,8 +310,9 @@ def pack_dataset(dataset, length, keys=None):
   length = length_dict
 
   # trim to length
-  dataset = dataset.map(lambda x: {k: x[k][:length[k]] for k in keys},
-                        num_parallel_calls=AUTOTUNE)
+  dataset = dataset.map(
+      lambda x: {k: x[k][:length[k]] for k in keys},
+      num_parallel_calls=AUTOTUNE)
   # Setting batch_size=length ensures that the concatenated sequences (if they
   # have length >=1) are sufficient to fill at least one packed example.
   batch_size = max(length.values())
@@ -321,6 +323,7 @@ def pack_dataset(dataset, length, keys=None):
   # Set the Tensor shapes correctly since they get lost in the process.
   def my_fn(x):
     return {k: tf.reshape(v, [length[k]]) for k, v in x.items()}
+
   return dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
 
 
@@ -349,8 +352,7 @@ def _pack_with_tf_ops(dataset, keys, length):
     for k in keys_etc:
       new_outputs[k] = outputs[k].write(
           outputs[k].size(),
-          tf.pad(partial[k],
-                 [[0, length[k] - tf.size(partial[k])]]))
+          tf.pad(partial[k], [[0, length[k] - tf.size(partial[k])]]))
     return new_partial, new_outputs
 
   def map_fn(x):
@@ -360,6 +362,7 @@ def _pack_with_tf_ops(dataset, keys, length):
     examples.
     Args:
       x: a single example
+
     Returns:
       a tf.data.Dataset
     """
@@ -372,9 +375,11 @@ def _pack_with_tf_ops(dataset, keys, length):
           tf.int32, size=0, dynamic_size=True, element_shape=[length[k]])
       outputs[k + '_position'] = tf.TensorArray(
           tf.int32, size=0, dynamic_size=True, element_shape=[length[k]])
+
     def cond_fn(i, partial, outputs):
       del partial, outputs
       return i < dynamic_batch_size
+
     def body_fn(i, partial, outputs):
       """Body function for while_loop.
 
@@ -382,6 +387,7 @@ def _pack_with_tf_ops(dataset, keys, length):
         i: integer scalar
         partial: dictionary of Tensor (partially-constructed example)
         outputs: dictionary of TensorArray
+
       Returns:
         A triple containing the new values of the inputs.
       """
@@ -396,10 +402,13 @@ def _pack_with_tf_ops(dataset, keys, length):
             can_append,
             tf.less_equal(
                 tf.size(partial[k]) + tf.size(one_example[k]), length[k]))
+
       def false_fn():
         return write_packed_example(partial, outputs)
+
       def true_fn():
         return partial, outputs
+
       partial, outputs = tf.cond(can_append, true_fn, false_fn)
       new_partial = {}
       for k in keys:
@@ -410,7 +419,7 @@ def _pack_with_tf_ops(dataset, keys, length):
             [partial[k + '_position'],
              tf.range(new_seq_len, dtype=tf.int32)], 0)
       partial = new_partial
-      return i+1, partial, outputs
+      return i + 1, partial, outputs
 
     i, partial, outputs = \
         tf.while_loop(
@@ -429,6 +438,7 @@ def _pack_with_tf_ops(dataset, keys, length):
               tf.cast(tf.equal(packed[k + '_position'], 0), tf.int32), axis=1) *
           tf.cast(tf.not_equal(packed[k], 0), tf.int32))
     return packed
+
   dataset = dataset.map(map_fn, num_parallel_calls=AUTOTUNE)
   return dataset.unbatch()
 
@@ -448,11 +458,14 @@ def preprocess_wmt_data(dataset,
                         drop_remainder=True,
                         prefetch_size=AUTOTUNE):
   """Shuffle and batch/pack the given dataset."""
+
   def length_filter(max_len):
+
     def filter_fn(x):
       source, target = x['inputs'], x['targets']
       l = tf.maximum(tf.shape(source)[0], tf.shape(target)[0])
       return tf.less(l, max_len + 1)
+
     return filter_fn
 
   if max_length > 0:
@@ -479,8 +492,14 @@ def preprocess_wmt_data(dataset,
   else:  # simple (static-shape) padded batching
     dataset = dataset.padded_batch(
         batch_size,
-        padded_shapes={'inputs': max_length, 'targets': max_length},
-        padding_values={'inputs': 0, 'targets': 0},
+        padded_shapes={
+            'inputs': max_length,
+            'targets': max_length
+        },
+        padding_values={
+            'inputs': 0,
+            'targets': 0
+        },
         drop_remainder=drop_remainder)
 
   if prefetch_size:
@@ -489,21 +508,22 @@ def preprocess_wmt_data(dataset,
   return dataset
 
 
-def get_wmt_datasets(n_devices,
-                     dataset_name='wmt17_translate/de-en',
-                     eval_dataset_name=None,
-                     reverse_translation=True,
-                     shard_idx=0,
-                     shard_count=1,
-                     vocab_path=None,
-                     target_vocab_size=2**15,  # 32000
-                     max_corpus_chars=10**7,
-                     batch_size=256,
-                     bucket_length=32,
-                     dynamic_batching=False,
-                     pack_examples=True,
-                     max_length=256,
-                     max_eval_length=256):
+def get_wmt_datasets(
+    n_devices,
+    dataset_name='wmt17_translate/de-en',
+    eval_dataset_name=None,
+    reverse_translation=True,
+    shard_idx=0,
+    shard_count=1,
+    vocab_path=None,
+    target_vocab_size=2**15,  # 32000
+    max_corpus_chars=10**7,
+    batch_size=256,
+    bucket_length=32,
+    dynamic_batching=False,
+    pack_examples=True,
+    max_length=256,
+    max_eval_length=256):
   """Load and return dataset of batched examples for use during training."""
   if batch_size % n_devices:
     raise ValueError("Batch size %d isn't divided evenly by n_devices %d" %
@@ -533,8 +553,11 @@ def get_wmt_datasets(n_devices,
 
   # Encode strings with sentencepiece tokenizer.
   def tokenize(data):
-    return {'inputs': sp_tokenizer.tokenize(data['inputs']),
-            'targets': sp_tokenizer.tokenize(data['targets'])}
+    return {
+        'inputs': sp_tokenizer.tokenize(data['inputs']),
+        'targets': sp_tokenizer.tokenize(data['targets'])
+    }
+
   train_data = train_data.map(tokenize, num_parallel_calls=AUTOTUNE)
   eval_data = eval_data.map(tokenize, num_parallel_calls=AUTOTUNE)
 
