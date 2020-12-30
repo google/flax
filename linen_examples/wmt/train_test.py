@@ -49,6 +49,10 @@ class TrainTest(absltest.TestCase):
     config.mlp_dim = 512
     config.num_heads = 2
 
+    config.max_target_length = 32
+    config.max_eval_target_length = 32
+    config.max_predict_length = 32
+
     workdir = tempfile.mkdtemp()
 
     # Go two directories up to the root of the flax directory.
