@@ -39,13 +39,13 @@ def get_config():
   config.reverse_translation = False
 
   # Per device batch size for training.
-  config.per_device_batch_size = 32
+  config.per_device_batch_size = 64
 
   # Beam size for inference.
   config.beam_size = 4
 
-  # Number of train steps.
-  config.num_train_steps = 500_000
+  config.num_train_steps = 100_000
+
   # Number of steps to take during evaluation.
   config.num_eval_steps = 20
   # Number of steps to generate predictions (used for BLEU score).
