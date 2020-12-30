@@ -414,9 +414,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   """
   tf.io.gfile.makedirs(workdir)
 
-  # Number of local devices for this host.
-  n_devices = jax.local_device_count()
-
   vocab_path = config.vocab_path
   if vocab_path is None:
     vocab_path = os.path.join(workdir, "sentencepiece_model")
@@ -426,17 +423,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # ---------------------------------------------------------------------------
   logging.info("Initializing dataset.")
   train_ds, eval_ds, predict_ds, encoder = input_pipeline.get_wmt_datasets(
-      n_devices=n_devices,
-      dataset_name=config.dataset_name,
-      eval_dataset_name=config.eval_dataset_name,
+      n_devices=jax.local_device_count(),
+      config=config,
       shard_idx=jax.host_id(),
       shard_count=jax.host_count(),
-      vocab_path=vocab_path,
-      target_vocab_size=config.vocab_size,
-      batch_size=config.per_device_batch_size * n_devices,
-      max_corpus_chars=config.max_corpus_chars,
-      max_length=config.max_target_length,
-      max_eval_length=config.max_eval_target_length)
+      vocab_path=vocab_path)
+
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
   eos_id = decode.EOS_ID  # Default Sentencepiece EOS token.
@@ -544,7 +536,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   # We init the first set of dropout PRNG keys, but update it afterwards inside
   # the main pmap"d training update for performance.
-  dropout_rngs = jax.random.split(rng, n_devices)
+  dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
   logging.info("Starting training loop.")
   hooks = []

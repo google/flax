@@ -17,8 +17,11 @@
 import os
 import tempfile
 import time
+from typing import Optional
+
 from absl import logging
 import jax
+import ml_collections
 import tensorflow.compat.v2 as tf
 import tensorflow_datasets as tfds
 import tensorflow_text as tftxt
@@ -447,8 +450,9 @@ def _pack_with_tf_ops(dataset, keys, length):
 # Main dataset prep routines.
 # -----------------------------------------------------------------------------
 def preprocess_wmt_data(dataset,
-                        training,
-                        n_devices,
+                        shuffle: bool,
+                        n_devices: int,
+                        num_epochs: Optional[int] = 1,
                         dynamic_batching=False,
                         pack_examples=True,
                         shuffle_buffer_size=1024,
@@ -471,9 +475,9 @@ def preprocess_wmt_data(dataset,
   if max_length > 0:
     dataset = dataset.filter(length_filter(max_length))
 
-  if training:
+  if shuffle:
     dataset = dataset.shuffle(shuffle_buffer_size)
-    dataset = dataset.repeat()
+  dataset = dataset.repeat(num_epochs)
 
   if pack_examples and dynamic_batching:
     raise ValueError(
@@ -508,32 +512,24 @@ def preprocess_wmt_data(dataset,
   return dataset
 
 
-def get_wmt_datasets(
-    n_devices,
-    dataset_name='wmt17_translate/de-en',
-    eval_dataset_name=None,
-    reverse_translation=True,
-    shard_idx=0,
-    shard_count=1,
-    vocab_path=None,
-    target_vocab_size=2**15,  # 32000
-    max_corpus_chars=10**7,
-    batch_size=256,
-    bucket_length=32,
-    dynamic_batching=False,
-    pack_examples=True,
-    max_length=256,
-    max_eval_length=256):
+def get_wmt_datasets(config: ml_collections.ConfigDict,
+                     *,
+                     n_devices: int,
+                     reverse_translation: bool = True,
+                     shard_idx: int = 0,
+                     shard_count: int = 1,
+                     vocab_path: Optional[str] = None,
+                     bucket_length: int = 32,
+                     dynamic_batching: bool = False,
+                     pack_examples: bool = True):
   """Load and return dataset of batched examples for use during training."""
-  if batch_size % n_devices:
-    raise ValueError("Batch size %d isn't divided evenly by n_devices %d" %
-                     (batch_size, n_devices))
+  batch_size = config.per_device_batch_size * n_devices
   if vocab_path is None:
     vocab_path = os.path.expanduser('~/wmt_sentencepiece_model')
 
   train_data, eval_data, _ = raw_wmt_datasets(
-      dataset_name=dataset_name,
-      eval_dataset_name=eval_dataset_name,
+      dataset_name=config.dataset_name,
+      eval_dataset_name=config.eval_dataset_name,
       reverse_translation=reverse_translation,
       shard_idx=shard_idx,
       shard_count=shard_count)
@@ -544,8 +540,8 @@ def get_wmt_datasets(
     logging.info('SentencePiece vocab not found, building one from data.')
     abs_vocab_path = train_sentencepiece(
         train_data,
-        target_vocab_size,
-        maxchars=max_corpus_chars,
+        config.vocab_size,
+        maxchars=config.max_corpus_chars,
         character_coverage=1.0,
         model_path=vocab_path,
         data_keys=('inputs', 'targets'))
@@ -563,33 +559,34 @@ def get_wmt_datasets(
 
   train_batches = preprocess_wmt_data(
       train_data,
-      training=True,
+      shuffle=True,
+      num_epochs=None,
       dynamic_batching=dynamic_batching,
       pack_examples=pack_examples,
       n_devices=n_devices,
       batch_size=batch_size,
       bucket_length=bucket_length,
-      max_length=max_length)
+      max_length=config.max_target_length)
 
   eval_batches = preprocess_wmt_data(
       eval_data,
-      training=False,
+      shuffle=False,
       dynamic_batching=dynamic_batching,
       pack_examples=False,
       n_devices=n_devices,
       batch_size=batch_size,
       bucket_length=bucket_length,
-      max_length=max_eval_length)
+      max_length=config.max_eval_target_length)
 
   predict_batches = preprocess_wmt_data(
       eval_data,
-      training=False,
+      shuffle=False,
       dynamic_batching=dynamic_batching,
       pack_examples=False,
       n_devices=n_devices,
       batch_size=batch_size,
       bucket_length=bucket_length,
-      max_length=max_eval_length,
+      max_length=config.max_predict_length,
       drop_remainder=False)
 
   return train_batches, eval_batches, predict_batches, sp_tokenizer
