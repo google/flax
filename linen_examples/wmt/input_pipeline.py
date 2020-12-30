@@ -17,7 +17,7 @@
 import os
 import tempfile
 import time
-from typing import Optional
+from typing import Dict, Optional, List, Union
 
 from absl import logging
 import jax
@@ -29,6 +29,7 @@ import tensorflow_text as tftxt
 from sentencepiece import SentencePieceTrainer
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
+Features = Dict[str, tf.Tensor]
 
 
 # -----------------------------------------------------------------------------
@@ -186,76 +187,9 @@ def load_sentencepiece_tokenizer(model_path,
   return sp_tokenizer
 
 
-# -----------------------------------------------------------------------------
-# Dynamic to static shape transforms.
-# -----------------------------------------------------------------------------
-def bin_and_batch(dataset,
-                  n_devices,
-                  batch_size=256,
-                  bucket_length=32,
-                  buckets=None,
-                  drop_remainder=True):
-  """Dynamic batching by length-bucketing.
-
-  Sorts data into a small number of batch x length "buckets" that have roughly
-  constant token count.
-
-  Args:
-    dataset: tf.data dataset
-    n_devices: int: number of local devices
-    batch_size: int: target batch size
-    bucket_length: int: target length for target batch size
-    buckets: List[Tuple[int, int]]: pairs of bucket-length, batch-size
-      boundaries to define custom length-buckets.
-    drop_remainder: bool: whether or not to drop the last odd-shaped batch
-      produced by bucketing a finite input data stream.
-
-  Returns:
-    tf.data dataset with dynamically batched examples.
-  """
-  # Create heuristic buckets is none are specified.
-  if buckets is None:
-    logging.info('Heuristically bucketing based on shapes of examples.')
-    bucket_boundaries = [
-        bucket_length // 4, bucket_length // 2, bucket_length,
-        bucket_length * 2, bucket_length * 4, bucket_length * 8,
-        bucket_length * 16
-    ]
-    bucket_batch_sizes = [
-        batch_size * 4, batch_size * 2, batch_size, batch_size // 2,
-        batch_size // 4, batch_size // 8, batch_size // 16
-    ]
-    # TF.data's bucket_by_sequence_length pads to (bucket_boundary - 1):
-    # we add 1 here to pad to the correct specified length.
-    bucket_boundaries = [b + 1 for b in bucket_boundaries]
-    # Make batch sizes divisible by n_devices.
-    bucket_batch_sizes = [
-        max(b // n_devices, 1) * n_devices for b in bucket_batch_sizes
-    ]
-    buckets = (bucket_boundaries, bucket_batch_sizes)
-
-  logging.info('Bucketing with buckets %s.', str(buckets))
-
-  def example_length(example):
-    """The length function used by bucket_by_sequence_length to bucket."""
-    return tf.maximum(
-        tf.shape(example['inputs'])[0],
-        tf.shape(example['targets'])[0])
-
-  boundaries, batch_sizes = buckets
-  # bucket_by_sequence_length expects a final dummy 1 batch_size.
-  batch_sizes.append(1)
-  dataset = dataset.apply(
-      tf.data.experimental.bucket_by_sequence_length(
-          example_length,
-          boundaries,
-          batch_sizes,
-          pad_to_bucket_boundary=True,
-          drop_remainder=drop_remainder))
-  return dataset
-
-
-def pack_dataset(dataset, length, keys=None):
+def pack_dataset(dataset: tf.data.Dataset,
+                 key2length: Union[int, Dict[str, int]],
+                 keys: Optional[List[str]] = None) -> tf.data.Dataset:
   """Creates a 'packed' version of a dataset on-the-fly.
 
   Adapted from the mesh-tf implementation.
@@ -289,7 +223,7 @@ def pack_dataset(dataset, length, keys=None):
 
   Args:
     dataset: a tf.data.Dataset
-    length: an integer, or a dict from feature-key to integer
+    key2length: an integer, or a dict from feature-key to integer
     keys: a list of strings (e.g. ["inputs", "targets"])
 
   Returns:
@@ -306,31 +240,32 @@ def pack_dataset(dataset, length, keys=None):
       raise ValueError('Tensors to be packed must be one-dimensional.')
   # make sure that the length dictionary contains all keys as well as the
   # keys suffixed by "_segmentation" and "_position"
-  length_dict = {}
+  if isinstance(key2length, int):
+    key2length = {k: key2length for k in keys}
   for k in keys:
-    for suffix in ['', '_segmentation', '_position']:
-      length_dict[k + suffix] = length if isinstance(length, int) else length[k]
-  length = length_dict
+    for suffix in ['_segmentation', '_position']:
+      key2length[k + suffix] = key2length[k]
 
   # trim to length
   dataset = dataset.map(
-      lambda x: {k: x[k][:length[k]] for k in keys},
+      lambda x: {k: x[k][:key2length[k]] for k in keys},
       num_parallel_calls=AUTOTUNE)
   # Setting batch_size=length ensures that the concatenated sequences (if they
   # have length >=1) are sufficient to fill at least one packed example.
-  batch_size = max(length.values())
+  batch_size = max(key2length.values())
   dataset = dataset.padded_batch(
       batch_size, padded_shapes={k: [-1] for k in keys})
-  dataset = _pack_with_tf_ops(dataset, keys, length)
+  dataset = _pack_with_tf_ops(dataset, keys, key2length)
 
   # Set the Tensor shapes correctly since they get lost in the process.
   def my_fn(x):
-    return {k: tf.reshape(v, [length[k]]) for k, v in x.items()}
+    return {k: tf.reshape(v, [key2length[k]]) for k, v in x.items()}
 
   return dataset.map(my_fn, num_parallel_calls=AUTOTUNE)
 
 
-def _pack_with_tf_ops(dataset, keys, length):
+def _pack_with_tf_ops(dataset: tf.data.Dataset, keys: List[str],
+                      key2length: Dict[str, int]) -> tf.data.Dataset:
   """Helper-function for packing a dataset which has already been batched.
 
   Helper for pack_dataset()  Uses tf.while_loop.
@@ -338,7 +273,7 @@ def _pack_with_tf_ops(dataset, keys, length):
   Args:
     dataset: a dataset containing padded batches of examples.
     keys: a list of strings
-    length: an dict from feature-key to integer
+    key2length: an dict from feature-key to integer
 
   Returns:
     a dataset.
@@ -355,7 +290,7 @@ def _pack_with_tf_ops(dataset, keys, length):
     for k in keys_etc:
       new_outputs[k] = outputs[k].write(
           outputs[k].size(),
-          tf.pad(partial[k], [[0, length[k] - tf.size(partial[k])]]))
+          tf.pad(partial[k], [[0, key2length[k] - tf.size(partial[k])]]))
     return new_partial, new_outputs
 
   def map_fn(x):
@@ -375,9 +310,9 @@ def _pack_with_tf_ops(dataset, keys, length):
     outputs = {}
     for k in keys:
       outputs[k] = tf.TensorArray(
-          tf.int32, size=0, dynamic_size=True, element_shape=[length[k]])
+          tf.int32, size=0, dynamic_size=True, element_shape=[key2length[k]])
       outputs[k + '_position'] = tf.TensorArray(
-          tf.int32, size=0, dynamic_size=True, element_shape=[length[k]])
+          tf.int32, size=0, dynamic_size=True, element_shape=[key2length[k]])
 
     def cond_fn(i, partial, outputs):
       del partial, outputs
@@ -404,7 +339,7 @@ def _pack_with_tf_ops(dataset, keys, length):
         can_append = tf.logical_and(
             can_append,
             tf.less_equal(
-                tf.size(partial[k]) + tf.size(one_example[k]), length[k]))
+                tf.size(partial[k]) + tf.size(one_example[k]), key2length[k]))
 
       def false_fn():
         return write_packed_example(partial, outputs)
@@ -415,7 +350,7 @@ def _pack_with_tf_ops(dataset, keys, length):
       partial, outputs = tf.cond(can_append, true_fn, false_fn)
       new_partial = {}
       for k in keys:
-        new_seq = one_example[k][:length[k]]
+        new_seq = one_example[k][:key2length[k]]
         new_seq_len = tf.size(new_seq)
         new_partial[k] = tf.concat([partial[k], new_seq], 0)
         new_partial[k + '_position'] = tf.concat(
@@ -451,16 +386,13 @@ def _pack_with_tf_ops(dataset, keys, length):
 # -----------------------------------------------------------------------------
 def preprocess_wmt_data(dataset,
                         shuffle: bool,
-                        n_devices: int,
                         num_epochs: Optional[int] = 1,
-                        dynamic_batching=False,
-                        pack_examples=True,
-                        shuffle_buffer_size=1024,
-                        max_length=512,
-                        batch_size=256,
-                        bucket_length=32,
-                        drop_remainder=True,
-                        prefetch_size=AUTOTUNE):
+                        pack_examples: bool = True,
+                        shuffle_buffer_size: int = 1024,
+                        max_length: int = 512,
+                        batch_size: int = 256,
+                        drop_remainder: bool = True,
+                        prefetch_size: int = AUTOTUNE):
   """Shuffle and batch/pack the given dataset."""
 
   def length_filter(max_len):
@@ -479,31 +411,14 @@ def preprocess_wmt_data(dataset,
     dataset = dataset.shuffle(shuffle_buffer_size)
   dataset = dataset.repeat(num_epochs)
 
-  if pack_examples and dynamic_batching:
-    raise ValueError(
-        "Can't use both dynamic batching and packed-examples simultaneously.")
-
   if pack_examples:
     dataset = pack_dataset(dataset, max_length)
     dataset = dataset.batch(batch_size, drop_remainder=drop_remainder)
-  elif dynamic_batching:
-    dataset = bin_and_batch(
-        dataset,
-        n_devices,
-        batch_size=batch_size,
-        bucket_length=bucket_length,
-        drop_remainder=drop_remainder)
   else:  # simple (static-shape) padded batching
     dataset = dataset.padded_batch(
         batch_size,
-        padded_shapes={
-            'inputs': max_length,
-            'targets': max_length
-        },
-        padding_values={
-            'inputs': 0,
-            'targets': 0
-        },
+        padded_shapes={'inputs': max_length, 'targets': max_length},
+        padding_values={'inputs': 0, 'targets': 0},
         drop_remainder=drop_remainder)
 
   if prefetch_size:
@@ -519,8 +434,6 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
                      shard_idx: int = 0,
                      shard_count: int = 1,
                      vocab_path: Optional[str] = None,
-                     bucket_length: int = 32,
-                     dynamic_batching: bool = False,
                      pack_examples: bool = True):
   """Load and return dataset of batched examples for use during training."""
   batch_size = config.per_device_batch_size * n_devices
@@ -561,31 +474,22 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
       train_data,
       shuffle=True,
       num_epochs=None,
-      dynamic_batching=dynamic_batching,
       pack_examples=pack_examples,
-      n_devices=n_devices,
       batch_size=batch_size,
-      bucket_length=bucket_length,
       max_length=config.max_target_length)
 
   eval_batches = preprocess_wmt_data(
       eval_data,
       shuffle=False,
-      dynamic_batching=dynamic_batching,
       pack_examples=False,
-      n_devices=n_devices,
       batch_size=batch_size,
-      bucket_length=bucket_length,
       max_length=config.max_eval_target_length)
 
   predict_batches = preprocess_wmt_data(
       eval_data,
       shuffle=False,
-      dynamic_batching=dynamic_batching,
       pack_examples=False,
-      n_devices=n_devices,
       batch_size=batch_size,
-      bucket_length=bucket_length,
       max_length=config.max_predict_length,
       drop_remainder=False)
 
