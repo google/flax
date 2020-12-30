@@ -202,8 +202,7 @@ def train_step(optimizer,
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
 
-  # We handle PRNG splitting inside the top pmap to improve efficiency.
-  dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+  dropout_rng = jax.random.fold_in(dropout_rng, optimizer.state.step)
 
   def loss_fn(params):
     """loss function used for training."""
@@ -231,7 +230,7 @@ def train_step(optimizer,
   metrics = compute_metrics(logits, targets, weights)
   metrics["learning_rate"] = lr
 
-  return new_optimizer, metrics, new_dropout_rng
+  return new_optimizer, metrics
 
 
 def eval_step(params, batch, config, label_smoothing=0.0):
@@ -537,6 +536,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # We init the first set of dropout PRNG keys, but update it afterwards inside
   # the main pmap"d training update for performance.
   dropout_rngs = jax.random.split(rng, jax.local_device_count())
+  del rng
 
   logging.info("Starting training loop.")
   hooks = []
@@ -552,7 +552,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceContext("train", step_num=step):
         batch = common_utils.shard(jax.tree_map(np.asarray, next(train_iter)))
-        optimizer, metrics, dropout_rngs = p_train_step(
+        optimizer, metrics = p_train_step(
             optimizer, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
