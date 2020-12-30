@@ -38,14 +38,11 @@ def get_config():
   # Reverse the direction of translation.
   config.reverse_translation = False
 
-  # Per host batch size for training.
-  config.batch_size = 256
+  # Per device batch size for training.
+  config.per_device_batch_size = 32
 
   # Beam size for inference.
   config.beam_size = 4
-
-  # Frequency of eval during training, e.g. every 1000 steps.
-  config.eval_frequency = 1000
 
   # Number of train steps.
   config.num_train_steps = 500_000
@@ -103,8 +100,11 @@ def get_config():
   config.save_checkpoints = True
   # Whether to restore from existing model checkpoints.
   config.restore_checkpoints = True
+
   # Save a checkpoint every these number of steps.
-  config.checkpoint_freq = 10000
+  config.checkpoint_every_steps = 10_000
+  # Frequency of eval during training, e.g. every 1000 steps.
+  config.eval_every_steps = 1_000
 
   # Use bfloat16 mixed precision training instead of float32.
   config.use_bfloat16 = True
