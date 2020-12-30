@@ -314,10 +314,6 @@ def _pack_with_tf_ops(dataset: tf.data.Dataset, keys: List[str],
       outputs[k + '_position'] = tf.TensorArray(
           tf.int32, size=0, dynamic_size=True, element_shape=[key2length[k]])
 
-    def cond_fn(i, partial, outputs):
-      del partial, outputs
-      return i < dynamic_batch_size
-
     def body_fn(i, partial, outputs):
       """Body function for while_loop.
 
@@ -355,20 +351,22 @@ def _pack_with_tf_ops(dataset: tf.data.Dataset, keys: List[str],
         new_partial[k] = tf.concat([partial[k], new_seq], 0)
         new_partial[k + '_position'] = tf.concat(
             [partial[k + '_position'],
-             tf.range(new_seq_len, dtype=tf.int32)], 0)
+             tf.range(new_seq_len)], 0)
       partial = new_partial
       return i + 1, partial, outputs
 
-    i, partial, outputs = \
-        tf.while_loop(
-            cond_fn, body_fn, (i, partial, outputs),
-            shape_invariants=(
-                tf.TensorShape([]),
-                {k: tf.TensorShape([None]) for k in keys_etc},
-                {k: tf.TensorShape(None) for k in keys_etc},
-            )
-        )
-    partial, outputs = write_packed_example(partial, outputs)
+    # For loop over all examples in the batch.
+    i, partial, outputs = tf.while_loop(
+        cond=lambda *_: True,
+        body=body_fn,
+        loop_vars=(i, partial, outputs),
+        shape_invariants=(
+            tf.TensorShape([]),
+            {k: tf.TensorShape([None]) for k in keys_etc},
+            {k: tf.TensorShape(None) for k in keys_etc},
+        ),
+        maximum_iterations=dynamic_batch_size)
+    _, outputs = write_packed_example(partial, outputs)
     packed = {k: outputs[k].stack() for k in keys_etc}
     for k in keys:
       packed[k + '_segmentation'] = (
