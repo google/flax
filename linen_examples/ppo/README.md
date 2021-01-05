@@ -25,11 +25,11 @@ Running `python ppo_main.py` will run the example with default
 By default logging info and checkpoints will be stored in `/tmp/ppo_training`
 directory. This can be overriden as follows:
 
-```python ppo_main.py --logdir=/my_fav_directory```
+```python ppo_main.py --config=configs/default.py --workdir=/my_fav_directory```
 
 You can also override the default (hyper)parameters, for example
 
-```python ppo_main.py --config.game=Seaquest --config.total_frames=20000000 --config.decaying_lr_and_clip_param=False --logdir=/tmp/seaquest```
+```python ppo_main.py --config=configs/default.py --config.game=Seaquest --config.total_frames=20000000 --config.decaying_lr_and_clip_param=False --workdir=/tmp/seaquest```
 
 will train the model on 20M Seaquest frames with constant (i.e. not linearly
 decaying) learning rate and PPO clipping parameter. Checkpoints and tensorboard

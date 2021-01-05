@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,12 +30,18 @@ import env_utils
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-    'logdir', default='/tmp/ppo_training',
+    'workdir',
+    default='/tmp/ppo_training',
     help=('Directory to save checkpoints and logging info.'))
 
 config_flags.DEFINE_config_file(
-    'config', os.path.join(os.path.dirname(__file__), 'default_config.py'),
-    'File path to the default configuration file.')
+    'config',
+    None,
+    'File path to the default configuration file.',
+    lock_config=True)
+
+flags.mark_flags_as_required(['config'])
+
 
 def main(argv):
   # Make sure tf does not allocate gpu memory.
@@ -49,7 +55,7 @@ def main(argv):
   key, subkey = jax.random.split(key)
   initial_params = models.get_initial_params(subkey, module)
   optimizer = models.create_optimizer(initial_params, config.learning_rate)
-  optimizer = ppo_lib.train(module, optimizer, config, FLAGS.logdir)
+  optimizer = ppo_lib.train(module, optimizer, config, FLAGS.workdir)
 
 if __name__ == '__main__':
   app.run(main)
