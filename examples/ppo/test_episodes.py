@@ -20,13 +20,19 @@ import numpy as onp
 
 import env_utils
 import agent
+import models
 
-def policy_test(n_episodes: int, model: flax.nn.base.Model, game: str):
+def policy_test(
+    n_episodes: int,
+    module: models.ActorCritic,
+    params: flax.core.frozen_dict.FrozenDict,
+    game: str):
   """Perform a test of the policy in Atari environment.
 
   Args:
     n_episodes: number of full Atari episodes to test on
-    model: the actor-critic model being tested
+    module: the actor-critic model
+    params: actor-critic model parameters, they define the policy being tested
     game: defines the Atari game to test on
 
   Returns:
@@ -38,7 +44,7 @@ def policy_test(n_episodes: int, model: flax.nn.base.Model, game: str):
     state = obs[None, ...]  # add batch dimension
     total_reward = 0.0
     for t in itertools.count():
-      log_probs, _ = agent.policy_action(model, state)
+      log_probs, _ = agent.policy_action(params, module, state)
       probs = onp.exp(onp.array(log_probs, dtype=onp.float32))
       probabilities = probs[0] / probs[0].sum()
       action = onp.random.choice(probs.shape[1], p=probabilities)

@@ -53,17 +53,11 @@ else
 fi
 
 # Per-example tests.
-if [[ $ALL_EXAMPLES == 'true' ]]; then
-  # we apply pytest within each example to avoid pytest's annoying test-filename collision.
-  # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
-  # /foo/bar and /baz/bleep aren't set up as packages.
-  for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-      pytest $egd
-  done
-fi
-
-# Per-example tests for Linen examples.
-for egd in $(find linen_examples -maxdepth 1 -mindepth 1 -type d); do
+#
+# we apply pytest within each example to avoid pytest's annoying test-filename collision.
+# In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
+# /foo/bar and /baz/bleep aren't set up as packages.
+for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
     pytest $egd
     # use cd to make sure pytpe cache lives in example dir and doesn't name clash
     # use *.py to avoid importing configs as a top-level import which leads tot import errors

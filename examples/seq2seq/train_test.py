@@ -21,10 +21,18 @@ import jax
 from jax import random
 import numpy as np
 
-from flax import nn
+from flax import optim
 import train
 
 jax.config.parse_flags_with_absl()
+# Require JAX omnistaging mode.
+jax.config.enable_omnistaging()
+
+
+def create_test_optimizer():
+  rng = random.PRNGKey(0)
+  param = train.get_initial_params(rng)
+  return optim.Adam(learning_rate=0.003).create(param)
 
 
 class TrainTest(absltest.TestCase):
@@ -57,28 +65,6 @@ class TrainTest(absltest.TestCase):
             dtype=np.float32)
     )
 
-  def test_get_sequence_lengths(self):
-    oh_sequence_batch = jax.vmap(functools.partial(train.onehot, vocab_size=4))(
-        np.array(
-            [[0, 1, 0],
-             [1, 0, 2],
-             [1, 2, 0],
-             [1, 2, 3]]
-        )
-    )
-    np.testing.assert_equal(
-        train.get_sequence_lengths(oh_sequence_batch, eos_id=0),
-        np.array([1, 2, 3, 3], np.int32)
-    )
-    np.testing.assert_equal(
-        train.get_sequence_lengths(oh_sequence_batch, eos_id=1),
-        np.array([2, 1, 1, 1], np.int32)
-    )
-    np.testing.assert_equal(
-        train.get_sequence_lengths(oh_sequence_batch, eos_id=2),
-        np.array([3, 3, 2, 2], np.int32)
-    )
-
   def test_mask_sequences(self):
     np.testing.assert_equal(
         train.mask_sequences(
@@ -94,22 +80,20 @@ class TrainTest(absltest.TestCase):
     )
 
   def test_train_one_step(self):
-    batch = train.get_batch(128)
-    rng = random.PRNGKey(0)
+    batch, masks = train.get_batch(128)
 
-    with nn.stochastic(rng):
-      model = train.create_model()
-      optimizer = train.create_optimizer(model, 0.003)
-      optimizer, train_metrics = train.train_step(
-          optimizer, batch, nn.make_rng())
+    optimizer = create_test_optimizer()
+    key = random.PRNGKey(0)
+    _, train_metrics = train.train_step(optimizer, batch, masks, key)
 
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
 
   def test_decode_batch(self):
-    with nn.stochastic(random.PRNGKey(0)):
-      model = train.create_model()
-      train.decode_batch(model, 5)
+    key = random.PRNGKey(0)
+    optimizer = create_test_optimizer()
+    batch, masks = train.get_batch(5)
+    train.decode_batch(optimizer.target, batch, masks, key)
 
 if __name__ == '__main__':
   absltest.main()

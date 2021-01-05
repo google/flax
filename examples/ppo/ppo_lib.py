@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Library file which executes the PPO training"""
+"""Library file which executes the PPO training."""
 
 import functools
 from typing import Tuple, List
@@ -21,12 +21,13 @@ import jax.random
 import jax.numpy as jnp
 import numpy as onp
 import flax
-from flax import nn
+
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 import ml_collections
 
 import agent
+import models
 import test_episodes
 
 @jax.jit
@@ -69,8 +70,59 @@ def gae_advantages(
   advantages = advantages[::-1]
   return jnp.array(advantages)
 
-@functools.partial(jax.jit, static_argnums=6)
+@functools.partial(jax.jit, static_argnums=1)
+def loss_fn(
+    params: flax.core.frozen_dict.FrozenDict,
+    module: models.ActorCritic,
+    minibatch: Tuple,
+    clip_param: float,
+    vf_coeff: float,
+    entropy_coeff: float):
+  """Evaluate the loss function.
+
+  Compute loss as a sum of three components: the negative of the PPO clipped
+  surrogate objective, the value function loss and the negative of the entropy
+  bonus.
+
+  Args:
+    params: the parameters of the actor-critic model
+    module: the actor-critic model
+    minibatch: Tuple of five elements forming one experience batch:
+               states: shape (batch_size, 84, 84, 4)
+               actions: shape (batch_size, 84, 84, 4)
+               old_log_probs: shape (batch_size,)
+               returns: shape (batch_size,)
+               advantages: shape (batch_size,)
+    clip_param: the PPO clipping parameter used to clamp ratios in loss function
+    vf_coeff: weighs value function loss in total loss
+    entropy_coeff: weighs entropy bonus in the total loss
+
+  Returns:
+    loss: the PPO loss, scalar quantity
+  """
+  states, actions, old_log_probs, returns, advantages = minibatch
+  log_probs, values = agent.policy_action(params, module, states)
+  values = values[:, 0]  # Convert shapes: (batch, 1) to (batch, ).
+  probs = jnp.exp(log_probs)
+
+  value_loss = jnp.mean(jnp.square(returns - values), axis=0)
+
+  entropy = jnp.sum(-probs*log_probs, axis=1).mean()
+
+  log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
+  ratios = jnp.exp(log_probs_act_taken - old_log_probs)
+  # Advantage normalization (following the OpenAI baselines).
+  advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+  PG_loss = ratios * advantages
+  clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
+                                            1. + clip_param)
+  PPO_loss = -jnp.mean(jnp.minimum(PG_loss, clipped_loss), axis=0)
+
+  return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
+
+@functools.partial(jax.jit, static_argnums=(0,7))
 def train_step(
+    module: models.ActorCritic,
     optimizer: flax.optim.base.Optimizer,
     trajectories: Tuple,
     clip_param: float,
@@ -80,10 +132,11 @@ def train_step(
     batch_size: int):
   """Compilable train step.
 
-  Runs an entire epoch of training (i.e. the loop over
-  minibatches within an epoch is included here for performance reasons).
+  Runs an entire epoch of training (i.e. the loop over minibatches within
+  an epoch is included here for performance reasons).
 
   Args:
+    module: the actor-critic model
     optimizer: optimizer for the actor-critic model
     trajectories: Tuple of the following five elements forming the experience:
                   states: shape (steps_per_agent*num_agents, 84, 84, 4)
@@ -102,37 +155,21 @@ def train_step(
     optimizer: new optimizer after the parameters update
     loss: loss summed over training steps
   """
-  def loss_fn(model, minibatch, clip_param, vf_coeff, entropy_coeff):
-    states, actions, old_log_probs, returns, advantages = minibatch
-    log_probs, values = model(states)
-    values = values[:, 0]  # Convert shapes: (batch, 1) to (batch, ).
-    probs = jnp.exp(log_probs)
-    entropy = jnp.sum(-probs*log_probs, axis=1).mean()
-    log_probs_act_taken = jax.vmap(lambda lp, a: lp[a])(log_probs, actions)
-    ratios = jnp.exp(log_probs_act_taken - old_log_probs)
-    # Advantage normalization (following the OpenAI baselines).
-    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
-    PG_loss = ratios * advantages
-    clipped_loss = advantages * jax.lax.clamp(1. - clip_param, ratios,
-                                              1. + clip_param)
-    PPO_loss = -jnp.mean(jnp.minimum(PG_loss, clipped_loss), axis=0)
-    value_loss = jnp.mean(jnp.square(returns - values), axis=0)
-    return PPO_loss + vf_coeff*value_loss - entropy_coeff*entropy
-
   iterations = trajectories[0].shape[0] // batch_size
   trajectories = jax.tree_map(
       lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trajectories)
   loss = 0.
   for batch in zip(*trajectories):
     grad_fn = jax.value_and_grad(loss_fn)
-    l, grad = grad_fn(optimizer.target, batch, clip_param, vf_coeff,
+    l, grad = grad_fn(optimizer.target, module, batch, clip_param, vf_coeff,
                       entropy_coeff)
     loss += l
     optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   return optimizer, loss
 
 def get_experience(
-    model: nn.base.Model,
+    params: flax.core.frozen_dict.FrozenDict,
+    module: models.ActorCritic,
     simulators: List[agent.RemoteSimulator],
     steps_per_actor: int):
   """Collect experience from agents.
@@ -147,7 +184,7 @@ def get_experience(
       state = sim.conn.recv()
       states.append(state)
     states = onp.concatenate(states, axis=0)
-    log_probs, values = agent.policy_action(model, states)
+    log_probs, values = agent.policy_action(params, module, states)
     log_probs, values = jax.device_get((log_probs, values))
     probs = onp.exp(onp.array(log_probs))
     for i, sim in enumerate(simulators):
@@ -213,12 +250,14 @@ def process_experience(
   return trajectories
 
 def train(
+    module: models.ActorCritic,
     optimizer: flax.optim.base.Optimizer,
     config: ml_collections.ConfigDict,
     model_dir: str):
   """Main training loop.
 
   Args:
+    module: the actor-critic model
     optimizer: optimizer for the actor-critic model
     config: object holding hyperparameters and the training information
     model_dir: path to dictionary where checkpoints and logging info are stored
@@ -230,6 +269,7 @@ def train(
   simulators = [agent.RemoteSimulator(game)
                 for _ in range(config.num_agents)]
   summary_writer = tensorboard.SummaryWriter(model_dir)
+  summary_writer.hparams(dict(config))
   loop_steps = config.total_frames // (config.num_agents * config.actor_steps)
   log_frequency = 40
   checkpoint_frequency = 500
@@ -238,7 +278,7 @@ def train(
   for s in range(loop_steps):
     # Bookkeeping and testing.
     if s % log_frequency == 0:
-      score = test_episodes.policy_test(1, optimizer.target, game)
+      score = test_episodes.policy_test(1, module, optimizer.target, game)
       frames = s * config.num_agents * config.actor_steps
       summary_writer.scalar('game_score', score, frames)
       print(f'Step {s}:\nframes seen {frames}\nscore {score}\n\n')
@@ -248,7 +288,7 @@ def train(
     # Core training code.
     alpha = 1. - s/loop_steps if config.decaying_lr_and_clip_param else 1.
     all_experiences = get_experience(
-        optimizer.target, simulators, config.actor_steps)
+        optimizer.target, module, simulators, config.actor_steps)
     trajectories = process_experience(
         all_experiences, config.actor_steps, config.num_agents, config.gamma,
         config.lambda_)
@@ -259,6 +299,6 @@ def train(
           config.num_agents * config.actor_steps)
       trajectories = tuple(map(lambda x: x[permutation], trajectories))
       optimizer, loss = train_step(
-          optimizer, trajectories, clip_param, config.vf_coeff,
+          module, optimizer, trajectories, clip_param, config.vf_coeff,
           config.entropy_coeff, lr, config.batch_size)
   return optimizer

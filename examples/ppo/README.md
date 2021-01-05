@@ -15,7 +15,7 @@ tested on the following:
 
 | Hardware | Game | Training time | Total frames seen | TensorBoard.dev |
 | --- | --- | --- | --- | --- |
-| 1x V100 GPU  | Qbert  |  9h 27m 8s | 40M | [2020-09-30](https://tensorboard.dev/experiment/1pacpbxxRz2di3NIOFkHoA/#scalars) |
+| 1x V100 GPU  | Breakout  |  9h 15m 15s | 40M | [2020-10-02](https://tensorboard.dev/experiment/pY7D2qYQQLO9ZT5lA9PFPA) |
 
 ## How to run
 

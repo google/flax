@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.linen_examples.imagenet.models."""
+"""Tests for flax.examples.imagenet.models."""
 
 from absl.testing import absltest
 

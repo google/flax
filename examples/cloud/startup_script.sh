@@ -46,14 +46,14 @@ tmux send "
       pip install --upgrade jax jaxlib==0.1.57+cuda110 -f https://storage.googleapis.com/jax-releases/jax_releases.html
     fi &&
 
-    cd linen_examples/$EXAMPLE &&
+    cd examples/$EXAMPLE &&
     pip install -r requirements.txt &&
     cd $HOME
   ) &&
 
   cd flax &&
   . env/bin/activate &&
-  cd linen_examples/$EXAMPLE &&
+  cd examples/$EXAMPLE &&
 
   TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$WORKDIR $ARGS
 
