@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Main file for running the example.
+"""Main file for running the PixelCNN example.
 
 This file is intentionally kept short. The majority for logic is in libraries
 than can be easily tested and imported in Colab.
@@ -31,9 +31,12 @@ import tensorflow as tf
 
 FLAGS = flags.FLAGS
 
+flags.DEFINE_string('workdir', None, 'Directory to store model data.')
 config_flags.DEFINE_config_file(
-    'config', 'configs/default.py', 'Training configuration.', lock_config=True)
-flags.DEFINE_string('workdir', None, 'Work unit directory.')
+    'config',
+    None,
+    'File path to the training hyperparameter configuration.',
+    lock_config=True)
 flags.DEFINE_bool('sample', False, 'Sample from a model in workdir.')
 flags.mark_flags_as_required(['config', 'workdir'])
 
@@ -49,7 +52,7 @@ def main(argv):
   logging.info('JAX host: %d / %d', jax.host_id(), jax.host_count())
   logging.info('JAX local devices: %r', jax.local_devices())
 
-  # Add a note so that we can tell which task is which JAX host in the UI.
+  # Add a note so that we can tell which task is which JAX host.
   # (Depending on the platform task 0 is not guaranteed to be host 0)
   platform.work_unit().set_task_status(
       f'host_id: {jax.host_id()}, host_count: {jax.host_count()}')
