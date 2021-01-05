@@ -59,10 +59,21 @@ fi
 # /foo/bar and /baz/bleep aren't set up as packages.
 for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
     pytest $egd
+
+    # Skip pytype on deprecated example
+    # TODO: Remove after github.com/google/flax/issues/567 is resolved
+    if [[ "$egd" == "examples/lm1b_deprecated" ]]; then
+        continue
+    fi
+
     # use cd to make sure pytpe cache lives in example dir and doesn't name clash
     # use *.py to avoid importing configs as a top-level import which leads tot import errors
     # because config files use relative imports (e.g. from config import ...). 
-    (cd $egd ; pytype "*.py")
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+      echo "Pytype is currently not working on MacOS, see https://github.com/google/pytype/issues/661"
+  else
+      (cd $egd ; pytype "*.py")
+  fi
 done
 
 # Return error code 0 if no real failures happened.
