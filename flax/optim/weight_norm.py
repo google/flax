@@ -47,7 +47,7 @@ class WeightNorm(OptimizerDef):
   def __init__(self, wrapped_optimizer, wn_decay=0, wn_eps=1e-8):
     """Constructor for a WeightNorm optimizer.
 
-    Weight vectors are decomposed as w = g * v/||v||_2, for scalar
+    Weight vectors are decomposed as :math:`w = g * v/||v||_2`, for scalar
     scale parameter g, and raw weight vector v. The original optimizer is then
     applied to the (g,v) parameterization and the updated parameters are
     transformed back to w-space, i.e.
@@ -58,7 +58,7 @@ class WeightNorm(OptimizerDef):
 
     Args:
       wrapped_optimizer: another OptimizerDef
-      wn_decay: apply l2 decay to the unnoralized weight vector
+      wn_decay: apply l2 decay to the unnormalized weight vector
       wn_eps: additive constant for stability of
         the normalization (default: 1e-8).
     """

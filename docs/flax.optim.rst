@@ -1,6 +1,9 @@
 
 flax.optim package
-=================
+===================
+
+Optimizer core
+------------------------
 
 .. currentmodule:: flax.optim
 
@@ -13,10 +16,30 @@ flax.optim package
 .. autoclass:: OptimizerDef
    :members: apply_param_gradient, init_param_state, apply_gradient, init_state, update_hyper_params, create
 
+.. autoclass:: MultiOptimizer
 
-Optimizers
+.. autoclass:: ModelParamTraversal
+
+
+Available optimizers
 ------------------------
+
+.. autoclass:: Adam
+
+.. autoclass:: Adafactor
+
+.. autoclass:: Adagrad
+
+.. autoclass:: DynamicScale
+
+.. autoclass:: GradientDescent
+
+.. autoclass:: LAMB
+
+.. autoclass:: LARS
 
 .. autoclass:: Momentum
 
-.. autoclass:: Adam
+.. autoclass:: RMSProp
+
+.. autoclass:: WeightNorm

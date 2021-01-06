@@ -52,7 +52,10 @@ class _AdafactorParamState:
 
 
 class Adafactor(OptimizerDef):
-  """Adafactor optimizer."""
+  """Adafactor optimizer.
+  
+  Adafactor is described in https://arxiv.org/abs/1804.04235.
+  """
 
   def __init__(self,
                learning_rate: Optional[float] = None,
@@ -67,8 +70,6 @@ class Adafactor(OptimizerDef):
                epsilon1: float = 1e-30,
                epsilon2: float = 1e-3):
     """Constructor for the Adafactor optimizer.
-
-    Adafactor is described in https://arxiv.org/abs/1804.04235.
 
     Args:
       learning_rate: float: learning rate.  NB: the natural scale for adafactor

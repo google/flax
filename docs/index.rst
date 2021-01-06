@@ -61,10 +61,10 @@ For a quick introduction and short example snippets, see our `README
    flax.serialization
    flax.struct
    flax.jax_utils
+   flax.traverse_util
 
 .. toctree::
    :maxdepth: 1
    :caption: (deprecated)
 
    flax.nn (deprecated) <flax.nn>
-
