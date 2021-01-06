@@ -18,8 +18,7 @@ import math
 from flax import struct
 
 
-@struct.dataclass
-class EarlyStopping:
+class EarlyStopping(struct.PyTreeNode):
   """Early stopping to avoid overfitting during training.
   
   Attributes:
