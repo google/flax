@@ -638,23 +638,23 @@ class Module:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.has_variable(col, name)
 
-  def make_rng(self, col: str) -> PRNGKey:
-    """Returns a new RNG key for a given collection for this Module. 
+  def make_rng(self, name: str) -> PRNGKey:
+    """Returns a new RNG key from a given RNG sequence for this Module.
     
     The new RNG key is split from the previous one. Thus, every call to 
     `make_rng` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
-    TODO: Link to both Flax RNG design note.
+    TODO: Link to Flax RNG design note.
 
     Args:
-      col: The variable collection name.
+      name: The RNG sequence name.
     Returns:
       The newly generated RNG key.
     """
     if self.scope is None:
       raise ValueError("Can't use RNGs on unbound modules")
-    return self.scope.make_rng(col)
+    return self.scope.make_rng(name)
 
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
             method: Callable[..., Any] = None, 
