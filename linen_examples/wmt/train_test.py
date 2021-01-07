@@ -38,7 +38,7 @@ class TrainTest(absltest.TestCase):
     config = default.get_config()
     config.max_corpus_chars = 1000
     config.vocab_size = 32
-    config.batch_size = 8
+    config.per_device_batch_size = 1
     config.num_train_steps = 1
     config.num_eval_steps = 1
     config.num_predict_steps = 1
