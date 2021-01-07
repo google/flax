@@ -66,8 +66,12 @@ Using Linen
 +==================================+=================+========================+==================================+
 | `JAX-RL`_                        | `@henry-prior`_ | Reinforcement learning | N/A                              |
 +----------------------------------+-----------------+------------------------+----------------------------------+
- 
+ | `DCGAN`_ Colab                   | `@bkkaggle`_    | Image Synthesis        | https://arxiv.org/abs/1511.06434 |
++----------------------------------+-----------------+------------------------+----------------------------------+
+
 .. _`JAX-RL`: https://github.com/henry-prior/jax-rl
+.. _`DCGAN`: https://github.com/bkkaggle/jax-dcgan
+.. _`@bkkaggle`: https://github.com/bkkaggle
 
 Using the Deprecated ``flax.nn`` API
 ~~~~~~~~~~~~~~~~~~~~
@@ -85,8 +89,6 @@ pull request to the new API if you want to earn some Flax karma?
 +----------------------------------+-----------------+------------------------+----------------------------------+
 | `Various CIFAR SOTA Models`_     | `@PForet`_      | Image Classification   | N/A                              |
 +----------------------------------+-----------------+------------------------+----------------------------------+
-| `DCGAN`_ Colab                   | `@bkkaggle`_    | Image Synthesis        | https://arxiv.org/abs/1511.06434 |
-+----------------------------------+-----------------+------------------------+----------------------------------+
 
 .. _`Gaussian Processes regression`: https://github.com/danieljtait/ladax/tree/master/examples
 .. _`DQN`: https://github.com/joaogui1/RL-JAX/tree/master/DQN
@@ -96,7 +98,6 @@ pull request to the new API if you want to earn some Flax karma?
 .. _`@henry-prior`: https://github.com/henry-prior
 .. _`@joaogui1`: https://github.com/joaogui1
 .. _`@PForet`: https://github.com/PForet
-.. _`@bkkaggle`: https://github.com/bkkaggle
 
 More examples
 -------------
