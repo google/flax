@@ -43,7 +43,7 @@ handle_errors () {
 }
 
 # Run battery of core FLAX API tests.
-pytest tests -n auto $PYTEST_OPTS
+pytest -n 4 tests $PYTEST_OPTS
 
 # validate types
 if [[ "$OSTYPE" == "darwin"* ]]; then

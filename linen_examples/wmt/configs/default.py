@@ -33,7 +33,8 @@ def get_config():
   config.dataset_name = "wmt17_translate/de-en"
 
   # Optional name of TFDS translation dataset to use for evaluation.
-  config.eval_dataset_name = "wmt14_translate/de-en:test"
+  config.eval_dataset_name = "wmt14_translate/de-en"
+  config.eval_split = "test"
 
   # Reverse the direction of translation.
   config.reverse_translation = False

@@ -17,78 +17,56 @@
 import os
 from typing import Dict, Optional, List, Union
 
-from absl import logging
+from clu import deterministic_data
 import tokenizer
 import ml_collections
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-AUTOTUNE = tf.data.experimental.AUTOTUNE
+AUTOTUNE = tf.data.AUTOTUNE
+Features = Dict[str, tf.Tensor]
 
 
-# -----------------------------------------------------------------------------
-# Raw TFDS dataset.
-# -----------------------------------------------------------------------------
-def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
-                     eval_dataset_name=None,
-                     reverse_translation=False,
-                     shard_idx=0,
-                     shard_count=1):
-  """Load raw WMT datasets and normalize feature keys.
+class NormalizeFetaureNamesOp:
+  """Normalizes feature names to 'inputs' and 'targets'."""
+
+  def __init__(self, ds_info: tfds.core.DatasetInfo, reverse_translation: bool):
+    self.input_lang, self.target_lang = ds_info.supervised_keys
+    if reverse_translation:
+      self.input_lang, self.target_lang = self.target_lang, self.input_lang
+
+  def __call__(self, features: Features) -> Features:
+    features['inputs'] = features.pop(self.input_lang)
+    features['targets'] = features.pop(self.target_lang)
+    return features
+
+
+def get_raw_dataset(dataset_builder: tfds.core.DatasetBuilder,
+                    split: str,
+                    *,
+                    reverse_translation: bool = False) -> tf.data.Dataset:
+  """Loads a raw WMT dataset and normalizes feature keys.
 
   Args:
-    dataset_name: str: TFDS WMT dataset name.
-    eval_dataset_name: Optional[str]: separate dataset name for evaluation. e.g.
-      for specifying the standard academic WMT14 test set.
+    dataset_builder: TFDS dataset builder that can build `slit`.
+    split: Split to use. This must be the full split. We shard the split across
+      multiple hosts and currently don't support sharding subsplits.
     reverse_translation: bool: whether to reverse the translation direction.
       e.g. for 'de-en' this translates from english to german.
-    shard_idx: int: for multihost training, index of this host.
-    shard_count: int: for mulithost training, number of total hosts.
 
   Returns:
-    training tf.dataset, evaluation tf.dataset, and training features_info
-    source and target language features are mapped to 'inputs' and 'targets'
-    keys.
+    Dataset with source and target language features mapped to 'inputs' and
+    'targets'.
   """
-  builder = tfds.builder(dataset_name)
-  shard_spec = (f'[{int(100 * shard_idx / shard_count)}%'
-                f':{int(100 * (shard_idx + 1) / shard_count)}%]')
-  logging.info('Training on TFDS dataset %s with split %s', dataset_name,
-               'train' + shard_spec)
-  train_data = builder.as_dataset(
-      split='train' + shard_spec, shuffle_files=True)
-  if eval_dataset_name is None:
-    logging.info('Evaluating on TFDS dataset %s with split %s', dataset_name,
-                 'validation' + shard_spec)
-    eval_data = builder.as_dataset(
-        split='validation' + shard_spec, shuffle_files=False)
-  else:
-    eval_dataset, *eval_split = eval_dataset_name.split(':')
-    if not eval_split:
-      eval_split = 'validation'
-    else:
-      eval_split = eval_split[0]
-    logging.info('Evaluating on TFDS dataset %s with split %s', eval_dataset,
-                 eval_split + shard_spec)
-    eval_builder = tfds.builder(eval_dataset)
-    eval_data = eval_builder.as_dataset(
-        split=eval_split + shard_spec, shuffle_files=False)
-
-  features_info = builder.info
-
-  # standardize on 'inputs' and 'targets' features.
-  input_lang = features_info.supervised_keys[0]
-  target_lang = features_info.supervised_keys[1]
-  if reverse_translation:
-    input_lang, target_lang = target_lang, input_lang
-
-  def to_features_dict(x):
-    return {'inputs': x[input_lang], 'targets': x[target_lang]}
-
-  train_data = train_data.map(to_features_dict, num_parallel_calls=AUTOTUNE)
-  eval_data = eval_data.map(to_features_dict, num_parallel_calls=AUTOTUNE)
-
-  return train_data, eval_data, features_info
+  num_examples = dataset_builder.info.splits[split].num_examples
+  per_host_split = deterministic_data.get_read_instruction_for_host(
+      split, num_examples, drop_remainder=False)
+  ds = dataset_builder.as_dataset(split=per_host_split, shuffle_files=False)
+  ds = ds.map(
+      NormalizeFetaureNamesOp(
+          dataset_builder.info, reverse_translation=reverse_translation),
+      num_parallel_calls=AUTOTUNE)
+  return ds
 
 
 def pack_dataset(dataset: tf.data.Dataset,
@@ -319,8 +297,14 @@ def preprocess_wmt_data(dataset,
   else:  # simple (static-shape) padded batching
     dataset = dataset.padded_batch(
         batch_size,
-        padded_shapes={'inputs': max_length, 'targets': max_length},
-        padding_values={'inputs': 0, 'targets': 0},
+        padded_shapes={
+            'inputs': max_length,
+            'targets': max_length
+        },
+        padding_values={
+            'inputs': 0,
+            'targets': 0
+        },
         drop_remainder=drop_remainder)
 
   if prefetch_size:
@@ -333,22 +317,25 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
                      *,
                      n_devices: int,
                      reverse_translation: bool = True,
-                     shard_idx: int = 0,
-                     shard_count: int = 1,
-                     vocab_path: Optional[str] = None,
-                     pack_examples: bool = True):
+                     vocab_path: Optional[str] = None):
   """Load and return dataset of batched examples for use during training."""
-  batch_size = config.per_device_batch_size * n_devices
   if vocab_path is None:
     vocab_path = os.path.expanduser('~/wmt_sentencepiece_model')
 
-  train_data, eval_data, _ = raw_wmt_datasets(
-      dataset_name=config.dataset_name,
-      eval_dataset_name=config.eval_dataset_name,
-      reverse_translation=reverse_translation,
-      shard_idx=shard_idx,
-      shard_count=shard_count)
+  train_ds_builder = tfds.builder(config.dataset_name)
+  train_data = get_raw_dataset(
+      train_ds_builder, 'train', reverse_translation=reverse_translation)
 
+  if config.eval_dataset_name:
+    eval_ds_builder = tfds.builder(config.eval_dataset_name)
+  else:
+    eval_ds_builder = train_ds_builder
+  eval_data = get_raw_dataset(
+      eval_ds_builder,
+      config.eval_split,
+      reverse_translation=reverse_translation)
+
+  # Tokenize data.
   sp_tokenizer = tokenizer.load_or_train_tokenizer(
       train_data,
       vocab_path=vocab_path,
@@ -359,22 +346,24 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
   eval_data = eval_data.map(
       tokenizer.TokenizeOp(sp_tokenizer), num_parallel_calls=AUTOTUNE)
 
-  train_batches = preprocess_wmt_data(
+  batch_size = config.per_device_batch_size * n_devices
+
+  train_ds = preprocess_wmt_data(
       train_data,
       shuffle=True,
       num_epochs=None,
-      pack_examples=pack_examples,
+      pack_examples=True,
       batch_size=batch_size,
       max_length=config.max_target_length)
 
-  eval_batches = preprocess_wmt_data(
+  eval_ds = preprocess_wmt_data(
       eval_data,
       shuffle=False,
       pack_examples=False,
       batch_size=batch_size,
       max_length=config.max_eval_target_length)
 
-  predict_batches = preprocess_wmt_data(
+  predict_ds = preprocess_wmt_data(
       eval_data,
       shuffle=False,
       pack_examples=False,
@@ -382,4 +371,4 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
       max_length=config.max_predict_length,
       drop_remainder=False)
 
-  return train_batches, eval_batches, predict_batches, sp_tokenizer
+  return train_ds, eval_ds, predict_ds, sp_tokenizer
