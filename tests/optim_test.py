@@ -19,6 +19,7 @@ from absl.testing import absltest
 from flax import nn
 from flax import optim
 from flax import traverse_util
+from flax.core import FrozenDict
 from flax.optim.adafactor import _AdafactorHyperParams, _AdafactorParamState
 from flax.optim.adagrad import _AdagradHyperParams, _AdagradParamState
 from flax.optim.adam import _AdamHyperParams, _AdamParamState
@@ -112,10 +113,10 @@ class OptimizerDefTest(absltest.TestCase):
 
 class ModelParamTraversalTest(absltest.TestCase):
 
-  def test_only_works_on_models(self):
+  def test_only_works_on_model_params(self):
     traversal = optim.ModelParamTraversal(lambda *_: True)
     with self.assertRaises(ValueError):
-      list(traversal.iterate({}))
+      list(traversal.iterate([]))
 
   def test_param_selection(self):
     params = {
@@ -129,17 +130,6 @@ class ModelParamTraversalTest(absltest.TestCase):
             'z': {},
         },
     }
-    names = []
-    def filter_fn(name, _):
-      names.append(name)  # track names passed to filter_fn for testing
-      return 'kernel' in name
-    model = nn.Model(None, params)
-    traversal = optim.ModelParamTraversal(filter_fn)
-    values = list(traversal.iterate(model))
-    self.assertEqual(values, [1, 3])
-    self.assertEqual(set(names), set([
-        '/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias']))
-    new_model = traversal.update(lambda x: x + x, model)
     expected_params = {
         'x': {
             'kernel': 2,
@@ -151,8 +141,26 @@ class ModelParamTraversalTest(absltest.TestCase):
             'z': {}
         },
     }
-    expected_model = nn.Model(None, expected_params)
-    self.assertEqual(new_model, expected_model)
+    names = []
+    def filter_fn(name, _):
+      names.append(name)  # track names passed to filter_fn for testing
+      return 'kernel' in name
+    traversal = optim.ModelParamTraversal(filter_fn)
+
+    # Model
+    model = nn.Model(None, params)
+    values = list(traversal.iterate(model))
+    configs = [
+      (nn.Model(None, params), nn.Model(None, expected_params)),
+      (params, expected_params),
+      (FrozenDict(params), FrozenDict(expected_params)),
+    ]
+    for model, expected_model in configs:
+      self.assertEqual(values, [1, 3])
+      self.assertEqual(set(names), set([
+          '/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias']))
+      new_model = traversal.update(lambda x: x + x, model)
+      self.assertEqual(new_model, expected_model)
 
 
 class MultiOptimizerTest(absltest.TestCase):
