@@ -139,8 +139,6 @@ def module_class_lift_transform(
         cloned = set_module_scopes(cloned, scopes)
         cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
         res = fn(cloned, *args, **kwargs)
-        # preserve submodule-tree stripped of scopes/tracers for introspection
-        object.__setattr__(self, 'children', clean_clone(cloned).children)
         self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
@@ -172,8 +170,6 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
       cloned = set_module_scopes(self, scopes)
       cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
       res = rewrapped_fn(cloned, *args, **kwargs)
-      # preserve submodule-tree stripped of scopes/tracers for introspection
-      object.__setattr__(self, 'children', clean_clone(cloned).children)
       self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
@@ -224,8 +220,6 @@ def named_call(class_fn):
       cloned = set_module_scopes(self, scopes)
       cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
       res = rewrapped_fn(cloned, *args, **kwargs)
-      # preserve submodule-tree stripped of scopes/tracers for introspection
-      object.__setattr__(self, 'children', clean_clone(cloned).children)
       self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn

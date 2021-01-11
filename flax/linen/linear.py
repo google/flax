@@ -257,8 +257,7 @@ class Conv(Module):
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
-    if self.strides is None:
-      self.strides = (1,) * (inputs.ndim - 2)
+    strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
     assert in_features % self.feature_group_count == 0
@@ -271,7 +270,7 @@ class Conv(Module):
     y = lax.conv_general_dilated(
         inputs,
         kernel,
-        self.strides,
+        strides,
         self.padding,
         lhs_dilation=self.input_dilation,
         rhs_dilation=self.kernel_dilation,

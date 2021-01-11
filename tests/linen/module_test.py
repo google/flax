@@ -721,6 +721,20 @@ class ModuleTest(absltest.TestCase):
     variables = foo.init(random.PRNGKey(0), x)
     self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
 
+  def test_module_frozen(self):
+    class Foo(nn.Module):
+      bar: nn.Dense = dataclasses.field(init=False)
+
+      def setup(self):
+        self.i = 1
+      
+      def __call__(self):
+        self.i = 2
+    
+    foo = Foo()
+    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
+      foo.init(random.PRNGKey(0))
+
 
 if __name__ == '__main__':
   absltest.main()
