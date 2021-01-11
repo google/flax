@@ -17,7 +17,6 @@
 import multiprocessing
 import collections
 import jax
-import numpy as onp
 
 import env_utils
 
