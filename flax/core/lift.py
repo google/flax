@@ -419,7 +419,7 @@ def scan(fn: Callable[..., Any],
     variable_axes: the variable collections that are scannned over.
     variable_broadcast: Specifies the broadcasted variable collections.
       A broadcasted variable should not depend on any computation that cannot be lifted out of the loop.
-      This is typically used to define shared paramaters inside the fn.
+      This is typically used to define shared parameters inside the fn.
     variable_carry: Specifies the variable collections that are carried through the loop.
       Mutations to these variables are carried to the next iteration and will be preserved
       when the scan finishes.

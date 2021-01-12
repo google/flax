@@ -80,7 +80,7 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       nn.dense(scope.push('dense'), np.ones((1, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/dense".'):
+    with self.assertRaisesWithLiteralMatch(ValueError, 'No parameter named "kernel" exists in "/dense".'):
       apply(f)({})
 
 

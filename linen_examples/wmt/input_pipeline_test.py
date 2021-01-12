@@ -30,6 +30,10 @@ _PREDICT_TARGET_LENGTH = 64
 
 class InputPipelineTest(absltest.TestCase):
 
+  def setUp(self):
+    super().setUp()
+    self.train_ds, self.eval_ds, self.predict_ds = self._get_datasets()
+
   def _get_datasets(self):
     config = default.get_config()
     config.per_device_batch_size = 1
@@ -47,19 +51,14 @@ class InputPipelineTest(absltest.TestCase):
 
     with tfds.testing.mock_data(num_examples=128, data_dir=data_dir):
       train_ds, eval_ds, predict_ds, _ = input_pipeline.get_wmt_datasets(
-          n_devices=2,
-          config=config,
-          shard_idx=0,
-          shard_count=1,
-          vocab_path=vocab_path)
+          n_devices=2, config=config, vocab_path=vocab_path)
     return train_ds, eval_ds, predict_ds
 
   def test_train_ds(self):
-    train_ds = self._get_datasets()[0]
     expected_shape = [2, _TARGET_LENGTH]  # 2 devices.
     # For training we pack multiple short examples in one example.
     # *_position and *_segmentation indicate the boundaries.
-    for batch in train_ds.take(3):
+    for batch in self.train_ds.take(3):
       self.assertEqual({k: v.shape.as_list() for k, v in batch.items()}, {
           'inputs': expected_shape,
           'inputs_position': expected_shape,
@@ -70,18 +69,16 @@ class InputPipelineTest(absltest.TestCase):
       })
 
   def test_eval_ds(self):
-    eval_ds = self._get_datasets()[1]
     expected_shape = [2, _EVAL_TARGET_LENGTH]  # 2 devices.
-    for batch in eval_ds.take(3):
+    for batch in self.eval_ds.take(3):
       self.assertEqual({k: v.shape.as_list() for k, v in batch.items()}, {
           'inputs': expected_shape,
           'targets': expected_shape,
       })
 
   def test_predict_ds(self):
-    predict_ds = self._get_datasets()[2]
     expected_shape = [2, _PREDICT_TARGET_LENGTH]  # 2 devices.
-    for batch in predict_ds.take(3):
+    for batch in self.predict_ds.take(3):
       self.assertEqual({k: v.shape.as_list() for k, v in batch.items()}, {
           'inputs': expected_shape,
           'targets': expected_shape,

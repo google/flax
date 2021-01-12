@@ -543,7 +543,7 @@ class Scope:
       return value
     else:
       if not self.is_mutable_collection('params'):
-        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
+        raise ValueError(f'No parameter named "{name}" exists in "{self.path_text}".')
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
       return value
