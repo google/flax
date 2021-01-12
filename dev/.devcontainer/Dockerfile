@@ -43,7 +43,7 @@ RUN apt-get update \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME\
     && chmod 0440 /etc/sudoers.d/$USERNAME \
     # custom packages
-    && apt-get -y install pandoc vim \
+    && apt-get -y install pandoc vim libgl1-mesa-dev \
     # Clean up
     && apt-get autoremove -y \
     && apt-get clean -y \
