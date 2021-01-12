@@ -28,7 +28,7 @@ from flax.metrics import tensorboard
 import jax
 import jax.numpy as jnp
 import ml_collections
-import numpy as onp
+import numpy as np
 import tensorflow_datasets as tfds
 
 
@@ -52,8 +52,8 @@ class CNN(nn.Module):
 
 
 def get_initial_params(key):
-  init_shape = jnp.ones((1, 28, 28, 1), jnp.float32)
-  initial_params = CNN().init(key, init_shape)['params']
+  init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
+  initial_params = CNN().init(key, init_val)['params']
   return initial_params
 
 
@@ -119,7 +119,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   # compute mean of metrics across each batch in epoch.
   batch_metrics_np = jax.device_get(batch_metrics)
   epoch_metrics_np = {
-      k: onp.mean([metrics[k] for metrics in batch_metrics_np])
+      k: np.mean([metrics[k] for metrics in batch_metrics_np])
       for k in batch_metrics_np[0]}
 
   logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
@@ -128,8 +128,8 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   return optimizer, epoch_metrics_np
 
 
-def eval_model(model, test_ds):
-  metrics = eval_step(model, test_ds)
+def eval_model(params, test_ds):
+  metrics = eval_step(params, test_ds)
   metrics = jax.device_get(metrics)
   summary = jax.tree_map(lambda x: x.item(), metrics)
   return summary['loss'], summary['accuracy']
