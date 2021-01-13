@@ -31,7 +31,7 @@ from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
 from flax.core.scope import CollectionFilter, Variable, VariableDict
-from flax.core.frozen_dict import freeze
+from flax.core.frozen_dict import FrozenDict, freeze
 
 # from .dotgetter import DotGetter
 
@@ -72,7 +72,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
   rep = ''
   attributes = {k: v for k, v in cls.__annotations__.items()
                 if k not in ('parent', 'name')}
-  child_modules = {k: v for k, v in module.children.items()  # pytype: disable=attribute-error
+  child_modules = {k: v for k, v in module._state.children.items()  # pytype: disable=attribute-error
                    if isinstance(v, Module)}
   if attributes:
     rep += '# attributes\n'
@@ -126,7 +126,7 @@ def disable_named_call():
   _use_named_call = False
 
 
-# Utilities for autonaming pytrees of Modules defined inside setup()
+# Utilities for pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
 def _get_suffix_value_pairs(
     tree_or_leaf: Any) -> List[Tuple[str, Type["Module"]]]:
@@ -151,6 +151,15 @@ def _all_names_on_object(obj: Any) -> Set[str]:
   for cls in obj.__class__.__mro__:
     nameset = nameset.union(set(cls.__dict__.keys()))
   return nameset
+
+
+def _freeze_attr(val: Any) -> Any:
+  if isinstance(val, (dict, FrozenDict)):
+    return FrozenDict({k: _freeze_attr(v) for k, v in val.items()})
+  elif isinstance(val, (list, tuple)):
+    return tuple(_freeze_attr(v) for v in val)
+  else:
+    return val
 
 
 # Method wrapping of "compact methods" and setup()
@@ -268,6 +277,8 @@ class _ModuleInternalState:
   in_setup: bool = False
   last_varname: Optional[str] = None
   autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
+  frozen: bool = False
+  children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
 
   def reset(self):
     self.in_compact_method = False
@@ -408,6 +419,10 @@ class Module:
       name: Attribute to set.
       val: Value of the attribute.
     """
+    if name != '_state' and self._state.frozen:
+      # raises a TypeError just like frozen python dataclasses
+      raise TypeError("Module instance is frozen outside of setup method.")
+
     # We don't mess with the parent module.
     if name == 'parent':
       pass
@@ -416,6 +431,7 @@ class Module:
       pass
     # Submodules are being defined and attached in setup()
     else:
+      val = _freeze_attr(val)
       for suffix, subvalue in _get_suffix_value_pairs(val):
         if isinstance(subvalue, Module):
           if not self._state.in_setup:
@@ -454,7 +470,6 @@ class Module:
     # this Module at the top-level to variables and rngs.
 
     self._state = _ModuleInternalState()
-    self.children = dict()  # tracks child modules
 
     # Typically we set the parent based on the dynamic module context.
     if self.parent is _unspecified_parent:  # pytype: disable=attribute-error
@@ -488,7 +503,7 @@ class Module:
             f"trying to share submodule {self.__class__.__name__} by name "
             f"{self.name}. To share submodules, store module instances as a"
             f" Python object or as an attribute on self and reuse.")
-      self.parent.children[self.name] = self
+      self.parent._state.children[self.name] = self
       self.scope = self.parent.scope.push(self.name)
 
     # Top-level invocation with a functional Scope.
@@ -500,6 +515,7 @@ class Module:
 
     # Call the user-defined initialization setup() function.
     self.setup()
+    self._state.frozen = True
 
   def __repr__(self):
     return _module_repr(self)
@@ -590,7 +606,7 @@ class Module:
     # ephemeral state for setattr name-equality-check
     self._state.last_varname = name
     v = self.scope.variable(col, name, init_fn, *init_args)
-    self.children[name] = col
+    self._state.children[name] = col
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
@@ -619,7 +635,7 @@ class Module:
     # ephemeral state for setattr name-equality-check
     self._state.last_varname = name
     v = self.scope.param(name, init_fn, *init_args)
-    self.children[name] = 'params'
+    self._state.children[name] = 'params'
     return v
 
   def has_variable(self, col: str, name: str) -> bool:
