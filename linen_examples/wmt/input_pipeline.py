@@ -15,21 +15,15 @@
 """Input pipeline for a WMT dataset."""
 
 import os
-import tempfile
-import time
 from typing import Dict, Optional, List, Union
 
 from absl import logging
-import jax
+import tokenizer
 import ml_collections
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 import tensorflow_datasets as tfds
-import tensorflow_text as tftxt
-
-from sentencepiece import SentencePieceTrainer
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
-Features = Dict[str, tf.Tensor]
 
 
 # -----------------------------------------------------------------------------
@@ -95,96 +89,6 @@ def raw_wmt_datasets(dataset_name='wmt17_translate/de-en',
   eval_data = eval_data.map(to_features_dict, num_parallel_calls=AUTOTUNE)
 
   return train_data, eval_data, features_info
-
-
-# -----------------------------------------------------------------------------
-# Tokenization.
-# -----------------------------------------------------------------------------
-def dump_chars_to_textfile(dataset,
-                           maxchars=1e7,
-                           data_keys=('inputs', 'targets')):
-  """Write part of a TFDS sentence dataset to lines in a text file.
-
-  Args:
-    dataset: tf.dataset containing string-data.
-    maxchars: int: approximate number of characters to save from dataset.
-    data_keys: Tuple[str]: what keys in dataset to dump from.
-
-  Returns:
-    name of temp file with dataset bytes, exact number of characters dumped.
-  """
-  char_count = 0
-  ds_iter = dataset.as_numpy_iterator()
-  with tempfile.NamedTemporaryFile(
-      delete=False, prefix='/tmp/ds_chars') as outfp:
-    while char_count < maxchars:
-      example = next(ds_iter)
-      for k in data_keys:
-        line = example[k] + b'\n'
-        char_count += len(line)
-        outfp.write(line)
-  return outfp.name, char_count
-
-
-def train_sentencepiece(dataset,
-                        vocab_size,
-                        maxchars=1e7,
-                        character_coverage=1.0,
-                        model_path='wmt_model.model',
-                        model_type='unigram',
-                        data_keys=('inputs', 'targets')):
-  """Train SentencePiece tokenizer from subset of tf dataset.
-
-  Args:
-    dataset: tf.dataset
-    vocab_size: int: size of vocab tokens to train.
-    maxchars: int: number of characters to use for sentencepiece training.
-    character_coverage: amount of characters covered by the model, good defaults
-      are 0.9995 for languages with rich character set like Japanese or Chinese
-      and 1.0 for other languages with small character set.
-    model_path: str: path of model file to save vocab model to.
-    model_type: str: type of sentencepiece vocab to train.
-    data_keys: Tuple[str]: keys of dataset to use for training.
-
-  Returns:
-    path to the trained sentencepiece vocabulary model.
-  """
-  abs_model_path = os.path.abspath(os.path.expanduser(model_path))
-  fname, _ = dump_chars_to_textfile(
-      dataset, maxchars=maxchars, data_keys=data_keys)
-  with tempfile.NamedTemporaryFile(
-      delete=False, prefix='/tmp/sp_tmp') as model_fp:
-    pass  # we just want a prefix'd tmp-filename
-  argstr = ' '.join([
-      f'--input={fname}', f'--vocab_size={vocab_size}',
-      f'--character_coverage={character_coverage}',
-      f'--model_prefix={model_fp.name}', f'--model_type={model_type}'
-  ])
-  SentencePieceTrainer.Train(argstr)
-  if jax.host_id() == 0:
-    # Use an intermediate filename that is renamed to the target name to address
-    # create and fill delays.
-    copy_rename_path = abs_model_path + '.rntmp'
-    tf.io.gfile.copy(model_fp.name + '.model', copy_rename_path, overwrite=True)
-    tf.io.gfile.rename(copy_rename_path, abs_model_path, overwrite=True)
-    logging.info('copied %s to %s', model_fp.name + '.model', abs_model_path)
-  else:
-    while not tf.io.gfile.exists(abs_model_path):
-      time.sleep(1)
-    time.sleep(1)
-  return abs_model_path
-
-
-def load_sentencepiece_tokenizer(model_path,
-                                 add_bos=False,
-                                 add_eos=True,
-                                 reverse=False):
-  """Load a tf-text SentencePiece tokenizer from given model filepath."""
-  with tf.io.gfile.GFile(model_path, 'rb') as model_fp:
-    sp_model = model_fp.read()
-  sp_tokenizer = tftxt.SentencepieceTokenizer(
-      model=sp_model, add_bos=add_bos, add_eos=add_eos, reverse=reverse)
-  return sp_tokenizer
 
 
 def pack_dataset(dataset: tf.data.Dataset,
@@ -445,28 +349,15 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
       shard_idx=shard_idx,
       shard_count=shard_count)
 
-  try:
-    sp_tokenizer = load_sentencepiece_tokenizer(vocab_path, add_eos=True)
-  except tf.errors.NotFoundError:
-    logging.info('SentencePiece vocab not found, building one from data.')
-    abs_vocab_path = train_sentencepiece(
-        train_data,
-        config.vocab_size,
-        maxchars=config.max_corpus_chars,
-        character_coverage=1.0,
-        model_path=vocab_path,
-        data_keys=('inputs', 'targets'))
-    sp_tokenizer = load_sentencepiece_tokenizer(abs_vocab_path, add_eos=True)
-
-  # Encode strings with sentencepiece tokenizer.
-  def tokenize(data):
-    return {
-        'inputs': sp_tokenizer.tokenize(data['inputs']),
-        'targets': sp_tokenizer.tokenize(data['targets'])
-    }
-
-  train_data = train_data.map(tokenize, num_parallel_calls=AUTOTUNE)
-  eval_data = eval_data.map(tokenize, num_parallel_calls=AUTOTUNE)
+  sp_tokenizer = tokenizer.load_or_train_tokenizer(
+      train_data,
+      vocab_path=vocab_path,
+      vocab_size=config.vocab_size,
+      max_corpus_chars=config.max_corpus_chars)
+  train_data = train_data.map(
+      tokenizer.TokenizeOp(sp_tokenizer), num_parallel_calls=AUTOTUNE)
+  eval_data = eval_data.map(
+      tokenizer.TokenizeOp(sp_tokenizer), num_parallel_calls=AUTOTUNE)
 
   train_batches = preprocess_wmt_data(
       train_data,
