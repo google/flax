@@ -115,8 +115,8 @@ class NormalizationTest(absltest.TestCase):
     model_cls = nn.LayerNorm(use_bias=False, use_scale=False, epsilon=e)
     y, _ = model_cls.init_with_output(key2, x)
     assert x.shape == y.shape
-    input_type = type(x)
-    assert isinstance(y, input_type)
+    self.assertEqual(x.dtype, y.dtype)
+    self.assertEqual(x.shape, y.shape)
     y_one_liner = ((x - x.mean(axis=-1, keepdims=True)) *
                    jax.lax.rsqrt(x.var(axis=-1, keepdims=True) + e))
     np.testing.assert_allclose(y_one_liner, y, atol=1e-4)
