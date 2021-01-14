@@ -4,6 +4,26 @@ Changelog
 vNext
 ------
 
+(Add your change to a random empty line to avoid merge conflicts)
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
  - Added OptimizedLSTM: ~33% faster than the original LSTM when using <=1024 units
  - Bug Fix `Scope.variable` mutability check, before a variable could only be initialized
    if the 'params' collection was mutable.
