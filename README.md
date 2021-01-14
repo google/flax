@@ -1,5 +1,8 @@
 # Flax: A neural network library and ecosystem for JAX designed for flexibility
 
+![Build](https://github.com/google/flax/workflows/Build/badge.svg?branch=master)
+
+
 [**Overview**](#overview)
 | [**Quick install**](#quick-install)
 | [**What does Flax look like?**](#what-does-flax-look-like)
