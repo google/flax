@@ -75,6 +75,8 @@ import jax.numpy as jnp
 
 from ..nn import base
 
+from ..core import FrozenDict, unfreeze
+
 
 @struct.dataclass
 class OptimizerState:
@@ -472,6 +474,15 @@ class ModelParamTraversal(traverse_util.Traversal):
   def __init__(self, filter_fn):
     """Constructor a new ModelParamTraversal.
 
+    This traversal operates on a nested dictionary of paramaters and selects a subset
+    based on the `filter_fn` argument.
+
+    See `MultiOptimizer` for an example of how to use `ModelParamTraversal` to update
+    subsets of the paramater tree with a specific optimizer.
+
+    Backward compatibility:
+    When using the old api the paramaters can be encapsulated in a `flax.nn.Model` instance.
+
     Args:
       filter_fn: a function that takes a parameters full name and its value and
         returns whether this parameter should be selected or not. The name of a
@@ -481,22 +492,26 @@ class ModelParamTraversal(traverse_util.Traversal):
     self._filter_fn = filter_fn
 
   @staticmethod
-  def _check_inputs(inputs):
-    if not isinstance(inputs, base.Model):
+  def _get_params_dict(inputs):
+    if isinstance(inputs, base.Model):
+      return inputs.params
+    elif isinstance(inputs, (dict, FrozenDict)):
+      return unfreeze(inputs)
+    else:
       raise ValueError(
-          'ModelParamTraversal can only traverse a flax Model instance.')
+          'ModelParamTraversal can only traverse a flax Model instance or a nested dict.')
 
   def iterate(self, inputs):
-    self._check_inputs(inputs)
-    flat_dict = traverse_util.flatten_dict(inputs.params)
+    params = self._get_params_dict(inputs)
+    flat_dict = traverse_util.flatten_dict(params)
     for key, value in _sorted_items(flat_dict):
       path = '/' + '/'.join(key)
       if self._filter_fn(path, value):
         yield value
 
   def update(self, fn, inputs):
-    self._check_inputs(inputs)
-    flat_dict = traverse_util.flatten_dict(inputs.params, keep_empty_nodes=True)
+    params = self._get_params_dict(inputs)
+    flat_dict = traverse_util.flatten_dict(params, keep_empty_nodes=True)
     new_dict = {}
     for key, value in _sorted_items(flat_dict):
       # empty_node is not an actual leave. It's just a stub for empty nodes
@@ -507,4 +522,9 @@ class ModelParamTraversal(traverse_util.Traversal):
           value = fn(value)
       new_dict[key] = value
     new_params = traverse_util.unflatten_dict(new_dict)
-    return inputs.replace(params=new_params)
+    if isinstance(inputs, base.Model):
+      return inputs.replace(params=new_params)
+    elif isinstance(inputs, FrozenDict):
+      return FrozenDict(new_params)
+    else:
+      return new_params

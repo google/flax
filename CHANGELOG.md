@@ -32,6 +32,8 @@ vNext
    is enforced by raising a TypeError in `__setattr__` after `setup`.
  - Pytrees of dicts and lists are transformed into FrozenDict and tuples during attribute assignment.
    This avoids undetected submodules and inner state. 
+ - Add support for dict/FrozenDict when using `ModelParamTraversal`
+   As a result `MultiOptimizer` can be used properly with linen modules.
 
 v0.3
 -----
