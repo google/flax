@@ -470,5 +470,91 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(variables['params']['test'].shape, (4,))
 
 
+  def test_nested_module_args_vmap(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(3)(x)
+    class B(nn.Module):
+      A: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return self.A(x)
+    class C(nn.Module):
+      B: nn.Module
+      @partial(nn.vmap,
+               variable_axes={'params': 0},
+               split_rngs={'params': True})
+      @nn.compact
+      def __call__(self, x):
+        return self.B(x)
+    class D(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        a = A()
+        b = B(a)
+        c = C(b)
+        return c(x)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((10, 10))
+    p = D().init(key, x)
+
+    variable_shapes = jax.tree_map(jnp.shape, p)
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['kernel'],
+        (10, 10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['bias'],
+        (10, 3))
+
+  def test_nested_module_args_vmap_2(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(3)(x)
+    class B(nn.Module):
+      A: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return self.A(x)
+    class C(nn.Module):
+      A: nn.Module
+      B: nn.Module
+      @partial(
+          nn.vmap,
+          variable_axes={'params': 0},
+          split_rngs={'params': True})
+      @nn.compact
+      def __call__(self, x):
+        return self.B(x) + self.A(x)
+    class D(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        a1 = A()
+        a2 = A()
+        b = B(a1)
+        c = C(a2, b)
+        return c(x)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((10, 10))
+    p = D().init(key, x)
+
+    variable_shapes = jax.tree_map(jnp.shape, p)
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['kernel'],
+        (10, 10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['bias'],
+        (10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_1']['Dense_0']['kernel'],
+        (10, 10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_1']['Dense_0']['bias'],
+        (10, 3))
+
+
 if __name__ == '__main__':
   absltest.main()
