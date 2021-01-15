@@ -14,7 +14,7 @@ vNext
    This avoids undetected submodules and inner state. 
  - Add support for dict/FrozenDict when using `ModelParamTraversal`
    As a result `MultiOptimizer` can be used properly with linen modules.
- - Added `is_mutable()` method to `Variable`.
+ - Added `is_mutable()` method to `Variable` and `is_mutable_collection()` to `flax.linen.Module`.
 
 v0.3
 -----
