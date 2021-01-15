@@ -126,7 +126,7 @@ def filter_to_set(x: Filter) -> Set[str]:
 def union_filters(a: Filter, b: Filter) -> Filter:
   """Takes the union of two filters (similar to a logical or).
   
-  Arguments:
+  Args:
     a: a filter.
     b: a filter.
     
@@ -144,7 +144,7 @@ def union_filters(a: Filter, b: Filter) -> Filter:
 def intersect_filters(a: Filter, b: Filter) -> Filter:
   """Take the intersection of two filters (similar to a logical and).
   
-  Arguments:
+  Args:
     a: a filter.
     b: a filter.
     
