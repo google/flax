@@ -83,6 +83,14 @@ class ScopeTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/dense".'):
       apply(f)({})
 
+  def test_variable_is_mutable(self):
+    def f(scope, should_be_mutable):
+      test = scope.variable('state', 'test', lambda: 1)
+      self.assertEqual(test.is_mutable(), should_be_mutable)
+
+    _, variables = apply(f, mutable='state')({}, True)
+    apply(f, mutable=False)(variables, False)
+
 
 if __name__ == '__main__':
   absltest.main()
