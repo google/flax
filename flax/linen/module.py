@@ -65,6 +65,7 @@ def _attr_repr(value: Any):
     value_rep = repr(value)
   return value_rep
 
+
 def _module_repr(module: 'Module', num_spaces: int = 4):
   """Returns a pretty printed representation of the module"""
   cls = type(module)
@@ -91,6 +92,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
   else:
     return f'{cls_name}()'
 
+
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
 class _DynamicContext:
@@ -103,7 +105,7 @@ class _DynamicContext:
       self._thread_data.module_stack = [None,]
     return self._thread_data.module_stack
 
-# The global context 
+# The global context
 _context = _DynamicContext()
 
 class _Sentinel:
@@ -132,16 +134,29 @@ def _get_suffix_value_pairs(
     tree_or_leaf: Any) -> List[Tuple[str, Type["Module"]]]:
   """Helper for naming pytrees of submodules."""
   dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
-  if dict_or_leaf == {} or not isinstance(dict_or_leaf, dict):
+  if not isinstance(dict_or_leaf, dict) or dict_or_leaf == {}:
     return [('', tree_or_leaf)]
   else:
     flat_dict = traverse_util.flatten_dict(dict_or_leaf)
     return [('_' + '_'.join(k), v) for k, v in flat_dict.items()]
 
 
+def _map_over_modules_in_tree(fn, tree_or_leaf):
+  """Helper for mapping function over submodules."""
+  dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
+  if not isinstance(dict_or_leaf, dict) or dict_or_leaf == {}:
+    return fn('', tree_or_leaf)
+  else:
+    flat_dict = traverse_util.flatten_dict(dict_or_leaf)
+    mapped_flat_dict = {k: fn('_' + '_'.join(k), v)
+                        for k, v in flat_dict.items()}
+    return serialization.from_state_dict(
+        tree_or_leaf, traverse_util.unflatten_dict(mapped_flat_dict))
+
+
 def _all_names_on_object(obj: Any) -> Set[str]:
   """Gets all names of attributes on `obj` and its classes throughout MRO.
-  
+
   Args:
     obj: The object to get names for.
   Returns:
@@ -165,8 +180,8 @@ def _freeze_attr(val: Any) -> Any:
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
 def compact(fun: Callable) -> Callable:
-  """Marks the given module method allowing inlined submodules. 
-  
+  """Marks the given module method allowing inlined submodules.
+
   Methods wrapped in @compact can define submodules directly within the method.
 
   For instance::
@@ -175,7 +190,7 @@ def compact(fun: Callable) -> Callable:
     __call__(self, x, features):
       x = nn.Dense(features)(x)
       ...
-  
+
   At most one method in each Module may be wrapped with @compact.
 
   Args:
@@ -189,7 +204,7 @@ def compact(fun: Callable) -> Callable:
 
 def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]:
   """Gets method names of a class, excluding class and static methods.
-  
+
   Args:
     cls: The class to get method names for.
     excludes: Names to exclude from output.
@@ -207,7 +222,7 @@ def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]
 
 def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
   """Manages Module state for a given user-defined method.
-  
+
   Args:
     fun: User-defined Module method to manage state for.
   Returns:
@@ -216,7 +231,8 @@ def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
   @functools.wraps(fun)
   def wrapped_module_method(self, *args, **kwargs):
     is_compact_method = hasattr(fun, 'compact')
-    is_setup_method = fun.__name__ == 'setup'
+    is_setup_method = (fun.__name__ == 'setup' or
+                       fun.__name__ == '_adopt_toplevel_modules')
 
     if is_compact_method:
       if self.scope is None:
@@ -249,9 +265,9 @@ def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
 
 def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
   """Returns an unbound function from a method that is possibly bound.
-  
+
   This means that the returned function does no longer depend on the instance
-  of the class, which is passed as it first argument. 
+  of the class, which is passed as it first argument.
 
   Args:
     method_or_fn: A class method or function.
@@ -295,7 +311,7 @@ _uninitialized_module_internal_state = _ModuleInternalState(
 class Module:
   """Base class for all neural network modules. Layers and models should subclass this class.
 
-  All Flax Modules are Python 3.7 
+  All Flax Modules are Python 3.7
   `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_. Since
   dataclasses take over ``__init__``, you should instead override :meth:`setup`,
   which is automatically called to initialize the module.
@@ -320,8 +336,8 @@ class Module:
       def __call__(self, x):
         return self.dense2(nn.relu(self.dense1(x)))
 
-  Optionally, for more concise module implementaions where submodules 
-  definitions are co-located with their usage, you can use the 
+  Optionally, for more concise module implementaions where submodules
+  definitions are co-located with their usage, you can use the
   :meth:`compact` wrapper.
   """
 
@@ -405,8 +421,8 @@ class Module:
 
   def __setattr__(self, name: str, val: Any):
     """Sets an attribute on this Module.
-    
-    We overload setattr solely to support pythonic naming via assignment of 
+
+    We overload setattr solely to support pythonic naming via assignment of
     submodules in the special setup() function::
 
       self.submodule_name = MyModule(...)
@@ -420,13 +436,13 @@ class Module:
       val: Value of the attribute.
     """
     if name != '_state' and self._state.frozen:
-      # raises a TypeError just like frozen python dataclasses
+      # Raises a TypeError just like frozen python dataclasses.
       raise TypeError("Module instance is frozen outside of setup method.")
 
     # We don't mess with the parent module.
     if name == 'parent':
       pass
-    # Modules have been passed in as dataclass args.
+    # Modules have been passed in as dataclass args and set in __init__.
     elif name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init:  # pytype: disable=attribute-error
       pass
     # Submodules are being defined and attached in setup()
@@ -465,12 +481,11 @@ class Module:
     _check_omnistaging()
     # In dataclasses, __init__ is overridden to process dataclass arguments,
     # and __post_init__ is called immediately afterwards. Here, depending on the
-    # type of `parent` passed to initialize the Module, we either defer 
+    # type of `parent` passed to initialize the Module, we either defer
     # initialization, attach this Module as a submodule of a parent, or bind
     # this Module at the top-level to variables and rngs.
 
     self._state = _ModuleInternalState()
-
     # Typically we set the parent based on the dynamic module context.
     if self.parent is _unspecified_parent:  # pytype: disable=attribute-error
       self.parent = _context.module_stack[-1]
@@ -513,6 +528,13 @@ class Module:
     else:
       raise ValueError("parent must be None, Module or Scope")
 
+    # If we're in the top Module and have been passed submodules that were
+    # themselves instantiated at the top-level outside, attach them.  We
+    # explicitly do _not_ need to do anything special when passing in
+    # submodules as attributes to module.init/apply use-cases.
+    if _context.module_stack == [None,]:
+      self._adopt_toplevel_modules()
+
     # Call the user-defined initialization setup() function.
     self.setup()
     self._state.frozen = True
@@ -527,8 +549,8 @@ class Module:
     or access variables or submodules (once the module is "bound").
 
     | This happens in three cases:
-    
-      1. Immediately when invoking :meth:`apply`, :meth:`init` or 
+
+      1. Immediately when invoking :meth:`apply`, :meth:`init` or
          :meth:`init_and_output`.
 
       2. When the module is given a name by being assigned to an attribute of
@@ -547,11 +569,56 @@ class Module:
 
                # Accessing `submodule.variables` is now safe.
 
-      3. Immediately when a module is constructed inside a method wrapped with 
+      3. Immediately when a module is constructed inside a method wrapped with
          :meth:`compact`.
 
     """
     pass
+
+  @wrap_method
+  def _adopt_toplevel_modules(self):
+    """Adopts top-level instantiated submodule attributes to root module.
+
+    This function is called _once_ by a top-level module during initialization.
+    All top-level instantiated modules passed in as attributes are 'adopted' or
+    'reparented' onto the root, top-level module. Effectively this function
+    registers any such top-level instantiated submodule as if they had been
+    defined in the top setup() function, taking care to preserve implied
+    sharing-by-reference relationships and to avoid name collisions.
+    """
+    # We process modules in a BFS to choose least nested names for shared modules.
+    bfs_queue = [(self, '')]
+    # We cache processed submodules by object id to recreate sharing by reference.
+    shared_ref_cache = {}
+    def adopt_modules(mdl: Module, prefix: str):
+      def adopt_modules_inner(name: str, suffix: str, subvalue: Any):
+        nonlocal bfs_queue
+        nonlocal shared_ref_cache
+        if isinstance(subvalue, Module) and subvalue.parent is None:
+          # We preserve any established share-by-reference relationships among
+          # the top-level modules.
+          original_id = id(subvalue)
+          if original_id in shared_ref_cache:
+            subvalue = shared_ref_cache[original_id]
+          else:
+            # Run the setup equivalent for adopted top-level modules.
+            subvalue = subvalue.clone(parent=None)
+            subvalue.parent = self  # always attach to root.
+            subvalue.name = f'{prefix}{name}{suffix}'
+            subvalue.__post_init__()
+            shared_ref_cache[original_id] = subvalue
+            bfs_queue.append((subvalue, f'{subvalue.name}_'))
+        return subvalue
+      for name in mdl.__dataclass_fields__:  # pytype: disable=attribute-error
+        if name != 'parent' and mdl.__dataclass_fields__[name].init:  # pytype: disable=attribute-error
+          oldval = object.__getattribute__(mdl, name)
+          # circumvent trivial name collision
+          object.__delattr__(mdl, name)  # pytype: disable=attribute-error
+          newval = _map_over_modules_in_tree(
+              functools.partial(adopt_modules_inner, name), oldval)
+          object.__setattr__(mdl, name, newval)
+    while bfs_queue:
+      adopt_modules(*bfs_queue.pop(0))
 
   def _name_taken(self, name: str) -> bool:
     return (name in self.scope.reservations or
@@ -565,9 +632,9 @@ class Module:
             parent: Optional[Union[Scope, 'Module']] = None,
             **updates) -> 'Module':
     """Creates a clone of this Module, with optionally updated arguments.
-    
+
     Args:
-      parent: The parent of the clone. The clone will have no parent if no 
+      parent: The parent of the clone. The clone will have no parent if no
         explicit parent is specified.
       **updates: Attribute updates.
     Returns:
@@ -593,7 +660,7 @@ class Module:
       *init_args: The arguments to pass to init_fn.
 
     Returns:
-      A :class:`flax.core.variables.Variable` that can be read or set via 
+      A :class:`flax.core.variables.Variable` that can be read or set via
       ".value" attribute. Throws an error if the variable exists already.
     """
     if not self._initialization_allowed:
@@ -643,7 +710,7 @@ class Module:
 
     See :mod:`flax.core.variables` for more explanation on variables and
     collections.
-    
+
     Args:
       col: The variable collection name.
       name: The name of the variable.
@@ -656,8 +723,8 @@ class Module:
 
   def make_rng(self, name: str) -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
-    
-    The new RNG key is split from the previous one. Thus, every call to 
+
+    The new RNG key is split from the previous one. Thus, every call to
     `make_rng` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
@@ -673,7 +740,7 @@ class Module:
     return self.scope.make_rng(name)
 
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
-            method: Callable[..., Any] = None, 
+            method: Callable[..., Any] = None,
             mutable: Union[bool, str, Sequence[str]] = False,
             **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
@@ -702,7 +769,7 @@ class Module:
     return apply(fn, mutable=mutable)(variables, rngs=rngs)
 
   def init_with_output(self, rngs: Union[PRNGKey, RNGSequences], *args,
-                       method: Optional[Callable[..., Any]] = None, 
+                       method: Optional[Callable[..., Any]] = None,
                        **kwargs) -> Tuple[Any, VariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
 
@@ -721,7 +788,7 @@ class Module:
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 
   def init(self, rngs: Union[PRNGKey, RNGSequences], *args,
-           method: Optional[Callable[..., Any]] = None, 
+           method: Optional[Callable[..., Any]] = None,
            **kwargs) -> VariableDict:
     """Initializes a module method with variables and returns modified variables.
 

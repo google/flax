@@ -52,7 +52,8 @@ def _dedup_scopes(scopes):
       path.append(scope.name)
       scope = scope.parent
     if max_parent is not leaf:
-      del minimal_set[leaf]
+      if leaf in minimal_set:
+        del minimal_set[leaf]
     paths.append((max_parent, max_parent_path))
   return tuple(minimal_set), tuple(paths)
 
@@ -67,8 +68,10 @@ def _dup_scopes(orig_scopes, scopes, paths):
     scopes.append(scope)
   return scopes
 
+
 def _transpose(xs):
   return tuple(zip(*xs))
+
 
 def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[CollectionFilter],

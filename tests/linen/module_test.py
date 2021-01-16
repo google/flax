@@ -15,6 +15,8 @@
 """Tests for flax.linen."""
 
 import dataclasses
+import functools
+import operator
 
 from absl.testing import absltest
 
@@ -36,6 +38,10 @@ jax.config.parse_flags_with_absl()
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 
+
+def tree_equals(x, y):
+  return jax.tree_util.tree_all(
+      jax.tree_multimap(operator.eq, x, y))
 
 class DummyModule(nn.Module):
   @compact
@@ -712,7 +718,7 @@ class ModuleTest(absltest.TestCase):
 
       def setup(self):
         self.bar = nn.Dense(3)
-      
+
       def __call__(self, x):
         return self.bar(x)
 
@@ -727,13 +733,185 @@ class ModuleTest(absltest.TestCase):
 
       def setup(self):
         self.i = 1
-      
+
       def __call__(self):
         self.i = 2
-    
+
     foo = Foo()
     with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
       foo.init(random.PRNGKey(0))
+
+
+  def test_toplevel_submodule_adoption(self):
+    class Encoder(nn.Module):
+      n_layers: int
+      ch: int
+      def setup(self):
+        self.layers = [nn.Dense(self.ch) for _ in range(self.n_layers)]
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+          x = nn.relu(x)
+        return x
+
+    class Model(nn.Module):
+      encoder: nn.Module
+      n_out: int
+      def setup(self):
+        self.dense_out = nn.Dense(self.n_out)
+      def __call__(self, x):
+        x = self.encoder(x)
+        return self.dense_out(x)
+
+    # Define model.
+    encoder = Encoder(n_layers=1, ch=8)
+    model = Model(encoder=encoder, n_out=5)
+
+    # Initialize.
+    key = jax.random.PRNGKey(0)
+    x = random.uniform(key, (4, 4))
+
+    variables = model.init(key, x)
+    y = model.apply(variables, x)
+    self.assertEqual(y.shape, (4, 5))
+
+    var_shapes = jax.tree_map(jnp.shape, variables)
+    ref_var_shapes = freeze({
+      'params': {
+          'dense_out': {
+              'bias': (5,),
+              'kernel': (8, 5),
+          },
+          'encoder': {
+              'layers_0': {
+                  'bias': (8,),
+                  'kernel': (4, 8),
+              },
+          },
+      },
+    })
+    self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
+
+  def test_toplevel_submodule_adoption_pytree(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, c, x):
+        counter = self.variable('counter', 'i', jnp.zeros, ())
+        counter.value += 1
+        x = nn.Dense(1)(x)
+        return c, x
+    class B(nn.Module):
+      A: Any
+      @nn.compact
+      def __call__(self, c, x):
+        return self.A['foo'](*self.A['bar'](c, x))
+
+    a = A()
+    As = {'foo': A(), 'bar': A()}
+    b = B(As)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+
+    p = B(As).init(key, x, x)
+    y, cntrs = b.apply(p, x, x, mutable='counter')
+    ref_cntrs = freeze({
+      'counter': {
+          'A_bar': {
+              'i': jnp.array(2.0),
+          },
+          'A_foo': {
+              'i': jnp.array(2.0),
+          },
+      },
+    })
+    self.assertTrue(jax.tree_util.tree_all(
+        jax.tree_multimap(
+            lambda x, y: onp.testing.assert_allclose(x, y, atol=1e-7),
+            cntrs, ref_cntrs)
+          ))
+
+  def test_toplevel_submodule_adoption_sharing(self):
+    dense = functools.partial(nn.Dense, use_bias=False)
+
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return dense(2)(x)
+
+    class B(nn.Module):
+      a: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return dense(2)(x) + self.a(x)
+
+    class C(nn.Module):
+      a: nn.Module
+      b: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return dense(2)(x) + self.b(x) + self.a(x)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+    a = A()
+    b = B(a)
+    c = C(a, b)
+    p = c.init(key, x)
+    var_shapes = jax.tree_map(jnp.shape, p)
+    ref_var_shapes = freeze({
+        'params': {
+            'Dense_0': {
+                'kernel': (2, 2),
+            },
+            'a': {
+                'Dense_0': {
+                    'kernel': (2, 2),
+                },
+            },
+            'b': {
+                'Dense_0': {
+                    'kernel': (2, 2),
+                },
+            },
+        },
+    })
+    self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
+
+  def test_toplevel_submodule_pytree_adoption_sharing(self):
+
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        counter = self.variable('counter', 'i', jnp.zeros, ())
+        counter.value += 1
+        x = nn.Dense(1)(x)
+        return x
+
+    class B(nn.Module):
+      A: Any
+      @nn.compact
+      def __call__(self, x):
+        return self.A['foo'](x) + self.A['bar'](x) + self.A['baz'](x)
+
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+
+    a = A()
+    As = {'foo': a, 'bar': a, 'baz': a}
+    b = B(As)
+
+    p = b.init(key, x)
+    _, cntrs = b.apply(p, x, mutable='counter')
+    ref_cntrs = freeze({
+      'counter': {
+          'A_foo': {
+              'i': jnp.array(6.0),
+          },
+      },
+    })
+    self.assertTrue(tree_equals(cntrs, ref_cntrs))
 
 
 if __name__ == '__main__':
