@@ -24,7 +24,6 @@ import jax
 from jax import lax
 import jax.numpy as jnp
 
-import numpy as onp
 
 
 Array = Any
