@@ -548,6 +548,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       is_last_step = step == config.num_train_steps - 1
 
       # Shard data to devices and do a training step.
+      # We use a global batch size and shard the batch, so the per-device batch 
+      # size decreases if the number of devices increases.
       with jax.profiler.StepTraceContext("train", step_num=step):
         batch = common_utils.shard(jax.tree_map(np.asarray, next(train_iter)))
         optimizer, metrics = p_train_step(
