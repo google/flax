@@ -16,12 +16,11 @@
 
 from typing import Callable, Any, Optional
 
-import jax
-import jax.numpy as jnp
-import numpy as np
-
 from flax import linen as nn
 from flax import struct
+
+import jax.numpy as jnp
+import numpy as np
 
 
 @struct.dataclass
@@ -68,17 +67,17 @@ def sinusoidal_init(max_len=2048):
 
   return init
 
+
 class AddPositionEmbs(nn.Module):
   """Adds (optionally learned) positional embeddings to the inputs.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
   config: TransformerConfig
 
   @nn.compact
-  def __call__(self,
-               inputs):
+  def __call__(self, inputs):
     """Applies AddPositionEmbs module.
 
     By default this layer uses a fixed sinusoidal embedding table. If a
@@ -112,7 +111,7 @@ class AddPositionEmbs(nn.Module):
 class MlpBlock(nn.Module):
   """Transformer MLP / feed-forward block.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
     out_dim: optionally specify out dimension.
   """
@@ -141,17 +140,15 @@ class MlpBlock(nn.Module):
 
 
 class Encoder1DBlock(nn.Module):
-  """Transformer decoder layer.
+  """Transformer encoder layer.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
   config: TransformerConfig
 
   @nn.compact
-  def __call__(self,
-               inputs,
-               deterministic):
+  def __call__(self, inputs, deterministic):
     """Applies Encoder1DBlock module.
 
     Args:
@@ -193,10 +190,7 @@ class Transformer(nn.Module):
   config: TransformerConfig
 
   @nn.compact
-  def __call__(self,
-               *,
-               inputs,
-               train):
+  def __call__(self, *, inputs, train):
     """Applies Transformer model on the inputs.
 
     Args:
@@ -204,21 +198,21 @@ class Transformer(nn.Module):
       train: if it is training.
 
     Returns:
-      output of a transformer decoder.
+      output of a transformer encoder.
 
     """
     padding_mask = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)[..., None]
     assert inputs.ndim == 2  # (batch, len)
 
-    cfg=self.config
+    cfg = self.config
 
     x = inputs.astype('int32')
     x = nn.Embed(num_embeddings=cfg.vocab_size, features=cfg.emb_dim, name='embed')(x)
     x = nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=not train)
     x = AddPositionEmbs(cfg)(x)
 
-    for l in range(cfg.num_layers):
-       x = Encoder1DBlock(cfg)(x, deterministic=not train)
+    for _ in range(cfg.num_layers):
+      x = Encoder1DBlock(cfg)(x, deterministic=not train)
 
     x = nn.LayerNorm(dtype=cfg.dtype)(x)
     logits = nn.Dense(
