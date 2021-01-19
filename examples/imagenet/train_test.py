@@ -12,43 +12,63 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
-"""Tests for flax.examples.imagenet.imagenet_lib."""
+"""Tests for flax.examples.imagenet.train."""
 
-import os
 import pathlib
 import tempfile
 
 from absl.testing import absltest
 
+import jax
+from jax import random
+
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-import imagenet_lib
+# Local imports.
+import models
+import train
+from configs import default as default_lib
 
 
-class ImageNetTest(absltest.TestCase):
-  """Test cases for imagenet_lib."""
+jax.config.update('jax_disable_most_optimizations', True)
+
+
+class TrainTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
     # Make sure tf does not allocate gpu memory.
     tf.config.experimental.set_visible_devices([], 'GPU')
 
+  def test_create_model(self):
+    """Tests creating model."""
+    model = train.create_model(model_cls=models._ResNet1, half_precision=False)  # pylint: disable=protected-access
+    params, state = train.initialized(random.PRNGKey(0), 224, model)
+    variables = {'params': params, **state}
+    x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
+    y = model.apply(variables, x, train=False)
+    self.assertEqual(y.shape, (8, 1000))
+
   def test_train_and_evaluate(self):
     """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
-    model_dir = tempfile.mkdtemp()
+    workdir = tempfile.mkdtemp()
 
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
+    # Define training configuration
+    config = default_lib.get_config()
+    config.model = '_ResNet1'
+    config.batch_size = 1
+    config.num_epochs = 1
+    config.num_train_steps = 1
+    config.steps_per_eval = 1
+
     with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
-      imagenet_lib.train_and_evaluate(
-          model_dir=model_dir, batch_size=1, num_epochs=1,
-          learning_rate=0.1, momentum=0.9, cache=False, half_precision=False,
-          num_train_steps=1, num_eval_steps=1)
+      train.train_and_evaluate(workdir=workdir, config=config)
 
 
 if __name__ == '__main__':

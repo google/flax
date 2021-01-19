@@ -2,13 +2,9 @@
 
 export FLAX_PROFILE=1
 
-ALL_EXAMPLES=false
 PYTEST_OPTS=
 for flag in "$@"; do
 case $flag in
-  --all)
-  ALL_EXAMPLES=true
-  ;;
   --with-cov)
   PYTEST_OPTS+="--cov=flax --cov-report=xml --cov-report=term --cov-config=setup.cfg"
   ;;
@@ -43,33 +39,43 @@ handle_errors () {
 }
 
 # Run battery of core FLAX API tests.
-pytest tests -n auto $PYTEST_OPTS
+pytest -n 4 tests $PYTEST_OPTS
+
+# Per-example tests.
+#
+# we apply pytest within each example to avoid pytest's annoying test-filename collision.
+# In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
+# /foo/bar and /baz/bleep aren't set up as packages.
+for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+    # Skip tests on deprecated example -- we get this error.
+    #   ValueError: Failed to construct dataset lm1b: BuilderConfig subwords32k not found. Available: []
+    #
+    # TODO: Remove after github.com/google/flax/issues/567 is resolved
+    if [[ "$egd" == "examples/lm1b_deprecated" ]]; then
+        continue
+    fi
+    pytest $egd
+done
 
 # validate types
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  echo "Pytype is currently not working on MacOS, see https://github.com/google/pytype/issues/661"
+    echo "Pytype is currently not working on MacOS, see https://github.com/google/pytype/issues/661"
 else
-  pytype flax/
-fi
+    pytype flax/
 
-# Per-example tests.
-if [[ $ALL_EXAMPLES == 'true' ]]; then
-  # we apply pytest within each example to avoid pytest's annoying test-filename collision.
-  # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
-  # /foo/bar and /baz/bleep aren't set up as packages.
-  for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-      pytest $egd
-  done
-fi
+    for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+        # Skip pytype on deprecated example
+        # TODO: Remove after github.com/google/flax/issues/567 is resolved
+        if [[ "$egd" == "examples/lm1b_deprecated" ]]; then
+            continue
+        fi
 
-# Per-example tests for Linen examples.
-for egd in $(find linen_examples -maxdepth 1 -mindepth 1 -type d); do
-    pytest $egd
-    # use cd to make sure pytpe cache lives in example dir and doesn't name clash
-    # use *.py to avoid importing configs as a top-level import which leads tot import errors
-    # because config files use relative imports (e.g. from config import ...). 
-    (cd $egd ; pytype "*.py")
-done
+        # use cd to make sure pytpe cache lives in example dir and doesn't name clash
+        # use *.py to avoid importing configs as a top-level import which leads tot import errors
+        # because config files use relative imports (e.g. from config import ...).
+        (cd $egd ; pytype "*.py")
+    done
+fi
 
 # Return error code 0 if no real failures happened.
 echo "finished all tests."

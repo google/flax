@@ -16,7 +16,6 @@
 
 import jax
 import flax
-from flax import nn
 import numpy as onp
 import numpy.testing as onp_testing
 from absl.testing import absltest
@@ -24,6 +23,7 @@ from absl.testing import absltest
 import ppo_lib
 import env_utils
 import models
+import agent
 
 # test GAE
 class TestGAE(absltest.TestCase):
@@ -39,6 +39,7 @@ class TestGAE(absltest.TestCase):
     adv = ppo_lib.gae_advantages(rewards, terminal_masks, values, discount,
                                  gae_param)
     self.assertEqual(adv.shape, (steps, envs))
+
   def test_gae_hardcoded(self):
     #test on small example that can be verified by hand
     rewards = onp.array([[1., 0.], [0., 0.], [-1., 1.]])
@@ -88,13 +89,15 @@ class TestModel(absltest.TestCase):
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
     outputs = self.choose_random_outputs()
-    model = models.create_model(subkey, outputs)
-    optimizer = models.create_optimizer(model, learning_rate=1e-3)
-    self.assertTrue(isinstance(model, nn.base.Model))
+    module = models.ActorCritic(num_outputs=outputs)
+    initial_params = models.get_initial_params(subkey, module)
+    lr = 2.5e-4
+    optimizer = models.create_optimizer(initial_params, lr)
     self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
     test_batch_size, obs_shape = 10, (84, 84, 4)
     random_input = onp.random.random(size=(test_batch_size,) + obs_shape)
-    log_probs, values = optimizer.target(random_input)
+    log_probs, values = agent.policy_action(optimizer.target, module,
+        random_input)
     self.assertEqual(values.shape, (test_batch_size, 1))
     sum_probs = onp.sum(onp.exp(log_probs), axis=1)
     self.assertEqual(sum_probs.shape, (test_batch_size, ))
@@ -123,10 +126,12 @@ class TestOptimizationStep(absltest.TestCase):
     batch_size = 256
     key = jax.random.PRNGKey(0)
     key, subkey = jax.random.split(key)
-    model = models.create_model(subkey, num_outputs)
-    optimizer = models.create_optimizer(model, learning_rate=lr)
+    module = models.ActorCritic(num_outputs)
+    initial_params = models.get_initial_params(subkey, module)
+    lr = 2.5e-4
+    optimizer = models.create_optimizer(initial_params, lr)
     optimizer, _ = ppo_lib.train_step(
-        optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr,
+        module, optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr,
         batch_size)
     self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
 

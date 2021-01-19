@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for model."""
+# Lint as: python3
+"""Tests for PixelCNN Modules."""
 
+import pixelcnn
+from flax import linen as nn
 from absl.testing import absltest
 from absl.testing import parameterized
 
@@ -21,121 +24,111 @@ import numpy.testing as onp_testing
 
 from jax import random
 import jax.numpy as np
-
-from flax import nn
-
-import pixelcnn
+from jax.config import config
+config.enable_omnistaging()
 
 
 class ModelTest(absltest.TestCase):
 
+  def setUp(self):
+    super().setUp()
+    self.rng = random.PRNGKey(0)
+    self.x = np.arange(24).reshape(1, 4, 3, 2)
+
+
+  def get_weightnorm(self, params):
+    return [params[k] for k in ('direction', 'scale', 'bias')]
+
+
+  def assert_mean_and_variance(self, out):
+    # Weightnorm should ensure that, at initialization time, the outputs of the
+    # module have mean 0 and variance 1 over the non-feature dimensions.
+    onp_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
+    onp_testing.assert_allclose(np.var(out, (0, 1, 2)), 1., atol=1e-5)
+
+
   def test_conv(self):
-    rng = random.PRNGKey(0)
-    x = np.arange(24).reshape(1, 4, 3, 2)
-    conv_module = pixelcnn.Conv.partial(features=4, kernel_size=(3, 2))
-    out, initial_params = conv_module.init(rng, x)
-    model = nn.Model(conv_module, initial_params)
-    params = model.params['weightnorm_params']
-    direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
+    model = pixelcnn.ConvWeightNorm(features=4, kernel_size=(3, 2))
+    out, variables = model.init_with_output(self.rng, self.x)
+    params = variables['params']['weightnorm_params']
+    direction, scale, bias = self.get_weightnorm(params)
+
     self.assertEqual(direction.shape, (3, 2, 2, 4))
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 2, 2, 4))
+    self.assert_mean_and_variance(out)
 
-    # Weightnorm should ensure that, at initialization time, the outputs of the
-    # module have mean 0 and variance 1 over the non-feature dimensions.
-    onp_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
-    onp_testing.assert_allclose(np.var (out, (0, 1, 2)), 1., atol=1e-5)
 
   def test_conv_down(self):
-    rng = random.PRNGKey(0)
-    x = np.arange(24).reshape(1, 4, 3, 2)
-    conv_module = pixelcnn.ConvDown.partial(features=4)
-    out, initial_params = conv_module.init(rng, x)
-    model = nn.Model(conv_module, initial_params)
-    params = model.params['Conv_0']['weightnorm_params']
-    direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
+    model = pixelcnn.ConvDown(features=4)
+    out, variables = model.init_with_output(self.rng, self.x)
+    params = variables['params']['ConvWeightNorm_0']['weightnorm_params']
+    direction, scale, bias = self.get_weightnorm(params)
+
     self.assertEqual(direction.shape, (2, 3, 2, 4))
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 4, 3, 4))
+    self.assert_mean_and_variance(out)
 
-    # Weightnorm should ensure that, at initialization time, the outputs of the
-    # module have mean 0 and variance 1 over the non-feature dimensions.
-    onp_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
-    onp_testing.assert_allclose(np.var (out, (0, 1, 2)), 1., atol=1e-5)
 
   def test_conv_down_right(self):
-    rng = random.PRNGKey(0)
-    x = np.arange(24).reshape(1, 4, 3, 2)
-    conv_module = pixelcnn.ConvDownRight.partial(features=4)
-    out, initial_params = conv_module.init(rng, x)
-    model = nn.Model(conv_module, initial_params)
-    params = model.params['Conv_0']['weightnorm_params']
-    direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
+    model = pixelcnn.ConvDownRight(features=4)
+    out, variables = model.init_with_output(self.rng, self.x)
+    params = variables['params']['ConvWeightNorm_0']['weightnorm_params']
+    direction, scale, bias = self.get_weightnorm(params)
+
     self.assertEqual(direction.shape, (2, 2, 2, 4))
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 4, 3, 4))
+    self.assert_mean_and_variance(out)
 
-    # Weightnorm should ensure that, at initialization time, the outputs of the
-    # module have mean 0 and variance 1 over the non-feature dimensions.
-    onp_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
-    onp_testing.assert_allclose(np.var (out, (0, 1, 2)), 1., atol=1e-5)
 
   def test_conv_transpose(self):
-    rng = random.PRNGKey(0)
-    x = np.arange(24).reshape(1, 4, 3, 2)
-    conv_module = pixelcnn.ConvTranspose.partial(features=4,
-                                                   kernel_size=(3, 2))
-    out, initial_params = conv_module.init(rng, x)
-    model = nn.Model(conv_module, initial_params)
-    params = model.params['weightnorm_params']
-    direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
+    model = pixelcnn.ConvTranspose(features=4, kernel_size = (3, 2))
+    out, variables = model.init_with_output(self.rng, self.x)
+    params = variables['params']['weightnorm_params']
+    direction, scale, bias = self.get_weightnorm(params)
+
     self.assertEqual(direction.shape, (3, 2, 2, 4))
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 6, 4, 4))
+    self.assert_mean_and_variance(out)
 
-    # Weightnorm should ensure that, at initialization time, the outputs of the
-    # module have mean 0 and variance 1 over the non-feature dimensions.
-    onp_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
-    onp_testing.assert_allclose(np.var (out, (0, 1, 2)), 1., atol=1e-5)
 
   def test_conv_transpose_down(self):
-    rng = random.PRNGKey(0)
-    x = np.arange(24).reshape(1, 4, 3, 2)
-    conv_module = pixelcnn.ConvTransposeDown.partial(features=4)
-    out, initial_params = conv_module.init(rng, x)
-    model = nn.Model(conv_module, initial_params)
-    params = model.params['Conv_0']['weightnorm_params']
-    direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
+    model = pixelcnn.ConvTransposeDown(features=4)
+    out, variables = model.init_with_output(self.rng, self.x)
+    params = variables['params']["ConvWeightNorm_0"]["weightnorm_params"]
+    direction, scale, bias = self.get_weightnorm(params)
+
     self.assertEqual(direction.shape, (2, 3, 2, 4))
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 8, 6, 4))
 
+
   def test_conv_transpose_down_right(self):
-    rng = random.PRNGKey(0)
-    x = np.arange(24).reshape(1, 4, 3, 2)
-    conv_module = pixelcnn.ConvTransposeDownRight.partial(features=4)
-    out, initial_params = conv_module.init(rng, x)
-    model = nn.Model(conv_module, initial_params)
-    params = model.params['Conv_0']['weightnorm_params']
-    direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
+    model = pixelcnn.ConvTransposeDownRight(features=4)
+    out, variables = model.init_with_output(self.rng, self.x)
+    params = variables['params']['ConvWeightNorm_0']['weightnorm_params']
+    direction, scale, bias = self.get_weightnorm(params)
+
     self.assertEqual(direction.shape, (2, 2, 2, 4))
     self.assertEqual(scale.shape, (4,))
     self.assertEqual(bias.shape, (4,))
     self.assertEqual(out.shape, (1, 8, 6, 4))
 
+
   def test_pcnn_shape(self):
-    rng = random.PRNGKey(0)
-    x = random.normal(rng, (2, 4, 4, 3))
-    conv_module = pixelcnn.PixelCNNPP.partial(depth=0, features=2, dropout_p=0)
-    out, initial_params = conv_module.init(rng, x)
-    model = nn.Model(conv_module, initial_params)
+    x = random.normal(self.rng, (2, 4, 4, 3))
+    model = pixelcnn.PixelCNNPP(depth=0, features=2, dropout_p=0)
+    out, _ = model.init_with_output(self.rng, x)
     self.assertEqual(out.shape, (2, 4, 4, 100))
 
 
 if __name__ == '__main__':
-  googletest.main()
+  absltest.main()

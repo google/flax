@@ -1,6 +1,4 @@
-# Deprecated Examples
-
-You've caught us mid-way through our chrysalis! This directory
-contains examples with the deprecated `flax.nn` API.
-
-[linen_examples/](../linen_examples) now contains our supported examples.
+# Flax Examples
+ 
+ Please see documentation on RTD:
+ https://flax.readthedocs.io/en/latest/examples.html

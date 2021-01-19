@@ -12,20 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 r"""Parallel BLEU score calculation.
 
 This version of BLEU calculation is derived from the MLPerf transformer reference.
@@ -186,11 +172,11 @@ def bleu_partial(ref_lines, hyp_lines, case_sensitive=False):
 
 
 def complete_bleu(matches_by_order,
-                 possible_matches_by_order,
-                 reference_length,
-                 translation_length,
-                 max_order=4,
-                 use_bp=True):
+                  possible_matches_by_order,
+                  reference_length,
+                  translation_length,
+                  max_order=4,
+                  use_bp=True):
   """Compute BLEU score from aggregated n-gram statistics."""
   precisions = [0] * max_order
   smooth = 1.0

@@ -13,40 +13,42 @@
 # limitations under the License.
 
 """Benchmark for the ImageNet example."""
+
 import time
 
-from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-import imagenet_main
+
+# Local imports.
+import train
+from configs import v100_x8_mixed_precision as config_lib
 from flax.testing import Benchmark
+
 import jax
-
 import numpy as np
-
+import tensorflow as tf
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
-FLAGS = flags.FLAGS
 
 class ImagenetBenchmark(Benchmark):
   """Benchmarks for the ImageNet Flax example."""
 
   @flagsaver
-  def _test_8x_v100_half_precision(
-      self, num_epochs, min_accuracy, max_accuracy):
+  def _test_8x_v100_half_precision(self, num_epochs: int, min_accuracy,
+                                   max_accuracy):
     """Utility to benchmark ImageNet on 8xV100 GPUs. Use in your test func."""
-    model_dir = self.get_tmp_model_dir()
-    FLAGS.batch_size = 2048
-    FLAGS.half_precision = True
-    FLAGS.num_epochs = num_epochs
-    FLAGS.model_dir = model_dir
+    # Make sure tf does not allocate gpu memory.
+    tf.config.experimental.set_visible_devices([], 'GPU')
 
+    workdir = self.get_tmp_model_dir()
+    config = config_lib.get_config()
+    config.num_epochs = num_epochs
     start_time = time.time()
-    imagenet_main.main([])
+    train.train_and_evaluate(config=config, workdir=workdir)
     benchmark_time = time.time() - start_time
-    summaries = self.read_summaries(model_dir)
+    summaries = self.read_summaries(workdir)
 
     # Summaries contain all the information necessary for the regression
     # metrics.
@@ -73,6 +75,7 @@ class ImagenetBenchmark(Benchmark):
         'description': 'Short (2 epochs) 8 x V100 test for ImageNet ResNet50.',
         'model_name': 'resnet50',
         'parameters': 'hp=true,bs=2048,num_epochs=2',
+        'implementation': 'linen',
     })
 
   def test_8x_v100_half_precision_full(self):
@@ -83,7 +86,9 @@ class ImagenetBenchmark(Benchmark):
         'description': 'Full (90 epochs) 8 x V100 test for ImageNet ResNet50.',
         'model_name': 'resnet50',
         'parameters': 'hp=true,bs=2048,num_epochs=90',
+        'implementation': 'linen',
     })
+
 
 if __name__ == '__main__':
   absltest.main()

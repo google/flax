@@ -1,5 +1,0 @@
-atari-py
-gym
-jax
-jaxlib
-opencv-python

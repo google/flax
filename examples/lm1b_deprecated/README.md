@@ -1,3 +1,7 @@
+## NOTE
+This example uses the deprecated `flax.nn` API. https://github.com/google/flax/issues/567 tracks the update
+to [Linen](https://github.com/google/flax/tree/master/flax/linen).
+
 ## Language modeling
 Trains a Transformer-based model (Vaswani *et al.*, 2017) on the One Billion Word Benchmark (lm1b; Chelba *et al.*, 2013).
 

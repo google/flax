@@ -12,26 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Transformer-based machine translation model."""
 
-from flax import nn
+# pylint: disable=attribute-defined-outside-init
+# See issue #620.
+# pytype: disable=wrong-arg-count
+# pytype: disable=wrong-keyword-args
+# pytype: disable=attribute-error
+
+from typing import Callable, Any, Optional
+
 from jax import lax
 import jax.numpy as jnp
 import numpy as np
+
+from flax import linen as nn
+from flax import struct
+
+
+@struct.dataclass
+class TransformerConfig:
+  """Global hyperparameters used to minimize obnoxious kwarg plumbing."""
+  vocab_size: int
+  output_vocab_size: int
+  share_embeddings: bool = False
+  logits_via_embedding: bool = False
+  dtype: Any = jnp.float32
+  emb_dim: int = 512
+  num_heads: int = 8
+  num_layers: int = 6
+  qkv_dim: int = 512
+  mlp_dim: int = 2048
+  max_len: int = 2048
+  dropout_rate: float = 0.1
+  attention_dropout_rate: float = 0.1
+  deterministic: bool = False
+  decode: bool = False
+  kernel_init: Callable = nn.initializers.xavier_uniform()
+  bias_init: Callable = nn.initializers.normal(stddev=1e-6)
+  posemb_init: Optional[Callable] = None
 
 
 def shift_right(x, axis=1):
@@ -74,54 +93,56 @@ def sinusoidal_init(max_len=2048,
 
 
 class AddPositionEmbs(nn.Module):
-  """Adds (optionally learned) positional embeddings to the inputs."""
+  """Adds (optionally learned) positional embeddings to the inputs.
 
-  def apply(self,
-            inputs,
-            inputs_positions=None,
-            max_len=512,
-            posemb_init=None,
-            cache=None):
+  Args:
+    config: TransformerConfig dataclass containing hyperparameters.
+    decode: whether to run in single-position autoregressive mode.
+  """
+  config: TransformerConfig
+  decode: bool = False
+
+  @nn.compact
+  def __call__(self,
+               inputs,
+               inputs_positions=None):
     """Applies AddPositionEmbs module.
 
     By default this layer uses a fixed sinusoidal embedding table. If a
     learned position embedding is desired, pass an initializer to
-    posemb_init.
+    posemb_init in the configuration.
 
     Args:
       inputs: input data.
       inputs_positions: input position indices for packed sequences.
-      max_len: maximum possible length for the input.
-      posemb_init: positional embedding initializer, if None, then use a
-        fixed (non-learned) sinusoidal embedding table.
-      cache: flax attention cache for fast decoding.
 
     Returns:
       output: `(bs, timesteps, in_dim)`
     """
+    cfg = self.config
     # inputs.shape is (batch_size, seq_len, emb_dim)
     assert inputs.ndim == 3, ('Number of dimensions should be 3,'
                               ' but it is: %d' % inputs.ndim)
     length = inputs.shape[1]
-    pos_emb_shape = (1, max_len, inputs.shape[-1])
-    if posemb_init is None:
+    pos_emb_shape = (1, cfg.max_len, inputs.shape[-1])
+    if cfg.posemb_init is None:
       # Use a fixed (non-learned) sinusoidal position embedding.
-      pos_embedding = sinusoidal_init(
-          max_len=max_len)(None, pos_emb_shape, None)
+      pos_embedding = sinusoidal_init(max_len=cfg.max_len)(
+          None, pos_emb_shape, None)
     else:
-      pos_embedding = self.param('pos_embedding', pos_emb_shape, posemb_init)
+      pos_embedding = self.param('pos_embedding',
+                                 cfg.posemb_init,
+                                 pos_emb_shape)
     pe = pos_embedding[:, :length, :]
-    # We abuse the same attention Cache mechanism to run positional embeddings
-    # in fast predict mode. We could use state variables instead, but this
-    # simplifies invocation with a single top-level cache context manager.
-    # We only use the cache's position index for tracking decoding position.
-    if cache:
-      if self.is_initializing():
-        cache.store(np.array((4, 1, 1), dtype=np.int32))
-      else:
-        cache_entry = cache.retrieve(None)
-        i = cache_entry.i
-        cache.store(cache_entry.replace(i=cache_entry.i + 1))
+
+    # We use a cache position index for tracking decoding position.
+    if self.decode:
+      is_initialized = self.has_variable('cache', 'cache_index')
+      cache_index = self.variable('cache', 'cache_index',
+                                  lambda: jnp.array(0, dtype=jnp.uint32))
+      if is_initialized:
+        i = cache_index.value
+        cache_index.value = i + 1
         _, _, df = pos_embedding.shape
         pe = lax.dynamic_slice(pos_embedding,
                                jnp.array((0, i, 0)),
@@ -135,650 +156,433 @@ class AddPositionEmbs(nn.Module):
 
 
 class MlpBlock(nn.Module):
-  """Transformer MLP / feed-forward block."""
+  """Transformer MLP / feed-forward block.
 
-  def apply(self,
-            inputs,
-            mlp_dim,
-            dtype=jnp.float32,
-            out_dim=None,
-            dropout_rate=0.1,
-            deterministic=False,
-            kernel_init=nn.initializers.xavier_uniform(),
-            bias_init=nn.initializers.normal(stddev=1e-6)):
+  Args:
+    config: TransformerConfig dataclass containing hyperparameters.
+    out_dim: optionally specify out dimension.
+  """
+  config: TransformerConfig
+  out_dim: Optional[int] = None
+
+  @nn.compact
+  def __call__(self, inputs):
     """Applies Transformer MlpBlock module."""
-    actual_out_dim = inputs.shape[-1] if out_dim is None else out_dim
-    x = nn.Dense(inputs, mlp_dim, dtype=dtype, kernel_init=kernel_init,
-                 bias_init=bias_init)
+    cfg = self.config
+    actual_out_dim = (inputs.shape[-1] if self.out_dim is None
+                      else self.out_dim)
+    x = nn.Dense(cfg.mlp_dim,
+                 dtype=cfg.dtype,
+                 kernel_init=cfg.kernel_init,
+                 bias_init=cfg.bias_init)(inputs)
     x = nn.relu(x)
-    x = nn.dropout(x, rate=dropout_rate, deterministic=deterministic)
-    output = nn.Dense(x, actual_out_dim, dtype=dtype, kernel_init=kernel_init,
-                      bias_init=bias_init)
-    output = nn.dropout(output, rate=dropout_rate, deterministic=deterministic)
+    x = nn.Dropout(rate=cfg.dropout_rate)(
+        x, deterministic=cfg.deterministic)
+    output = nn.Dense(actual_out_dim,
+                      dtype=cfg.dtype,
+                      kernel_init=cfg.kernel_init,
+                      bias_init=cfg.bias_init)(x)
+    output = nn.Dropout(rate=cfg.dropout_rate)(
+        output, deterministic=cfg.deterministic)
     return output
 
 
 class Encoder1DBlock(nn.Module):
-  """Transformer decoder layer."""
+  """Transformer decoder layer.
 
-  def apply(self,
-            inputs,
-            qkv_dim,
-            mlp_dim,
-            num_heads,
-            dtype=jnp.float32,
-            inputs_segmentation=None,
-            padding_mask=None,
-            dropout_rate=0.1,
-            attention_dropout_rate=0.1,
-            deterministic=False):
+  Args:
+    config: TransformerConfig dataclass containing hyperparameters.
+  """
+  config: TransformerConfig
+
+  @nn.compact
+  def __call__(self,
+               inputs,
+               encoder_mask=None):
     """Applies Encoder1DBlock module.
 
     Args:
       inputs: input data.
-      qkv_dim: dimension of the query/key/value.
-      mlp_dim: dimension of the mlp on top of attention block.
-      num_heads: number of heads.
-      dtype: the dtype of the computation (default: float32).
-      inputs_segmentation: input segmentation info for packed examples.
-      padding_mask: bool, mask padding tokens.
-      dropout_rate: dropout rate.
-      attention_dropout_rate: dropout rate for attention weights.
-      deterministic: bool, deterministic or not (to apply dropout).
+      encoder_mask: encoder self-attention mask.
 
     Returns:
       output after transformer encoder block.
     """
+    cfg = self.config
 
     # Attention block.
     assert inputs.ndim == 3
-    x = nn.LayerNorm(inputs, dtype=dtype)
+    x = nn.LayerNorm(dtype=cfg.dtype)(inputs)
     x = nn.SelfAttention(
-        x,
-        num_heads=num_heads,
-        dtype=dtype,
-        inputs_kv=x,
-        qkv_features=qkv_dim,
-        attention_axis=(1,),
-        causal_mask=False,
-        segmentation=inputs_segmentation,
-        padding_mask=padding_mask,
-        kernel_init=nn.initializers.xavier_uniform(),
-        bias_init=nn.initializers.normal(stddev=1e-6),
-        bias=False,
+        num_heads=cfg.num_heads,
+        dtype=cfg.dtype,
+        qkv_features=cfg.qkv_dim,
+        kernel_init=cfg.kernel_init,
+        bias_init=cfg.bias_init,
+        use_bias=False,
         broadcast_dropout=False,
-        dropout_rate=attention_dropout_rate,
-        deterministic=deterministic)
-    x = nn.dropout(x, rate=dropout_rate, deterministic=deterministic)
+        dropout_rate=cfg.attention_dropout_rate,
+        deterministic=cfg.deterministic)(x, encoder_mask)
+
+    x = nn.Dropout(rate=cfg.dropout_rate)(
+        x, deterministic=cfg.deterministic)
     x = x + inputs
 
     # MLP block.
-    y = nn.LayerNorm(x, dtype=dtype)
-    y = MlpBlock(
-        y,
-        mlp_dim=mlp_dim,
-        dtype=dtype,
-        dropout_rate=dropout_rate,
-        deterministic=deterministic)
+    y = nn.LayerNorm(dtype=cfg.dtype)(x)
+    y = MlpBlock(config=cfg)(y)
 
     return x + y
 
 
 class EncoderDecoder1DBlock(nn.Module):
-  """Transformer encoder-decoder layer."""
+  """Transformer encoder-decoder layer.
 
-  def apply(self,
-            targets,
-            encoded,
-            qkv_dim,
-            mlp_dim,
-            num_heads,
-            dtype=jnp.float32,
-            inputs_segmentation=None,
-            targets_segmentation=None,
-            padding_mask=None,
-            key_padding_mask=None,
-            dropout_rate=0.1,
-            attention_dropout_rate=0.1,
-            deterministic=False,
-            cache=None):
+  Args:
+    config: TransformerConfig dataclass containing hyperparameters.
+  """
+  config: TransformerConfig
+
+  @nn.compact
+  def __call__(self,
+               targets,
+               encoded,
+               decoder_mask=None,
+               encoder_decoder_mask=None):
     """Applies EncoderDecoder1DBlock module.
 
     Args:
       targets: input data for decoder
       encoded: input data from encoder
-      qkv_dim: dimension of the query/key/value
-      mlp_dim: dimension of the mlp on top of attention block
-      num_heads: number of heads
-      dtype: the dtype of the computation (default: float32)
-      inputs_segmentation: input segmentation info for packed examples.
-      targets_segmentation: target segmentation info for packed examples.
-      causal_mask: bool, mask future or not
-      padding_mask: bool, mask padding tokens
-      key_padding_mask: bool, mask padding tokens
-      dropout_rate: dropout rate
-      attention_dropout_rate: dropout rate for attention weights
-      deterministic: bool, deterministic or not (to apply dropout)
-      cache: flax attention cache for fast decoding.
+      decoder_mask: decoder self-attention mask.
+      encoder_decoder_mask: encoder-decoder attention mask.
 
     Returns:
       output after transformer encoder-decoder block.
     """
+    cfg = self.config
 
     # Decoder block.
     assert targets.ndim == 3
-    x = nn.LayerNorm(targets, dtype=dtype)
+    x = nn.LayerNorm(dtype=cfg.dtype)(targets)
     x = nn.SelfAttention(
-        x,
-        num_heads=num_heads,
-        dtype=dtype,
-        inputs_kv=x,
-        qkv_features=qkv_dim,
-        attention_axis=(1,),
-        causal_mask=True,
-        padding_mask=padding_mask,
-        segmentation=targets_segmentation,
-        kernel_init=nn.initializers.xavier_uniform(),
-        bias_init=nn.initializers.normal(stddev=1e-6),
-        bias=False,
+        num_heads=cfg.num_heads,
+        dtype=cfg.dtype,
+        qkv_features=cfg.qkv_dim,
+        kernel_init=cfg.kernel_init,
+        bias_init=cfg.bias_init,
+        use_bias=False,
         broadcast_dropout=False,
-        dropout_rate=attention_dropout_rate,
-        deterministic=deterministic,
-        cache=cache)
-    x = nn.dropout(x, rate=dropout_rate, deterministic=deterministic)
+        dropout_rate=cfg.attention_dropout_rate,
+        deterministic=cfg.deterministic,
+        decode=cfg.decode)(x, decoder_mask)
+    x = nn.Dropout(rate=cfg.dropout_rate)(
+        x, deterministic=cfg.deterministic)
     x = x + targets
 
     # Encoder-Decoder block.
-    y = nn.LayerNorm(x, dtype=dtype)
-    y = nn.SelfAttention(
-        y,
-        num_heads=num_heads,
-        dtype=dtype,
-        inputs_kv=encoded,
-        qkv_features=qkv_dim,
-        attention_axis=(1,),
-        causal_mask=False,
-        padding_mask=padding_mask,
-        key_padding_mask=key_padding_mask,
-        segmentation=targets_segmentation,
-        key_segmentation=inputs_segmentation,
-        kernel_init=nn.initializers.xavier_uniform(),
-        bias_init=nn.initializers.normal(stddev=1e-6),
-        bias=False,
+    y = nn.LayerNorm(dtype=cfg.dtype)(x)
+    y = nn.MultiHeadDotProductAttention(
+        num_heads=cfg.num_heads,
+        dtype=cfg.dtype,
+        qkv_features=cfg.qkv_dim,
+        kernel_init=cfg.kernel_init,
+        bias_init=cfg.bias_init,
+        use_bias=False,
         broadcast_dropout=False,
-        dropout_rate=attention_dropout_rate,
-        deterministic=deterministic)
-    y = nn.dropout(y, rate=dropout_rate, deterministic=deterministic)
+        dropout_rate=cfg.attention_dropout_rate,
+        deterministic=cfg.deterministic)(
+            y, encoded, encoder_decoder_mask)
+
+    y = nn.Dropout(rate=cfg.dropout_rate)(
+        y, deterministic=cfg.deterministic)
     y = y + x
 
     # MLP block.
-    z = nn.LayerNorm(y, dtype=dtype)
-    z = MlpBlock(
-        z,
-        mlp_dim=mlp_dim,
-        dtype=dtype,
-        dropout_rate=dropout_rate,
-        deterministic=deterministic)
+    z = nn.LayerNorm(dtype=cfg.dtype)(y)
+    z = MlpBlock(config=cfg)(z)
 
     return y + z
 
 
 class Encoder(nn.Module):
-  """Transformer Model Encoder for sequence to sequence translation."""
+  """Transformer Model Encoder for sequence to sequence translation.
 
-  def apply(self,
-            inputs,
-            vocab_size,
-            inputs_positions=None,
-            inputs_segmentation=None,
-            shared_embedding=None,
-            use_bfloat16=False,
-            emb_dim=512,
-            num_heads=8,
-            num_layers=6,
-            qkv_dim=512,
-            mlp_dim=2048,
-            max_len=512,
-            train=True,
-            dropout_rate=0.1,
-            attention_dropout_rate=0.1):
+  Args:
+    config: TransformerConfig dataclass containing hyperparameters.
+    shared_embedding: a shared embedding layer to use.
+  """
+  config: TransformerConfig
+  shared_embedding: Any = None
+
+  @nn.compact
+  def __call__(self,
+               inputs,
+               inputs_positions=None,
+               encoder_mask=None):
     """Applies Transformer model on the inputs.
 
     Args:
       inputs: input data
-      vocab_size: size of the vocabulary
       inputs_positions: input subsequence positions for packed examples.
-      inputs_segmentation: input segmentation info for packed examples.
-      shared_embedding: a shared embedding layer to use.
-      use_bfloat16: bool: whether use bfloat16.
-      emb_dim: dimension of embedding
-      num_heads: number of heads
-      num_layers: number of layers
-      qkv_dim: dimension of the query/key/value
-      mlp_dim: dimension of the mlp on top of attention block
-      max_len: maximum length.
-      train: if it is training,
-      dropout_rate: dropout rate
-      attention_dropout_rate: dropout rate for attention weights
+      encoder_mask: decoder self-attention mask.
 
     Returns:
       output of a transformer encoder.
     """
+    cfg = self.config
     assert inputs.ndim == 2  # (batch, len)
 
-    # Padding Masks
-    src_padding_mask = (inputs > 0)[..., None]
-
     # Input Embedding
-    if shared_embedding is None:
-      input_embed = nn.Embed.partial(
-          num_embeddings=vocab_size,
-          features=emb_dim,
+    if self.shared_embedding is None:
+      input_embed = nn.Embed(
+          num_embeddings=cfg.vocab_size,
+          features=cfg.emb_dim,
           embedding_init=nn.initializers.normal(stddev=1.0))
     else:
-      input_embed = shared_embedding
+      input_embed = self.shared_embedding
     x = inputs.astype('int32')
     x = input_embed(x)
-    x = AddPositionEmbs(
-        x,
-        inputs_positions=inputs_positions,
-        max_len=max_len,
-        name='posembed_input')
-    x = nn.dropout(x, rate=dropout_rate, deterministic=not train)
+    x = AddPositionEmbs(config=cfg, decode=False, name='posembed_input')(
+        x, inputs_positions=inputs_positions)
+    x = nn.Dropout(rate=cfg.dropout_rate)(
+        x, deterministic=cfg.deterministic)
 
-    if use_bfloat16:
-      x = x.astype(jnp.bfloat16)
-      dtype = jnp.bfloat16
-    else:
-      dtype = jnp.float32
+    x = x.astype(cfg.dtype)
 
     # Input Encoder
-    for lyr in range(num_layers):
-      x = Encoder1DBlock(
-          x,
-          qkv_dim=qkv_dim,
-          mlp_dim=mlp_dim,
-          num_heads=num_heads,
-          dtype=dtype,
-          padding_mask=src_padding_mask,
-          inputs_segmentation=inputs_segmentation,
-          dropout_rate=dropout_rate,
-          attention_dropout_rate=attention_dropout_rate,
-          deterministic=not train,
-          name=f'encoderblock_{lyr}')
-    encoded = nn.LayerNorm(x, dtype=dtype, name='encoder_norm')
+    for lyr in range(cfg.num_layers):
+      x = Encoder1DBlock(config=cfg, name=f'encoderblock_{lyr}')(
+          x, encoder_mask)
+
+    encoded = nn.LayerNorm(dtype=cfg.dtype, name='encoder_norm')(x)
 
     return encoded
 
 
 class Decoder(nn.Module):
-  """Transformer Model Decoder for sequence to sequence translation."""
+  """Transformer Model Decoder for sequence to sequence translation.
 
-  def apply(self,
-            encoded,
-            src_padding_mask,
-            targets,
-            output_vocab_size,
-            targets_positions=None,
-            inputs_segmentation=None,
-            targets_segmentation=None,
-            tgt_padding_mask=None,
-            shared_embedding=None,
-            logits_via_embedding=False,
-            shift=True,
-            use_bfloat16=False,
-            emb_dim=512,
-            num_heads=8,
-            num_layers=6,
-            qkv_dim=512,
-            mlp_dim=2048,
-            max_len=512,
-            train=True,
-            cache=None,
-            dropout_rate=0.1,
-            attention_dropout_rate=0.1):
+  Args:
+    config: TransformerConfig dataclass containing hyperparameters.
+    shared_embedding: a shared embedding layer to use.
+  """
+  config: TransformerConfig
+  shared_embedding: Any = None
+
+  @nn.compact
+  def __call__(self,
+               encoded,
+               targets,
+               targets_positions=None,
+               decoder_mask=None,
+               encoder_decoder_mask=None):
     """Applies Transformer model on the inputs.
 
     Args:
       encoded: encoded input data from encoder.
-      src_padding_mask: padding mask for inputs.
       targets: target inputs.
-      output_vocab_size: size of the vocabulary.
       targets_positions: input subsequence positions for packed examples.
-      inputs_segmentation: input segmentation info for packed examples.
-      targets_segmentation: target segmentation info for packed examples.
-      tgt_padding_mask: target tokens padding mask.
-      shared_embedding: a shared embedding layer to use.
-      logits_via_embedding: bool: whether final logit transform shares
-        embedding weights.
-      shift: whether to shift or not (for fast decoding).
-      use_bfloat16: bool: whether use bfloat16.
-      emb_dim: dimension of embedding.
-      num_heads: number of heads.
-      num_layers: number of layers.
-      qkv_dim: dimension of the query/key/value.
-      mlp_dim: dimension of the mlp on top of attention block.
-      max_len: maximum length.
-      train: whether it is training.
-      cache: flax attention cache for fast decoding.
-      dropout_rate: dropout rate.
-      attention_dropout_rate: dropout rate for attention weights.
+      decoder_mask: decoder self-attention mask.
+      encoder_decoder_mask: encoder-decoder attention mask.
 
     Returns:
       output of a transformer decoder.
     """
+    cfg = self.config
+
     assert encoded.ndim == 3  # (batch, len, depth)
     assert targets.ndim == 2  # (batch, len)
 
-    # Padding Masks
-    if tgt_padding_mask is None:
-      tgt_padding_mask = (targets > 0)[..., None]
-
     # Target Embedding
-    if shared_embedding is None:
-      output_embed = nn.Embed.partial(
-          num_embeddings=output_vocab_size,
-          features=emb_dim,
+    if self.shared_embedding is None:
+      output_embed = nn.Embed(
+          num_embeddings=cfg.output_vocab_size,
+          features=cfg.emb_dim,
           embedding_init=nn.initializers.normal(stddev=1.0))
     else:
-      output_embed = shared_embedding
+      output_embed = self.shared_embedding
 
     y = targets.astype('int32')
-    if shift:
+    if not cfg.decode:
       y = shift_right(y)
     y = output_embed(y)
-    y = AddPositionEmbs(
-        y,
-        inputs_positions=targets_positions,
-        max_len=max_len,
-        cache=cache,
-        name='posembed_output')
-    y = nn.dropout(y, rate=dropout_rate, deterministic=not train)
+    y = AddPositionEmbs(config=cfg, decode=cfg.decode, name='posembed_output')(
+        y, inputs_positions=targets_positions)
+    y = nn.Dropout(rate=cfg.dropout_rate)(
+        y, deterministic=cfg.deterministic)
 
-    if use_bfloat16:
-      y = y.astype(jnp.bfloat16)
-      dtype = jnp.bfloat16
-    else:
-      dtype = jnp.float32
+    y = y.astype(cfg.dtype)
 
     # Target-Input Decoder
-    for lyr in range(num_layers):
+    for lyr in range(cfg.num_layers):
       y = EncoderDecoder1DBlock(
-          y,
-          encoded,
-          qkv_dim=qkv_dim,
-          mlp_dim=mlp_dim,
-          num_heads=num_heads,
-          dtype=dtype,
-          padding_mask=tgt_padding_mask,
-          key_padding_mask=src_padding_mask,
-          inputs_segmentation=inputs_segmentation,
-          targets_segmentation=targets_segmentation,
-          dropout_rate=dropout_rate,
-          attention_dropout_rate=attention_dropout_rate,
-          deterministic=not train,
-          cache=cache,
-          name=f'encoderdecoderblock_{lyr}')
-    y = nn.LayerNorm(y, dtype=dtype, name='encoderdecoder_norm')
+          config=cfg, name=f'encoderdecoderblock_{lyr}')(
+              y,
+              encoded,
+              decoder_mask=decoder_mask,
+              encoder_decoder_mask=encoder_decoder_mask)
+    y = nn.LayerNorm(dtype=cfg.dtype, name='encoderdecoder_norm')(y)
 
     # Decoded Logits
-    if logits_via_embedding:
+    if cfg.logits_via_embedding:
       # Use the transpose of embedding matrix for logit transform.
       logits = output_embed.attend(y.astype(jnp.float32))
       # Correctly normalize pre-softmax logits for this shared case.
       logits = logits / jnp.sqrt(y.shape[-1])
     else:
       logits = nn.Dense(
-          y,
-          output_vocab_size,
-          dtype=dtype,
-          kernel_init=nn.initializers.xavier_uniform(),
-          bias_init=nn.initializers.normal(stddev=1e-6),
-          name='logitdense')
+          cfg.output_vocab_size,
+          dtype=cfg.dtype,
+          kernel_init=cfg.kernel_init,
+          bias_init=cfg.bias_init,
+          name='logitdense')(y)
     return logits
 
 
-# The following final model is simple but looks verbose due to all the
-# repetitive keyword argument plumbing.  It just sticks the Encoder and
-# Decoder in series for training, but allows running them separately for
-# inference.
-
-
 class Transformer(nn.Module):
-  """Transformer Model for sequence to sequence translation."""
+  """Transformer Model for sequence to sequence translation.
 
-  def apply(self,
-            inputs,
-            targets,
-            vocab_size=None,
-            output_vocab_size=None,
-            inputs_positions=None,
-            targets_positions=None,
-            inputs_segmentation=None,
-            targets_segmentation=None,
-            tgt_padding_mask=None,
-            share_embeddings=False,
-            logits_via_embedding=False,
-            use_bfloat16=False,
-            emb_dim=512,
-            num_heads=8,
-            num_layers=6,
-            qkv_dim=512,
-            mlp_dim=2048,
-            max_len=2048,
-            train=False,
-            shift=True,
-            dropout_rate=0.1,
-            attention_dropout_rate=0.1,
-            cache=None):
+  Args:
+    config: TransformerConfig dataclass containing hyperparameters.
+  """
+  config: TransformerConfig
+
+  def setup(self):
+    cfg = self.config
+
+    if cfg.share_embeddings:
+      if cfg.output_vocab_size is not None:
+        assert cfg.output_vocab_size == cfg.vocab_size, (
+            "can't share embedding with different vocab sizes.")
+      self.shared_embedding = nn.Embed(
+          num_embeddings=cfg.vocab_size,
+          features=cfg.emb_dim,
+          embedding_init=nn.initializers.normal(stddev=1.0))
+    else:
+      self.shared_embedding = None
+
+    self.encoder = Encoder(config=cfg,
+                           shared_embedding=self.shared_embedding)
+    self.decoder = Decoder(config=cfg,
+                           shared_embedding=self.shared_embedding)
+
+  def encode(self,
+             inputs,
+             inputs_positions=None,
+             inputs_segmentation=None):
+    """Applies Transformer encoder-branch on the inputs.
+
+    Args:
+      inputs: input data.
+      inputs_positions: input subsequence positions for packed examples.
+      inputs_segmentation: input segmentation info for packed examples.
+
+    Returns:
+      encoded feature array from the transformer encoder.
+    """
+    cfg = self.config
+    # Make padding attention mask.
+    encoder_mask = nn.make_attention_mask(
+        inputs > 0, inputs > 0, dtype=cfg.dtype)
+    # Add segmentation block-diagonal attention mask if using segmented data.
+    if inputs_segmentation is not None:
+      encoder_mask = nn.combine_masks(
+          encoder_mask,
+          nn.make_attention_mask(inputs_segmentation,
+                                 inputs_segmentation,
+                                 jnp.equal,
+                                 dtype=cfg.dtype)
+      )
+    return self.encoder(
+        inputs,
+        inputs_positions=inputs_positions,
+        encoder_mask=encoder_mask)
+
+  def decode(self,
+             encoded,
+             inputs,  # only needed for masks
+             targets,
+             targets_positions=None,
+             inputs_segmentation=None,
+             targets_segmentation=None):
+    """Applies Transformer decoder-branch on encoded-input and target.
+
+    Args:
+      encoded: encoded input data from encoder.
+      inputs: input data (only needed for masking).
+      targets: target data.
+      targets_positions: target subsequence positions for packed examples.
+      inputs_segmentation: input segmentation info for packed examples.
+      targets_segmentation: target segmentation info for packed examples.
+
+    Returns:
+      logits array from transformer decoder.
+    """
+    cfg = self.config
+
+    # Make padding attention masks.
+    if cfg.decode:
+      # for fast autoregressive decoding only a special encoder-decoder mask is used
+      decoder_mask = None
+      encoder_decoder_mask = nn.make_attention_mask(
+          jnp.ones_like(targets) > 0, inputs > 0, dtype=cfg.dtype)
+    else:
+      decoder_mask = nn.combine_masks(
+          nn.make_attention_mask(targets > 0, targets > 0, dtype=cfg.dtype),
+          nn.make_causal_mask(targets, dtype=cfg.dtype))
+      encoder_decoder_mask = nn.make_attention_mask(
+          targets > 0, inputs > 0, dtype=cfg.dtype)
+
+    # Add segmentation block-diagonal attention masks if using segmented data.
+    if inputs_segmentation is not None:
+      decoder_mask = nn.combine_masks(
+          decoder_mask,
+          nn.make_attention_mask(targets_segmentation,
+                                 targets_segmentation,
+                                 jnp.equal,
+                                 dtype=cfg.dtype))
+      encoder_decoder_mask = nn.combine_masks(
+          encoder_decoder_mask,
+          nn.make_attention_mask(targets_segmentation,
+                                 inputs_segmentation,
+                                 jnp.equal,
+                                 dtype=cfg.dtype))
+    logits = self.decoder(
+        encoded,
+        targets,
+        targets_positions=targets_positions,
+        decoder_mask=decoder_mask,
+        encoder_decoder_mask=encoder_decoder_mask)
+    return logits.astype(self.config.dtype)
+
+  def __call__(self,
+               inputs,
+               targets,
+               inputs_positions=None,
+               targets_positions=None,
+               inputs_segmentation=None,
+               targets_segmentation=None):
     """Applies Transformer model on the inputs.
 
     Args:
       inputs: input data.
       targets: target data.
-      vocab_size: size of the input vocabulary.
-      output_vocab_size: size of the output vocabulary. If None, the output
-        vocabulary size is assumed to be the same as vocab_size.
       inputs_positions: input subsequence positions for packed examples.
       targets_positions: target subsequence positions for packed examples.
       inputs_segmentation: input segmentation info for packed examples.
       targets_segmentation: target segmentation info for packed examples.
-      tgt_padding_mask: target tokens padding mask.
-      share_embeddings: bool: share embedding layer for inputs and targets.
-      logits_via_embedding: bool: whether final logit transform shares
-        embedding weights.
-      use_bfloat16: bool: whether use bfloat16.
-      emb_dim: dimension of embedding.
-      num_heads: number of heads.
-      num_layers: number of layers.
-      qkv_dim: dimension of the query/key/value.
-      mlp_dim: dimension of the mlp on top of attention block.
-      max_len: maximum length.
-      train: whether it is training.
-      shift: whether to right-shift targets.
-      dropout_rate: dropout rate.
-      attention_dropout_rate: dropout rate for attention weights.
-      cache: flax autoregressive cache for fast decoding.
 
     Returns:
-      output of a transformer decoder.
+      logits array from full transformer.
     """
-    src_padding_mask = (inputs > 0)[..., None]
+    encoded = self.encode(inputs,
+                          inputs_positions=inputs_positions,
+                          inputs_segmentation=inputs_segmentation)
 
-    if share_embeddings:
-      if output_vocab_size is not None:
-        assert output_vocab_size == vocab_size, (
-            "can't share embedding with different vocab sizes.")
-      shared_embedding = nn.Embed.shared(
-          num_embeddings=vocab_size,
-          features=emb_dim,
-          embedding_init=nn.initializers.normal(stddev=1.0))
-    else:
-      shared_embedding = None
-
-    encoded = Encoder(
-        inputs,
-        inputs_positions=inputs_positions,
-        inputs_segmentation=inputs_segmentation,
-        vocab_size=vocab_size,
-        shared_embedding=shared_embedding,
-        use_bfloat16=use_bfloat16,
-        emb_dim=emb_dim,
-        num_heads=num_heads,
-        num_layers=num_layers,
-        qkv_dim=qkv_dim,
-        mlp_dim=mlp_dim,
-        max_len=max_len,
-        train=train,
-        dropout_rate=dropout_rate,
-        attention_dropout_rate=attention_dropout_rate,
-        name='encoder')
-
-    logits = Decoder(
-        encoded,
-        src_padding_mask,
-        targets,
-        targets_positions=targets_positions,
-        inputs_segmentation=inputs_segmentation,
-        targets_segmentation=targets_segmentation,
-        output_vocab_size=output_vocab_size,
-        shared_embedding=shared_embedding,
-        logits_via_embedding=logits_via_embedding,
-        use_bfloat16=use_bfloat16,
-        emb_dim=emb_dim,
-        num_heads=num_heads,
-        num_layers=num_layers,
-        qkv_dim=qkv_dim,
-        mlp_dim=mlp_dim,
-        max_len=max_len,
-        train=train,
-        dropout_rate=dropout_rate,
-        attention_dropout_rate=attention_dropout_rate,
-        cache=cache,
-        name='decoder')
-    return logits.astype(jnp.float32) if use_bfloat16 else logits
-
-  # The following two methods allow us to run the trained Transformer in
-  # two parts during fast decoding.  First, we call the encoder branch to
-  # encode the inputs, then we call the decoder branch while providing a
-  # cache object for iteratively storing keys and values during the decoding
-  # process.
-
-  @nn.module_method
-  def encode(self,
-             inputs,
-             vocab_size=None,
-             output_vocab_size=None,
-             inputs_positions=None,
-             inputs_segmentation=None,
-             targets_positions=None,
-             targets_segmentation=None,
-             tgt_padding_mask=None,
-             share_embeddings=False,
-             logits_via_embedding=False,
-             use_bfloat16=False,
-             emb_dim=512,
-             num_heads=8,
-             num_layers=6,
-             qkv_dim=512,
-             mlp_dim=2048,
-             max_len=2048,
-             train=True,
-             shift=True,
-             dropout_rate=0.1,
-             attention_dropout_rate=0.1,
-             cache=None):
-    del (output_vocab_size, shift, targets_positions,
-         targets_segmentation, tgt_padding_mask, logits_via_embedding,
-         cache)
-
-    if share_embeddings:
-      shared_embedding = nn.Embed.shared(
-          num_embeddings=vocab_size,
-          features=emb_dim,
-          embedding_init=nn.initializers.normal(stddev=1.0))
-    else:
-      shared_embedding = None
-
-    encoded = Encoder(
-        inputs,
-        inputs_positions=inputs_positions,
-        inputs_segmentation=inputs_segmentation,
-        vocab_size=vocab_size,
-        shared_embedding=shared_embedding,
-        use_bfloat16=use_bfloat16,
-        emb_dim=emb_dim,
-        num_heads=num_heads,
-        num_layers=num_layers,
-        qkv_dim=qkv_dim,
-        mlp_dim=mlp_dim,
-        max_len=max_len,
-        train=train,
-        dropout_rate=dropout_rate,
-        attention_dropout_rate=attention_dropout_rate,
-        name='encoder')
-
-    return encoded
-
-  @nn.module_method
-  def decode(self,
-             encoded,
-             src_padding_mask,
-             targets,
-             inputs_positions=None,
-             vocab_size=None,
-             output_vocab_size=None,
-             targets_positions=None,
-             inputs_segmentation=None,
-             targets_segmentation=None,
-             tgt_padding_mask=None,
-             share_embeddings=False,
-             logits_via_embedding=False,
-             use_bfloat16=False,
-             emb_dim=512,
-             num_heads=8,
-             num_layers=6,
-             qkv_dim=512,
-             mlp_dim=2048,
-             max_len=2048,
-             train=True,
-             shift=True,
-             dropout_rate=0.1,
-             attention_dropout_rate=0.1,
-             cache=None):
-    del inputs_positions
-
-    if share_embeddings:
-      shared_embedding = nn.Embed.shared(
-          num_embeddings=vocab_size,
-          features=emb_dim,
-          embedding_init=nn.initializers.normal(stddev=1.0))
-    else:
-      shared_embedding = None
-
-    logits = Decoder(
-        encoded,
-        src_padding_mask,
-        targets,
-        targets_positions=targets_positions,
-        inputs_segmentation=inputs_segmentation,
-        targets_segmentation=targets_segmentation,
-        tgt_padding_mask=tgt_padding_mask,
-        output_vocab_size=output_vocab_size,
-        shared_embedding=shared_embedding,
-        logits_via_embedding=logits_via_embedding,
-        use_bfloat16=use_bfloat16,
-        emb_dim=emb_dim,
-        num_heads=num_heads,
-        num_layers=num_layers,
-        qkv_dim=qkv_dim,
-        mlp_dim=mlp_dim,
-        max_len=max_len,
-        train=train,
-        shift=shift,
-        dropout_rate=dropout_rate,
-        attention_dropout_rate=attention_dropout_rate,
-        cache=cache,
-        name='decoder')
-
-    return logits
+    return self.decode(encoded,
+                       inputs,  # only used for masks
+                       targets,
+                       targets_positions=targets_positions,
+                       inputs_segmentation=inputs_segmentation,
+                       targets_segmentation=targets_segmentation)
