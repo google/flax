@@ -14,6 +14,7 @@
 
 """Flax implementation of ResNet V1."""
 
+
 # See issue #620.
 # pytype: disable=wrong-arg-count
 

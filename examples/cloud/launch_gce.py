@@ -15,6 +15,7 @@
 # Script for creating VM on Google cloud and run a Flax example inside.
 # See ./README.md for instructions.
 
+
 import datetime
 import os
 import re

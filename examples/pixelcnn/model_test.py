@@ -20,6 +20,7 @@ from flax import linen as nn
 from absl.testing import absltest
 from absl.testing import parameterized
 
+
 import numpy.testing as onp_testing
 
 from jax import random

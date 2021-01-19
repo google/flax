@@ -32,6 +32,7 @@ import numpy as np
 import tensorflow_datasets as tfds
 
 
+
 class CNN(nn.Module):
   """A simple CNN model."""
 

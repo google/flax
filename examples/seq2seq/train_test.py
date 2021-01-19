@@ -16,6 +16,7 @@
 
 import functools
 
+
 from absl.testing import absltest
 import jax
 from jax import random

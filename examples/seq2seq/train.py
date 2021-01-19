@@ -17,6 +17,7 @@
 # See issue #620.
 # pytype: disable=wrong-keyword-args
 
+
 import random
 from absl import app
 from absl import flags

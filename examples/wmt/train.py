@@ -17,6 +17,7 @@
 This script trains a Transformer on a WMT dataset.
 """
 
+
 # pytype: disable=wrong-arg-count
 # pytype: disable=attribute-error
 

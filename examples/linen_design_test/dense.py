@@ -18,6 +18,7 @@ from flax.linen import initializers
 from typing import Callable
 from flax.linen import Module, compact
 
+
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 

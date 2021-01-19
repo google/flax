@@ -17,6 +17,7 @@
 # pytype: disable=wrong-arg-count
 # pytype: disable=wrong-keyword-args
 
+
 from absl import app
 from absl import flags
 import numpy as np

@@ -18,6 +18,7 @@ import codecs
 import collections
 import enum
 
+
 import tensorflow.compat.v2 as tf
 
 # Values for padding, unknown words and a root.
