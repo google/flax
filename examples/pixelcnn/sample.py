@@ -22,8 +22,10 @@ from flax import optim
 import pixelcnn
 import train
 import jax
+
 from jax import random
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 import ml_collections
 import numpy as onp
 from PIL import Image

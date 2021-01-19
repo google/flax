@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import jax
+
 from jax import numpy as jnp, random, lax
 from flax.linen import initializers
 from typing import Callable

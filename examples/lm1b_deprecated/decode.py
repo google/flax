@@ -15,9 +15,11 @@
 """Fast decoding routines for inference from a trained language model."""
 
 import jax
+
 from jax import lax
 from jax import random
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 import numpy as np
 
 

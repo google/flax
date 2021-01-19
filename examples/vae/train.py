@@ -20,8 +20,10 @@
 from absl import app
 from absl import flags
 import numpy as np
-import jax.numpy as jnp
 import jax
+.numpy as jnp
+import jax
+
 from jax import random
 from jax.config import config
 config.enable_omnistaging()

@@ -19,7 +19,8 @@ from typing import Callable, Any, Optional
 from flax import linen as nn
 from flax import struct
 
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 import numpy as np
 
 

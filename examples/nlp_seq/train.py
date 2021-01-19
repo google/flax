@@ -27,11 +27,14 @@ from absl import flags
 from absl import logging
 from jax import random
 import jax
-import jax.numpy as jnp
+
+import jax
+.numpy as jnp
 import numpy as np
 import tensorflow as tf
 
-from flax import jax_utils
+from flax import jax
+_utils
 from flax import linen as nn
 from flax import optim
 from flax.metrics import tensorboard

@@ -17,8 +17,11 @@
 import functools
 from typing import Tuple, List
 import jax
-import jax.random
-import jax.numpy as jnp
+
+import jax
+.random
+import jax
+.numpy as jnp
 import numpy as onp
 import flax
 

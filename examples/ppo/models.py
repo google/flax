@@ -19,7 +19,9 @@ import numpy as onp
 from flax import linen as nn
 from flax import optim
 import jax
-import jax.numpy as jnp
+
+import jax
+.numpy as jnp
 
 # See issue #620.
 # pytype: disable=wrong-keyword-args

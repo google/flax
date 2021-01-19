@@ -25,6 +25,8 @@ from configs import v100_x8_mixed_precision as config_lib
 from flax.testing import Benchmark
 
 import jax
+
+
 import numpy as np
 import tensorflow as tf
 

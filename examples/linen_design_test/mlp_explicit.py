@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import jax
+
 from jax import numpy as jnp, random, lax
 from flax import nn
 from flax.nn import initializers

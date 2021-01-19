@@ -15,6 +15,7 @@
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
 
 import jax
+
 from jax import numpy as jnp, random, lax
 import numpy as np
 

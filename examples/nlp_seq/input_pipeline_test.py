@@ -20,6 +20,7 @@ from absl.testing import absltest
 
 import input_pipeline
 import jax
+
 import tensorflow.compat.v2 as tf
 
 # Enable direct iteration over a tf-datasets.

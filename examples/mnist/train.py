@@ -26,7 +26,9 @@ from flax import linen as nn
 from flax import optim
 from flax.metrics import tensorboard
 import jax
-import jax.numpy as jnp
+
+import jax
+.numpy as jnp
 import ml_collections
 import numpy as np
 import tensorflow_datasets as tfds

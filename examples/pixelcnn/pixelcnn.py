@@ -43,8 +43,10 @@ from typing import Any, Callable, Iterable, Tuple, Optional, Union
 
 import flax.linen as nn
 import jax
+
 from jax import lax
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 from jax.scipy.special import logsumexp
 import numpy as onp
 

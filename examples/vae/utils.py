@@ -24,7 +24,9 @@ import math
 from PIL import Image
 
 import jax
-import jax.numpy as jnp
+
+import jax
+.numpy as jnp
 
 
 def save_image(ndarray, fp, nrow=8, padding=2, pad_value=0.0, format=None):

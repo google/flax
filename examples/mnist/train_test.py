@@ -21,6 +21,7 @@ from absl.testing import absltest
 import train
 from configs import default
 import jax
+
 from jax import numpy as jnp
 import tensorflow as tf
 import tensorflow_datasets as tfds

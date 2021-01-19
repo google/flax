@@ -14,6 +14,7 @@
 
 from dataclasses import dataclass
 import jax
+
 from jax import numpy as jnp, random, lax, jit
 from flax import linen as nn
 from flax.core.scope import Scope

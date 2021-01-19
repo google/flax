@@ -17,8 +17,10 @@
 import typing
 import flax
 import jax
+
 from jax import lax
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 import numpy as np
 
 # Constants

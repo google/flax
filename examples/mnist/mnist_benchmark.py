@@ -17,6 +17,7 @@ import time
 from absl.testing import absltest
 
 import jax
+
 import numpy as np
 from flax.testing import Benchmark
 

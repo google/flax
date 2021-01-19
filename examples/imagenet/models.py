@@ -21,7 +21,8 @@ from functools import partial
 from typing import Any, Callable, Sequence, Tuple
 
 from flax import linen as nn
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 
 ModuleDef = Any
 

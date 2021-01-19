@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import jax
+
 from jax import numpy as jnp, random, lax
 from flax import linen as nn
 from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union

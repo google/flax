@@ -34,7 +34,8 @@ import functools
 import datetime
 
 from absl import logging
-from flax import jax_utils
+from flax import jax
+_utils
 from flax import optim
 import input_pipeline
 import pixelcnn
@@ -42,7 +43,9 @@ from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import common_utils
 import jax
-import jax.numpy as jnp
+
+import jax
+.numpy as jnp
 import numpy as np
 import ml_collections
 import tensorflow as tf

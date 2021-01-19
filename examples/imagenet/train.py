@@ -26,7 +26,8 @@ from absl import logging
 from clu import periodic_actions
 
 import flax
-from flax import jax_utils
+from flax import jax
+_utils
 from flax import optim
 
 import input_pipeline
@@ -37,10 +38,12 @@ from flax.training import checkpoints
 from flax.training import common_utils
 
 import jax
+
 from jax import lax
 from jax import random
 
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 
 import ml_collections
 

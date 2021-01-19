@@ -23,7 +23,8 @@
 from typing import Callable, Any, Optional
 
 from jax import lax
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 import numpy as np
 
 from flax import linen as nn

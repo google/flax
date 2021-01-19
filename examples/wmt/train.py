@@ -27,7 +27,8 @@ import os
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
-from flax import jax_utils
+from flax import jax
+_utils
 from flax import linen as nn
 from flax import optim
 import bleu
@@ -37,7 +38,9 @@ import models
 from flax.training import checkpoints
 from flax.training import common_utils
 import jax
-import jax.numpy as jnp
+
+import jax
+.numpy as jnp
 import ml_collections
 import numpy as np
 import tensorflow as tf

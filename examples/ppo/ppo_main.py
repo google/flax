@@ -19,7 +19,9 @@ import os
 from absl import flags
 from absl import app
 import jax
-import jax.random
+
+import jax
+.random
 import tensorflow as tf
 from ml_collections import config_flags
 

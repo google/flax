@@ -23,7 +23,8 @@ from absl import flags
 from absl import logging
 import functools
 
-from flax import jax_utils
+from flax import jax
+_utils
 from flax import linen as nn
 from flax import optim
 from flax.core import Scope, init, apply, unfreeze, lift
@@ -31,7 +32,9 @@ from flax.core import Scope, init, apply, unfreeze, lift
 from typing import Any, Callable, Tuple
 
 import jax
-import jax.numpy as jnp
+
+import jax
+.numpy as jnp
 from jax.config import config
 config.enable_omnistaging()
 

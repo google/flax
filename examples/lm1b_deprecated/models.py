@@ -16,7 +16,8 @@
 
 from flax import nn
 from jax import lax
-import jax.numpy as jnp
+import jax
+.numpy as jnp
 import numpy as np
 
 

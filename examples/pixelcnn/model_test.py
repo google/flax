@@ -23,7 +23,8 @@ from absl.testing import parameterized
 import numpy.testing as onp_testing
 
 from jax import random
-import jax.numpy as np
+import jax
+.numpy as np
 from jax.config import config
 config.enable_omnistaging()
 

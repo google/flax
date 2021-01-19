@@ -15,6 +15,7 @@
 """Unit tests for the PPO example."""
 
 import jax
+
 import flax
 import numpy as onp
 import numpy.testing as onp_testing
