@@ -310,8 +310,8 @@ class Optimizer(struct.PyTreeNode):
     """Replicates an optimizer for data parallel training.
 
     A replicated optimizer will automatically average the gradients across
-      devices. For this to work correctly the optimize method should be called
-      within the context of a `jax.pmap` call with the correct axis_name.
+    devices. For this to work correctly the optimize method should be called
+    within the context of a `jax.pmap` call with the correct axis_name.
 
     DEPRECATION WARNING:
     replicate() is deprecated.
@@ -334,8 +334,8 @@ class Optimizer(struct.PyTreeNode):
     """Un-replicates an optimizer.
 
     This will create a new optimizer with the target and state of the first
-      device this optimizer was replicated to. After this call the optimizer
-      and the target can be used outside of a `jax.pmap` call.
+    device this optimizer was replicated to. After this call the optimizer
+    and the target can be used outside of a `jax.pmap` call.
 
     DEPRECATION WARNING:
     unreplicate() is deprecated.
