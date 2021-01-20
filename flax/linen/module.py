@@ -725,6 +725,12 @@ class Module:
            **kwargs) -> VariableDict:
     """Initializes a module method with variables and returns modified variables.
 
+    Calling `jax.jit` on init will make JAX trace through the model and compile
+    it at once, which means we possibly avoid many small op-by-op compilations.
+    However, it does mean we cannot re-use ops (e.g., for compiling many kernels
+    of the same shape), so it depends on the specifics of the model whether this
+    is a good idea or not.
+
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
