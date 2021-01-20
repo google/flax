@@ -28,7 +28,7 @@
 # limitations under the License.
 """Serialization utilities for Jax.
 
-All flax classes that carry state like Model and Optimizer can be turned into a
+All Flax classes that carry state (e.g. ,Optimizer) can be turned into a
 state dict of numpy arrays for easy serialization.
 """
 import collections
