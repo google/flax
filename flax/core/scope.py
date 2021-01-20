@@ -602,10 +602,10 @@ def apply(fn: Callable[..., Any],
     new_variables = _unfreeze_variables(variables, mutable)
     with Scope(new_variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
-    if mutable:
-      mutated_variables = {
-          k: v for k, v in new_variables.items() if in_filter(mutable, k)
-      }
+    if mutable is not False:
+      mutated_variables = {k: v
+                           for k, v in new_variables.items()
+                           if in_filter(mutable, k)}
       return y, freeze(mutated_variables)
     else:
       return y
