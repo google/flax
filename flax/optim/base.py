@@ -12,55 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax Optimizer api.
-
-Flax optimizers are defined using the OptimizerDef class which specifies the
-initialization and gradient application logic.
-Creating an optimizer using the `create` method will result in an instance of
-the `Optimizer` class which encapsulates the optimization target and state.
-
-Example of constructing an optimizer for a model::
-
-  from flax import optim
-  optimizer_def = optim.GradientDescent(learning_rate=0.1)
-  optimizer = optimizer_def.create(model)
-
-The optimizer is then used in a training step as follows::
-
-  def train_step(optimizer, data):
-    def loss_fn(model):
-      y = model(data)
-      loss = ... # compute the loss
-      aux = ... # compute auxiliary outputs (eg. training metrics)
-      return loss, aux
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, aux), grad = grad_fn(optimizer.target)
-    new_optimizer = optimizer.apply_gradient(grad)
-    return new_optimizer, loss, aux
-
-
-Distributed training only requires a few extra additions::
-
-  from flax import optim
-  optimizer_def = optim.GradientDescent(learning_rate=0.1)
-  optimizer = optimizer_def.create(model)
-  optimizer = jax_utils.replicate(optimizer)
-
-  def train_step(optimizer, data):
-    def loss_fn(model):
-      y = model(data)
-      loss = ... # compute the loss
-      aux = ... # compute auxiliary outputs (eg. training metrics)
-      return loss, aux
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, aux), grad = grad_fn(optimizer.target)
-    grad = jax.lax.pmean(grad, 'batch')
-    new_optimizer = optimizer.apply_gradient(grad)
-    return new_optimizer, loss, aux
-
-  distributed_train_step = jax.pmap(train_step, axis_name='batch')
-
-"""
+"""Flax Optimizer api."""
 
 from typing import Any
 import warnings
@@ -85,7 +37,10 @@ class OptimizerState:
 
 
 class OptimizerDef:
-  """Base class for optimizers."""
+  """Base class for an optimizer defintion, which specifies the initialization and gradient application logic.
+  
+  See docstring of :class:`Optimizer` for more details.
+  """
 
   def __init__(self, hyper_params):
     self.hyper_params = hyper_params
@@ -164,6 +119,8 @@ class OptimizerDef:
   def create(self, target, focus=None):
     """Creates a new optimizer for the given target.
 
+    See docstring of :class:`Optimizer` for more details.
+
     Args:
       target: the object to be optimized. This will typically be
         an instance of `flax.nn.Model`.
@@ -215,7 +172,59 @@ class _NoAux:
 
 
 class Optimizer(struct.PyTreeNode):
-  """Wraps an optimizer with its hyper_params, state, and model parameters."""
+  """
+  Flax optimizers are created using the :class:`OptimizerDef` class. That class
+  specifies the initialization and gradient application logic. Creating an 
+  optimizer using the :meth:`OptimizerDef.create` method will result in an 
+  instance of the :class:`Optimizer` class, which encapsulates the optimization
+  target and state. The optimizer is updated using the method 
+  :meth:`apply_gradient`.
+
+  Example of constructing an optimizer for a model::
+
+    from flax import optim
+    optimizer_def = optim.GradientDescent(learning_rate=0.1)
+    optimizer = optimizer_def.create(model)
+
+  The optimizer is then used in a training step as follows::
+
+    def train_step(optimizer, data):
+      def loss_fn(model):
+        y = model(data)
+        loss = ... # compute the loss
+        aux = ... # compute auxiliary outputs (eg. training metrics)
+        return loss, aux
+      grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+      (loss, aux), grad = grad_fn(optimizer.target)
+      new_optimizer = optimizer.apply_gradient(grad)
+      return new_optimizer, loss, aux
+
+
+  Distributed training only requires a few extra additions::
+
+    from flax import optim
+    optimizer_def = optim.GradientDescent(learning_rate=0.1)
+    optimizer = optimizer_def.create(model)
+    optimizer = jax_utils.replicate(optimizer)
+
+    def train_step(optimizer, data):
+      def loss_fn(model):
+        y = model(data)
+        loss = ... # compute the loss
+        aux = ... # compute auxiliary outputs (eg. training metrics)
+        return loss, aux
+      grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+      (loss, aux), grad = grad_fn(optimizer.target)
+      grad = jax.lax.pmean(grad, 'batch')
+      new_optimizer = optimizer.apply_gradient(grad)
+      return new_optimizer, loss, aux
+
+    distributed_train_step = jax.pmap(train_step, axis_name='batch')
+
+  Attributes:
+    optimizer_def: The optimizer definition.
+    state: The initial state of the optimizer.
+    target: The target to optimizer."""
 
   optimizer_def: OptimizerDef = struct.field(pytree_node=False)
   state: Any = struct.field(pytree_node=True)
@@ -301,8 +310,13 @@ class Optimizer(struct.PyTreeNode):
     """Replicates an optimizer for data parallel training.
 
     A replicated optimizer will automatically average the gradients across
-      devices. For this to work correctly the optimize method should be called
-      within the context of a `jax.pmap` call with the correct axis_name.
+    devices. For this to work correctly the optimize method should be called
+    within the context of a `jax.pmap` call with the correct axis_name.
+
+    DEPRECATION WARNING:
+    replicate() is deprecated.
+    Use jax_utils.replicate() instead.
+
     Args:
       devices: an optional list of devices defining which devices this optimizer
         is replicated to (default: all local devices).
@@ -320,8 +334,12 @@ class Optimizer(struct.PyTreeNode):
     """Un-replicates an optimizer.
 
     This will create a new optimizer with the target and state of the first
-      device this optimizer was replicated to. After this call the optimizer
-      and the target can be used outside of a `jax.pmap` call.
+    device this optimizer was replicated to. After this call the optimizer
+    and the target can be used outside of a `jax.pmap` call.
+
+    DEPRECATION WARNING:
+    unreplicate() is deprecated.
+    Use jax_utils.unreplicate() instead.
 
     Returns:
       The optimizer that is no longer replicated.
@@ -395,23 +413,40 @@ class ReplicatedOptimizer(OptimizerDef):
 
 
 class MultiOptimizer(OptimizerDef):
-  """Combine a set of optimizers by applying each to a subset of the parameters."""
+  """ 
+  A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying 
+  separate optimizer algorithms to various subsets of the model parameters. 
+  
+  The example below creates two optimizers using :class:`ModelParamTraversal`:
+  one to optimize ``kernel`` parameters and to optimize ``bias`` parameters.
+  Note each optimizer is created with a different learning rate::
+
+    kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
+    biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
+    kernel_opt = optim.Momentum(learning_rate=0.01)
+    bias_opt = optim.Momentum(learning_rate=0.1)
+    opt_def = MultiOptimizer((kernels, kernel_opt), (biases, bias_opt))
+    optimizer = opt_def.create(model)
+
+  In order to train only a subset of the parameters, you can simply use a single
+  :class:`ModelParamTraversal` instance.
+
+  If you want to update the learning rates of both optimizers online with
+  different learning rate schedules, you should update the learning rates when
+  applying the gradient as follows::
+
+    new_optimizer = optimizer.apply_gradient(
+        grads, 
+        hyper_params=[
+          optimizer.optimizer_def.hyper_params[0].replace(learning_rate=0.2), 
+          optimizer.optimizer_def.hyper_params[1].replace(learning_rate=0.4),
+        ])
+  """
 
   def __init__(self, *traversals_and_optimizers):
     """Create a new MultiOptimizer.
 
-    A MultiOptimizer is useful when separate optimizer algorithms should be
-    applied to various subsets of the model parameters.
-
-    Example::
-
-      kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
-      biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
-      kernel_opt = optim.Momentum(learning_rate=0.01)
-      bias_opt = optim.Momentum(learning_rate=0.1)
-      opt_def = MultiOptimizer((kernels, kernel_opt), (biases, bias_opt))
-      optimizer = opt_def.create(model)
-
+    See docstring of :class:`MultiOptimizer` for more details.
 
     Args:
       *traversals_and_optimizers: pairs of flax.traverse_util.Traversal and
@@ -446,7 +481,7 @@ class MultiOptimizer(OptimizerDef):
   def update_hyper_params(self, **hyper_param_overrides):
     """Updates the hyper parameters with a set of overrides.
 
-    This method is called from Optimizer apply_gradient to create the
+    This method is called from :meth:`Optimizer.apply_gradient` to create the
     hyper parameters for a specific optimization step.
     MultiOptimizer will apply the overrides for each sub optimizer.
 
@@ -469,22 +504,25 @@ def _sorted_items(x):
 
 
 class ModelParamTraversal(traverse_util.Traversal):
-  """Select model parameters using a name filter."""
+  """Select model parameters using a name filter.
+  
+  This traversal operates on a nested dictionary of parameters and selects a
+  subset based on the `filter_fn` argument.
+
+  See :class:`MultiOptimizer` for an example of how to use 
+  :class:`ModelParamTraversal` to update subsets of the parameter tree with a
+  specific optimizer.
+
+  Backward compatibility:
+  When using the old api the parameters can be encapsulated in a 
+  :class:`flax.nn.Model` instance.
+  """
 
   def __init__(self, filter_fn):
     """Constructor a new ModelParamTraversal.
 
-    This traversal operates on a nested dictionary of paramaters and selects a subset
-    based on the `filter_fn` argument.
-
-    See `MultiOptimizer` for an example of how to use `ModelParamTraversal` to update
-    subsets of the paramater tree with a specific optimizer.
-
-    Backward compatibility:
-    When using the old api the paramaters can be encapsulated in a `flax.nn.Model` instance.
-
     Args:
-      filter_fn: a function that takes a parameters full name and its value and
+      filter_fn: a function that takes a parameter's full name and its value and
         returns whether this parameter should be selected or not. The name of a
         parameter is determined by the module hierarchy and the parameter name
         (for example: '/module/sub_module/parameter_name').
