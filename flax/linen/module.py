@@ -438,6 +438,10 @@ class Module:
             raise ValueError(
                 "You can only assign submodules to self in setup().")
           if subvalue.parent is _unspecified_parent:
+            raise ValueError("Unexpected -- parent should have been assigned during __post_init__")
+          elif subvalue.parent is None:
+            # Attaching unbound modules -- this pattern is used
+            # for "model surgery" on `nn.Sequential` type models.
             subvalue.parent = self
           elif subvalue.parent is not self:
             raise ValueError("Can't attach to remote parent in setup, pass in "

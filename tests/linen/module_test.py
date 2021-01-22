@@ -25,7 +25,7 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as onp
-from typing import Any, Tuple, Iterable, Callable
+from typing import Any, Tuple, Iterable, Callable, Sequence
 
 from flax import linen as nn
 from flax.linen import compact
@@ -735,6 +735,30 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
       foo.init(random.PRNGKey(0))
 
+  def test_sequential_submodule_attributes(self):
+    """Test that it's possible to pass in an unbound submodule into another module, and attach in `setup`."""
+    class Sequential(nn.Module):
+      submodules: Sequence[nn.Module]
+
+      def setup(self):
+        self.layers = self.submodules
+
+      def __call__(self, x):
+        for layer in self.layers:
+          x = layer(x)
+        return x
+
+    def CNN():
+      return Sequential([
+        nn.Conv(features=32, kernel_size=(3, 3)),
+        nn.relu,
+        nn.Dense(features=10),
+      ])
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((5,4,4,3))
+
+    CNN().init(key, x)  # just make sure this doens't fail
 
 if __name__ == '__main__':
   absltest.main()
