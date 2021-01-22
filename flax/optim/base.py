@@ -125,7 +125,8 @@ class OptimizerDef:
       target: the object to be optimized. This will typically be
         an instance of `flax.nn.Model`.
       focus: a `flax.traverse_util.Traversal` that selects which subset of
-        the target is optimized.
+        the target is optimized. See docstring of :class:`MultiOptimizer` 
+        for an example of how to define a `Traversal` object.
     Returns:
       An instance of `Optimizer`.
     """
