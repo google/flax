@@ -38,6 +38,9 @@ handle_errors () {
     fi
 }
 
+# Run embedded tests inside docs
+sphinx-build -M doctest docs docs/_build
+
 # Run battery of core FLAX API tests.
 pytest -n 4 tests $PYTEST_OPTS
 
