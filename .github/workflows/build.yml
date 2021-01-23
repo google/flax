@@ -34,6 +34,9 @@ jobs:
     - name: Build documentation
       run: |
         sphinx-build -M html docs docs/_build
+    - name: Lint with pylint
+      run: |
+        pylint flax -rn --load-plugins=pylint.extensions.check_docs --accept-no-param-doc=n
     - name: Test with pytest and generate coverage report
       run: |
         tests/run_all_tests.sh --with-cov
