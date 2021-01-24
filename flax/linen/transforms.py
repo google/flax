@@ -54,7 +54,7 @@ def get_module_scopes(module):
   def get_scope(x):
     nonlocal outer_scopes
     if isinstance(x, Module) and isinstance(x.scope, Scope):
-      outer_scopes.append(x.scope)
+      outer_scopes.extend(get_module_scopes(x))
     return x
   attrs = {f.name: getattr(module, f.name)
            for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
@@ -81,19 +81,20 @@ def set_module_scopes(module, scopes):
     to this function.
   """
   idx = 0
-  def set_scope(x):
+  def set_scopes(module):
     nonlocal idx
-    if isinstance(x, Module) and isinstance(x.scope, Scope):
-      new_x = x.clone(parent=scopes[idx])
-      idx += 1
-      return new_x
-    else:
-      return x
-  attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
-  new_attrs = jax.tree_map(set_scope, attrs)
-  new_module = module.clone(parent=scopes[idx], **new_attrs)
-  idx += 1
+    def set_scopes_inner(x):
+      if isinstance(x, Module) and isinstance(x.scope, Scope):
+        return set_scopes(x)
+      else:
+        return x
+    attrs = {f.name: getattr(module, f.name)
+             for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
+    new_attrs = jax.tree_map(set_scopes_inner, attrs)
+    new_module = module.clone(parent=scopes[idx], **new_attrs)
+    idx += 1
+    return new_module
+  new_module = set_scopes(module)
   assert len(scopes) == idx, f'scope list mismatch {len(scopes)} != {idx}'
   return new_module
 
