@@ -16,16 +16,4 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
-                         log_softmax, relu, sigmoid, soft_sign, softmax,
-                         softplus, swish, silu, tanh)
-from .attention import (dot_product_attention, MultiHeadDotProductAttention,
-                        SelfAttention)
-from .base import (Module, Model, Collection, capture_module_outputs,
-                   module, stateful, get_state, module_method)
-from .linear import Dense, DenseGeneral, Conv, ConvTranspose, Embed
-from .normalization import BatchNorm, LayerNorm, GroupNorm
-from .pooling import max_pool, avg_pool
-from .recurrent import LSTMCell, GRUCell, ConvLSTM, OptimizedLSTMCell
-from .stochastic import make_rng, stochastic, dropout, is_stochastic
 # pylint: enable=g-multiple-import

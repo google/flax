@@ -15,43 +15,45 @@
 import pathlib
 import tempfile
 
-from absl import logging
-from absl.testing import absltest
-import train
-from configs import default
 import tensorflow as tf
 import tensorflow_datasets as tfds
+import train
+from absl import logging
+from absl.testing import absltest
+from configs import default
 
 
 def get_test_config():
-  config = default.get_config()
-  config.init_batch_size = 8
-  config.batch_size = 8
-  config.num_epochs = 1
-  config.n_resent = 1
-  config.n_feature = 8
-  return config
+    config = default.get_config()
+    config.init_batch_size = 8
+    config.batch_size = 8
+    config.num_epochs = 1
+    config.n_resent = 1
+    config.n_feature = 8
+    return config
 
 
 class TrainTest(absltest.TestCase):
-  """Test cases for PixelCNN library."""
+    """Test cases for PixelCNN library."""
 
-  def setUp(self):
-    super().setUp()
-    tf.config.experimental.set_visible_devices([], 'GPU')
+    def setUp(self):
+        super().setUp()
+        tf.config.experimental.set_visible_devices([], "GPU")
 
-  def test_train_and_evaluate(self):
-    config = get_test_config()
-    workdir = tempfile.mkdtemp()
+    def test_train_and_evaluate(self):
+        config = get_test_config()
+        workdir = tempfile.mkdtemp()
 
-    # Go two directories up to the root of the flax directory.
-    flax_root_dir = pathlib.Path(__file__).parents[2]
-    data_dir = str(flax_root_dir) + '/.tfds/metadata'  # pylint: disable=unused-variable
+        # Go two directories up to the root of the flax directory.
+        flax_root_dir = pathlib.Path(__file__).parents[2]
+        data_dir = (
+            str(flax_root_dir) + "/.tfds/metadata"
+        )  # pylint: disable=unused-variable
 
-    with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
-      train.train_and_evaluate(config, workdir)
-    logging.info('workdir content: %s', tf.io.gfile.listdir(workdir))
+        with tfds.testing.mock_data(num_examples=8, data_dir=data_dir):
+            train.train_and_evaluate(config, workdir)
+        logging.info("workdir content: %s", tf.io.gfile.listdir(workdir))
 
 
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

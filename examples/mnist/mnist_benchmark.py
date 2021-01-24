@@ -14,57 +14,61 @@
 
 """Benchmark for the MNIST example."""
 import time
-from absl.testing import absltest
 
 import jax
 import numpy as np
-from flax.testing import Benchmark
-
 import train
+from absl.testing import absltest
 from configs import default
+
+from flax.testing import Benchmark
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
 
 class MnistBenchmark(Benchmark):
-  """Benchmarks for the MNIST Flax example."""
+    """Benchmarks for the MNIST Flax example."""
 
-  def test_cpu(self):
-    """Run full training for MNIST CPU training."""
-    workdir = self.get_tmp_model_dir()
-    config = default.get_config()
+    def test_cpu(self):
+        """Run full training for MNIST CPU training."""
+        workdir = self.get_tmp_model_dir()
+        config = default.get_config()
 
-    start_time = time.time()
-    train.train_and_evaluate(config=config, workdir=workdir)
-    benchmark_time = time.time() - start_time
+        start_time = time.time()
+        train.train_and_evaluate(config=config, workdir=workdir)
+        benchmark_time = time.time() - start_time
 
-    summaries = self.read_summaries(workdir)
+        summaries = self.read_summaries(workdir)
 
-    # Summaries contain all the information necessary for the regression
-    # metrics.
-    wall_time, _, eval_accuracy = zip(*summaries['eval_accuracy'])
-    wall_time = np.array(wall_time)
-    sec_per_epoch = np.mean(wall_time[1:] - wall_time[:-1])
-    end_eval_accuracy = eval_accuracy[-1]
+        # Summaries contain all the information necessary for the regression
+        # metrics.
+        wall_time, _, eval_accuracy = zip(*summaries["eval_accuracy"])
+        wall_time = np.array(wall_time)
+        sec_per_epoch = np.mean(wall_time[1:] - wall_time[:-1])
+        end_eval_accuracy = eval_accuracy[-1]
 
-    # Assertions are deferred until the test finishes, so the metrics are
-    # always reported and benchmark success is determined based on *all*
-    # assertions.
-    self.assertBetween(end_eval_accuracy, 0.98, 1.0)
+        # Assertions are deferred until the test finishes, so the metrics are
+        # always reported and benchmark success is determined based on *all*
+        # assertions.
+        self.assertBetween(end_eval_accuracy, 0.98, 1.0)
 
-    # Use the reporting API to report single or multiple metrics/extras.
-    self.report_wall_time(benchmark_time)
-    self.report_metrics({
-        'sec_per_epoch': sec_per_epoch,
-        'accuracy': end_eval_accuracy,
-    })
-    self.report_extras({
-        'model_name': 'MNIST',
-        'description': 'CPU test for MNIST.',
-        'implementation': 'linen',
-    })
+        # Use the reporting API to report single or multiple metrics/extras.
+        self.report_wall_time(benchmark_time)
+        self.report_metrics(
+            {
+                "sec_per_epoch": sec_per_epoch,
+                "accuracy": end_eval_accuracy,
+            }
+        )
+        self.report_extras(
+            {
+                "model_name": "MNIST",
+                "description": "CPU test for MNIST.",
+                "implementation": "linen",
+            }
+        )
 
 
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

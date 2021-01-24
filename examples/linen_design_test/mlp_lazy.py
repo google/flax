@@ -12,13 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pprint import pprint
+
 import jax
-from jax import numpy as jnp, random, lax
+from dense import Dense
+from jax import numpy as jnp
+
 from flax import linen as nn
 from flax.linen import Module
-import numpy as np
-from pprint import pprint
-from dense import Dense
 
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
@@ -26,16 +27,17 @@ jax.config.enable_omnistaging()
 # Here submodules are explicitly defined during init, but still materialized
 # lazily only once a first input is passed through and shapes are known.
 class MLP(Module):
-  def setup(self):
-    self.dense1 = Dense(features=2)
-    self.dense2 = Dense(features=1)
+    def setup(self):
+        self.dense1 = Dense(features=2)
+        self.dense2 = Dense(features=1)
 
-    # shapes aren't yet known, so variables aren't materialized
-    print(self.dense2.variables)
-    # FrozenDict({})
+        # shapes aren't yet known, so variables aren't materialized
+        print(self.dense2.variables)
+        # FrozenDict({})
 
-  def __call__(self, x):
-    return self.dense2(nn.relu(self.dense1(x)))
+    def __call__(self, x):
+        return self.dense2(nn.relu(self.dense1(x)))
+
 
 # Return an initialized instance of MLP by calling `__call__` with an input batch,
 # initializing all variables.
@@ -52,4 +54,3 @@ pprint(mlp_variables)
 #            'dense2': {'bias': DeviceArray([0.], dtype=float32),
 #                       'kernel': DeviceArray([[ 0.6704609 ],
 #              [-0.90477365]], dtype=float32)}}}
-

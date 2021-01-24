@@ -14,67 +14,72 @@
 
 import jax.numpy as jnp
 import numpy as onp
+
 from .. import struct
 from .base import OptimizerDef
 
 
 @struct.dataclass
 class _RMSPropHyperParams:
-  """RMSProp hyper parameters"""
+    """RMSProp hyper parameters"""
 
-  learning_rate: float
-  beta2: float
-  eps: float
-  centered: bool
+    learning_rate: float
+    beta2: float
+    eps: float
+    centered: bool
 
 
 @struct.dataclass
 class _RMSPropParamState:
-  """RMSProp parameter state"""
+    """RMSProp parameter state"""
 
-  v: onp.ndarray
-  mg: onp.ndarray
+    v: onp.ndarray
+    mg: onp.ndarray
 
 
 class RMSProp(OptimizerDef):
-  """RMSProp optimizer"""
-  def __init__(self, learning_rate: float = None, beta2=0.9, eps=1e-8,
-               centered=False):
-    """Constructor for the RMSProp optimizer
+    """RMSProp optimizer"""
 
-    Args:
-      learning_rate: the step size used to update the parameters.
-      beta2: the coefficient used for the moving average of the
-        gradient magnitude (default: 0.9).
-      eps: the term added to the gradient magnitude estimate for
-        numerical stability.
-      centered: If `True`, gradients are normalized by the estimated
-        variance of the gradient; if False, by the uncentered second moment.
-        Setting this to `True` may help with training, but is slightly more
-        expensive in terms of computation and memory. Defaults to `False`.
-    """
-    hyper_params = _RMSPropHyperParams(learning_rate, beta2, eps, centered)
-    super().__init__(hyper_params)
+    def __init__(
+        self, learning_rate: float = None, beta2=0.9, eps=1e-8, centered=False
+    ):
+        """Constructor for the RMSProp optimizer
 
-  def init_param_state(self, param):
-    """Initialize parameter state"""
-    mg = jnp.zeros_like(param) if self.hyper_params.centered else None
-    return _RMSPropParamState(jnp.zeros_like(param), mg)
+        Args:
+          learning_rate: the step size used to update the parameters.
+          beta2: the coefficient used for the moving average of the
+            gradient magnitude (default: 0.9).
+          eps: the term added to the gradient magnitude estimate for
+            numerical stability.
+          centered: If `True`, gradients are normalized by the estimated
+            variance of the gradient; if False, by the uncentered second moment.
+            Setting this to `True` may help with training, but is slightly more
+            expensive in terms of computation and memory. Defaults to `False`.
+        """
+        hyper_params = _RMSPropHyperParams(learning_rate, beta2, eps, centered)
+        super().__init__(hyper_params)
 
-  def apply_param_gradient(self, step, hyper_params, param, state, grad):
-    """Apply per-parameter gradients"""
+    def init_param_state(self, param):
+        """Initialize parameter state"""
+        mg = jnp.zeros_like(param) if self.hyper_params.centered else None
+        return _RMSPropParamState(jnp.zeros_like(param), mg)
 
-    assert hyper_params.learning_rate is not None, 'no learning rate provided.'
-    new_v = hyper_params.beta2 * state.v + (
-        1.0 - hyper_params.beta2) * jnp.square(grad)
-    if hyper_params.centered:
-      new_mg = hyper_params.beta2 * state.mg + (1.0 - hyper_params.beta2) * grad
-      maybe_centered_v = new_v - jnp.square(new_mg)
-    else:
-      new_mg = state.mg
-      maybe_centered_v = new_v
-    new_param = param - hyper_params.learning_rate * grad / ( 
-        jnp.sqrt(maybe_centered_v) + hyper_params.eps)
-    new_state = _RMSPropParamState(new_v, new_mg)
+    def apply_param_gradient(self, step, hyper_params, param, state, grad):
+        """Apply per-parameter gradients"""
 
-    return new_param, new_state
+        assert hyper_params.learning_rate is not None, "no learning rate provided."
+        new_v = hyper_params.beta2 * state.v + (1.0 - hyper_params.beta2) * jnp.square(
+            grad
+        )
+        if hyper_params.centered:
+            new_mg = hyper_params.beta2 * state.mg + (1.0 - hyper_params.beta2) * grad
+            maybe_centered_v = new_v - jnp.square(new_mg)
+        else:
+            new_mg = state.mg
+            maybe_centered_v = new_v
+        new_param = param - hyper_params.learning_rate * grad / (
+            jnp.sqrt(maybe_centered_v) + hyper_params.eps
+        )
+        new_state = _RMSPropParamState(new_v, new_mg)
+
+        return new_param, new_state

@@ -14,12 +14,19 @@
 
 """Flax Optimizer api."""
 
+from .adafactor import Adafactor
+from .adagrad import Adagrad
+
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
 from .adam import Adam
-from .adafactor import Adafactor
-from .adagrad import Adagrad
-from .base import OptimizerState, OptimizerDef, Optimizer, MultiOptimizer, ModelParamTraversal
+from .base import (
+    ModelParamTraversal,
+    MultiOptimizer,
+    Optimizer,
+    OptimizerDef,
+    OptimizerState,
+)
 from .dynamic_scale import DynamicScale
 from .lamb import LAMB
 from .lars import LARS

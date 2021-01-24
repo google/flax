@@ -13,12 +13,6 @@
 # limitations under the License.
 
 import jax
-from jax import numpy as jnp, random, lax
-from flax import linen as nn
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, compact
-import numpy as np
-from dense import Dense
 
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()

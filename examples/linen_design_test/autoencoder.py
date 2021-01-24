@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
+from typing import Iterable, Tuple
 
 import jax
-from jax import numpy as jnp, random, lax
-import numpy as np
+from jax import numpy as jnp
+from jax import random
 
 from flax import linen as nn
-from flax.linen import Module, Dense, compact
+from flax.linen import Dense, Module, compact
 
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
@@ -27,58 +27,57 @@ jax.config.enable_omnistaging()
 
 # A concise MLP defined via lazy submodule initialization
 class MLP(Module):
-  widths: Iterable
+    widths: Iterable
 
-  @compact
-  def __call__(self, x):
-    for width in self.widths[:-1]:
-      x = nn.relu(Dense(width)(x))
-    return Dense(self.widths[-1])(x)
+    @compact
+    def __call__(self, x):
+        for width in self.widths[:-1]:
+            x = nn.relu(Dense(width)(x))
+        return Dense(self.widths[-1])(x)
 
 
 # An autoencoder exposes multiple methods, so we define all
 # submodules in setup().
 class AutoEncoder(Module):
-  encoder_widths: Iterable
-  decoder_widths: Iterable
-  input_shape: Tuple = None
+    encoder_widths: Iterable
+    decoder_widths: Iterable
+    input_shape: Tuple = None
 
-  def setup(self):
-    # Submodules attached in `setup` get names via attribute assignment
-    self.encoder = MLP(self.encoder_widths)
-    self.decoder = MLP(self.decoder_widths + (jnp.prod(self.input_shape), ))
+    def setup(self):
+        # Submodules attached in `setup` get names via attribute assignment
+        self.encoder = MLP(self.encoder_widths)
+        self.decoder = MLP(self.decoder_widths + (jnp.prod(self.input_shape),))
 
-  def __call__(self, x):
-    return self.decode(self.encode(x))
+    def __call__(self, x):
+        return self.decode(self.encode(x))
 
-  def encode(self, x):
-    assert x.shape[-len(self.input_shape):] == self.input_shape
-    return self.encoder(jnp.reshape(x, (x.shape[0], -1)))
+    def encode(self, x):
+        assert x.shape[-len(self.input_shape) :] == self.input_shape
+        return self.encoder(jnp.reshape(x, (x.shape[0], -1)))
 
-  def decode(self, z):
-    z = self.decoder(z)
-    x = nn.sigmoid(z)
-    x = jnp.reshape(x, (x.shape[0],) + self.input_shape)
-    return x
+    def decode(self, z):
+        z = self.decoder(z)
+        x = nn.sigmoid(z)
+        x = jnp.reshape(x, (x.shape[0],) + self.input_shape)
+        return x
 
 
 # `ae` is a detached module, which has no variables.
 ae = AutoEncoder(
-    encoder_widths=(32, 32, 32),
-    decoder_widths=(32, 32, 32),
-    input_shape=(28, 28, 1))
+    encoder_widths=(32, 32, 32), decoder_widths=(32, 32, 32), input_shape=(28, 28, 1)
+)
 
 
 # `ae.initialized` returnes a materialized copy of `ae` by
 # running through an input to create submodules defined lazily.
-params = ae.init(
-    {'params': random.PRNGKey(42)},
-    jnp.ones((1, 28, 28, 1)))
+params = ae.init({"params": random.PRNGKey(42)}, jnp.ones((1, 28, 28, 1)))
 
 
 # Now you can use `ae` as a normal object, calling any methods defined on AutoEncoder
 print("reconstruct", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)))))
-print("encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method=ae.encode)))
+print(
+    "encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method=ae.encode))
+)
 
 
 # `ae.variables` is a frozen dict that looks like

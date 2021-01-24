@@ -29,5 +29,3 @@
 # limitations under the License.
 
 """Flax testing utilities."""
-
-from .benchmark import Benchmark

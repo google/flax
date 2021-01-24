@@ -15,32 +15,31 @@
 import numpy as onp
 
 from .. import struct
-
 from .base import OptimizerDef
 
 
 @struct.dataclass
 class _GradientDescentHyperParams:
-  learning_rate: onp.ndarray
+    learning_rate: onp.ndarray
 
 
 class GradientDescent(OptimizerDef):
-  """Gradient descent optimizer."""
+    """Gradient descent optimizer."""
 
-  def __init__(self, learning_rate=None):
-    """Constructor for the GradientDescent optimizer.
+    def __init__(self, learning_rate=None):
+        """Constructor for the GradientDescent optimizer.
 
-    Args:
-      learning_rate: the step size used to update the parameters.
-    """
-    hyper_params = _GradientDescentHyperParams(learning_rate)
-    super().__init__(hyper_params)
+        Args:
+          learning_rate: the step size used to update the parameters.
+        """
+        hyper_params = _GradientDescentHyperParams(learning_rate)
+        super().__init__(hyper_params)
 
-  def init_param_state(self, param):
-    return ()
+    def init_param_state(self, param):
+        return ()
 
-  def apply_param_gradient(self, step, hyper_params, param, state, grad):
-    del step
-    assert hyper_params.learning_rate is not None, 'no learning rate provided.'
-    new_param = param - hyper_params.learning_rate * grad
-    return new_param, state
+    def apply_param_gradient(self, step, hyper_params, param, state, grad):
+        del step
+        assert hyper_params.learning_rate is not None, "no learning rate provided."
+        new_param = param - hyper_params.learning_rate * grad
+        return new_param, state

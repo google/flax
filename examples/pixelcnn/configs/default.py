@@ -18,46 +18,46 @@ import ml_collections
 
 
 def get_config():
-  """Get the default hyperparameter configuration."""
-  config = ml_collections.ConfigDict()
+    """Get the default hyperparameter configuration."""
+    config = ml_collections.ConfigDict()
 
-  # The initial learning rate.
-  config.learning_rate = 0.001
+    # The initial learning rate.
+    config.learning_rate = 0.001
 
-  # Learning rate decay, applied each optimization step.
-  config.lr_decay = 0.999995
+    # Learning rate decay, applied each optimization step.
+    config.lr_decay = 0.999995
 
-  # Batch size to use for data-dependent initialization.
-  config.init_batch_size = 16
+    # Batch size to use for data-dependent initialization.
+    config.init_batch_size = 16
 
-  # Batch size for training.
-  config.batch_size = 64
+    # Batch size for training.
+    config.batch_size = 64
 
-  # Number of training epochs.
-  config.num_epochs = 200
+    # Number of training epochs.
+    config.num_epochs = 200
 
-  # Dropout rate.
-  config.dropout_rate = 0.5
+    # Dropout rate.
+    config.dropout_rate = 0.5
 
-  # Number of resnet layers per block.
-  config.n_resnet = 5
+    # Number of resnet layers per block.
+    config.n_resnet = 5
 
-  # Number of features in each conv layer.
-  config.n_feature = 160
+    # Number of features in each conv layer.
+    config.n_feature = 160
 
-  # Number of components in the output distribution.
-  config.n_logistic_mix = 10
+    # Number of components in the output distribution.
+    config.n_logistic_mix = 10
 
-  # Exponential decay rate of the sum of previous model iterates during Polyak
-  # averaging.
-  config.polyak_decay = 0.9995
+    # Exponential decay rate of the sum of previous model iterates during Polyak
+    # averaging.
+    config.polyak_decay = 0.9995
 
-  # Batch size for sampling.
-  config.sample_batch_size = 256
-  # Random number generator seed for sampling.
-  config.sample_rng_seed = 0
+    # Batch size for sampling.
+    config.sample_batch_size = 256
+    # Random number generator seed for sampling.
+    config.sample_rng_seed = 0
 
-  # Integer for PRNG random seed.
-  config.seed = 0
+    # Integer for PRNG random seed.
+    config.seed = 0
 
-  return config
+    return config

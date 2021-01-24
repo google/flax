@@ -12,24 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 import jax
-from jax import numpy as jnp, random, lax, jit
-from flax import linen as nn
-from flax.core.scope import Scope
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, compact
-import numpy as np
-from dense import Dense
-from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
+from jax import numpy as jnp
 
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 
+
 def standardize(x, axis, eps=1e-8):
-  x = x - jnp.mean(x, axis=axis, keepdims=True)
-  x = x / jnp.sqrt(jnp.mean(jnp.square(x), axis=axis, keepdims=True) + eps)
-  return x
+    x = x - jnp.mean(x, axis=axis, keepdims=True)
+    x = x / jnp.sqrt(jnp.mean(jnp.square(x), axis=axis, keepdims=True) + eps)
+    return x
+
 
 # TODO(avital, levskaya): resurrect this example once interactive api is restored.
 

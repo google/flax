@@ -18,53 +18,54 @@ This file is intentionally kept short. The majority for logic is in libraries
 than can be easily tested and imported in Colab.
 """
 
-from absl import app
-from absl import flags
-from absl import logging
-
-from clu import platform
-import sample
-import train
 import jax
-from ml_collections import config_flags
+import sample
 import tensorflow as tf
+import train
+from absl import app, flags, logging
+from clu import platform
+from ml_collections import config_flags
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('workdir', None, 'Directory to store model data.')
+flags.DEFINE_string("workdir", None, "Directory to store model data.")
 config_flags.DEFINE_config_file(
-    'config',
+    "config",
     None,
-    'File path to the training hyperparameter configuration.',
-    lock_config=True)
-flags.DEFINE_bool('sample', False, 'Sample from a model in workdir.')
-flags.mark_flags_as_required(['config', 'workdir'])
+    "File path to the training hyperparameter configuration.",
+    lock_config=True,
+)
+flags.DEFINE_bool("sample", False, "Sample from a model in workdir.")
+flags.mark_flags_as_required(["config", "workdir"])
 
 
 def main(argv):
-  if len(argv) > 1:
-    raise app.UsageError('Too many command-line arguments.')
+    if len(argv) > 1:
+        raise app.UsageError("Too many command-line arguments.")
 
-  # Hide any GPUs form TensorFlow. Otherwise TF might reserve memory and make
-  # it unavailable to JAX.
-  tf.config.experimental.set_visible_devices([], 'GPU')
+    # Hide any GPUs form TensorFlow. Otherwise TF might reserve memory and make
+    # it unavailable to JAX.
+    tf.config.experimental.set_visible_devices([], "GPU")
 
-  logging.info('JAX host: %d / %d', jax.host_id(), jax.host_count())
-  logging.info('JAX local devices: %r', jax.local_devices())
+    logging.info("JAX host: %d / %d", jax.host_id(), jax.host_count())
+    logging.info("JAX local devices: %r", jax.local_devices())
 
-  # Add a note so that we can tell which task is which JAX host.
-  # (Depending on the platform task 0 is not guaranteed to be host 0)
-  platform.work_unit().set_task_status(
-      f'host_id: {jax.host_id()}, host_count: {jax.host_count()}')
-  platform.work_unit().create_artifact(platform.ArtifactType.DIRECTORY,
-                                       FLAGS.workdir, 'workdir')
+    # Add a note so that we can tell which task is which JAX host.
+    # (Depending on the platform task 0 is not guaranteed to be host 0)
+    platform.work_unit().set_task_status(
+        f"host_id: {jax.host_id()}, host_count: {jax.host_count()}"
+    )
+    platform.work_unit().create_artifact(
+        platform.ArtifactType.DIRECTORY, FLAGS.workdir, "workdir"
+    )
 
-  if FLAGS.sample:
-    sample.save_images(
-        sample.generate_sample(FLAGS.config, FLAGS.workdir), 'sample.png')
-  else:
-    train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
+    if FLAGS.sample:
+        sample.save_images(
+            sample.generate_sample(FLAGS.config, FLAGS.workdir), "sample.png"
+        )
+    else:
+        train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
 
 
-if __name__ == '__main__':
-  app.run(main)
+if __name__ == "__main__":
+    app.run(main)

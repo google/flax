@@ -17,43 +17,44 @@
 import pathlib
 import time
 
-from absl.testing import absltest
-from absl.testing.flagsaver import flagsaver
-from flax.testing import Benchmark
 import jax
-
 import tensorflow_datasets as tfds
+import train
+from absl.testing import absltest
 
 # Local imports.
 from configs import fake_data_benchmark as config_lib
-import train
+
+from flax.testing import Benchmark
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
 
 class ImagenetBenchmarkFakeData(Benchmark):
-  """Runs ImageNet using fake data for quickly measuring performance."""
+    """Runs ImageNet using fake data for quickly measuring performance."""
 
-  def test_fake_data(self):
-    workdir = self.get_tmp_model_dir()
-    config = config_lib.get_config()
-    # Go two directories up to the root of the flax directory.
-    flax_root_dir = pathlib.Path(__file__).parents[2]
-    data_dir = str(flax_root_dir) + '/.tfds/metadata'
+    def test_fake_data(self):
+        workdir = self.get_tmp_model_dir()
+        config = config_lib.get_config()
+        # Go two directories up to the root of the flax directory.
+        flax_root_dir = pathlib.Path(__file__).parents[2]
+        data_dir = str(flax_root_dir) + "/.tfds/metadata"
 
-    start_time = time.time()
-    with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
-      train.train_and_evaluate(config, workdir)
-    benchmark_time = time.time() - start_time
+        start_time = time.time()
+        with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
+            train.train_and_evaluate(config, workdir)
+        benchmark_time = time.time() - start_time
 
-    self.report_wall_time(benchmark_time)
-    self.report_extras({
-        'description': 'ImageNet ResNet50 with fake data',
-        'model_name': 'resnet50',
-        'parameters': f'hp=true,bs={config.batch_size}',
-    })
+        self.report_wall_time(benchmark_time)
+        self.report_extras(
+            {
+                "description": "ImageNet ResNet50 with fake data",
+                "model_name": "resnet50",
+                "parameters": f"hp=true,bs={config.batch_size}",
+            }
+        )
 
 
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

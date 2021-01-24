@@ -16,11 +16,10 @@
 
 import os
 
-from absl.testing import absltest
-
 import input_pipeline
 import jax
 import tensorflow.compat.v2 as tf
+from absl.testing import absltest
 
 # Enable direct iteration over a tf-datasets.
 tf.enable_v2_behavior()
@@ -43,72 +42,99 @@ CONLL_DATA = u"""1\tThey\tthey\tPRON\tPRP\tCase=Nom|Number=Plur\t2\tnsubj
 
 
 class InputPipelineTest(absltest.TestCase):
+    def setUp(self):
+        super(InputPipelineTest, self).setUp()
+        self.test_tmpdir = self.create_tempdir()
 
-  def setUp(self):
-    super(InputPipelineTest, self).setUp()
-    self.test_tmpdir = self.create_tempdir()
+        # Write a sample corpus.
+        self._filename = os.path.join(self.test_tmpdir.full_path, "data.conll")
+        with tf.io.gfile.GFile(self._filename, "w") as f:
+            # The CoNLL data has to end with an empty line.
+            f.write(CONLL_DATA)
+            f.write("\n")
 
-    # Write a sample corpus.
-    self._filename = os.path.join(self.test_tmpdir.full_path, 'data.conll')
-    with tf.io.gfile.GFile(self._filename, 'w') as f:
-      # The CoNLL data has to end with an empty line.
-      f.write(CONLL_DATA)
-      f.write('\n')
+    def test_vocab_creation(self):
+        """Tests the creation of the vocab."""
+        vocabs = input_pipeline.create_vocabs(self._filename)
+        self.assertEqual(
+            vocabs["forms"],
+            {
+                "<p>": 0,
+                "<u>": 1,
+                "<r>": 2,
+                "They": 3,
+                "buy": 4,
+                "books": 5,
+                ".": 6,
+                "NY": 7,
+            },
+        )
 
-  def test_vocab_creation(self):
-    """Tests the creation of the vocab."""
-    vocabs = input_pipeline.create_vocabs(self._filename)
-    self.assertEqual(
-        vocabs['forms'], {
-            '<p>': 0,
-            '<u>': 1,
-            '<r>': 2,
-            'They': 3,
-            'buy': 4,
-            'books': 5,
-            '.': 6,
-            'NY': 7,
-        })
+    def testInputBatch(self):
+        """Test the batching of the dataset."""
+        vocabs = input_pipeline.create_vocabs(self._filename)
 
-  def testInputBatch(self):
-    """Test the batching of the dataset."""
-    vocabs = input_pipeline.create_vocabs(self._filename)
+        attributes_input = [input_pipeline.CoNLLAttributes.FORM]
+        attributes_target = []  # empty target for tagging of unlabeled data.
+        sentence_dataset = input_pipeline.sentence_dataset_dict(
+            self._filename,
+            vocabs,
+            attributes_input,
+            attributes_target,
+            batch_size=2,
+            bucket_size=10,
+            repeat=1,
+        )
 
-    attributes_input = [input_pipeline.CoNLLAttributes.FORM]
-    attributes_target = []  # empty target for tagging of unlabeled data.
-    sentence_dataset = input_pipeline.sentence_dataset_dict(
-        self._filename, vocabs, attributes_input, attributes_target,
-        batch_size=2, bucket_size=10, repeat=1)
+        sentence_dataset_iter = iter(sentence_dataset)
 
-    sentence_dataset_iter = iter(sentence_dataset)
+        batch = next(sentence_dataset_iter)
+        inputs = batch["inputs"].numpy().tolist()
+        self.assertSameStructure(
+            inputs,
+            [
+                [2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ],
+        )
+        self.assertLen(batch, 1)  # make sure target is not included.
 
-    batch = next(sentence_dataset_iter)
-    inputs = batch['inputs'].numpy().tolist()
-    self.assertSameStructure(inputs, [[2., 3., 4., 5., 6., 0., 0., 0., 0., 0.],
-                                      [2., 3., 4., 5., 6., 0., 0., 0., 0., 0.]])
-    self.assertLen(batch, 1)  # make sure target is not included.
+    def testInputTargetBatch(self):
+        """Test the batching of the dataset."""
+        vocabs = input_pipeline.create_vocabs(self._filename)
 
-  def testInputTargetBatch(self):
-    """Test the batching of the dataset."""
-    vocabs = input_pipeline.create_vocabs(self._filename)
+        attributes_input = [input_pipeline.CoNLLAttributes.FORM]
+        attributes_target = [input_pipeline.CoNLLAttributes.XPOS]
+        sentence_dataset = input_pipeline.sentence_dataset_dict(
+            self._filename,
+            vocabs,
+            attributes_input,
+            attributes_target,
+            batch_size=2,
+            bucket_size=10,
+            repeat=1,
+        )
 
-    attributes_input = [input_pipeline.CoNLLAttributes.FORM]
-    attributes_target = [input_pipeline.CoNLLAttributes.XPOS]
-    sentence_dataset = input_pipeline.sentence_dataset_dict(
-        self._filename, vocabs, attributes_input, attributes_target,
-        batch_size=2, bucket_size=10, repeat=1)
+        sentence_dataset_iter = iter(sentence_dataset)
 
-    sentence_dataset_iter = iter(sentence_dataset)
+        batch = next(sentence_dataset_iter)
+        inputs = batch["inputs"].numpy().tolist()
+        self.assertSameStructure(
+            inputs,
+            [
+                [2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [2.0, 3.0, 4.0, 5.0, 6.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ],
+        )
+        targets = batch["targets"].numpy().tolist()
+        self.assertSameStructure(
+            targets,
+            [
+                [2.0, 4.0, 5.0, 3.0, 6.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [2.0, 4.0, 5.0, 3.0, 6.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ],
+        )
 
-    batch = next(sentence_dataset_iter)
-    inputs = batch['inputs'].numpy().tolist()
-    self.assertSameStructure(inputs, [[2., 3., 4., 5., 6., 0., 0., 0., 0., 0.],
-                                      [2., 3., 4., 5., 6., 0., 0., 0., 0., 0.]])
-    targets = batch['targets'].numpy().tolist()
-    self.assertSameStructure(targets,
-                             [[2., 4., 5., 3., 6., 0., 0., 0., 0., 0.],
-                              [2., 4., 5., 3., 6., 0., 0., 0., 0., 0.]])
 
-
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

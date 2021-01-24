@@ -15,20 +15,20 @@
 """setup.py for Flax."""
 
 import os
-from setuptools import find_packages
-from setuptools import setup
+
+from setuptools import find_packages, setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
-  README = open(os.path.join(here, "README.md"), encoding='utf-8').read()
+    README = open(os.path.join(here, "README.md"), encoding="utf-8").read()
 except IOError:
-  README = ""
+    README = ""
 
 install_requires = [
     "numpy>=1.12",
     "jax>=0.2.6",
     "matplotlib",  # only needed for tensorboard export
-    "dataclasses;python_version<'3.7'", # will only install on py3.6
+    "dataclasses;python_version<'3.7'",  # will only install on py3.6
     "msgpack",
 ]
 
@@ -52,15 +52,15 @@ tests_require = [
 
 __version__ = None
 
-with open('flax/version.py') as f:
-  exec(f.read(), globals())
+with open("flax/version.py") as f:
+    exec(f.read(), globals())
 
 setup(
     name="flax",
     version=__version__,
     description="Flax: A neural network library for JAX designed for flexibility",
     long_description="\n\n".join([README]),
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
@@ -68,7 +68,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3.7",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        ],
+    ],
     keywords="",
     author="Flax team",
     author_email="flax-dev@google.com",
@@ -79,5 +79,5 @@ setup(
     install_requires=install_requires,
     extras_require={
         "testing": tests_require,
-        },
-    )
+    },
+)

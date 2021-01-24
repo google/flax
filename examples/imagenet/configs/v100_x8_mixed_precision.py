@@ -18,12 +18,12 @@ from configs import default as default_lib
 
 
 def get_config():
-  """Get the hyperparameter configuration to train on 8 x Nvidia V100 GPUs."""
-  # Override default configuration to avoid duplication of field definition.
-  config = default_lib.get_config()
+    """Get the hyperparameter configuration to train on 8 x Nvidia V100 GPUs."""
+    # Override default configuration to avoid duplication of field definition.
+    config = default_lib.get_config()
 
-  config.batch_size = 2048
-  config.cache = True
-  config.half_precision = True
+    config.batch_size = 2048
+    config.cache = True
+    config.half_precision = True
 
-  return config
+    return config

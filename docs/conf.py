@@ -44,15 +44,15 @@
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('..'))
 
+sys.path.insert(0, os.path.abspath(".."))
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'Flax'
-copyright = '2020, The Flax authors'  # pylint: disable=redefined-builtin
-author = 'The Flax authors'
+project = "Flax"
+copyright = "2020, The Flax authors"  # pylint: disable=redefined-builtin
+author = "The Flax authors"
 
 
 # -- General configuration ---------------------------------------------------
@@ -61,32 +61,32 @@ author = 'The Flax authors'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.doctest',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
-    'nbsphinx',
-    'recommonmark',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.doctest",
+    "sphinx.ext.intersphinx",
+    "sphinx.ext.mathjax",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.viewcode",
+    "nbsphinx",
+    "recommonmark",
 ]
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
-source_suffix = ['.rst', '.md']
+source_suffix = [".rst", ".md"]
 
 autosummary_generate = True
 
-master_doc = 'index'
+master_doc = "index"
 
-autodoc_typehints = 'description'
+autodoc_typehints = "description"
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -94,14 +94,14 @@ autodoc_typehints = 'description'
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
-nbsphinx_codecell_lexer = 'ipython3'
+nbsphinx_codecell_lexer = "ipython3"
 
 nbsphinx_prolog = r"""
 {% set docname = 'docs/' + env.doc2path(env.docname, base=None) %}

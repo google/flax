@@ -20,78 +20,82 @@ import warnings
 
 
 class PrefetchIterator:
-  """Wraps an iterator to provide async prefetching.
+    """Wraps an iterator to provide async prefetching.
 
-  DEPRECATION WARNING:
-  TensorFlow datasets no longer require manual prefetching.
+    DEPRECATION WARNING:
+    TensorFlow datasets no longer require manual prefetching.
 
-  Previously this class was used to make data loading using TensorFlow datasets
-  more efficient. Now TF data handles prefetching with NumPy iterators
-  correctly.
+    Previously this class was used to make data loading using TensorFlow datasets
+    more efficient. Now TF data handles prefetching with NumPy iterators
+    correctly.
 
-  Example::
+    Example::
 
-    tf_iter = dataset.as_numpy_iterator()  # only loads data while calling next
-    tf_iter = PrefetchIterator(tf_iter)  # prefetches data in the background
+      tf_iter = dataset.as_numpy_iterator()  # only loads data while calling next
+      tf_iter = PrefetchIterator(tf_iter)  # prefetches data in the background
 
-  """
-
-  def __init__(self, data_iter, buffer_size=1):
-    """Construct a PrefetchIterator.
-
-    Args:
-      data_iter: the Iterator that should be prefetched.
-      buffer_size: how many items to prefetch (default: 1).
     """
-    warnings.warn('PrefetchIterator is deprecated. Use the standard `tf.data`'
-                  ' prefetch method instead', DeprecationWarning)
 
-    self._data_iter = data_iter
-    self.buffer_size = buffer_size
-    self._cond = threading.Condition()
-    self._buffer = []
-    self._active = True
-    self._thread = threading.Thread(target=self._prefetch_loop, daemon=True)
-    self._thread.start()
-    self._error = None
+    def __init__(self, data_iter, buffer_size=1):
+        """Construct a PrefetchIterator.
 
-  def __iter__(self):
-    return self
+        Args:
+          data_iter: the Iterator that should be prefetched.
+          buffer_size: how many items to prefetch (default: 1).
+        """
+        warnings.warn(
+            "PrefetchIterator is deprecated. Use the standard `tf.data`"
+            " prefetch method instead",
+            DeprecationWarning,
+        )
 
-  def __next__(self):
-    with self._cond:
-      self._cond.wait_for(lambda: self._buffer or not self._active)
-      if self._buffer:
-        item = self._buffer.pop(0)
-        self._cond.notifyAll()
-        return item
-      if self._error:
-        raise self._error  # pylint: disable=raising-bad-type
-      assert not self._active
-      raise StopIteration()
+        self._data_iter = data_iter
+        self.buffer_size = buffer_size
+        self._cond = threading.Condition()
+        self._buffer = []
+        self._active = True
+        self._thread = threading.Thread(target=self._prefetch_loop, daemon=True)
+        self._thread.start()
+        self._error = None
 
-  def close(self):
-    with self._cond:
-      self._active = False
-      self._cond.notifyAll()
+    def __iter__(self):
+        return self
 
-  def _prefetch_loop(self):
-    """Prefetch loop that prefetches a tf dataset."""
-    def _predicate():
-      return len(self._buffer) < self.buffer_size or not self._active
-
-    while True:
-      try:
-        item = next(self._data_iter)
+    def __next__(self):
         with self._cond:
-          self._buffer.append(item)
-          self._cond.notifyAll()
-          self._cond.wait_for(_predicate)
-          if not self._active:
-            return
-      except Exception as e:  # pylint: disable=broad-except
+            self._cond.wait_for(lambda: self._buffer or not self._active)
+            if self._buffer:
+                item = self._buffer.pop(0)
+                self._cond.notifyAll()
+                return item
+            if self._error:
+                raise self._error  # pylint: disable=raising-bad-type
+            assert not self._active
+            raise StopIteration()
+
+    def close(self):
         with self._cond:
-          self._error = e
-          self._active = False
-          self._cond.notifyAll()
-          return
+            self._active = False
+            self._cond.notifyAll()
+
+    def _prefetch_loop(self):
+        """Prefetch loop that prefetches a tf dataset."""
+
+        def _predicate():
+            return len(self._buffer) < self.buffer_size or not self._active
+
+        while True:
+            try:
+                item = next(self._data_iter)
+                with self._cond:
+                    self._buffer.append(item)
+                    self._cond.notifyAll()
+                    self._cond.wait_for(_predicate)
+                    if not self._active:
+                        return
+            except Exception as e:  # pylint: disable=broad-except
+                with self._cond:
+                    self._error = e
+                    self._active = False
+                    self._cond.notifyAll()
+                    return

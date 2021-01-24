@@ -15,22 +15,21 @@
 """Hyperparameter configuration for Fake data benchmark."""
 
 import jax
-
 from configs import default as default_lib
 
 
 def get_config():
-  """Get the hyperparameter configuration for Fake data benchmark."""
-  # Override default configuration to avoid duplication of field definition.
-  config = default_lib.get_config()
-  config.batch_size = 256 * jax.device_count()
-  config.half_precision = True
-  config.num_epochs = 5
+    """Get the hyperparameter configuration for Fake data benchmark."""
+    # Override default configuration to avoid duplication of field definition.
+    config = default_lib.get_config()
+    config.batch_size = 256 * jax.device_count()
+    config.half_precision = True
+    config.num_epochs = 5
 
-  # Previously the input pipeline computed:
-  # `steps_per_epoch` as input_pipeline.TRAIN_IMAGES // batch_size
-  config.num_train_steps = 1024 // config.batch_size
-  # and `steps_per_eval` as input_pipeline.EVAL_IMAGES // batch_size
-  config.steps_per_eval = 512 // config.batch_size
+    # Previously the input pipeline computed:
+    # `steps_per_epoch` as input_pipeline.TRAIN_IMAGES // batch_size
+    config.num_train_steps = 1024 // config.batch_size
+    # and `steps_per_eval` as input_pipeline.EVAL_IMAGES // batch_size
+    config.steps_per_eval = 512 // config.batch_size
 
-  return config
+    return config

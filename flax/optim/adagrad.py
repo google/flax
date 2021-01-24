@@ -14,47 +14,50 @@
 
 import jax.numpy as jnp
 import numpy as onp
+
 from .. import struct
 from .base import OptimizerDef
 
 
 @struct.dataclass
 class _AdagradHyperParams:
-  """Adagrad hyper parameters"""
+    """Adagrad hyper parameters"""
 
-  learning_rate: float
-  eps: float
+    learning_rate: float
+    eps: float
 
 
 @struct.dataclass
 class _AdagradParamState:
-  """Adagrad parameter state"""
+    """Adagrad parameter state"""
 
-  G: onp.ndarray
+    G: onp.ndarray
 
 
 class Adagrad(OptimizerDef):
-  """Adagrad optimizer"""
-  def __init__(self, learning_rate: float = None, eps=1e-8):
-    """Constructor for the Adagrad optimizer.
-        
-    Args:
-      learning_rate: the step size used to update the parameters.
-    """
-    hyper_params = _AdagradHyperParams(learning_rate, eps)
-    super().__init__(hyper_params)
+    """Adagrad optimizer"""
 
-  def init_param_state(self, param):
-    """Initialize parameter state"""
-    return _AdagradParamState(jnp.zeros_like(param))
+    def __init__(self, learning_rate: float = None, eps=1e-8):
+        """Constructor for the Adagrad optimizer.
 
-  def apply_param_gradient(self, step, hyper_params, param, state, grad):
-    """Apply per-parameter gradients"""
+        Args:
+          learning_rate: the step size used to update the parameters.
+        """
+        hyper_params = _AdagradHyperParams(learning_rate, eps)
+        super().__init__(hyper_params)
 
-    assert hyper_params.learning_rate is not None, 'no learning rate provided.'
-    new_G = state.G + jnp.square(grad)
-    new_param = param - hyper_params.learning_rate * grad / (jnp.sqrt(new_G) +
-                                                             hyper_params.eps)
-    new_state = _AdagradParamState(new_G)
+    def init_param_state(self, param):
+        """Initialize parameter state"""
+        return _AdagradParamState(jnp.zeros_like(param))
 
-    return new_param, new_state
+    def apply_param_gradient(self, step, hyper_params, param, state, grad):
+        """Apply per-parameter gradients"""
+
+        assert hyper_params.learning_rate is not None, "no learning rate provided."
+        new_G = state.G + jnp.square(grad)
+        new_param = param - hyper_params.learning_rate * grad / (
+            jnp.sqrt(new_G) + hyper_params.eps
+        )
+        new_state = _AdagradParamState(new_G)
+
+        return new_param, new_state

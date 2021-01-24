@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Iterable
+
 import jax
-from jax import numpy as jnp, random, lax
-from flax import linen as nn
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.linen import Module, compact
-import numpy as np
-from pprint import pprint
 from dense import Dense
+from jax import numpy as jnp
+
+from flax import linen as nn
+from flax.linen import Module, compact
 
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
@@ -27,14 +27,15 @@ jax.config.enable_omnistaging()
 # Many NN layers and blocks are best described by a single function with inline variables.
 # In this case, variables are initialized during the first call.
 class MLP(Module):
-  sizes: Iterable[int]
+    sizes: Iterable[int]
 
-  @compact
-  def __call__(self, x):
-    for size in self.sizes[:-1]:
-        x = Dense(size)(x)
-        x = nn.relu(x)
-    return Dense(self.sizes[-1])(x)
+    @compact
+    def __call__(self, x):
+        for size in self.sizes[:-1]:
+            x = Dense(size)(x)
+            x = nn.relu(x)
+        return Dense(self.sizes[-1])(x)
+
 
 # Return an initialized instance of MLP by calling `__call__` with an input batch,
 # initializing all variables.

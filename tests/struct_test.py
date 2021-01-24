@@ -14,15 +14,13 @@
 
 """Tests for flax.struct."""
 
+import dataclasses
 from typing import Any
 
+import jax
 from absl.testing import absltest
 
-import dataclasses
-
 from flax import struct
-
-import jax
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -30,32 +28,31 @@ jax.config.parse_flags_with_absl()
 
 @struct.dataclass
 class Point:
-  x: float
-  y: float
-  meta: Any = struct.field(pytree_node=False)
+    x: float
+    y: float
+    meta: Any = struct.field(pytree_node=False)
 
 
 class StructTest(absltest.TestCase):
+    def test_no_extra_fields(self):
+        p = Point(x=1, y=2, meta={})
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            p.new_field = 1
 
-  def test_no_extra_fields(self):
-    p = Point(x=1, y=2, meta={})
-    with self.assertRaises(dataclasses.FrozenInstanceError):
-      p.new_field = 1
+    def test_mutation(self):
+        p = Point(x=1, y=2, meta={})
+        new_p = p.replace(x=3)
+        self.assertEqual(new_p, Point(x=3, y=2, meta={}))
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            p.y = 3
 
-  def test_mutation(self):
-    p = Point(x=1, y=2, meta={})
-    new_p = p.replace(x=3)
-    self.assertEqual(new_p, Point(x=3, y=2, meta={}))
-    with self.assertRaises(dataclasses.FrozenInstanceError):
-      p.y = 3
-
-  def test_pytree_nodes(self):
-    p = Point(x=1, y=2, meta={'abc': True})
-    leaves = jax.tree_leaves(p)
-    self.assertEqual(leaves, [1, 2])
-    new_p = jax.tree_map(lambda x: x + x, p)
-    self.assertEqual(new_p, Point(x=2, y=4, meta={'abc': True}))
+    def test_pytree_nodes(self):
+        p = Point(x=1, y=2, meta={"abc": True})
+        leaves = jax.tree_leaves(p)
+        self.assertEqual(leaves, [1, 2])
+        new_p = jax.tree_map(lambda x: x + x, p)
+        self.assertEqual(new_p, Point(x=2, y=4, meta={"abc": True}))
 
 
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

@@ -31,22 +31,22 @@ import ml_collections
 
 
 def get_config():
-  """Get the default hyperparameter configuration."""
-  config = ml_collections.ConfigDict()
+    """Get the default hyperparameter configuration."""
+    config = ml_collections.ConfigDict()
 
-  # As defined in the `models` module.
-  config.model = 'ResNet50'
+    # As defined in the `models` module.
+    config.model = "ResNet50"
 
-  config.learning_rate = 0.1
-  config.momentum = 0.9
-  config.batch_size = 128
-  config.num_epochs = 100
+    config.learning_rate = 0.1
+    config.momentum = 0.9
+    config.batch_size = 128
+    config.num_epochs = 100
 
-  config.cache = False
-  config.half_precision = False
+    config.cache = False
+    config.half_precision = False
 
-  # If num_train_steps==-1 then the number of training steps is calculated from
-  # num_epochs using the entire dataset. Similarly for steps_per_eval.
-  config.num_train_steps = -1
-  config.steps_per_eval = -1
-  return config
+    # If num_train_steps==-1 then the number of training steps is calculated from
+    # num_epochs using the entire dataset. Similarly for steps_per_eval.
+    config.num_train_steps = -1
+    config.steps_per_eval = -1
+    return config

@@ -15,33 +15,31 @@
 """Stochastic modules.
 """
 
-from jax import lax
-from jax import random
 import jax.numpy as jnp
-
+from jax import lax, random
 
 
 def dropout(scope, inputs, rate, deterministic=False, rng=None):
-  """Applies a random dropout mask to the input.
-  Args:
-    inputs: the inputs that should be randomly masked.
-    rate: the probablity of masking out a value.
-    deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
-      masked, whereas if true, no mask is applied and the inputs are returned as
-      is.
-    rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
-      be used.
-  Returns:
-    The masked inputs.
-  """
-  if rate == 0.:
-    return inputs
-  keep_prob = 1. - rate
+    """Applies a random dropout mask to the input.
+    Args:
+      inputs: the inputs that should be randomly masked.
+      rate: the probablity of masking out a value.
+      deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+        masked, whereas if true, no mask is applied and the inputs are returned as
+        is.
+      rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
+        be used.
+    Returns:
+      The masked inputs.
+    """
+    if rate == 0.0:
+        return inputs
+    keep_prob = 1.0 - rate
 
-  if deterministic:
-    return inputs
-  else:
-    if rng is None:
-      rng = scope.make_rng('dropout')
-    mask = random.bernoulli(rng, p=keep_prob, shape=inputs.shape)
-    return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
+    if deterministic:
+        return inputs
+    else:
+        if rng is None:
+            rng = scope.make_rng("dropout")
+        mask = random.bernoulli(rng, p=keep_prob, shape=inputs.shape)
+        return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))

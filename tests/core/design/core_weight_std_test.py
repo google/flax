@@ -15,59 +15,67 @@
 from functools import partial
 from typing import Sequence
 
-from flax.core import Scope, Array, init, apply, unfreeze, lift, nn
-
-from absl.testing import absltest
-
 import jax
-from jax import random, numpy as jnp
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax.core import Array, Scope, apply, init, lift, nn, unfreeze
 
 
-def weight_std(fn, kernel_name='kernel', eps=1e-8):
-  def std(variables):
-    params = variables['params']
-    assert kernel_name in params
-    kernel = params[kernel_name]
-    redux = tuple(range(kernel.ndim - 1))
-    norm = jnp.square(kernel).sum(redux, keepdims=True)
-    std_kernel = kernel / jnp.sqrt(norm + eps)
-    params[kernel_name] = std_kernel
-    return variables
+def weight_std(fn, kernel_name="kernel", eps=1e-8):
+    def std(variables):
+        params = variables["params"]
+        assert kernel_name in params
+        kernel = params[kernel_name]
+        redux = tuple(range(kernel.ndim - 1))
+        norm = jnp.square(kernel).sum(redux, keepdims=True)
+        std_kernel = kernel / jnp.sqrt(norm + eps)
+        params[kernel_name] = std_kernel
+        return variables
 
-  # transform handles a few of nasty edge cases here...
-  # the transformed kind will be immutable inside fn
-  # this way we avoid lost mutations to param
-  # transform also avoids accidental reuse of rngs
-  # and it makes sure that other state is updated correctly (not twice during init!)
-  return lift.transform_module(fn, trans_in_fn=std)
+    # transform handles a few of nasty edge cases here...
+    # the transformed kind will be immutable inside fn
+    # this way we avoid lost mutations to param
+    # transform also avoids accidental reuse of rngs
+    # and it makes sure that other state is updated correctly (not twice during init!)
+    return lift.transform_module(fn, trans_in_fn=std)
 
-def mlp(scope: Scope, x: Array,
-        sizes: Sequence[int] = (8, 1)):
-  std_dense = weight_std(partial(
-      nn.dense, kernel_init=nn.initializers.normal(stddev=1e5)))
-  for size in sizes[:-1]:
-    x = scope.child(std_dense, prefix='hidden_')(x, size)
-  return scope.child(nn.dense, 'out')(x, sizes[-1])
+
+def mlp(scope: Scope, x: Array, sizes: Sequence[int] = (8, 1)):
+    std_dense = weight_std(
+        partial(nn.dense, kernel_init=nn.initializers.normal(stddev=1e5))
+    )
+    for size in sizes[:-1]:
+        x = scope.child(std_dense, prefix="hidden_")(x, size)
+    return scope.child(nn.dense, "out")(x, sizes[-1])
 
 
 class WeightStdTest(absltest.TestCase):
+    def test_weight_std(self):
+        x = random.normal(
+            random.PRNGKey(0),
+            (
+                1,
+                4,
+            ),
+        )
+        y, variables = init(mlp)(random.PRNGKey(1), x)
 
-  def test_weight_std(self):
-    x = random.normal(random.PRNGKey(0), (1, 4,))
-    y, variables = init(mlp)(random.PRNGKey(1), x)
+        param_shapes = unfreeze(jax.tree_map(jnp.shape, variables["params"]))
+        self.assertEqual(
+            param_shapes,
+            {
+                "hidden_0": {"kernel": (4, 8), "bias": (8,)},
+                "out": {"kernel": (8, 1), "bias": (1,)},
+            },
+        )
+        self.assertEqual(y.shape, (1, 1))
+        self.assertTrue(y.ravel() < 1.0)
 
-    param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(param_shapes, {
-        'hidden_0': {'kernel': (4, 8), 'bias': (8,)},
-        'out': {'kernel': (8, 1), 'bias': (1,)},
-    })
-    self.assertEqual(y.shape, (1, 1))
-    self.assertTrue(y.ravel() < 1.)
-
-    y2 = apply(mlp)(variables, x)
-    self.assertTrue(jnp.allclose(y, y2))
+        y2 = apply(mlp)(variables, x)
+        self.assertTrue(jnp.allclose(y, y2))
 
 
-if __name__ == '__main__':
-  absltest.main()
+if __name__ == "__main__":
+    absltest.main()

@@ -15,49 +15,49 @@
 """Stochastic modules.
 """
 
-from jax import lax
-from jax import random
 import jax.numpy as jnp
+from jax import lax, random
 
 from flax.linen.module import Module, compact
 
 
 class Dropout(Module):
-  """Create a dropout layer.
+    """Create a dropout layer.
 
     Attributes:
       rate: the dropout probability.  (_not_ the keep rate!)
-  """
-  rate: float
-
-  @compact
-  def __call__(self, inputs, deterministic=False, rng=None, broadcast_dims=()):
-    """Applies a random dropout mask to the input.
-
-    Args:
-      inputs: the inputs that should be randomly masked.
-      deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
-        masked, whereas if true, no mask is applied and the inputs are returned
-        as is.
-      rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
-        be used.
-      broadcast_dims: an optional tuple specifying in which dimensions to
-        broadcast the dropout to.
-
-    Returns:
-      The masked inputs reweighted to preserve mean.
     """
-    if self.rate == 0.:
-      return inputs
-    keep_prob = 1. - self.rate
-    if deterministic:
-      return inputs
-    else:
-      if rng is None:
-        rng = self.make_rng('dropout')
-      broadcast_shape = list(inputs.shape)
-      for dim in broadcast_dims:
-        broadcast_shape[dim] = 1
-      mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
-      mask = jnp.broadcast_to(mask, inputs.shape)
-      return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
+
+    rate: float
+
+    @compact
+    def __call__(self, inputs, deterministic=False, rng=None, broadcast_dims=()):
+        """Applies a random dropout mask to the input.
+
+        Args:
+          inputs: the inputs that should be randomly masked.
+          deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+            masked, whereas if true, no mask is applied and the inputs are returned
+            as is.
+          rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
+            be used.
+          broadcast_dims: an optional tuple specifying in which dimensions to
+            broadcast the dropout to.
+
+        Returns:
+          The masked inputs reweighted to preserve mean.
+        """
+        if self.rate == 0.0:
+            return inputs
+        keep_prob = 1.0 - self.rate
+        if deterministic:
+            return inputs
+        else:
+            if rng is None:
+                rng = self.make_rng("dropout")
+            broadcast_shape = list(inputs.shape)
+            for dim in broadcast_dims:
+                broadcast_shape[dim] = 1
+            mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
+            mask = jnp.broadcast_to(mask, inputs.shape)
+            return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
