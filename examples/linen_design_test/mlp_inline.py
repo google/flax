@@ -24,6 +24,7 @@ from flax.linen import Module, compact
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 
+
 # Many NN layers and blocks are best described by a single function with inline variables.
 # In this case, variables are initialized during the first call.
 class MLP(Module):

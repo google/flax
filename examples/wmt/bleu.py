@@ -130,12 +130,9 @@ def compute_bleu_matches(reference_corpus, translation_corpus, max_order=4):
     """
     reference_length = 0
     translation_length = 0
-    bp = 1.0
-    geo_mean = 0
 
     matches_by_order = [0] * max_order
     possible_matches_by_order = [0] * max_order
-    precisions = []
 
     for (references, translations) in zip(reference_corpus, translation_corpus):
         reference_length += len(references)

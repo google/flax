@@ -24,6 +24,7 @@ from flax.linen import Module
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 
+
 # Here submodules are explicitly defined during init, but still materialized
 # lazily only once a first input is passed through and shapes are known.
 class MLP(Module):

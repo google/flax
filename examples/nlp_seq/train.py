@@ -248,7 +248,6 @@ def main(argv):
         raise app.UsageError("Please provide path to training set.")
     if batch_size % jax.device_count() > 0:
         raise ValueError("Batch size must be divisible by the number of devices")
-    device_batch_size = batch_size // jax.device_count()
 
     if jax.host_id() == 0:
         train_summary_writer = tensorboard.SummaryWriter(

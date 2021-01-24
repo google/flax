@@ -238,7 +238,7 @@ class TransformTest(absltest.TestCase):
         class Outer(nn.Module):
             @nn.compact
             def __call__(self, x):
-                cntr = nn.jit(Counter)(name="cntr")()
+                nn.jit(Counter)(name="cntr")()
                 return x
 
         class Inner(nn.Module):
@@ -282,7 +282,7 @@ class TransformTest(absltest.TestCase):
             @nn.jit
             @nn.compact
             def __call__(self, x):
-                cntr = Counter(name="cntr")()
+                Counter(name="cntr")()
                 return x
 
         class Inner(nn.Module):
@@ -325,7 +325,7 @@ class TransformTest(absltest.TestCase):
         class Outer(nn.Module):
             @nn.compact
             def __call__(self, x):
-                cntr = nn.jit(Counter)(name="cntr")()
+                nn.jit(Counter)(name="cntr")()
                 return x
 
         class Inner(nn.Module):
@@ -376,7 +376,7 @@ class TransformTest(absltest.TestCase):
             @nn.jit
             @nn.compact
             def __call__(self, x):
-                cntr = nn.jit(Counter)(name="cntr")()
+                nn.jit(Counter)(name="cntr")()
                 return x
 
         class Inner(nn.Module):
@@ -432,7 +432,7 @@ class TransformTest(absltest.TestCase):
                 @nn.jit
                 @nn.compact
                 def __call__(self, x):
-                    cntr = Counter(name="cntr")()
+                    Counter(name="cntr")()
                     return x
 
             class Inner(nn.Module):

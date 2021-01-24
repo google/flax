@@ -121,7 +121,7 @@ class DenseTest(absltest.TestCase):
             },
         )
 
-    def test_explicit_dense(self):
+    def test_explicit_dense0(self):
         x = jnp.ones((1, 3))
         y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
         param_shapes = unfreeze(jax.tree_map(jnp.shape, variables["params"]))
@@ -134,7 +134,7 @@ class DenseTest(absltest.TestCase):
             },
         )
 
-    def test_explicit_dense(self):
+    def test_explicit_dense1(self):
         x = jnp.ones((1, 4))
         y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
         param_shapes = unfreeze(jax.tree_map(jnp.shape, variables["params"]))

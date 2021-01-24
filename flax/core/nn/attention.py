@@ -452,7 +452,7 @@ def make_padding_mask(
                 "Attention axis must be between the batch axis and the last-two axes."
             )
 
-    mask_shape_final = (query_shape[0], 1)  #  batch_size, 1 (for all heads)s
+    mask_shape_final = (query_shape[0], 1)  # batch_size, 1 (for all heads)s
     for ax in attention_axis:
         mask_shape_final += (query_shape[ax],)
     for ax in attention_axis:

@@ -241,7 +241,7 @@ def main(_):
         login_true_args = login_args[:-1] + ["true"]
         while True:
             try:
-                result = subprocess.run(login_true_args, timeout=10)
+                subprocess.run(login_true_args, timeout=10)
                 break
             except subprocess.TimeoutExpired:
                 print("(Not ready yet - waiting a little longer...)")
@@ -249,7 +249,7 @@ def main(_):
         if "VM_READY_CMD" in os.environ:
             os.system(os.environ["VM_READY_CMD"])
         if FLAGS.connect:
-            result = subprocess.run(login_args)
+            subprocess.run(login_args)
             # SSH session has cleared previous message, print it again.
             print_howto(login_args)
 

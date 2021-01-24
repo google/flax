@@ -25,6 +25,7 @@ from flax.linen import Module
 # Require JAX omnistaging mode.
 jax.config.enable_omnistaging()
 
+
 # Add `in_features` to the built-in Dense layer that normally works
 # via shape inference.
 class DenseExplicit(Dense):

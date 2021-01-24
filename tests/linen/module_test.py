@@ -166,7 +166,7 @@ class ModuleTest(absltest.TestCase):
                 self.dense = Dense(3)
 
         scope = Scope({})
-        MLPclone = MLP(parent=scope).clone()
+        MLP(parent=scope).clone()
 
     def test_submodule_attr(self):
         rngkey = jax.random.PRNGKey(0)
@@ -231,7 +231,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "must be initialized.*setup"):
-            y = DummyModule(parent=scope)(x)
+            DummyModule(parent=scope)(x)
 
     def test_init_outside_call(self):
         rngkey = jax.random.PRNGKey(0)
@@ -249,7 +249,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "must be initialized.*setup"):
-            y = Dummy(parent=scope).foo(x)
+            Dummy(parent=scope).foo(x)
 
     def test_setup_call_var_collision(self):
         rngkey = jax.random.PRNGKey(0)
@@ -262,13 +262,13 @@ class ModuleTest(absltest.TestCase):
 
             @compact
             def __call__(self, x):
-                bias = self.param("bias", initializers.ones, x.shape)
+                self.bias = self.param("bias", initializers.ones, x.shape)
                 return x + self.bias
 
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "bias already in use"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_setup_var_collision(self):
         rngkey = jax.random.PRNGKey(0)
@@ -286,7 +286,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "bias already in use"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_call_var_collision(self):
         rngkey = jax.random.PRNGKey(0)
@@ -303,7 +303,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "bias already in use"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_setattr_name_var_disagreement(self):
         rngkey = jax.random.PRNGKey(0)
@@ -320,7 +320,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "notbias.*must equal.*bias"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_setattr_name_var_disagreement_allowed_in_lists(self):
         rngkey = jax.random.PRNGKey(0)
@@ -382,7 +382,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "name bias exists already"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
         class Dummy(nn.Module):
             xshape: Tuple[int]
@@ -392,13 +392,13 @@ class ModuleTest(absltest.TestCase):
 
             @compact
             def __call__(self, x):
-                bias = DummyModule(name="bias")
+                self.bias = DummyModule(name="bias")
                 return x + self.bias
 
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "name bias exists already"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
         class Dummy(nn.Module):
             xshape: Tuple[int]
@@ -408,13 +408,13 @@ class ModuleTest(absltest.TestCase):
 
             @compact
             def __call__(self, x):
-                bias = self.param("bias", initializers.ones, self.xshape)
+                self.bias = self.param("bias", initializers.ones, self.xshape)
                 return x + self.bias
 
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "bias already"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_setattr_name_submodule_redundant(self):
         rngkey = jax.random.PRNGKey(0)
@@ -435,7 +435,7 @@ class ModuleTest(absltest.TestCase):
             "In setup, assign names of Modules "
             'via self.<name> and not using keyword argument name="<name>"',
         ):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_attr_param_name_collision(self):
         rngkey = jax.random.PRNGKey(0)
@@ -452,7 +452,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "Name bias already in use"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_attr_submodule_name_collision(self):
         rngkey = jax.random.PRNGKey(0)
@@ -469,7 +469,7 @@ class ModuleTest(absltest.TestCase):
         x = jnp.array([1.0])
         scope = Scope({}, {"params": rngkey}, mutable=["params"])
         with self.assertRaisesRegex(ValueError, "bias exists already"):
-            y = Dummy(x.shape, parent=scope)(x)
+            Dummy(x.shape, parent=scope)(x)
 
     def test_only_one_compact_method(self):
         with self.assertRaisesRegex(RuntimeError, "@compact"):
@@ -755,18 +755,6 @@ class ModuleTest(absltest.TestCase):
         empty = EmptyModule()
         with self.assertRaisesRegex(ValueError, "variables.*unbound module"):
             empty.foo()
-
-    def test_call_unbound_noncompact_module_methods(self):
-        class EmptyModule(nn.Module):
-            foo: int = 3
-
-            def bar(self):
-                return self.foo
-
-        empty = EmptyModule()
-        # It's fine to call methods of unbound methods that don't depend on
-        # attributes defined during `setup`
-        self.assertEqual(empty.bar(), 3)
 
     def test_call_unbound_noncompact_module_methods(self):
         class EmptyModule(nn.Module):

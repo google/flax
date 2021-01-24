@@ -138,6 +138,7 @@ def module_class_lift_transform(
         # get existing unbound method from class
         fn = getattr(module_class, fn_name)
         trafo_args, trafo_kwargs = fn_trafo_args
+
         # we need to create a scope-function from our class for the given method
         @functools.wraps(fn)
         def wrapped_fn(self, *args, **kwargs):
@@ -250,6 +251,7 @@ def named_call(class_fn):
         method_suffix = f".{fn_name}" if fn_name != "__call__" else ""
         module_name = self.name or self.__class__.__name__
         full_name = f"{module_name}{method_suffix}"
+
         # make a scope-function to transform
         def core_fn(scopes, *args, **kwargs):
             cloned = set_module_scopes(self, scopes)

@@ -122,8 +122,8 @@ def _list_state_dict(xs):
 def _restore_list(xs, state_dict):
     if len(state_dict) != len(xs):
         raise ValueError(
-            f"The size of the list and the state dict do not match,"
-            " got {len(xs)} and {len(state_dict)}."
+            "The size of the list and the state dict do not match,"
+            f" got {len(xs)} and {len(state_dict)}."
         )
     ys = []
     for i in range(len(state_dict)):
@@ -152,8 +152,8 @@ def _restore_namedtuple(xs, state_dict):
     """Rebuild namedtuple from serialized dict."""
     if len(state_dict["values"]) != len(xs):
         raise ValueError(
-            f"The size of the list and the state dict do not match,"
-            ' got {len(xs)} and {len(state_dict["values"])}.'
+            "The size of the list and the state dict do not match,"
+            f' got {len(xs)} and {len(state_dict["values"])}.'
         )
     fields = [state_dict["fields"][str(i)] for i in range(len(xs))]
     namedtuple_class = collections.namedtuple(state_dict["name"], fields)

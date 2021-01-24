@@ -115,7 +115,7 @@ def _get_tensorboard_scalars(path):
 
     data_by_key = {}
     for tag, wall_time, step, value in data:
-        if not tag in data_by_key:
+        if tag not in data_by_key:
             data_by_key[tag] = []
         data_by_key[tag].append((wall_time, step, value))
     return data_by_key

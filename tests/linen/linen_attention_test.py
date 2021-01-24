@@ -107,6 +107,7 @@ class AttentionTest(parameterized.TestCase):
         y_ref = jax.jit(lambda x, y: module.apply(initial_vars, x, y))(
             inputs, causal_mask
         )
+
         # feed the inputs sequentially to simulate decoding
         def body_fn(state, x):
             y, state = decode_module.apply(
