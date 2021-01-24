@@ -24,7 +24,7 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
@@ -63,8 +63,8 @@ class ModuleTest(absltest.TestCase):
     y = DummyModule(parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
-    onp.testing.assert_allclose(y, jnp.array([2.]))
+    np.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_arg_module(self):
@@ -74,7 +74,7 @@ class ModuleTest(absltest.TestCase):
     y = Dense(3, parent=scope)(x)
     params = scope.variables()['params']
     y2 = Dense(3, parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     self.assertEqual(params['kernel'].shape, (10, 3))
 
   def test_util_fun(self):
@@ -92,7 +92,7 @@ class ModuleTest(absltest.TestCase):
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'Dense_0': {'kernel': (10, 3)},
@@ -120,7 +120,7 @@ class ModuleTest(absltest.TestCase):
     y = Top(parent=scope)(x)
     params = scope.variables()['params']
     y2 = Top(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'MLP_0':
@@ -143,7 +143,7 @@ class ModuleTest(absltest.TestCase):
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'lyrs1_a': {'kernel': (10, 3)},
@@ -199,8 +199,8 @@ class ModuleTest(absltest.TestCase):
     y = DummyModule(x.shape, parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(x.shape, parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
-    onp.testing.assert_allclose(y, jnp.array([2.]))
+    np.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_init_outside_setup_without_compact(self):
@@ -465,7 +465,7 @@ class ModuleTest(absltest.TestCase):
         for width in self.widths[:-1]:
           x = nn.relu(nn.Dense(width)(x))
         return nn.Dense(self.widths[-1])(x)
-    test = MLP(onp.array([3, 3], onp.int32))
+    test = MLP(np.array([3, 3], np.int32))
     params = test.init({'params': random.PRNGKey(42)}, jnp.ones((3, 3)))
     _ = test.apply(params, jnp.ones((3, 3)))
 
@@ -691,28 +691,13 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(empty.bar(), 3)
 
 
-  def test_call_unbound_noncompact_module_method_without_setup(self):
-    class EmptyModule(nn.Module):
-      def setup(self):
-        self.setup_called = True
-
-      def bar(self):
-        return self.setup_called
-
-    empty = EmptyModule()
-    # `empty.setup()` hasn't been called yet because it doesn't have a scope.
-    # it's fine to call methods but they won't have access to attributes defined
-    # in `setup()`
-    with self.assertRaisesRegex(AttributeError, "has no attribute 'setup_called'"):
-      empty.bar()
-
   def test_module_with_attrs(self):
     class Foo(nn.Module):
       bar: nn.Dense = dataclasses.field(init=False)
 
       def setup(self):
         self.bar = nn.Dense(3)
-      
+
       def __call__(self, x):
         return self.bar(x)
 
@@ -727,13 +712,54 @@ class ModuleTest(absltest.TestCase):
 
       def setup(self):
         self.i = 1
-      
+
       def __call__(self):
         self.i = 2
-    
+
     foo = Foo()
     with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
       foo.init(random.PRNGKey(0))
+
+  def test_module_lazy_getattr_setup(self):
+    class A(nn.Module):
+      def setup(self):
+        self.d = nn.Dense(2)
+      def __call__(self, x):
+        return self.d(x)
+
+    class B(nn.Module):
+      def setup(self):
+        self.a = A()
+      def __call__(self, x):
+        y1 = self.a.d(x)
+        y2 = self.a(x)
+        return y1, y2
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2,))
+
+    (y1, y2), p = B().init_with_output(key, x)
+    np.testing.assert_array_equal(y1, y2)
+
+  def test_module_lazy_dir_setup(self):
+    class A(nn.Module):
+      def setup(self):
+        self.d = nn.Dense(2)
+      def __call__(self, x):
+        return self.d(x)
+
+    class B(nn.Module):
+      def setup(self):
+        self.a = A()
+      def __call__(self, x):
+        assert 'd' in dir(self.a)
+        y1 = self.a.d(x)
+        y2 = self.a(x)
+        return y1, y2
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2,))
+    _ = B().init_with_output(key, x)
 
 
 if __name__ == '__main__':
