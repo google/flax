@@ -134,11 +134,24 @@ def _get_suffix_value_pairs(
     tree_or_leaf: Any) -> List[Tuple[str, Type["Module"]]]:
   """Helper for naming pytrees of submodules."""
   dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
-  if dict_or_leaf == {} or not isinstance(dict_or_leaf, dict):
+  if not isinstance(dict_or_leaf, dict) or dict_or_leaf == {}:
     return [('', tree_or_leaf)]
   else:
     flat_dict = traverse_util.flatten_dict(dict_or_leaf)
     return [('_' + '_'.join(k), v) for k, v in flat_dict.items()]
+
+
+def _map_over_modules_in_tree(fn, tree_or_leaf):
+  """Helper for mapping function over submodules."""
+  dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
+  if not isinstance(dict_or_leaf, dict) or dict_or_leaf == {}:
+    return fn('', tree_or_leaf)
+  else:
+    flat_dict = traverse_util.flatten_dict(dict_or_leaf)
+    mapped_flat_dict = {k: fn('_' + '_'.join(k), v)
+                        for k, v in flat_dict.items()}
+    return serialization.from_state_dict(
+        tree_or_leaf, traverse_util.unflatten_dict(mapped_flat_dict))
 
 
 def _all_names_on_object(obj: Any) -> Set[str]:
@@ -224,7 +237,9 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
   @functools.wraps(fun)
   def wrapped_module_method(self, *args, **kwargs):
     is_compact_method = hasattr(fun, 'compact')
-    is_setup_method = fun.__name__ == 'setup'
+    is_setup_method = (fun.__name__ == 'setup' or
+                       fun.__name__ == '_adopt_toplevel_modules')
+
     # We lazily call setup() only when needed.
     if not is_setup_method:
       if not self._state.setup_called:
@@ -378,6 +393,7 @@ class Module:
     cls._wrap_module_methods()
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state
+    cls._setup_called = False
     cls.scope = None
 
   @classmethod
@@ -440,8 +456,8 @@ class Module:
 
   def __setattr__(self, name: str, val: Any):
     """Sets an attribute on this Module.
-    
-    We overload setattr solely to support pythonic naming via assignment of 
+
+    We overload setattr solely to support pythonic naming via assignment of
     submodules in the special setup() function::
 
       self.submodule_name = MyModule(...)
@@ -472,9 +488,7 @@ class Module:
           if not self._state.in_setup:
             raise ValueError(
                 "You can only assign submodules to self in setup().")
-          if subvalue.parent is _unspecified_parent:
-            subvalue.parent = self
-          elif subvalue.parent is not self:
+          if subvalue.parent is not self:
             raise ValueError("Can't attach to remote parent in setup, pass in "
                              "bound Modules from outside as an argument.")
           if subvalue.name is not None:
@@ -482,6 +496,7 @@ class Module:
                 "In setup, assign names of Modules via self.<name> and not "
                 "using keyword argument name=\"<name>\"")
           subvalue.name = f'{name}{suffix}'
+          subvalue._setattr_submodules(self)
           subvalue.__post_init__()
         # val is a parameter array or a Variable reference class.
         elif isinstance(subvalue, (np.ndarray, jax.interpreters.xla.DeviceArray,
@@ -495,6 +510,18 @@ class Module:
           self._state.last_varname = None
     # Finally, always run default __setattr__ to attach to self.__dict__.
     object.__setattr__(self, name, val)
+
+  def _setattr_submodules(self, root):
+    for field in dataclasses.fields(self):
+      if field.name != 'parent' and field.init:
+        val = object.__getattribute__(self, field.name)
+        for suffix, subvalue in _get_suffix_value_pairs(val):
+          if (isinstance(subvalue, Module)
+              and subvalue.parent._state.in_setup and subvalue.name is None):
+            subvalue.parent = root
+            subvalue.name = f"{self.name}_{field.name}{suffix}"
+            subvalue._setattr_submodules(root)
+            subvalue.__post_init__()
 
   def __getattr__(self, name: str) -> Any:
     """Call setup() before getting any setup-defined attributes."""
@@ -522,7 +549,7 @@ class Module:
     _check_omnistaging()
     # In dataclasses, __init__ is overridden to process dataclass arguments,
     # and __post_init__ is called immediately afterwards. Here, depending on the
-    # type of `parent` passed to initialize the Module, we either defer 
+    # type of `parent` passed to initialize the Module, we either defer
     # initialization, attach this Module as a submodule of a parent, or bind
     # this Module at the top-level to variables and rngs.
 
@@ -570,6 +597,13 @@ class Module:
     else:
       raise ValueError("parent must be None, Module or Scope")
 
+    # If we're in the top Module and have been passed submodules that were
+    # themselves instantiated at the top-level outside, attach them.  We
+    # explicitly do _not_ need to do anything special when passing in
+    # submodules as attributes to module.init/apply use-cases.
+    if _context.module_stack == [None,]:
+      self._adopt_toplevel_modules()
+
   def __repr__(self):
     return _module_repr(self)
 
@@ -607,6 +641,51 @@ class Module:
          ``setup`` defined attribute is accessed.
     """
     pass
+
+  @wrap_method_once
+  def _adopt_toplevel_modules(self):
+    """Adopts top-level instantiated submodule attributes to root module.
+
+    This function is called _once_ by a top-level module during initialization.
+    All top-level instantiated modules passed in as attributes are 'adopted' or
+    'reparented' onto the root, top-level module. Effectively this function
+    registers any such top-level instantiated submodule as if they had been
+    defined in the top setup() function, taking care to preserve implied
+    sharing-by-reference relationships and to avoid name collisions.
+    """
+    # We process modules in a BFS to choose least nested names for shared modules.
+    bfs_queue = [(self, '')]
+    # We cache processed submodules by object id to recreate sharing by reference.
+    shared_ref_cache = {}
+    def adopt_modules(mdl: Module, prefix: str):
+      def adopt_modules_inner(name: str, suffix: str, subvalue: Any):
+        nonlocal bfs_queue
+        nonlocal shared_ref_cache
+        if isinstance(subvalue, Module) and subvalue.parent is None:
+          # We preserve any established share-by-reference relationships among
+          # the top-level modules.
+          original_id = id(subvalue)
+          if original_id in shared_ref_cache:
+            subvalue = shared_ref_cache[original_id]
+          else:
+            # Run the setup equivalent for adopted top-level modules.
+            subvalue = subvalue.clone(parent=None)
+            subvalue.parent = self  # always attach to root.
+            subvalue.name = f'{prefix}{name}{suffix}'
+            subvalue.__post_init__()
+            shared_ref_cache[original_id] = subvalue
+            bfs_queue.append((subvalue, f'{subvalue.name}_'))
+        return subvalue
+      for field in dataclasses.fields(mdl):
+        if field.name != 'parent' and field.init:
+          oldval = object.__getattribute__(mdl, field.name)
+          # circumvent trivial name collision
+          object.__delattr__(mdl, field.name)  # pytype: disable=attribute-error
+          newval = _map_over_modules_in_tree(
+              functools.partial(adopt_modules_inner, field.name), oldval)
+          object.__setattr__(mdl, field.name, newval)
+    while bfs_queue:
+      adopt_modules(*bfs_queue.pop(0))
 
   def _name_taken(self, name: str) -> bool:
     return (name in self.scope.reservations or

@@ -52,7 +52,8 @@ def _dedup_scopes(scopes):
       path.append(scope.name)
       scope = scope.parent
     if max_parent is not leaf:
-      del minimal_set[leaf]
+      if leaf in minimal_set:
+        del minimal_set[leaf]
     paths.append((max_parent, max_parent_path))
   return tuple(minimal_set), tuple(paths)
 
