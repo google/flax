@@ -122,8 +122,10 @@ class OptimizerDef:
     See docstring of :class:`Optimizer` for more details.
 
     Args:
-      target: the object to be optimized. This will typically be
-        an instance of `flax.nn.Model`.
+      target: the object to be optimized. This is typically a variable dict
+        returned by `flax.linen.Module.init()`, but it can also be a container
+        of variables dicts, e.g. `(v1, v2)` and  `('var1': v1, 'var2': v2)`
+        are valid inputs as well.
       focus: a `flax.traverse_util.Traversal` that selects which subset of
         the target is optimized. See docstring of :class:`MultiOptimizer` 
         for an example of how to define a `Traversal` object.
