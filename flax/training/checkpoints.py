@@ -111,6 +111,26 @@ def save_checkpoint(ckpt_dir,
   return ckpt_path
 
 
+def latest_checkpoint(ckpt_dir, prefix='checkpoint_'):
+  """Retrieve the path of the latest checkpoint in a directory.
+
+  Args:
+    ckpt_dir: str: directory of checkpoints to restore from.
+    prefix: str: name prefix of checkpoint files.
+
+  Returns:
+    The latest checkpoint path or None if no checkpoints were found.
+  """
+  glob_path = os.path.join(ckpt_dir, f'{prefix}*')
+  checkpoint_files = natural_sort(gfile.glob(glob_path))
+  ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
+  checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
+  if checkpoint_files:
+    return checkpoint_files[-1]
+  else:
+    return None
+
+
 def restore_checkpoint(ckpt_dir,
                        target,
                        step=None,
@@ -141,13 +161,9 @@ def restore_checkpoint(ckpt_dir,
     if not gfile.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
-    glob_path = os.path.join(ckpt_dir, f'{prefix}*')
-    checkpoint_files = natural_sort(gfile.glob(glob_path))
-    ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
-    checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
-    if not checkpoint_files:
+    ckpt_path = latest_checkpoint(ckpt_dir, prefix)
+    if not ckpt_path:
       return target
-    ckpt_path = checkpoint_files[-1]
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
   with gfile.GFile(ckpt_path, 'rb') as fp:
