@@ -139,6 +139,8 @@ def prefetch_to_device(iterator, size, devices=None):
   This utility takes an iterator and returns a new iterator which fills an on
   device prefetch buffer. Eager prefetching can improve the performance of
   training loops significantly by overlapping compute and data transfer.
+  
+  This utility is mostly useful for GPUs, for TPUs it should not be necessary.
 
   Args:
     iterator: an iterator that yields a pytree of ndarrays where the first
