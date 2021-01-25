@@ -597,8 +597,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           writer.write_texts(step, {"samples": exemplars})
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
-      save_checkpoint = step % config.checkpoint_every_steps or is_last_step
-      if config.save_checkpoints and save_checkpoint and jax.host_id():
+      save_checkpoint = step % config.checkpoint_every_steps == 0 or is_last_step
+      if config.save_checkpoints and save_checkpoint and jax.host_id() == 0:
         with report_progress.timed("checkpoint"):
           checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(optimizer),
                                       step)
