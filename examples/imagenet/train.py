@@ -317,7 +317,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   epoch_metrics = []
   hooks = []
   if jax.host_id() == 0:
-    hooks += [periodic_actions.Profile(num_profile_steps=5)]
+    hooks += [periodic_actions.Profile(logdir=workdir, num_profile_steps=5)]
   t_loop_start = time.time()
   logging.info('Initial compilation, this might take some minutes...')
   for step, batch in zip(range(step_offset, num_steps), train_iter):

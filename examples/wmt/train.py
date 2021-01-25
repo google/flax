@@ -541,7 +541,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   report_progress = periodic_actions.ReportProgress(
       num_train_steps=config.num_train_steps, writer=writer)
   if jax.host_id() == 0:
-    hooks += [report_progress, periodic_actions.Profile(num_profile_steps=5)]
+    hooks += [
+        report_progress,
+        periodic_actions.Profile(logdir=workdir, num_profile_steps=5)
+    ]
   train_metrics = []
   with metric_writers.ensure_flushes(writer):
     for step in range(start_step, config.num_train_steps):
