@@ -85,6 +85,9 @@ class CheckpointsTest(absltest.TestCase):
     new_object = checkpoints.restore_checkpoint(
         tmp_dir, test_object0, step=3, prefix='test_')
     jtu.check_eq(new_object, test_object2)
+    new_object = checkpoints.restore_checkpoint(
+        os.path.join(tmp_dir, 'test_3'), test_object0)
+    jtu.check_eq(new_object, test_object2)
     with self.assertRaises(ValueError):
       checkpoints.restore_checkpoint(
           tmp_dir, test_object0, step=5, prefix='test_')
