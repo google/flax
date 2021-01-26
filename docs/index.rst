@@ -56,11 +56,12 @@ For a quick introduction and short example snippets, see our `README
    :maxdepth: 2
    :caption: API reference
 
+   flax.errors
+   flax.jax_utils
    flax.linen
    flax.optim
    flax.serialization
    flax.struct
-   flax.jax_utils
    flax.traverse_util
 
 .. toctree::

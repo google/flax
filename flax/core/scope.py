@@ -32,6 +32,7 @@ import functools
 import hashlib
 from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic, Mapping
 
+from flax.errors import InvalidFilterError, InvalidScopeError, MutableCollectionError, ScopeNamingError
 from . import tracers
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
@@ -101,7 +102,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
-  raise TypeError(f'Invalid Filter: "{filter_like}"')
+  raise InvalidFilterError(f'Invalid Filter: "{filter_like}"')
 
 
 def filter_to_set(x: Filter) -> Set[str]:
@@ -120,7 +121,7 @@ def filter_to_set(x: Filter) -> Set[str]:
     return set([x])
   if isinstance(x, Iterable):
     return set(x)
-  raise TypeError('Invalid Filter')
+  raise InvalidFilterError(f'Invalid Filter: "{x}"')
 
 
 def union_filters(a: Filter, b: Filter) -> Filter:
@@ -279,7 +280,7 @@ class Scope:
 
   def _check_valid(self):
     if self._invalid:
-      raise ValueError('This scope is no longer valid.')
+      raise InvalidScopeError('This scope {self.name} is no longer valid.')
 
   @contextlib.contextmanager
   def temporary(self):
@@ -323,9 +324,9 @@ class Scope:
       name: the name to reserve.
     """
     if not isinstance(name, str):
-      raise ValueError('Variable and child scopes should have a string name.')
+      raise ScopeNamingError('{name} is not a string.')
     if name in self.reservations:
-      raise ValueError(f'Duplicate use of name: "{name}"')
+      raise ScopeNamingError(f'Duplicate use of name: "{name}"')
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
@@ -408,7 +409,8 @@ class Scope:
   def _mutable_collection(self, col: str) -> MutableCollection:
     """Returns the collection `col` as a mutable object."""
     if not self.is_mutable_collection(col):
-      raise ValueError(f'Collection is not mutable: "{col}"')
+      raise MutableCollectionError(f'Collection is not mutable: "{col}" in '
+                                   '"{self.path_text}"')
     if col not in self._variables:
       if self.parent:
         parent_col = self.parent._mutable_collection(col)
@@ -483,7 +485,7 @@ class Scope:
     self._check_valid()
     self._validate_trace_level()
     if not self.is_mutable_collection(col):
-      raise ValueError(
+      raise MutableCollectionError(
         f'Trying to update variable "{name}" in "{self.path_text}" '
         f'but collection "{col}" is immutable.')
     variables = self._mutable_collection(col)

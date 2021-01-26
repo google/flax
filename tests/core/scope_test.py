@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from flax.errors import MutableCollectionError
 from flax.core import Scope, scope, freeze, init, apply, nn
 
 from jax import random
@@ -73,7 +74,7 @@ class ScopeTest(absltest.TestCase):
       scope.put_variable('state', 'test', 123)
 
     msg = 'Trying to update variable "test" in "/" but collection "state" is immutable.'
-    with self.assertRaisesWithLiteralMatch(ValueError, msg):
+    with self.assertRaises(MutableCollectionError):
       init(f, mutable='params')(random.PRNGKey(0))
 
   def test_undefined_param(self):
