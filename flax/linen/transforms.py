@@ -19,7 +19,7 @@ import functools
 import inspect
 from flax.core import lift, Scope
 from flax.linen.module import Module
-from flax.linen.module import wrap_method
+from flax.linen.module import wrap_method_once
 import jax
 
 # Utils
@@ -134,13 +134,13 @@ def module_class_lift_transform(
       def core_fn(scopes, *args, **kwargs):
         # make a clone of self using its arguments
         attrs = {f.name: getattr(self, f.name)
-                 for f in dataclasses.fields(self) if f.name != 'parent'}
+                 for f in dataclasses.fields(self) if f.name != 'parent' and f.init}
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
         cloned = set_module_scopes(cloned, scopes)
-        cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
+        cloned._state = self._state.export()  # pylint: disable=protected-access
         res = fn(cloned, *args, **kwargs)
-        self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
+        self._state.reimport(cloned._state)  # pylint: disable=protected-access
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
       trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
@@ -149,7 +149,6 @@ def module_class_lift_transform(
     return wrapped_fn
   transformed_fns = {fn_name: create_trans_fn(fn_name, fn_trafo_args)
                      for fn_name, fn_trafo_args in class_trafo_args.items()}
-  transformed_fns['setup'] = lambda _: None
   # construct new dynamic class w. transformed methods
   transformed_cls = type(transform.__name__.capitalize() + module_class.__name__,
                          (module_class,),
@@ -160,18 +159,17 @@ def module_class_lift_transform(
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
 def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
-  # NB: due to the ordering of method decorators, we must re-wrap the class_fn
-  # to maintain Module state correctly for multiple invocations.  If we want to
-  # save another stacktrace entry we could instead replicate its logic below.
-  rewrapped_fn = wrap_method(class_fn)
-  @functools.wraps(class_fn)
+  # Due to the ordering of method decorators, we must wrap the class_fn
+  # with the module state management wrapper first to maintain Module state correctly.
+  prewrapped_fn = wrap_method_once(class_fn)
+  @functools.wraps(prewrapped_fn)
   def wrapped_fn(self, *args, **kwargs):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
       cloned = set_module_scopes(self, scopes)
-      cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
-      res = rewrapped_fn(cloned, *args, **kwargs)
-      self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
+      cloned._state = self._state.export()  # pylint: disable=protected-access
+      res = prewrapped_fn(cloned, *args, **kwargs)
+      self._state.reimport(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
@@ -206,11 +204,10 @@ scan = functools.partial(lift_transform, lift.scan)
 # Special case of decorator_lift_transform to handle named calls for profiling.
 def named_call(class_fn):
   """Labels a method for labelled traces in profiles."""
-  # NB: due to the ordering of method decorators, we must re-wrap the class_fn
-  # to maintain Module state correctly for multiple invocations.  If we want to
-  # save another stacktrace entry we could instead replicate its logic below.
-  rewrapped_fn = wrap_method(class_fn)
-  @functools.wraps(class_fn)
+  # Due to the ordering of method decorators, we must wrap the class_fn
+  # with the module state management wrapper first to maintain Module state correctly.
+  prewrapped_fn = wrap_method_once(class_fn)
+  @functools.wraps(prewrapped_fn)
   def wrapped_fn(self, *args, **kwargs):
     fn_name = class_fn.__name__
     method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
@@ -219,9 +216,9 @@ def named_call(class_fn):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
       cloned = set_module_scopes(self, scopes)
-      cloned._state = copy.deepcopy(self._state)  # pylint: disable=protected-access
-      res = rewrapped_fn(cloned, *args, **kwargs)
-      self._state = copy.deepcopy(cloned._state)  # pylint: disable=protected-access
+      cloned._state = self._state.export()  # pylint: disable=protected-access
+      res = prewrapped_fn(cloned, *args, **kwargs)
+      self._state.reimport(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = lift.named_call(core_fn, full_name)
