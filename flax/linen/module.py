@@ -780,6 +780,13 @@ class Module:
            **kwargs) -> VariableDict:
     """Initializes a module method with variables and returns modified variables.
 
+    Jitting `init` initializes a model lazily using only the shapes of the 
+    provided arguments, and avoids computing the forward pass with actual 
+    values. Example::
+
+      jit_init = jax.jit(SomeModule.init)
+      jit_init(rng, jnp.ones(input_shape, jnp.float32))      
+
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
