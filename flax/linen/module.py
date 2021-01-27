@@ -227,9 +227,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
     is_setup_method = fun.__name__ == 'setup'
     # We lazily call setup() only when needed.
     if not is_setup_method:
-      if not self._state.setup_called:
-        self.setup()
-        self._state.setup_called = True
+      self._try_setup()
 
     if is_compact_method:
       if self.scope is None:
@@ -501,10 +499,7 @@ class Module:
     # We don't want to return anything for python copy / pickle methods.
     if name in _UNDEFINED_COPY_PICKLE_METHODS:
       raise AttributeError()
-    # _state have class defaults to prevent infinite loop.
-    if self.parent and not self._state.setup_called and not self._state.in_setup:
-      self.setup()
-      self._state.setup_called = True
+    self._try_setup()
     if name in self.__dict__:
       return self.__dict__[name]
     else:
@@ -513,9 +508,7 @@ class Module:
 
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
-    if self.parent and not self._state.setup_called and not self._state.in_setup:
-      self.setup()
-      self._state.setup_called = True
+    self._try_setup()
     return object.__dir__(self)  # pytype: disable=attribute-error
 
   def __post_init__(self):
@@ -607,6 +600,14 @@ class Module:
          ``setup`` defined attribute is accessed.
     """
     pass
+
+  def _try_setup(self):
+    """Tries to setup module if scope is available and setup has not been called yet."""
+    if self.scope and not self._state.setup_called and not self._state.in_setup:
+      try:
+        self.setup()
+      finally:
+        self._state.setup_called = True
 
   def _name_taken(self, name: str) -> bool:
     return (name in self.scope.reservations or
