@@ -760,6 +760,37 @@ class ModuleTest(absltest.TestCase):
     key = random.PRNGKey(0)
     x = jnp.ones((2,))
     _ = B().init_with_output(key, x)
+  
+  def test_module_unbound_getattr(self):
+    class A(nn.Module):
+      def setup(self):
+        b = B()
+        b.c  # B is unbound because it is not yet assigned to an attribute.
+        self.b = b
+      
+      def __call__(self):
+        pass
+    
+    class B(nn.Module):
+      def setup(self):
+        self.c = nn.Dense(2)
+
+    with self.assertRaisesWithLiteralMatch(AttributeError, "'B' object has no attribute 'c'"):
+      A().init(random.PRNGKey(0))
+
+  def test_unbound_setup_call(self):
+    setup_called = False
+
+    class A(nn.Module):
+      def setup(self):
+        nonlocal setup_called
+        setup_called = True
+      
+      def test(self):
+        pass
+
+    A().test()
+    self.assertFalse(setup_called)
 
 
 if __name__ == '__main__':
