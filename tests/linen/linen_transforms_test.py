@@ -468,7 +468,8 @@ class TransformTest(absltest.TestCase):
       def __call__(self, x):
         return x * self.test
 
-    FooVmap = nn.vmap(Foo, in_axes=0, out_axes=0, variable_axes={'params': 0}, split_rngs={'params': True})
+    FooVmap = nn.vmap(Foo, in_axes=0, out_axes=0,
+                      variable_axes={'params': 0}, split_rngs={'params': True})
     variables = FooVmap().init(random.PRNGKey(0), jnp.ones((4,)))
     self.assertEqual(variables['params']['test'].shape, (4,))
 
@@ -613,6 +614,112 @@ class TransformTest(absltest.TestCase):
     (y1, y2), _ = B().init_with_output(key, x)
     np.testing.assert_array_equal(y1, y2)
     self.assertEqual(cntr, 2)
+
+  def test_toplevel_submodule_adoption_transform(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(3)(x)
+    class B(nn.Module):
+      A: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return self.A(x)
+    class C(nn.Module):
+      A: nn.Module
+      B: nn.Module
+      @partial(
+          nn.vmap,
+          variable_axes={'params': 0},
+          split_rngs={'params': True})
+      @nn.compact
+      def __call__(self, x):
+        return self.B(x) + self.A(x)
+    class Csimple(nn.Module):
+      A: nn.Module
+      B: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return self.B(x) + self.A(x)
+    class D(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        a1 = A()
+        a2 = A()
+        b = B(a1)
+        c = C(a2, b)
+        return c(x)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((10, 10))
+    p1 = D().init(key, x)
+    y1 = D().apply(p1, x)
+
+    a1 = A()
+    a2 = A()
+    b = B(a1)
+    p2 = freeze({'params': {
+        'A': p1['params']['A_0'],
+        'B': {
+            'A': p1['params']['A_1'],
+        }
+    }})
+
+    print(jax.tree_map(jnp.shape, p1))
+    # Test method wrapper transform.
+    y2 = C(a2, b).apply(p2, x)
+    np.testing.assert_allclose(y1, y2, atol=1e-7)
+    # Test class transform.
+    Ctrafo = nn.vmap(Csimple,
+                     variable_axes={'params': 0},
+                     split_rngs={'params': True})
+
+    y3 = Ctrafo(a2, b).apply(p2, x)
+    np.testing.assert_allclose(y1, y3, atol=1e-7)
+
+  def test_toplevel_submodule_adoption_pytree_transform(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, c, x):
+        counter = self.variable('counter', 'i', jnp.zeros, ())
+        counter.value += 1
+        x = nn.Dense(1)(x)
+        return c, x
+
+    class B(nn.Module):
+      A: Any
+      @nn.compact
+      def __call__(self, c, x):
+        return self.A['foo'](*self.A['bar'](c, x))
+
+    a = A()
+    As = {'foo': A(), 'bar': A()}
+    b = nn.scan(B,
+                in_axes=0,
+                variable_carry='counter',
+                variable_broadcast='params',
+                split_rngs={'params': False})(As)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((10, 2))
+
+    p = B(As).init(key, x, x)
+    y, cntrs = b.apply(p, x, x, mutable='counter')
+    ref_cntrs = freeze({
+        'counter': {
+            'A_bar': {
+                'i': jnp.array(11.0),
+            },
+            'A_foo': {
+                'i': jnp.array(11.0),
+            },
+        },
+      })
+    self.assertTrue(jax.tree_util.tree_all(
+        jax.tree_multimap(
+            lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
+            cntrs, ref_cntrs)
+        ))
 
 if __name__ == '__main__':
   absltest.main()

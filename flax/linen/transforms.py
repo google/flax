@@ -50,6 +50,7 @@ def get_module_scopes(module):
     A list of all functional-core Scopes bound on self and inside dataclass
     fields.
   """
+  module._try_setup(shallow=True)
   outer_scopes = []
   def get_scope(x):
     nonlocal outer_scopes
@@ -138,7 +139,7 @@ def module_class_lift_transform(
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
         cloned = set_module_scopes(cloned, scopes)
-        cloned._state = self._state.export()  # pylint: disable=protected-access
+        object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
         res = fn(cloned, *args, **kwargs)
         self._state.reimport(cloned._state)  # pylint: disable=protected-access
         return res
@@ -167,7 +168,7 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
       cloned = set_module_scopes(self, scopes)
-      cloned._state = self._state.export()  # pylint: disable=protected-access
+      object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
       return res
@@ -216,7 +217,7 @@ def named_call(class_fn):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
       cloned = set_module_scopes(self, scopes)
-      cloned._state = self._state.export()  # pylint: disable=protected-access
+      object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
       return res
