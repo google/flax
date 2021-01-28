@@ -11,7 +11,7 @@
 **See our [full documentation](https://flax.readthedocs.io/)
 to learn everything you need to know about Flax.**
 
-Flax is developed by a group within the Brain Team in Google AI, in
+Flax is developed by a group within the Brain Team in Google Research, in
 close collaboration with the JAX team. Flax is being used by a growing
 community of hundreds of folks in various Alphabet research departments
 for their daily work, as well as a [growing community
@@ -150,4 +150,4 @@ class AutoEncoder(Module):
 
 ## Note
 
-This is not an official Google product.
+Flax is an open source project maintained by a dedicated team in Google Research, but is not an official Google product.
