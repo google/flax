@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.errors import MutableCollectionError
+from flax.errors import VariableModificationError
 from flax.core import Scope, scope, freeze, init, apply, nn
 
 from jax import random
@@ -74,14 +74,14 @@ class ScopeTest(absltest.TestCase):
       scope.put_variable('state', 'test', 123)
 
     msg = 'Trying to update variable "test" in "/" but collection "state" is immutable.'
-    with self.assertRaises(MutableCollectionError):
+    with self.assertRaises(VariableModificationError):
       init(f, mutable='params')(random.PRNGKey(0))
 
   def test_undefined_param(self):
     def f(scope):
       nn.dense(scope.push('dense'), np.ones((1, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/dense".'):
+    with self.assertRaisesWithLiteralMatch(ValueError, 'No parameter named "kernel" exists in "/dense".'):
       apply(f)({})
 
 

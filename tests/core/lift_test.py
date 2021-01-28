@@ -44,7 +44,7 @@ class ScopeTest(absltest.TestCase):
                         split_rngs={'params': True})
       dense(scope.push('dense'), np.ones((3, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/vmap(dense)".'):
+    with self.assertRaisesWithLiteralMatch(ValueError, 'No parameter named "kernel" exists in "/vmap(dense)".'):
       apply(f)({})
 
 
