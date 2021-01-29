@@ -85,6 +85,16 @@ class CheckpointsTest(absltest.TestCase):
     new_object = checkpoints.restore_checkpoint(
         tmp_dir, test_object0, step=3, prefix='test_')
     jtu.check_eq(new_object, test_object2)
+    # Restore a specific path.
+    new_object = checkpoints.restore_checkpoint(
+        os.path.join(tmp_dir, 'test_3'), test_object0)
+    jtu.check_eq(new_object, test_object2)
+    # If a specific path is specified, but it does not exist, the same behavior
+    # as when a directory is empty should apply: the target is returned
+    # unchanged.
+    new_object = checkpoints.restore_checkpoint(
+        os.path.join(tmp_dir, 'test_not_there'), test_object0)
+    jtu.check_eq(new_object, test_object0)
     with self.assertRaises(ValueError):
       checkpoints.restore_checkpoint(
           tmp_dir, test_object0, step=5, prefix='test_')
