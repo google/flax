@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import dataclasses
-from typing import Sequence
+from typing import Optional, Sequence
 import itertools
 
 from docutils import nodes
@@ -36,61 +36,54 @@ Use directive as follows:
   <CODE_BLOCK_RIGHT>
 """
 
-@dataclasses.dataclass
-class CodeDiffBlock:
-  lines: Sequence[str]
-  title_left: str = 'Base code'
-  title_right: str = 'Diff code'
-  highlight_left: str = ''
-  highlight_right: str = ''
-  code_sep: str = '---'
-
-  def __post_init__(self):
-    if self.code_sep not in self.lines:
-      raise ValueError('Code separator not found! Code snippets should be '
-                       f'separated by {self.code_sep}.')
-  
-
 class CodeDiffParser:
-  def __init__(self, code_block: CodeDiffBlock):
-    self.code_block = code_block
-
-  def parse(self):
-    code = self.code_block
-    idx = code.lines.index(code.code_sep)
-    self.left_code, self.left_max = self._code_block(code.highlight_left, 0, idx)
-    self.right_code, self.right_max = self._code_block(code.highlight_right, idx+1)
+  def parse(self, lines, title_left='Base', title_right='Diff', code_sep='---'):
+    if code_sep not in lines:
+      raise ValueError('Code separator not found! Code snippets should be '
+                       f'separated by {code_sep}.')
+    idx = lines.index(code_sep)
+    code_left = self._code_block(lines[0: idx])
+    code_right = self._code_block(lines[idx+1:])
     
+    self.max_left = max(len(x) for x in code_left + [title_left])
+    self.max_right = max(len(x) for x in code_right + [title_right])
+
     output = [
-      self._horizontal_line(),
-      self._table_row(self.code_block.title_left, self.code_block.title_right),
-      self._horizontal_line(),
+      self._hline(),
+      self._table_row(title_left, title_right),
+      self._hline(),
     ]
 
-    for left, right in itertools.zip_longest(self.left_code, self.right_code, fillvalue=''):
-      output += [self._table_row(left, right)]
+    for l, r in itertools.zip_longest(code_left, code_right, fillvalue=''):
+      output += [self._table_row(l, r)]
 
-    return output + [self._horizontal_line()]
+    return output + [self._hline()]
 
-  def _code_block(self, highlights, start_idx, end_idx=None):
-    lines = ['.. code-block:: python']
+  def _code_block(self, lines):
+    # Remove right trailing whitespace so we can detect the comments.
+    lines = [x.rstrip() for x in lines]
+    highlight = lambda x : x.endswith('#!')
+    code = map(lambda x : x[:-2].rstrip() if highlight(x) else x, lines)
+    highlights = [i+1 for i in range(len(lines)) if highlight(lines[i])]
+    highlights = ','.join(str(i) for i in highlights)
+
+    directive = ['.. code-block:: python']
     if highlights:
-      lines += [f'  :emphasize-lines: {highlights}']
+      directive += [f'  :emphasize-lines: {highlights}']
 
-    indent = lambda lines: ['  ' + line for line in lines]
+    # Indent code and add empty line so the code is picked up by the directive.
+    return directive + [''] + list(map(lambda x: '  ' + x, code))
 
-    # Prefix empty line to code blocks to separate them from the code directive.
-    lines += [''] + indent(self.code_block.lines[start_idx: end_idx])
-    return lines, max(len(x) for x in lines)
-
-  def _horizontal_line(self):
-    return '+' + '-'*(self.left_max+2) + '+' + '-'*(self.right_max+2) + '+'
+  def _hline(self):
+    return '+' + '-'*(self.max_left+2) + '+' + '-'*(self.max_right+2) + '+'
 
   def _rfill(self, text, max_len):
     return text + ' ' * (max_len-len(text))
 
   def _table_row(self, left, right):
-    return '| ' + self._rfill(left, self.left_max) + ' | ' + self._rfill(right, self.right_max) + ' |'
+    text_left = self._rfill(left, self.max_left)
+    text_right = self._rfill(right, self.max_right)
+    return '| ' + text_left + ' | ' + text_right + ' |'
 
 
 class CodeDiffDirective(SphinxDirective):
@@ -98,13 +91,11 @@ class CodeDiffDirective(SphinxDirective):
   option_spec = {
     'title_left': directives.unchanged,
     'title_right': directives.unchanged,
-    'highlight_left': directives.unchanged,
-    'highlight_right': directives.unchanged
+    'code_sep': directives.unchanged,
     }
 
   def run(self):    
-    code_diff = CodeDiffBlock(lines=list(self.content), **self.options)
-    new_content = CodeDiffParser(code_diff).parse()
+    new_content = CodeDiffParser().parse(list(self.content), **self.options)
 
     node = nodes.paragraph()
     self.content = ViewList(new_content, self.content.parent)

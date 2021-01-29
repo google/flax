@@ -15,20 +15,20 @@
 
 from absl.testing import absltest
 
-from codediff import CodeDiffParser, CodeDiffBlock
+from codediff import CodeDiffParser
 
 class CodeDiffTest(absltest.TestCase):
 
   def test_parse(self):
 
-    input_text = r'''@jax.jit
-def get_initial_params(key):
+    input_text = r'''@jax.jit #!
+def get_initial_params(key):   #!  
   init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
   initial_params = CNN().init(key, init_val)['params']
   extra_line
   return initial_params
 ---
-@jax.pmap
+@jax.pmap #!
 def get_initial_params(key):
   init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
   initial_params = CNN().init(key, init_val)['params']
@@ -38,7 +38,7 @@ def get_initial_params(key):
 | Single device                                            | Ensembling on multiple devices                           |
 +----------------------------------------------------------+----------------------------------------------------------+
 | .. code-block:: python                                   | .. code-block:: python                                   |
-|   :emphasize-lines: 1, 2                                 |   :emphasize-lines: 1                                    |
+|   :emphasize-lines: 1,2                                  |   :emphasize-lines: 1                                    |
 |                                                          |                                                          |
 |   @jax.jit                                               |   @jax.pmap                                              |
 |   def get_initial_params(key):                           |   def get_initial_params(key):                           |
@@ -50,18 +50,11 @@ def get_initial_params(key):
 
     title_left = 'Single device'
     title_right = 'Ensembling on multiple devices'
-    highlight_left = '1, 2'
-    highlight_right = '1'
 
-    code_diff = CodeDiffBlock(
+    actual_output = CodeDiffParser().parse(
       lines=input_text.split('\n'),
       title_left=title_left,
-      title_right=title_right,
-      highlight_left=highlight_left,
-      highlight_right=highlight_right)
-
-    actual_output = '\n'.join(CodeDiffParser(code_diff).parse())
-
-    print(actual_output)
+      title_right=title_right)
+    actual_output = '\n'.join(actual_output)
 
     self.assertEqual(expected_output, actual_output)
