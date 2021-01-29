@@ -9,18 +9,16 @@ Example of the new directive:
 .. codediff::
   :title_left: Without ensembling
   :title_right: With ensembling
-  :highlight_left: 1, 2
-  :highlight_right: 1, 2
   
-  # Jitting
-  @jax.jit
+  # Jitting #!
+  @jax.jit #!
   def get_initial_params(key):
     init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
     initial_params = CNN().init(key, init_val)['params']
     return initial_params
   ---
-  # Pmapping
-  @jax.pmap
+  # Pmapping #!
+  @jax.pmap #!
   def get_initial_params(key):
     init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
     initial_params = CNN().init(key, init_val)['params']
