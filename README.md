@@ -19,14 +19,15 @@ of open source
 projects](https://github.com/google/flax/network/dependents?dependent_type=REPOSITORY).
 
 The Flax team's mission is to serve the growing JAX neural network
-research ecosystem -- both within Alphabet and with the broader , and to explore the use-cases where JAX shines. We
-use GitHub for almost all of our coordination and planning, as well as
-where we discuss upcoming design changes. We welcome feedback on any
-of our discussion, issue and pull request thread. We are in the
-process of moving some remaining internal design docs and conversation
-threads to GitHub discussions, issues and pull requests. We hope to
-increasingly engage with the needs and clarifications of the broader
-ecosystem. Please let us know how we can help!
+research ecosystem -- both within Alphabet and with the broader community,
+and to explore the use-cases where JAX shines. We use GitHub for almost
+all of our coordination and planning, as well as where we discuss
+upcoming design changes. We welcome feedback on any of our discussion,
+issue and pull request thread. We are in the process of moving some
+remaining internal design docs and conversation threads to GitHub
+discussions, issues and pull requests. We hope to increasingly engage
+with the needs and clarifications of the broader ecosystem. Please let
+us know how we can help!
 
 **NOTE**: The new Flax ["Linen" module
 API](https://github.com/google/flax/tree/master/flax/linen/README.md)
@@ -51,7 +52,7 @@ JAX that is **designed for flexibility**:
 Try new forms of training by forking an example and by modifying the training
 loop, not by adding features to a framework.
 
-Flax is being developed in close collaboration with the JAX team and 
+Flax is being developed in close collaboration with the JAX team and
 comes with everything you need to start your research, including:
 
 * **Neural network API** (`flax.linen`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout

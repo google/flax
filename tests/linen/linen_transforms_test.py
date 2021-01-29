@@ -461,14 +461,155 @@ class TransformTest(absltest.TestCase):
     class Foo(nn.Module):
       def setup(self):
         self.test = self.param('test', nn.initializers.ones, ())
-      
+
       def __call__(self, x):
         return x * self.test
-      
+
     FooVmap = nn.vmap(Foo, in_axes=0, out_axes=0, variable_axes={'params': 0}, split_rngs={'params': True})
     variables = FooVmap().init(random.PRNGKey(0), jnp.ones((4,)))
     self.assertEqual(variables['params']['test'].shape, (4,))
 
+
+  def test_nested_module_args_vmap(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(3)(x)
+    class B(nn.Module):
+      A: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return self.A(x)
+    class C(nn.Module):
+      B: nn.Module
+      @partial(nn.vmap,
+               variable_axes={'params': 0},
+               split_rngs={'params': True})
+      @nn.compact
+      def __call__(self, x):
+        return self.B(x)
+    class D(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        a = A()
+        b = B(a)
+        c = C(b)
+        return c(x)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((10, 10))
+    p = D().init(key, x)
+
+    variable_shapes = jax.tree_map(jnp.shape, p)
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['kernel'],
+        (10, 10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['bias'],
+        (10, 3))
+
+  def test_nested_module_args_vmap_2(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(3)(x)
+    class B(nn.Module):
+      A: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        return self.A(x)
+    class C(nn.Module):
+      A: nn.Module
+      B: nn.Module
+      @partial(
+          nn.vmap,
+          variable_axes={'params': 0},
+          split_rngs={'params': True})
+      @nn.compact
+      def __call__(self, x):
+        return self.B(x) + self.A(x)
+    class D(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        a1 = A()
+        a2 = A()
+        b = B(a1)
+        c = C(a2, b)
+        return c(x)
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((10, 10))
+    p = D().init(key, x)
+
+    variable_shapes = jax.tree_map(jnp.shape, p)
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['kernel'],
+        (10, 10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_0']['Dense_0']['bias'],
+        (10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_1']['Dense_0']['kernel'],
+        (10, 10, 3))
+    self.assertEqual(
+        variable_shapes['params']['A_1']['Dense_0']['bias'],
+        (10, 3))
+
+  def test_nested_setup_calls_count(self):
+    D = 3
+    N = 4
+    cntr = 0
+    class Repeat(nn.Module):
+      mdl_def: Any
+      def setup(self):
+        self.lyrs = [self.mdl_def() for _ in range(N)]
+      @nn.remat  # we just use remat as a convenient test of transform logic
+      def __call__(self, x):
+        for lyr in self.lyrs:
+          lyr(x)
+        return x
+    class Counter(nn.Module):
+      def setup(self):
+        nonlocal cntr
+        cntr += 1
+        self.dense = nn.Dense(2, use_bias=False)
+      @nn.remat
+      def __call__(self, x):
+        return self.dense(x)
+
+    def nested_repeat(mdl):
+      for _ in range(D):
+        mdl = partial(Repeat, mdl)
+      return mdl()
+    _ = nested_repeat(Counter).init(random.PRNGKey(0), jnp.ones((2,)))
+    self.assertEqual(cntr, 64)
+
+  def test_multimethod_setup_calls(self):
+    cntr=0
+    class A(nn.Module):
+      def setup(self):
+        nonlocal cntr
+        cntr+=1
+        self.d = nn.Dense(2)
+      @nn.remat
+      def foo(self, x):
+        return self.d(x)
+      @nn.remat
+      def bar(self, x):
+        return self.d(x)
+    class B(nn.Module):
+      def setup(self):
+        self.a = A()
+      def __call__(self, x):
+        y1 = self.a.foo(x)
+        y2 = self.a.bar(x)
+        return y1, y2
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2,))
+    (y1, y2), _ = B().init_with_output(key, x)
+    np.testing.assert_array_equal(y1, y2)
+    self.assertEqual(cntr, 2)
 
 if __name__ == '__main__':
   absltest.main()

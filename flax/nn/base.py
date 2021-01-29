@@ -242,7 +242,7 @@ def _fold_in_str(rng, data):
   m = hashlib.sha1()
   m.update(data.encode('utf-8'))
   d = m.digest()
-  hash_int = int.from_bytes(d[:4], byteorder='big')
+  hash_int = int.from_bytes(d[:4], byteorder='big', signed=True)
   return random.fold_in(rng, hash_int)
 
 
