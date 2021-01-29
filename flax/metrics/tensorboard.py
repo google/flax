@@ -32,6 +32,36 @@ from tensorboard.plugins.hparams import api as hparams_api
 import tensorflow.compat.v2 as tf
 
 
+def _flatten_dict(input_dict, parent_key='', sep='.'):
+  """Flatten and simplify dict such that it can be used by hparams.
+
+  Args:
+    input_dict: Input dict, e.g., from ConfigDict.
+    parent_key: String used in recursion.
+    sep: String used to separate parent and child keys.
+
+  Returns:
+   Flattened dict.
+  """
+  items = []
+  for k, v in input_dict.items():
+    new_key = parent_key + sep + k if parent_key else k
+
+    # Take special care of things hparams cannot handle.
+    if v is None:
+      v = 'None'
+    elif isinstance(v, list):
+      v = str(v)
+    elif isinstance(v, tuple):
+      v = str(v)
+    elif isinstance(v, dict):
+      # Recursively flatten the dict.
+      items.extend(_flatten_dict(v, new_key, sep=sep).items())
+    else:
+      items.append((new_key, v))
+  return dict(items)
+
+
 class SummaryWriter(object):
   """Saves data in event and summary protos for tensorboard."""
 
@@ -172,5 +202,6 @@ class SummaryWriter(object):
     Args:
       hparams: Flat mapping from hyper parameter name to value.
     """
+
     with self._event_writer.as_default():
-      hparams_api.hparams(hparams=hparams)
+      hparams_api.hparams(hparams=_flatten_dict(hparams))

@@ -82,7 +82,7 @@ class BottleneckResNetBlock(nn.Module):
 class ResNet(nn.Module):
   """ResNetV1."""
   stage_sizes: Sequence[int]
-  block_cls: Sequence[int]
+  block_cls: ModuleDef
   num_classes: int
   num_filters: int = 64
   dtype: Any = jnp.float32

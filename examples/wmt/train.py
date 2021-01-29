@@ -541,7 +541,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   report_progress = periodic_actions.ReportProgress(
       num_train_steps=config.num_train_steps, writer=writer)
   if jax.host_id() == 0:
-    hooks += [report_progress, periodic_actions.Profile(num_profile_steps=5)]
+    hooks += [
+        report_progress,
+        periodic_actions.Profile(logdir=workdir, num_profile_steps=5)
+    ]
   train_metrics = []
   with metric_writers.ensure_flushes(writer):
     for step in range(start_step, config.num_train_steps):
@@ -594,8 +597,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           writer.write_texts(step, {"samples": exemplars})
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
-      save_checkpoint = step % config.checkpoint_every_steps or is_last_step
-      if config.save_checkpoints and save_checkpoint and jax.host_id():
+      save_checkpoint = step % config.checkpoint_every_steps == 0 or is_last_step
+      if config.save_checkpoints and save_checkpoint and jax.host_id() == 0:
         with report_progress.timed("checkpoint"):
           checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(optimizer),
                                       step)
