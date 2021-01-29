@@ -145,25 +145,34 @@ def restore_checkpoint(ckpt_dir,
     ckpt_-1.0, ckpt_1.0, ckpt_1e5 --> ckpt_1e5
 
   Args:
-    ckpt_dir: str: directory of checkpoints to restore from.
+    ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
     target: matching object to rebuild via deserialized state-dict. If None,
       the deserialized state-dict is returned as-is.
-    step: int: step number to load or None to load latest.
+    step: int: step number to load or None to load latest. If specified,
+      ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
     no checkpoint files present, returns the passed-in `target` unchanged.
+    If a file path is specified and is not found, the passed-in `target` will be
+    returned. This is to match the behavior of the case where a directory path
+    is specified but the directory has not yet been created.
   """
   if step:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
-    ckpt_path = latest_checkpoint(ckpt_dir, prefix)
-    if not ckpt_path:
-      return target
+    if gfile.isdir(ckpt_dir):
+      ckpt_path = latest_checkpoint(ckpt_dir, prefix)
+      if not ckpt_path:
+        return target
+    else:
+      ckpt_path = ckpt_dir
+      if not gfile.exists(ckpt_path):
+        return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
   with gfile.GFile(ckpt_path, 'rb') as fp:
