@@ -11,8 +11,9 @@
 **See our [full documentation](https://flax.readthedocs.io/)
 to learn everything you need to know about Flax.**
 
-Flax is developed by a group within the Brain Team in Google Research, in
-close collaboration with the JAX team. Flax is being used by a growing
+Flax was originally started by engineers and researchers within the Brain Team in Google Research (in close collaboration with the JAX team), and is now developed jointly with the open source community.
+
+Flax is being used by a growing
 community of hundreds of folks in various Alphabet research departments
 for their daily work, as well as a [growing community
 of open source
@@ -39,8 +40,8 @@ issues, questions or concerns in our [discussion
 forum](https://github.com/google/flax/discussions), or just let us
 know what you're working on!
 
-We expect to add some improvements to Flax, but we only expect minor
-API changes to the core API. We will use [Changelog](CHANGELOG.md)
+We expect to improve to Flax, but we don't anticipate signifcant
+breaking changes to the core API. We use [Changelog](CHANGELOG.md)
 entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
