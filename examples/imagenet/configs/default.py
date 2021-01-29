@@ -36,7 +36,7 @@ def get_config():
 
   # As defined in the `models` module.
   config.model = 'ResNet50'
-  # We use 'imagenette' in the Colab.
+  # `name` argument of tensorflow_datasets.builder()
   config.dataset = 'imagenet2012:5.*.*'
 
   config.learning_rate = 0.1
