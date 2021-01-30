@@ -107,7 +107,7 @@ def _list_state_dict(xs):
 def _restore_list(xs, state_dict):
   if len(state_dict) != len(xs):
     raise ValueError(f'The size of the list and the state dict do not match,'
-                     ' got {len(xs)} and {len(state_dict)}.')
+                     f' got {len(xs)} and {len(state_dict)}.')
   ys = []
   for i in range(len(state_dict)):
     y = from_state_dict(xs[i], state_dict[str(i)])
