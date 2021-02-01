@@ -74,7 +74,7 @@ class LAMB(OptimizerDef):
     grad_ema = beta1 * state.grad_ema + (1. - beta1) * grad
     grad_sq_ema = beta2 * state.grad_sq_ema + (1. - beta2) * grad_sq
 
-    t = step + 1.
+    t = jnp.array(step + 1, lax.dtype(param.dtype))
     grad_ema_corr = grad_ema / (1. - beta1 ** t)
     grad_sq_ema_corr = grad_sq_ema / (1. - beta2 ** t)
 

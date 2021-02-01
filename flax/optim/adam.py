@@ -39,7 +39,7 @@ class _AdamParamState:
 
 class Adam(OptimizerDef):
   """Adam optimizer.
-  
+
   See: http://arxiv.org/abs/1412.6980
   """
 
@@ -79,7 +79,7 @@ class Adam(OptimizerDef):
     grad_sq_ema = beta2 * state.grad_sq_ema + (1. - beta2) * grad_sq
 
     # bias correction
-    t = step + 1.
+    t = jnp.array(step + 1, lax.dtype(param.dtype))
     grad_ema_corr = grad_ema / (1 - beta1 ** t)
     grad_sq_ema_corr = grad_sq_ema / (1 - beta2 ** t)
 
