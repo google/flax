@@ -11,8 +11,9 @@
 **See our [full documentation](https://flax.readthedocs.io/)
 to learn everything you need to know about Flax.**
 
-Flax is developed by a group within the Brain Team in Google Research, in
-close collaboration with the JAX team. Flax is being used by a growing
+Flax was originally started by engineers and researchers within the Brain Team in Google Research (in close collaboration with the JAX team), and is now developed jointly with the open source community.
+
+Flax is being used by a growing
 community of hundreds of folks in various Alphabet research departments
 for their daily work, as well as a [growing community
 of open source
@@ -39,8 +40,8 @@ issues, questions or concerns in our [discussion
 forum](https://github.com/google/flax/discussions), or just let us
 know what you're working on!
 
-We expect to add some improvements to Flax, but we only expect minor
-API changes to the core API. We will use [Changelog](CHANGELOG.md)
+We expect to improve Flax, but we don't anticipate significant
+breaking changes to the core API. We use [Changelog](CHANGELOG.md)
 entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
@@ -148,6 +149,23 @@ class AutoEncoder(Module):
     x = jnp.reshape(x, (x.shape[0],) + self.input_shape)
     return x
 ```
+
+## Citing Flax
+
+To cite this repository:
+
+```
+@software{flax2020github,
+  author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
+  title = {{F}lax: A neural network library and ecosystem for {JAX}},
+  url = {http://github.com/google/flax},
+  version = {0.3.0},
+  year = {2020},
+}
+```
+
+In the above bibtex entry, names are in alphabetical order, the version number
+is intended to be that from [flax/version.py](https://github.com/google/flax/blob/master/flax/version.py), and the year corresponds to the project's open-source release.
 
 ## Note
 

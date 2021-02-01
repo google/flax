@@ -734,6 +734,14 @@ class Module:
             **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
 
+    Note that `method` should be set if one would like to call `apply` on a 
+    different class method than `_call__`. For instance, suppose a Transformer
+    modules has a method called `encode`, then the following calls `apply` on
+    that method::
+
+      model = models.Transformer(config)
+      encoded = model.apply({'params': params}, inputs, method=model.encode) 
+
     Args:
       variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
