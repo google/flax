@@ -62,6 +62,7 @@ For a quick introduction and short example snippets, see our `README
    flax.struct
    flax.jax_utils
    flax.traverse_util
+   flax.errors
 
 .. toctree::
    :maxdepth: 1
