@@ -149,6 +149,23 @@ class AutoEncoder(Module):
     return x
 ```
 
+## Citing Flax
+
+To cite this repository:
+
+```
+@software{flax2020github,
+  author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
+  title = {{F}lax: A neural network library and ecosystem for {JAX}},
+  url = {http://github.com/google/flax},
+  version = {0.3.0},
+  year = {2020},
+}
+```
+
+In the above bibtex entry, names are in alphabetical order, the version number
+is intended to be that from [flax/version.py](https://github.com/google/flax/blob/master/flax/version.py), and the year corresponds to the project's open-source release.
+
 ## Note
 
 Flax is an open source project maintained by a dedicated team in Google Research, but is not an official Google product.

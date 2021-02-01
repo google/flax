@@ -46,6 +46,8 @@ def stack_forest(forest):
 
 
 def get_metrics(device_metrics):
+  # We select the first element of x in order to get a single copy of a
+  # device-replicated metric.
   device_metrics = jax.tree_map(lambda x: x[0], device_metrics)
   metrics_np = jax.device_get(device_metrics)
   return stack_forest(metrics_np)
