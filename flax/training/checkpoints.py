@@ -168,10 +168,12 @@ def restore_checkpoint(ckpt_dir,
     if gfile.isdir(ckpt_dir):
       ckpt_path = latest_checkpoint(ckpt_dir, prefix)
       if not ckpt_path:
+        logging.info(f'Found no checkpoint files in {ckpt_dir}')
         return target
     else:
       ckpt_path = ckpt_dir
       if not gfile.exists(ckpt_path):
+        logging.info(f'Found no checkpoint file at {ckpt_path}')
         return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
