@@ -94,7 +94,7 @@ def pack(fn: Callable[..., Any],
           scope._variables, in_variable_filters))
     variable_groups_xs_t = _transpose(variable_groups_xs)
 
-    # Make sure in only variable collections are frozen
+    # Make sure that in-only variable collections are frozen
     for variable_group_xs in variable_groups_xs_t:
       for variable_group in variable_group_xs:
         for col_name, collection in variable_group.items():
@@ -209,9 +209,9 @@ def transform(
     trans_in_fn: creates a view of the target variables.
     trans_out_fn: transforms the updated variables in the view after mutation.
     init: If True, variables are initialized before transformation.
-    rngs: PRNGSequences added tot the transformed scope (default: all).
+    rngs: PRNGSequences added to the transformed scope (default: all).
     variables: Addtional Variable collections added to the transformed scope.
-      Beside those specified by `target` (default: all).
+      Besides those specified by `target` (default: all).
   """
   def wrapper(scope_fn, repack, variable_groups, rng_groups, treedef, *args):
     target, variables = variable_groups
@@ -252,7 +252,7 @@ def transform_module(fn: Callable[..., Any],
                      mutable: bool = False,
                      rngs: PRNGSequenceFilter = True,
                      variables: CollectionFilter = True):
-  """"Wrapper around `tranform` for automatic init detection.
+  """"Wrapper around `transform` for automatic init detection.
 
   This function will detect if the target collection exists.
   If it doesn't `init=True` is will be passed to `transform`.
@@ -317,7 +317,7 @@ def vmap(fn: Callable[..., Any],
 
   Example::
 
-    # a dense mapping with seperate parameters for axis 0.
+    # a dense mapping with separate parameters for axis 0.
     batch_dense = lift.vmap(
         nn.dense,
         in_axes=(0, None),
@@ -334,7 +334,7 @@ def vmap(fn: Callable[..., Any],
     in_axes: Specifies the mapping of the input arguments (see `jax.vmap).
     out_axes: Specifies the mapping of the return value (see `jax.vmap).
     axes_size: Specifies the size of the batch axis. This only needs
-      to be specified if it cannot be derivied from the input arguments.
+      to be specified if it cannot be derived from the input arguments.
   """
   variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
@@ -416,10 +416,10 @@ def scan(fn: Callable[..., Any],
 
   Args:
     fn: the function to be transformed.
-    variable_axes: the variable collections that are scannned over.
+    variable_axes: the variable collections that are scanned over.
     variable_broadcast: Specifies the broadcasted variable collections.
       A broadcasted variable should not depend on any computation that cannot be lifted out of the loop.
-      This is typically used to define shared paramaters inside the fn.
+      This is typically used to define shared parameters inside the fn.
     variable_carry: Specifies the variable collections that are carried through the loop.
       Mutations to these variables are carried to the next iteration and will be preserved
       when the scan finishes.
@@ -535,10 +535,10 @@ def custom_vjp(fn: Callable[..., Any], backward_fn: Callable[..., Any],
     dense_sign_grad = lift.custom_vjp(fwd, backward_fn=bwd, nondiff_argnums=(2,))
 
   Args:
-    fn: should return a tuple of output and auxilairy data for the backward pass.
+    fn: should return a tuple of output and auxilliary data for the backward pass.
     backward_fn: arguments are passed as (*nondiff_args, scope_fn, grad_variables, aux, g_y)
-      where scope_fn takes grad_varialbes to create the scope,
-      aux is the auxilairy data returend by `fn`,
+      where scope_fn takes grad_variables to create the scope,
+      aux is the auxilliary data returend by `fn`,
       and g_y is the tangent of y.
   """
   # TODO(jheek) is this transform general/flexible enough?
