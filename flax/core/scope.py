@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import functools
 import hashlib
 from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic, Mapping
 
+from flax.errors import InvalidFilterError, InvalidScopeError, VariableModificationError, NameTypeError, NameInUseError
 from . import tracers
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
@@ -101,7 +102,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
-  raise TypeError(f'Invalid Filter: "{filter_like}"')
+  raise InvalidFilterError(filter_like)
 
 
 def filter_to_set(x: Filter) -> Set[str]:
@@ -120,13 +121,13 @@ def filter_to_set(x: Filter) -> Set[str]:
     return set([x])
   if isinstance(x, Iterable):
     return set(x)
-  raise TypeError('Invalid Filter')
+  raise InvalidFilterError(x)
 
 
 def union_filters(a: Filter, b: Filter) -> Filter:
   """Takes the union of two filters (similar to a logical or).
   
-  Arguments:
+  Args:
     a: a filter.
     b: a filter.
     
@@ -144,7 +145,7 @@ def union_filters(a: Filter, b: Filter) -> Filter:
 def intersect_filters(a: Filter, b: Filter) -> Filter:
   """Take the intersection of two filters (similar to a logical and).
   
-  Arguments:
+  Args:
     a: a filter.
     b: a filter.
     
@@ -279,7 +280,7 @@ class Scope:
 
   def _check_valid(self):
     if self._invalid:
-      raise ValueError('This scope is no longer valid.')
+      raise InvalidScopeError(self.name)
 
   @contextlib.contextmanager
   def temporary(self):
@@ -323,9 +324,9 @@ class Scope:
       name: the name to reserve.
     """
     if not isinstance(name, str):
-      raise ValueError('Variable and child scopes should have a string name.')
+      raise NameTypeError(name)
     if name in self.reservations:
-      raise ValueError(f'Duplicate use of name: "{name}"')
+      raise NameInUseError(name)
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
@@ -407,8 +408,7 @@ class Scope:
 
   def _mutable_collection(self, col: str) -> MutableCollection:
     """Returns the collection `col` as a mutable object."""
-    if not self.is_mutable_collection(col):
-      raise ValueError(f'Collection is not mutable: "{col}"')
+    assert self.is_mutable_collection(col), f'Collection {col} is not mutable'
     if col not in self._variables:
       if self.parent:
         parent_col = self.parent._mutable_collection(col)
@@ -483,9 +483,7 @@ class Scope:
     self._check_valid()
     self._validate_trace_level()
     if not self.is_mutable_collection(col):
-      raise ValueError(
-        f'Trying to update variable "{name}" in "{self.path_text}" '
-        f'but collection "{col}" is immutable.')
+      raise VariableModificationError(col, name, self.path_text)
     variables = self._mutable_collection(col)
     variables[name] = value
 
@@ -504,8 +502,8 @@ class Scope:
     """
     self.reserve(name)
     if not self.has_variable(col, name):
-      if not self.is_mutable_collection('params'):
-        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
+      if not self.is_mutable_collection(col):
+        raise ValueError(f'No Variable named "{name}" for collection "{col}" exists in "{self.path_text}".')
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
@@ -543,7 +541,7 @@ class Scope:
       return value
     else:
       if not self.is_mutable_collection('params'):
-        raise ValueError(f'No paramater named "{name}" exists in "{self.path_text}".')
+        raise ValueError(f'No parameter named "{name}" exists in "{self.path_text}".')
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
       return value

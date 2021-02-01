@@ -20,15 +20,30 @@ For a quick introduction and short example snippets, see our `README
 
    overview
    installation
-   notebooks/index
    examples
 
 .. toctree::
    :maxdepth: 1
-   :caption: Flax design notes
+   :caption: Guided Tour
 
-   patterns/flax_patterns
-   design_notes/design_notes
+   notebooks/jax_for_the_impatient
+   notebooks/flax_basics
+
+.. toctree::
+   :maxdepth: 1
+   :caption: How do I ...?
+   :glob:
+   :titlesonly:
+
+   howtos/*
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Design Notes
+   :glob:
+   :titlesonly:
+
+   design_notes/*
 
 .. toctree::
    :maxdepth: 1
@@ -46,10 +61,11 @@ For a quick introduction and short example snippets, see our `README
    flax.serialization
    flax.struct
    flax.jax_utils
+   flax.traverse_util
+   flax.errors
 
 .. toctree::
    :maxdepth: 1
    :caption: (deprecated)
 
    flax.nn (deprecated) <flax.nn>
-

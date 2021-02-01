@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,12 +18,10 @@ from absl.testing import absltest
 
 import jax
 import numpy as np
-
-from configs import default as config_lib
-import mnist_lib
-
 from flax.testing import Benchmark
 
+import train
+from configs import default
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -34,12 +32,14 @@ class MnistBenchmark(Benchmark):
 
   def test_cpu(self):
     """Run full training for MNIST CPU training."""
-    model_dir = self.get_tmp_model_dir()
+    workdir = self.get_tmp_model_dir()
+    config = default.get_config()
+
     start_time = time.time()
-    mnist_lib.train_and_evaluate(
-      config=config_lib.get_config(), model_dir=model_dir)
+    train.train_and_evaluate(config=config, workdir=workdir)
     benchmark_time = time.time() - start_time
-    summaries = self.read_summaries(model_dir)
+
+    summaries = self.read_summaries(workdir)
 
     # Summaries contain all the information necessary for the regression
     # metrics.
@@ -61,7 +61,8 @@ class MnistBenchmark(Benchmark):
     })
     self.report_extras({
         'model_name': 'MNIST',
-        'description': 'CPU test for MNIST.'
+        'description': 'CPU test for MNIST.',
+        'implementation': 'linen',
     })
 
 

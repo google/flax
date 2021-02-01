@@ -4,7 +4,36 @@ Changelog
 vNext
 ------
 
+(Add your change to a random empty line to avoid merge conflicts)
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
  - Added OptimizedLSTM: ~33% faster than the original LSTM when using <=1024 units
+ - Bug Fix `Scope.variable` mutability check, before a variable could only be initialized
+   if the 'params' collection was mutable.
+ - Linen `Module` instances are now Frozen after `setup` has been called.
+   Previously mutations after setup could be dropped silently. Now the stateless requirement
+   is enforced by raising a TypeError in `__setattr__` after `setup`.
+ - Pytrees of dicts and lists are transformed into FrozenDict and tuples during attribute assignment.
+   This avoids undetected submodules and inner state. 
+ - Add support for dict/FrozenDict when using `ModelParamTraversal`
+   As a result `MultiOptimizer` can be used properly with linen modules.
 
 v0.3
 -----

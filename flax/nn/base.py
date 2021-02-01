@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -242,7 +242,7 @@ def _fold_in_str(rng, data):
   m = hashlib.sha1()
   m.update(data.encode('utf-8'))
   d = m.digest()
-  hash_int = int.from_bytes(d[:4], byteorder='big')
+  hash_int = int.from_bytes(d[:4], byteorder='big', signed=True)
   return random.fold_in(rng, hash_int)
 
 

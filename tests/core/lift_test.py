@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ class ScopeTest(absltest.TestCase):
                         split_rngs={'params': True})
       dense(scope.push('dense'), np.ones((3, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/vmap(dense)".'):
+    with self.assertRaisesWithLiteralMatch(ValueError, 'No parameter named "kernel" exists in "/vmap(dense)".'):
       apply(f)({})
 
 

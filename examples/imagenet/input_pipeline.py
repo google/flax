@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -76,19 +76,19 @@ def distorted_bounding_box_crop(image_bytes,
   return image
 
 
-def resize(image, image_size):
+def _resize(image, image_size):
   return tf.image.resize([image], [image_size, image_size],
                          method=tf.image.ResizeMethod.BICUBIC)[0]
 
 
-def at_least_x_are_equal(a, b, x):
+def _at_least_x_are_equal(a, b, x):
   """At least `x` of `a` and `b` `Tensors` are equal."""
   match = tf.equal(a, b)
   match = tf.cast(match, tf.int32)
   return tf.greater_equal(tf.reduce_sum(match), x)
 
 
-def decode_and_random_crop(image_bytes, image_size):
+def _decode_and_random_crop(image_bytes, image_size):
   """Make a random crop of image_size."""
   bbox = tf.constant([0.0, 0.0, 1.0, 1.0], dtype=tf.float32, shape=[1, 1, 4])
   image = distorted_bounding_box_crop(
@@ -99,17 +99,17 @@ def decode_and_random_crop(image_bytes, image_size):
       area_range=(0.08, 1.0),
       max_attempts=10)
   original_shape = tf.io.extract_jpeg_shape(image_bytes)
-  bad = at_least_x_are_equal(original_shape, tf.shape(image), 3)
+  bad = _at_least_x_are_equal(original_shape, tf.shape(image), 3)
 
   image = tf.cond(
       bad,
-      lambda: decode_and_center_crop(image_bytes, image_size),
-      lambda: resize(image, image_size))
+      lambda: _decode_and_center_crop(image_bytes, image_size),
+      lambda: _resize(image, image_size))
 
   return image
 
 
-def decode_and_center_crop(image_bytes, image_size):
+def _decode_and_center_crop(image_bytes, image_size):
   """Crops to center of image with padding then scales image_size."""
   shape = tf.io.extract_jpeg_shape(image_bytes)
   image_height = shape[0]
@@ -124,8 +124,8 @@ def decode_and_center_crop(image_bytes, image_size):
   offset_width = ((image_width - padded_center_crop_size) + 1) // 2
   crop_window = tf.stack([offset_height, offset_width,
                           padded_center_crop_size, padded_center_crop_size])
-  image = tf.io.decode_and_crop_jpeg(image_bytes, crop_window)
-  image = resize(image, image_size)
+  image = tf.io.decode_and_crop_jpeg(image_bytes, crop_window, channels=3)
+  image = _resize(image, image_size)
 
   return image
 
@@ -147,7 +147,7 @@ def preprocess_for_train(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = decode_and_random_crop(image_bytes, image_size)
+  image = _decode_and_random_crop(image_bytes, image_size)
   image = tf.reshape(image, [image_size, image_size, 3])
   image = tf.image.random_flip_left_right(image)
   image = normalize_image(image)
@@ -166,52 +166,48 @@ def preprocess_for_eval(image_bytes, dtype=tf.float32, image_size=IMAGE_SIZE):
   Returns:
     A preprocessed image `Tensor`.
   """
-  image = decode_and_center_crop(image_bytes, image_size)
+  image = _decode_and_center_crop(image_bytes, image_size)
   image = tf.reshape(image, [image_size, image_size, 3])
   image = normalize_image(image)
   image = tf.image.convert_image_dtype(image, dtype=dtype)
   return image
 
 
-def create_split(dataset_builder: tfds.core.DatasetBuilder, batch_size: int,
-                 train: bool, dtype: tf.DType = tf.float32,
-                 image_size: int = IMAGE_SIZE, cache: bool = False):
+def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
+                 image_size=IMAGE_SIZE, cache=False):
   """Creates a split from the ImageNet dataset using TensorFlow Datasets.
 
   Args:
     dataset_builder: TFDS dataset builder for ImageNet.
     batch_size: the batch size returned by the data pipeline.
     train: Whether to load the train or evaluation split.
-    dtype: data type of the image (default: float32).
-    image_size: The target size of the images (default: 224).
-    cache: Whether to cache the dataset (default: False).
+    dtype: data type of the image.
+    image_size: The target size of the images.
+    cache: Whether to cache the dataset.
   Returns:
     A `tf.data.Dataset`.
   """
   if train:
-    train_size = dataset_builder.info.splits['train'].num_examples
-    split_size = train_size // jax.host_count()
+    train_examples = dataset_builder.info.splits['train'].num_examples
+    split_size = train_examples // jax.host_count()
     start = jax.host_id() * split_size
     split = 'train[{}:{}]'.format(start, start + split_size)
   else:
-    validation_size = dataset_builder.info.splits['validation'].num_examples
-    split_size = validation_size // jax.host_count()
+    validate_examples = dataset_builder.info.splits['validation'].num_examples
+    split_size = validate_examples // jax.host_count()
     start = jax.host_id() * split_size
     split = 'validation[{}:{}]'.format(start, start + split_size)
 
-  def _decode_example(example):
+  def decode_example(example):
     if train:
       image = preprocess_for_train(example['image'], dtype, image_size)
     else:
       image = preprocess_for_eval(example['image'], dtype, image_size)
     return {'image': image, 'label': example['label']}
 
-  ds = dataset_builder.as_dataset(
-      split=split,
-      decoders={
-          'image': tfds.decode.SkipDecoding()
-      }
-  )
+  ds = dataset_builder.as_dataset(split=split, decoders={
+      'image': tfds.decode.SkipDecoding(),
+  })
   ds.options().experimental_threading.private_threadpool_size = 48
   ds.options().experimental_threading.max_intra_op_parallelism = 1
 
@@ -222,9 +218,7 @@ def create_split(dataset_builder: tfds.core.DatasetBuilder, batch_size: int,
     ds = ds.repeat()
     ds = ds.shuffle(16 * batch_size, seed=0)
 
-  ds = ds.map(
-      _decode_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
+  ds = ds.map(decode_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
   ds = ds.batch(batch_size, drop_remainder=True)
 
   if not train:

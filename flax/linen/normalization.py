@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,15 +39,15 @@ class BatchNorm(Module):
   """BatchNorm Module.
 
   Attributes:
-    use_running_average: if true, the statistics stored in batch_stats
+    use_running_average: if True, the statistics stored in batch_stats
       will be used instead of computing the batch statistics on the input.
     axis: the feature or non-batch axis of the input.
     momentum: decay rate for the exponential moving average of
       the batch statistics.
     epsilon: a small float added to variance to avoid dividing by zero.
     dtype: the dtype of the computation (default: float32).
-    bias:  if True, bias (beta) is added.
-    scale: if True, multiply by scale (gamma).
+    use_bias:  if True, bias (beta) is added.
+    use_scale: if True, multiply by scale (gamma).
       When the next layer is linear (also e.g. nn.relu), this can be disabled
       since the scaling will be done by the next layer.
     bias_init: initializer for bias, by default, zero.
@@ -203,8 +203,8 @@ class GroupNorm(Module):
       group_size: the number of channels in a group.
       epsilon: A small float added to variance to avoid dividing by zero.
       dtype: the dtype of the computation (default: float32).
-      bias:  If True, bias (beta) is added.
-      scale: If True, multiply by scale (gamma). When the next layer is linear
+      use_bias:  If True, bias (beta) is added.
+      use_scale: If True, multiply by scale (gamma). When the next layer is linear
         (also e.g. nn.relu), this can be disabled since the scaling will be done
         by the next layer.
       bias_init: Initializer for bias, by default, zero.

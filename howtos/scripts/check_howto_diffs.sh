@@ -12,7 +12,7 @@ set -euxo
 old_pwd=$(pwd)
 top_dir=$(git rev-parse --show-toplevel)
 howto_diff_path="${top_dir}/howtos/diffs"
-howto_doc_path="${top_dir}/docs/howtos"
+howto_doc_path="${top_dir}/docs/deprecated_howtos"
 
 # Get names of howtos from diff files.
 cd $howto_diff_path

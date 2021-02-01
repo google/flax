@@ -28,8 +28,8 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
-        pip install -v .
-        pip install -v .[testing]
+        pip install .
+        pip install .[testing]
         pip install -r docs/requirements.txt
     - name: Build documentation
       run: |
@@ -37,9 +37,6 @@ jobs:
     - name: Test with pytest and generate coverage report
       run: |
         tests/run_all_tests.sh --with-cov
-    - name: Check HOWTO patches
-      run: |
-        howtos/scripts/check_howto_diffs.sh
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:

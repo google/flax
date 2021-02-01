@@ -1,16 +1,17 @@
 # Flax: A neural network library and ecosystem for JAX designed for flexibility
 
+![Build](https://github.com/google/flax/workflows/Build/badge.svg?branch=master) [![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
+
+
 [**Overview**](#overview)
 | [**Quick install**](#quick-install)
 | [**What does Flax look like?**](#what-does-flax-look-like)
 | [**Documentation**](https://flax.readthedocs.io/)
 
-[![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
-
 **See our [full documentation](https://flax.readthedocs.io/)
 to learn everything you need to know about Flax.**
 
-Flax is developed by a group within the Brain Team in Google AI, in
+Flax is developed by a group within the Brain Team in Google Research, in
 close collaboration with the JAX team. Flax is being used by a growing
 community of hundreds of folks in various Alphabet research departments
 for their daily work, as well as a [growing community
@@ -18,14 +19,15 @@ of open source
 projects](https://github.com/google/flax/network/dependents?dependent_type=REPOSITORY).
 
 The Flax team's mission is to serve the growing JAX neural network
-research ecosystem -- both within Alphabet and with the broader , and to explore the use-cases where JAX shines. We
-use GitHub for almost all of our coordination and planning, as well as
-where we discuss upcoming design changes. We welcome feedback on any
-of our discussion, issue and pull request thread. We are in the
-process of moving some remaining internal design docs and conversation
-threads to GitHub discussions, issues and pull requests. We hope to
-increasingly engage with the needs and clarifications of the broader
-ecosystem. Please let us know how we can help!
+research ecosystem -- both within Alphabet and with the broader community,
+and to explore the use-cases where JAX shines. We use GitHub for almost
+all of our coordination and planning, as well as where we discuss
+upcoming design changes. We welcome feedback on any of our discussion,
+issue and pull request thread. We are in the process of moving some
+remaining internal design docs and conversation threads to GitHub
+discussions, issues and pull requests. We hope to increasingly engage
+with the needs and clarifications of the broader ecosystem. Please let
+us know how we can help!
 
 **NOTE**: The new Flax ["Linen" module
 API](https://github.com/google/flax/tree/master/flax/linen/README.md)
@@ -50,7 +52,7 @@ JAX that is **designed for flexibility**:
 Try new forms of training by forking an example and by modifying the training
 loop, not by adding features to a framework.
 
-Flax is being developed in close collaboration with the JAX team and 
+Flax is being developed in close collaboration with the JAX team and
 comes with everything you need to start your research, including:
 
 * **Neural network API** (`flax.linen`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
@@ -91,7 +93,7 @@ To upgrade to the latest version of Flax, you can use:
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
 
 To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) or visit our
-[patterns](https://flax.readthedocs.io/en/latest/patterns/flax_patterns.html) page for additional concrete demonstrations of best practices.
+[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html) page for additional concrete demonstrations of best practices.
 
 ```py
 class MLP(nn.Module):
@@ -147,6 +149,23 @@ class AutoEncoder(Module):
     return x
 ```
 
+## Citing Flax
+
+To cite this repository:
+
+```
+@software{flax2020github,
+  author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
+  title = {{F}lax: A neural network library and ecosystem for {JAX}},
+  url = {http://github.com/google/flax},
+  version = {0.3.0},
+  year = {2020},
+}
+```
+
+In the above bibtex entry, names are in alphabetical order, the version number
+is intended to be that from [flax/version.py](https://github.com/google/flax/blob/master/flax/version.py), and the year corresponds to the project's open-source release.
+
 ## Note
 
-This is not an official Google product.
+Flax is an open source project maintained by a dedicated team in Google Research, but is not an official Google product.

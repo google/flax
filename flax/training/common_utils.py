@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,8 @@ def stack_forest(forest):
 
 
 def get_metrics(device_metrics):
+  # We select the first element of x in order to get a single copy of a
+  # device-replicated metric.
   device_metrics = jax.tree_map(lambda x: x[0], device_metrics)
   metrics_np = jax.device_get(device_metrics)
   return stack_forest(metrics_np)

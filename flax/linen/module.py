@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
 from flax.core.scope import CollectionFilter, Variable, VariableDict
-from flax.core.frozen_dict import freeze
+from flax.core.frozen_dict import FrozenDict, freeze
 
 # from .dotgetter import DotGetter
 
@@ -65,6 +65,7 @@ def _attr_repr(value: Any):
     value_rep = repr(value)
   return value_rep
 
+
 def _module_repr(module: 'Module', num_spaces: int = 4):
   """Returns a pretty printed representation of the module"""
   cls = type(module)
@@ -72,7 +73,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
   rep = ''
   attributes = {k: v for k, v in cls.__annotations__.items()
                 if k not in ('parent', 'name')}
-  child_modules = {k: v for k, v in module.children.items()  # pytype: disable=attribute-error
+  child_modules = {k: v for k, v in module._state.children.items()  # pytype: disable=attribute-error
                    if isinstance(v, Module)}
   if attributes:
     rep += '# attributes\n'
@@ -90,6 +91,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
     return f'{cls_name}(\n{_indent(rep, num_spaces)})'
   else:
     return f'{cls_name}()'
+
 
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
@@ -126,7 +128,7 @@ def disable_named_call():
   _use_named_call = False
 
 
-# Utilities for autonaming pytrees of Modules defined inside setup()
+# Utilities for pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
 def _get_suffix_value_pairs(
     tree_or_leaf: Any) -> List[Tuple[str, Type["Module"]]]:
@@ -151,6 +153,15 @@ def _all_names_on_object(obj: Any) -> Set[str]:
   for cls in obj.__class__.__mro__:
     nameset = nameset.union(set(cls.__dict__.keys()))
   return nameset
+
+
+def _freeze_attr(val: Any) -> Any:
+  if isinstance(val, (dict, FrozenDict)):
+    return FrozenDict({k: _freeze_attr(v) for k, v in val.items()})
+  elif isinstance(val, (list, tuple)):
+    return tuple(_freeze_attr(v) for v in val)
+  else:
+    return val
 
 
 # Method wrapping of "compact methods" and setup()
@@ -196,7 +207,7 @@ def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]
   return tuple(true_methods.difference(set(exclude)))
 
 
-def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
+def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
   """Manages Module state for a given user-defined method.
   
   Args:
@@ -204,15 +215,23 @@ def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
   Returns:
     Wrapped method.
   """
+  # Don't rewrap methods that have already had the state management wrapper
+  # applied in the decorator stack.  This wrapper should always be applied
+  # before transformation wrappers.
+  if hasattr(fun, 'method_handler_wrapped'):
+    return fun
+
   @functools.wraps(fun)
   def wrapped_module_method(self, *args, **kwargs):
     is_compact_method = hasattr(fun, 'compact')
     is_setup_method = fun.__name__ == 'setup'
+    # We lazily call setup() only when needed.
+    if not is_setup_method:
+      self._try_setup()
 
     if is_compact_method:
       if self.scope is None:
         raise ValueError("Can't call compact methods on unbound modules")
-
       self._state.in_compact_method = True
     elif is_setup_method:
       self._state.in_setup = True
@@ -225,7 +244,7 @@ def wrap_method(fun: Callable[..., Any]) -> Callable[..., Any]:
         object.__setattr__(self, 'scope', self.scope.rewound())
       if is_compact_method or is_setup_method:
         self._state.reset()
-
+  wrapped_module_method.method_handler_wrapped = True
   return wrapped_module_method
 
 
@@ -262,22 +281,46 @@ class _ModuleInternalState:
   """Ephemeral Module Evaluation State.
 
   For clarity, we collect all of the temporary flags and ephemeral state used by
-  Modules for autonaming and error messages here.
+  Modules for autonaming and error messages here, alongside the rules used
+  to pass this ephemeral state across transform boundaries.
   """
   in_compact_method: bool = False
   in_setup: bool = False
+  setup_called: bool = False
   last_varname: Optional[str] = None
   autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
+  children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
 
   def reset(self):
+    """Resets transient state."""
     self.in_compact_method = False
     self.in_setup = False
     self.last_varname = None
     self.autoname_cursor = dict()
 
-_uninitialized_module_internal_state = _ModuleInternalState(
-    False, False, None, None)
+  def export(self):
+    """Exports transform-preserved state across transform boundary."""
+    cloned = _ModuleInternalState(
+      in_compact_method=self.in_compact_method,
+      in_setup=self.in_setup,
+      setup_called=False,  # setup_called is object local, not shared.
+      last_varname=self.last_varname,
+      autoname_cursor=dict(self.autoname_cursor))
+    return cloned
 
+  def reimport(self, other):
+    """Re-imports transform-preserved state from across transform boundary."""
+    self.in_compact_method = other.in_compact_method
+    self.in_setup = other.in_setup
+    self.last_varname = other.last_varname
+    self.autoname_cursor = dict(other.autoname_cursor)
+
+_uninitialized_module_internal_state = _ModuleInternalState()
+
+
+_UNDEFINED_COPY_PICKLE_METHODS = (
+    '__getstate__', '__setstate__', '__getnewargs_ex__',
+    '__reduce__', '__reduce_ex__', '__copy__', '__deepcopy__')
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
@@ -385,11 +428,12 @@ class Module:
                   ['__eq__', '__repr__', '__init__', '__hash__'])
     for key in _get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
+      wrapped_method = wrap_method_once(method)
       if _use_named_call and key != 'setup':
         # We import named_call at runtime to avoid a circular import issue.
         from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
-        method = named_call(method)
-      setattr(cls, key, wrap_method(method))
+        wrapped_method = named_call(wrapped_method)
+      setattr(cls, key, wrapped_method)
     return cls
 
   def __setattr__(self, name: str, val: Any):
@@ -408,14 +452,19 @@ class Module:
       name: Attribute to set.
       val: Value of the attribute.
     """
+    if name != '_state' and self._state.setup_called:
+      # Raises a TypeError just like frozen python dataclasses.
+      raise TypeError("Module instance is frozen outside of setup method.")
+
     # We don't mess with the parent module.
     if name == 'parent':
       pass
-    # Modules have been passed in as dataclass args.
+    # Modules have been passed in as dataclass args and set in __init__.
     elif name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init:  # pytype: disable=attribute-error
       pass
     # Submodules are being defined and attached in setup()
     else:
+      val = _freeze_attr(val)
       for suffix, subvalue in _get_suffix_value_pairs(val):
         if isinstance(subvalue, Module):
           if not self._state.in_setup:
@@ -445,6 +494,23 @@ class Module:
     # Finally, always run default __setattr__ to attach to self.__dict__.
     object.__setattr__(self, name, val)
 
+  def __getattr__(self, name: str) -> Any:
+    """Call setup() before getting any setup-defined attributes."""
+    # We don't want to return anything for python copy / pickle methods.
+    if name in _UNDEFINED_COPY_PICKLE_METHODS:
+      raise AttributeError()
+    self._try_setup()
+    if name in self.__dict__:
+      return self.__dict__[name]
+    else:
+      raise AttributeError(
+          f"'{self.__class__.__name__}' object has no attribute '{name}'")
+
+  def __dir__(self) -> List[str]:
+    """Call setup() before listing attributes."""
+    self._try_setup()
+    return object.__dir__(self)  # pytype: disable=attribute-error
+
   def __post_init__(self):
     _check_omnistaging()
     # In dataclasses, __init__ is overridden to process dataclass arguments,
@@ -454,7 +520,6 @@ class Module:
     # this Module at the top-level to variables and rngs.
 
     self._state = _ModuleInternalState()
-    self.children = dict()  # tracks child modules
 
     # Typically we set the parent based on the dynamic module context.
     if self.parent is _unspecified_parent:  # pytype: disable=attribute-error
@@ -488,7 +553,7 @@ class Module:
             f"trying to share submodule {self.__class__.__name__} by name "
             f"{self.name}. To share submodules, store module instances as a"
             f" Python object or as an attribute on self and reuse.")
-      self.parent.children[self.name] = self
+      self.parent._state.children[self.name] = self
       self.scope = self.parent.scope.push(self.name)
 
     # Top-level invocation with a functional Scope.
@@ -498,24 +563,22 @@ class Module:
     else:
       raise ValueError("parent must be None, Module or Scope")
 
-    # Call the user-defined initialization setup() function.
-    self.setup()
-
   def __repr__(self):
     return _module_repr(self)
 
   def setup(self):
-    """Initializes a Module (similar to ``__init__`` for non-dataclass Python classes).
+    """Initializes a Module lazily (similar to a lazy ``__init__``).
 
-    ``setup`` is called on a module instance at the moment it is safe to define
-    or access variables or submodules (once the module is "bound").
+    ``setup`` is called once lazily on a module instance when a module
+    is bound, immediately before any other methods like ``__call__`` are
+    invoked, or before a ``setup``-defined attribute on `self` is accessed.
 
-    | This happens in three cases:
-    
-      1. Immediately when invoking :meth:`apply`, :meth:`init` or 
+    This can happen in three cases:
+
+      1. Immediately when invoking :meth:`apply`, :meth:`init` or
          :meth:`init_and_output`.
 
-      2. When the module is given a name by being assigned to an attribute of
+      2. Once the module is given a name by being assigned to an attribute of
          another module inside the other module's ``setup`` method
          (see :meth:`__setattr__`)::
 
@@ -523,19 +586,28 @@ class Module:
              def setup(self):
                submodule = Conv(...)
 
-               # Accessing `submodule.variables` does not yet work here.
+               # Accessing `submodule` attributes does not yet work here.
 
                # The following line invokes `self.__setattr__`, which gives
-               # `submodule` the name "conv1", which calls `submodule.setup`.
+               # `submodule` the name "conv1".
                self.conv1 = submodule
 
-               # Accessing `submodule.variables` is now safe.
+               # Accessing `submodule` attributes or methods is now safe and
+               # either causes setup() to be called once.
 
-      3. Immediately when a module is constructed inside a method wrapped with 
-         :meth:`compact`.
-
+      3. Once a module is constructed inside a method wrapped with
+         :meth:`compact`, immediately before another method is called or
+         ``setup`` defined attribute is accessed.
     """
     pass
+
+  def _try_setup(self):
+    """Tries to setup module if scope is available and setup has not been called yet."""
+    if self.scope and not self._state.setup_called and not self._state.in_setup:
+      try:
+        self.setup()
+      finally:
+        self._state.setup_called = True
 
   def _name_taken(self, name: str) -> bool:
     return (name in self.scope.reservations or
@@ -590,7 +662,7 @@ class Module:
     # ephemeral state for setattr name-equality-check
     self._state.last_varname = name
     v = self.scope.variable(col, name, init_fn, *init_args)
-    self.children[name] = col
+    self._state.children[name] = col
     return v
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
@@ -619,7 +691,7 @@ class Module:
     # ephemeral state for setattr name-equality-check
     self._state.last_varname = name
     v = self.scope.param(name, init_fn, *init_args)
-    self.children[name] = 'params'
+    self._state.children[name] = 'params'
     return v
 
   def has_variable(self, col: str, name: str) -> bool:
@@ -638,29 +710,37 @@ class Module:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.has_variable(col, name)
 
-  def make_rng(self, col: str) -> PRNGKey:
-    """Returns a new RNG key for a given collection for this Module. 
+  def make_rng(self, name: str) -> PRNGKey:
+    """Returns a new RNG key from a given RNG sequence for this Module.
     
     The new RNG key is split from the previous one. Thus, every call to 
     `make_rng` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
-    TODO: Link to both Flax RNG design note.
+    TODO: Link to Flax RNG design note.
 
     Args:
-      col: The variable collection name.
+      name: The RNG sequence name.
     Returns:
       The newly generated RNG key.
     """
     if self.scope is None:
       raise ValueError("Can't use RNGs on unbound modules")
-    return self.scope.make_rng(col)
+    return self.scope.make_rng(name)
 
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
             method: Callable[..., Any] = None, 
             mutable: Union[bool, str, Sequence[str]] = False,
             **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
+
+    Note that `method` should be set if one would like to call `apply` on a 
+    different class method than `_call__`. For instance, suppose a Transformer
+    modules has a method called `encode`, then the following calls `apply` on
+    that method::
+
+      model = models.Transformer(config)
+      encoded = model.apply({'params': params}, inputs, method=model.encode) 
 
     Args:
       variables: A dictionary containing variables keyed by variable
@@ -708,6 +788,13 @@ class Module:
            method: Optional[Callable[..., Any]] = None, 
            **kwargs) -> VariableDict:
     """Initializes a module method with variables and returns modified variables.
+
+    Jitting `init` initializes a model lazily using only the shapes of the 
+    provided arguments, and avoids computing the forward pass with actual 
+    values. Example::
+
+      jit_init = jax.jit(SomeModule.init)
+      jit_init(rng, jnp.ones(input_shape, jnp.float32))      
 
     Args:
       rngs: The rngs for the variable collections.

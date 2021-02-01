@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -53,6 +53,19 @@ class PoolTest(absltest.TestCase):
     ]).reshape((1, 3, 3, 1))
     np.testing.assert_allclose(y_grad, expected_grad)
 
+  def test_avg_pool_no_batch(self):
+    x = jnp.full((3, 3, 1), 2.)
+    pool = lambda x: nn.avg_pool(x, (2, 2))
+    y = pool(x)
+    np.testing.assert_allclose(y, np.full((2, 2, 1), 2.))
+    y_grad = jax.grad(lambda x: pool(x).sum())(x)
+    expected_grad = jnp.array([
+        [0.25, 0.5, 0.25],
+        [0.5, 1., 0.5],
+        [0.25, 0.5, 0.25],
+    ]).reshape((3, 3, 1))
+    np.testing.assert_allclose(y_grad, expected_grad)
+
   def test_max_pool(self):
     x = jnp.arange(9).reshape((1, 3, 3, 1)).astype(jnp.float32)
     pool = lambda x: nn.max_pool(x, (2, 2))
@@ -101,9 +114,8 @@ class NormalizationTest(absltest.TestCase):
     x = random.normal(key1, (2, 3, 4))
     model_cls = nn.LayerNorm(use_bias=False, use_scale=False, epsilon=e)
     y, _ = model_cls.init_with_output(key2, x)
-    assert x.shape == y.shape
-    input_type = type(x)
-    assert isinstance(y, input_type)
+    self.assertEqual(x.dtype, y.dtype)
+    self.assertEqual(x.shape, y.shape)
     y_one_liner = ((x - x.mean(axis=-1, keepdims=True)) *
                    jax.lax.rsqrt(x.var(axis=-1, keepdims=True) + e))
     np.testing.assert_allclose(y_one_liner, y, atol=1e-4)
@@ -116,8 +128,8 @@ class NormalizationTest(absltest.TestCase):
     model_cls = nn.GroupNorm(num_groups=2, use_bias=False, use_scale=False, epsilon=e)
 
     y, _ = model_cls.init_with_output(key2, x)
+    self.assertEqual(x.dtype, y.dtype)
     self.assertEqual(x.shape, y.shape)
-    self.assertIsInstance(y, type(x))
 
     x_gr = x.reshape([2, 5, 4, 4, 2, 16])
     y_test = ((x_gr - x_gr.mean(axis=[1, 2, 3, 5], keepdims=True)) *
