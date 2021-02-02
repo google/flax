@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,6 +44,16 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   strides = strides or (1,) * len(window_shape)
   strides = (1,) + strides + (1,)
   dims = (1,) + window_shape + (1,)
+  assert len(dims) == len(strides)
+
+  is_single_input = False
+  if inputs.ndim == len(dims) - 1:
+    # add singleton batch dimension because lax.reduce_window always
+    # needs a batch dimension.
+    inputs = inputs[None]
+    is_single_input = True
+
+  assert inputs.ndim == len(dims)
   if not isinstance(padding, str):
     padding = tuple(map(tuple, padding))
     assert(len(padding) == len(window_shape)), (
@@ -52,7 +62,10 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     assert(all([len(x) == 2 for x in padding])), (
       f"each entry in padding {padding} must be length 2")
     padding = ((0,0),) + padding + ((0,0),)
-  return lax.reduce_window(inputs, init, reduce_fn, dims, strides, padding)
+  y = lax.reduce_window(inputs, init, reduce_fn, dims, strides, padding)
+  if is_single_input:
+    y = jnp.squeeze(y, axis=0)
+  return y
 
 
 def avg_pool(inputs, window_shape, strides=None, padding="VALID"):

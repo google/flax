@@ -1,4 +1,4 @@
-Flax guided tour
+Guided Tour
 =================
 
 To help you get start with the JAX + Flax ecosystem, we suggest that you start with the following notebooks.

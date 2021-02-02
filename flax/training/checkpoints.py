@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ other numerical metric in filename.  Cleans up older / worse-performing
 checkpoint files.
 """
 
+from concurrent.futures import thread
 import os
 import re
 
@@ -110,7 +111,31 @@ def save_checkpoint(ckpt_dir,
   return ckpt_path
 
 
-def restore_checkpoint(ckpt_dir, target, step=None, prefix='checkpoint_'):
+def latest_checkpoint(ckpt_dir, prefix='checkpoint_'):
+  """Retrieve the path of the latest checkpoint in a directory.
+
+  Args:
+    ckpt_dir: str: directory of checkpoints to restore from.
+    prefix: str: name prefix of checkpoint files.
+
+  Returns:
+    The latest checkpoint path or None if no checkpoints were found.
+  """
+  glob_path = os.path.join(ckpt_dir, f'{prefix}*')
+  checkpoint_files = natural_sort(gfile.glob(glob_path))
+  ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
+  checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
+  if checkpoint_files:
+    return checkpoint_files[-1]
+  else:
+    return None
+
+
+def restore_checkpoint(ckpt_dir,
+                       target,
+                       step=None,
+                       prefix='checkpoint_',
+                       parallel=True):
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -120,32 +145,66 @@ def restore_checkpoint(ckpt_dir, target, step=None, prefix='checkpoint_'):
     ckpt_-1.0, ckpt_1.0, ckpt_1e5 --> ckpt_1e5
 
   Args:
-    ckpt_dir: str: directory of checkpoints to restore from.
+    ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
     target: matching object to rebuild via deserialized state-dict. If None,
       the deserialized state-dict is returned as-is.
-    step: int: step number to load or None to load latest.
+    step: int: step number to load or None to load latest. If specified,
+      ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
+    parallel: bool: whether to load seekable checkpoints in parallel, for speed.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
     no checkpoint files present, returns the passed-in `target` unchanged.
+    If a file path is specified and is not found, the passed-in `target` will be
+    returned. This is to match the behavior of the case where a directory path
+    is specified but the directory has not yet been created.
   """
   if step:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
-    glob_path = os.path.join(ckpt_dir, f'{prefix}*')
-    checkpoint_files = natural_sort(gfile.glob(glob_path))
-    ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
-    checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
-    if not checkpoint_files:
-      return target
-    ckpt_path = checkpoint_files[-1]
+    if gfile.isdir(ckpt_dir):
+      ckpt_path = latest_checkpoint(ckpt_dir, prefix)
+      if not ckpt_path:
+        logging.info(f'Found no checkpoint files in {ckpt_dir}')
+        return target
+    else:
+      ckpt_path = ckpt_dir
+      if not gfile.exists(ckpt_path):
+        logging.info(f'Found no checkpoint file at {ckpt_path}')
+        return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
   with gfile.GFile(ckpt_path, 'rb') as fp:
-    if target is None:
-      return serialization.msgpack_restore(fp.read())
+    if parallel and fp.seekable():
+      buf_size = 128 << 20  # 128M buffer.
+      num_bufs = fp.size() / buf_size
+      logging.debug('num_bufs: %d', num_bufs)
+      checkpoint_contents = bytearray(fp.size())
+
+      def read_chunk(i):
+        # NOTE: We have to re-open the file to read each chunk, otherwise the
+        # parallelism has no effect. But we could reuse the file pointers
+        # within each thread.
+        with gfile.GFile(ckpt_path, 'rb') as f:
+          f.seek(i * buf_size)
+          buf = f.read(buf_size)
+          if buf:
+            checkpoint_contents[i * buf_size:i * buf_size + len(buf)] = buf
+          return len(buf) / buf_size
+
+      pool_size = 32
+      pool = thread.ThreadPoolExecutor(pool_size)
+      results = pool.map(read_chunk, range(int(num_bufs) + 1))
+      results = list(results)
+      pool.shutdown(wait=False)
+      logging.debug('results: %s', results)
     else:
-      return serialization.from_bytes(target, fp.read())
+      checkpoint_contents = fp.read()
+
+    if target is None:
+      return serialization.msgpack_restore(checkpoint_contents)
+    else:
+      return serialization.from_bytes(target, checkpoint_contents)

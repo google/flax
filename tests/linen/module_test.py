@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
@@ -63,8 +63,8 @@ class ModuleTest(absltest.TestCase):
     y = DummyModule(parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
-    onp.testing.assert_allclose(y, jnp.array([2.]))
+    np.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_arg_module(self):
@@ -74,7 +74,7 @@ class ModuleTest(absltest.TestCase):
     y = Dense(3, parent=scope)(x)
     params = scope.variables()['params']
     y2 = Dense(3, parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     self.assertEqual(params['kernel'].shape, (10, 3))
 
   def test_util_fun(self):
@@ -92,7 +92,7 @@ class ModuleTest(absltest.TestCase):
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'Dense_0': {'kernel': (10, 3)},
@@ -120,7 +120,7 @@ class ModuleTest(absltest.TestCase):
     y = Top(parent=scope)(x)
     params = scope.variables()['params']
     y2 = Top(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'MLP_0':
@@ -143,7 +143,7 @@ class ModuleTest(absltest.TestCase):
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'lyrs1_a': {'kernel': (10, 3)},
@@ -199,8 +199,8 @@ class ModuleTest(absltest.TestCase):
     y = DummyModule(x.shape, parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(x.shape, parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
-    onp.testing.assert_allclose(y, jnp.array([2.]))
+    np.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_init_outside_setup_without_compact(self):
@@ -284,6 +284,42 @@ class ModuleTest(absltest.TestCase):
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'notbias.*must equal.*bias'):
       y = Dummy(x.shape, parent=scope)(x)
+
+  def test_setattr_name_var_disagreement_allowed_in_lists(self):
+    rngkey = jax.random.PRNGKey(0)
+    class Dummy(nn.Module):
+      xshape: Tuple[int]
+      def setup(self):
+        self.biases = [
+          self.param(f'bias_{i}', initializers.ones, self.xshape)
+          for i in range(4)]
+      def __call__(self, x):
+        return x + self.biases[0]
+
+    x = jnp.array([1.])
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    y = Dummy(x.shape, parent=scope)(x)
+    self.assertEqual(y, jnp.array([2.]))
+
+  def test_setattr_name_var_disagreement_allowed_in_dicts(self):
+    rngkey = jax.random.PRNGKey(0)
+    class Dummy(nn.Module):
+      xshape: Tuple[int]
+      def setup(self):
+        self.biases = {
+          # NOTE that keys still must be strings. This is to make a possible
+          # future transition to automatically derived parameter names when assigned
+          # as a dict easier (like we currently have with submodules).
+          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853 
+          str(i): self.param(f'bias_{i}', initializers.ones, self.xshape)
+          for i in range(4)}
+      def __call__(self, x):
+        return x + self.biases['0']
+
+    x = jnp.array([1.])
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    y = Dummy(x.shape, parent=scope)(x)
+    self.assertEqual(y, jnp.array([2.]))
 
   def test_submodule_var_collision(self):
     rngkey = jax.random.PRNGKey(0)
@@ -429,7 +465,7 @@ class ModuleTest(absltest.TestCase):
         for width in self.widths[:-1]:
           x = nn.relu(nn.Dense(width)(x))
         return nn.Dense(self.widths[-1])(x)
-    test = MLP(onp.array([3, 3], onp.int32))
+    test = MLP(np.array([3, 3], np.int32))
     params = test.init({'params': random.PRNGKey(42)}, jnp.ones((3, 3)))
     _ = test.apply(params, jnp.ones((3, 3)))
 
@@ -655,28 +691,13 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(empty.bar(), 3)
 
 
-  def test_call_unbound_noncompact_module_method_without_setup(self):
-    class EmptyModule(nn.Module):
-      def setup(self):
-        self.setup_called = True
-
-      def bar(self):
-        return self.setup_called
-
-    empty = EmptyModule()
-    # `empty.setup()` hasn't been called yet because it doesn't have a scope.
-    # it's fine to call methods but they won't have access to attributes defined
-    # in `setup()`
-    with self.assertRaisesRegex(AttributeError, "has no attribute 'setup_called'"):
-      empty.bar()
-
   def test_module_with_attrs(self):
     class Foo(nn.Module):
       bar: nn.Dense = dataclasses.field(init=False)
 
       def setup(self):
         self.bar = nn.Dense(3)
-      
+
       def __call__(self, x):
         return self.bar(x)
 
@@ -684,7 +705,92 @@ class ModuleTest(absltest.TestCase):
     x = jnp.ones((2,))
     variables = foo.init(random.PRNGKey(0), x)
     self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
+
+  def test_module_frozen(self):
+    class Foo(nn.Module):
+      bar: nn.Dense = dataclasses.field(init=False)
+
+      def setup(self):
+        self.i = 1
+
+      def __call__(self):
+        self.i = 2
+
+    foo = Foo()
+    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
+      foo.init(random.PRNGKey(0))
+
+  def test_module_lazy_getattr_setup(self):
+    class A(nn.Module):
+      def setup(self):
+        self.d = nn.Dense(2)
+      def __call__(self, x):
+        return self.d(x)
+
+    class B(nn.Module):
+      def setup(self):
+        self.a = A()
+      def __call__(self, x):
+        y1 = self.a.d(x)
+        y2 = self.a(x)
+        return y1, y2
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2,))
+
+    (y1, y2), p = B().init_with_output(key, x)
+    np.testing.assert_array_equal(y1, y2)
+
+  def test_module_lazy_dir_setup(self):
+    class A(nn.Module):
+      def setup(self):
+        self.d = nn.Dense(2)
+      def __call__(self, x):
+        return self.d(x)
+
+    class B(nn.Module):
+      def setup(self):
+        self.a = A()
+      def __call__(self, x):
+        assert 'd' in dir(self.a)
+        y1 = self.a.d(x)
+        y2 = self.a(x)
+        return y1, y2
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2,))
+    _ = B().init_with_output(key, x)
+  
+  def test_module_unbound_getattr(self):
+    class A(nn.Module):
+      def setup(self):
+        b = B()
+        b.c  # B is unbound because it is not yet assigned to an attribute.
+        self.b = b
+      
+      def __call__(self):
+        pass
     
+    class B(nn.Module):
+      def setup(self):
+        self.c = nn.Dense(2)
+
+    with self.assertRaisesWithLiteralMatch(AttributeError, "'B' object has no attribute 'c'"):
+      A().init(random.PRNGKey(0))
+
+  def test_unbound_setup_call(self):
+    setup_called = False
+
+    class A(nn.Module):
+      def setup(self):
+        nonlocal setup_called
+        setup_called = True
+      
+      def test(self):
+        pass
+
+    A().test()
+    self.assertFalse(setup_called)
 
 
 if __name__ == '__main__':

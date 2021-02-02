@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import jax
 from jax import random
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -67,14 +67,14 @@ class SerializationTest(absltest.TestCase):
     state = serialization.to_state_dict(model)
     self.assertEqual(state, {
         'params': {
-            'kernel': onp.ones((1, 1)),
-            'bias': onp.zeros((1,)),
+            'kernel': np.ones((1, 1)),
+            'bias': np.zeros((1,)),
         }
     })
     state = {
         'params': {
-            'kernel': onp.zeros((1, 1)),
-            'bias': onp.zeros((1,)),
+            'kernel': np.zeros((1, 1)),
+            'bias': np.zeros((1,)),
         }
     }
     restored_model = serialization.from_state_dict(model, state)
@@ -91,16 +91,16 @@ class SerializationTest(absltest.TestCase):
     expected_state = {
         'target': {
             'params': {
-                'kernel': onp.ones((1, 1)),
-                'bias': onp.zeros((1,)),
+                'kernel': np.ones((1, 1)),
+                'bias': np.zeros((1,)),
             }
         },
         'state': {
             'step': 0,
             'param_states': {
                 'params': {
-                    'kernel': {'momentum': onp.zeros((1, 1))},
-                    'bias': {'momentum': onp.zeros((1,))},
+                    'kernel': {'momentum': np.zeros((1, 1))},
+                    'bias': {'momentum': np.zeros((1,))},
                 }
             }
         },
@@ -164,20 +164,20 @@ class SerializationTest(absltest.TestCase):
                      'uintc', 'int_', 'longfloat', 'clongfloat',
                      'longcomplex', 'bool_', 'int', 'float',
                      'complex', 'bool']
-    onp.random.seed(0)
+    np.random.seed(0)
     for dtype in normal_dtypes:
-      v = onp.random.uniform(-100, 100, size=()).astype(dtype)[()]
+      v = np.random.uniform(-100, 100, size=()).astype(dtype)[()]
       restored_v = serialization.msgpack_restore(
             serialization.msgpack_serialize(v))
       self.assertEqual(restored_v.dtype, v.dtype)
-      onp.testing.assert_array_equal(restored_v, v)
+      np.testing.assert_array_equal(restored_v, v)
 
       for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
-        arr = onp.random.uniform(-100, 100, size=shape).astype(dtype)
+        arr = np.random.uniform(-100, 100, size=shape).astype(dtype)
         restored_arr = serialization.msgpack_restore(
             serialization.msgpack_serialize(arr))
         self.assertEqual(restored_arr.dtype, arr.dtype)
-        onp.testing.assert_array_equal(restored_arr, arr)
+        np.testing.assert_array_equal(restored_arr, arr)
 
   def test_jax_numpy_serialization(self):
     jax_dtypes = [jnp.bool_, jnp.uint8, jnp.uint16, jnp.uint32,
@@ -186,19 +186,19 @@ class SerializationTest(absltest.TestCase):
                   jnp.complex64]
     for dtype in jax_dtypes:
       v = jnp.array(
-            onp.random.uniform(-100, 100, size=())).astype(dtype)[()]
+            np.random.uniform(-100, 100, size=())).astype(dtype)[()]
       restored_v = serialization.msgpack_restore(
           serialization.msgpack_serialize(v))
       self.assertEqual(restored_v.dtype, v.dtype)
-      onp.testing.assert_array_equal(restored_v, v)
+      np.testing.assert_array_equal(restored_v, v)
 
       for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
         arr = jnp.array(
-            onp.random.uniform(-100, 100, size=shape)).astype(dtype)
+            np.random.uniform(-100, 100, size=shape)).astype(dtype)
         restored_arr = serialization.msgpack_restore(
             serialization.msgpack_serialize(arr))
         self.assertEqual(restored_arr.dtype, arr.dtype)
-        onp.testing.assert_array_equal(restored_arr, arr)
+        np.testing.assert_array_equal(restored_arr, arr)
 
   def test_complex_serialization(self):
     for x in [1j, 1+2j]:
@@ -233,6 +233,33 @@ class SerializationTest(absltest.TestCase):
     serialized_bytes = serialization.to_bytes(optimizer)
     restored_optimizer = serialization.from_bytes(optimizer, serialized_bytes)
     self.assertEqual(restored_optimizer, optimizer)
+
+  def test_serialization_chunking(self):
+    old_chunksize = serialization.MAX_CHUNK_SIZE
+    serialization.MAX_CHUNK_SIZE = 91 * 8
+    try:
+      tmp = {'a': np.ones((10, 10))}
+      tmp = serialization._chunk_array_leaves_in_place(tmp)
+    finally:
+      serialization.MAX_CHUNK_SIZE = old_chunksize
+    test = jax.tree_map(jnp.shape, tmp)
+    ref = {'a': {
+        '__msgpack_chunked_array__': (),
+        'chunks': {'0': (91,), '1': (9,)},
+        'shape': {'0': (), '1': ()}}
+        }
+    self.assertEqual(test, ref)
+
+  def test_serialization_chunking2(self):
+    old_chunksize = serialization.MAX_CHUNK_SIZE
+    serialization.MAX_CHUNK_SIZE = 91 * 8
+    try:
+      tmp = {'a': np.ones((10, 10))}
+      tmpbytes = serialization.to_bytes(tmp)
+      newtmp = serialization.from_bytes(tmp, tmpbytes)
+    finally:
+      serialization.MAX_CHUNK_SIZE = old_chunksize
+    jax.tree_multimap(np.testing.assert_array_equal, tmp, newtmp)
 
 
 if __name__ == '__main__':

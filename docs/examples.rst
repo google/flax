@@ -1,4 +1,4 @@
-Flax examples
+Examples
 =============
 
 Core examples
@@ -7,8 +7,8 @@ Core examples
 Each example is designed to be self-contained and easily forkable, while
 reproducing relevant results in different areas of machine learning. These
 examples adhere to a shared style and functionality outlined in `#231`_. All
-examples are under the folder `flax/linen_examples/
-<https://github.com/google/flax/tree/master/linen_examples/>`__. Some of the
+examples are under the folder `flax/examples/
+<https://github.com/google/flax/tree/master/examples/>`__. Some of the
 examples below have a link [Interactive] that lets you run them directly in
 Colab.
 
@@ -17,39 +17,39 @@ Colab.
 
 Image classification
 
-   -  `MNIST <https://github.com/google/flax/tree/master/linen_examples/mnist/>`__ [`Interactive
-      <https://colab.research.google.com/github/google/flax/blob/master/linen_examples/mnist/mnist.ipynb>`__] :
+   -  `MNIST <https://github.com/google/flax/tree/master/examples/mnist/>`__ [`Interactive
+      <https://colab.research.google.com/github/google/flax/blob/master/examples/mnist/mnist.ipynb>`__] :
       Convolutional neural network for MNIST classification (featuring simple code).
-   -  `ImageNet <https://github.com/google/flax/tree/master/linen_examples/imagenet/>`__ :
+   -  `ImageNet <https://github.com/google/flax/tree/master/examples/imagenet/>`__ :
       Resnet-50 on imagenet with weight decay (featuring multi host SPMD, custom
       preprocessing, checkpointing, dynamic scaling, mixed precision).
 
 Reinforcement Learning
 
    -  `Proximal Policy
-      Optimization <https://github.com/google/flax/tree/master/linen_examples/ppo/>`__ :
+      Optimization <https://github.com/google/flax/tree/master/examples/ppo/>`__ :
       Learning to play Atari games (featuring single host SPMD, RL setup).
 
 Natural language processing
 
    -  `Sequence to sequence for number
-      addition <https://github.com/google/flax/tree/master/linen_examples/seq2seq/>`__
+      addition <https://github.com/google/flax/tree/master/examples/seq2seq/>`__
       (featuring simple code, LSTM state handling, on the fly data generation).
    -  `Transformer model on
-      WMT <https://github.com/google/flax/tree/master/linen_examples/wmt/>`__ :
+      WMT <https://github.com/google/flax/tree/master/examples/wmt/>`__ :
       Translating English/German (featuring multihost SPMD, dynamic bucketing, attention cache,
       packed sequences, recipe for TPU training on GCP).
 
 Generative models
 
    -  `Variational
-      auto-encoder <https://github.com/google/flax/tree/master/linen_examples/vae/>`__ :
+      auto-encoder <https://github.com/google/flax/tree/master/examples/vae/>`__ :
       Trained on binarized MNIST (featuring simple code, vmap).
-   -  `PixelCNN++ <https://github.com/google/flax/tree/master/linen_examples/pixelcnn/>`__ :
+   -  `PixelCNN++ <https://github.com/google/flax/tree/master/examples/pixelcnn/>`__ :
       Trained on cifar10 (featuring single host SPMD, checkpointing, Polyak decay).
 
 
-Flax examples from the community
+Community Examples
 --------------------------------
 
 In addition to the curated list of official Flax examples, there is a growing
@@ -66,10 +66,14 @@ Using Linen
 +==================================+=================+========================+==================================+
 | `JAX-RL`_                        | `@henry-prior`_ | Reinforcement learning | N/A                              |
 +----------------------------------+-----------------+------------------------+----------------------------------+
- 
-.. _`JAX-RL`: https://github.com/henry-prior/jax-rl
+| `DCGAN`_ Colab                   | `@bkkaggle`_    | Image Synthesis        | https://arxiv.org/abs/1511.06434 |
++----------------------------------+-----------------+------------------------+----------------------------------+
 
-Using Deprecated API
+.. _`JAX-RL`: https://github.com/henry-prior/jax-rl
+.. _`DCGAN`: https://github.com/bkkaggle/jax-dcgan
+.. _`@bkkaggle`: https://github.com/bkkaggle
+
+Using the Deprecated ``flax.nn`` API
 ~~~~~~~~~~~~~~~~~~~~
 
 The following examples were created using the old pre-Linen API. You can still
@@ -85,8 +89,6 @@ pull request to the new API if you want to earn some Flax karma?
 +----------------------------------+-----------------+------------------------+----------------------------------+
 | `Various CIFAR SOTA Models`_     | `@PForet`_      | Image Classification   | N/A                              |
 +----------------------------------+-----------------+------------------------+----------------------------------+
-| `DCGAN`_ Colab                   | `@bkkaggle`_    | Image Synthesis        | https://arxiv.org/abs/1511.06434 |
-+----------------------------------+-----------------+------------------------+----------------------------------+
 
 .. _`Gaussian Processes regression`: https://github.com/danieljtait/ladax/tree/master/examples
 .. _`DQN`: https://github.com/joaogui1/RL-JAX/tree/master/DQN
@@ -96,7 +98,6 @@ pull request to the new API if you want to earn some Flax karma?
 .. _`@henry-prior`: https://github.com/henry-prior
 .. _`@joaogui1`: https://github.com/joaogui1
 .. _`@PForet`: https://github.com/PForet
-.. _`@bkkaggle`: https://github.com/bkkaggle
 
 More examples
 -------------

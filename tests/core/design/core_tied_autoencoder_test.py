@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,13 +20,17 @@ from jax import numpy as jnp, random
 import jax
 
 
-from flax.core import Scope, Array, init, unfreeze, lift, nn
+from flax.core import init, unfreeze, lift, nn
 
 
-def mlp(scope: Scope, x: Array, hidden: int, out: int):
-  x = scope.child(nn.dense, 'hidden')(x, hidden)
-  x = nn.relu(x)
-  return scope.child(nn.dense, 'out')(x, out)
+def transpose(fn):
+  def trans(variables):
+    params = variables['params']
+    params['kernel'] = params['kernel'].T
+    return variables
+
+  return lift.transform_module(
+      fn, trans_in_fn=trans, trans_out_fn=trans)
 
 
 @dataclass
@@ -40,27 +44,11 @@ class TiedAutoEncoder:
     return self.decode(scope, z)
 
   def encode(self, scope, x):
-    assert x.shape[-1] == self.features
-    return self._tied(nn.dense)(scope, x, self.latents, bias=False)
+    return nn.dense(scope, x, self.latents, bias=False)
 
   def decode(self, scope, z):
-    assert z.shape[-1] == self.latents
-    return self._tied(nn.dense, transpose=True)(
+    return transpose(nn.dense)(
         scope, z, self.features, bias=False)
-
-  def _tied(self, fn, transpose=False):
-    if not transpose:
-      return fn
-
-    def trans(variables):
-      if 'params' not in variables:
-        return variables
-      params = variables['params']
-      params['kernel'] = params['kernel'].T
-      return variables
-
-    return lift.transform_module(
-        fn, trans_in_fn=trans, trans_out_fn=trans)
 
 
 class TiedAutoEncoderTest(absltest.TestCase):

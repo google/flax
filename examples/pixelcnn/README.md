@@ -21,15 +21,16 @@ The model should run with other configurations and hardware, but was tested on t
 
 | Hardware | Batch size | Training time | Log-likelihood (bits/dimension) | TensorBoard.dev |
 | --- | --- | --- | --- | --- |
-| 8 x Nvidia V100 (16GB)  | 320  |  1d 14h | 2.92 | [2020-04-23](https://tensorboard.dev/experiment/t8fM3u2zSJG7tAx6YbXHkQ/) |
+| 8 x Nvidia V100 (16GB)  | 320  |  1d 14h | 2.923 | [2020-04-23](https://tensorboard.dev/experiment/t8fM3u2zSJG7tAx6YbXHkQ/) |
+| 8 x TPUv3 (16GB)  | 320  |  4d4h | 2.927 | [2020-08-15](https://tensorboard.dev/experiment/6rTypNzlSN2o7pfNWJOjMw/) |
 
 ### How to run
-#### 8 x Nvidia V100 (16GB)
+#### 8 x Nvidia V100 (16GB), 8 x TPUv3 (16GB)
 To run training
 ```
-python train.py --batch_size=320
+python main.py --workdir=./pixelcnn --config.batch_size=320
 ```
 To run sampling (this will automatically load model parameters from the most recent trained checkpoint)
 ```
-python sample.py --sample_batch_size=256
+python main.py --workdir=./pixelcnn --sample --config.sample_batch_size=256
 ```

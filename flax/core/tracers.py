@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,19 +17,9 @@
 import jax
 
 
-def _masters():
-  """Returns a list of currently active Jax tracers."""
-  # stack = jax.core.trace_state.trace_stack
-  # return stack.downward[::-1] + stack.upward
-  return []
-
-
 def current_trace():
   """Returns the innermost Jax tracer."""
-  tracers = _masters()
-  if tracers:
-    return tracers[-1]
-  return None
+  return jax.core.find_top_trace(())
 
 
 def trace_level(master):
@@ -41,5 +31,5 @@ def trace_level(master):
 
 def check_trace_level(base_level):
   level = trace_level(current_trace())
-  if level > base_level:
+  if level != base_level:
     raise ValueError('Jax transforms and modules cannot be mixed.')

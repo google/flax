@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,21 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 
 """Fast decoding routines for inference from a trained model."""
 
@@ -54,17 +39,6 @@ def brevity_penalty(alpha, length):
     Brevity penalty score as jax scalar.
   """
   return jnp.power(((5.0 + length) / 6.0), alpha)
-
-
-# TODO(levskaya): try to eliminate this in favor of lax.top_k at its last
-# callsite w.o. causing the mysterious BLEU regression.
-# def top_k(x, k):
-#   """Select the top k slices from the last dimension."""
-#   bcast_idxs = jnp.broadcast_to(np.arange(x.shape[-1]), x.shape)
-#   sorted_vals, sorted_idxs = lax.sort_key_val(x, bcast_idxs)
-#   topk_vals = lax.slice_in_dim(sorted_vals, -k, sorted_vals.shape[-1], axis=-1)
-#   topk_idxs = lax.slice_in_dim(sorted_idxs, -k, sorted_idxs.shape[-1], axis=-1)
-#   return topk_vals, topk_idxs
 
 
 # Beam handling utility functions:
@@ -206,7 +180,7 @@ def beam_search(inputs,
       slices and cache and returning next-token logits and updated cache.
     beam_size: int: number of beams to use in beam search.
     alpha: float: scaling factor for brevity penalty.
-    eos_id: int: if of end-of-sentence token for target vocabulary.
+    eos_id: int: id of end-of-sentence token for target vocabulary.
     max_decode_len: int: maximum length of decoded translations.
 
   Returns:

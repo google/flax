@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,10 +30,9 @@
 Adapted from SEED RL, originally adapted from Dopamine.
 """
 
+import cv2
 from gym.spaces.box import Box
 import numpy as np
-
-import cv2
 
 
 class AtariPreprocessing(object):

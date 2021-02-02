@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2021 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Simple syntactic wrapper for nested dictionaries to allow dot traversal."""
-from collections.abc import MutableMapping
+from collections.abc import MutableMapping  # pylint: disable=g-importing-member
 from flax import serialization
 from flax.core.frozen_dict import FrozenDict
 from jax import tree_util

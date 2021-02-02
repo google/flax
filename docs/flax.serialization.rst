@@ -1,6 +1,6 @@
 
 flax.serialization package
-=================
+============================
 
 .. currentmodule:: flax.serialization
 
@@ -17,7 +17,7 @@ State dicts
 
 
 Serialization with MessagePack
-------------------------
+--------------------------------
 
 .. autofunction:: msgpack_serialize
 .. autofunction:: msgpack_restore

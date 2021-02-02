@@ -15,7 +15,7 @@ tested on the following:
 
 | Hardware | Game | Training time | Total frames seen | TensorBoard.dev |
 | --- | --- | --- | --- | --- |
-| 1x V100 GPU  | Qbert  |  9h 27m 8s | 40M | [2020-09-30](https://tensorboard.dev/experiment/1pacpbxxRz2di3NIOFkHoA/#scalars) |
+| 1x V100 GPU  | Breakout  |  9h 15m 15s | 40M | [2020-10-02](https://tensorboard.dev/experiment/pY7D2qYQQLO9ZT5lA9PFPA) |
 
 ## How to run
 
@@ -25,11 +25,11 @@ Running `python ppo_main.py` will run the example with default
 By default logging info and checkpoints will be stored in `/tmp/ppo_training`
 directory. This can be overriden as follows:
 
-```python ppo_main.py --logdir=/my_fav_directory```
+```python ppo_main.py --config=configs/default.py --workdir=/my_fav_directory```
 
 You can also override the default (hyper)parameters, for example
 
-```python ppo_main.py --config.game=Seaquest --config.total_frames=20000000 --config.decaying_lr_and_clip_param=False --logdir=/tmp/seaquest```
+```python ppo_main.py --config=configs/default.py --config.game=Seaquest --config.total_frames=20000000 --config.decaying_lr_and_clip_param=False --workdir=/tmp/seaquest```
 
 will train the model on 20M Seaquest frames with constant (i.e. not linearly
 decaying) learning rate and PPO clipping parameter. Checkpoints and tensorboard
