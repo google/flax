@@ -23,7 +23,7 @@ We will show you how to...
 This example shows how to create a simple cyclical learning rate scheduler, the triangular scheduler.
 
 To use the schedule one must simply create a learning rate function by passing the hyperparameters to the 
-`create_triangular_schedule` function and then use that function to compute the learning rate for your updates.
+create_triangular_schedule function and then use that function to compute the learning rate for your updates.
 For example using this schedule on MNIST would require changing the train_step function
 .. code-block:: python
   
