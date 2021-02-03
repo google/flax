@@ -26,14 +26,14 @@ from sphinx.util.docutils import SphinxDirective
 Use directive as follows:
 
 .. codediff::
-  :title-left: <LEFT_CODE_BLOCK_TITLE>
-  :title-right: <RIGHT_CODE_BLOCK_TITLE>
-  :highlight-left: <LINES_TO_HIGHLIGHT_LEFT>
-  :highlight-right: <LINES_TO_HIGHLIGHT_RIGHT>
+  :title_left: <LEFT_CODE_BLOCK_TITLE>
+  :title_right: <RIGHT_CODE_BLOCK_TITLE>
   
   <CODE_BLOCK_LEFT>
   ---
   <CODE_BLOCK_RIGHT>
+
+In order to highlight a line of code, prepend it with "#!".
 """
 
 class CodeDiffParser:
@@ -94,7 +94,7 @@ class CodeDiffDirective(SphinxDirective):
     'code_sep': directives.unchanged,
     }
 
-  def run(self):    
+  def run(self):
     new_content = CodeDiffParser().parse(list(self.content), **self.options)
 
     node = nodes.paragraph()
