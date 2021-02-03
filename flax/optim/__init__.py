@@ -16,6 +16,7 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
+from .adabelief import Adabelief
 from .adadelta import Adadelta
 from .adafactor import Adafactor
 from .adagrad import Adagrad
@@ -30,6 +31,7 @@ from .sgd import GradientDescent
 from .weight_norm import WeightNorm
 
 __all__ = [
+    "Adabelief",
     "Adam",
     "Adadelta",
     "Adafactor",
