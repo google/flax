@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.errors import VariableModificationError
+from flax.errors import ModifyVariableError
 from flax.core import Scope, scope, freeze, init, apply, nn
 
 from jax import random
@@ -73,8 +73,7 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       scope.put_variable('state', 'test', 123)
 
-    msg = 'Trying to update variable "test" in "/" but collection "state" is immutable.'
-    with self.assertRaises(VariableModificationError):
+    with self.assertRaises(ModifyVariableError):
       init(f, mutable='params')(random.PRNGKey(0))
 
   def test_undefined_param(self):

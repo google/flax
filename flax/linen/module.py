@@ -22,6 +22,7 @@ import threading
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
                     Set, Type, Union, TypeVar, Generic, Dict)
 
+from flax.errors import CallCompactUnboundModuleError, InitModuleInvalidRngError, JaxOmnistagingError
 import jax
 from jax import tree_util
 import numpy as np
@@ -44,10 +45,7 @@ T = TypeVar('T')
 
 def _check_omnistaging():
   if not jax.config.omnistaging_enabled:
-    raise RuntimeError(
-        "Flax linen API requires JAX omnistaging to be enabled:\n"
-        "  from jax.config import config\n"
-        "  config.enable_omnistaging()")
+    raise JaxOmnistagingError()
 
 
 def _indent(x: str, num_spaces: int):
@@ -231,7 +229,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
 
     if is_compact_method:
       if self.scope is None:
-        raise ValueError("Can't call compact methods on unbound modules")
+        raise CallCompactUnboundModuleError()
       self._state.in_compact_method = True
     elif is_setup_method:
       self._state.in_setup = True
@@ -251,8 +249,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
 def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
   @functools.wraps(hash_fn)
   def wrapped(self):
-    if self.scope is not None:
-      raise ValueError('Can\'t call __hash__ on modules that hold variables.')
+    assert self.scope == None, 'Can\'t call __hash__ on modules that hold variables.'
     return hash_fn(self)
   return wrapped
 
@@ -272,8 +269,7 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
     return method_or_fn.__func__  # pytype: disable=attribute-error
   elif callable(method_or_fn):
     return method_or_fn
-  else:
-    raise ValueError('Expect a function or method.')
+  assert True, 'Expected a function or method.'
 
 
 @dataclasses.dataclass
@@ -761,6 +757,8 @@ class Module:
     if method is None:
       method = self.__class__.__call__
     else:
+      if not inspect.ismethod(method):
+        raise ApplyModuleInvalidMethodError(type(self).__name__, method)
       method = _get_unbound_fn(method)
     fn = lambda scope: method(self.clone(parent=scope), *args, **kwargs)
     return apply(fn, mutable=mutable)(variables, rngs=rngs)
@@ -779,7 +777,8 @@ class Module:
       collections.
     """
     if not isinstance(rngs, dict):
-      assert rngs.shape == (2,)
+      if rngs.shape != (2,):
+        raise InitModuleInvalidRngError(type(self).__name, rngs)
       rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)

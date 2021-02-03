@@ -19,7 +19,7 @@ import functools
 import hashlib
 from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic, Mapping
 
-from flax.errors import InvalidFilterError, InvalidScopeError, VariableModificationError, NameTypeError, NameInUseError
+from flax.errors import InvalidFilterError, InvalidScopeError, ModifyVariableError, NameTypeError, NameInUseError
 from . import tracers
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
@@ -470,7 +470,7 @@ class Scope:
     self._check_valid()
     self._validate_trace_level()
     if not self.is_mutable_collection(col):
-      raise VariableModificationError(col, name, self.path_text)
+      raise ModifyVariableError(col, name, self.path_text)
     variables = self._mutable_collection(col)
     variables[name] = value
 
