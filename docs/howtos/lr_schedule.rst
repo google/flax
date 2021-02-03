@@ -25,6 +25,7 @@ This example shows how to create a simple cyclical learning rate scheduler, the 
 To use the schedule one must simply create a learning rate function by passing the hyperparameters to the 
 create_triangular_schedule function and then use that function to compute the learning rate for your updates.
 For example using this schedule on MNIST would require changing the train_step function
+
 .. code-block:: python
   
   def train_step(optimizer, batch, learning_rate_fn):  
@@ -42,29 +43,32 @@ For example using this schedule on MNIST would require changing the train_step f
     return optimizer, metrics
 
 And the train_epoch function:
-def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
-  """Train for a single epoch."""
-  train_ds_size = len(train_ds['image'])
-  steps_per_epoch = train_ds_size // batch_size
 
-  #If you want 4 cycles per epoch
-  learning_rate_fn = create_triangular_schedule(3e-3, 3e-2, steps_per_epoch//4)
-  perms = jax.random.permutation(rng, len(train_ds['image']))
-  perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
-  perms = perms.reshape((steps_per_epoch, batch_size))
-  batch_metrics = []
-  for perm in perms:
-    batch = {k: v[perm, ...] for k, v in train_ds.items()}
-    optimizer, metrics = train_step(optimizer, batch, learning_rate_fn)
-    batch_metrics.append(metrics)
+.. code-block:: python
 
-  # compute mean of metrics across each batch in epoch.
-  batch_metrics_np = jax.device_get(batch_metrics)
-  epoch_metrics_np = {
-      k: np.mean([metrics[k] for metrics in batch_metrics_np])
-      for k in batch_metrics_np[0]}
+  def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+    """Train for a single epoch."""
+    train_ds_size = len(train_ds['image'])
+    steps_per_epoch = train_ds_size // batch_size
 
-  logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-               epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
+    #If you want 4 cycles per epoch
+    learning_rate_fn = create_triangular_schedule(3e-3, 3e-2, steps_per_epoch//4)
+    perms = jax.random.permutation(rng, len(train_ds['image']))
+    perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+    perms = perms.reshape((steps_per_epoch, batch_size))
+    batch_metrics = []
+    for perm in perms:
+      batch = {k: v[perm, ...] for k, v in train_ds.items()}
+      optimizer, metrics = train_step(optimizer, batch, learning_rate_fn)
+      batch_metrics.append(metrics)
 
-  return optimizer, epoch_metrics_np
+    # compute mean of metrics across each batch in epoch.
+    batch_metrics_np = jax.device_get(batch_metrics)
+    epoch_metrics_np = {
+        k: np.mean([metrics[k] for metrics in batch_metrics_np])
+        for k in batch_metrics_np[0]}
+
+    logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
+                epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
+
+    return optimizer, epoch_metrics_np
