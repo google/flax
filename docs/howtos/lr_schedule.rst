@@ -6,7 +6,7 @@ We will show you how to...
 * define a learning rate schedule
 * train a simple model using that schedule
 
-.. code-block:: python
+.. testcode::
   
   def create_triangular_schedule(lr_min, lr_max, steps_per_cycle):
   """Return fn from epoch to LR, linearly interpolating between `lr_min`->`lr_max`->`lr_min`."""
