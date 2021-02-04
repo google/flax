@@ -4,7 +4,7 @@
 
 In Linen we can define `Module` arguments either as dataclass attributes or as arguments to methods (usually `__call__`).
 Typically the distinction is clear:
-* Completely fixed properties, such as the choice of kernel initializer or number of output features, are hyperparameters and should be defined as dataclass attributes. Typically two Module instances with different hyperparamaters cannot share in a meaningfull way.
+* Completely fixed properties, such as the choice of kernel initializer or number of output features, are hyperparameters and should be defined as dataclass attributes. Typically two Module instances with different hyperparamaters cannot share in a meaningful way.
 * Dynamic properties, such as input data and top-level "mode switches" like `train=True/False` that should be passed as arguments to `__call__` or another method.
 
 Some cases are however ambigious. Take for example the `Dropout` module.
@@ -39,7 +39,7 @@ class ResidualModel(nn.Module):
 
 It makes sense to pass `determinstic` to the constructor here because this way we can pass the dropout template to the sub-modules.
 Now the sub-module no longer needs to take care of train vs eval mode and can simply use the `dropout` argument.
-Note that because the dropout layer can only be constructed in the sub-module we can only partially `deterministic` to the constructor but not to `__call__`.
+Note that because the dropout layer can only be constructed in the sub-module we can only partially apply `deterministic` to the constructor but not to `__call__`.
 
 However, if `deterministic` is a dataclass attribute we run into trouble when using the setup pattern. We would **want** to write our module code like this:
 
