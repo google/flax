@@ -288,7 +288,7 @@ class Conv(Module):
 
 
 class ConvTranspose(Module):
-  """Convolution Module wrapping lax.conv_general_dilated.
+  """Convolution Module wrapping lax.conv_transpose.
 
   Attributes:
     features: number of convolution filters.

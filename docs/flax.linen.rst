@@ -37,6 +37,7 @@ Linear modules
     Dense
     DenseGeneral
     Conv
+    ConvTranspose
     Embed
 
 

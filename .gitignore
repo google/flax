@@ -10,3 +10,4 @@ build/
 *.egg-info
 *.rej
 .pytype
+.vscode/*
