@@ -1,15 +1,22 @@
-Managing Parameters and State
+Learning Rate Scheduling
 =============================
+
+Choosing the correct learning rate for your training can be quite hard, besides that there's mounting evidence that a static 
+learning rate may not be the best option, and that it would be better to vary your learning rate during training. 
+Here we will show you how to implement a triangular learning rate scheduler, as descbride in https://arxiv.org/abs/1506.01186 
+which can allow your neural network to converge much faster than with a static lr.
 
 We will show you how to...
 
 * define a learning rate schedule
 * train a simple model using that schedule
 
+The triangular schedule makes your learning rate vary as a triangle wave during training, so over the course of a period (steps_per_cycle
+training steps) the value will start at lr_min, increase linearly to lr_max and then decrease again to lr_min.
+
 .. testcode::
   
   def create_triangular_schedule(lr_min, lr_max, steps_per_cycle):
-  """Return fn from epoch to LR, linearly interpolating between `lr_min`->`lr_max`->`lr_min`."""
     top = (steps_per_cycle + 1) // 2
     def learning_rate_fn(step):
       cycle_step = step % steps_per_cycle
@@ -20,9 +27,8 @@ We will show you how to...
       return lr
     return learning_rate_fn
 
-This example shows how to create a simple cyclical learning rate scheduler, the triangular scheduler.
 
-To use the schedule one must simply create a learning rate function by passing the hyperparameters to the 
+To use the schedule one must create a learning rate function by passing the hyperparameters to the 
 create_triangular_schedule function and then use that function to compute the learning rate for your updates.
 For example using this schedule on MNIST would require changing the train_step function
 
