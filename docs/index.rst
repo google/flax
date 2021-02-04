@@ -3,8 +3,11 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Flax documentation
-==================
+.. image:: flax.png
+   :width: 400
+
+Flax
+====
 
 Flax is a neural network library and ecosystem for JAX that is
 designed for flexibility. Flax is in use by a growing community of
