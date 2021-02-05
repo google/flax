@@ -814,6 +814,8 @@ class Module:
     return self.scope.variables()
 
 
+  # THE PART BELOW IS STILL UNDER DEVELOPMENT, PLEASE IGNORE
+  # ===========================================================
   # @contextmanager
   # def mutate(self, mutable=True, **updates):
   #   cloned = self.clone(**updates)
