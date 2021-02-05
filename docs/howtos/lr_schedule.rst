@@ -47,6 +47,8 @@ For example using this schedule on MNIST would require changing the train_step f
       loss = cross_entropy_loss(logits, batch['label'])
       return loss, logits
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    
+    
     (_, logits), grad = grad_fn(optimizer.target)
 
 
@@ -78,11 +80,14 @@ And the train_epoch function:
   """Train for a single epoch."""
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
+  
+  
+  
 
 
 
   perms = jax.random.permutation(rng, len(train_ds['image']))
-  perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+  perms = perms[:steps_per_epoch * batch_size]
   perms = perms.reshape((steps_per_epoch, batch_size))
   batch_metrics = []
   for perm in perms:
@@ -91,15 +96,15 @@ And the train_epoch function:
     batch_metrics.append(metrics)
 
   # compute mean of metrics across each batch in epoch.
-  batch_metrics_np = jax.device_get(batch_metrics)
-  epoch_metrics_np = {
-      k: np.mean([metrics[k] for metrics in batch_metrics_np])
-      for k in batch_metrics_np[0]}
+  batch_metrics = jax.device_get(batch_metrics)
+  epoch_metrics = {
+      k: np.mean([metrics[k] for metrics in batch_metrics])
+      for k in batch_metrics[0]}
 
   logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-               epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
+               epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
 
-  return optimizer, epoch_metrics_np
+  return optimizer, epoch_metrics
   ---
   def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
     """Train for a single epoch."""
