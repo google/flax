@@ -29,3 +29,6 @@ from .pooling import max_pool, avg_pool
 from .recurrent import LSTMCell, GRUCell, ConvLSTM, OptimizedLSTMCell
 from .stochastic import make_rng, stochastic, dropout, is_stochastic
 # pylint: enable=g-multiple-import
+import warnings
+warnings.filterwarnings("default", category=DeprecationWarning, module=__name__)
+warnings.warn("the nn module is deprecated, use linen instead", DeprecationWarning)
