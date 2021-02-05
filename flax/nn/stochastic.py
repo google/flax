@@ -27,7 +27,9 @@ _prng_stack = utils.CallStack()
 
 
 class _PRNGFrame:
-  """Random Number generator scope responsible for generation prngs in a stochastic context."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Random Number generator scope responsible for generation prngs in a stochastic context."""
 
   def __init__(self, rng):
     self.base_rng = rng
@@ -49,7 +51,9 @@ class _PRNGFrame:
 
 @contextlib.contextmanager
 def stochastic(rng):
-  """A context manager for stochastic computations.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A context manager for stochastic computations.
 
   Args:
     rng: the random number generator used as a seed for the stochastic context.
@@ -61,12 +65,16 @@ def stochastic(rng):
 
 
 def is_stochastic():
-  """Returns true if a stochastic scope is currently active."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Returns true if a stochastic scope is currently active."""
   return bool(_prng_stack)
 
 
 def make_rng():
-  """Create a new unique random number generator in a stochastic scope.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Create a new unique random number generator in a stochastic scope.
 
   In combination with `nn.stochastic()` this function is used to generate random
   keys without manually passing around and splitting a random number generator::
@@ -87,7 +95,9 @@ def make_rng():
 
 
 def dropout(inputs, rate, deterministic=False, rng=None):
-  """Applies a random dropout mask to the input.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Applies a random dropout mask to the input.
 
   Args:
     inputs: the inputs that should be randomly masked.

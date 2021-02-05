@@ -21,7 +21,9 @@ import numpy as onp
 
 
 def pool(inputs, init, reduce_fn, window_shape, strides, padding):
-  """Helper function to define pooling functions.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Helper function to define pooling functions.
 
   Pooling functions are implemented using the ReduceWindow XLA op.
   NOTE: Be aware that pooling is not generally differentiable.
@@ -56,7 +58,9 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
 
 
 def avg_pool(inputs, window_shape, strides=None, padding="VALID"):
-  """Pools the input by taking the average over a window.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Pools the input by taking the average over a window.
 
   Args:
     inputs: input data with dimensions (batch, window dims..., features).
@@ -75,7 +79,9 @@ def avg_pool(inputs, window_shape, strides=None, padding="VALID"):
 
 
 def max_pool(inputs, window_shape, strides=None, padding="VALID"):
-  """Pools the input by taking the maximum of a window slice.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Pools the input by taking the maximum of a window slice.
 
   Args:
     inputs: input data with dimensions (batch, window dims..., features).

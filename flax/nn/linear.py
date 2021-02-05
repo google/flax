@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Linear modules."""
+"""DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
@@ -34,7 +36,9 @@ def _normalize_axes(axes, ndim):
 
 
 class DenseGeneral(base.Module):
-  """A linear transformation with flexible axes."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A linear transformation with flexible axes."""
 
   def apply(self,
             inputs,
@@ -124,7 +128,9 @@ class DenseGeneral(base.Module):
 
 
 class Dense(base.Module):
-  """A linear transformation applied over the last dimension of the input."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A linear transformation applied over the last dimension of the input."""
 
   def apply(self,
             inputs,
@@ -162,7 +168,9 @@ class Dense(base.Module):
 
 
 def _conv_dimension_numbers(input_shape):
-  """Computes the dimension numbers based on the input shape."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Computes the dimension numbers based on the input shape."""
   ndim = len(input_shape)
   lhs_spec = (0, ndim - 1) + tuple(range(1, ndim - 1))
   rhs_spec = (ndim - 1, ndim - 2) + tuple(range(0, ndim - 2))
@@ -171,7 +179,9 @@ def _conv_dimension_numbers(input_shape):
 
 
 class Conv(base.Module):
-  """Convolution Module wrapping lax.conv_general_dilated."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Convolution Module wrapping lax.conv_general_dilated."""
 
   def apply(self,
             inputs,
@@ -260,7 +270,9 @@ class Conv(base.Module):
 
 
 class ConvTranspose(base.Module):
-  """Transposed convolution Module wrapping lax.conv_transpose."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Transposed convolution Module wrapping lax.conv_transpose."""
 
   def apply(self,
             inputs,
@@ -334,7 +346,9 @@ default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
 
 
 class Embed(base.Module):
-  """Embedding Module.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Embedding Module.
 
   A parameterized function from integers [0, n) to d-dimensional vectors.
   """

@@ -29,7 +29,9 @@ def _absolute_dims(rank, dims):
 
 
 class BatchNorm(base.Module):
-  """BatchNorm Module."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  BatchNorm Module."""
 
   def apply(self,
             x,
@@ -123,7 +125,9 @@ class BatchNorm(base.Module):
 
 
 class LayerNorm(base.Module):
-  """Layer normalization (https://arxiv.org/abs/1607.06450).
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Layer normalization (https://arxiv.org/abs/1607.06450).
 
   Operates on the last axis of the input data.
   """
@@ -174,7 +178,9 @@ class LayerNorm(base.Module):
 
 
 class GroupNorm(base.Module):
-  """Group normalization (arxiv.org/abs/1803.08494)."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Group normalization (arxiv.org/abs/1803.08494)."""
 
   def apply(self,
             x,

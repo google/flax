@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""NN base modules for JAX."""
+"""DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  NN base modules for JAX."""
 
 from typing import Type
 
@@ -47,7 +49,9 @@ def _track_outputs(x):
 
 
 class _ModuleFrame:
-  """A ModuleFrame the context needed to initialize (init) or apply a Module.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A ModuleFrame the context needed to initialize (init) or apply a Module.
 
   In particular, `self.params` is a dictionary where parameters are
   stored (during module init) and read from (during module application).
@@ -131,7 +135,9 @@ class _ModuleFrame:
 
 
 def module_method(fn):
-  """Decorates a function as a module method.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Decorates a function as a module method.
 
   The `module_method` allows modules to have multiple methods that make use of
   the modules parameters.
@@ -198,7 +204,9 @@ MODULE_CLASSMETHODS = [
 
 
 class _ModuleMeta(abc.ABCMeta):
-  """A meta class for automatically setting the doc of Modules."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A meta class for automatically setting the doc of Modules."""
 
   def __init__(cls, name, bases, attrs):
     super(_ModuleMeta, cls).__init__(name, bases, attrs)
@@ -247,7 +255,9 @@ def _fold_in_str(rng, data):
 
 
 class Module(metaclass=_ModuleMeta):
-  """Functional modules."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Functional modules."""
 
   def __new__(cls, *args, name=None, **kwargs):
     if not _module_stack:
@@ -693,7 +703,9 @@ class Module(metaclass=_ModuleMeta):
 
 
 def module(fun):
-  """Convert a function into the apply method of a new Module.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Convert a function into the apply method of a new Module.
 
   This is convenient shortcut for writing higher level modules that don't need
   access to `self` for creating parameters directly.
@@ -728,7 +740,9 @@ def module(fun):
 
 # TODO(flax-dev) consider removing this...
 class TransparentModule(Module):
-  """A transparent module.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A transparent module.
 
   A transparent module can only have one parameter named '0'.
   """
@@ -753,7 +767,9 @@ class TransparentModule(Module):
 
 
 class TruncatedModule(TransparentModule):
-  """Wraps a Module and returns the requested intermediate outputs instead.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Wraps a Module and returns the requested intermediate outputs instead.
 
   Check `Model.truncate_at` for a simple API to get the intermediate outputs of
   an existing Model.
@@ -785,7 +801,9 @@ class TruncatedModule(TransparentModule):
 
 @contextlib.contextmanager
 def capture_module_outputs():
-  """A context manager that captures all model outputs.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A context manager that captures all model outputs.
 
   Yields:
     A `flax.nn.Collection` containing all module outputs.
@@ -796,7 +814,9 @@ def capture_module_outputs():
 
 
 class ModuleState():
-  """Tracks a state variable.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Tracks a state variable.
 
   ModuleState instances should not be created directly. See `Module.state` on
   how to create state variables inside modules.
@@ -831,7 +851,9 @@ class ModuleState():
 
 @contextlib.contextmanager
 def stateful(state=None, mutable=True):
-  """A context manager for stateful computations.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A context manager for stateful computations.
 
   Module's that use the `Module.state` by default store state inside the
   `Collection` specified by the (innermost) `nn.stateful` context manager.
@@ -882,7 +904,9 @@ def stateful(state=None, mutable=True):
 
 
 def is_stateful():
-  """Returns true if a stateful scope is currently active (see `flax.nn.stateful`)."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  Returns true if a stateful scope is currently active (see `flax.nn.stateful`)."""
   return bool(_state_stack)
 
 
@@ -902,7 +926,9 @@ def _top_frame(call_name):
 
 @struct.dataclass
 class Model:
-  """A Model contains the model parameters, state and definition."""
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A Model contains the model parameters, state and definition."""
 
   module: Type[Module] = struct.field(pytree_node=False)
   params: Any = struct.field(pytree_node=True)
@@ -942,7 +968,9 @@ class Model:
 
 
 class Collection:
-  """A collection of tensors useful for tracking state.
+  """DEPRECATION WARNING:
+  `flax.nn` is deprecated, use `flax.linen` instead.
+  A collection of tensors useful for tracking state.
 
   A Collection can be used to associate data with the application of a Module.
   For example, a collection can be used to collect activations across modules.
