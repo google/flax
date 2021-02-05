@@ -268,8 +268,6 @@ than the train dataset so we can do this for the entire dataset directly.
 
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f', #!
                 epoch, loss, accuracy * 100)
-
-     // handle metrics
   ---
   train_ds, test_ds = get_datasets()
   test_ds = jax_utils.replicate(test_ds) #!
@@ -285,8 +283,6 @@ than the train dataset so we can do this for the entire dataset directly.
 
     logging.info('eval epoch: %d, loss: %s, accuracy: %s', #!
                 epoch, loss, accuracy * 100)
-
-    // handle metrics
 
 
 
