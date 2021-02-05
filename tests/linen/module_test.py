@@ -28,6 +28,7 @@ import numpy as np
 from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
+from flax.errors import CallCompactUnboundModuleError
 from flax.linen import compact
 from flax.core import Scope, freeze
 
@@ -582,7 +583,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
-    with self.assertRaisesWithLiteralMatch(ValueError, 'Can\'t call __hash__ on modules that hold variables.'):
+    with self.assertRaisesWithLiteralMatch(AssertionError, 'Can\'t call __hash__ on modules that hold variables.'):
       hash(module_a)
 
   def test_module_trace(self):
@@ -631,7 +632,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)
-    with self.assertRaisesRegex(ValueError, "compact.*unbound module"):
+    with self.assertRaises(CallCompactUnboundModuleError):
       dense(jnp.ones((1, )))
 
 
