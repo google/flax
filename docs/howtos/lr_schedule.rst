@@ -1,18 +1,22 @@
 Learning Rate Scheduling
 =============================
-
-Choosing the correct learning rate for your training can be quite hard, besides that there's mounting evidence that a static 
-learning rate may not be the best option, and that it would be better to vary your learning rate during training. 
-Here we will show you how to implement a triangular learning rate scheduler, as descbride in https://arxiv.org/abs/1506.01186 
-which can allow your neural network to converge much faster than with a static lr.
+The learning rate is considered one of the most important hyperparameters for
+training deep neural networks, but choosing it can be quite hard.
+To simplify this, one can use a so-called *cyclic learning rate*, which
+virtually eliminates the need for experimentally finding the best value and
+schedule for the global learning rate. Instead of monotonically decreasing the
+learning rate, this method lets the learning rate cyclically vary between
+reasonable boundary value.
+Here we will show you how to implement a triangular learning rate scheduler,
+as described in the paper  `"Cyclical Learning Rates for Training Neural Networks" <https://arxiv.org/abs/1506.01186>`_.
 
 We will show you how to...
 
 * define a learning rate schedule
 * train a simple model using that schedule
 
-The triangular schedule makes your learning rate vary as a triangle wave during training, so over the course of a period (steps_per_cycle
-training steps) the value will start at lr_min, increase linearly to lr_max and then decrease again to lr_min.
+The triangular schedule makes your learning rate vary as a triangle wave during training, so over the course of a period (``steps_per_cycle``
+training steps) the value will start at ``lr_min``, increase linearly to ``lr_max`` and then decrease again to ``lr_min``.
 
 .. testcode::
   
@@ -44,6 +48,8 @@ For example using this schedule on MNIST would require changing the train_step f
       return loss, logits
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     (_, logits), grad = grad_fn(optimizer.target)
+
+
     optimizer = optimizer.apply_gradient(grad) #!
     metrics = compute_metrics(logits, batch['label'])
     return optimizer, metrics
@@ -58,7 +64,7 @@ For example using this schedule on MNIST would require changing the train_step f
     (_, logits), grad = grad_fn(optimizer.target)
     step = optimizer.state.step #!
     lr = learning_rate_fn(step) #!
-    optimizer = optimizer.apply_gradient(grad, {"learning_rate":lr}) #!
+    optimizer = optimizer.apply_gradient(grad, {"learning_rate": lr}) #!
     metrics = compute_metrics(logits, batch['label'])
     return optimizer, metrics
 
@@ -72,6 +78,8 @@ And the train_epoch function:
   """Train for a single epoch."""
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
+
+
 
   perms = jax.random.permutation(rng, len(train_ds['image']))
   perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
@@ -101,7 +109,7 @@ And the train_epoch function:
     #If you want 4 cycles per epoch #!
     learning_rate_fn = create_triangular_schedule(3e-3, 3e-2, steps_per_epoch//4) #!
     perms = jax.random.permutation(rng, len(train_ds['image']))
-    perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+    perms = perms[:steps_per_epoch * batch_size]
     perms = perms.reshape((steps_per_epoch, batch_size))
     batch_metrics = []
     for perm in perms:
@@ -110,12 +118,12 @@ And the train_epoch function:
       batch_metrics.append(metrics)
 
     # compute mean of metrics across each batch in epoch.
-    batch_metrics_np = jax.device_get(batch_metrics)
-    epoch_metrics_np = {
-        k: np.mean([metrics[k] for metrics in batch_metrics_np])
-        for k in batch_metrics_np[0]}
+    batch_metrics = jax.device_get(batch_metrics)
+    epoch_metrics = {
+        k: np.mean([metrics[k] for metrics in batch_metrics])
+        for k in batch_metrics[0]}
 
     logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-                epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
+                epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
 
-    return optimizer, epoch_metrics_np
+    return optimizer, epoch_metrics
