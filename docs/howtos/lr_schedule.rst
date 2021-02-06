@@ -47,8 +47,6 @@ For example using this schedule on MNIST would require changing the train_step f
       loss = cross_entropy_loss(logits, batch['label'])
       return loss, logits
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    
-    
     (_, logits), grad = grad_fn(optimizer.target)
 
 
@@ -80,13 +78,10 @@ And the train_epoch function:
   """Train for a single epoch."""
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
-  
-  
-  
 
 
 
-  perms = jax.random.permutation(rng, len(train_ds['image']))
+  perms = jax.m random.permutation(rng, len(train_ds['image']))
   perms = perms[:steps_per_epoch * batch_size]
   perms = perms.reshape((steps_per_epoch, batch_size))
   batch_metrics = []
@@ -110,9 +105,9 @@ And the train_epoch function:
     """Train for a single epoch."""
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
-
-    #If you want 4 cycles per epoch #!
-    learning_rate_fn = create_triangular_schedule(3e-3, 3e-2, steps_per_epoch//4) #!
+    # 4 cycles per epoch #!
+    learning_rate_fn = create_triangular_schedule( #!
+      3e-3, 3e-2, steps_per_epoch // 4) #!
     perms = jax.random.permutation(rng, len(train_ds['image']))
     perms = perms[:steps_per_epoch * batch_size]
     perms = perms.reshape((steps_per_epoch, batch_size))
