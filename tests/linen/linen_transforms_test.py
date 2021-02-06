@@ -189,19 +189,22 @@ class TransformTest(absltest.TestCase):
     class SimpleScan(nn.Module):
       @partial(nn.scan,
                variable_broadcast='params',
+               in_axes=(nn.broadcast, 0),
                split_rngs={'params': False})
       @nn.compact
-      def __call__(self, c, xs):
+      def __call__(self, c, b, xs):
+        assert b.shape == (4,)
         return nn.LSTMCell(name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
     xs = random.uniform(key1, (3, 2))
+    b = jnp.ones((4,))
     dummy_rng = random.PRNGKey(0)
     init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
                                               xs.shape[:1],
                                               xs.shape[-1])
     model = SimpleScan()
-    init_variables = model.init(key2, init_carry, xs)
+    init_variables = model.init(key2, init_carry, b, xs)
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
@@ -211,7 +214,7 @@ class TransformTest(absltest.TestCase):
       ys.append(y[None, ...])
     y1 = jnp.vstack(ys)
 
-    c2, y2 = model.apply(init_variables, init_carry, xs)
+    c2, y2 = model.apply(init_variables, init_carry, b, xs)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
     np.testing.assert_allclose(c[0], c2[0], atol=1e-7)
     np.testing.assert_allclose(c[1], c2[1], atol=1e-7)

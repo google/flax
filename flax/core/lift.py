@@ -426,7 +426,8 @@ def scan(fn: Callable[..., Any],
     split_rngs: Split PRNG sequences will be different for each loop iterations.
       If split is False the PRNGs will be the same across iterations.
     in_axes: Specifies the axis to scan over for the arguments. Should be a prefix
-      tree of the arguments.
+      tree of the arguments. Use `flax.core.broadcast` to feed an entire input
+      to each iteration of the scan body.
     out_axes: Specifies the axis to scan over for the return value. Should be a prefix
       tree of the return value.
     length: Specifies the number of loop iterations. This only needs
@@ -446,7 +447,7 @@ def scan(fn: Callable[..., Any],
             variable_groups, rng_groups,
             init, *args):
     def find_length(axis, x):
-      if axis is not None:
+      if axis is not axes_scan.broadcast:
         leaves = jax.tree_leaves(x)
         if leaves:
           return leaves[0].shape[axis]
