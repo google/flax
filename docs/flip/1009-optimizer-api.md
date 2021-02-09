@@ -1,5 +1,5 @@
 - Start Date: 2021-02-08
-- FLIP PR: [#0000](https://github.com/google/flax/pull/0000)
+- FLIP PR: [#1011](https://github.com/google/flax/pull/1011)
 - FLIP Issue: [#1009](https://github.com/google/flax/issues/1009)
 
 Table of contents:
