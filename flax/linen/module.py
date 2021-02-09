@@ -814,6 +814,42 @@ class Module:
     return self.scope.variables()
 
 
+T = TypeVar('T')
+def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
+  """Merges construction and call time argument.
+
+  This is a utility for supporting the pattern where a Module hyper parameter
+  can be passed to `__init__` or `__call__`.
+
+  Example::
+
+    class Foo(nn.Module):
+      train: Optional[bool] = None
+
+      def __call__(self, train: Optional[bool] = None):
+        train = nn.merge_param('train', self.train, train)
+
+  An error is thrown when both arguments are `None` or both values are not `None`.
+
+  Args:
+    name: the name of the parameter. Used for error messages.
+    a: option a
+    b: option b
+  Returns:
+    a or b whichever is not `None`.
+
+  """
+  if a is None and b is None:
+    raise ValueError(f'Parameter "{name}" must be passed to the constructor or at call time.')
+  if a is not None and b is not None:
+    raise ValueError(f'Parameter "{name}" was passed to the constructor and at call time.'
+                     ' Should be passed just once.')
+  if a is None:
+    return b
+  else:
+    return a
+
+
   # THE PART BELOW IS STILL UNDER DEVELOPMENT, PLEASE IGNORE
   # ===========================================================
   # @contextmanager

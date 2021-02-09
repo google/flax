@@ -15,9 +15,10 @@ vNext
  -
  -
  -
- -
- -
- -
+ - Some Module arguments can now be passed either as dataclass attribute or
+   as argument to `__call__`. See [design note](https://flax.readthedocs.io/en/latest/design_notes/arguments.html)
+ - `use_running_average` and `deterministic` no longer have a default. They should be passed explicitly
+ - `broadcast_dims` is now a attribute to `Dropout` instead of a `__call__` argument.
  -
  -
  -
@@ -95,4 +96,3 @@ v0.1
      `rhs_dilation` -> `kernel_dilation`
  - Change default layer names from numbers '0', '1', etc. to
    include the Module class name, e.g. 'Dense_0', 'LayerNorm_1'.
-

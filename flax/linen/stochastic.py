@@ -15,11 +15,13 @@
 """Stochastic modules.
 """
 
+from typing import Iterable, Optional
+
 from jax import lax
 from jax import random
 import jax.numpy as jnp
 
-from flax.linen.module import Module, compact
+from flax.linen.module import Module, compact, merge_param
 
 
 class Dropout(Module):
@@ -27,11 +29,17 @@ class Dropout(Module):
 
     Attributes:
       rate: the dropout probability.  (_not_ the keep rate!)
+      broadcast_dims: dimensions that will share the same dropout mask
+      deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+        masked, whereas if true, no mask is applied and the inputs are returned
+        as is.
   """
   rate: float
+  broadcast_dims: Iterable[int] = ()
+  deterministic: Optional[bool] = None
 
   @compact
-  def __call__(self, inputs, deterministic=False, rng=None, broadcast_dims=()):
+  def __call__(self, inputs, deterministic: Optional[bool] = None, rng=None):
     """Applies a random dropout mask to the input.
 
     Args:
@@ -41,12 +49,12 @@ class Dropout(Module):
         as is.
       rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
         be used.
-      broadcast_dims: an optional tuple specifying in which dimensions to
-        broadcast the dropout to.
 
     Returns:
       The masked inputs reweighted to preserve mean.
     """
+    deterministic = merge_param(
+        'deterministic', self.deterministic, deterministic)
     if self.rate == 0.:
       return inputs
     keep_prob = 1. - self.rate
@@ -56,7 +64,7 @@ class Dropout(Module):
       if rng is None:
         rng = self.make_rng('dropout')
       broadcast_shape = list(inputs.shape)
-      for dim in broadcast_dims:
+      for dim in self.broadcast_dims:
         broadcast_shape[dim] = 1
       mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
       mask = jnp.broadcast_to(mask, inputs.shape)

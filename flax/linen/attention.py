@@ -25,7 +25,7 @@ import numpy as np
 
 from flax.linen.linear import default_kernel_init
 from flax.linen.linear import DenseGeneral
-from flax.linen.module import Module, compact
+from flax.linen.module import Module, compact, merge_param
 from flax.linen.initializers import zeros
 
 PRNGKey = Any
@@ -125,7 +125,9 @@ class MultiHeadDotProductAttention(Module):
       out_features: dimension of the last projection
       broadcast_dropout: bool: use a broadcasted dropout along batch dims.
       dropout_rate: dropout rate
-      deterministic: bool, deterministic or not (to apply dropout)
+      deterministic: if false, the attention weight is masked randomly
+        using dropout, whereas if true, the attention weights
+        are deterministic.
       precision: numerical precision of the computation see `jax.lax.Precision`
         for details.
       kernel_init: initializer for the kernel of the Dense layers.
@@ -142,7 +144,7 @@ class MultiHeadDotProductAttention(Module):
   out_features: Optional[int] = None
   broadcast_dropout: bool = True
   dropout_rate: float = 0.
-  deterministic: bool = False
+  deterministic: Optional[bool] = None
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
@@ -154,7 +156,8 @@ class MultiHeadDotProductAttention(Module):
   def __call__(self,
                inputs_q: Array,
                inputs_kv: Array,
-               mask: Optional[Array] = None):
+               mask: Optional[Array] = None,
+               deterministic: Optional[bool] = None):
     """Applies multi-head dot product attention on the input data.
 
     Projects the inputs into multi-headed query, key, and value vectors,
@@ -167,10 +170,14 @@ class MultiHeadDotProductAttention(Module):
         `[batch_sizes..., length, features]`.
       mask: attention mask of shape
         `[batch_sizes..., num_heads, query_length, key/value_length]`.
+      deterministic: if false, the attention weight is masked randomly
+        using dropout, whereas if true, the attention weights
+        are deterministic.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
+    deterministic = merge_param('deterministic', self.deterministic, deterministic)
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (
@@ -238,7 +245,7 @@ class MultiHeadDotProductAttention(Module):
       attention_bias = None
 
     dropout_rng = None
-    if not self.deterministic and self.dropout_rate > 0.:
+    if not deterministic and self.dropout_rate > 0.:
       dropout_rng = self.make_rng('dropout')
 
     # apply attention
@@ -250,7 +257,7 @@ class MultiHeadDotProductAttention(Module):
         dropout_rng=dropout_rng,
         dropout_rate=self.dropout_rate,
         broadcast_dropout=self.broadcast_dropout,
-        deterministic=self.deterministic,
+        deterministic=deterministic,
         dtype=self.dtype,
         precision=self.precision)
 
@@ -270,8 +277,9 @@ class SelfAttention(MultiHeadDotProductAttention):
   """Self-attention special case of multi-head dot-product attention."""
 
   @compact
-  def __call__(self, inputs_q: Array, mask: Optional[Array] = None):
-    return super().__call__(inputs_q, inputs_q, mask)
+  def __call__(self, inputs_q: Array, mask: Optional[Array] = None,
+               deterministic: Optional[bool] = None):
+    return super().__call__(inputs_q, inputs_q, mask, deterministic=deterministic)
 
 
 # mask-making utility functions
