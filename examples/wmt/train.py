@@ -425,6 +425,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   train_ds, eval_ds, predict_ds, encoder = input_pipeline.get_wmt_datasets(
       n_devices=jax.local_device_count(),
       config=config,
+      reverse_translation=config.reverse_translation,
       vocab_path=vocab_path)
 
   train_iter = iter(train_ds)
