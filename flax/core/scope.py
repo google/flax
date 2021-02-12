@@ -43,6 +43,7 @@ Collection = Mapping[str, Any]
 MutableCollection = Dict[str, Any]
 
 VariableDict = Mapping[str, Collection]
+FrozenVariableDict = FrozenDict[str, Collection]
 MutableVariableDict = Dict[str, MutableCollection]
 
 
