@@ -30,7 +30,7 @@ import flax
 from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
-from flax.core.scope import CollectionFilter, Variable, VariableDict
+from flax.core.scope import CollectionFilter, Variable, VariableDict, FrozenVariableDict
 from flax.core.frozen_dict import FrozenDict, freeze
 
 # from .dotgetter import DotGetter
@@ -731,7 +731,7 @@ class Module:
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
             method: Callable[..., Any] = None, 
             mutable: Union[bool, str, Sequence[str]] = False,
-            **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
+            **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
 
     Note that `method` should be set if one would like to call `apply` on a 
@@ -767,7 +767,7 @@ class Module:
 
   def init_with_output(self, rngs: Union[PRNGKey, RNGSequences], *args,
                        method: Optional[Callable[..., Any]] = None, 
-                       **kwargs) -> Tuple[Any, VariableDict]:
+                       **kwargs) -> Tuple[Any, FrozenVariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
 
     Args:
@@ -786,7 +786,7 @@ class Module:
 
   def init(self, rngs: Union[PRNGKey, RNGSequences], *args,
            method: Optional[Callable[..., Any]] = None, 
-           **kwargs) -> VariableDict:
+           **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
     Jitting `init` initializes a model lazily using only the shapes of the 
