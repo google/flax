@@ -9,7 +9,8 @@ The Linen Module API is stable and currently recommended for new projects. We ar
 
 Please open a [discussion](https://github.com/google/flax/discussions) if you have any questions or thoughts.
 
-We're still working on documentation, but here are some references we have available now:
+**See the [Linen API reference docs](https://flax.readthedocs.io/en/latest/flax.linen.html)**, or take a look at our additional material: 
+
 * 2-page intro to the [Linen Design Principles](https://docs.google.com/document/d/1ZlL_4bXCw5Xl0WstQw1GpnZqfb9JFOeUGAPcBVk-kn8)
 * [Slides from a talk to the JAX core team](https://docs.google.com/presentation/d/1ngKWUwsSqAwPRvATG8sAxMzu9ujv4N__cKsUofdNno0)
 * [Brief Intro to Linen](https://colab.research.google.com/github/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) in Colab
