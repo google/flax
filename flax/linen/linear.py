@@ -40,6 +40,13 @@ def _normalize_axes(axes, ndim):
   return tuple([ax if ax >= 0 else ndim + ax for ax in axes])
 
 
+def _canonicalize_tuple(x):
+  if isinstance(x, Iterable):
+    return tuple(x)
+  else:
+    return (x,)
+
+
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
 
@@ -64,23 +71,6 @@ class DenseGeneral(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: Any = None
 
-  def setup(self):
-    """Normalize hyperparameters."""
-    if not isinstance(self.features, Iterable):
-      self.features = (self.features,)
-    if not isinstance(self.axis, Iterable):
-      self.axis = (self.axis,)
-    if not isinstance(self.batch_dims, Iterable):
-      self.batch_dims = (self.batch_dims,)
-    self.features = tuple(self.features)
-    self.axis = tuple(self.axis)
-    self.batch_dims = tuple(self.batch_dims)
-    if self.batch_dims:
-      max_dim = np.max(self.batch_dims)
-      if set(self.batch_dims) != set(range(max_dim + 1)):
-        raise ValueError('batch_dims %s must be consecutive leading '
-                         'dimensions starting from 0.' % str(self.batch_dims))
-
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a linear transformation to the inputs along multiple dimensions.
@@ -91,13 +81,22 @@ class DenseGeneral(Module):
     Returns:
       The transformed input.
     """
+    features = _canonicalize_tuple(self.features)
+    axis = _canonicalize_tuple(self.axis)
+    batch_dims = _canonicalize_tuple(self.batch_dims)
+    if batch_dims:
+      max_dim = np.max(batch_dims)
+      if set(batch_dims) != set(range(max_dim + 1)):
+        raise ValueError('batch_dims %s must be consecutive leading '
+                         'dimensions starting from 0.' % str(batch_dims))
+
     inputs = jnp.asarray(inputs, self.dtype)
 
     ndim = inputs.ndim
-    n_batch_dims = len(self.batch_dims)
-    axis = _normalize_axes(self.axis, ndim)
-    batch_dims = _normalize_axes(self.batch_dims, ndim)
-    n_axis, n_features = len(axis), len(self.features)
+    n_batch_dims = len(batch_dims)
+    axis = _normalize_axes(axis, ndim)
+    batch_dims = _normalize_axes(batch_dims, ndim)
+    n_axis, n_features = len(axis), len(features)
 
     def kernel_init_wrap(rng, shape, dtype=jnp.float32):
       size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
@@ -108,7 +107,7 @@ class DenseGeneral(Module):
       return jnp.reshape(kernel, shape)
 
     batch_shape = tuple([inputs.shape[ax] for ax in batch_dims])
-    kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + self.features
+    kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
     kernel = self.param('kernel', kernel_init_wrap, batch_shape + kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
 
@@ -126,7 +125,7 @@ class DenseGeneral(Module):
                                 for _ in range(size_batch_dims)], axis=0)
         return jnp.reshape(bias, shape)
 
-      bias = self.param('bias', bias_init_wrap, batch_shape + self.features)
+      bias = self.param('bias', bias_init_wrap, batch_shape + features)
 
       # Reshape bias for broadcast.
       expand_dims = sorted(
