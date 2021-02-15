@@ -33,6 +33,7 @@ from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
 from flax import errors
+from flax import struct
 from flax.linen import compact
 from flax.core import Scope, freeze
 
@@ -1001,6 +1002,18 @@ class ModuleTest(absltest.TestCase):
       },
     })
     self.assertTrue(tree_equals(cntrs, ref_cntrs))
+  
+  def test_inner_class_def(self):
+    class X(nn.Module):
+      class Hyper(struct.PyTreeNode):
+        a: int
+
+      hyper: Hyper
+
+      @nn.compact
+      def __call__(self, x):
+        return x+1
+    self.assertTrue(isinstance(X.Hyper(a=1), X.Hyper))
 
 
 if __name__ == '__main__':
