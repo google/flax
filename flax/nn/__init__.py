@@ -31,4 +31,4 @@ from .stochastic import make_rng, stochastic, dropout, is_stochastic
 # pylint: enable=g-multiple-import
 import warnings
 warnings.filterwarnings("default", category=DeprecationWarning, module=__name__)
-warnings.warn("the nn module is deprecated, use linen instead", DeprecationWarning)
+warnings.warn("The `flax.nn` module is Deprecated, use `flax.linen` instead. Learn more and find an upgrade guide at https://github.com/google/flax/blob/master/flax/linen/README.md", DeprecationWarning)
