@@ -28,7 +28,9 @@ _prng_stack = utils.CallStack()
 
 class _PRNGFrame:
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Random Number generator scope responsible for generation prngs in a stochastic context."""
 
   def __init__(self, rng):
@@ -52,7 +54,9 @@ class _PRNGFrame:
 @contextlib.contextmanager
 def stochastic(rng):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   A context manager for stochastic computations.
 
   Args:
@@ -66,14 +70,18 @@ def stochastic(rng):
 
 def is_stochastic():
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Returns true if a stochastic scope is currently active."""
   return bool(_prng_stack)
 
 
 def make_rng():
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Create a new unique random number generator in a stochastic scope.
 
   In combination with `nn.stochastic()` this function is used to generate random
@@ -96,7 +104,9 @@ def make_rng():
 
 def dropout(inputs, rate, deterministic=False, rng=None):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Applies a random dropout mask to the input.
 
   Args:

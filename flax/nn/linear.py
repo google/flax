@@ -13,7 +13,9 @@
 # limitations under the License.
 
 """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
@@ -37,7 +39,9 @@ def _normalize_axes(axes, ndim):
 
 class DenseGeneral(base.Module):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   A linear transformation with flexible axes."""
 
   def apply(self,
@@ -129,7 +133,9 @@ class DenseGeneral(base.Module):
 
 class Dense(base.Module):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   A linear transformation applied over the last dimension of the input."""
 
   def apply(self,
@@ -169,7 +175,9 @@ class Dense(base.Module):
 
 def _conv_dimension_numbers(input_shape):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Computes the dimension numbers based on the input shape."""
   ndim = len(input_shape)
   lhs_spec = (0, ndim - 1) + tuple(range(1, ndim - 1))
@@ -180,7 +188,9 @@ def _conv_dimension_numbers(input_shape):
 
 class Conv(base.Module):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Convolution Module wrapping lax.conv_general_dilated."""
 
   def apply(self,
@@ -271,7 +281,9 @@ class Conv(base.Module):
 
 class ConvTranspose(base.Module):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Transposed convolution Module wrapping lax.conv_transpose."""
 
   def apply(self,
@@ -347,7 +359,9 @@ default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal',
 
 class Embed(base.Module):
   """DEPRECATION WARNING:
-  `flax.nn` is deprecated, use `flax.linen` instead.
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
   Embedding Module.
 
   A parameterized function from integers [0, n) to d-dimensional vectors.
