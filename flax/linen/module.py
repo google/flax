@@ -19,6 +19,7 @@ import functools
 import inspect
 import os
 import threading
+import types
 import weakref
 
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
@@ -219,7 +220,7 @@ def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]
   """
   true_methods = set()
   for m in cls.__dict__:
-    if callable(cls.__dict__[m]):
+    if callable(cls.__dict__[m]) and not inspect.isclass(cls.__dict__[m]):
       mtype = type(cls.__dict__[m])
       if mtype != staticmethod and mtype != classmethod:
         true_methods.add(m)
@@ -241,7 +242,14 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
     return fun
 
   @functools.wraps(fun)
-  def wrapped_module_method(self, *args, **kwargs):
+  def wrapped_module_method(*args, **kwargs):
+    # We might have incorrectly wrappped a callable
+    # that is not a method. Check whether the first arg is self,
+    # otherwise call the wrapped function as is.
+    if args and isinstance(args[0], Module):
+      self, args = args[0], args[1:]
+    else:
+      return fun(*args, **kwargs)
     is_compact_method = hasattr(fun, 'compact')
     is_setup_method = fun.__name__ == 'setup'
     # We lazily call setup() only when needed.
