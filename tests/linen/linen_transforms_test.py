@@ -154,6 +154,34 @@ class TransformTest(absltest.TestCase):
     y2 = vmap_model.apply(init_variables, x2)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
 
+  def test_vmap_batchnorm(self):
+    key1, key2 = random.split(random.PRNGKey(3), 2)
+    x = random.uniform(key1, (4, 4))
+    x2 = random.uniform(key1, (5, 4, 4))
+
+    def vmap(cls):
+      return nn.vmap(cls,
+                     in_axes=(0,),
+                     variable_axes={'params': None, 'batch_stats': None},
+                     split_rngs={'params': False},
+                     axis_name='batch')
+    class MlpBn(nn.Module):
+      axis_name: Any = None
+
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(3)(x)
+        x = nn.BatchNorm(axis_name=self.axis_name, use_running_average=False)(x)
+        return x
+
+    normal_model = MlpBn()
+    vmap_model = vmap(MlpBn)(axis_name='batch')
+    init_variables = normal_model.init(key2, x)
+    y1 = normal_model.apply(init_variables, x2.reshape((-1, 4)), mutable=['batch_stats'])[0]
+    y1 = y1.reshape((5, 4, 3))
+    y2 = vmap_model.apply(init_variables, x2, mutable=['batch_stats'])[0]
+    np.testing.assert_allclose(y1, y2, atol=1e-6)
+
   def test_scan(self):
     class SimpleScan(nn.Module):
       @nn.compact
