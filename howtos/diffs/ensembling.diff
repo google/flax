@@ -11,7 +11,7 @@ index dbe6254..e540a1e 100644
  import jax
  from jax import random
  
-@@ -31,6 +33,7 @@ import numpy as onp
+@@ -31,6 +33,7 @@ import numpy as np
  
  import tensorflow_datasets as tfds
  
@@ -65,14 +65,14 @@ index dbe6254..e540a1e 100644
 +  # stack all of the metrics from each devioce into
 +  # numpy arrays directly on a dict, such that, e.g.
 +  # `batch_metrics_np['loss']` has shape (jax.device_count(), )
-+  batch_metrics_np = jax.tree_multimap(lambda *xs: onp.array(xs),
++  batch_metrics_np = jax.tree_multimap(lambda *xs: np.array(xs),
 +                                       *batch_metrics_np)
    epoch_metrics_np = {
--      k: onp.mean([metrics[k] for metrics in batch_metrics_np])
+-      k: np.mean([metrics[k] for metrics in batch_metrics_np])
 -      for k in batch_metrics_np[0]}
 -
 -  logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-+      k: onp.mean(batch_metrics_np[k], axis=0)
++      k: np.mean(batch_metrics_np[k], axis=0)
 +      for k in batch_metrics_np
 +  }
 +  # `epoch_metrics_np` now contains 1D arrays of length `jax.device_count()`
@@ -114,10 +114,10 @@ index dbe6254..e540a1e 100644
 -    summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
 -    summary_writer.scalar('eval_loss', loss, epoch)
 -    summary_writer.scalar('eval_accuracy', accuracy, epoch)
-+    summary_writer.scalar('train_loss', onp.mean(train_metrics['loss']), epoch)
-+    summary_writer.scalar('train_accuracy', onp.mean(train_metrics['accuracy']), epoch)
-+    summary_writer.scalar('eval_loss', onp.mean(loss), epoch)
-+    summary_writer.scalar('eval_accuracy', onp.mean(accuracy), epoch)
++    summary_writer.scalar('train_loss', np.mean(train_metrics['loss']), epoch)
++    summary_writer.scalar('train_accuracy', np.mean(train_metrics['accuracy']), epoch)
++    summary_writer.scalar('eval_loss', np.mean(loss), epoch)
++    summary_writer.scalar('eval_accuracy', np.mean(accuracy), epoch)
  
    summary_writer.flush()
    return optimizer

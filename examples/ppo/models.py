@@ -15,7 +15,7 @@
 """Class and functions to define and initialize the actor-critic model."""
 
 import functools
-import numpy as onp
+import numpy as np
 from flax import linen as nn
 from flax import optim
 import jax
@@ -64,7 +64,7 @@ class ActorCritic(nn.Module):
     return policy_log_probabilities, value
 
 @functools.partial(jax.jit, static_argnums=1)
-def get_initial_params(key: onp.ndarray, module: ActorCritic):
+def get_initial_params(key: np.ndarray, module: ActorCritic):
   input_dims = (1, 84, 84, 4)  # (minibatch, height, width, stacked frames)
   init_shape = jnp.ones(input_dims, jnp.float32)
   initial_params = module.init(key, init_shape)['params']

@@ -16,7 +16,7 @@
 
 import collections
 import gym
-import numpy as onp
+import numpy as np
 
 import seed_rl_atari_preprocessing
 
@@ -31,7 +31,7 @@ class ClipRewardEnv(gym.RewardWrapper):
 
   def reward(self, reward):
     """Bin reward to {+1, 0, -1} by its sign."""
-    return onp.sign(reward)
+    return np.sign(reward)
 
 class FrameStack:
   """Implements stacking of `num_frames` last frames of the game.
@@ -60,7 +60,7 @@ class FrameStack:
 
   def _get_array(self):
     assert len(self.frames) == self.num_frames
-    return onp.concatenate(self.frames, axis=-1)
+    return np.concatenate(self.frames, axis=-1)
 
 def create_env(game: str, clip_rewards: bool):
   """Create a FrameStack object that serves as environment for the `game`."""

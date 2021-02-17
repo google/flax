@@ -17,7 +17,7 @@
 import jax
 from jax import lax
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 
 
 def shard(xs):
@@ -41,7 +41,7 @@ def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
 
 
 def stack_forest(forest):
-  stack_args = lambda *args: onp.stack(args)
+  stack_args = lambda *args: np.stack(args)
   return jax.tree_multimap(stack_args, *forest)
 
 
