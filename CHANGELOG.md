@@ -8,7 +8,7 @@ vNext
  -
  -
  -
- -
+ - Bug Fix `flax.core.apply` and `Module.apply`. Now it returns a tuple containing the output and a frozen empty collection when `mutable` is specified as an empty list.
  -
  -
  -
