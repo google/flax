@@ -46,7 +46,7 @@ import jax
 from jax import lax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
-import numpy as onp
+import numpy as np
 
 
 class PixelCNNPP(nn.Module):
@@ -277,7 +277,7 @@ class ConvTransposeDown(nn.Module):
   @nn.compact
   def __call__(self, inputs):
     _, k_w = self.kernel_size
-    out_h, out_w = onp.multiply(self.strides, inputs.shape[1:3])
+    out_h, out_w = np.multiply(self.strides, inputs.shape[1:3])
     return ConvTranspose(self.features, self.kernel_size, self.strides)(inputs)[
         :, :out_h, (k_w - 1) // 2:out_w + (k_w - 1) // 2, :]
 
@@ -293,7 +293,7 @@ class ConvTransposeDownRight(nn.Module):
 
   @nn.compact
   def __call__(self, inputs):
-    out_h, out_w = onp.multiply(self.strides, inputs.shape[1:3])
+    out_h, out_w = np.multiply(self.strides, inputs.shape[1:3])
     return ConvTranspose(self.features, self.kernel_size,
                          self.strides)(inputs)[:, :out_h, :out_w]
 

@@ -17,7 +17,7 @@
 from jax import lax
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 
 def pool(inputs, init, reduce_fn, window_shape, strides, padding):
@@ -70,7 +70,7 @@ def avg_pool(inputs, window_shape, strides=None, padding="VALID"):
     The average for each window slice.
   """
   y = pool(inputs, 0., lax.add, window_shape, strides, padding)
-  y = y / onp.prod(window_shape)
+  y = y / np.prod(window_shape)
   return y
 
 

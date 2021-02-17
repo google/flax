@@ -28,7 +28,7 @@ from flax.metrics import tensorboard
 import jax
 import jax.numpy as jnp
 import ml_collections
-import numpy as onp
+import numpy as np
 import tensorflow_datasets as tfds
 
 
@@ -119,7 +119,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   # compute mean of metrics across each batch in epoch.
   batch_metrics_np = jax.device_get(batch_metrics)
   epoch_metrics_np = {
-      k: onp.mean([metrics[k] for metrics in batch_metrics_np])
+      k: np.mean([metrics[k] for metrics in batch_metrics_np])
       for k in batch_metrics_np[0]}
 
   logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,

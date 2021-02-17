@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numpy as onp
+import numpy as np
 
 from .. import struct
 
@@ -21,7 +21,7 @@ from .base import OptimizerDef
 
 @struct.dataclass
 class _GradientDescentHyperParams:
-  learning_rate: onp.ndarray
+  learning_rate: np.ndarray
 
 
 class GradientDescent(OptimizerDef):

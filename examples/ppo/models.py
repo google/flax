@@ -14,7 +14,7 @@
 
 """Class and functions to define and initialize the actor-critic model."""
 
-import numpy as onp
+import numpy as np
 import flax
 from flax import nn
 import jax.numpy as jnp
@@ -54,7 +54,7 @@ class ActorCritic(flax.nn.Module):
     value = nn.Dense(x, features=1, name='value', dtype=dtype)
     return policy_log_probabilities, value
 
-def create_model(key: onp.ndarray, num_outputs: int):
+def create_model(key: np.ndarray, num_outputs: int):
   input_dims = (1, 84, 84, 4)  # (minibatch, height, width, stacked frames)
   module = ActorCritic.partial(num_outputs=num_outputs)
   _, initial_par = module.init_by_shape(key, [(input_dims, jnp.float32)])

@@ -16,22 +16,22 @@ from .. import struct
 
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 from .base import OptimizerDef
 
 
 @struct.dataclass
 class _MomentumHyperParams:
-  learning_rate: onp.ndarray
-  beta: onp.ndarray
-  weight_decay: onp.ndarray
+  learning_rate: np.ndarray
+  beta: np.ndarray
+  weight_decay: np.ndarray
   nesterov: bool
 
 
 @struct.dataclass
 class _MomentumParamState:
-  momentum: onp.ndarray
+  momentum: np.ndarray
 
 
 class Momentum(OptimizerDef):

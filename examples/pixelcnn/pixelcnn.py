@@ -37,7 +37,7 @@ published at ICLR '17 (https://openreview.net/forum?id=BJrFC6ceg).
 """
 from functools import partial
 
-import numpy as onp
+import numpy as np
 
 from jax import lax
 from jax.scipy.special import logsumexp
@@ -263,7 +263,7 @@ def ConvTransposeDown(
   """
   inputs = np.asarray(inputs, kwargs.get('dtype', np.float32))
   k_h, k_w = kernel_size
-  out_h, out_w = onp.multiply(strides, inputs.shape[1:3])
+  out_h, out_w = np.multiply(strides, inputs.shape[1:3])
   return ConvTranspose(inputs, features, kernel_size, strides, **kwargs)[
       :, :out_h, (k_w - 1) // 2:out_w + (k_w - 1) // 2, :]
 
@@ -277,7 +277,7 @@ def ConvTransposeDownRight(
   """
   inputs = np.asarray(inputs, kwargs.get('dtype', np.float32))
   k_h, k_w = kernel_size
-  out_h, out_w = onp.multiply(strides, inputs.shape[1:3])
+  out_h, out_w = np.multiply(strides, inputs.shape[1:3])
   return ConvTranspose(inputs, features, kernel_size, strides, **kwargs)[
       :, :out_h, :out_w]
 

@@ -19,7 +19,7 @@ from typing import Tuple, List
 import jax
 import jax.random
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 import flax
 from flax import nn
 from flax.metrics import tensorboard
@@ -32,9 +32,9 @@ import test_episodes
 @jax.jit
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)
 def gae_advantages(
-    rewards: onp.ndarray,
-    terminal_masks: onp.ndarray,
-    values: onp.ndarray,
+    rewards: np.ndarray,
+    terminal_masks: np.ndarray,
+    values: np.ndarray,
     discount: float,
     gae_param: float):
   """Use Generalized Advantage Estimation (GAE) to compute advantages.
@@ -146,13 +146,13 @@ def get_experience(
     for sim in simulators:
       state = sim.conn.recv()
       states.append(state)
-    states = onp.concatenate(states, axis=0)
+    states = np.concatenate(states, axis=0)
     log_probs, values = agent.policy_action(model, states)
     log_probs, values = jax.device_get((log_probs, values))
-    probs = onp.exp(onp.array(log_probs))
+    probs = np.exp(np.array(log_probs))
     for i, sim in enumerate(simulators):
       probabilities = probs[i]
-      action = onp.random.choice(probs.shape[1], p=probabilities)
+      action = np.random.choice(probs.shape[1], p=probabilities)
       sim.conn.send(action)
     experiences = []
     for i, sim in enumerate(simulators):
@@ -185,12 +185,12 @@ def process_experience(
   obs_shape = (84, 84, 4)
   exp_dims = (actor_steps, num_agents)
   values_dims = (actor_steps + 1, num_agents)
-  states = onp.zeros(exp_dims + obs_shape, dtype=onp.float32)
-  actions = onp.zeros(exp_dims, dtype=onp.int32)
-  rewards = onp.zeros(exp_dims, dtype=onp.float32)
-  values = onp.zeros(values_dims, dtype=onp.float32)
-  log_probs = onp.zeros(exp_dims, dtype=onp.float32)
-  dones = onp.zeros(exp_dims, dtype=onp.float32)
+  states = np.zeros(exp_dims + obs_shape, dtype=np.float32)
+  actions = np.zeros(exp_dims, dtype=np.int32)
+  rewards = np.zeros(exp_dims, dtype=np.float32)
+  values = np.zeros(values_dims, dtype=np.float32)
+  log_probs = np.zeros(exp_dims, dtype=np.float32)
+  dones = np.zeros(exp_dims, dtype=np.float32)
 
   for t in range(len(experience) - 1):  # experience[-1] only for next_values
     for agent_id, exp_agent in enumerate(experience[t]):
@@ -209,7 +209,7 @@ def process_experience(
   trajectories = (states, actions, log_probs, returns, advantages)
   trajectory_len = num_agents * actor_steps
   trajectories = tuple(map(
-      lambda x: onp.reshape(x, (trajectory_len,) + x.shape[2:]), trajectories))
+      lambda x: np.reshape(x, (trajectory_len,) + x.shape[2:]), trajectories))
   return trajectories
 
 def train(
@@ -255,7 +255,7 @@ def train(
     lr = config.learning_rate * alpha
     clip_param = config.clip_param * alpha
     for e in range(config.num_epochs):
-      permutation = onp.random.permutation(
+      permutation = np.random.permutation(
           config.num_agents * config.actor_steps)
       trajectories = tuple(map(lambda x: x[permutation], trajectories))
       optimizer, loss = train_step(

@@ -17,23 +17,23 @@ from .. import struct
 from jax import lax
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 from .base import OptimizerDef
 
 @struct.dataclass
 class _LAMBHyperParams:
-  learning_rate: onp.ndarray
-  beta1: onp.ndarray
-  beta2: onp.ndarray
-  weight_decay: onp.ndarray
-  eps: onp.ndarray
+  learning_rate: np.ndarray
+  beta1: np.ndarray
+  beta2: np.ndarray
+  weight_decay: np.ndarray
+  eps: np.ndarray
 
 
 @struct.dataclass
 class _LAMBParamState:
-  grad_ema: onp.ndarray
-  grad_sq_ema: onp.ndarray
+  grad_ema: np.ndarray
+  grad_sq_ema: np.ndarray
 
 
 class LAMB(OptimizerDef):

@@ -17,24 +17,24 @@ from .. import struct
 import jax.numpy as jnp
 from jax import lax
 
-import numpy as onp
+import numpy as np
 
 from .base import OptimizerDef
 
 
 @struct.dataclass
 class _AdamHyperParams:
-  learning_rate: onp.ndarray
-  beta1: onp.ndarray
-  beta2: onp.ndarray
-  eps: onp.ndarray
-  weight_decay: onp.ndarray
+  learning_rate: np.ndarray
+  beta1: np.ndarray
+  beta2: np.ndarray
+  eps: np.ndarray
+  weight_decay: np.ndarray
 
 
 @struct.dataclass
 class _AdamParamState:
-  grad_ema: onp.ndarray
-  grad_sq_ema: onp.ndarray
+  grad_ema: np.ndarray
+  grad_sq_ema: np.ndarray
 
 
 class Adam(OptimizerDef):

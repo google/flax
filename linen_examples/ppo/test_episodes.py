@@ -16,7 +16,7 @@
 
 import itertools
 import flax
-import numpy as onp
+import numpy as np
 
 import env_utils
 import agent
@@ -45,9 +45,9 @@ def policy_test(
     total_reward = 0.0
     for t in itertools.count():
       log_probs, _ = agent.policy_action(params, module, state)
-      probs = onp.exp(onp.array(log_probs, dtype=onp.float32))
+      probs = np.exp(np.array(log_probs, dtype=np.float32))
       probabilities = probs[0] / probs[0].sum()
-      action = onp.random.choice(probs.shape[1], p=probabilities)
+      action = np.random.choice(probs.shape[1], p=probabilities)
       obs, reward, done, _ = test_env.step(action)
       total_reward += reward
       next_state = obs[None, ...] if not done else None

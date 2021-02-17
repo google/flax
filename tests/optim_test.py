@@ -28,7 +28,7 @@ from flax.optim.sgd import _GradientDescentHyperParams
 from flax.optim.weight_norm import _WeightNormParamState
 import jax
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 import pytest
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -37,12 +37,12 @@ jax.config.parse_flags_with_absl()
 
 def _assert_numpy_allclose(a, b, atol=None, rtol=None):
   a, b = jnp.array(a), jnp.array(b)
-  a = a.astype(onp.float32) if a.dtype == jnp.bfloat16 else a
-  b = b.astype(onp.float32) if b.dtype == jnp.bfloat16 else b
+  a = a.astype(np.float32) if a.dtype == jnp.bfloat16 else a
+  b = b.astype(np.float32) if b.dtype == jnp.bfloat16 else b
   kw = {}
   if atol: kw["atol"] = atol
   if rtol: kw["rtol"] = rtol
-  onp.testing.assert_allclose(a, b, **kw)
+  np.testing.assert_allclose(a, b, **kw)
 
 
 def check_eq(xs, ys, atol=None, rtol=None):
@@ -50,7 +50,7 @@ def check_eq(xs, ys, atol=None, rtol=None):
   ys_leaves, ys_tree = jax.tree_flatten(ys)
   assert xs_tree == ys_tree, "Tree shapes don't match."
   assert jax.tree_util.tree_all(jax.tree_multimap(
-      lambda x, y: onp.array(x).shape == onp.array(y).shape,
+      lambda x, y: np.array(x).shape == np.array(y).shape,
       xs_leaves, ys_leaves)), "Leaves' shapes don't match."
   assert jax.tree_multimap(
       partial(_assert_numpy_allclose, atol=atol, rtol=rtol),
@@ -60,18 +60,18 @@ def check_eq(xs, ys, atol=None, rtol=None):
 class OptimizerDefTest(absltest.TestCase):
 
   def test_create(self):
-    params = onp.ones((1,))
+    params = np.ones((1,))
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
     optimizer = optimizer_def.create(params)
     expected_state = optim.OptimizerState(
-        0, _MomentumParamState(onp.zeros((1,))))
+        0, _MomentumParamState(np.zeros((1,))))
     self.assertEqual(optimizer.optimizer_def, optimizer_def)
     self.assertEqual(optimizer.state, expected_state)
     self.assertEqual(optimizer.target, params)
 
   @pytest.mark.filterwarnings("ignore: compute_gradient()")
   def test_compute_grad(self):
-    params = onp.ones(())
+    params = np.ones(())
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
     optimizer = optimizer_def.create(params)
     def loss_fn(x):
@@ -190,7 +190,7 @@ class MultiOptimizerTest(absltest.TestCase):
 class GradientDescentTest(absltest.TestCase):
 
   def test_init_state(self):
-    params = onp.zeros((1,))
+    params = np.zeros((1,))
     optimizer_def = optim.GradientDescent(learning_rate=0.1)
     state = optimizer_def.init_state(params)
     expected_hyper_params = _GradientDescentHyperParams(0.1)
@@ -200,13 +200,13 @@ class GradientDescentTest(absltest.TestCase):
 
   def test_apply_gradient(self):
     optimizer_def = optim.GradientDescent(learning_rate=0.1)
-    params = onp.ones((1,))
+    params = np.ones((1,))
     state = optim.OptimizerState(0, ())
-    grads = onp.array([3.])
+    grads = np.array([3.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(1, ())
-    expected_new_params = onp.array([0.7])
+    expected_new_params = np.array([0.7])
     self.assertEqual(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 
@@ -214,26 +214,26 @@ class GradientDescentTest(absltest.TestCase):
 class MomentumTest(absltest.TestCase):
 
   def test_init_state(self):
-    params = onp.zeros((1,))
+    params = np.zeros((1,))
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
     state = optimizer_def.init_state(params)
     expected_hyper_params = _MomentumHyperParams(0.1, 0.2, 0, False)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _MomentumParamState(onp.zeros((1,))))
+        0, _MomentumParamState(np.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
     optimizer_def = optim.Momentum(learning_rate=0.1, beta=0.2)
-    params = onp.ones((1,))
+    params = np.ones((1,))
     state = optim.OptimizerState(
-        0, _MomentumParamState(onp.array([1.])))
-    grads = onp.array([3.])
+        0, _MomentumParamState(np.array([1.])))
+    grads = np.array([3.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        1, _MomentumParamState(onp.array([3.2])))
-    expected_new_params = onp.array([1. - 0.32])
+        1, _MomentumParamState(np.array([3.2])))
+    expected_new_params = np.array([1. - 0.32])
     self.assertEqual(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 
@@ -241,7 +241,7 @@ class MomentumTest(absltest.TestCase):
 class AdamTest(absltest.TestCase):
 
   def test_init_state(self):
-    params = onp.zeros((1,))
+    params = np.zeros((1,))
     optimizer_def = optim.Adam(learning_rate=0.1,
                                beta1=0.2,
                                beta2=0.9,
@@ -252,7 +252,7 @@ class AdamTest(absltest.TestCase):
     expected_hyper_params = _AdamHyperParams(0.1, 0.2, 0.9, 0.01, 0.0)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _AdamParamState(onp.zeros((1,)), onp.zeros((1,))))
+        0, _AdamParamState(np.zeros((1,)), np.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
@@ -261,23 +261,23 @@ class AdamTest(absltest.TestCase):
                                beta2=0.9,
                                eps=0.01,
                                weight_decay=0.0)
-    params = onp.array([1.])
+    params = np.array([1.])
     state = optim.OptimizerState(
-        1, _AdamParamState(onp.array([0.1]), onp.array([0.9])))
-    grads = onp.array([4.])
+        1, _AdamParamState(np.array([0.1]), np.array([0.9])))
+    grads = np.array([4.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        2, _AdamParamState(onp.array([3.22]), onp.array([2.41])))
-    expected_new_params = onp.array([0.906085])
-    onp.testing.assert_allclose(new_params, expected_new_params)
+        2, _AdamParamState(np.array([3.22]), np.array([2.41])))
+    expected_new_params = np.array([0.906085])
+    np.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 
 
 class AdafactorTest(absltest.TestCase):
 
   def test_init_state(self):
-    params = onp.zeros((3, 2))
+    params = np.zeros((3, 2))
     optimizer_def = optim.Adafactor(learning_rate=0.1,
                                     decay_rate=0.8,
                                     beta1=None,
@@ -289,8 +289,8 @@ class AdafactorTest(absltest.TestCase):
                                                   1e-30, 1e-3)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _AdafactorParamState(onp.zeros((2,)), onp.zeros((3,)),
-                                onp.zeros((1,)), onp.zeros((1,))))
+        0, _AdafactorParamState(np.zeros((2,)), np.zeros((3,)),
+                                np.zeros((1,)), np.zeros((1,))))
     check_eq(state, expected_state)
 
     # unfactorized
@@ -305,57 +305,57 @@ class AdafactorTest(absltest.TestCase):
                                                   1e-30, 1e-3)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _AdafactorParamState(onp.zeros((1,)), onp.zeros((1,)),
-                                onp.zeros((3, 2)), onp.zeros((3, 2))))
+        0, _AdafactorParamState(np.zeros((1,)), np.zeros((1,)),
+                                np.zeros((3, 2)), np.zeros((3, 2))))
     check_eq(state, expected_state)
 
   def test_apply_gradient(self):
     optimizer_def = optim.Adafactor(learning_rate=0.1, decay_rate=0.8,
                                     min_dim_size_to_factor=0)
-    params = onp.ones((3, 2), onp.float32)
+    params = np.ones((3, 2), np.float32)
     state = optim.OptimizerState(
-        1, _AdafactorParamState(onp.array([0.9, 0.9]),
-                                onp.array([0.1, 0.1, 0.1]),
-                                onp.zeros((1,)),
-                                onp.zeros((1,))))
-    grads = onp.ones((3, 2), onp.float32)
+        1, _AdafactorParamState(np.array([0.9, 0.9]),
+                                np.array([0.1, 0.1, 0.1]),
+                                np.zeros((1,)),
+                                np.zeros((1,))))
+    grads = np.ones((3, 2), np.float32)
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
         2, _AdafactorParamState(
-            onp.array([0.9574349, 0.9574349]),
-            onp.array([0.6169143, 0.6169143, 0.6169143]),
-            onp.zeros((1,)),
-            onp.zeros((1,))))
-    expected_new_params = 0.9 * onp.ones((3, 2))
-    onp.testing.assert_allclose(new_params, expected_new_params)
+            np.array([0.9574349, 0.9574349]),
+            np.array([0.6169143, 0.6169143, 0.6169143]),
+            np.zeros((1,)),
+            np.zeros((1,))))
+    expected_new_params = 0.9 * np.ones((3, 2))
+    np.testing.assert_allclose(new_params, expected_new_params)
     check_eq(new_state, expected_new_state, rtol=1e-6)
 
     # unfactored w momentum
     optimizer_def = optim.Adafactor(learning_rate=0.1,
                                     beta1=0.0, decay_rate=0.8,
                                     min_dim_size_to_factor=32)
-    params = onp.ones((3, 2), onp.float32)
+    params = np.ones((3, 2), np.float32)
     state = optim.OptimizerState(
-        1, _AdafactorParamState(onp.zeros(1,),
-                                onp.zeros(1,),
-                                0.5*onp.ones((3, 2)),
-                                onp.zeros((3, 2))))
-    grads = onp.ones((3, 2), onp.float32)
+        1, _AdafactorParamState(np.zeros(1,),
+                                np.zeros(1,),
+                                0.5*np.ones((3, 2)),
+                                np.zeros((3, 2))))
+    grads = np.ones((3, 2), np.float32)
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
-    expected_new_params = 0.9 * onp.ones((3, 2))
-    onp.testing.assert_allclose(new_params, expected_new_params)
+    expected_new_params = 0.9 * np.ones((3, 2))
+    np.testing.assert_allclose(new_params, expected_new_params)
     expected_new_state = optim.OptimizerState(
         2, _AdafactorParamState(
-            onp.array([0.0]),
-            onp.array([0.0]),
-            0.787174 * onp.ones((3, 2)),
-            0.1 * onp.ones((3,2))))
+            np.array([0.0]),
+            np.array([0.0]),
+            0.787174 * np.ones((3, 2)),
+            0.1 * np.ones((3,2))))
     check_eq(new_state, expected_new_state, rtol=1e-6)
 
   def test_factorizes(self):
-    params = onp.zeros((64, 64))
+    params = np.zeros((64, 64))
     optimizer_def = optim.Adafactor(learning_rate=0.1,
                                     decay_rate=0.8,
                                     beta1=None,
@@ -366,7 +366,7 @@ class AdafactorTest(absltest.TestCase):
     self.assertEqual(state.param_states.v_row.shape, (64,))
     self.assertEqual(state.param_states.v_col.shape, (64,))
 
-    params = onp.zeros((31, 64))
+    params = np.zeros((31, 64))
     optimizer_def = optim.Adafactor(learning_rate=0.1,
                                     decay_rate=0.8,
                                     beta1=None,
@@ -381,35 +381,35 @@ class AdafactorTest(absltest.TestCase):
 class AdagradTest(absltest.TestCase):
 
   def test_init_state(self):
-    params = onp.zeros((1,))
+    params = np.zeros((1,))
     optimizer_def = optim.Adagrad(learning_rate=0.1, eps=0.01)
     state = optimizer_def.init_state(params)
 
     expected_hyper_params = _AdagradHyperParams(0.1, 0.01)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _AdagradParamState(onp.zeros((1,))))
+        0, _AdagradParamState(np.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
     optimizer_def = optim.Adagrad(learning_rate=0.1, eps=0.01)
-    params = onp.array([1.])
+    params = np.array([1.])
     state = optim.OptimizerState(
-        1, _AdagradParamState(onp.array([0.1])))
-    grads = onp.array([4.])
+        1, _AdagradParamState(np.array([0.1])))
+    grads = np.array([4.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        2, _AdagradParamState(onp.array([16.1])))
-    expected_new_params = onp.array([0.9005588])
-    onp.testing.assert_allclose(new_params, expected_new_params)
+        2, _AdagradParamState(np.array([16.1])))
+    expected_new_params = np.array([0.9005588])
+    np.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 
 
 class RMSPropTest(absltest.TestCase):
 
   def test_init_state(self):
-    params = onp.zeros((1,))
+    params = np.zeros((1,))
     optimizer_def = optim.RMSProp(learning_rate=0.1,
                                   beta2=0.9,
                                   eps=0.01,
@@ -419,11 +419,11 @@ class RMSPropTest(absltest.TestCase):
     expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01, False)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _RMSPropParamState(onp.zeros((1,)), None))
+        0, _RMSPropParamState(np.zeros((1,)), None))
     self.assertEqual(state, expected_state)
 
   def test_init_state_centered(self):
-    params = onp.zeros((1,))
+    params = np.zeros((1,))
     optimizer_def = optim.RMSProp(learning_rate=0.1,
                                   beta2=0.9,
                                   eps=0.01,
@@ -433,23 +433,23 @@ class RMSPropTest(absltest.TestCase):
     expected_hyper_params = _RMSPropHyperParams(0.1, 0.9, 0.01, True)
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
     expected_state = optim.OptimizerState(
-        0, _RMSPropParamState(onp.zeros((1,)), onp.zeros((1,))))
+        0, _RMSPropParamState(np.zeros((1,)), np.zeros((1,))))
     self.assertEqual(state, expected_state)
 
   def test_apply_gradient(self):
     optimizer_def = optim.RMSProp(learning_rate=0.1,
                                   beta2=0.9,
                                   eps=0.01)
-    params = onp.array([1.])
+    params = np.array([1.])
     state = optim.OptimizerState(
-        1, _RMSPropParamState(onp.array([0.1]), None))
-    grads = onp.array([4.])
+        1, _RMSPropParamState(np.array([0.1]), None))
+    grads = np.array([4.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        2, _RMSPropParamState(onp.array([1.69]), None))
-    expected_new_params = onp.array([0.6946565])
-    onp.testing.assert_allclose(new_params, expected_new_params)
+        2, _RMSPropParamState(np.array([1.69]), None))
+    expected_new_params = np.array([0.6946565])
+    np.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 
   def test_apply_gradient_centered(self):
@@ -457,29 +457,29 @@ class RMSPropTest(absltest.TestCase):
                                   beta2=0.9,
                                   eps=0.01,
                                   centered=True)
-    params = onp.array([1.])
+    params = np.array([1.])
     state = optim.OptimizerState(
-        1, _RMSPropParamState(onp.array([0.1]), onp.array([0.1])))
-    grads = onp.array([4.])
+        1, _RMSPropParamState(np.array([0.1]), np.array([0.1])))
+    grads = np.array([4.])
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_new_state = optim.OptimizerState(
-        2, _RMSPropParamState(onp.array([1.69]), onp.array([0.49])))
-    expected_new_params = onp.array([0.670543], dtype=onp.float32)
-    onp.testing.assert_allclose(new_params, expected_new_params, rtol=1e-6)
-    onp.testing.assert_allclose(new_state.param_states.v,
+        2, _RMSPropParamState(np.array([1.69]), np.array([0.49])))
+    expected_new_params = np.array([0.670543], dtype=np.float32)
+    np.testing.assert_allclose(new_params, expected_new_params, rtol=1e-6)
+    np.testing.assert_allclose(new_state.param_states.v,
                                 expected_new_state.param_states.v)
-    onp.testing.assert_allclose(new_state.param_states.mg,
+    np.testing.assert_allclose(new_state.param_states.mg,
                                 expected_new_state.param_states.mg)
 
 
 class WeightNormTest(absltest.TestCase):
 
   def test_momentum_with_weight_norm(self):
-    params = onp.ones((2, 2)) * 2.
+    params = np.ones((2, 2)) * 2.
     optimizer_def = optim.WeightNorm(optim.Momentum(0.1))
     state = optimizer_def.init_state(params)
-    self.assertEqual(jax.tree_map(onp.shape, state), optim.OptimizerState(
+    self.assertEqual(jax.tree_map(np.shape, state), optim.OptimizerState(
         step=(),
         param_states=_WeightNormParamState(
             direction_state=_MomentumParamState(momentum=(2, 2)),
@@ -487,11 +487,11 @@ class WeightNormTest(absltest.TestCase):
             mult=(1, 2)
         )
     ))
-    grads = onp.ones((2, 2))
+    grads = np.ones((2, 2))
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
-    onp.testing.assert_allclose(new_params, onp.full_like(params, 1.9))
-    onp.testing.assert_allclose(new_state.param_states.mult, 1.9 * 2 ** 0.5)
+    np.testing.assert_allclose(new_params, np.full_like(params, 1.9))
+    np.testing.assert_allclose(new_state.param_states.mult, 1.9 * 2 ** 0.5)
 
 
 class DynamicScaleTest(absltest.TestCase):
@@ -516,8 +516,8 @@ class DynamicScaleTest(absltest.TestCase):
 
     for expected in expected_values:
       dyn_scale, is_fin, loss, grad = step(dyn_scale, p)
-      values = onp.array((is_fin, loss, dyn_scale.scale, grad))
-      onp.testing.assert_allclose(values, expected)
+      values = np.array((is_fin, loss, dyn_scale.scale, grad))
+      np.testing.assert_allclose(values, expected)
 
 if __name__ == '__main__':
   absltest.main()

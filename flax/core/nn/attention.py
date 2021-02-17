@@ -33,7 +33,7 @@ from jax import random
 import jax.numpy as jnp
 from .linear import default_kernel_init
 from .linear import dense_general
-import numpy as onp
+import numpy as np
 
 
 def dot_product_attention(scope,
@@ -94,7 +94,7 @@ def dot_product_attention(scope,
   depth = query.shape[-1]
   n = key.ndim
   # batch_dims is  <bs, <non-attention dims>, num_heads>
-  batch_dims = tuple(onp.delete(range(n), axis + (n - 1,)))
+  batch_dims = tuple(np.delete(range(n), axis + (n - 1,)))
   # q & k -> (bs, <non-attention dims>, num_heads, <attention dims>, channels)
   qk_perm = batch_dims + axis + (n - 1,)
   key = key.transpose(qk_perm)
@@ -159,9 +159,9 @@ def _invert_perm(perm):
 
 @struct.dataclass
 class CacheEntry:
-  key: onp.ndarray
-  value: onp.ndarray
-  i: onp.ndarray
+  key: np.ndarray
+  value: np.ndarray
+  i: np.ndarray
 
 def multi_head_dot_product_attention(
     scope: Scope,
@@ -295,7 +295,7 @@ def multi_head_dot_product_attention(
       cshape = cache_entry.key.shape
       indices = [0] * len(cshape)
       i = cache_entry.i
-      attn_size = onp.prod(onp.take(cshape, attention_axis))
+      attn_size = np.prod(np.take(cshape, attention_axis))
       for attn_dim in attention_axis:
         attn_size //= cshape[attn_dim]
         indices[attn_dim] = i // attn_size
@@ -320,8 +320,8 @@ def multi_head_dot_product_attention(
   if causal_mask:
     if cache and isinstance(cache_entry, CacheEntry):
       bias_pre_shape = (1,) * (key.ndim - 1)
-      attn_shape = tuple(onp.take(key.shape, attention_axis))
-      attn_size = onp.prod(attn_shape)
+      attn_shape = tuple(np.take(key.shape, attention_axis))
+      attn_size = np.prod(attn_shape)
       ii = jnp.arange(attn_size, dtype=jnp.uint32)
       mask = ii < cache_entry.i
       mask_components.append(mask.reshape(bias_pre_shape + attn_shape))
@@ -439,7 +439,7 @@ def make_padding_mask(padding_mask_query,
 
   padding_mask_query = padding_mask_query[..., None]
   padding_mask_key = padding_mask_key[..., None]
-  perm = (0,) + tuple(onp.flip(onp.arange(padding_mask_key.ndim)))[:-1]
+  perm = (0,) + tuple(np.flip(np.arange(padding_mask_key.ndim)))[:-1]
   if segmentation_mask:
     mask = jnp.equal(padding_mask_query, padding_mask_key.transpose(perm))
   else:

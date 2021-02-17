@@ -25,7 +25,7 @@ import jax
 from jax import random
 import jax.numpy as jnp
 import ml_collections
-import numpy as onp
+import numpy as np
 from PIL import Image
 
 
@@ -105,8 +105,8 @@ def snap_to_grid(sample):
 
 def save_images(batch, fname):
   n_rows = batch.shape[0] // 16
-  batch = onp.uint8(jnp.round((batch + 1) * 127.5))
-  out = onp.full((1 + 33 * n_rows, 1 + 33 * 16, 3), 255, 'uint8')
+  batch = np.uint8(jnp.round((batch + 1) * 127.5))
+  out = np.full((1 + 33 * n_rows, 1 + 33 * 16, 3), 255, 'uint8')
   for i, im in enumerate(batch):
     top  = 1 + 33 * (i // 16)
     left = 1 + 33 * (i %  16)

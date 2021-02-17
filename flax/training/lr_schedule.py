@@ -16,7 +16,7 @@
 """
 
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 
 
 def _piecewise_constant(boundaries, values, t):
@@ -84,9 +84,9 @@ def create_stepped_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   """
   boundaries = [step[0] for step in lr_sched_steps]
   decays = [step[1] for step in lr_sched_steps]
-  boundaries = onp.array(boundaries) * steps_per_epoch
-  boundaries = onp.round(boundaries).astype(int)
-  values = onp.array([1.0] + decays) * base_learning_rate
+  boundaries = np.array(boundaries) * steps_per_epoch
+  boundaries = np.round(boundaries).astype(int)
+  values = np.array([1.0] + decays) * base_learning_rate
 
   def learning_rate_fn(step):
     lr = _piecewise_constant(boundaries, values, step)

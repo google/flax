@@ -24,7 +24,7 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 from typing import Any, Tuple, Iterable, Callable
 
 from flax import linen as nn
@@ -63,8 +63,8 @@ class ModuleTest(absltest.TestCase):
     y = DummyModule(parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
-    onp.testing.assert_allclose(y, jnp.array([2.]))
+    np.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_arg_module(self):
@@ -74,7 +74,7 @@ class ModuleTest(absltest.TestCase):
     y = Dense(3, parent=scope)(x)
     params = scope.variables()['params']
     y2 = Dense(3, parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     self.assertEqual(params['kernel'].shape, (10, 3))
 
   def test_util_fun(self):
@@ -92,7 +92,7 @@ class ModuleTest(absltest.TestCase):
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'Dense_0': {'kernel': (10, 3)},
@@ -120,7 +120,7 @@ class ModuleTest(absltest.TestCase):
     y = Top(parent=scope)(x)
     params = scope.variables()['params']
     y2 = Top(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'MLP_0':
@@ -143,7 +143,7 @@ class ModuleTest(absltest.TestCase):
     y = MLP(parent=scope)(x)
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
       {'lyrs1_a': {'kernel': (10, 3)},
@@ -199,8 +199,8 @@ class ModuleTest(absltest.TestCase):
     y = DummyModule(x.shape, parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(x.shape, parent=scope.rewound())(x)
-    onp.testing.assert_allclose(y, y2)
-    onp.testing.assert_allclose(y, jnp.array([2.]))
+    np.testing.assert_allclose(y, y2)
+    np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
   def test_init_outside_setup_without_compact(self):
@@ -465,7 +465,7 @@ class ModuleTest(absltest.TestCase):
         for width in self.widths[:-1]:
           x = nn.relu(nn.Dense(width)(x))
         return nn.Dense(self.widths[-1])(x)
-    test = MLP(onp.array([3, 3], onp.int32))
+    test = MLP(np.array([3, 3], np.int32))
     params = test.init({'params': random.PRNGKey(42)}, jnp.ones((3, 3)))
     _ = test.apply(params, jnp.ones((3, 3)))
 

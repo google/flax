@@ -42,7 +42,7 @@ from jax.interpreters import partial_eval as pe
 from jax.interpreters import xla
 import jax.lib.xla_bridge as xb
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 
 
 def _replicate(x, devices=None):
@@ -227,10 +227,10 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), keepdims=False):
     axis = (axis,)
 
   def transpose_in(x):
-    perm = axis + tuple(onp.delete(onp.arange(x.ndim), axis))
+    perm = axis + tuple(np.delete(np.arange(x.ndim), axis))
     return x.transpose(perm)
   def transpose_out(x):
-    perm = axis + tuple(onp.delete(onp.arange(x.ndim), axis))
+    perm = axis + tuple(np.delete(np.arange(x.ndim), axis))
     return x.transpose(_invert_perm(perm))
 
   def body_wrapper(c, xs):

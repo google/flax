@@ -16,24 +16,24 @@ from .. import struct
 
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 from .base import OptimizerDef
 
 
 @struct.dataclass
 class _LARSHyperParams:
-  learning_rate: onp.ndarray
-  beta: onp.ndarray
-  weight_decay: onp.ndarray
-  trust_coefficient: onp.ndarray
-  eps: onp.ndarray
+  learning_rate: np.ndarray
+  beta: np.ndarray
+  weight_decay: np.ndarray
+  trust_coefficient: np.ndarray
+  eps: np.ndarray
   nesterov: bool
 
 
 @struct.dataclass
 class _LARSParamState:
-  momentum: onp.ndarray
+  momentum: np.ndarray
 
 
 class LARS(OptimizerDef):

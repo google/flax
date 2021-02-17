@@ -26,7 +26,7 @@ with warnings.catch_warnings():
   else:
     mpl.use('Agg')
 # pylint: disable=g-import-not-at-top
-import numpy as onp
+import numpy as np
 
 from tensorboard.plugins.hparams import api as hparams_api
 import tensorflow.compat.v2 as tf
@@ -66,12 +66,12 @@ class SummaryWriter(object):
       value: int/float: number to log
       step: int: training step
     """
-    value = float(onp.array(value))
+    value = float(np.array(value))
     with self._event_writer.as_default():
       tf.summary.scalar(name=tag, data=value, step=step)
 
   def image(self, tag, image, step):
-    """Saves RGB image summary from onp.ndarray [H,W], [H,W,1], or [H,W,3].
+    """Saves RGB image summary from np.ndarray [H,W], [H,W,1], or [H,W,3].
 
     Args:
       tag: str: label for this data
@@ -80,14 +80,14 @@ class SummaryWriter(object):
         Floating point values should be in range [0, 1).
       step: int: training step
     """
-    image = onp.array(image)
-    if len(onp.shape(image)) == 2:
-      image = image[:, :, onp.newaxis]
-    if onp.shape(image)[-1] == 1:
-      image = onp.repeat(image, 3, axis=-1)
+    image = np.array(image)
+    if len(np.shape(image)) == 2:
+      image = image[:, :, np.newaxis]
+    if np.shape(image)[-1] == 1:
+      image = np.repeat(image, 3, axis=-1)
     # tf.summary.image expects image to have shape [k, h, w, c] where,
     # k = number of samples, h = height, w = width, c = number of channels.
-    image = image[onp.newaxis, :, :, :]
+    image = image[np.newaxis, :, :, :]
 
     # Convert to tensor value as tf.summary.image expects data to be a tensor.
     image = tf.convert_to_tensor(image)
@@ -110,7 +110,7 @@ class SummaryWriter(object):
     """
     # tf.summary.audio expects the audio data to have floating values in
     # [-1.0, 1.0].
-    audiodata = onp.clip(onp.array(audiodata), -1, 1)
+    audiodata = np.clip(np.array(audiodata), -1, 1)
 
     # Convert to tensor value as tf.summary.audio expects data to be a tensor.
     audio = tf.convert_to_tensor(audiodata, dtype=tf.float32)
@@ -128,8 +128,8 @@ class SummaryWriter(object):
       step: int: training step
       bins: number of bins in histogram
     """
-    values = onp.array(values)
-    values = onp.reshape(values, -1)
+    values = np.array(values)
+    values = np.reshape(values, -1)
     with self._event_writer.as_default():
       tf.summary.histogram(name=tag, data=values, step=step, buckets=bins)
 

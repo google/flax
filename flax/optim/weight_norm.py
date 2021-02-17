@@ -19,7 +19,7 @@ from .. import struct
 import jax
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 from .base import OptimizerDef
 
@@ -27,15 +27,15 @@ from .base import OptimizerDef
 @struct.dataclass
 class _WeightNormHyperParams:
   inner: Any
-  wn_decay: onp.ndarray
-  wn_eps: onp.ndarray
+  wn_decay: np.ndarray
+  wn_eps: np.ndarray
 
 
 @struct.dataclass
 class _WeightNormParamState:
   direction_state: Any
   scale_state: Any
-  mult: onp.ndarray
+  mult: np.ndarray
 
 
 class WeightNorm(OptimizerDef):

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 from .. import struct
 from .base import OptimizerDef
 
@@ -30,7 +30,7 @@ class _AdagradHyperParams:
 class _AdagradParamState:
   """Adagrad parameter state"""
 
-  G: onp.ndarray
+  G: np.ndarray
 
 
 class Adagrad(OptimizerDef):

@@ -26,7 +26,7 @@ from jax import random
 from jax.nn import initializers
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -44,7 +44,7 @@ class LinearTest(parameterized.TestCase):
     )
     y, _ = dense_module.init(rng, x)
     self.assertEqual(y.shape, (1, 4))
-    onp.testing.assert_allclose(y, onp.full((1, 4), 4.))
+    np.testing.assert_allclose(y, np.full((1, 4), 4.))
 
   def test_dense_extra_batch_dims(self):
     rng = random.PRNGKey(0)
@@ -55,7 +55,7 @@ class LinearTest(parameterized.TestCase):
         bias_init=initializers.ones,
     )
     y, _ = dense_module.init(rng, x)
-    onp.testing.assert_allclose(y, onp.full((1, 2, 4), 4.))
+    np.testing.assert_allclose(y, np.full((1, 2, 4), 4.))
 
   def test_dense_no_bias(self):
     rng = random.PRNGKey(0)
@@ -66,7 +66,7 @@ class LinearTest(parameterized.TestCase):
         kernel_init=initializers.ones,
     )
     y, _ = dense_module.init(rng, x)
-    onp.testing.assert_allclose(y, onp.full((1, 4), 3.))
+    np.testing.assert_allclose(y, np.full((1, 4), 3.))
 
   def test_dense_is_dense_general(self):
     x = jax.random.normal(random.PRNGKey(0), (5, 3))
@@ -83,7 +83,7 @@ class LinearTest(parameterized.TestCase):
     )
     y2, _ = dg_module.init(random.PRNGKey(1), x)
 
-    onp.testing.assert_allclose(y1, y2)
+    np.testing.assert_allclose(y1, y2)
 
   def test_dense_general_batch_dim_raises(self):
     rng = random.PRNGKey(0)
@@ -106,7 +106,7 @@ class LinearTest(parameterized.TestCase):
         bias_init=initializers.ones,
     )
     y, _ = dg_module.init(rng, x)
-    onp.testing.assert_allclose(y, onp.full((1, 2, 2), 4.))
+    np.testing.assert_allclose(y, np.full((1, 2, 2), 4.))
 
   def test_dense_general_two_in(self):
     rng = random.PRNGKey(0)
@@ -118,7 +118,7 @@ class LinearTest(parameterized.TestCase):
         bias_init=initializers.ones,
     )
     y, _ = dg_module.init(rng, x)
-    onp.testing.assert_allclose(y, onp.full((1, 3), 5.))
+    np.testing.assert_allclose(y, np.full((1, 3), 5.))
 
   def test_dense_general_batch_dim(self):
     rng = random.PRNGKey(0)
@@ -139,9 +139,9 @@ class LinearTest(parameterized.TestCase):
         kernel_init=counter_init,
     )
     y, _ = dg_module.init(rng, x)
-    target = onp.concatenate(
-        [onp.full((1, 1, 7), 16.), onp.full((1, 1, 7), 31.)], axis=0)
-    onp.testing.assert_allclose(y, target)
+    target = np.concatenate(
+        [np.full((1, 1, 7), 16.), np.full((1, 1, 7), 31.)], axis=0)
+    np.testing.assert_allclose(y, target)
 
   @parameterized.parameters([((-2, 3), (), 'bijk,jklm->bilm'),
                              ((3, -2), (), 'bijk,kjlm->bilm'),
@@ -159,8 +159,8 @@ class LinearTest(parameterized.TestCase):
     )
     y, initial_params = dg_module.init(rng, x)
     dg_module = nn.Model(dg_module, initial_params)
-    target = onp.einsum(einsum_expr, x, dg_module.params['kernel']) + 1.
-    onp.testing.assert_allclose(y, target, atol=1e-6)
+    target = np.einsum(einsum_expr, x, dg_module.params['kernel']) + 1.
+    np.testing.assert_allclose(y, target, atol=1e-6)
 
   @parameterized.parameters([((3,),), (3,)])
   def test_conv(self, kernel_size):
@@ -176,7 +176,7 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = conv_module.init(rng, x)
     model = nn.Model(conv_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
-    onp.testing.assert_allclose(y, onp.full((1, 6, 4), 10.))
+    np.testing.assert_allclose(y, np.full((1, 6, 4), 10.))
 
   @parameterized.parameters([((3,),), (3,)])
   def test_single_input_conv(self, kernel_size):
@@ -192,7 +192,7 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = conv_module.init(rng, x)
     model = nn.Model(conv_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
-    onp.testing.assert_allclose(y, onp.full((6, 4), 10.))
+    np.testing.assert_allclose(y, np.full((6, 4), 10.))
 
   @parameterized.parameters([((3,),), (3,)])
   def test_group_conv(self, kernel_size):
@@ -209,7 +209,7 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = conv_module.init(rng, x)
     model = nn.Model(conv_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 2, 4))
-    onp.testing.assert_allclose(y, onp.full((1, 6, 4), 7.))
+    np.testing.assert_allclose(y, np.full((1, 6, 4), 7.))
 
   @parameterized.parameters([((3,),), (3,)])
   def test_conv_transpose(self, kernel_size):
@@ -225,7 +225,7 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = conv_transpose_module.init(rng, x)
     model = nn.Model(conv_transpose_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
-    correct_ans = onp.array([[[ 4.,  4.,  4.,  4.],
+    correct_ans = np.array([[[ 4.,  4.,  4.,  4.],
                               [ 7.,  7.,  7.,  7.],
                               [10., 10., 10., 10.],
                               [10., 10., 10., 10.],
@@ -235,7 +235,7 @@ class LinearTest(parameterized.TestCase):
                               [10., 10., 10., 10.],
                               [ 7.,  7.,  7.,  7.],
                               [ 4.,  4.,  4.,  4.]]])
-    onp.testing.assert_allclose(y, correct_ans)
+    np.testing.assert_allclose(y, correct_ans)
 
   @parameterized.parameters([((3,),), (3,)])
   def test_single_input_conv_transpose(self, kernel_size):
@@ -251,7 +251,7 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = conv_transpose_module.init(rng, x)
     model = nn.Model(conv_transpose_module, initial_params)
     self.assertEqual(model.params['kernel'].shape, (3, 3, 4))
-    correct_ans = onp.array([[ 4.,  4.,  4.,  4.],
+    correct_ans = np.array([[ 4.,  4.,  4.,  4.],
                               [ 7.,  7.,  7.,  7.],
                               [10., 10., 10., 10.],
                               [10., 10., 10., 10.],
@@ -261,7 +261,7 @@ class LinearTest(parameterized.TestCase):
                               [10., 10., 10., 10.],
                               [ 7.,  7.,  7.,  7.],
                               [ 4.,  4.,  4.,  4.]])
-    onp.testing.assert_allclose(y, correct_ans)
+    np.testing.assert_allclose(y, correct_ans)
 
   def test_embed(self):
     rng = random.PRNGKey(0)
@@ -275,10 +275,10 @@ class LinearTest(parameterized.TestCase):
     )
     y, initial_params = embed_module.init(rng, x)
     model = nn.Model(embed_module, initial_params)
-    onp.testing.assert_allclose(y, dummy_embedding[None])
+    np.testing.assert_allclose(y, dummy_embedding[None])
 
     z = model.attend(jnp.ones((3,)))
-    onp.testing.assert_allclose(z, 3. * jnp.arange(4))
+    np.testing.assert_allclose(z, 3. * jnp.arange(4))
 
 
 if __name__ == '__main__':
