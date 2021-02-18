@@ -739,6 +739,12 @@ class Module:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.has_variable(col, name)
 
+  def is_mutable_collection(self, col: str) -> bool:
+    """Returns true if the collection `col` is mutable."""
+    if self.scope is None:
+      raise ValueError("Can't check mutability on unbound modules")
+    return self.scope.is_mutable_collection(col)
+
   def make_rng(self, name: str) -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
     

@@ -213,6 +213,10 @@ class Variable(Generic[T]):
     """Updates the value of this Variable."""
     self.scope.put_variable(self.collection, self.name, value)
 
+  def is_mutable(self) -> bool:
+    """Checks if this Variable is mutable."""
+    return self.scope.is_mutable_collection(self.collection)
+
 
 class Scope:
   """A Scope allows easy access to variables and manages RNGS of a neural network layer.
