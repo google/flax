@@ -5,7 +5,10 @@
 Table of contents:
 
 - [Summary]
+- [Motivation]
 - [Functional API]
+- [Using Optax]
+- [Multi Opimizer]
 - [Previous API]
 - [Linen Helper]
 
@@ -21,8 +24,22 @@ train step (especially when using mutable state collections).
 
 This FLIP proposes a new purely [functional API] where optimizers are simply
 defined with a `init()` and an `update()` function and a new [Linen helper] that
-reduces boilerplate in a typical Linen train step.
+reduces boilerplate in a typical Linen train step. See also the section
+[Using Optax] for how to use Deepmind's [Optax] package, and the section about
+[Multi Opimizer].
 
+# Motivation
+[motivation]: #motivation
+
+Flax contains some optimizers in the `flax.optim` package, but list is far from
+exhaustive and ideally we would instead use JAX optimizers from a dedicated PyPi
+package.
+
+Deepmind's [Optax] library is such a dedicated package that already implements a
+choice of interesting optimizers and it also provides a framework to compose new
+optimizers from reusable gradient transformations.
+
+[Optax]: https://github.com/deepmind/optax
 
 # Functional API
 [Functional API]: #functional-api
@@ -91,6 +108,11 @@ Remarks:
 - See further down in [Linen helper] for an example of how to use this API in a
   typical Linen train step.
 
+# Using Optax
+[Using Optax]: #using-optax
+
+# Multi Opimizer
+[Multi Opimizer]: #multi-optimizer
 
 # Previous API
 [previous API]: #previous-api
