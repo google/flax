@@ -598,8 +598,8 @@ def apply(fn: Callable[..., Any],
     if not _is_valid_variables(variables):
       raise ValueError('The first argument passed to an apply function '
                        'should be a dictionary of collections. '
-                       'Each collection should be a `FrozenDict` with string '
-                       'keys.')
+                       'Each collection should be a dictionary '
+                       'with string keys.')
     if rngs is not None and not _is_valid_rngs(rngs):
       raise ValueError('rngs should be a dictionary mapping strings to '
                        '`jax.PRNGKey`.')
@@ -643,7 +643,7 @@ def init(fn: Callable[..., Any],
 
 
 def _is_valid_collection(col: VariableDict):
-  if not isinstance(col, FrozenDict):
+  if not isinstance(col, (FrozenDict, dict)):
     return False
   for name in col.keys():
     # Any value can be stored in a collection so only keys can be verified.
