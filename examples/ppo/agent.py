@@ -17,7 +17,7 @@
 import functools
 import multiprocessing
 import collections
-import numpy as onp
+import numpy as np
 import jax
 import flax
 
@@ -28,14 +28,14 @@ import models
 def policy_action(
   params: flax.core.frozen_dict.FrozenDict,
   module: models.ActorCritic,
-  state: onp.ndarray):
+  state: np.ndarray):
   """Forward pass of the network.
 
   Args:
     params: the parameters of the actor-critic model
     module: the actor-critic model
     state: the input for the forward pass
-    
+
   Returns:
     out: a tuple (log_probabilities, values)
   """

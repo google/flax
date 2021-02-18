@@ -26,7 +26,7 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 
-import numpy as onp
+import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -341,8 +341,8 @@ class ModuleTest(absltest.TestCase):
     bias_rng = nn.base._fold_in_str(dense_rng, 'bias')
     kernel = nn.linear.default_kernel_init(kernel_rng, (1, 2))
     bias = nn.initializers.normal()(bias_rng, (2,))
-    onp.testing.assert_allclose(kernel, params['dummy']['kernel'])
-    onp.testing.assert_allclose(bias, params['dummy']['bias'])
+    np.testing.assert_allclose(kernel, params['dummy']['kernel'])
+    np.testing.assert_allclose(bias, params['dummy']['bias'])
 
 class CollectionTest(absltest.TestCase):
 
@@ -515,20 +515,20 @@ class PoolTest(absltest.TestCase):
     x = jnp.full((1, 3, 3, 1), 2.)
     mul_reduce = lambda x, y: x * y
     y = nn.pooling.pool(x, 1., mul_reduce, (2, 2), (1, 1), 'VALID')
-    onp.testing.assert_allclose(y, onp.full((1, 2, 2, 1), 2. ** 4))
+    np.testing.assert_allclose(y, np.full((1, 2, 2, 1), 2. ** 4))
 
   def test_avg_pool(self):
     x = jnp.full((1, 3, 3, 1), 2.)
     pool = lambda x: nn.avg_pool(x, (2, 2))
     y = pool(x)
-    onp.testing.assert_allclose(y, onp.full((1, 2, 2, 1), 2.))
+    np.testing.assert_allclose(y, np.full((1, 2, 2, 1), 2.))
     y_grad = jax.grad(lambda x: pool(x).sum())(x)
     expected_grad = jnp.array([
         [0.25, 0.5, 0.25],
         [0.5, 1., 0.5],
         [0.25, 0.5, 0.25],
     ]).reshape((1, 3, 3, 1))
-    onp.testing.assert_allclose(y_grad, expected_grad)
+    np.testing.assert_allclose(y_grad, expected_grad)
 
   def test_max_pool(self):
     x = jnp.arange(9).reshape((1, 3, 3, 1)).astype(jnp.float32)
@@ -538,14 +538,14 @@ class PoolTest(absltest.TestCase):
         [7., 8.],
     ]).reshape((1, 2, 2, 1))
     y = pool(x)
-    onp.testing.assert_allclose(y, expected_y)
+    np.testing.assert_allclose(y, expected_y)
     y_grad = jax.grad(lambda x: pool(x).sum())(x)
     expected_grad = jnp.array([
         [0., 0., 0.],
         [0., 1., 1.],
         [0., 1., 1.],
     ]).reshape((1, 3, 3, 1))
-    onp.testing.assert_allclose(y_grad, expected_grad)
+    np.testing.assert_allclose(y_grad, expected_grad)
 
   def test_max_pool_explicit_pads(self):
     x = jnp.arange(9).reshape((1, 3, 3, 1)).astype(jnp.float32)
@@ -557,14 +557,14 @@ class PoolTest(absltest.TestCase):
         [6.,7.,8.,8.],
     ]).reshape((1, 4, 4, 1))
     y = pool(x)
-    onp.testing.assert_allclose(y, expected_y)
+    np.testing.assert_allclose(y, expected_y)
     y_grad = jax.grad(lambda x: pool(x).sum())(x)
     expected_grad = jnp.array([
         [1., 1., 2.],
         [1., 1., 2.],
         [2., 2., 4.],
     ]).reshape((1, 3, 3, 1))
-    onp.testing.assert_allclose(y_grad, expected_grad)
+    np.testing.assert_allclose(y_grad, expected_grad)
 
 class NormalizationTest(absltest.TestCase):
 
@@ -578,14 +578,14 @@ class NormalizationTest(absltest.TestCase):
       model = nn.Model(model_cls, initial_params)
     mean = y.mean((0, 1))
     var = y.var((0, 1))
-    onp.testing.assert_allclose(mean, onp.array([0., 0.]), atol=1e-4)
-    onp.testing.assert_allclose(var, onp.array([1., 1.]), rtol=1e-4)
+    np.testing.assert_allclose(mean, np.array([0., 0.]), atol=1e-4)
+    np.testing.assert_allclose(var, np.array([1., 1.]), rtol=1e-4)
     with nn.stateful(state_0) as state:
       y = model(x)
     ema = state['/']
-    onp.testing.assert_allclose(
+    np.testing.assert_allclose(
         ema['mean'], 0.1 * x.mean((0, 1), keepdims=False), atol=1e-4)
-    onp.testing.assert_allclose(
+    np.testing.assert_allclose(
         ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=False), rtol=1e-4)
 
   def test_layer_norm(self):
@@ -599,7 +599,7 @@ class NormalizationTest(absltest.TestCase):
     assert  isinstance(y, input_type)
     y_one_liner = ((x - x.mean(axis=-1, keepdims=True)) *
                    jax.lax.rsqrt(x.var(axis=-1, keepdims=True) + e))
-    onp.testing.assert_allclose(y_one_liner, y, atol=1e-4)
+    np.testing.assert_allclose(y_one_liner, y, atol=1e-4)
 
   def test_group_norm(self):
     rng = random.PRNGKey(0)
@@ -616,7 +616,7 @@ class NormalizationTest(absltest.TestCase):
               jax.lax.rsqrt(x_gr.var(axis=[1, 2, 3, 5], keepdims=True) + e))
     y_test = y_test.reshape([2, 5, 4, 4, 32])
 
-    onp.testing.assert_allclose(y_test, y, atol=1e-4)
+    np.testing.assert_allclose(y_test, y, atol=1e-4)
 
 
 # TODO(flax-dev): add integration tests for RNN cells
@@ -633,8 +633,8 @@ class RecurrentTest(absltest.TestCase):
     lstm = nn.Model(nn.LSTMCell, initial_params)
     self.assertEqual(carry[0].shape, (2, 4))
     self.assertEqual(carry[1].shape, (2, 4))
-    onp.testing.assert_allclose(y, carry[1])
-    param_shapes = jax.tree_map(onp.shape, lstm.params)
+    np.testing.assert_allclose(y, carry[1])
+    param_shapes = jax.tree_map(np.shape, lstm.params)
     self.assertEqual(param_shapes, {
         'ii': {'kernel': (3, 4)},
         'if': {'kernel': (3, 4)},
@@ -655,8 +655,8 @@ class RecurrentTest(absltest.TestCase):
     (carry, y), initial_params = nn.GRUCell.init(key2, carry0, x)
     gru = nn.Model(nn.GRUCell, initial_params)
     self.assertEqual(carry.shape, (2, 4))
-    onp.testing.assert_allclose(y, carry)
-    param_shapes = jax.tree_map(onp.shape, gru.params)
+    np.testing.assert_allclose(y, carry)
+    param_shapes = jax.tree_map(np.shape, gru.params)
     self.assertEqual(param_shapes, {
         'ir': {'kernel': (3, 4), 'bias': (4,)},
         'iz': {'kernel': (3, 4), 'bias': (4,)},
@@ -678,8 +678,8 @@ class RecurrentTest(absltest.TestCase):
     lstm = nn.Model(nn.ConvLSTM, initial_params)
     self.assertEqual(carry[0].shape, (2, 4, 4, 6))
     self.assertEqual(carry[1].shape, (2, 4, 4, 6))
-    onp.testing.assert_allclose(y, carry[1])
-    param_shapes = jax.tree_map(onp.shape, lstm.params)
+    np.testing.assert_allclose(y, carry[1])
+    param_shapes = jax.tree_map(np.shape, lstm.params)
     self.assertEqual(param_shapes, {
         'hh': {'bias': (6*4,), 'kernel': (3, 3, 6, 6*4)},
         'ih': {'bias': (6*4,), 'kernel': (3, 3, 3, 6*4)},
@@ -709,7 +709,7 @@ class RecurrentTest(absltest.TestCase):
     lstm_opt = nn.Model(nn.OptimizedLSTMCell.partial(name='LSTMCell'), 
       initial_params)
     
-    onp.testing.assert_allclose(y, y_opt, rtol=1e-6)
+    np.testing.assert_allclose(y, y_opt, rtol=1e-6)
     jtu.check_eq(lstm.params, lstm_opt.params)
 
 
@@ -724,8 +724,8 @@ class StochasticTest(absltest.TestCase):
     with nn.stochastic(rng):
       r1 = nn.make_rng()
       r2 = nn.make_rng()
-    self.assertTrue(onp.all(r1 == random.fold_in(rng, 1)))
-    self.assertTrue(onp.all(r2 == random.fold_in(rng, 2)))
+    self.assertTrue(np.all(r1 == random.fold_in(rng, 1)))
+    self.assertTrue(np.all(r2 == random.fold_in(rng, 2)))
 
   # TODO(jheek): re-introduce this test when the tracer check is revived.
   # def test_make_rng_in_jax_transform_check(self):
@@ -742,7 +742,7 @@ class StochasticTest(absltest.TestCase):
       rng, _ = StochasticModule.init_by_shape(random.PRNGKey(1), [])
     expected_rng = random.fold_in(random.PRNGKey(0), 1)
     expected_rng = random.fold_in(expected_rng, 1)
-    self.assertTrue(onp.all(rng == expected_rng))
+    self.assertTrue(np.all(rng == expected_rng))
 
 
 if __name__ == '__main__':

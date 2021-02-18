@@ -31,7 +31,7 @@ from jax import lax
 from jax import random
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 
 def dot_product_attention(query,
@@ -95,7 +95,7 @@ def dot_product_attention(query,
   depth = query.shape[-1]
   n = key.ndim
   # batch_dims is  <bs, <non-attention dims>, num_heads>
-  batch_dims = tuple(onp.delete(range(n), axis + (n - 1,)))
+  batch_dims = tuple(np.delete(range(n), axis + (n - 1,)))
   # q & k -> (bs, <non-attention dims>, num_heads, <attention dims>, channels)
   qk_perm = batch_dims + axis + (n - 1,)
   key = key.transpose(qk_perm)
@@ -158,9 +158,9 @@ def _invert_perm(perm):
 
 @struct.dataclass
 class _CacheEntry:
-  key: onp.ndarray
-  value: onp.ndarray
-  i: onp.ndarray
+  key: np.ndarray
+  value: np.ndarray
+  i: np.ndarray
 
 
 def scan_in_dim(*args, **kwargs):
@@ -314,7 +314,7 @@ class MultiHeadDotProductAttention(Module):
     if cache:
       assert isinstance(cache, Cache), 'cache must be an instance of Cache'
       if self.is_initializing():
-        cache.store(onp.array((key.ndim,) + key.shape[-2:], dtype=onp.int32))
+        cache.store(np.array((key.ndim,) + key.shape[-2:], dtype=np.int32))
       else:
         cache_entry = cache.retrieve(None)
         expected_shape = list(cache_entry.key.shape[:-2])
@@ -332,7 +332,7 @@ class MultiHeadDotProductAttention(Module):
         cshape = cache_entry.key.shape
         indices = [0] * len(cshape)
         i = cache_entry.i
-        attn_size = onp.prod(onp.take(cshape, attention_axis))
+        attn_size = np.prod(np.take(cshape, attention_axis))
         for attn_dim in attention_axis:
           attn_size //= cshape[attn_dim]
           indices[attn_dim] = i // attn_size
@@ -352,8 +352,8 @@ class MultiHeadDotProductAttention(Module):
     if causal_mask:
       if cache and not self.is_initializing():
         bias_pre_shape = (1,) * (key.ndim - 1)
-        attn_shape = tuple(onp.take(key.shape, attention_axis))
-        attn_size = onp.prod(attn_shape)
+        attn_shape = tuple(np.take(key.shape, attention_axis))
+        attn_size = np.prod(attn_shape)
         ii = jnp.arange(attn_size, dtype=jnp.uint32)
         mask = ii < cache_entry.i
         mask_components.append(mask.reshape(bias_pre_shape + attn_shape))
@@ -487,7 +487,7 @@ def make_padding_mask(padding_mask_query,
 
   padding_mask_query = padding_mask_query[..., None]
   padding_mask_key = padding_mask_key[..., None]
-  perm = (0,) + tuple(onp.flip(onp.arange(padding_mask_key.ndim)))[:-1]
+  perm = (0,) + tuple(np.flip(np.arange(padding_mask_key.ndim)))[:-1]
   if segmentation_mask:
     mask = jnp.equal(padding_mask_query, padding_mask_key.transpose(perm))
   else:

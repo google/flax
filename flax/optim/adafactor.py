@@ -26,7 +26,7 @@ from .base import OptimizerDef
 import jax
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 
 Dtype = Any
@@ -49,10 +49,10 @@ class _AdafactorHyperParams:
 
 @struct.dataclass
 class _AdafactorParamState:
-  v_row: onp.ndarray  # used in normal factored version
-  v_col: onp.ndarray
-  v: onp.ndarray  # only used without factoring
-  m: onp.ndarray  # only used with momentum
+  v_row: np.ndarray  # used in normal factored version
+  v_col: np.ndarray
+  v: np.ndarray  # only used without factoring
+  m: np.ndarray  # only used with momentum
 
 
 class Adafactor(OptimizerDef):
@@ -126,7 +126,7 @@ class Adafactor(OptimizerDef):
     """
     if not self.hyper_params.factored or len(shape) < 2:
       return None
-    sorted_dims = onp.argsort(shape)
+    sorted_dims = np.argsort(shape)
     if shape[sorted_dims[-2]] < self.hyper_params.min_dim_size_to_factor:
       return None
     return int(sorted_dims[-2]), int(sorted_dims[-1])
@@ -137,8 +137,8 @@ class Adafactor(OptimizerDef):
     factored_dims = self._factored_dims(shape)
     if factored_dims is not None:
       d1, d0 = factored_dims
-      vr_shape = onp.delete(shape, d0)
-      vc_shape = onp.delete(shape, d1)
+      vr_shape = np.delete(shape, d0)
+      vc_shape = np.delete(shape, d1)
       state['v_row'] = jnp.zeros(vr_shape, dtype=jnp.float32)
       state['v_col'] = jnp.zeros(vc_shape, dtype=jnp.float32)
     else:
