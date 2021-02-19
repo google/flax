@@ -18,6 +18,7 @@ import copy
 import os
 
 from absl.testing import absltest
+from flax import core
 from flax.training import checkpoints
 import jax
 from jax import test_util as jtu
@@ -147,6 +148,41 @@ class CheckpointsTest(absltest.TestCase):
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
     expected_new_object = {str(k): v for k, v in enumerate(test_object1)}
     jtu.check_eq(new_object, expected_new_object)
+
+  def test_convert_pre_linen(self):
+    params = checkpoints.convert_pre_linen({
+        'mod_0': {
+            'submod1_0': {},
+            'submod2_1': {},
+            'submod1_2': {},
+        },
+        'mod2_2': {
+            'submod2_2_0': {}
+        },
+        'mod2_11': {
+            'submod2_11_0': {}
+        },
+        'mod2_1': {
+            'submod2_1_0': {}
+        },
+    })
+    self.assertDictEqual(
+        core.unfreeze(params), {
+            'mod_0': {
+                'submod1_0': {},
+                'submod1_1': {},
+                'submod2_0': {},
+            },
+            'mod2_0': {
+                'submod2_1_0': {}
+            },
+            'mod2_1': {
+                'submod2_2_0': {}
+            },
+            'mod2_2': {
+                'submod2_11_0': {}
+            },
+        })
 
 
 if __name__ == '__main__':

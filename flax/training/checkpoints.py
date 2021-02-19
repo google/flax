@@ -26,6 +26,7 @@ import re
 from absl import logging
 
 from flax import serialization
+from flax import core
 from tensorflow.io import gfile
 
 
@@ -36,6 +37,8 @@ SIGNED_FLOAT_RE = re.compile(
 # does not capture sign:
 UNSIGNED_FLOAT_RE = re.compile(
     r'[-+]?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
+# Module name folowed by number.
+MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
 
 
 def _checkpoint_path(ckpt_dir, step, prefix='checkpoint_'):
@@ -208,3 +211,51 @@ def restore_checkpoint(ckpt_dir,
       return serialization.msgpack_restore(checkpoint_contents)
     else:
       return serialization.from_bytes(target, checkpoint_contents)
+
+
+def convert_pre_linen(params):
+  """Converts a pre-Linen parameter pytree.
+
+  In pre-Linen API submodules were numbered incrementally, independent of the
+  submodule class. With Linen this behavior has changed to keep separate
+  submodule counts per module class.
+
+  Consider the following module:
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Conv(1, 1)(x)
+        x = nn.Dense(1)(x)
+        return x
+
+  In pre-Linen the resulting params would have had the structure:
+    {'Conv_0': { ... }, 'Dense_1': { ... } }
+
+  With Linen the resulting params would instead have had the structure:
+    {'Conv_0': { ... }, 'Dense_0': { ... } }
+
+  Args:
+    params: Parameter pytree in pre-Linen format. If the pytree is already in
+      Linen format, then the returned pytree is unchanged (i.e. this function
+      can safely be called on any loaded checkpoint for use with Linen).
+
+  Returns:
+    Parameter pytree with Linen submodule naming.
+  """
+  if not isinstance(params, (dict, core.FrozenDict)):
+    return params
+  params_renamed = {}
+  counts = {}
+  names = natural_sort(params.keys())
+  for name in names:
+    value = params[name]
+    match = MODULE_NUM_RE.match(name)
+    if match:
+      module = match.group(1)
+      num = counts.get(module, 0)
+      name = f'{module}_{num}'
+      counts[module] = num + 1
+    params_renamed[name] = convert_pre_linen(value)
+
+  return core.freeze(params_renamed)
