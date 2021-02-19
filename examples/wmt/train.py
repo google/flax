@@ -515,8 +515,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       donate_argnums=(0,))  # pytype: disable=wrong-arg-types
   p_eval_step = jax.pmap(
       functools.partial(
-          eval_step, config=eval_config,
-          label_smoothing=config.label_smoothing),
+          eval_step, config=eval_config),
       axis_name="batch")
   p_init_cache = jax.pmap(
       functools.partial(
