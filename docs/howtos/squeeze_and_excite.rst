@@ -7,10 +7,10 @@ We will show you how to...
 
 Squeeze-and- Excitation blocks `(Hu at el., 2017) <https://arxiv.org/abs/1709.01507>`_ seek to
 improve the quality of representations learned by a network by modelling the dependencies between channels of convolutional features.
-The first step in the block is the Squeeze operation: all channels are aggregated by taking their means, changing the 
-tensor's shape from (H, W, C) to (1, 1, C). Then it goes through an Excitation operation: the mean vector passes through a 2 layer MLP
-before being  used in a self-gating mechanism, where it modulates each channel. The output still has shape (H, W, C) and so can just be passed
-on to the next layer.
+The first step in the block is the Squeeze operation: a copy of all channels are aggregated by taking their means, generating 
+a tensor with shape (1, 1, C). Then we have the Excitation operation: the mean vector passes through a 2 layer MLP
+before being  used in a self-gating mechanism, where it modulates each channel of the original block. 
+The output retains the shape (H, W, C) and therefore can just be passed on to the next layer.
 .. code-block:: python
 
 
