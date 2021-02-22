@@ -16,11 +16,14 @@
 
 import copy
 import os
+from typing import Any
 
 from absl.testing import absltest
+import flax
 from flax import core
 from flax.training import checkpoints
 import jax
+from jax import numpy as jnp
 from jax import test_util as jtu
 import numpy as np
 from tensorflow.io import gfile
@@ -34,6 +37,59 @@ def shuffle(l):
   l = copy.copy(l)
   np.random.shuffle(l)
   return l
+
+
+class InnerPreLinen(flax.nn.Module):
+  """Inner class based on pre-Linen flax.nn."""
+
+  def apply(self, x):
+    x = flax.nn.Conv(x, 10, (2, 2))
+    x = flax.nn.normalization.BatchNorm(x, use_running_average=True)
+    return x
+
+
+class ModelPreLinen(flax.nn.Module):
+  """Simple model based on pre-Linen flax.nn."""
+
+  def apply(self, inputs):
+    x = flax.nn.Conv(inputs, 10, (2, 2))
+    x = InnerPreLinen(x, name='Inner_1')
+    x = x.reshape([x.shape[0], -1])
+    x = flax.nn.normalization.BatchNorm(x, use_running_average=True)
+    x = flax.nn.Dense(x, 10)
+    x = flax.nn.log_softmax(x)
+    return x
+
+
+class Inner(flax.linen.Module):
+  """Inner class based on flax.linen."""
+
+  @flax.linen.compact
+  def __call__(self, x):
+    x = flax.linen.Conv(10, (2, 2))(x)
+    x = flax.linen.normalization.BatchNorm(True)(x)
+    return x
+
+
+class Model(flax.linen.Module):
+  """Simple model based on flax.linen."""
+
+  @flax.linen.compact
+  def __call__(self, inputs):
+    x = flax.linen.Conv(10, (2, 2))(inputs)
+    x = Inner()(x)
+    x = x.reshape([x.shape[0], -1])
+    x = flax.linen.normalization.BatchNorm(True)(x)
+    x = flax.linen.Dense(10)(x)
+    x = flax.linen.log_softmax(x)
+    return x
+
+
+@flax.struct.dataclass
+class TrainState:
+  """Simple container that captures training state."""
+  optimizer: flax.optim.Optimizer
+  model_state: Any
 
 
 class CheckpointsTest(absltest.TestCase):
@@ -183,6 +239,34 @@ class CheckpointsTest(absltest.TestCase):
                 'submod2_11_0': {}
             },
         })
+
+  def test_convert_checkpoint(self):
+    inputs = jnp.ones([2, 5, 5, 1])
+    rng = jax.random.PRNGKey(0)
+    # pre-Linen.
+    with flax.nn.stateful() as model_state:
+      y, params = ModelPreLinen.init(rng, inputs)
+    pre_linen_optimizer = flax.optim.GradientDescent(0.1).create(params)
+    train_state = TrainState(
+        optimizer=pre_linen_optimizer, model_state=model_state)
+    state_dict = flax.serialization.to_state_dict(train_state)
+    # Linen.
+    model = Model()
+    variables = model.init(rng, inputs)
+    optimizer = flax.optim.GradientDescent(0.1).create(variables['params'])
+    optimizer = optimizer.restore_state(
+        flax.core.unfreeze(
+            checkpoints.convert_pre_linen(state_dict['optimizer'])))
+    optimizer = optimizer.apply_gradient(variables['params'])
+    batch_stats= flax.core.freeze(flax.traverse_util.unflatten_dict({
+        tuple(k.split('/')[1:]): v
+        for k, v in model_state.as_dict().items()
+    }))
+    y, updated_state = model.apply(
+        dict(params=optimizer.target, batch_stats=batch_stats),
+        inputs,
+        mutable=['batch_stats'])
+    del y, updated_state  # not used.
 
 
 if __name__ == '__main__':
