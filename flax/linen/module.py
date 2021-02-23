@@ -367,7 +367,7 @@ class Module:
     from flax import linen as nn
 
     class Module(nn.Module):
-      features: Tuple[int] = [16, 4]
+      features: Tuple[int] = (16, 4)
 
       def setup(self):
         self.dense1 = Dense(self.features[0])
