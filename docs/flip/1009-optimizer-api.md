@@ -210,22 +210,16 @@ Remarks:
 # Current Examples
 [Current Examples]: #current-examples
 
-
-+-
-| Example | Flax | Optax | comments |
-+=
-| imagenet : optim.Momentum
-+-
-| mnist
-
-- mnist : 
-- nlp_seq
-- pixelcnn
-- ppo
-- seq2seq
-- sst2
-- vae
-- wmt
+| Example  |      Flax      |    Optax    |              Comments               |
+| -------- | -------------- | ----------- | ----------------------------------- |
+| imagenet | optim.Momentum | optax.trace | DynamicScale can be used unchanged. |
+| mnist    | optim.Momentum | optax.trace |                                     |
+| nlp_seq  | optim.Adam     | optax.adamw |                                     |
+| pixelcnn | optim.Adam     | optax.adam  |                                     |
+| ppo      | optim.Adam     | optax.adam  |                                     |
+| seq2seq  | optim.Adam     | optax.adam  |                                     |
+| vae      | optim.Adam     | optax.adam  |                                     |
+| wmt      | optim.Adam     | optax.adamw |                                     |
 
 
 # Linen Helper
