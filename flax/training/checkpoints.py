@@ -235,6 +235,16 @@ def convert_pre_linen(params):
   With Linen the resulting params would instead have had the structure:
     {'Conv_0': { ... }, 'Dense_0': { ... } }
 
+  Note that you can also use this utility to convert pre-Linen collections
+  because they're following the same module naming. Note though that collections
+  were "flat" in pre-Linen and first need to be unflattened before they can be
+  used with this function:
+
+    batch_stats = convert_pre_linen(flax.traverse_util.unflatten_dict({
+        tuple(k.split('/')[1:]): v
+        for k, v in model_state.as_dict().items()
+    }))
+
   Args:
     params: Parameter pytree in pre-Linen format. If the pytree is already in
       Linen format, then the returned pytree is unchanged (i.e. this function

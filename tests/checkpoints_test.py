@@ -258,10 +258,11 @@ class CheckpointsTest(absltest.TestCase):
         flax.core.unfreeze(
             checkpoints.convert_pre_linen(state_dict['optimizer'])))
     optimizer = optimizer.apply_gradient(variables['params'])
-    batch_stats= flax.core.freeze(flax.traverse_util.unflatten_dict({
-        tuple(k.split('/')[1:]): v
-        for k, v in checkpoints.convert_pre_linen(model_state.as_dict()).items()
-    }))
+    batch_stats = checkpoints.convert_pre_linen(
+        flax.traverse_util.unflatten_dict({
+            tuple(k.split('/')[1:]): v
+            for k, v in model_state.as_dict().items()
+        }))
     y, updated_state = model.apply(
         dict(params=optimizer.target, batch_stats=batch_stats),
         inputs,
