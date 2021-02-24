@@ -219,7 +219,7 @@ In the following code example we check if any intermediate activations are non-f
   all_finite = all(jax.tree_leaves(is_finite))
   assert all_finite, "non finite intermediate detected!"
 
-By default only the intermediates of `__call__` methods are collected.
+By default only the intermediates of ``__call__`` methods are collected.
 Alternatively, you can pass a custom filter based on the ``Module`` instance and the method name.
 
 .. testcode::
@@ -231,13 +231,13 @@ Alternatively, you can pass a custom filter based on the ``Module`` instance and
   dense_intermediates = state['intermediates']
 
 
-Use ``nn.Sequential``
+Use ``Sequential``
 ---------------------
 
 You could also define ``CNN`` using a simple implementation of a ``Sequential`` combinator (this is quite common in more stateful approaches). This may be useful
 for very simple models and gives you arbitrary model
 surgery. But it can be very limiting -- if you even want to add one conditional, you are 
-forced to refactor away from ``nn.Sequential`` and structure
+forced to refactor away from ``Sequential`` and structure
 your model more explicitly.
 
 .. testcode::
