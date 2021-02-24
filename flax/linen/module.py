@@ -33,7 +33,7 @@ import flax
 from flax import traverse_util
 from flax import serialization
 from flax.core import Scope, apply
-from flax.core.scope import CollectionFilter, Variable, VariableDict, FrozenVariableDict
+from flax.core.scope import CollectionFilter, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
 
 # from .dotgetter import DotGetter
@@ -41,8 +41,12 @@ from flax.core.frozen_dict import FrozenDict, freeze
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
 Array = Any    # pylint: disable=invalid-name
+
+
 T = TypeVar('T')
+K = TypeVar('T')
 _CallableT = TypeVar('_CallableT', bound=Callable)
+
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
@@ -108,6 +112,12 @@ class _DynamicContext:
     if not hasattr(self._thread_data, 'module_stack'):
       self._thread_data.module_stack = [None,]
     return self._thread_data.module_stack
+  
+  @property
+  def capture_stack(self):
+    if not hasattr(self._thread_data, 'capture_stack'):
+      self._thread_data.capture_stack = []
+    return self._thread_data.capture_stack
 
 # The global context 
 _context = _DynamicContext()
@@ -263,7 +273,12 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
       self._state.in_compact_method = True
     _context.module_stack.append(self)
     try:
-      return fun(self, *args, **kwargs)
+      y = fun(self, *args, **kwargs)
+      if _context.capture_stack:
+        filter_fn = _context.capture_stack[-1]
+        if filter_fn and filter_fn(self, fun.__name__):
+          self.sow('intermediates', fun.__name__, y)
+      return y
     finally:
       _context.module_stack.pop()
       if is_compact_method:
@@ -345,10 +360,20 @@ _UNDEFINED_COPY_PICKLE_METHODS = (
     '__reduce__', '__reduce_ex__', '__copy__', '__deepcopy__')
 
 
-_caches = weakref.WeakKeyDictionary()
+tuple_reduce = lambda xs, x: xs + (x,)
+tuple_init = lambda: ()
+
+
+capture_call_intermediates = lambda _, method_name: method_name == '__call__'
+
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
+
+
+_caches = weakref.WeakKeyDictionary()
+
+
 class Module:
   """Base class for all neural network modules. Layers and models should subclass this class.
 
@@ -767,6 +792,7 @@ class Module:
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
             method: Callable[..., Any] = None, 
             mutable: Union[bool, str, Sequence[str]] = False,
+            capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
 
@@ -789,6 +815,12 @@ class Module:
                treated as mutable: ``bool``: all/no collections are mutable.
                ``str``: The name of a single mutable collection. ``list``: A
                list of names of mutable collections.
+      capture_intermediates: If `True`, captures intermediate return values
+        of all Modules inside the "intermediates" collection. By default only
+        the return value of the `__call__` method is stored. A function can
+        be passed to change the filter behavior. The filter function takes
+        the Module instance and method name and returns a bool indicating
+        whether the output of that method invocation should be stored.
     Returns:
       If ``mutable`` is False, returns output. If any collections are
       mutable, returns ``(output, vars)``, where ``vars`` are is a dict
@@ -799,7 +831,16 @@ class Module:
     else:
       method = _get_unbound_fn(method)
     fn = lambda scope: method(self.clone(parent=scope), *args, **kwargs)
-    return apply(fn, mutable=mutable)(variables, rngs=rngs)
+    if capture_intermediates is True:
+      capture_intermediates = capture_call_intermediates
+    if capture_intermediates:
+      mutable = union_filters(mutable, 'intermediates')
+    _context.capture_stack.append(capture_intermediates)
+    try:
+      return apply(fn, mutable=mutable)(variables, rngs=rngs)
+    finally:
+      _context.capture_stack.pop()
+    
 
   def init_with_output(self, rngs: Union[PRNGKey, RNGSequences], *args,
                        method: Optional[Callable[..., Any]] = None, 
@@ -848,9 +889,79 @@ class Module:
     if self.scope is None:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.variables()
+  
+  def get_variable(self, col: str, name: str, default: T = None) -> T:
+    """Retrieves the value of a Variable.
+
+    Args:
+      col: the variable collection.
+      name: the name of the variable.
+      default: the default value to return if the variable does not exist in
+        this scope.
+
+    Returns:
+      The value of the input variable, of the default value if the variable
+      doesn't exist in this scope.
+    """
+    if self.scope is None:
+      raise ValueError("Can't access variables on unbound modules")
+    return self.scope.get_variable(col, name, default)
+
+  def sow(self, col: str, name: str, value: T,
+          reduce_fn: Callable[[K, T], K] = tuple_reduce,
+          init_fn: Callable[[], K] = tuple_init) -> bool:
+    """Stores a value in a collection.
+
+    Collections can be used to collect intermediate values without
+    the overhead of explicitly passing a container through each Module call.
+
+    By default the value is stored in a tuple and each stored value
+    is appended at the end. This way all intermediates can be tracked when
+    the same module is called multiple times.
+
+    If the target collection is not mutable `sow` behaves like a no-op
+    and returns `False`.
+
+    Example::
+
+      class Foo(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          h = nn.Dense(4)(x)
+          self.sow('intermediates', 'h', h)
+          return nn.Dense(2)(h)
+
+      y, state = Foo.apply(params, x, mutable=['intermediates'])
+      print(state['intermediates'])  # {'h': (...,)}
+
+    Args:
+      col: the variable collection.
+      name: the name of the variable.
+      reduce_fn: The function used to combine the existing value with
+        the new value the default is to append the value to a tuple.
+      init_fn: For the first value stored reduce_fn will be passed
+        the result of `init_fn` together with the value to be stored.
+        The default is an empty tuple.
+
+    Returns:
+      `True` if the value has been stored succesfully, `False` otherwise.
+    """
+    if self.scope is None:
+      raise ValueError("Can't store variables on unbound modules")
+    if not self.scope.is_mutable_collection(col):
+      return False
+    if self.scope.has_variable(col, name):
+      xs = self.scope.get_variable(col, name)
+    else:
+      self.scope.reserve(name)
+      self._state.children[name] = col
+      xs = init_fn()
+    xs = reduce_fn(xs, value)
+    self.scope.put_variable(col, name, xs)
+    return True
 
 
-T = TypeVar('T')
+
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.
 
