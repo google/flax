@@ -31,6 +31,9 @@ jobs:
         pip install .
         pip install .[testing]
         pip install -r docs/requirements.txt
+    - name: Test testcode blocks in documentation
+      run: |
+        sphinx-build -M doctest docs docs/_build
     - name: Build documentation
       run: |
         sphinx-build -M html docs docs/_build
