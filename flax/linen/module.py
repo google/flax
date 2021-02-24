@@ -44,7 +44,7 @@ Array = Any    # pylint: disable=invalid-name
 
 
 T = TypeVar('T')
-K = TypeVar('T')
+K = TypeVar('K')
 _CallableT = TypeVar('_CallableT', bound=Callable)
 
 
