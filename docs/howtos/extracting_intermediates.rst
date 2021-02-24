@@ -71,7 +71,7 @@ The CNN can be augmented with calls to ``sow`` to store intermediates as followi
     @nn.compact
     def __call__(self, x):
       x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-      
+
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = nn.Conv(features=64, kernel_size=(3, 3))(x)
@@ -218,6 +218,17 @@ In the following code example we check if any intermediate activations are non-f
   y, is_finite = predict(variables, batch)
   all_finite = all(jax.tree_leaves(is_finite))
   assert all_finite, "non finite intermediate detected!"
+
+By default only the intermediates of `__call__` methods are collected.
+Alternatively, you can pass a custom filter based on the ``Module`` instance and the method name.
+
+.. testcode::
+
+  filter_Dense = lambda mdl, method_name: isinstance(mdl, nn.Dense)
+  filter_encodings = lambda mdl, method_name: method_name == "encode"
+
+  y, state = CNN().apply(variables, batch, capture_intermediates=filter_Dense, mutable=["intermediates"])
+  dense_intermediates = state['intermediates']
 
 
 Use ``nn.Sequential``

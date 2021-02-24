@@ -115,6 +115,7 @@ class _DynamicContext:
   
   @property
   def capture_stack(self):
+    """Keeps track of the active capture_intermediates filter functions."""
     if not hasattr(self._thread_data, 'capture_stack'):
       self._thread_data.capture_stack = []
     return self._thread_data.capture_stack
@@ -360,6 +361,9 @@ _UNDEFINED_COPY_PICKLE_METHODS = (
     '__reduce__', '__reduce_ex__', '__copy__', '__deepcopy__')
 
 
+_caches = weakref.WeakKeyDictionary()
+
+
 tuple_reduce = lambda xs, x: xs + (x,)
 tuple_init = lambda: ()
 
@@ -369,9 +373,6 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
-
-
-_caches = weakref.WeakKeyDictionary()
 
 
 class Module:
@@ -796,13 +797,13 @@ class Module:
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
 
-    Note that `method` should be set if one would like to call `apply` on a 
+    Note that `method` should be set if one would like to call `apply` on a
     different class method than `_call__`. For instance, suppose a Transformer
     modules has a method called `encode`, then the following calls `apply` on
     that method::
 
       model = models.Transformer(config)
-      encoded = model.apply({'params': params}, inputs, method=model.encode) 
+      encoded = model.apply({'params': params}, inputs, method=model.encode)
 
     Args:
       variables: A dictionary containing variables keyed by variable
@@ -817,7 +818,7 @@ class Module:
                list of names of mutable collections.
       capture_intermediates: If `True`, captures intermediate return values
         of all Modules inside the "intermediates" collection. By default only
-        the return value of the `__call__` method is stored. A function can
+        the return values of all `__call__` methods are stored. A function can
         be passed to change the filter behavior. The filter function takes
         the Module instance and method name and returns a bool indicating
         whether the output of that method invocation should be stored.
