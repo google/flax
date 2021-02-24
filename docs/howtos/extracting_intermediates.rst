@@ -243,12 +243,7 @@ your model more explicitly.
 .. testcode::
 
   class Sequential(nn.Module):
-    submodules: Sequence[nn.Module]
-
-    def setup(self):
-      # Bind layers to `self` -- `__setattr__` gives submodules
-      # names and connects their variables through `self.variables`
-      self.layers = self.submodules
+    layers: Sequence[nn.Module]
 
     def __call__(self, x):
       for layer in self.layers:
@@ -277,7 +272,7 @@ your model more explicitly.
 
   @jax.jit
   def features(params, x):
-    return Sequential(SeqCNN().submodules[0:7]).apply({"params": params}, x)
+    return Sequential(SeqCNN().layers[0:7]).apply({"params": params}, x)
 
   params = init(jax.random.PRNGKey(0), batch)
   features(params, batch)
