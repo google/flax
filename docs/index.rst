@@ -38,6 +38,7 @@ For a quick introduction and short example snippets, see our `README
    howtos/state_params
    howtos/ensembling
    howtos/lr_schedule
+   howtos/extracting_intermediates
 
 .. toctree::
    :maxdepth: 1

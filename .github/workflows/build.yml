@@ -36,6 +36,7 @@ jobs:
         sphinx-build -M doctest docs docs/_build
     - name: Build documentation
       run: |
+        sphinx-build -M doctest docs docs/_build
         sphinx-build -M html docs docs/_build
     - name: Test with pytest and generate coverage report
       run: |
