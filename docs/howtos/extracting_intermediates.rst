@@ -146,6 +146,51 @@ can define all submodules in ``setup`` and avoid using ``nn.compact`` altogether
   features(params, batch)
 
 
+Use `capture_intermediates`
+---------------------------
+
+Linen supports the capture of intermediate return values from submodules automatically without any code changes.
+This pattern should be considered the "sledge hammer" approach to capturing intermediates.
+As a debugging and inspection tool it is very useful but using the other patterns described in this howto.
+
+In the following code example we check if any intermediate activations are non-finite (NaN or infinite):
+
+.. testcode::
+
+  class CNN(nn.Module):
+    @nn.compact
+    def __call__(self, x):
+      x = nn.Conv(features=32, kernel_size=(3, 3))(x)
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = nn.Conv(features=64, kernel_size=(3, 3))(x)
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = x.reshape((x.shape[0], -1))  # flatten
+      x = nn.Dense(features=256)(x)
+      x = nn.relu(x)
+      x = nn.Dense(features=10)(x)
+      x = nn.log_softmax(x)
+      return x
+
+  @jax.jit
+  def init(key, x):
+    variables = CNN().init(key, x)
+    return variables
+
+  @jax.jit
+  def predict(variables, x):
+    y, state = CNN().apply(variables, x, capture_intermediates=True, mutable=["intermediates"])
+    intermediates = state['intermediates']
+    fin = jax.tree_map(lambda xs: jnp.all(jnp.isfinite(xs)), intermediates)
+    return y, fin
+
+  variables = init(jax.random.PRNGKey(0), batch)
+  y, is_finite = predict(variables, batch)
+  all_finite = all(jax.tree_leaves(is_finite))
+  assert all_finite, "non finite intermediate detected!"
+
+
 Use ``nn.Sequential``
 ---------------------
 
