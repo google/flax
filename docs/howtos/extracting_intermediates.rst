@@ -14,6 +14,27 @@ Let's start with this simple CNN that uses :code:`nn.compact`.
 
   batch = jnp.ones((4, 32, 32, 3))
 
+  class SowCNN(nn.Module):
+    @nn.compact
+    def __call__(self, x):
+      x = nn.Conv(features=32, kernel_size=(3, 3))(x)
+      self.sow('intermediates', 'conv1', x)
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = nn.Conv(features=64, kernel_size=(3, 3))(x)
+      self.sow('intermediates', 'conv2', x)
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = x.reshape((x.shape[0], -1))  # flatten
+      self.sow('intermediates', 'features', x)
+      x = nn.Dense(features=256)(x)
+      self.sow('intermediates', 'conv3', x)
+      x = nn.relu(x)
+      x = nn.Dense(features=10)(x)
+      self.sow('intermediates', 'dense', x)
+      x = nn.log_softmax(x)
+      return x
+
 .. testcode::
 
   class CNN(nn.Module):
@@ -39,42 +60,68 @@ intermediate values. There are a few ways to expose them:
 Store intermediate values in a new variable collection
 ------------------------------------------------------
 
-You can augment any module with calls to ``sow``
-which store any intermediate values. ``sow`` only
-stores a value if the given variable collection is passed in
-as "mutable" in the call to :code:`Module.apply`.
+The CNN can be augmented with calls to ``sow`` to store intermediates as following:
 
-.. testcode::
 
+.. codediff:: 
+  :title_left: Default CNN
+  :title_right: CNN using sow API
+  
   class CNN(nn.Module):
     @nn.compact
     def __call__(self, x):
       x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-      self.sow('intermediates', 'conv1', x)
+      
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-      self.sow('intermediates', 'conv2', x)
+
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = x.reshape((x.shape[0], -1))  # flatten
-      self.sow('intermediates', 'features', x)
+
       x = nn.Dense(features=256)(x)
-      self.sow('intermediates', 'conv3', x)
+
       x = nn.relu(x)
       x = nn.Dense(features=10)(x)
-      self.sow('intermediates', 'dense', x)
+
+      x = nn.log_softmax(x)
+      return x
+  ---
+  class SowCNN(nn.Module):
+    @nn.compact
+    def __call__(self, x):
+      x = nn.Conv(features=32, kernel_size=(3, 3))(x)
+      self.sow('intermediates', 'conv1', x) #!
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = nn.Conv(features=64, kernel_size=(3, 3))(x)
+      self.sow('intermediates', 'conv2', x) #!
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = x.reshape((x.shape[0], -1))  # flatten
+      self.sow('intermediates', 'features', x) #!
+      x = nn.Dense(features=256)(x)
+      self.sow('intermediates', 'conv3', x) #!
+      x = nn.relu(x)
+      x = nn.Dense(features=10)(x)
+      self.sow('intermediates', 'dense', x) #!
       x = nn.log_softmax(x)
       return x
 
+``sow`` only stores a value if the given variable collection is passed in
+as "mutable" in the call to :code:`Module.apply`.
+
+.. testcode::
+
   @jax.jit
   def init(key, x):
-    variables = CNN().init(key, x)
+    variables = SowCNN().init(key, x)
     return variables
 
   @jax.jit
   def predict(variables, x):
-    return CNN().apply(variables, x)
+    return SowCNN().apply(variables, x)
 
   @jax.jit
   def features(variables, x):
@@ -82,7 +129,7 @@ as "mutable" in the call to :code:`Module.apply`.
     # mutable during `apply`. The variables aren't actually mutated, instead
     # `apply` returns a second value, which is a dictionary of the modified
     # collections.
-    output, modified_variables = CNN().apply(variables, x, mutable=['intermediates'])
+    output, modified_variables = SowCNN().apply(variables, x, mutable=['intermediates'])
     return modified_variables['intermediates']['features']
 
   variables = init(jax.random.PRNGKey(0), batch)
@@ -98,7 +145,7 @@ can define all submodules in ``setup`` and avoid using ``nn.compact`` altogether
 
 .. testcode::
 
-  class CNN(nn.Module):
+  class RefactoredCNN(nn.Module):
     def setup(self):
       self.features = Features()
       self.classifier = Classifier()
@@ -131,14 +178,12 @@ can define all submodules in ``setup`` and avoid using ``nn.compact`` altogether
 
   @jax.jit
   def init(key, x):
-    variables = CNN().init(key, x)
+    variables = RefactoredCNN().init(key, x)
     return variables['params']
 
   @jax.jit
   def features(params, x):
-    # Proposal #686 should allow for this alternative:
-    #   return CNN().features.apply({"params": params['features']})
-    return CNN().apply({"params": params}, x,
+    return RefactoredCNN().apply({"params": params}, x,
       method=lambda module, x: module.features(x))
 
   params = init(jax.random.PRNGKey(0), batch)
@@ -156,22 +201,6 @@ As a debugging and inspection tool it is very useful but using the other pattern
 In the following code example we check if any intermediate activations are non-finite (NaN or infinite):
 
 .. testcode::
-
-  class CNN(nn.Module):
-    @nn.compact
-    def __call__(self, x):
-      x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-      x = nn.relu(x)
-      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-      x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-      x = nn.relu(x)
-      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-      x = x.reshape((x.shape[0], -1))  # flatten
-      x = nn.Dense(features=256)(x)
-      x = nn.relu(x)
-      x = nn.Dense(features=10)(x)
-      x = nn.log_softmax(x)
-      return x
 
   @jax.jit
   def init(key, x):
@@ -215,7 +244,7 @@ your model more explicitly.
         x = layer(x)
       return x
 
-  def CNN():
+  def SeqCNN():
     return Sequential([
       nn.Conv(features=32, kernel_size=(3, 3)),
       nn.relu,
@@ -232,12 +261,12 @@ your model more explicitly.
 
   @jax.jit
   def init(key, x):
-    variables = CNN().init(key, x)
+    variables = SeqCNN().init(key, x)
     return variables['params']
 
   @jax.jit
   def features(params, x):
-    return Sequential(CNN().submodules[0:7]).apply({"params": params}, x)
+    return Sequential(SeqCNN().submodules[0:7]).apply({"params": params}, x)
 
   params = init(jax.random.PRNGKey(0), batch)
   features(params, batch)
