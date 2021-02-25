@@ -1027,14 +1027,22 @@ class ModuleTest(absltest.TestCase):
   def test_sow(self):
     class Foo(nn.Module):
       @nn.compact
-      def __call__(self, x):
-        self.sow('intermediates', 'h', x)
-        self.sow('intermediates', 'h', 2 * x)
+      def __call__(self, x, **sow_args):
+        self.sow('intermediates', 'h', x, **sow_args)
+        self.sow('intermediates', 'h', 2 * x, **sow_args)
         return 3 * x
 
     _, state = Foo().apply({}, 1, mutable=['intermediates'])
     self.assertEqual(state, {
       'intermediates': {'h': (1, 2)}
+    })
+    _, state = Foo().apply(
+        {}, 1,
+        init_fn=lambda: 0,
+        reduce_fn=lambda a, b: a + b,
+        mutable=['intermediates'])
+    self.assertEqual(state, {
+      'intermediates': {'h': 3}
     })
     self.assertEqual(Foo().apply({}, 1), 3)
 
