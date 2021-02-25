@@ -916,10 +916,6 @@ class Module:
     Collections can be used to collect intermediate values without
     the overhead of explicitly passing a container through each Module call.
 
-    By default the value is stored in a tuple and each stored value
-    is appended at the end. This way all intermediates can be tracked when
-    the same module is called multiple times.
-
     If the target collection is not mutable `sow` behaves like a no-op
     and returns `False`.
 
@@ -931,9 +927,26 @@ class Module:
           h = nn.Dense(4)(x)
           self.sow('intermediates', 'h', h)
           return nn.Dense(2)(h)
-
       y, state = Foo.apply(params, x, mutable=['intermediates'])
       print(state['intermediates'])  # {'h': (...,)}
+    
+    By default the values are stored in a tuple and each stored value
+    is appended at the end. This way all intermediates can be tracked when
+    the same module is called multiple times. Alternatively, a custom
+    init/reduce function can be passed::
+
+      class Foo(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          init_fn = lambda: 0
+          reduce_fn = lambda a, b: a + b
+          self.sow('intermediates', x, h,
+                   init_fn=init_fn, reduce_fn=reduce_fn)
+          self.sow('intermediates', x * 2, h,
+                   init_fn=init_fn, reduce_fn=reduce_fn)
+          return x
+      y, state = Foo.apply(params, 1, mutable=['intermediates'])
+      print(state['intermediates'])  # ==> {'h': 3}
 
     Args:
       col: the variable collection.
