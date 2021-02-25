@@ -1024,6 +1024,48 @@ class ModuleTest(absltest.TestCase):
         return x+1
     self.assertTrue(isinstance(X.Hyper(a=1), X.Hyper))
 
+  def test_sow(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, **sow_args):
+        self.sow('intermediates', 'h', x, **sow_args)
+        self.sow('intermediates', 'h', 2 * x, **sow_args)
+        return 3 * x
+
+    _, state = Foo().apply({}, 1, mutable=['intermediates'])
+    self.assertEqual(state, {
+      'intermediates': {'h': (1, 2)}
+    })
+    _, state = Foo().apply(
+        {}, 1,
+        init_fn=lambda: 0,
+        reduce_fn=lambda a, b: a + b,
+        mutable=['intermediates'])
+    self.assertEqual(state, {
+      'intermediates': {'h': 3}
+    })
+    self.assertEqual(Foo().apply({}, 1), 3)
+
+  def test_capture_intermediates(self):
+    class Bar(nn.Module):
+      def test(self, x):
+        return x + 1
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return Bar().test(x) + 1
+
+    _, state = Foo().apply({}, 1, capture_intermediates=True)
+    self.assertEqual(state, {
+      'intermediates': {'__call__': (3,)}
+    })
+    fn = lambda mdl, _: isinstance(mdl, Bar)
+    _, state = Foo().apply({}, 1, capture_intermediates=fn)
+    self.assertEqual(state, {
+      'intermediates': {'Bar_0': {'test': (2,)}}
+    })
+
 
 if __name__ == '__main__':
   absltest.main()
