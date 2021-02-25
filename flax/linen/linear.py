@@ -27,7 +27,7 @@ import numpy as np
 
 
 PRNGKey = Any
-Shape = Tuple[int]
+Shape = Iterable[int]
 Dtype = Any  # this could be a real type?
 Array = Any
 

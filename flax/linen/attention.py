@@ -259,7 +259,7 @@ class MultiHeadDotProductAttention(Module):
         broadcast_dropout=self.broadcast_dropout,
         deterministic=deterministic,
         dtype=self.dtype,
-        precision=self.precision)
+        precision=self.precision)  # pytype: disable=wrong-keyword-args
 
     # back to the original inputs dimensions
     out = DenseGeneral(features=features,

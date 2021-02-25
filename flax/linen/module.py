@@ -42,6 +42,7 @@ PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
 Array = Any    # pylint: disable=invalid-name
 T = TypeVar('T')
+_CallableT = TypeVar('_CallableT', bound=Callable)
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
@@ -186,7 +187,7 @@ def _freeze_attr(val: Any) -> Any:
 
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
-def compact(fun: Callable) -> Callable:
+def compact(fun: _CallableT) -> _CallableT:
   """Marks the given module method allowing inlined submodules. 
   
   Methods wrapped in @compact can define submodules directly within the method.
