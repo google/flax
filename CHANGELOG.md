@@ -8,34 +8,56 @@ vNext
  -
  -
  -
- - Bug Fix `flax.core.apply` and `Module.apply`. Now it returns a tuple containing the output and a frozen empty collection when `mutable` is specified as an empty list.
- -
- -
- - Add `sow` method to `Module` and `capture_intermediates` argument to `Module.apply`.
-   See [howto](https://flax.readthedocs.io/en/latest/howtos/extracting_intermediates.html) for usage patterns.
- -
- -
- -
- - Some Module arguments can now be passed either as dataclass attribute or
-   as argument to `__call__`. See [design note](https://flax.readthedocs.io/en/latest/design_notes/arguments.html)
- - `use_running_average` and `deterministic` no longer have a default. They should be passed explicitly
- - `broadcast_dims` is now a attribute to `Dropout` instead of a `__call__` argument.
  -
  -
  -
  -
  -
  -
- - Added OptimizedLSTM: ~33% faster than the original LSTM when using <=1024 units
- - Bug Fix `Scope.variable` mutability check, before a variable could only be initialized
-   if the 'params' collection was mutable.
- - Linen `Module` instances are now Frozen after `setup` has been called.
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+
+0.3.1
+------
+
+Many improvements to Linen! Notably, there's a clean API for extracting intermediates from modules
+defined using `@nn.compact`, a more ergonomic API for using Batch Norm and Dropout in modules
+defined using `setup`, support for `MultiOptimizer` with Linen, and multiple safety, performance
+and error message improvements.
+
+Breaking Changes:
+ - Linen `Module` instances are now frozen after `setup` has been called.
    Previously mutations after setup could be dropped silently. Now the stateless requirement
    is enforced by raising a TypeError in `__setattr__` after `setup`.
  - Pytrees of dicts and lists are transformed into FrozenDict and tuples during attribute assignment.
    This avoids undetected submodules and inner state. 
+ - Bug Fix `flax.core.apply` and `Module.apply`. Now it returns a tuple containing the output and a frozen empty
+   collection when `mutable` is specified as an empty list.
+ - `broadcast_dims` is now a attribute to `Dropout` instead of a `__call__` argument.
+ - `use_running_average` and `deterministic` no longer have a default. They should be passed explicitly
+ - Bug Fix `Scope.variable` mutability check, before a variable could only be initialized
+   if the 'params' collection was mutable.
+
+Other Improvements:
+ - Some Module arguments can now be passed either as dataclass attribute or
+   as argument to `__call__`. See [design note](https://flax.readthedocs.io/en/latest/design_notes/arguments.html)
+ - Add `sow` method to `Module` and `capture_intermediates` argument to `Module.apply`.
+   See [howto](https://flax.readthedocs.io/en/latest/howtos/extracting_intermediates.html) for usage patterns.
  - Add support for dict/FrozenDict when using `ModelParamTraversal`
    As a result `MultiOptimizer` can be used properly with linen modules.
+ - Added OptimizedLSTM: ~33% faster than the original LSTM when using <=1024 units
  - Added `is_mutable()` method to `Variable` and `is_mutable_collection()` to `flax.linen.Module`.
 
 v0.3
