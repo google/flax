@@ -50,14 +50,16 @@ metrics computation, but they can be found in the `MNIST example`_.
       return x
 
   def get_datasets():
-    """Load Dummy MNIST train and test datasets into memory."""
-    ds_builder = tfds.testing.DummyMnist()
-    ds_builder.download_and_prepare()
-    train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
-    test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
+    """Load fake MNIST data."""
+    # Converts dataset from list of dicts to dict of lists.
+    to_dict = lambda x: {k: np.array([d[k] for d in x]) for k in ['image', 'label']}
+    with tfds.testing.mock_data(num_examples=100):
+      train_ds = to_dict(tfds.as_numpy(tfds.load('mnist', split='train')))
+      test_ds = to_dict(tfds.as_numpy(tfds.load('mnist', split='test')))
     train_ds['image'] = jnp.float32(train_ds['image']) / 255.
     test_ds['image'] = jnp.float32(test_ds['image']) / 255.
     return train_ds, test_ds
+
 
   def onehot(labels, num_classes=10):
     x = (labels[..., None] == jnp.arange(num_classes)[None])
