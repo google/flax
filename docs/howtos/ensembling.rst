@@ -32,7 +32,6 @@ metrics computation, but they can be found in the `MNIST example`_.
   import functools
 
   num_epochs = 1
-  tfds.testing.mock_data(num_examples=8, data_dir='/tmp/tfds_mock_data')
 
   class CNN(nn.Module):
     @nn.compact
@@ -51,8 +50,8 @@ metrics computation, but they can be found in the `MNIST example`_.
       return x
 
   def get_datasets():
-    """Load MNIST train and test datasets into memory."""
-    ds_builder = tfds.builder('mnist')
+    """Load Dummy MNIST train and test datasets into memory."""
+    ds_builder = tfds.testing.DummyMnist()
     ds_builder.download_and_prepare()
     train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
     test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
@@ -196,7 +195,7 @@ Next we transform the ``train_epoch`` function.
   :title_left: Single-model
   :title_right: Ensemble
 
-  def train_epoch(optimizer, train_ds, rng, batch_size=128):
+  def train_epoch(optimizer, train_ds, rng, batch_size=10):
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
 
@@ -219,7 +218,7 @@ Next we transform the ``train_epoch`` function.
 
     return optimizer, epoch_metrics_np
   ---
-  def train_epoch(optimizer, train_ds, rng, batch_size=128):
+  def train_epoch(optimizer, train_ds, rng, batch_size=10):
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
 
@@ -234,8 +233,7 @@ Next we transform the ``train_epoch`` function.
       batch_metrics.append(metrics)
 
     batch_metrics_np = jax.device_get(batch_metrics)
-    batch_metrics_np = jax.tree_multimap(lambda *xs: np.array(xs), #!
-                                         *batch_metrics_np) #!
+    batch_metrics_np = jax.tree_multimap(lambda *xs: np.array(xs), *batch_metrics_np) #!
     epoch_metrics_np = {
            k: np.mean(batch_metrics_np[k], axis=0) #!
            for k in batch_metrics_np} #!

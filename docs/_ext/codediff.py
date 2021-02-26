@@ -105,13 +105,14 @@ class CodeDiffDirective(SphinxDirective):
     test_node = nodes.comment(test_code, test_code, testnodetype='testcode')
     # Set the source info so the error message is correct when testing.
     self.set_source_info(test_node)
+    test_node['options'] = {}
     test_node['language'] = 'python3'
 
     # The table node is the side-by-side diff view that will be shown on RTD.    
     table_node = nodes.paragraph()
     self.content = ViewList(table_code, self.content.parent)
     self.state.nested_parse(self.content, self.content_offset, table_node)
-    
+
     return [table_node, test_node]
 
 def setup(app):
