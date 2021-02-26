@@ -6,8 +6,12 @@ jaxlib>=0.1.41
 ipykernel
 nbsphinx
 recommonmark
-# The next packages are for notebooks
+# The next packages are for notebooks.
 matplotlib
 sklearn
-# Must install flax itself for notebook execution and auotdocs to work
+# Must install flax itself for notebook execution and autodocs to work.
 .
+# The next packages are used in testcode blocks.
+ml_collections
+tensorflow
+tensorflow_datasets

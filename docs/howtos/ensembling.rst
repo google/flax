@@ -14,30 +14,39 @@ metrics computation, but they can be found in the `MNIST example`_.
 
 .. testsetup::
 
+  # Since this HOWTO's code is part of our tests (which are often ran locally on
+  # CPU), we use a very small CNN, we only run for 1 epoch, and we make sure we
+  # are using mock data.
+
   from absl import logging
+  from flax import jax_utils
   from flax import linen as nn
   from flax import optim
   from flax.metrics import tensorboard
   import jax
   import jax.numpy as jnp
+  from jax import random
   import ml_collections
   import numpy as np
   import tensorflow_datasets as tfds
   import functools
 
+  num_epochs = 1
+  tfds.testing.mock_data(num_examples=8, data_dir='/tmp/tfds_mock_data')
+
   class CNN(nn.Module):
     @nn.compact
     def __call__(self, x):
-      x = nn.Conv(features=32, kernel_size=(3, 3))(x)
+      x = nn.Conv(features=1, kernel_size=(3, 3))(x)
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-      x = nn.Conv(features=64, kernel_size=(3, 3))(x)
+      x = nn.Conv(features=1, kernel_size=(3, 3))(x)
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = x.reshape((x.shape[0], -1))  # flatten
-      x = nn.Dense(features=256)(x)
+      x = nn.Dense(features=1)(x)
       x = nn.relu(x)
-      x = nn.Dense(features=10)(x)
+      x = nn.Dense(features=1)(x)
       x = nn.log_softmax(x)
       return x
 
@@ -111,7 +120,7 @@ setting.
   :title_right: Ensemble
 
   # #!
-  def create_optimizer(params, learning_rate=0.1, momentum=0.9):
+  def create_optimizer(params, learning_rate=0.1, beta=0.9):
     optimizer_def = optim.Momentum(learning_rate=learning_rate,
                                    beta=beta)
     optimizer = optimizer_def.create(params)
@@ -142,7 +151,7 @@ setting.
     return summary['loss'], summary['accuracy']
   ---
   @functools.partial(jax.pmap, static_broadcasted_argnums=(1, 2)) #!
-  def create_optimizer(params, learning_rate=0.1, momentum=0.9):
+  def create_optimizer(params, learning_rate=0.1, beta=0.9):
     optimizer_def = optim.Momentum(learning_rate=learning_rate,
                                    beta=beta)
     optimizer = optimizer_def.create(params)
@@ -191,7 +200,7 @@ Next we transform the ``train_epoch`` function.
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
 
-    perms = jax.random.permutation(rng, len(train_ds['image']))
+    perms = random.permutation(rng, len(train_ds['image']))
     perms = perms[:steps_per_epoch * batch_size]
     perms = perms.reshape((steps_per_epoch, batch_size))
     batch_metrics = []
@@ -214,7 +223,7 @@ Next we transform the ``train_epoch`` function.
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
 
-    perms = jax.random.permutation(rng, len(train_ds['image']))
+    perms = random.permutation(rng, len(train_ds['image']))
     perms = perms[:steps_per_epoch * batch_size]
     perms = perms.reshape((steps_per_epoch, batch_size))
     batch_metrics = []
@@ -257,12 +266,12 @@ than the train dataset so we can do this for the entire dataset directly.
   train_ds, test_ds = get_datasets()
 
 
-  rng, init_rng = jax.random.split(jax.random.PRNGKey(0))
+  rng, init_rng = random.split(random.PRNGKey(0))
   params = get_initial_params(init_rng) #!
-  optimizer = create_optimizer(params)
+  optimizer = create_optimizer(params, learning_rate=0.1, momentum=0.9) #!
 
-  for epoch in range(10):
-    rng, input_rng = jax.random.split(rng)
+  for epoch in range(num_epochs):
+    rng, input_rng = random.split(rng)
     optimizer, _ = train_epoch(optimizer, train_ds, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
 
@@ -272,19 +281,21 @@ than the train dataset so we can do this for the entire dataset directly.
   train_ds, test_ds = get_datasets()
   test_ds = jax_utils.replicate(test_ds) #!
   
-  rng, init_rng = jax.random.split(jax.random.PRNGKey(0))
+  rng, init_rng = random.split(random.PRNGKey(0))
   params = get_initial_params(random.split(rng, jax.device_count())) #!
-  optimizer = create_optimizer(params)
+  optimizer = create_optimizer(params, 0.1, 0.9) #!
 
-  for epoch in range(10):
-    rng, input_rng = jax.random.split(rng)
+  for epoch in range(num_epochs):
+    rng, input_rng = random.split(rng)
     optimizer, _ = train_epoch(optimizer, train_ds, input_rng)
     loss, accuracy = eval_model(optimizer.target, test_ds)
 
     logging.info('eval epoch: %d, loss: %s, accuracy: %s', #!
                 epoch, loss, accuracy * 100)
 
-
+Note that ``create_optimizer`` is using positional arguments in the ensembling
+case. This is because we defined those arguments as static broadcasted
+arguments, and those should be positional rather then keyword arguments.
 
 .. _jax.jit: https://jax.readthedocs.io/en/latest/notebooks/thinking_in_jax.html#To-JIT-or-not-to-JIT
 .. _jax.pmap: https://jax.readthedocs.io/en/latest/jax.html#jax.pmap

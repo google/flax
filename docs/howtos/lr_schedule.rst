@@ -18,6 +18,10 @@ We will show you how to...
 The triangular schedule makes your learning rate vary as a triangle wave during training, so over the course of a period (``steps_per_cycle``
 training steps) the value will start at ``lr_min``, increase linearly to ``lr_max`` and then decrease again to ``lr_min``.
 
+.. testsetup::
+
+  import jax
+
 .. testcode::
   
   def create_triangular_schedule(lr_min, lr_max, steps_per_cycle):
