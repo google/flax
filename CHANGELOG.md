@@ -32,7 +32,7 @@ vNext
 0.3.1
 ------
 
-Many improvements to Linen, and the old `flax.nn` is officially reprecated! 
+Many improvements to Linen, and the old `flax.nn` is officially deprecated! 
 
 Notably, there's a clean API for extracting intermediates from modules
 defined using `@nn.compact`, a more ergonomic API for using Batch Norm and Dropout in modules
