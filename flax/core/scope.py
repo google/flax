@@ -213,6 +213,10 @@ class Variable(Generic[T]):
     """Updates the value of this Variable."""
     self.scope.put_variable(self.collection, self.name, value)
 
+  def is_mutable(self) -> bool:
+    """Checks if this Variable is mutable."""
+    return self.scope.is_mutable_collection(self.collection)
+
 
 class Scope:
   """A Scope allows easy access to variables and manages RNGS of a neural network layer.
@@ -594,18 +598,18 @@ def apply(fn: Callable[..., Any],
     if not _is_valid_variables(variables):
       raise ValueError('The first argument passed to an apply function '
                        'should be a dictionary of collections. '
-                       'Each collection should be a `FrozenDict` with string '
-                       'keys.')
+                       'Each collection should be a dictionary '
+                       'with string keys.')
     if rngs is not None and not _is_valid_rngs(rngs):
       raise ValueError('rngs should be a dictionary mapping strings to '
                        '`jax.PRNGKey`.')
     new_variables = _unfreeze_variables(variables, mutable)
     with Scope(new_variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
-    if mutable:
-      mutated_variables = {
-          k: v for k, v in new_variables.items() if in_filter(mutable, k)
-      }
+    if mutable is not False:
+      mutated_variables = {k: v
+                           for k, v in new_variables.items()
+                           if in_filter(mutable, k)}
       return y, freeze(mutated_variables)
     else:
       return y
@@ -639,7 +643,7 @@ def init(fn: Callable[..., Any],
 
 
 def _is_valid_collection(col: VariableDict):
-  if not isinstance(col, FrozenDict):
+  if not isinstance(col, (FrozenDict, dict)):
     return False
   for name in col.keys():
     # Any value can be stored in a collection so only keys can be verified.

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Machine Translation example.
+"""Language Modeling example.
 
-This script trains a Transformer on a WMT dataset.
+This script trains a Transformer on a LM1B dataset.
 """
 
 # pytype: disable=wrong-arg-count
@@ -30,13 +30,13 @@ from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
 from flax import optim
-import bleu
-import decode
 import input_pipeline
 import models
+import temperature_sampler
 from flax.training import checkpoints
 from flax.training import common_utils
 import jax
+from jax import random
 import jax.numpy as jnp
 import ml_collections
 import numpy as np
@@ -193,30 +193,24 @@ def train_step(optimizer,
   # metadata.
   # if such features are not present they are ignored and the example is treated
   # like a normal, unpacked sequence example.
-  train_keys = [
-      "inputs", "targets", "inputs_position", "targets_position",
-      "inputs_segmentation", "targets_segmentation"
-  ]
-  (inputs, targets, inputs_positions, targets_positions, inputs_segmentation,
-   targets_segmentation) = [batch.get(k, None) for k in train_keys]
+  train_keys = ["inputs", "inputs_position", "inputs_segmentation"]
+  (inputs, inputs_positions, inputs_segmentation
+   ) = [batch.get(k, None) for k in train_keys]
 
-  weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
+  weights = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)
 
   dropout_rng = jax.random.fold_in(dropout_rng, optimizer.state.step)
 
   def loss_fn(params):
     """loss function used for training."""
-    logits = models.Transformer(config).apply(
+    logits = models.TransformerLM(config).apply(
         {"params": params},
         inputs,
-        targets,
         inputs_positions=inputs_positions,
-        targets_positions=targets_positions,
         inputs_segmentation=inputs_segmentation,
-        targets_segmentation=targets_segmentation,
         rngs={"dropout": dropout_rng})
 
-    loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights,
+    loss, weight_sum = compute_weighted_cross_entropy(logits, inputs, weights,
                                                       label_smoothing)
     mean_loss = loss / weight_sum
     return mean_loss, logits
@@ -227,7 +221,7 @@ def train_step(optimizer,
   (_, logits), grad = grad_fn(optimizer.target)
   grad = jax.lax.pmean(grad, "batch")
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
-  metrics = compute_metrics(logits, targets, weights)
+  metrics = compute_metrics(logits, inputs, weights)
   metrics["learning_rate"] = lr
 
   return new_optimizer, metrics
@@ -235,80 +229,59 @@ def train_step(optimizer,
 
 def eval_step(params, batch, config, label_smoothing=0.0):
   """Calculate evaluation metrics on a batch."""
-  inputs, targets = batch["inputs"], batch["targets"]
-  weights = jnp.where(targets > 0, 1.0, 0.0)
-  logits = models.Transformer(config).apply({"params": params}, inputs, targets)
+  inputs = batch["inputs"]
+  weights = jnp.where(inputs > 0, 1.0, 0.0)
+  logits = models.TransformerLM(config).apply({"params": params}, inputs)
 
-  return compute_metrics(logits, targets, weights, label_smoothing)
-
-
-def initialize_cache(inputs, max_decode_len, config):
-  """Initialize a cache for a given input shape and max decode length."""
-  target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
-  initial_variables = models.Transformer(config).init(
-      jax.random.PRNGKey(0), jnp.ones(inputs.shape, config.dtype),
-      jnp.ones(target_shape, config.dtype))
-  return initial_variables["cache"]
+  return compute_metrics(logits, inputs, weights, label_smoothing)
 
 
 def predict_step(inputs,
                  params,
-                 cache,
+                 rngkey,
                  eos_id,
                  max_decode_len,
                  config,
-                 beam_size=4):
-  """Predict translation with fast decoding beam search on a batch."""
-  # Prepare transformer fast-decoder call for beam search: for beam search, we
-  # need to set up our decoder model to handle a batch size equal to
-  # batch_size * beam_size, where each batch item"s data is expanded in-place
-  # rather than tiled.
-  # i.e. if we denote each batch element subtensor as el[n]:
-  # [el0, el1, el2] --> beamsize=2 --> [el0,el0,el1,el1,el2,el2]
-  encoded_inputs = decode.flat_batch_beam_expand(
-      models.Transformer(config).apply({"params": params},
-                                       inputs,
-                                       method=models.Transformer.encode),
-      beam_size)
-  raw_inputs = decode.flat_batch_beam_expand(inputs, beam_size)
+                 temperature,
+                 top_k):
+  """Predict language model on a batch."""
+  target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
+  initial_variables = models.TransformerLM(config).init(
+      jax.random.PRNGKey(0),
+      jnp.ones(target_shape, config.dtype))
+  cache = initial_variables["cache"]
 
   def tokens_ids_to_logits(flat_ids, flat_cache):
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
-    flat_logits, new_vars = models.Transformer(config).apply(
+    flat_logits, new_vars = models.TransformerLM(config).apply(
         {
             "params": params,
             "cache": flat_cache
         },
-        encoded_inputs,
-        raw_inputs,  # only needed for input padding mask
         flat_ids,
-        mutable=["cache"],
-        method=models.Transformer.decode)
+        mutable=["cache"])
     new_flat_cache = new_vars["cache"]
     # Remove singleton sequence-length dimension:
-    # [batch * beam, 1, vocab] --> [batch * beam, vocab]
+    # [batch, 1, vocab] --> [batch, vocab]
     flat_logits = flat_logits.squeeze(axis=1)
     return flat_logits, new_flat_cache
 
   # Using the above-defined single-step decoder function, run a
   # beam search over possible sequences given input encoding.
-  beam_seqs, _ = decode.beam_search(
+  seqs = temperature_sampler.temperature_sample(
       inputs,
       cache,
       tokens_ids_to_logits,
-      beam_size=beam_size,
-      alpha=0.6,
-      eos_id=eos_id,
-      max_decode_len=max_decode_len)
+      rngkey,
+      temperature=temperature,
+      topk=top_k,
+      eos_token=eos_id)
 
-  # Beam search returns [n_batch, n_beam, n_length + 1] with beam dimension
-  # sorted in increasing order of log-probability.
-  # Return the highest scoring beam sequence, drop first dummy 0 token.
-  return beam_seqs[:, -1, 1:]
+  return seqs
 
 
-# Utils for prediction and BLEU calculation
+# Utils for prediction
 # -----------------------------------------------------------------------------
 
 
@@ -361,46 +334,44 @@ def evaluate(*, p_eval_step, target, eval_ds: tf.data.Dataset,
   return eval_summary
 
 
-def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, target,
-                                 predict_ds: tf.data.Dataset, decode_tokens,
-                                 max_predict_length: int):
-  """Translates the `predict_ds` and calculates the BLEU score."""
+def generate_prediction(*, p_pred_step, target,
+                        tokenized_prompts,
+                        eos_id,
+                        inference_rng,
+                        decode_tokens,
+                        max_predict_length: int):
+  """Generate text from the prompt."""
   n_devices = jax.local_device_count()
-  logging.info("Translating evaluation dataset.")
-  sources, references, predictions = [], [], []
-  for pred_batch in predict_ds:
-    pred_batch = jax.tree_map(lambda x: x._numpy(), pred_batch)  # pylint: disable=protected-access
-    # Handle final odd-sized batch by padding instead of dropping it.
-    cur_pred_batch_size = pred_batch["inputs"].shape[0]
-    if cur_pred_batch_size % n_devices:
-      padded_size = int(np.ceil(cur_pred_batch_size / n_devices) * n_devices)
-      pred_batch = jax.tree_map(
-          lambda x: pad_examples(x, padded_size),  # pylint: disable=cell-var-from-loop
-          pred_batch)
-    pred_batch = common_utils.shard(pred_batch)
-    cache = p_init_cache(pred_batch["inputs"])
-    predicted = p_pred_step(pred_batch["inputs"], target, cache, decode.EOS_ID,
-                            max_predict_length)
-    predicted = tohost(predicted)
-    inputs = tohost(pred_batch["inputs"])
-    targets = tohost(pred_batch["targets"])
-    # Iterate through non-padding examples of batch.
-    for i, s in enumerate(predicted[:cur_pred_batch_size]):
-      sources.append(decode_tokens(inputs[i]))
-      references.append(decode_tokens(targets[i]))
-      predictions.append(decode_tokens(s))
-  logging.info("Translation: %d predictions %d references %d sources.",
-               len(predictions), len(references), len(sources))
 
-  # Calculate BLEU score for translated eval corpus against reference.
-  bleu_matches = bleu.bleu_partial(references, predictions)
-  all_bleu_matches = per_host_sum_pmap(bleu_matches)
-  bleu_score = bleu.complete_bleu(*all_bleu_matches)
-  # Save translation samples for tensorboard.
-  exemplars = ""
-  for n in np.random.choice(np.arange(len(predictions)), 8):
-    exemplars += f"{sources[n]}\n\n{references[n]}\n\n{predictions[n]}\n\n"
-  return exemplars, bleu_score
+  logging.info("Generating text.")
+  predictions = []
+  # Use batch of prompts provided by user.
+  for pred_batch in jnp.array_split(
+      tokenized_prompts, int(np.ceil(len(tokenized_prompts) / n_devices))):
+    cur_pred_batch_size = pred_batch.shape[0]
+    if cur_pred_batch_size % n_devices:
+      padded_size = int(
+          np.ceil(cur_pred_batch_size / n_devices) * n_devices)
+      pred_batch = jax.tree_map(
+          lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
+    pred_batch = common_utils.shard(pred_batch)
+    inference_rng, sub_rng = random.split(inference_rng)
+    inference_rngs = random.split(sub_rng, n_devices)
+
+    predicted = p_pred_step(pred_batch, target, inference_rngs,
+                            eos_id, max_predict_length)
+    predicted = tohost(predicted)
+    # Iterate through non-padding examples of batch.
+    for s in predicted[:cur_pred_batch_size]:
+      prediction = decode_tokens(s)
+      logging.info("Sample: %s", str(prediction))
+      predictions.append(prediction)
+
+    # Save generated texts for tensorboard.
+    exemplars = ""
+    for prediction in predictions:
+      exemplars += f"{prediction}\n\n"
+  return exemplars
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
@@ -422,31 +393,36 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # Load Dataset
   # ---------------------------------------------------------------------------
   logging.info("Initializing dataset.")
-  train_ds, eval_ds, predict_ds, encoder = input_pipeline.get_wmt_datasets(
+  train_ds, eval_ds, _, encoder = input_pipeline.get_datasets(
       n_devices=jax.local_device_count(),
       config=config,
-      reverse_translation=config.reverse_translation,
       vocab_path=vocab_path)
 
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
-  eos_id = decode.EOS_ID  # Default Sentencepiece EOS token.
+  eos_id = temperature_sampler.EOS_ID  # Default Sentencepiece EOS token.
 
   def decode_tokens(toks):
     valid_toks = toks[:np.argmax(toks == eos_id) + 1].astype(np.int32)
     return encoder.detokenize(valid_toks).numpy().decode("utf-8")
 
-  if config.num_predict_steps > 0:
-    predict_ds = predict_ds.take(config.num_predict_steps)
+  def encode_strings(strs, max_len):
+    tokenized_batch = np.zeros((len(strs), max_len), np.int32)
+    for i, s in enumerate(strs):
+      toks = encoder.tokenize(s).numpy()
+      # Remove EOS token in prompt.
+      tokenized_batch[i, :toks.shape[0]-1] = toks[:-1]
+    return tokenized_batch
+
+  tokenized_prompts = encode_strings(
+      [config.prompts], config.max_predict_length)
 
   logging.info("Initializing model, optimizer, and step functions.")
-
   # Build Model and Optimizer
   # ---------------------------------------------------------------------------
   train_config = models.TransformerConfig(
       vocab_size=vocab_size,
       output_vocab_size=vocab_size,
-      share_embeddings=config.share_embeddings,
       logits_via_embedding=config.logits_via_embedding,
       dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
       emb_dim=config.emb_dim,
@@ -467,13 +443,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   start_step = 0
   rng = jax.random.PRNGKey(config.seed)
   rng, init_rng = jax.random.split(rng)
+  rng, inference_rng = random.split(rng)
   input_shape = (config.per_device_batch_size, config.max_target_length)
-  target_shape = (config.per_device_batch_size, config.max_target_length)
 
-  m = models.Transformer(eval_config)
+  m = models.TransformerLM(eval_config)
   initial_variables = jax.jit(m.init)(init_rng,
-                                      jnp.ones(input_shape, jnp.float32),
-                                      jnp.ones(target_shape, jnp.float32))
+                                      jnp.ones(input_shape, jnp.float32))
 
   # apply an optimizer to this tree
   optimizer_def = optim.Adam(
@@ -504,28 +479,24 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   learning_rate_fn = create_learning_rate_scheduler(
       base_learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
 
-  # compile multidevice versions of train/eval/predict step and cache init fn.
+  # compile multidevice versions of train/eval/predict step fn.
   p_train_step = jax.pmap(
       functools.partial(
           train_step,
           config=train_config,
-          learning_rate_fn=learning_rate_fn,
-          label_smoothing=config.label_smoothing),
+          learning_rate_fn=learning_rate_fn),
       axis_name="batch",
       donate_argnums=(0,))  # pytype: disable=wrong-arg-types
   p_eval_step = jax.pmap(
       functools.partial(
           eval_step, config=eval_config),
       axis_name="batch")
-  p_init_cache = jax.pmap(
-      functools.partial(
-          initialize_cache,
-          max_decode_len=config.max_predict_length,
-          config=predict_config),
-      axis_name="batch")
+
   p_pred_step = jax.pmap(
       functools.partial(
-          predict_step, config=predict_config, beam_size=config.beam_size),
+          predict_step, config=predict_config,
+          temperature=config.sampling_temperature,
+          top_k=config.sampling_top_k),
       axis_name="batch",
       static_broadcasted_argnums=(3, 4))  # eos token, max_length are constant
 
@@ -573,6 +544,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           denominator = metrics_sums.pop("denominator")
           summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
           summary["learning_rate"] = lr
+          summary["perplexity"] = jnp.clip(
+              jnp.exp(summary["loss"]), a_max=1.0e4)
           summary = {"train_" + k: v for k, v in summary.items()}
           writer.write_scalars(step, summary)
           train_metrics = []
@@ -583,18 +556,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
               target=optimizer.target,
               eval_ds=eval_ds,
               num_eval_steps=config.num_eval_steps)
+          # (clipped) perplexity after averaging log-perplexitie
+          eval_results["perplexity"] = jnp.clip(
+              jnp.exp(eval_results["loss"]), a_max=1.0e4)
           writer.write_scalars(
               step, {"eval_" + k: v for k, v in eval_results.items()})
 
-        with report_progress.timed("translate_and_bleu"):
-          exemplars, bleu_score = translate_and_calculate_bleu(
+        with report_progress.timed("generate_text"):
+          exemplars = generate_prediction(
               p_pred_step=p_pred_step,
-              p_init_cache=p_init_cache,
               target=optimizer.target,
-              predict_ds=predict_ds,
+              tokenized_prompts=tokenized_prompts,
+              eos_id=eos_id,
+              inference_rng=inference_rng,
               decode_tokens=decode_tokens,
               max_predict_length=config.max_predict_length)
-          writer.write_scalars(step, {"bleu": bleu_score})
           writer.write_texts(step, {"samples": exemplars})
 
       # Save a checkpoint on one host after every checkpoint_freq steps.

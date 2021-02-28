@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 from .. import struct
 from .base import OptimizerDef
 
@@ -32,8 +32,8 @@ class _RMSPropHyperParams:
 class _RMSPropParamState:
   """RMSProp parameter state"""
 
-  v: onp.ndarray
-  mg: onp.ndarray
+  v: np.ndarray
+  mg: np.ndarray
 
 
 class RMSProp(OptimizerDef):

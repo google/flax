@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Input pipeline for a WMT dataset."""
+"""Input pipeline for a LM1B dataset."""
 
 import os
 from typing import Dict, Optional, List, Union
@@ -30,29 +30,24 @@ Features = Dict[str, tf.Tensor]
 class NormalizeFeatureNamesOp:
   """Normalizes feature names to 'inputs' and 'targets'."""
 
-  def __init__(self, ds_info: tfds.core.DatasetInfo, reverse_translation: bool):
-    self.input_lang, self.target_lang = ds_info.supervised_keys
-    if reverse_translation:
-      self.input_lang, self.target_lang = self.target_lang, self.input_lang
+  def __init__(self, ds_info: tfds.core.DatasetInfo):
+    self.ds_info = ds_info
 
   def __call__(self, features: Features) -> Features:
-    features['inputs'] = features.pop(self.input_lang)
-    features['targets'] = features.pop(self.target_lang)
+    features['inputs'] = features.pop('text')
+    # Unnecessary step used for uniformizing with examples/wmt.
+    features['targets'] = features['inputs']
     return features
 
 
 def get_raw_dataset(dataset_builder: tfds.core.DatasetBuilder,
-                    split: str,
-                    *,
-                    reverse_translation: bool = False) -> tf.data.Dataset:
-  """Loads a raw WMT dataset and normalizes feature keys.
+                    split: str) -> tf.data.Dataset:
+  """Loads a raw text dataset and normalizes feature keys.
 
   Args:
-    dataset_builder: TFDS dataset builder that can build `slit`.
+    dataset_builder: TFDS dataset builder that can build `split`.
     split: Split to use. This must be the full split. We shard the split across
       multiple hosts and currently don't support sharding subsplits.
-    reverse_translation: bool: whether to reverse the translation direction.
-      e.g. for 'de-en' this translates from english to german.
 
   Returns:
     Dataset with source and target language features mapped to 'inputs' and
@@ -63,8 +58,7 @@ def get_raw_dataset(dataset_builder: tfds.core.DatasetBuilder,
       split, num_examples, drop_remainder=False)
   ds = dataset_builder.as_dataset(split=per_host_split, shuffle_files=False)
   ds = ds.map(
-      NormalizeFeatureNamesOp(
-          dataset_builder.info, reverse_translation=reverse_translation),
+      NormalizeFeatureNamesOp(dataset_builder.info),
       num_parallel_calls=AUTOTUNE)
   return ds
 
@@ -264,15 +258,15 @@ def _pack_with_tf_ops(dataset: tf.data.Dataset, keys: List[str],
 # -----------------------------------------------------------------------------
 # Main dataset prep routines.
 # -----------------------------------------------------------------------------
-def preprocess_wmt_data(dataset,
-                        shuffle: bool,
-                        num_epochs: Optional[int] = 1,
-                        pack_examples: bool = True,
-                        shuffle_buffer_size: int = 1024,
-                        max_length: int = 512,
-                        batch_size: int = 256,
-                        drop_remainder: bool = True,
-                        prefetch_size: int = AUTOTUNE):
+def preprocess_data(dataset,
+                    shuffle: bool,
+                    num_epochs: Optional[int] = 1,
+                    pack_examples: bool = True,
+                    shuffle_buffer_size: int = 1024,
+                    max_length: int = 512,
+                    batch_size: int = 256,
+                    drop_remainder: bool = True,
+                    prefetch_size: int = AUTOTUNE):
   """Shuffle and batch/pack the given dataset."""
 
   def length_filter(max_len):
@@ -313,27 +307,22 @@ def preprocess_wmt_data(dataset,
   return dataset
 
 
-def get_wmt_datasets(config: ml_collections.ConfigDict,
-                     *,
-                     n_devices: int,
-                     reverse_translation: bool = True,
-                     vocab_path: Optional[str] = None):
+def get_datasets(config: ml_collections.ConfigDict,
+                 *,
+                 n_devices: int,
+                 vocab_path: Optional[str] = None):
   """Load and return dataset of batched examples for use during training."""
   if vocab_path is None:
-    vocab_path = os.path.expanduser('~/wmt_sentencepiece_model')
+    vocab_path = os.path.expanduser('~/lm1b_sentencepiece_model')
 
   train_ds_builder = tfds.builder(config.dataset_name)
-  train_data = get_raw_dataset(
-      train_ds_builder, 'train', reverse_translation=reverse_translation)
+  train_data = get_raw_dataset(train_ds_builder, 'train')
 
   if config.eval_dataset_name:
     eval_ds_builder = tfds.builder(config.eval_dataset_name)
   else:
     eval_ds_builder = train_ds_builder
-  eval_data = get_raw_dataset(
-      eval_ds_builder,
-      config.eval_split,
-      reverse_translation=reverse_translation)
+  eval_data = get_raw_dataset(eval_ds_builder, config.eval_split)
 
   # Tokenize data.
   sp_tokenizer = tokenizer.load_or_train_tokenizer(
@@ -347,8 +336,12 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
       tokenizer.TokenizeOp(sp_tokenizer), num_parallel_calls=AUTOTUNE)
 
   batch_size = config.per_device_batch_size * n_devices
+  if config.eval_per_device_batch_size > 0:
+    eval_batch_size = config.eval_per_device_batch_size * n_devices
+  else:
+    eval_batch_size = batch_size
 
-  train_ds = preprocess_wmt_data(
+  train_ds = preprocess_data(
       train_data,
       shuffle=True,
       num_epochs=None,
@@ -356,18 +349,18 @@ def get_wmt_datasets(config: ml_collections.ConfigDict,
       batch_size=batch_size,
       max_length=config.max_target_length)
 
-  eval_ds = preprocess_wmt_data(
+  eval_ds = preprocess_data(
       eval_data,
       shuffle=False,
       pack_examples=False,
-      batch_size=batch_size,
+      batch_size=eval_batch_size,
       max_length=config.max_eval_target_length)
 
-  predict_ds = preprocess_wmt_data(
+  predict_ds = preprocess_data(
       eval_data,
       shuffle=False,
       pack_examples=False,
-      batch_size=batch_size,
+      batch_size=eval_batch_size,
       max_length=config.max_predict_length,
       drop_remainder=False)
 

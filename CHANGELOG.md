@@ -8,10 +8,11 @@ vNext
  -
  -
  -
+ - Bug Fix `flax.core.apply` and `Module.apply`. Now it returns a tuple containing the output and a frozen empty collection when `mutable` is specified as an empty list.
  -
  -
- -
- -
+ - Add `sow` method to `Module` and `capture_intermediates` argument to `Module.apply`.
+   See [howto](https://flax.readthedocs.io/en/latest/howtos/extracting_intermediates.html) for usage patterns.
  -
  -
  -
@@ -35,6 +36,7 @@ vNext
    This avoids undetected submodules and inner state. 
  - Add support for dict/FrozenDict when using `ModelParamTraversal`
    As a result `MultiOptimizer` can be used properly with linen modules.
+ - Added `is_mutable()` method to `Variable` and `is_mutable_collection()` to `flax.linen.Module`.
 
 v0.3
 -----
