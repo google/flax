@@ -208,8 +208,9 @@ def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
   ds = dataset_builder.as_dataset(split=split, decoders={
       'image': tfds.decode.SkipDecoding(),
   })
-  ds.options().experimental_threading.private_threadpool_size = 48
-  ds.options().experimental_threading.max_intra_op_parallelism = 1
+  options = tf.data.Options()
+  options.experimental_threading.private_threadpool_size = 48
+  ds = ds.with_options(options)
 
   if cache:
     ds = ds.cache()
