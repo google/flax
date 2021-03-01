@@ -82,7 +82,10 @@ def _train_sentencepiece(dataset: tf.data.Dataset,
   Returns:
     path to the trained sentencepiece vocabulary model.
   """
-  abs_model_path = os.path.abspath(os.path.expanduser(model_path))
+  if model_path.startswith('gs://'):
+    abs_model_path = model_path
+  else:
+    abs_model_path = os.path.abspath(os.path.expanduser(model_path))
   fname, _ = _dump_chars_to_textfile(
       dataset, maxchars=maxchars, data_keys=data_keys)
   with tempfile.NamedTemporaryFile(
