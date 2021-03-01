@@ -11,7 +11,7 @@ This example uses linear learning rate warmup and inverse square root learning r
 * TensorFlow dataset `lm1b/subwords32k` will be downloaded and prepared automatically, if necessary.
 
 ### Supported setups
-The model should run with other configurations and hardware, but explicitely tested on the following.
+The model should run with other configurations and hardware, but explicitly tested on the following.
 
 | Hardware | Batch size | Training time | Perplexity  | TensorBoard.dev |
 | --- | --- | --- | --- | --- |
