@@ -32,4 +32,3 @@ from .stochastic import make_rng, stochastic, dropout, is_stochastic
 import warnings
 # Makes sure the user sees the warning, as deprecation warnings are silent by default
 warnings.filterwarnings("default", category=DeprecationWarning, module=__name__)
-warnings.warn("The `flax.nn` module is Deprecated, use `flax.linen` instead. Learn more and find an upgrade guide at https://github.com/google/flax/blob/master/flax/linen/README.md", DeprecationWarning)
