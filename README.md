@@ -41,7 +41,7 @@ forum](https://github.com/google/flax/discussions), or just let us
 know what you're working on!
 
 We expect to improve Flax, but we don't anticipate significant
-breaking changes to the core API. We use [Changelog](CHANGELOG.md)
+breaking changes to the core API. We use [Changelog](https://github.com/google/flax/tree/master/CHANGELOG.md)
 entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
