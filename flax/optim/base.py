@@ -464,22 +464,22 @@ class MultiOptimizer(OptimizerDef):
   def init_state(self, params):
     sub_states = []
     for traversal, opt in zip(self.traversals, self.sub_optimizers):
-      params_t = list(traversal.iterate(params))
+      params_t = tuple(traversal.iterate(params))
       state = opt.init_state(params_t)
       sub_states.append(state)
-    return sub_states
+    return tuple(sub_states)
 
   def apply_gradient(self, hyper_params, params, states, grads):
     new_params = params
     new_states = []
     it = zip(self.traversals, self.sub_optimizers, hyper_params, states)
     for focus, opt, hp, s in it:
-      p = list(focus.iterate(params))
-      g = list(focus.iterate(grads))
+      p = tuple(focus.iterate(params))
+      g = tuple(focus.iterate(grads))
       new_p, new_s = opt.apply_gradient(hp, p, s, g)
-      new_params = focus.set(new_p, new_params)
+      new_params = focus.set(list(new_p), new_params)
       new_states.append(new_s)
-    return new_params, new_states
+    return new_params, tuple(new_states)
 
   def update_hyper_params(self, **hyper_param_overrides):
     """Updates the hyper parameters with a set of overrides.
