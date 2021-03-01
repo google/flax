@@ -61,6 +61,65 @@ class FlaxError(Exception):
     super().__init__(error_msg)
 
 
+class AssignSubModuleOutsideSetupError(FlaxError):
+  """
+
+
+  """
+  def __init__(self):
+    super().__init__(f'You can only assign submodules to self in setup().')
+
+
+class SetAttributeFrozenModuleError(FlaxError):
+  """
+  You can only assign Flax Module attributes to `self` inside the
+  :meth:`Module.setup() <flax.linen.Module.setup>` method. Outside of that 
+  method, the Module instance is frozen (i.e., immutable), meaning you can't
+  modify it. This behavior is similar to frozen Python dataclasses.
+  
+  For instance, this error is raised in the following case::
+
+  class SomeModule(nn.Module):
+    @nn.compact
+    def __call__(self, x, num_features=10):
+      self.num_features = num_features
+      x = nn.Dense(self.num_features)(x)
+      return x
+
+  s = SomeModule().init(random.PRNGKey(0), jnp.ones((5, 5)))
+
+  This error is also thrown if you try to 
+  
+  """
+  def __init__(self):
+    super().__init__(f'Module instance is frozen outside of setup method.')
+
+
+class MultipleMethodsCompactError(FlaxError):
+  """
+  The ``@compact`` decorator may only be added to at most one method in a Flax
+  module. In order to resolve this, you can:
+  
+  * remove ``@compact`` and define submodules and variables using 
+    :meth:`Module.setup() <flax.linen.Module.setup>`.
+  * Use two separate modules that both have a unique ``@compact`` method.
+  """
+  def __init__(self):
+    super().__init__(f'Only one method per class can be @compact')
+
+class ReservedModuleAttributeError(FlaxError):
+  """
+  This error is thrown when creating a Flax Module that is using reserved
+  attributes. The following attributes are reserved:
+  
+  * parent: The parent Module of this Module.
+  * name: The name of this Module.
+  """
+  def __init__(self, annotations):
+    super().__init__(f'properties `parent` and `name` are reserved: '
+                     f'{annotations}')
+
+
 class InitModuleInvalidRngError(FlaxError):
   """
   This error is thrown if the RNG you provide to one of the ``init`` functions
@@ -118,10 +177,11 @@ class CallCompactUnboundModuleError(FlaxError):
   :meth:`Module.init() <flax.linen.Module.init>` to get initial variables)::
 
     # Create the initialized variables with a random key for inits:
-    params = test_dense.init(random.PRNGKey(0), jnp.ones((5,5)))['params']
+    from jax import random
+    vars = test_dense.init(random.PRNGKey(0), jnp.ones((5,5)))
 
     # Apply the NN to the variables + input to get output.
-    y = test_dense.apply(params, jnp.ones((5,5)))
+    y = test_dense.apply(vars, jnp.ones((5,5)))
 
 
   """

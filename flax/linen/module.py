@@ -380,8 +380,7 @@ class Module:
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
     if 'parent' in annotations or 'name' in annotations:
-      raise ValueError(
-          f'properties `parent` and `name` are reserved: {annotations}')
+      raise ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
     # argument behavior and ordering from dataclass class-transform.
@@ -412,10 +411,7 @@ class Module:
     n_compact_fns = len([method_name for method_name in methods
                          if hasattr(getattr(cls, method_name), 'compact')])
     if n_compact_fns > 1:
-      raise RuntimeError(
-          'Only one method per class can be @compact. You can remove @compact '
-          'and define submodules and variables in setup(), or use two '
-          'separate modules.')
+      raise MultipleMethodsCompactError()
 
   @classmethod
   def _wrap_module_methods(cls):
@@ -436,7 +432,7 @@ class Module:
     """Sets an attribute on this Module.
     
     We overload setattr solely to support pythonic naming via assignment of 
-    submodules in the special setup() function::
+    submodules in the special :meth:`setup` function::
 
       self.submodule_name = MyModule(...)
 
@@ -448,9 +444,13 @@ class Module:
       name: Attribute to set.
       val: Value of the attribute.
     """
+    print('name', name)
+    print('val', val)
+    print('setup called', self._state.setup_called)
     if name != '_state' and self._state.setup_called:
+      print('JAAA')
       # Raises a TypeError just like frozen python dataclasses.
-      raise TypeError("Module instance is frozen outside of setup method.")
+      raise SetAttributeFrozenModuleError()
 
     # We don't mess with the parent module.
     if name == 'parent':
@@ -464,8 +464,7 @@ class Module:
       for suffix, subvalue in _get_suffix_value_pairs(val):
         if isinstance(subvalue, Module):
           if not self._state.in_setup:
-            raise ValueError(
-                "You can only assign submodules to self in setup().")
+            raise AssignSubModuleOutsideSetupError()
           if subvalue.parent is _unspecified_parent:
             subvalue.parent = self
           elif subvalue.parent is not self:
