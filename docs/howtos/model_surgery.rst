@@ -14,7 +14,7 @@ Model Surgery
   from flax.core import unfreeze, freeze
 
 We will show how to get a flat dict of all the tensors, and then go back to a 
-nested, frozen dict. We show this for both Flax modules and optimizers.
+nested, frozen dict. This will be demonstrated for both Flax modules and optimizers.
 
 Surgery with Flax Modules
 --------------------------------
