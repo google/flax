@@ -128,7 +128,7 @@ After doing whatever you want, unflatten back:
 Surgey with Optimizers
 --------------------------------
 
-If you're loading from a flax optimizer, all of the variables live in
+If you're loading from a Flax optimizer, all of the variables live in
 ``optimizer.target``.
 
 .. testcode::
