@@ -41,7 +41,7 @@ forum](https://github.com/google/flax/discussions), or just let us
 know what you're working on!
 
 We expect to improve Flax, but we don't anticipate significant
-breaking changes to the core API. We use [Changelog](CHANGELOG.md)
+breaking changes to the core API. We use [Changelog](https://github.com/google/flax/tree/master/CHANGELOG.md)
 entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
@@ -159,7 +159,7 @@ To cite this repository:
   author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
   title = {{F}lax: A neural network library and ecosystem for {JAX}},
   url = {http://github.com/google/flax},
-  version = {0.3.0},
+  version = {0.3.2},
   year = {2020},
 }
 ```
