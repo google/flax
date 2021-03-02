@@ -43,8 +43,8 @@ Flax contains some optimizers in the `flax.optim` package, but that list is far
 from exhaustive and ideally we would instead use JAX optimizers from a dedicated
 PyPi package.
 
-Deepmind's [Optax] library is such a dedicated package that already implements a
-choice of interesting optimizers and it also provides a framework to compose new
+DeepMind already has a dedicated library — [Optax] — that implements a wide
+range of interesting optimizers and provides a framework to compose new
 optimizers from reusable gradient transformations.
 
 [Optax]: https://github.com/deepmind/optax
@@ -106,7 +106,7 @@ Note that unlike in the [previous API], the function `update_fn()` will be
 called directly in the train loop and must take care of processing the pytrees
 of parameters and optimizer state with a `jax.tree_multimap()`. For more
 complex optimizers this can become a hassle but we can provide a small
-functional helper that takes care of this:
+functional helper `@multimap` that takes care of this:
 
 ```python
   def update_fn(
@@ -128,10 +128,10 @@ Remarks:
 - We'll call `Optimizer` instances from the functional API `optim`, and refer
   to `flax.optim.Optimizer` instances from the [previous API] as `optimizer`
   for the remainder of this document.
-- As opposed to the [previous API], this API does not have the option to update
-  hyper parameters. When [using Optax], updating the hyper parameters is instead
+- Compared with the [previous API], this new API does not have the option to
+  update hyper parameters. With Optax, updating the hyper parameters is instead
   done by defining a schedule that takes care of updating the hyper parameters
-  during training.
+  during training (see the [using Optax] code snippet for an example).
 - Using this simple API directly makes the user code a bit more verbose than
   using the [previous API], but the difference is smaller with Linen. If you
   care about a boilerplate-free training loop see the proposed [Linen helper]
@@ -141,8 +141,9 @@ Remarks:
 [Using Optax]: #using-optax
 
 Optax is centered on the idea of composable gradient transformations. Since
-above [functional API] is based on Optax's interface it is straightforward to
-wrap an Optax transformation to comply with the `Optimizer` interface:
+above-mentioned [functional API] is based on Optax's interface it is
+straightforward to wrap an Optax transformation to comply with the `Optimizer`
+interface:
 
 ```python
 import optax
@@ -162,17 +163,25 @@ def optax_optimizer(tx: optax.GradientTransformation) -> Optimizer:
 
 tx = optax.chain(
     optax.trace(decay=0.9, nesterov=False),
-    optax.scale(-0.1),
+    optax.scale_by_schedule(lambda step: -get_learning_rate(step))
 )
 
 optim = optax_optimizer(tx)
 ```
 
-The only difference is that the Optax udpate function returns a transformed
-gradient and the updated optimizer state (which makes them composable), so we
-apply this to the parameters in a final step and return the updated parameters
-and optimizer state.
+Remarks:
 
+- The only difference is that the Optax udpate function returns a transformed
+  gradient and the updated optimizer state (which makes them composable), so we
+  apply this to the parameters in a final step and return the updated parameters
+  and optimizer state.
+- We can use a `get_learning_rate()` that returns the learning rate depending on
+  the step number when defining the Optax gradient update transformation. Above
+  code illustrates how this can be a drop-in replacement for [previous Code],
+  where this update function already exists (notice how we need to invert the
+  sign because we add the gradient update to the parameters). See also [Optax
+  #20](https://github.com/deepmind/optax/issues/20) for an ongoing discussion
+  about scheduling hyper parameters.
 
 ## Multi Optimizer
 [Multi Optimizer]: #multi-optimizer
@@ -286,26 +295,32 @@ for batch in ds.as_numpy_iterator():
 
 Remarks:
 
-- As opposed to the [previous API], we now can keep the entire `variables` 
+- Compared with the [previous API], we can now keep the entire `variables`
   including the `params` as an input and output to the `train_step()`.
 - Splitting `params` from `variables` is still necessary inside the train step
   because we only want to compute gradients with respect to `params` and not the
   entire `variables`.
 - A further complication is that we cannot provide `apply_fn` and
   `opt_update_fn` as direct arguments to the jitted function `train_step()`
-  because they're not valid JAX types.
+  because they're not valid JAX types - they need to be wrapped in a
+  `make_train_step()` function like above, or declared as `static_argnums` to
+  `jax.jit()`.
 
 ## Linen Helper
 [Linen helper]: #linen-helper
 
-While the above training loop is perfectly fine, there is quite a number of
-lines that are going to be exactly the same for every Linen training loop,
-namely the splitting of variables, passing in parameters separately because
-we only need the gradients for those, updating the parameters with the opimizer
-and then merging the updated parameters, any other updated collections, and
-the unchanged collections to generate the new variables. We also need to keep
-track of the model's `apply_fn`, the otpimizer's `update_fn`, and the optimizer
-state, in addition to the data.
+While the above training loop is perfectly fine, a number of lines are going to
+be exactly the same for every Linen training loop, namely:
+
+1. The splitting of variables.
+2. Passing in parameters separately because we only need the gradients for
+   those.
+3. Updating the parameters with the opimizer.
+4. Merging the updated parameters, any other updated collections, and the
+   unchanged collections to generate the new variables.
+5. We also need to keep track of the model's `apply_fn`, the otpimizer's
+   `update_fn`, and the optimizer state, in addition to the data.
+
 
 If we put all this state into a dataclass then we only have to pass around a
 single object (and the train data):
@@ -327,13 +342,8 @@ merging the variable collections appropriately:
   def update_with_loss(self, loss_fn, inputs, labels, *, mutable=False):
 
     def loss_from_params(params):
-      if mutable:
-        outputs, new_model_state = self.apply_fn(
-          self.variables.copy(dict(params=params)), inputs, mutable=mutable)
-      else:
-        outputs = self.apply_fn(
-          self.variables.copy(dict(params=params)), inputs, mutable=mutable)
-        new_model_state = {}
+      outputs, new_model_state = self.apply_fn(
+        self.variables.copy(dict(params=params)), inputs, mutable=mutable or [])
       loss = loss_fn(inputs, outputs, labels)
       return loss, new_model_state
 
@@ -357,7 +367,7 @@ class TrainState(LinenHelper):
   step: int
 ```
 
-This will reduce above training loop to something much simpler:
+This will reduce the above training loop to something much simpler:
 
 ```python
 @jax.jit
@@ -399,7 +409,7 @@ Remarks:
 ## Previous Implementation
 [Previous Implementation]: #previous-implementation
 
-The optimizer itself would be implemented by creating a new class deriving
+The optimizer itself would be implemented by creating a new class derived
 from `OpimizerDef`:
 
 ```python
@@ -439,8 +449,8 @@ Remarks:
 - Note the relationship between `OptimizerDef` and `Optimizer` : When the
   function `Optimizer.apply_gradient()` is called from the user code, it calls
   into `OptimizerDef.apply_gradient()` (among other things) which in turn will
-  call `OptimizerDef.apply_param_gradient()` which is implemented by subclasses
-  of `OptimizerDef`.
+  call `OptimizerDef.apply_param_gradient()` (implemented by subclasses of
+  `OptimizerDef`).
 - The functions `init_param_state()` and `apply_param_gradient()` are called
   for every leaf in the params/grads pytree. This makes it possible to write the
   calculations directly without `jax.tree_multimap()`.
@@ -461,7 +471,7 @@ optimizer_def = flax.optim.Momentum(learning_rate=0.1, beta=0.9)
 optimizer = optimizer_def.create(variables['params'])
 ```
 
-The target variables would then optimized in the train step (assuming a single
+Then, the target variables would optimized in the train step (assuming a single
 non-params collection "batch_stats"):
 
 ```python
@@ -494,8 +504,8 @@ for step, batch in enumerate(ds)
 
 Remarks:
 
-- Note how `optimizer.apply_gradients()` can take additional arguments to update
-  hyper parameters, like the learning rate from an independent function
+- Notice how `optimizer.apply_gradients()` can take additional arguments to
+  update hyperparameters, such as learning rate from an independent function
   `get_learning_rate()` in this case.
 
 
@@ -508,8 +518,10 @@ Remarks:
 3. Update examples to use Optax and verify that they reach the same final
    performance with the same computational cost. We probably want some examples
    to directly use the optimizer while others might use [Linen helper].
-4. Update all documentation to talk exclusively about Optax optimizers.
-5. Mark optimizers in `flax.optim` as deprecated.
+4. Port missing optimizers to Optax (e.g. Adafactor) - and verify above points.
+5. Update all documentation (including README, Flax guided tour, HOWTOs, ...) to
+   talk exclusively about Optax optimizers.
+6. Mark optimizers in `flax.optim` as deprecated.
 
 Note that all current Flax examples use an optimizer that is already available
 in Optax:
