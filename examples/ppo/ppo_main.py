@@ -16,8 +16,9 @@
 # pytype: disable=wrong-keyword-args
 
 import os
-from absl import flags
 from absl import app
+from absl import flags
+from absl import logging
 import jax
 import jax.random
 import tensorflow as tf
