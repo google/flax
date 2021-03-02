@@ -100,7 +100,10 @@ class CodeDiffDirective(SphinxDirective):
 
     # Create a test node as a comment node so it won't show up in the docs.
     # We add attribute "testnodetype" so it is be picked up by the doctest
-    # builder.
+    # builder. This functionality is not officially documented but can be found
+    # in the source code: 
+    # https://github.com/sphinx-doc/sphinx/blob/3.x/sphinx/ext/doctest.py
+    # (search for 'testnodetype').
     test_code = '\n'.join(test_code)
     test_node = nodes.comment(test_code, test_code, testnodetype='testcode')
     # Set the source info so the error message is correct when testing.
