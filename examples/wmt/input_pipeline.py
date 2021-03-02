@@ -27,7 +27,7 @@ AUTOTUNE = tf.data.AUTOTUNE
 Features = Dict[str, tf.Tensor]
 
 
-class NormalizeFetaureNamesOp:
+class NormalizeFeatureNamesOp:
   """Normalizes feature names to 'inputs' and 'targets'."""
 
   def __init__(self, ds_info: tfds.core.DatasetInfo, reverse_translation: bool):
@@ -63,7 +63,7 @@ def get_raw_dataset(dataset_builder: tfds.core.DatasetBuilder,
       split, num_examples, drop_remainder=False)
   ds = dataset_builder.as_dataset(split=per_host_split, shuffle_files=False)
   ds = ds.map(
-      NormalizeFetaureNamesOp(
+      NormalizeFeatureNamesOp(
           dataset_builder.info, reverse_translation=reverse_translation),
       num_parallel_calls=AUTOTUNE)
   return ds

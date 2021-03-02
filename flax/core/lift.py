@@ -51,7 +51,7 @@ def _dedup_scopes(scopes):
         max_parent_path = tuple(reversed(path))
       path.append(scope.name)
       scope = scope.parent
-    if max_parent is not leaf:
+    if max_parent is not leaf and leaf in minimal_set:
       del minimal_set[leaf]
     paths.append((max_parent, max_parent_path))
   return tuple(minimal_set), tuple(paths)
@@ -310,7 +310,7 @@ InOutAxis = Union[Axis, In[Axis], Out[Axis]]
 def vmap(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutAxis],
          split_rngs: Mapping[PRNGSequenceFilter, bool],
-         in_axes=0, out_axes=0, axis_size=None) -> Callable[..., Any]:
+         in_axes=0, out_axes=0, axis_size=None, axis_name=None) -> Callable[..., Any]:
   """A lifted version of `jax.vmap`.
 
   See `jax.vmap` for the unlifted batch transform in Jax.
@@ -333,8 +333,11 @@ def vmap(fn: Callable[..., Any],
       of the batch dimension. Unsplit PRNGs will be broadcasted.
     in_axes: Specifies the mapping of the input arguments (see `jax.vmap).
     out_axes: Specifies the mapping of the return value (see `jax.vmap).
-    axes_size: Specifies the size of the batch axis. This only needs
+    axis_size: Specifies the size of the batch axis. This only needs
       to be specified if it cannot be derived from the input arguments.
+    axis_name: Specifies a name for the batch axis. Can be used together
+      with parallel reduction primitives (e.g. `jax.lax.pmean`,
+      `jax.lax.ppermute`, etc.)
   """
   variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
@@ -369,7 +372,8 @@ def vmap(fn: Callable[..., Any],
 
     @functools.partial(jax.vmap,
                        in_axes=(variable_in_axes, rng_axes, in_axes),
-                       out_axes=(out_axes, variable_out_axes))
+                       out_axes=(out_axes, variable_out_axes),
+                       axis_name=axis_name)
     @functools.wraps(fn)
     def mapped(variable_groups, rng_groups, args):
       scope = scope_fn(variable_groups, rng_groups)
@@ -426,7 +430,8 @@ def scan(fn: Callable[..., Any],
     split_rngs: Split PRNG sequences will be different for each loop iterations.
       If split is False the PRNGs will be the same across iterations.
     in_axes: Specifies the axis to scan over for the arguments. Should be a prefix
-      tree of the arguments.
+      tree of the arguments. Use `flax.core.broadcast` to feed an entire input
+      to each iteration of the scan body.
     out_axes: Specifies the axis to scan over for the return value. Should be a prefix
       tree of the return value.
     length: Specifies the number of loop iterations. This only needs
@@ -446,7 +451,7 @@ def scan(fn: Callable[..., Any],
             variable_groups, rng_groups,
             init, *args):
     def find_length(axis, x):
-      if axis is not None:
+      if axis is not axes_scan.broadcast:
         leaves = jax.tree_leaves(x)
         if leaves:
           return leaves[0].shape[axis]

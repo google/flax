@@ -93,11 +93,12 @@ def cosine_decay(lr, step, total_steps):
 
 
 def create_learning_rate_fn(config: ml_collections.ConfigDict,
+                            base_learning_rate: float,
                             steps_per_epoch: int):
 
   def step_fn(step):
     epoch = step / steps_per_epoch
-    lr = cosine_decay(config.learning_rate,
+    lr = cosine_decay(base_learning_rate,
                       epoch - config.warmup_epochs,
                       config.num_epochs - config.warmup_epochs)
     warmup = jnp.minimum(1., epoch / config.warmup_epochs)
@@ -309,7 +310,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   step_offset = int(state.step)
   state = jax_utils.replicate(state)
 
-  learning_rate_fn = create_learning_rate_fn(config, steps_per_epoch)
+  learning_rate_fn = create_learning_rate_fn(
+      config, base_learning_rate, steps_per_epoch)
 
   p_train_step = jax.pmap(
       functools.partial(train_step, model.apply,

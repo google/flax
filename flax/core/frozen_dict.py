@@ -68,6 +68,9 @@ class FrozenDict(Mapping[K, V]):
   def __repr__(self):
     return self.pretty_repr()
 
+  def __reduce__(self):
+    return FrozenDict, (self.unfreeze(),)
+
   def pretty_repr(self, num_spaces=4):
     """Returns an indented representation of the nested dictionary."""
     def pretty_dict(x):

@@ -17,20 +17,18 @@
 import contextlib
 import functools
 import hashlib
-from typing import Any, Callable, Container, Dict, Set, Iterable, Optional, Sequence, Tuple, TypeVar, Union, Generic, Mapping
+from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
 
-from flax.errors import InvalidFilterError, InvalidScopeError, ModifyVariableError, NameTypeError, NameInUseError
 from . import tracers
+from flax import errors
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
-
 import jax
-from jax import random
 from jax import numpy as jnp
+from jax import random
 
 T = TypeVar('T')
-
 
 PRNGKey = Any
 Array = Any
@@ -45,6 +43,7 @@ Collection = Mapping[str, Any]
 MutableCollection = Dict[str, Any]
 
 VariableDict = Mapping[str, Collection]
+FrozenVariableDict = FrozenDict[str, Collection]
 MutableVariableDict = Dict[str, MutableCollection]
 
 
@@ -74,8 +73,8 @@ def in_filter(filter_like: Filter, col: str) -> bool:
   Used for both collections and rng sequence filters.
 
   Args:
-    filter_like: a filter (either a boolean, a string, or a list of strings)
-      for a collection.
+    filter_like: a filter (either a boolean, a string, or a list of strings) for
+      a collection.
     col: a collection, which is a string identifying a dictionary of data, for
       instance "params" or "batch_stats".
 
@@ -89,7 +88,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
-  raise InvalidFilterError(filter_like)
+  raise errors.InvalidFilterError(filter_like)
 
 
 def filter_to_set(x: Filter) -> Set[str]:
@@ -108,7 +107,7 @@ def filter_to_set(x: Filter) -> Set[str]:
     return set([x])
   if isinstance(x, Iterable):
     return set(x)
-  raise InvalidFilterError(x)
+  raise errors.InvalidFilterError(x)
 
 
 def union_filters(a: Filter, b: Filter) -> Filter:
@@ -149,8 +148,9 @@ def intersect_filters(a: Filter, b: Filter) -> Filter:
   return a.intersection(b)
 
 
-def group_collections(xs: VariableDict,
-                col_filters: Sequence[CollectionFilter]) -> Sequence[MutableVariableDict]:
+def group_collections(
+    xs: VariableDict,
+    col_filters: Sequence[CollectionFilter]) -> Sequence[MutableVariableDict]:
   """Groups variables by collection filters.
 
   Iteratively applies the filters in `col_filters` to `xs`, and adds the result
@@ -181,6 +181,8 @@ def group_collections(xs: VariableDict,
 
 
 T = TypeVar('T')
+
+
 class Variable(Generic[T]):
   """A Variable object allows mutable access to a variable in a VariableDict.
 
@@ -211,6 +213,10 @@ class Variable(Generic[T]):
     """Updates the value of this Variable."""
     self.scope.put_variable(self.collection, self.name, value)
 
+  def is_mutable(self) -> bool:
+    """Checks if this Variable is mutable."""
+    return self.scope.is_mutable_collection(self.collection)
+
 
 class Scope:
   """A Scope allows easy access to variables and manages RNGS of a neural network layer.
@@ -219,7 +225,8 @@ class Scope:
   :class:`flax.linen.module.Module`, so users writing neural network code
   usually generally do not interact with ``Scopes`` directly.
 
-  See `core design tests <https://github.com/google/flax/tree/master/tests/core/design>`_
+  See `core design tests
+  <https://github.com/google/flax/tree/master/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
 
@@ -236,7 +243,9 @@ class Scope:
       variables: VariableDict to initialize the Scope with.
       rngs: RNGs used in this scope or one of the child scopes.
       name: name of this scope.
-      parent: parent scope.
+      mutable: A CollectionFilter determining which variables are mutable.
+      parent: The parent scope.
+      path: The path in the variable tree from the root scope to this scope. 
     """
     self._variables = variables
     self.parent = parent
@@ -267,7 +276,7 @@ class Scope:
 
   def _check_valid(self):
     if self._invalid:
-      raise InvalidScopeError(self.name)
+      raise errors.InvalidScopeError(self.name)
 
   @contextlib.contextmanager
   def temporary(self):
@@ -294,12 +303,14 @@ class Scope:
 
     Args:
       rewind_rngs: if true, reset the RNG counter of this scope.
+
     Returns:
       A rewound version of this scope, which means reservations and children are
       emptied, and the rng counter is optionally rewound.
     """
     self._check_valid()
-    scope = Scope(self._variables, self.rngs, self.name, self.mutable, self.parent)
+    scope = Scope(self._variables, self.rngs, self.name, self.mutable,
+                  self.parent)
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
     return scope
@@ -311,9 +322,9 @@ class Scope:
       name: the name to reserve.
     """
     if not isinstance(name, str):
-      raise NameTypeError(name)
+      raise errors.ScopeNameTypeError(name)
     if name in self.reservations:
-      raise NameInUseError(name)
+      raise errors.ScopeNameInUseError(name)
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
@@ -321,6 +332,7 @@ class Scope:
 
     Args:
       prefix: prefix to use for generating an unreserved name.
+
     Returns:
       The generated name.
     """
@@ -331,7 +343,10 @@ class Scope:
         return name
       i += 1
 
-  def push(self, name: Optional[str] = None, prefix: str = '', reuse=False) -> 'Scope':
+  def push(self,
+           name: Optional[str] = None,
+           prefix: str = '',
+           reuse=False) -> 'Scope':
     """Creates a child Scope.
 
     Args:
@@ -339,6 +354,7 @@ class Scope:
       prefix: prefix used for generating the name if `name` is `None`.
       reuse: if True will return a pre-existing child scope with the given name
         instead of throwing an error.
+
     Returns:
       The child scope.
     """
@@ -350,7 +366,11 @@ class Scope:
       return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
-    scope = Scope({}, name=name, rngs=rngs, parent=self, path=self.path + (name,))
+    scope = Scope({},
+                  name=name,
+                  rngs=rngs,
+                  parent=self,
+                  path=self.path + (name,))
     self._children[name] = scope
     return scope
 
@@ -368,9 +388,10 @@ class Scope:
       fn: the function to partially apply the child Scope to.
       name: optional name of the child.
       prefix: prefix used for generating name if it is `None`.
-      named_call: if true, `fn` will be wrapped with `lift.named_call`.
-        The XLA profiler will use this to name tag the computation.
+      named_call: if true, `fn` will be wrapped with `lift.named_call`. The XLA
+        profiler will use this to name tag the computation.
       **partial_kwargs: additional kwargs partially applied to `fn`.
+
     Returns:
       The function with a partially applied scope.
     """
@@ -383,10 +404,12 @@ class Scope:
       # We import named_call at runtime to avoid a circular import issue.
       from . import lift  # type: ignore
       fn = lift.named_call(fn, name)
+
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
       kwargs = dict(partial_kwargs, **kwargs)
       return fn(scope.rewound(), *args, **kwargs)
+
     return wrapper
 
   def is_mutable_collection(self, col: str) -> bool:
@@ -470,7 +493,7 @@ class Scope:
     self._check_valid()
     self._validate_trace_level()
     if not self.is_mutable_collection(col):
-      raise ModifyVariableError(col, name, self.path_text)
+      raise errors.ModifyScopeVariableError(col, name, self.path_text)
     variables = self._mutable_collection(col)
     variables[name] = value
 
@@ -481,16 +504,17 @@ class Scope:
     Args:
       col: the collection of the variable.
       name: the name of the variable.
-      init_fn: a function taking a PRNGKey plus any other number of
-        positional arguments.
+      init_fn: a function taking a PRNGKey plus any other number of positional
+        arguments.
       *init_args: the arguments to evaluate init_fn on lazily.
+
     Returns:
       The variable.
     """
     self.reserve(name)
     if not self.has_variable(col, name):
       if not self.is_mutable_collection(col):
-        raise ValueError(f'No Variable named "{name}" for collection "{col}" exists in "{self.path_text}".')
+        raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
@@ -498,11 +522,14 @@ class Scope:
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
+    If the parameter exists already, the existing value is simply returned.
+
     Args:
       name: the name of the parameter.
-      init_fn: a function taking a PRNGKey plus any other number of
-        positional arguments.
+      init_fn: a function taking a PRNGKey plus any other number of positional
+        arguments.
       *init_args: the arguments to evaluate init_fn on lazily.
+
     Returns:
       The parameters.
     """
@@ -523,20 +550,21 @@ class Scope:
         # usefuleness is less obvious. We might intentionally change the dtype
         # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
-          raise ValueError('Inconsistent shapes between value and initializer '
-                           f'for parameter "{name}" in "{self.path_text}": {jnp.shape(val)}, {jnp.shape(abs_val)}')
-      return value
+          raise errors.ScopeParamShapeError(name, self.path_text, 
+              jnp.shape(val), jnp.shape(abs_val))
     else:
       if not self.is_mutable_collection('params'):
-        raise ValueError(f'No parameter named "{name}" exists in "{self.path_text}".')
+        raise errors.ScopeParamNotFoundError(name, self.path_text)
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
-      return value
+
+    return value
 
   def _populate_collections(self):
     collections = self.root._variables.keys()
     for col in collections:
       self._collection(col)
+
 
 def _unfreeze_variables(variables, mutable):
   new_variables = {}
@@ -555,58 +583,60 @@ def apply(fn: Callable[..., Any],
   Args:
     fn: a function taking a `Scope` as its first argument.
     mutable: the filter determining which variable collections are mutable.
+
   Returns:
     `fn` with the scope partially applied.
   """
+
   @functools.wraps(fn)
-  def wrapper(variables: VariableDict, *args,
+  def wrapper(variables: VariableDict,
+              *args,
               rngs: Optional[RNGSequences] = None,
               **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
 
     if not _is_valid_variables(variables):
-      raise ValueError('The first argument passed to an apply function '
-                       'should be a dictionary of collections. '
-                       'Each collection should be a `FrozenDict` with string '
-                       'keys.')
+      raise errors.ApplyScopeInvalidVariablesError()
     if rngs is not None and not _is_valid_rngs(rngs):
-      raise ValueError('rngs should be a dictionary mapping strings to '
-                       '`jax.PRNGKey`.')
+      raise errors.ApplyScopeInvalidRngsError()
     new_variables = _unfreeze_variables(variables, mutable)
     with Scope(new_variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
-    if mutable:
+    if mutable is not False:
       mutated_variables = {k: v
                            for k, v in new_variables.items()
                            if in_filter(mutable, k)}
       return y, freeze(mutated_variables)
     else:
       return y
+
   return wrapper
 
 
 def init(fn: Callable[..., Any],
-        mutable: CollectionFilter = True) -> Callable[..., Any]:
+         mutable: CollectionFilter = True) -> Callable[..., Any]:
   """Functionalize a `Scope` function for initialization.
 
   Args:
     fn: a function taking a `Scope` as its first argument.
     mutable: the filter determining which variable collections are mutable.
+
   Returns:
     `fn` with the scope partially applied.
   """
+
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
-      raise ValueError('First argument passed to an init function should be a `jax.PRNGKey` '
-                       'or a dictionary mapping strings to `jax.PRNGKey`.')
+      raise errors.InitScopeInvalidRngsError()
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
     return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)
+
   return wrapper
 
 
 def _is_valid_collection(col: VariableDict):
-  if not isinstance(col, FrozenDict):
+  if not isinstance(col, (FrozenDict, dict)):
     return False
   for name in col.keys():
     # Any value can be stored in a collection so only keys can be verified.
@@ -620,6 +650,7 @@ def _is_valid_variables(variables: VariableDict) -> bool:
 
   Args:
     variables: A variable dict.
+
   Returns:
     True if `variables` is a valid variable dict.
   """

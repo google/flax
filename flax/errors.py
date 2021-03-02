@@ -25,9 +25,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+""""""  # Use an empty top-level docstring so Sphinx won't output the one below.
 """Flax error classes.
 
-=== Suggested error classes naming conventions:
+=== When to create a Flax error class?
+
+If an error message requires more explanation than a one-liner, it is useful to
+add it as a separate error class. This may lead to some duplication with 
+existing documentation or docstrings, but it will provide users with more help
+when they are debugging a problem. We can also point to existing documentation
+from the error docstring directly.
+
+=== How to name the error class?
 
 * If the error occurs when doing something, name the error
   <Verb><Object><TypeOfError>Error
@@ -60,145 +69,157 @@ class FlaxError(Exception):
     error_msg = f'{message} ({error_page}#{module_name}.{class_name})'
     super().__init__(error_msg)
 
+#################################################
+# scope.py errors                               #
+#################################################
 
-class AssignSubModuleOutsideSetupError(FlaxError):
+class InitScopeInvalidRngsError(FlaxError):
   """
+  When initializing a Module with
+  :meth:`Module.init() <flax.linen.Module.init>`, the first argument can be of
+  two forms:
 
+  1. A single PRNGKey. This is in case only one PRNGKey is needed to initialize
+     the ``params`` collection. Note that this::
 
+       SomeModule(...).init(jax.random.PRNGKey(0), ...)
+
+     Is shorthand for::
+
+       SomeModule(...).init({'params': jax.random.PRNGKey(0)}, ...)
+
+  2. A directionary mapping collections to the PRNGKey to initialize them with.
+     This is useful if the Module has more rngs than one for ``params``.
+     
+     For instance, suppose an ``EncoderDecoder`` Module that requires an RNG for
+     decoding tokens based on a categorical probability distribution. Then a 
+     typical call looks as follows::
+
+        EncoderDecoder(...).init({'params': rng1, 'decode': rng2}, ...)
+
+     Note that even though they may be used inside submodules, the rngs for the
+     collections should be defined at the top-level. So the ``EncoderDecoder``
+     module above may contain a submodule ``Decoder``, which then uses the 
+     ``decode`` collection. The RNGs will be passed down to submodules
+     automatically.
   """
   def __init__(self):
-    super().__init__(f'You can only assign submodules to self in setup().')
+    super().__init__('First argument passed to an init function should be a '
+                     '`jax.PRNGKey` or a dictionary mapping strings to '
+                     '`jax.PRNGKey`.')
 
 
-class SetAttributeFrozenModuleError(FlaxError):
+class ApplyScopeInvalidRngsError(FlaxError):
   """
-  You can only assign Flax Module attributes to `self` inside the
-  :meth:`Module.setup() <flax.linen.Module.setup>` method. Outside of that 
-  method, the Module instance is frozen (i.e., immutable), meaning you can't
-  modify it. This behavior is similar to frozen Python dataclasses.
-  
-  For instance, this error is raised in the following case::
+  When applying a Module, the `rng` argument should be a dictionary mapping 
+  collections to the PRNGKeys that are used when computing their new values.
 
-  class SomeModule(nn.Module):
+  For instance, suppose an ``EncoderDecoder`` Module that requires an RNG for
+  decoding tokens based on a categorical probability distribution. Then a 
+  typical call to :meth:`Module.apply() <flax.linen.Module.apply>` looks as
+  follows::
+
+     EncoderDecoder(...).apply(params, ... {'decode': rng2}, ...)
+
+  Remarks:
+
+  * While :meth:`Module.init() <flax.linen.Module.init>` requires a rngs for
+    the collection ``params``, this is not necessary when applying the module,
+    because this collection is only use to initialize the model with.
+  * Even though they may be used inside submodules, the rngs for the collections
+    should be defined at the top-level. So the ``EncoderDecoder`` module above 
+    may contain a submodule ``Decoder``, which then uses the ``decode``
+    collection. The RNGs will be passed down to submodules automatically.
+  """
+  def __init__(self):
+    super().__init__('rngs should be a dictionary mapping strings to '
+                     '`jax.PRNGKey`.')
+                   
+
+class ApplyScopeInvalidVariablesError(FlaxError):
+  """
+  When calling :meth:`Module.apply() <flax.linen.Module.apply>`, the first
+  argument should be a variable dict. For more explanation on variable direct,
+  please see :mod:`flax.core.variables`.
+  """
+  def __init__(self):
+    super().__init__('The first argument passed to an apply function should be '
+                     'a dictionary of collections. Each collection should be a '
+                     'dictionary with string keys.')
+
+
+class ScopeParamNotFoundError(FlaxError):
+  """
+  This error is thrown when trying to access a parameter that does not exist.
+  For instance, in the code below, the initialized embedding name 'embedding'
+  does not match the apply name 'embed'::
+
+    class Embed(nn.Module):
+    num_embeddings: int
+    features: int
+      
     @nn.compact
-    def __call__(self, x, num_features=10):
-      self.num_features = num_features
-      x = nn.Dense(self.num_features)(x)
-      return x
+    def __call__(self, inputs, embed_name='embedding'):
+      inputs = inputs.astype('int32')
+      embedding = self.param(embed_name,
+                            lecun_normal(),
+                            (self.num_embeddings, self.features))    
+      return embedding[inputs]
 
-  s = SomeModule().init(random.PRNGKey(0), jnp.ones((5, 5)))
-
-  This error is also thrown if you try to 
+  vars = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
+  print(jax.tree_map(lambda x : x.shape, vars))
+  _ = NoBiasDense().apply(vars, jnp.ones((5, 5, 1)), 'embed')
   
+
   """
-  def __init__(self):
-    super().__init__(f'Module instance is frozen outside of setup method.')
+  def __init__(self, param_name, scope_path):
+    super().__init__(f'No parameter named "{param_name}" exists in '
+                     f'"{scope_path}".')
 
 
-class MultipleMethodsCompactError(FlaxError):
+class ScopeParamShapeError(FlaxError):
   """
-  The ``@compact`` decorator may only be added to at most one method in a Flax
-  module. In order to resolve this, you can:
+  This error is thrown when the shape of an existing parameter is different from
+  the shape of the return value of the ``init_fn``. This can happen when the 
+  shape provided during :meth:`Module.apply() <flax.linen.Module.apply>` is
+  different from the one used when intializing the module.
   
-  * remove ``@compact`` and define submodules and variables using 
-    :meth:`Module.setup() <flax.linen.Module.setup>`.
-  * Use two separate modules that both have a unique ``@compact`` method.
+  For instance, the following code throws this error because the apply shape 
+  (``(5, 5, 1)``) is different from the init shape (``(5, 5``). As a result, the
+  shape of the kernel during ``init`` is ``(1, 8)``, and the shape during 
+  ``apply`` is ``(5, 8)``, which results in this error.::
+
+      class NoBiasDense(nn.Module):
+      features: int = 8
+
+      @nn.compact
+      def __call__(self, x):
+        kernel = self.param('kernel',
+                            lecun_normal(),
+                            (x.shape[-1], self.features))  # <--- ERROR
+        y = lax.dot_general(x, kernel,
+                            (((x.ndim - 1,), (0,)), ((), ())))
+        return y
+
+    vars = NoBiasDense().init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
+    _ = NoBiasDense().apply(vars, jnp.ones((5, 5)))
   """
-  def __init__(self):
-    super().__init__(f'Only one method per class can be @compact')
+  def __init__(self, param_name, scope_path, value_shape, init_shape):
+    super().__init__('Inconsistent shapes between value and initializer '
+                     f'for parameter "{param_name}" in "{scope_path}": '
+                     f'{value_shape}, {init_shape}.')
 
-class ReservedModuleAttributeError(FlaxError):
+
+class ScopeVariableNotFoundError(FlaxError):
   """
-  This error is thrown when creating a Flax Module that is using reserved
-  attributes. The following attributes are reserved:
-  
-  * parent: The parent Module of this Module.
-  * name: The name of this Module.
+  This error is thrown when trying to use a variable in a Scope in a collection
+  that is immutable. In order to create this variable, mark the collection as
+  mutable explicitly using the `mutable` keyword in
+  :meth:`Module.apply() <flax.linen.Module.apply>`.
   """
-  def __init__(self, annotations):
-    super().__init__(f'properties `parent` and `name` are reserved: '
-                     f'{annotations}')
-
-
-class InitModuleInvalidRngError(FlaxError):
-  """
-  This error is thrown if the RNG you provide to one of the ``init`` functions
-  of a Flax MOdule has an incorrect shape (it should be ``(2,)``).
-
-  When initializing a Module with :meth:`Module.init() <flax.linen.Module.init>`
-  or :meth:`Module.init_with_output() <flax.linen.Module.init_with_output>`, you
-  should provide the RNGs required for initializing all variable collections as
-  the first argument in a dictionary::
-
-    from jax import random
-    rngs = random.split(random.PRNGKey(0), n)
-    rng_dict = {"collection_1": rngs[0], ..., "collection_n": rng[n-1]}
-    vars = SomeModule.init(rng_dict, ...)
-  
-  Often, a Module only has collection "params", in which case it is allowed to
-  just provide the RNG as the first argument to the ``init`` function::
-
-    rng = jax.random.PRNGKey(0)
-    vars = SomeModule.init(rng, ...)
-
-  This error is thrown is you provide a single RNG, but it is not of shape
-  ``(2,)``.
-  """
-  def __init__(self, module_name, rngs):
-    super().__init__(f'RNGs should be of shape (2,) in Module {module_name}, '
-                     f'but rngs are: {rngs}')
-
-
-class ApplyModuleInvalidMethodError(FlaxError):
-  """
-  When calling :meth:`Module.apply() <flax.linen.Module.apply>`, you can specify
-  the method to apply with parameters `method`. This error is thrown if the
-  provided parameter is not a method..
-  """
-  def __init__(self, module_name, method):
-    super().__init__(f'Cannot call apply() for {module_name}: {method} is not a '
-                     'method.')
-
-
-class CallCompactUnboundModuleError(FlaxError):
-  """
-  This error occurs when you are trying to call a Module directly, rather than
-  through :meth:`Module.apply() <flax.linen.Module.apply>`. For instance, the 
-  error will be raised when trying to run this code::
-
-    from flax import linen as nn
-    import jax.numpy as jnp
-
-    test_dense = nn.Dense(10)
-    test_dense(jnp.ones((5,5)))
-
-  Instead, you should pass the variables (parameters and other state) via 
-  :meth:`Module.apply() <flax.linen.Module.apply>` (or use 
-  :meth:`Module.init() <flax.linen.Module.init>` to get initial variables)::
-
-    # Create the initialized variables with a random key for inits:
-    from jax import random
-    vars = test_dense.init(random.PRNGKey(0), jnp.ones((5,5)))
-
-    # Apply the NN to the variables + input to get output.
-    y = test_dense.apply(vars, jnp.ones((5,5)))
-
-
-  """
-  def __init__(self):
-    super().__init__('Can\'t call compact methods on unbound modules')
-
-
-class JaxOmnistagingError(FlaxError):
-  """
-  The Flax linen API requires JAX omnistaging to be enabled. In order to enable
-  this, add this to your imports::
-    
-    from jax.config import config
-    config.enable_omnistaging()
-  """
-  def __init(self):
-    super().__init__(f'Flax Linen requires Omnistaging to be enabled')
+  def __init__(self, name, col, scope_path):
+    super().__init__(f'No Variable named "{name}" for collection "{col}" '
+                     f'exists in "{scope_path}".')
 
 
 class InvalidFilterError(FlaxError):
@@ -222,7 +243,7 @@ class InvalidScopeError(FlaxError):
     super().__init__(f'The scope "{scope_name}" is no longer valid.')
 
 
-class ModifyVariableError(FlaxError):
+class ModifyScopeVariableError(FlaxError):
   """
   You cannot update a variable if the collection it belongs to is immutable.
   When you are applying a Module, you should specify which variable 
@@ -246,9 +267,7 @@ class ModifyVariableError(FlaxError):
                      f'"{scope_path}" because collection "{col}" is immutable.')
 
 
-# TODO(marcvanzee): Make sure this error is thrown in Modules and not in Scope
-# and rename it to something like "ModuleNameTypeError".
-class NameTypeError(FlaxError):
+class ScopeNameTypeError(FlaxError):
   """
   Scope names should be strings.
   """
@@ -257,9 +276,7 @@ class NameTypeError(FlaxError):
                      f'it is {type(scope_name)}')
 
 
-# TODO(marcvanzee): Make sure this error is thrown in Modules and not in Scope
-# and rename it to something like "ModuleNameInUseError".
-class NameInUseError(FlaxError):
+class ScopeNameInUseError(FlaxError):
   """
   Module names are unique within a subscope::
 

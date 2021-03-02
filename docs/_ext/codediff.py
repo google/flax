@@ -26,14 +26,14 @@ from sphinx.util.docutils import SphinxDirective
 Use directive as follows:
 
 .. codediff::
-  :title-left: <LEFT_CODE_BLOCK_TITLE>
-  :title-right: <RIGHT_CODE_BLOCK_TITLE>
-  :highlight-left: <LINES_TO_HIGHLIGHT_LEFT>
-  :highlight-right: <LINES_TO_HIGHLIGHT_RIGHT>
+  :title_left: <LEFT_CODE_BLOCK_TITLE>
+  :title_right: <RIGHT_CODE_BLOCK_TITLE>
   
   <CODE_BLOCK_LEFT>
   ---
   <CODE_BLOCK_RIGHT>
+
+In order to highlight a line of code, prepend it with "#!".
 """
 
 class CodeDiffParser:
@@ -43,7 +43,8 @@ class CodeDiffParser:
                        f'separated by {code_sep}.')
     idx = lines.index(code_sep)
     code_left = self._code_block(lines[0: idx])
-    code_right = self._code_block(lines[idx+1:])
+    test_code = lines[idx+1:]
+    code_right = self._code_block(test_code)
     
     self.max_left = max(len(x) for x in code_left + [title_left])
     self.max_right = max(len(x) for x in code_right + [title_right])
@@ -57,7 +58,7 @@ class CodeDiffParser:
     for l, r in itertools.zip_longest(code_left, code_right, fillvalue=''):
       output += [self._table_row(l, r)]
 
-    return output + [self._hline()]
+    return output + [self._hline()], test_code
 
   def _code_block(self, lines):
     # Remove right trailing whitespace so we can detect the comments.
@@ -94,13 +95,28 @@ class CodeDiffDirective(SphinxDirective):
     'code_sep': directives.unchanged,
     }
 
-  def run(self):    
-    new_content = CodeDiffParser().parse(list(self.content), **self.options)
+  def run(self):
+    table_code, test_code = CodeDiffParser().parse(list(self.content), **self.options)
 
-    node = nodes.paragraph()
-    self.content = ViewList(new_content, self.content.parent)
-    self.state.nested_parse(self.content, self.content_offset, node)
-    return [node]
+    # Create a test node as a comment node so it won't show up in the docs.
+    # We add attribute "testnodetype" so it is be picked up by the doctest
+    # builder. This functionality is not officially documented but can be found
+    # in the source code: 
+    # https://github.com/sphinx-doc/sphinx/blob/3.x/sphinx/ext/doctest.py
+    # (search for 'testnodetype').
+    test_code = '\n'.join(test_code)
+    test_node = nodes.comment(test_code, test_code, testnodetype='testcode')
+    # Set the source info so the error message is correct when testing.
+    self.set_source_info(test_node)
+    test_node['options'] = {}
+    test_node['language'] = 'python3'
+
+    # The table node is the side-by-side diff view that will be shown on RTD.    
+    table_node = nodes.paragraph()
+    self.content = ViewList(table_code, self.content.parent)
+    self.state.nested_parse(self.content, self.content_offset, table_node)
+
+    return [table_node, test_node]
 
 def setup(app):
     app.add_directive('codediff', CodeDiffDirective)

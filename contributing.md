@@ -12,7 +12,7 @@ git clone https://github.com/google/flax
 cd flax
 python3.6 -m virtualenv env
 . env/bin/activate
-pip install -e . .[testing]
+pip install -e . '.[testing]'
 ./tests/run_all_tests.sh
 ```
 

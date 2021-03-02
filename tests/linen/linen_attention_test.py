@@ -44,6 +44,7 @@ class AttentionTest(parameterized.TestCase):
         qkv_features=16,
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
+        deterministic=False,
     )
     y, _ = sa_module.init_with_output(rng, x)
     self.assertEqual(y.shape, x.shape)
@@ -57,6 +58,7 @@ class AttentionTest(parameterized.TestCase):
         qkv_features=16,
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
+        deterministic=False,
     )
     y, _ = sa_module.init_with_output(rng, q, kv)
     self.assertEqual(y.shape, q.shape)
@@ -70,6 +72,7 @@ class AttentionTest(parameterized.TestCase):
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
         dropout_rate=0.1,
+        deterministic=False,
     )
     rng1, rng2 = random.split(rng)
     rngs = {'params': rng1, 'dropout': rng2}
@@ -98,6 +101,7 @@ class AttentionTest(parameterized.TestCase):
         num_heads=num_heads,
         qkv_features=num_heads * num_features,
         precision=lax.Precision.HIGHEST,
+        deterministic=False,
         decode=False)
     decode_module = module.clone(decode=True)
 
@@ -130,7 +134,8 @@ class AttentionTest(parameterized.TestCase):
 
     module = nn.MultiHeadDotProductAttention(
         num_heads=num_heads,
-        kernel_init=jax.nn.initializers.ones)
+        kernel_init=jax.nn.initializers.ones,
+        deterministic=False)
 
     initial_vars = module.init(rng1, inputs, inputs)
     causal_mask = nn.attention.make_causal_mask(jnp.ones(input_shape[:-1]))

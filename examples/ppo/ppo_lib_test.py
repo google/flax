@@ -16,8 +16,8 @@
 
 import jax
 import flax
-import numpy as onp
-import numpy.testing as onp_testing
+import numpy as np
+import numpy.testing as np_testing
 from absl.testing import absltest
 
 import ppo_lib
@@ -30,10 +30,10 @@ class TestGAE(absltest.TestCase):
   def test_gae_shape_on_random(self):
     # create random data, simulating 4 parallel envs and 20 time_steps
     envs, steps = 10, 100
-    rewards = onp.random.choice([-1., 0., 1.], size=(steps, envs),
+    rewards = np.random.choice([-1., 0., 1.], size=(steps, envs),
                                 p=[0.01, 0.98, 0.01])
-    terminal_masks = onp.ones(shape=(steps, envs), dtype=onp.float64)
-    values = onp.random.random(size=(steps + 1, envs))
+    terminal_masks = np.ones(shape=(steps, envs), dtype=np.float64)
+    values = np.random.random(size=(steps + 1, envs))
     discount = 0.99
     gae_param = 0.95
     adv = ppo_lib.gae_advantages(rewards, terminal_masks, values, discount,
@@ -42,22 +42,22 @@ class TestGAE(absltest.TestCase):
 
   def test_gae_hardcoded(self):
     #test on small example that can be verified by hand
-    rewards = onp.array([[1., 0.], [0., 0.], [-1., 1.]])
+    rewards = np.array([[1., 0.], [0., 0.], [-1., 1.]])
     #one of the two episodes terminated in the middle
-    terminal_masks = onp.array([[1., 1.], [0., 1.], [1., 1.]])
-    values = onp.array([[1., 1.], [1., 1.], [1., 1.], [1., 1.]])
+    terminal_masks = np.array([[1., 1.], [0., 1.], [1., 1.]])
+    values = np.array([[1., 1.], [1., 1.], [1., 1.], [1., 1.]])
     discount = 0.5
     gae_param = 0.25
-    correct_gae = onp.array([[0.375, -0.5546875], [-1., -0.4375], [-1.5, 0.5]])
+    correct_gae = np.array([[0.375, -0.5546875], [-1., -0.4375], [-1.5, 0.5]])
     actual_gae = ppo_lib.gae_advantages(rewards, terminal_masks, values,
                                         discount, gae_param)
-    onp_testing.assert_allclose(actual_gae, correct_gae)
+    np_testing.assert_allclose(actual_gae, correct_gae)
 # test environment and preprocessing
 class TestEnvironmentPreprocessing(absltest.TestCase):
   def choose_random_game(self):
     games = ['BeamRider', 'Breakout', 'Pong',
              'Qbert', 'Seaquest', 'SpaceInvaders']
-    ind = onp.random.choice(len(games))
+    ind = np.random.choice(len(games))
     return games[ind] + "NoFrameskip-v4"
 
   def test_creation(self):
@@ -83,7 +83,7 @@ class TestEnvironmentPreprocessing(absltest.TestCase):
 # test the model (creation and forward pass)
 class TestModel(absltest.TestCase):
   def choose_random_outputs(self):
-    return onp.random.choice([4, 5, 6, 7, 8, 9])
+    return np.random.choice([4, 5, 6, 7, 8, 9])
 
   def test_model(self):
     key = jax.random.PRNGKey(0)
@@ -95,13 +95,13 @@ class TestModel(absltest.TestCase):
     optimizer = models.create_optimizer(initial_params, lr)
     self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
     test_batch_size, obs_shape = 10, (84, 84, 4)
-    random_input = onp.random.random(size=(test_batch_size,) + obs_shape)
+    random_input = np.random.random(size=(test_batch_size,) + obs_shape)
     log_probs, values = agent.policy_action(optimizer.target, module,
         random_input)
     self.assertEqual(values.shape, (test_batch_size, 1))
-    sum_probs = onp.sum(onp.exp(log_probs), axis=1)
+    sum_probs = np.sum(np.exp(log_probs), axis=1)
     self.assertEqual(sum_probs.shape, (test_batch_size, ))
-    onp_testing.assert_allclose(sum_probs, onp.ones((test_batch_size, )),
+    np_testing.assert_allclose(sum_probs, np.ones((test_batch_size, )),
                                 atol=1e-6)
 
 # test one optimization step
@@ -109,11 +109,11 @@ class TestOptimizationStep(absltest.TestCase):
   def generate_random_data(self, num_actions):
     data_len = 256 # equal to one default-sized batch
     state_shape = (84, 84, 4)
-    states = onp.random.randint(0, 255, size=((data_len, ) + state_shape))
-    actions = onp.random.choice(num_actions, size=data_len)
-    old_log_probs = onp.random.random(size=data_len)
-    returns = onp.random.random(size=data_len)
-    advantages = onp.random.random(size=data_len)
+    states = np.random.randint(0, 255, size=((data_len, ) + state_shape))
+    actions = np.random.choice(num_actions, size=data_len)
+    old_log_probs = np.random.random(size=data_len)
+    returns = np.random.random(size=data_len)
+    advantages = np.random.random(size=data_len)
     return states, actions, old_log_probs, returns, advantages
 
   def test_optimization_step(self):

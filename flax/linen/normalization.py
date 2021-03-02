@@ -20,7 +20,7 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-from flax.linen.module import Module, compact
+from flax.linen.module import Module, compact, merge_param
 
 
 PRNGKey = Any
@@ -60,7 +60,7 @@ class BatchNorm(Module):
       the examples on the first two and last two devices. See `jax.lax.psum`
       for more details.
   """
-  use_running_average: bool = False
+  use_running_average: Optional[bool] = None
   axis: int = -1
   momentum: float = 0.99
   epsilon: float = 1e-5
@@ -73,15 +73,19 @@ class BatchNorm(Module):
   axis_index_groups: Any = None
 
   @compact
-  def __call__(self, x):
+  def __call__(self, x, use_running_average: Optional[bool] = None):
     """Normalizes the input using batch statistics.
 
     Args:
       x: the input to be normalized.
+      use_running_average: if true, the statistics stored in batch_stats
+        will be used instead of computing the batch statistics on the input.
 
     Returns:
       Normalized inputs (the same shape as inputs).
     """
+    use_running_average = merge_param(
+        'use_running_average', self.use_running_average, use_running_average)
     x = jnp.asarray(x, jnp.float32)
     axis = self.axis if isinstance(self.axis, tuple) else (self.axis,)
     axis = _absolute_dims(x.ndim, axis)
@@ -99,7 +103,7 @@ class BatchNorm(Module):
                            lambda s: jnp.ones(s, jnp.float32),
                            reduced_feature_shape)
 
-    if self.use_running_average:
+    if use_running_average:
       mean, var = ra_mean.value, ra_var.value
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=False)

@@ -24,16 +24,69 @@ vNext
  -
  -
  -
- - Added OptimizedLSTM: ~33% faster than the original LSTM when using <=1024 units
- - Bug Fix `Scope.variable` mutability check, before a variable could only be initialized
-   if the 'params' collection was mutable.
- - Linen `Module` instances are now Frozen after `setup` has been called.
+ -
+ -
+ -
+ -
+
+0.3.2
+------
+
+`flax.nn` deprecation message no longer appears if you import flax directly.
+
+NOTE: You must now explicitly import `flax.nn` if you want to use the old
+      pre-Linen `flax.nn.Module`.
+
+0.3.1
+------
+
+Many improvements to Linen, and the old `flax.nn` is officially reprecated! 
+
+Notably, there's a clean API for extracting intermediates from modules
+defined using `@nn.compact`, a more ergonomic API for using Batch Norm and Dropout in modules
+defined using `setup`, support for `MultiOptimizer` with Linen, and multiple safety, performance
+and error message improvements.
+
+Possible breaking changes:
+ - Call setup lazily. See #938 for motivation and more details.
+ - Linen `Module` instances are now frozen after `setup` has been called.
    Previously mutations after setup could be dropped silently. Now the stateless requirement
    is enforced by raising a TypeError in `__setattr__` after `setup`.
- - Pytrees of dicts and lists are transformed into FrozenDict and tuples during attribute assignment.
+ - Pytrees of dicts and lists are transformed into FrozenDict and tuples during
+   attribute assignment.
    This avoids undetected submodules and inner state. 
+ - Bug Fix `flax.core.apply` and `Module.apply`. Now it returns a tuple
+   containing the output and a frozen empty
+   collection when `mutable` is specified as an empty list.
+ - `broadcast_dims` is now a attribute to `Dropout` instead of a `__call__`
+   argument.
+ - `use_running_average` and `deterministic` no longer have a default. They
+   should be passed explicitly
+ - Bug Fix `Scope.variable` mutability check, before a variable could only be
+   initialized if the 'params' collection was mutable.
+
+Other Improvements:
+ - Re-introduced the `lm1b` language modeling example
+ - Recognizes batch free inputs in pooling layers. (for use with vmap)
+ - Add Adadelta optimizer
+ - Fully deprecate all "pre-Linen" `flax.nn` classes and methods.
+ - Some Module arguments can now be passed either as dataclass attribute or
+   as argument to `__call__`. See [design note](https://flax.readthedocs.io/en/latest/design_notes/arguments.html)
+ - Add `sow` method to `Module` and `capture_intermediates` argument to `Module.apply`.
+   See [howto](https://flax.readthedocs.io/en/latest/howtos/extracting_intermediates.html) for usage patterns.
+ - Support passing in modules directly as attributes to other modules, and
+   deal with them correctly both in top-level modules and in submodules.
+ - Don't require the `variable` argument to `Module.apply` to be a FrozenDict
  - Add support for dict/FrozenDict when using `ModelParamTraversal`
    As a result `MultiOptimizer` can be used properly with linen modules.
+ - Added OptimizedLSTM: ~33% faster than the original LSTM when using <=1024 units
+ - Fix dtype handling for Adam and LAMB optimizers in 64bit mode.
+ - Added `is_mutable()` method to `Variable` and `is_mutable_collection()` to `flax.linen.Module`.
+ - Add `axis_name` arg to `flax.linen.vmap`
+ - Enable broadcast in `flax.linen.scan`
+ - Fix behavior when inner module classes were defined in another module
+ - Add automatic giant array chunking in msgpack checkpoints.
+ - Log info message when a checkpoint is not found in the directory.
 
 v0.3
 -----
@@ -95,4 +148,3 @@ v0.1
      `rhs_dilation` -> `kernel_dilation`
  - Change default layer names from numbers '0', '1', etc. to
    include the Module class name, e.g. 'Dense_0', 'LayerNorm_1'.
-

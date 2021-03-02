@@ -26,7 +26,7 @@ from jax import random
 from jax.nn import initializers
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -84,9 +84,9 @@ class AttentionTest(parameterized.TestCase):
     mask_1d = nn.attention._make_causal_mask(
         key, attention_axis=att_axis, self_mask=False)
 
-    ts = onp.arange(key.shape[1])
+    ts = np.arange(key.shape[1])
     mask_1d_simple = (ts[:, None] >= ts[None, :])[None, None, :, :]
-    onp.testing.assert_allclose(mask_1d, mask_1d_simple,)
+    np.testing.assert_allclose(mask_1d, mask_1d_simple,)
 
   def test_causal_mask_2d(self):
     """Tests autoregresive masking for 2d attention."""
@@ -100,10 +100,10 @@ class AttentionTest(parameterized.TestCase):
 
     # masking when dealing with 1d attention weights
     # w_1d_shape = (4, 5*5, 5*5, 2)
-    ts = onp.arange(25)
+    ts = np.arange(25)
     mask_1d = (ts[:, None] >= ts[None, :])[None, None, :, :]
 
-    onp.testing.assert_allclose(mask_nd.reshape(mask_1d.shape), mask_1d,
+    np.testing.assert_allclose(mask_nd.reshape(mask_1d.shape), mask_1d,
                                 atol=1e-9)
 
   @parameterized.parameters([((5,), (1,)),
@@ -141,7 +141,7 @@ class AttentionTest(parameterized.TestCase):
     _, y = jax_utils.scan_in_dim(body_fn, cache0, inputs,
                                     axis=attn_dims, keepdims=True)
 
-    onp.testing.assert_allclose(y_ref, y, atol=1e-5)
+    np.testing.assert_allclose(y_ref, y, atol=1e-5)
 
   def test_autoregresive_receptive_field_1d(self):
     """Tests the autoregresive self-attention receptive field."""
