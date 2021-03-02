@@ -19,7 +19,7 @@ nested, frozen dict. This will be demonstrated for both Flax modules and optimiz
 Surgery with Flax Modules
 --------------------------------
 
-Let's first make a little model for our demo.
+Let's create a small convolutional neural network model for our demo.
 
 .. testcode::
 
