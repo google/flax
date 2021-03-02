@@ -125,11 +125,11 @@ After doing whatever you want, unflatten back:
       },
   })
 
-Surgey with Optimizers
+Surgery with Optimizers
 --------------------------------
 
-If you're loading from a flax optimizer, all of the variables live in
-``optimizer.target``.
+If you're loading from a flax optimizer, all of the variables that should be
+optimized live in ``optimizer.target``.
 
 .. testcode::
 
