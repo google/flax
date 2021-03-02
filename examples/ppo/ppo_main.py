@@ -44,6 +44,13 @@ flags.mark_flags_as_required(['config'])
 
 
 def main(argv):
+  if len(argv) > 1:
+    raise app.UsageError('Too many command-line arguments.')
+
+  FLAGS.log_dir = FLAGS.workdir
+  FLAGS.stderrthreshold = 'info'
+  logging.get_absl_handler().start_logging_to_file()
+
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
   config = FLAGS.config
