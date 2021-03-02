@@ -14,11 +14,14 @@ The output retains the shape ``(H, W, C)`` and therefore can just be passed on t
 
 .. testcode::
 
+  from flax import linen as nn
+  from typing import Callable, Tuple
+
   class SEBlock(nn.Module):
     """The Squeeze-and-Excitation block."""
     hidden_size: int
     act: Callable = nn.relu 
-    axis: Tuple[int, int] = (1, 2), 
+    axis: Tuple[int, int] = (1, 2) 
 
     @nn.compact
     def __call__(self, x):
