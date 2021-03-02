@@ -71,7 +71,7 @@ Let's create a small convolutional neural network model for our demo.
   })
 
 
-Let's get a flat dict for doing model surgery.
+Next, get a flat dict for doing model surgery as follows:
 
 .. testcode::
 
