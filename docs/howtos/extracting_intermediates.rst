@@ -14,27 +14,6 @@ Let's start with this simple CNN that uses :code:`nn.compact`.
 
   batch = jnp.ones((4, 32, 32, 3))
 
-  class SowCNN(nn.Module):
-    @nn.compact
-    def __call__(self, x):
-      x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-      self.sow('intermediates', 'conv1', x)
-      x = nn.relu(x)
-      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-      x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-      self.sow('intermediates', 'conv2', x)
-      x = nn.relu(x)
-      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
-      x = x.reshape((x.shape[0], -1))  # flatten
-      self.sow('intermediates', 'features', x)
-      x = nn.Dense(features=256)(x)
-      self.sow('intermediates', 'conv3', x)
-      x = nn.relu(x)
-      x = nn.Dense(features=10)(x)
-      self.sow('intermediates', 'dense', x)
-      x = nn.log_softmax(x)
-      return x
-
 .. testcode::
 
   class CNN(nn.Module):
@@ -52,6 +31,7 @@ Let's start with this simple CNN that uses :code:`nn.compact`.
       x = nn.Dense(features=10)(x)
       x = nn.log_softmax(x)
       return x
+
 
 Because this module uses ``nn.compact``, we don't have direct access to
 intermediate values. There are a few ways to expose them:

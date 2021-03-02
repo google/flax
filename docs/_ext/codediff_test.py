@@ -34,7 +34,7 @@ def get_initial_params(key):
   initial_params = CNN().init(key, init_val)['params']
   return initial_params'''
 
-    expected_output= r'''+----------------------------------------------------------+----------------------------------------------------------+
+    expected_table = r'''+----------------------------------------------------------+----------------------------------------------------------+
 | Single device                                            | Ensembling on multiple devices                           |
 +----------------------------------------------------------+----------------------------------------------------------+
 | .. code-block:: python                                   | .. code-block:: python                                   |
@@ -48,13 +48,21 @@ def get_initial_params(key):
 |     return initial_params                                |                                                          |
 +----------------------------------------------------------+----------------------------------------------------------+'''
 
+    expected_testcode = r'''@jax.pmap #!
+def get_initial_params(key):
+  init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
+  initial_params = CNN().init(key, init_val)['params']
+  return initial_params'''
+
     title_left = 'Single device'
     title_right = 'Ensembling on multiple devices'
 
-    actual_output = CodeDiffParser().parse(
+    actual_table, actual_testcode = CodeDiffParser().parse(
       lines=input_text.split('\n'),
       title_left=title_left,
       title_right=title_right)
-    actual_output = '\n'.join(actual_output)
+    actual_table = '\n'.join(actual_table)
+    actual_testcode = '\n'.join(actual_testcode)
 
-    self.assertEqual(expected_output, actual_output)
+    self.assertEqual(expected_table, actual_table)
+    self.assertEqual(expected_testcode, actual_testcode)
