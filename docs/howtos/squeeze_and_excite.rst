@@ -19,18 +19,17 @@ The output retains the shape ``(H, W, C)`` and therefore can just be passed on t
 
   class SEBlock(nn.Module):
     """The Squeeze-and-Excitation block."""
-    hidden_size: int
-    act: Callable = nn.relu 
+    hidden_size: int 
     axis: Tuple[int, int] = (1, 2) 
 
     @nn.compact
     def __call__(self, x):
-      y = x.mean(axis=axis, keepdims=True)
+      y = jnp.mean(x, axis=axis, keepdims=True)
       y = nn.Dense(
-          y, features=self.hidden_size,
-          name='reduce')
-      y = act(y)
+          features=self.hidden_size,
+          name='reduce')(y)
+      y = nn.relu(y)
       y = nn.Dense(
-          y, features=x.shape[-1],
-          name='expand')
+          features=x.shape[-1],
+          name='expand')(y)
       return nn.sigmoid(y) * x
