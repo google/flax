@@ -143,16 +143,17 @@ def train_step(optimizer, batch, z_rng):
 
 @jax.jit
 def eval(params, images, z, z_rng):
-  recon_images, mean, logvar = model().apply({'params': params}, images, z_rng)
+  def eval_model(vae):
+    recon_images, mean, logvar = vae(images, z_rng)
+    comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
+                                  recon_images[:8].reshape(-1, 28, 28, 1)])
 
-  comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
-                                recon_images[:8].reshape(-1, 28, 28, 1)])
+    generate_images = vae.generate(z)
+    generate_images = generate_images.reshape(-1, 28, 28, 1)
+    metrics = compute_metrics(recon_images, images, mean, logvar)
+    return metrics, comparison, generate_images
 
-  generate_images = model().apply({'params': params}, z, method=VAE.generate)
-  generate_images = generate_images.reshape(-1, 28, 28, 1)
-  metrics = compute_metrics(recon_images, images, mean, logvar)
-
-  return metrics, comparison, generate_images
+  return nn.apply(eval_model, model())({'params': params})
 
 
 def prepare_image(x):
