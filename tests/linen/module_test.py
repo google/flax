@@ -705,6 +705,15 @@ class ModuleTest(absltest.TestCase):
     foo = Foo()
     with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
       foo.init(random.PRNGKey(0))
+
+
+  def test_module_call_not_implemented(self):
+    class Foo(nn.Module):
+      pass
+
+    foo = Foo()
+    with self.assertRaisesWithLiteralMatch(AttributeError, "'Foo' object has no attribute '__call__'"):
+      foo.init(random.PRNGKey(0))
   
   def test_is_mutable_collection(self):
     class EmptyModule(nn.Module):

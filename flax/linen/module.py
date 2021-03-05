@@ -828,9 +828,8 @@ class Module:
       of the modified collections.
     """
     if method is None:
-      method = self.__class__.__call__
-    else:
-      method = _get_unbound_fn(method)
+      method = self.__call__
+    method = _get_unbound_fn(method)
     fn = lambda scope: method(self.clone(parent=scope), *args, **kwargs)
     if capture_intermediates is True:
       capture_intermediates = capture_call_intermediates
