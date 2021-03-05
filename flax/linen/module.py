@@ -1068,4 +1068,3 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   #   assert self.scope is None, ("Can't attach a module twice."
   #                               " Maybe you want to clone first?")
   #   return self.clone(parent=Scope(variables, rngs))
-

@@ -331,7 +331,8 @@ class ModuleTest(absltest.TestCase):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaises(errors.NameInUseError):
+    msg = r'Duplicate use of scope name: "bias"'
+    with self.assertRaisesRegex(errors.ScopeNameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
     class Dummy(nn.Module):
       xshape: Tuple[int]
