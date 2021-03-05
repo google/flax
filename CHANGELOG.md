@@ -10,7 +10,7 @@ vNext
  -
  -
  -
- - Bug Fix: Disallow modifying attributes in Modules after they are initialized.
+ -
  -
  -
  -
