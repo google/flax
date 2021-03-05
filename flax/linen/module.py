@@ -1080,8 +1080,6 @@ def apply(fn: Callable[..., Any], module: Module,
     module: The ``Module`` that will be used to bind variables and RNGs to.
       The ``Module`` passed as the first argument to ``fn`` will be a clone
       of module.
-    method: The literal name of a method in this class. If provided, applies
-      this method. If not provided, applies the ``__call__`` method.
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable.
       ``str``: The name of a single mutable collection. ``list``: A
