@@ -67,6 +67,11 @@ tx = optax.chain(
 
 Remarks:
 
+- Above gradient transformation would be equivalent with the example under
+  [Optimizer and OptimizerDef] where we define a Momentum optimizer without
+  Nesterov momentum (note that the `beta` parameter corresponds to the `decay`
+  parameter of the `optax.trace()` transformation, and the learning rate is
+  applied in a second chained transformation).
 - Note that hyper parameters like `decay` or `nesterov` only exist in the inner
   scope of the higher order functions returning the `GradientTransformation`.
   Such a gradient transformation is currently defined as a `NamedTuple` of the
