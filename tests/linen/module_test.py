@@ -692,19 +692,35 @@ class ModuleTest(absltest.TestCase):
     variables = foo.init(random.PRNGKey(0), x)
     self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
 
-  def test_module_frozen(self):
+  def test_noncompact_module_frozen(self):
     class Foo(nn.Module):
-      bar: nn.Dense = dataclasses.field(init=False)
-
       def setup(self):
-        self.i = 1
+        self.i = 1  # This is allowed (for assigning submodules).
 
+      def __call__(self):
+        self.i = 2  # This is not allowed.
+
+    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
+      Foo().init(random.PRNGKey(0))
+
+  def test_compact_module_frozen(self):
+    class Foo(nn.Module):
+      @nn.compact
       def __call__(self):
         self.i = 2
 
-    foo = Foo()
     with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
-      foo.init(random.PRNGKey(0))
+      Foo().init(random.PRNGKey(0))
+
+  def test_submodule_frozen(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self):
+        dense = nn.Dense(10)
+        dense.features = 20  # <--- This is not allowed
+
+    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
+      Foo().init(random.PRNGKey(0))
   
   def test_is_mutable_collection(self):
     class EmptyModule(nn.Module):

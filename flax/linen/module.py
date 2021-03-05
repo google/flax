@@ -329,11 +329,16 @@ class _ModuleInternalState:
   in_compact_method: bool = False
   in_setup: bool = False
   setup_called: bool = False
+  is_initialized: bool = False
   autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
   children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
 
   def reset(self):
-    """Resets transient state."""
+    """Resets transient state. 
+    
+    This function is called after each module method, so only attributes that
+    are method-dependent are reset.
+    """
     self.in_compact_method = False
     self.in_setup = False
     self.autoname_cursor = dict()
@@ -344,6 +349,7 @@ class _ModuleInternalState:
       in_compact_method=self.in_compact_method,
       in_setup=self.in_setup,
       setup_called=False,  # setup_called is object local, not shared.
+      is_initialized=self.is_initialized,
       autoname_cursor=dict(self.autoname_cursor))
     return cloned
 
@@ -351,6 +357,7 @@ class _ModuleInternalState:
     """Re-imports transform-preserved state from across transform boundary."""
     self.in_compact_method = other.in_compact_method
     self.in_setup = other.in_setup
+    self.is_initialized = other.is_initialized
     self.autoname_cursor = dict(other.autoname_cursor)
 
 _uninitialized_module_internal_state = _ModuleInternalState()
@@ -504,8 +511,8 @@ class Module:
       val: Value of the attribute.
     """
     is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
-    
-    if not self._state.in_setup and not is_dataclass_attr:
+
+    if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
       raise TypeError("Module instance is frozen outside of setup method.")
     if is_dataclass_attr:
@@ -583,6 +590,8 @@ class Module:
       object.__setattr__(self, 'scope', self.parent)
     else:
       raise ValueError("parent must be None, Module or Scope")
+
+    self._state.is_initialized = True
 
   def __repr__(self):
     return _module_repr(self)
