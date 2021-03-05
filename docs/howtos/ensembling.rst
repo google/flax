@@ -235,7 +235,8 @@ Next we transform the ``train_epoch`` function.
       batch_metrics.append(metrics)
 
     batch_metrics_np = jax.device_get(batch_metrics)
-    batch_metrics_np = jax.tree_multimap(lambda *xs: np.array(xs), *batch_metrics_np) #!
+    batch_metrics_np = jax.tree_multimap(lambda *xs: np.array(xs), #!
+                                        *batch_metrics_np) #!
     epoch_metrics_np = {
            k: np.mean(batch_metrics_np[k], axis=0) #!
            for k in batch_metrics_np} #!
@@ -268,7 +269,8 @@ than the train dataset so we can do this for the entire dataset directly.
 
   rng, init_rng = random.split(random.PRNGKey(0))
   params = get_initial_params(init_rng) #!
-  optimizer = create_optimizer(params, learning_rate=0.1, momentum=0.9) #!
+  optimizer = create_optimizer(params, learning_rate=0.1, #!
+                               momentum=0.9) #!
 
   for epoch in range(num_epochs):
     rng, input_rng = random.split(rng)
@@ -282,7 +284,8 @@ than the train dataset so we can do this for the entire dataset directly.
   test_ds = jax_utils.replicate(test_ds) #!
   
   rng, init_rng = random.split(random.PRNGKey(0))
-  params = get_initial_params(random.split(rng, jax.device_count())) #!
+  params = get_initial_params(random.split(rng, #!
+                              jax.device_count())) #!
   optimizer = create_optimizer(params, 0.1, 0.9) #!
 
   for epoch in range(num_epochs):
