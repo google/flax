@@ -586,7 +586,7 @@ def _unfreeze_variables(variables, mutable):
 def bind(variables: VariableDict,
          rngs: Optional[RNGSequences] = None,
          mutable: CollectionFilter = False):
-  """Bind variables and rngs to a new ```Scope```.
+  """Bind variables and rngs to a new ``Scope``.
   
   bind provides a ``Scope`` instance without transforming a function
   with ``apply``. This is particulary useful for debugging and
