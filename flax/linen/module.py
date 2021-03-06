@@ -809,7 +809,8 @@ class Module:
       variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
         about variables.
-      rngs: The rngs for the variable collections.
+      rngs: The rngs for the variable collections. For example :class:`flax.linen.stochastic.Dropout`
+        requires an additional rng named `dropout`.
       method: The literal name of a method in this class. If provided, applies
         this method. If not provided, applies the ``__call__`` method.
       mutable: Can be bool, str, or list. Specifies which collections should be
