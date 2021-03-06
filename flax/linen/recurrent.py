@@ -66,6 +66,7 @@ class RNNCellBase(Module):
 class LSTMCell(RNNCellBase):
   r"""LSTM cell.
     the mathematical definition of the cell is as follows
+
   .. math::
       \begin{array}{ll}
       i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
@@ -75,6 +76,7 @@ class LSTMCell(RNNCellBase):
       c' = f * c + i * g \\
       h' = o * \tanh(c') \\
       \end{array}
+
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
@@ -170,6 +172,7 @@ class OptimizedLSTMCell(RNNCellBase):
   faster than `LSTMCell` as long as the hidden size is roughly <= 2048 units.
 
   The mathematical definition of the cell is the same as `LSTMCell` and as follows
+
   .. math::
       \begin{array}{ll}
       i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
@@ -179,6 +182,7 @@ class OptimizedLSTMCell(RNNCellBase):
       c' = f * c + i * g \\
       h' = o * \tanh(c') \\
       \end{array}
+
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
@@ -280,6 +284,7 @@ class GRUCell(RNNCellBase):
   r"""GRU cell.
 
   the mathematical definition of the cell is as follows
+
   .. math::
       \begin{array}{ll}
       r = \sigma(W_{ir} x + W_{hr} h + b_{hr}) \\
@@ -287,6 +292,7 @@ class GRUCell(RNNCellBase):
       n = \tanh(W_{in} x + b_{in} + r * (W_{hn} h + b_{hn})) \\
       h' = (1 - z) * n + z * h
       \end{array}
+
   where x is the input and h, is the output of the previous time step.
 
   Attributes:
