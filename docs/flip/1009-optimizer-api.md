@@ -190,11 +190,8 @@ Remarks:
 [Train State]: #train-state
 
 In Flax it is common to hand around a `TrainState` object that can then be
-used for checkpointing. We could extend this pattern slightly for Linen and
-shorten the above [Optax Training Step] significantly. The augmented
-`TrainState` would provide an easy access to `variables['params']` and the added
-function `.update()` would accept dataclass items as well as collections inside
-`.variables`:
+used for checkpointing. This simplifies above [Optax training step] a bit by
+reducing the number of arguments and getting rid of the `static_argnums`.
 
 ```python
 class TrainState(flax.struct.PyTreeNode):
@@ -203,25 +200,6 @@ class TrainState(flax.struct.PyTreeNode):
   variables: flax.core.FrozenDict[str, Any]
   tx: optax.GradientTransformation = flax.struct.field(pytree_node=False)
   opt_state: optax.OptState
-
-  def __post_init__(self):
-    for name in self.variables:
-      assert name not in self.__annotations__, name
-
-  @property
-  def params(self):
-    """Provides access into variables['params']."""
-    return self.variables['params']
-
-  def update(self, **kwargs):
-    """Replace dataclass fields or collections inside variables."""
-    variables = kwargs.get('variables', self.variables)
-    for name in self.variables:
-      if name in kwargs:
-        value = kwargs.pop(name)
-        variables = variables.copy({name: value})
-    kwargs['variables'] = variables
-    return self.replace(**kwargs)
 ```
 
 Users can subclass this state and add more fields:
@@ -239,21 +217,23 @@ def train_step(state, inputs, labels):
 
   def loss_fn(params):
     outputs, new_model_state = state.apply_fn(
-      state.variables.copy(dict(params=params)), inputs, mutable=['batch_stats'])
+      state.variables.copy(
+          dict(params=params)), inputs, mutable=['batch_stats'])
     loss = xent_loss(outputs, labels)
     return loss, new_model_state
 
   (loss, new_model_state), grads = jax.value_and_grad(
-      loss_fn, has_aux=True)(state.params)
-  updates, new_opt_state = state.tx.update(grads, state.opt_state, state.params)
-  new_params = optax.apply_updates(state.params, updates)
+      loss_fn, has_aux=True)(state.variables['params'])
+  updates, new_opt_state = state.tx.update(
+      grads, state.opt_state, state.variables['params'])
+  new_params = optax.apply_updates(state.variables['params'], updates)
 
-  new_state = state.update(
+  new_state = state.replace(
       step=state.step + 1,
       opt_state=new_opt_state,
-      params=new_params,
-      **new_model_state,
+      variables=state.variables.copy({**new_model_state, 'params': new_params}),
   )
+
   return new_state, loss
 
 opt_state = tx.init(variables['params'])
