@@ -842,7 +842,7 @@ class Module:
     """Applies a module method to variables and returns output and modified variables.
 
     Note that `method` should be set if one would like to call `apply` on a
-    different class method than `_call__`. For instance, suppose a Transformer
+    different class method than ``__call__``. For instance, suppose a Transformer
     modules has a method called `encode`, then the following calls `apply` on
     that method::
 
@@ -863,7 +863,7 @@ class Module:
                list of names of mutable collections.
       capture_intermediates: If `True`, captures intermediate return values
         of all Modules inside the "intermediates" collection. By default only
-        the return values of all `__call__` methods are stored. A function can
+        the return values of all ``__call__`` methods are stored. A function can
         be passed to change the filter behavior. The filter function takes
         the Module instance and method name and returns a bool indicating
         whether the output of that method invocation should be stored.
@@ -1019,7 +1019,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.
 
   This is a utility for supporting the pattern where a Module hyper parameter
-  can be passed to `__init__` or `__call__`.
+  can be passed to ``__init__`` or ``__call__``.
 
   Example::
 
