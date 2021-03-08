@@ -421,8 +421,7 @@ class Module:
     # automatically transform Modules into dataclasses at subclass creation
     # time, and we set the last dataclass arguments to `parent` and `name`.
     cls._customized_dataclass_transform()
-    # We wrap user-defined methods including setup and _
-    to enforce
+    # We wrap user-defined methods including setup and __call__ to enforce
     # a number of different checks and to provide clear error messages.
     cls._verify_single_or_no_compact()
     cls._wrap_module_methods()
