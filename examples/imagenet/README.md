@@ -46,7 +46,7 @@ Configuration flag is defined using
 follows:
 
 ```shell
-python main.py --workdir=./imagenet_default --config.num_epochs=100
+python main.py --workdir=./imagenet_default --config.num_epochs=100 --config=configs/default.py
 ```
 
 #### 8 x Nvidia V100 (16GB)
@@ -66,6 +66,11 @@ python main.py \
 #### Running on Cloud
 
 See commands in [../cloud/README.md](../cloud/README.md)
+
+To use a dataset stored in a bucket, set the following shell parameter:
+
+    export TFDS_DATA_DIR="gs://$GCS_TFDS_BUCKET/tensorflow_datasets"
+
 ### Reproducibility
 
 Making the ImageNet classification example reproducible is WIP. 
