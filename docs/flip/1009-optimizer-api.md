@@ -217,8 +217,7 @@ def train_step(state, inputs, labels):
 
   def loss_fn(params):
     outputs, new_model_state = state.apply_fn(
-      state.variables.copy(
-          dict(params=params)), inputs, mutable=['batch_stats'])
+      state.variables.copy({'params': params}), inputs, mutable=['batch_stats'])
     loss = xent_loss(outputs, labels)
     return loss, new_model_state
 
