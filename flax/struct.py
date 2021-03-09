@@ -42,6 +42,9 @@ import jax
 def dataclass(clz: type):
   """Create a class which can be passed to functional transformations.
 
+  NOTE: Inherit from ``PyTreeNode`` instead to avoid type checking issues when
+  using PyType.
+
   Jax transformations such as `jax.jit` and `jax.grad` require objects that are
   immutable and can be mapped over using the `jax.tree_util` methods.
   The `dataclass` decorator makes it easy to define custom classes that can be
@@ -143,8 +146,32 @@ TNode = TypeVar('TNode', bound='PyTreeNode')
 class PyTreeNode():
   """Base class for dataclasses that should act like a JAX pytree node.
 
-  See `flax.struct.dataclass` for the `jax.tree_util` behavior.
-  This base class additionally avoids type checking errors when using pytype.
+  See ``flax.struct.dataclass`` for the ``jax.tree_util`` behavior.
+  This base class additionally avoids type checking errors when using PyType.
+
+  Example::
+
+    from flax import struct
+
+    class Model(struct.PyTreeNode):
+      params: Any
+      # use pytree_node=False to indicate an attribute should not be touched
+      # by Jax transformations.
+      apply_fn: FunctionType = struct.field(pytree_node=False)
+
+      def __apply__(self, *args):
+        return self.apply_fn(*args)
+
+    model = Model(params, apply_fn)
+
+    model.params = params_b  # Model is immutable. This will raise an error.
+    model_b = model.replace(params=params_b)  # Use the replace method instead.
+
+    # This class can now be used safely in Jax to compute gradients w.r.t. the
+    # parameters.
+    model = Model(params, apply_fn)
+    model_grad = jax.grad(some_loss_fn)(model)
+
   """
 
   def __init_subclass__(cls):
