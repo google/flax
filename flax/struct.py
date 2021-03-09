@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 # Copyright 2020 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,10 +74,7 @@ def dataclass(clz: type):
   Returns:
     The new class.
   """
-  if dataclasses.is_dataclass(clz):
-    data_clz = clz
-  else:
-    data_clz = dataclasses.dataclass(frozen=True)(clz)
+  data_clz = dataclasses.dataclass(frozen=True)(clz)
   meta_fields = []
   data_fields = []
   for name, field_info in data_clz.__dataclass_fields__.items():
