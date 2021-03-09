@@ -64,7 +64,7 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   m.update(data.encode('utf-8'))
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
-  return random.fold_in(rng, hash_int)
+  return random.fold_in(rng, jnp.uint32(hash_int))
 
 
 def in_filter(filter_like: Filter, col: str) -> bool:
