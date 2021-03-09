@@ -8,3 +8,6 @@ flax.struct package
 
 
 .. autofunction:: dataclass
+
+
+.. autoclass:: PyTreeNode
