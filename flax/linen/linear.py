@@ -46,6 +46,7 @@ def _canonicalize_tuple(x):
   else:
     return (x,)
 
+  # /cns/ 
 
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
