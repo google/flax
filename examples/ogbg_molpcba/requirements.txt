@@ -1,0 +1,9 @@
+absl-py>=0.10.0
+git+https://github.com/google/CommonLoopUtils@7664744#egg=clu
+flax>=0.3.4
+git+git://github.com/deepmind/jraph.git#egg=jraph
+ml-collections>=0.1.0
+optax>=0.0.9
+scikit-learn>=0.24.0
+tensorflow>=2.1
+tensorflow-datasets>=4.4.0
