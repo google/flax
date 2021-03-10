@@ -873,9 +873,8 @@ class Module:
       of the modified collections.
     """
     if method is None:
-      method = self.__class__.__call__
-    else:
-      method = _get_unbound_fn(method)
+      method = self.__call__
+    method = _get_unbound_fn(method)
     return apply(
         method, self,
         mutable=mutable, capture_intermediates=capture_intermediates
