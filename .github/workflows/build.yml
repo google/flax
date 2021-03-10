@@ -18,6 +18,10 @@ jobs:
       matrix:
         python-version: [3.6]
     steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@0.8.0
+      with:
+        access_token: ${{ github.token }}          
     - name: Install native dependencies
       run: |
         sudo apt-get -y install pandoc
