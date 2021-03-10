@@ -22,7 +22,8 @@ vNext
  -
  -
  -
- -
+ - Added custom error classes to many Linen errors. See: 
+   https://flax.readthedocs.io/en/latest/flax.errors.html
  -
  -
  -

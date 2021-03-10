@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.errors import VariableModificationError
+from flax import errors
 from flax.core import Scope, scope, freeze, init, apply, nn
 
 from jax import random
@@ -65,23 +65,24 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       scope.param('test', nn.initializers.ones, (4,))
     
-    msg = 'Inconsistent shapes between value and initializer for parameter "test" in "/": (2,), (4,)'
-    with self.assertRaisesWithLiteralMatch(ValueError, msg):
+    msg = r'Inconsistent shapes between value and initializer for parameter "test" in "/": \(2,\), \(4,\).'
+    with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
       apply(f)(freeze({'params': {'test': np.ones((2,))}}))
 
   def test_mutate_undefined_collection(self):
     def f(scope):
       scope.put_variable('state', 'test', 123)
 
-    msg = 'Trying to update variable "test" in "/" but collection "state" is immutable.'
-    with self.assertRaises(VariableModificationError):
+    msg = r'Cannot update variable "test" in "/" because collection "state" is immutable.'
+    with self.assertRaisesRegex(errors.ModifyScopeVariableError, msg):
       init(f, mutable='params')(random.PRNGKey(0))
 
   def test_undefined_param(self):
     def f(scope):
       nn.dense(scope.push('dense'), np.ones((1, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No parameter named "kernel" exists in "/dense".'):
+    msg = r'No parameter named "kernel" exists in "/dense".'
+    with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({})
 
   def test_variable_is_mutable(self):

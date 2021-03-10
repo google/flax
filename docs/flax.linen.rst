@@ -12,7 +12,15 @@ Module
 ------------------------
 
 .. autoclass:: Module
-   :members: setup, variable, param, apply, init, init_with_output, make_rng, variables, Variable, __setattr__
+   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, variables, Variable, __setattr__
+
+Init/Apply
+------------------------
+
+.. currentmodule:: flax.linen
+.. autofunction:: apply
+.. autofunction:: init
+.. autofunction:: init_with_output
 
 Variables
 ----------------------

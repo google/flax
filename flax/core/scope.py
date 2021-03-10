@@ -20,7 +20,7 @@ import hashlib
 from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
 
 from . import tracers
-from flax.errors import InvalidFilterError, InvalidScopeError, NameInUseError, NameTypeError, VariableModificationError
+from flax import errors
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
@@ -64,7 +64,7 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   m.update(data.encode('utf-8'))
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
-  return random.fold_in(rng, hash_int)
+  return random.fold_in(rng, jnp.uint32(hash_int))
 
 
 def in_filter(filter_like: Filter, col: str) -> bool:
@@ -88,7 +88,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
-  raise InvalidFilterError(filter_like)
+  raise errors.InvalidFilterError(filter_like)
 
 
 def filter_to_set(x: Filter) -> Set[str]:
@@ -107,7 +107,7 @@ def filter_to_set(x: Filter) -> Set[str]:
     return set([x])
   if isinstance(x, Iterable):
     return set(x)
-  raise InvalidFilterError(x)
+  raise errors.InvalidFilterError(x)
 
 
 def union_filters(a: Filter, b: Filter) -> Filter:
@@ -243,7 +243,9 @@ class Scope:
       variables: VariableDict to initialize the Scope with.
       rngs: RNGs used in this scope or one of the child scopes.
       name: name of this scope.
-      parent: parent scope.
+      mutable: A CollectionFilter determining which variables are mutable.
+      parent: The parent scope.
+      path: The path in the variable tree from the root scope to this scope. 
     """
     self._variables = variables
     self.parent = parent
@@ -274,7 +276,7 @@ class Scope:
 
   def _check_valid(self):
     if self._invalid:
-      raise InvalidScopeError(self.name)
+      raise errors.InvalidScopeError(self.name)
 
   @contextlib.contextmanager
   def temporary(self):
@@ -288,7 +290,14 @@ class Scope:
     """Invalidates the Scope."""
     self._invalid = True
 
-  def variables(self) -> Collection:
+  def mutable_variables(self) -> VariableDict:
+    """Returns an immutable copy of the mutable variables belonging to this Scope."""
+    self._populate_collections()
+    xs = {k: v for k, v in self._variables.items()
+          if in_filter(self.mutable, k)}
+    return freeze(xs)
+
+  def variables(self) -> VariableDict:
     """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
     return freeze(self._variables)
@@ -320,9 +329,10 @@ class Scope:
       name: the name to reserve.
     """
     if not isinstance(name, str):
-      raise NameTypeError(name)
+      raise TypeError('The type of scope "{name}" should be string but '
+                     f'it is {type(name)}')
     if name in self.reservations:
-      raise NameInUseError(name)
+      raise ValueError(f'Duplicate use of scope name: "{name}"')
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
@@ -445,7 +455,8 @@ class Scope:
 
   def make_rng(self, name: str) -> PRNGKey:
     """Generates A PRNGKey from a PRNGSequence with name `name`."""
-    assert self.has_rng(name), f'Need PRNG for "{name}"'
+    if not self.has_rng(name):
+      raise MissingRngError(self.name, name)
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[name] += 1
@@ -491,7 +502,7 @@ class Scope:
     self._check_valid()
     self._validate_trace_level()
     if not self.is_mutable_collection(col):
-      raise VariableModificationError(col, name, self.path_text)
+      raise errors.ModifyScopeVariableError(col, name, self.path_text)
     variables = self._mutable_collection(col)
     variables[name] = value
 
@@ -512,15 +523,15 @@ class Scope:
     self.reserve(name)
     if not self.has_variable(col, name):
       if not self.is_mutable_collection(col):
-        raise ValueError(
-            f'No Variable named "{name}" for collection "{col}" exists in "{self.path_text}".'
-        )
+        raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
     return Variable(self, col, name)
 
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
+
+    If the parameter exists already, the existing value is simply returned.
 
     Args:
       name: the name of the parameter.
@@ -548,18 +559,15 @@ class Scope:
         # usefuleness is less obvious. We might intentionally change the dtype
         # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
-          raise ValueError(
-              'Inconsistent shapes between value and initializer '
-              f'for parameter "{name}" in "{self.path_text}": {jnp.shape(val)}, {jnp.shape(abs_val)}'
-          )
-      return value
+          raise errors.ScopeParamShapeError(name, self.path_text, 
+              jnp.shape(val), jnp.shape(abs_val))
     else:
       if not self.is_mutable_collection('params'):
-        raise ValueError(
-            f'No parameter named "{name}" exists in "{self.path_text}".')
+        raise errors.ScopeParamNotFoundError(name, self.path_text)
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
-      return value
+
+    return value
 
   def _populate_collections(self):
     collections = self.root._variables.keys()
@@ -575,6 +583,29 @@ def _unfreeze_variables(variables, mutable):
     else:
       new_variables[key] = value
   return new_variables
+
+
+def bind(variables: VariableDict,
+         rngs: Optional[RNGSequences] = None,
+         mutable: CollectionFilter = False):
+  """Bind variables and rngs to a new ``Scope``.
+  
+  bind provides a ``Scope`` instance without transforming a function
+  with ``apply``. This is particulary useful for debugging and
+  interactive use cases like notebooks where a function would limit
+  the ability split up code into different cells.
+
+  a ``Scope`` instance is a stateful object. Note that idiomatic JAX is functional
+  and therefore a ``Scope` does not mix well well with vanilla JAX APIs. Therefore,
+  we recommend using ``apply`` when code should be reusable and compatible
+  across the JAX software ecosystem.
+  """
+  if not _is_valid_variables(variables):
+    raise errors.ApplyScopeInvalidVariablesError()
+  if rngs is not None and not _is_valid_rngs(rngs):
+    raise errors.BindInvalidRngsError()
+  new_variables = _unfreeze_variables(variables, mutable)
+  return Scope(new_variables, rngs=rngs, mutable=mutable)
 
 
 def apply(fn: Callable[..., Any],
@@ -594,23 +625,10 @@ def apply(fn: Callable[..., Any],
               *args,
               rngs: Optional[RNGSequences] = None,
               **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
-
-    if not _is_valid_variables(variables):
-      raise ValueError('The first argument passed to an apply function '
-                       'should be a dictionary of collections. '
-                       'Each collection should be a dictionary '
-                       'with string keys.')
-    if rngs is not None and not _is_valid_rngs(rngs):
-      raise ValueError('rngs should be a dictionary mapping strings to '
-                       '`jax.PRNGKey`.')
-    new_variables = _unfreeze_variables(variables, mutable)
-    with Scope(new_variables, rngs=rngs, mutable=mutable).temporary() as root:
+    with bind(variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:
-      mutated_variables = {k: v
-                           for k, v in new_variables.items()
-                           if in_filter(mutable, k)}
-      return y, freeze(mutated_variables)
+      return y, root.mutable_variables()
     else:
       return y
 
@@ -632,9 +650,9 @@ def init(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
-      raise ValueError(
-          'First argument passed to an init function should be a `jax.PRNGKey` '
-          'or a dictionary mapping strings to `jax.PRNGKey`.')
+      raise ValueError('First argument passed to an init function should be a '
+                       '`jax.PRNGKey` or a dictionary mapping strings to '
+                       '`jax.PRNGKey`.')
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
     return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)

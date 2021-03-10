@@ -35,7 +35,7 @@ from flax import linen as nn
 from flax import errors
 from flax import struct
 from flax.linen import compact
-from flax.core import Scope, freeze
+from flax.core import Scope, freeze, tracers
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -320,42 +320,66 @@ class ModuleTest(absltest.TestCase):
     y = Dummy(x.shape, parent=scope)(x)
     self.assertEqual(y, jnp.array([2.]))
 
-  def test_submodule_var_collision(self):
+  def test_submodule_var_collision_with_scope(self):
     rngkey = jax.random.PRNGKey(0)
+
     class Dummy(nn.Module):
       xshape: Tuple[int]
+
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
         self.bias = DummyModule()
+
       def __call__(self, x):
         return x + self.bias
+
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaises(errors.NameInUseError):
+
+    msg = 'Duplicate use of scope name: "bias"'
+    with self.assertRaisesWithLiteralMatch(ValueError, msg):
       y = Dummy(x.shape, parent=scope)(x)
+
+  def test_submodule_var_collision_with_submodule(self):
+    rngkey = jax.random.PRNGKey(0)
+
     class Dummy(nn.Module):
       xshape: Tuple[int]
+
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
+
       @compact
       def __call__(self, x):
         bias = DummyModule(name='bias')
         return x + self.bias
+
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaisesRegex(ValueError, 'name bias exists already'):
+
+    msg = 'A module of name "bias" exists already.'
+    with self.assertRaisesRegex(errors.ModuleNameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
+
+  def test_submodule_var_collision_with_params(self):
+    rngkey = jax.random.PRNGKey(0)
+
     class Dummy(nn.Module):
       xshape: Tuple[int]
+
       def setup(self):
         self.bias = DummyModule()
+
       @compact
       def __call__(self, x):
         bias = self.param('bias', initializers.ones, self.xshape)
         return x + self.bias
+
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaisesRegex(ValueError, 'bias already'):
+
+    msg = 'Name bias already in use in Dummy.'
+    with self.assertRaisesRegex(ValueError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_param_name_collision(self):
@@ -381,11 +405,13 @@ class ModuleTest(absltest.TestCase):
         return self.bias(x)
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaisesRegex(ValueError, 'bias exists already'):
+    msg = 'A module of name "bias" exists already.'
+    with self.assertRaisesRegex(errors.ModuleNameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_only_one_compact_method(self):
-    with self.assertRaisesRegex(RuntimeError, '@compact'):
+    msg = 'Only one method per class can be @compact'
+    with self.assertRaisesRegex(errors.MultipleMethodsCompactError, msg):
       class Dummy(nn.Module):
         @compact
         def call1(self):
@@ -423,7 +449,9 @@ class ModuleTest(absltest.TestCase):
         x = bar(x)
         x = bar(x)
         return x
-    with self.assertRaisesRegex(ValueError, '@compact'):
+    msg = (r'Submodule Dense must be defined in `setup\(\)` or in a method '
+            'wrapped in `@compact`')
+    with self.assertRaisesRegex(errors.AssignSubModuleError, msg):
       Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
 
   def test_forgotten_compact_annotation_with_explicit_parent(self):
@@ -439,7 +467,9 @@ class ModuleTest(absltest.TestCase):
         x = bar(x)
         return x
 
-    with self.assertRaisesRegex(ValueError, '@compact'):
+    msg = (r'Submodule Dense must be defined in `setup\(\)` or in a method '
+            'wrapped in `@compact`')
+    with self.assertRaisesRegex(errors.AssignSubModuleError, msg):
       Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
 
   def test_numpy_array_shape_class_args(self):
@@ -567,7 +597,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
-    with self.assertRaisesWithLiteralMatch(ValueError, 'Can\'t call __hash__ on modules that hold variables.'):
+    with self.assertRaisesWithLiteralMatch(AssertionError, 'Can\'t call __hash__ on modules that hold variables.'):
       hash(module_a)
 
   def test_module_trace(self):
@@ -614,9 +644,37 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(trace, expected_trace)
 
 
+  def test_module_apply_method(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self):
+        pass
+      
+      def test(self):
+        pass
+
+    # We can use both instance and class methods in apply.
+    Foo().apply({}, method=Foo.test)
+    Foo().apply({}, method=Foo().test)
+
+    # We can even use a function that is not in the provided Module, although
+    # it requires an argument for the class (Foo in this case).
+    x = Foo().apply({}, method=lambda cls: cls)
+    self.assertEqual(type(x), type(Foo()))
+
+    # This is not allowed.
+    msg = 'Cannot call apply()'
+    with self.assertRaisesRegex(errors.ApplyModuleInvalidMethodError, msg):
+      Foo().apply({}, method=lambda: True)
+
+    with self.assertRaisesRegex(errors.ApplyModuleInvalidMethodError, msg):
+      Foo().apply({}, method='allowed_apply_fn')
+
+
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)
-    with self.assertRaisesRegex(ValueError, "compact.*unbound module"):
+    msg = r'Can\'t call compact methods on unbound modules'
+    with self.assertRaisesRegex(errors.CallCompactUnboundModuleError, msg):
       dense(jnp.ones((1, )))
 
 
@@ -659,22 +717,23 @@ class ModuleTest(absltest.TestCase):
 
     empty = EmptyModule()
     # It's fine to call methods of unbound methods that don't depend on
-    # attributes defined during `setup`
+    # attributes defined during `setup`.
     self.assertEqual(empty.bar(), 3)
 
 
-  def test_call_unbound_noncompact_module_methods(self):
+  def test_call_unbound_noncompact_module_methods_depending_on_setup(self):
     class EmptyModule(nn.Module):
-      foo: int = 3
+      def setup(self):
+        self.foo = 2
 
       def bar(self):
         return self.foo
 
     empty = EmptyModule()
-    # It's fine to call methods of unbound methods that don't depend on
-    # attributes defined during `setup`
-    self.assertEqual(empty.bar(), 3)
-
+    msg = r'"EmptyModule" object has no attribute "foo"'
+    with self.assertRaisesRegex(errors.ModuleAttributeNotFoundError, msg):
+      empty.bar()
+     
 
   def test_module_with_attrs(self):
     class Foo(nn.Module):
@@ -701,10 +760,12 @@ class ModuleTest(absltest.TestCase):
       def __call__(self):
         self.i = 2
 
-    foo = Foo()
-    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
-      foo.init(random.PRNGKey(0))
-  
+    msg = ('Can set i=2 for Module of type Foo: Module instance is frozen '
+           'outside of setup method.')
+
+    with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
+      Foo().init(random.PRNGKey(0))
+
   def test_is_mutable_collection(self):
     class EmptyModule(nn.Module):
       def __call__(self):
@@ -769,7 +830,8 @@ class ModuleTest(absltest.TestCase):
       def setup(self):
         self.c = nn.Dense(2)
 
-    with self.assertRaisesWithLiteralMatch(AttributeError, "'B' object has no attribute 'c'"):
+    msg = '"B" object has no attribute "c"'
+    with self.assertRaisesRegex(errors.ModuleAttributeNotFoundError, msg):
       A().init(random.PRNGKey(0))
 
   def test_unbound_setup_call(self):
@@ -1065,6 +1127,68 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(state, {
       'intermediates': {'Bar_0': {'test': (2,)}}
     })
+
+  def test_functional_apply(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(3)
+        self.b = nn.Dense(1)
+
+    def f(foo, x):
+      x = foo.a(x)
+      return foo.b(x)
+      
+    foo = Foo()
+    x = jnp.ones((4,))
+    f_init = nn.init_with_output(f, foo)
+    f_apply = nn.apply(f, foo)
+    y1, variables = f_init(random.PRNGKey(0), x)
+    y2 = f_apply(variables, x)
+    self.assertEqual(y1, y2)
+
+  
+  def test_bind(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(3)
+        self.b = nn.Dense(1)
+
+    def f(foo, x):
+      x = foo.a(x)
+      return foo.b(x)
+      
+    foo = Foo()
+    x = jnp.ones((4,))
+    f_init = nn.init_with_output(f, foo)
+    y1, variables = f_init(random.PRNGKey(0), x)
+    y2 = f(foo.bind(variables), x)
+    self.assertEqual(y1, y2)
+  
+  def test_bind_stateful(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(3)
+        self.bn = nn.BatchNorm()
+        self.b = nn.Dense(1)
+
+    def f(foo, x):
+      x = foo.a(x)
+      x = foo.bn(x, use_running_average=False)
+      return foo.b(x)
+      
+    foo = Foo()
+    x = jnp.ones((4,))
+    f_init = nn.init_with_output(f, foo)
+    y1, variables = f_init(random.PRNGKey(0), x)
+    foo_b = foo.bind(variables, mutable='batch_stats')
+    y2 = f(foo_b, x)
+    y3, new_state = nn.apply(f, foo, mutable='batch_stats')(variables, x)
+    self.assertEqual(y1, y2)
+    self.assertEqual(y2, y3)
+    bs_1 = new_state['batch_stats']
+    bs_2 = foo_b.variables['batch_stats']
+    for x, y in zip(jax.tree_leaves(bs_1), jax.tree_leaves(bs_2)):
+      np.testing.assert_allclose(x, y)
 
 
 if __name__ == '__main__':

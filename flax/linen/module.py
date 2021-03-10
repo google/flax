@@ -30,9 +30,11 @@ from jax import tree_util
 import numpy as np
 
 import flax
+from flax import errors
 from flax import traverse_util
 from flax import serialization
-from flax.core import Scope, apply
+from flax import core
+from flax.core import Scope
 from flax.core.scope import CollectionFilter, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
 
@@ -52,10 +54,7 @@ _CallableT = TypeVar('_CallableT', bound=Callable)
 
 def _check_omnistaging():
   if not jax.config.omnistaging_enabled:
-    raise RuntimeError(
-        "Flax linen API requires JAX omnistaging to be enabled:\n"
-        "  from jax.config import config\n"
-        "  config.enable_omnistaging()")
+    raise errors.JaxOmnistagingError()
 
 
 def _indent(x: str, num_spaces: int):
@@ -270,7 +269,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
 
     if is_compact_method:
       if self.scope is None:
-        raise ValueError("Can't call compact methods on unbound modules")
+        raise errors.CallCompactUnboundModuleError()
       self._state.in_compact_method = True
     _context.module_stack.append(self)
     try:
@@ -293,8 +292,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
 def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
   @functools.wraps(hash_fn)
   def wrapped(self):
-    if self.scope is not None:
-      raise ValueError('Can\'t call __hash__ on modules that hold variables.')
+    assert self.scope == None, 'Can\'t call __hash__ on modules that hold variables.'
     return hash_fn(self)
   return wrapped
 
@@ -302,8 +300,9 @@ def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
 def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
   """Returns an unbound function from a method that is possibly bound.
   
-  This means that the returned function does no longer depend on the instance
-  of the class, which is passed as it first argument. 
+  This means that if the passed function belongs of an instance of a class, then
+  the returned function does no longer depend on the instance, which is passed
+  as the first argument to the function.
 
   Args:
     method_or_fn: A class method or function.
@@ -311,12 +310,16 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
     An unbound version of input function.
   """
   if inspect.ismethod(method_or_fn):
-    return method_or_fn.__func__  # pytype: disable=attribute-error
-  elif callable(method_or_fn):
-    return method_or_fn
-  else:
-    raise ValueError('Expect a function or method.')
+    method_or_fn = method_or_fn.__func__  # pytype: disable=attribute-error
 
+  # The method should be callable, and it should have at least one argument
+  # representing the class that is passed in.
+  if (not callable(method_or_fn) or 
+      len(inspect.signature(method_or_fn).parameters) < 1):
+    raise errors.ApplyModuleInvalidMethodError(method_or_fn)
+  
+  return method_or_fn
+  
 
 @dataclasses.dataclass
 class _ModuleInternalState:
@@ -435,8 +438,7 @@ class Module:
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
     if 'parent' in annotations or 'name' in annotations:
-      raise ValueError(
-          f'properties `parent` and `name` are reserved: {annotations}')
+      raise errors.ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
     # argument behavior and ordering from dataclass class-transform.
@@ -467,10 +469,7 @@ class Module:
     n_compact_fns = len([method_name for method_name in methods
                          if hasattr(getattr(cls, method_name), 'compact')])
     if n_compact_fns > 1:
-      raise RuntimeError(
-          'Only one method per class can be @compact. You can remove @compact '
-          'and define submodules and variables in setup(), or use two '
-          'separate modules.')
+      raise errors.MultipleMethodsCompactError()
 
   @classmethod
   def _wrap_module_methods(cls):
@@ -491,7 +490,7 @@ class Module:
     """Sets an attribute on this Module.
     
     We overload setattr solely to support pythonic naming via assignment of 
-    submodules in the special setup() function::
+    submodules in the special :meth:`setup` function::
 
       self.submodule_name = MyModule(...)
 
@@ -507,10 +506,11 @@ class Module:
     
     if not self._state.in_setup and not is_dataclass_attr:
       # Raises a TypeError just like frozen python dataclasses.
-      raise TypeError("Module instance is frozen outside of setup method.")
+      raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name, 
+                                                 val)
     if is_dataclass_attr:
       if self._state.in_setup:
-        raise TypeError("Module construction attributes are frozen.")
+        raise errors.SetAttributeInModuleSetupError()
       object.__setattr__(self, name, val)
     # Submodules are being defined and attached in setup()
     else:
@@ -525,8 +525,7 @@ class Module:
     if name in self.__dict__:
       return self.__dict__[name]
     else:
-      raise AttributeError(
-          f"'{self.__class__.__name__}' object has no attribute '{name}'")
+      raise errors.ModuleAttributeNotFoundError(self.__class__.__name__, name)
 
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
@@ -560,9 +559,7 @@ class Module:
       if self.parent._state.in_setup and self.name is None:  # pytype: disable=attribute-error
         return
       if not self.parent._initialization_allowed:
-        raise ValueError(
-            'Submodules must be defined in `setup()` or in a method wrapped '
-            'in `@compact`')
+        raise errors.AssignSubModuleError(self.__class__.__name__)
       # Autonaming of submodules.
       if self.name is None:  # pytype: disable=attribute-error
         prefix = f"{self.__class__.__name__}"
@@ -570,11 +567,7 @@ class Module:
         self.name = f"{prefix}_{cursor}"
         self.parent._state.autoname_cursor[prefix] = cursor + 1
       if self.parent._name_taken(self.name, self):
-        raise ValueError(
-            f"A variable of name {self.name} exists already, or "
-            f"trying to share submodule {self.__class__.__name__} by name "
-            f"{self.name}. To share submodules, store module instances as a"
-            f" Python object or as an attribute on self and reuse.")
+        raise errors.ModuleNameInUseError(self.__class__.__name__, self.name)
       self.parent._state.children[self.name] = self
       object.__setattr__(self, 'scope', self.parent.scope.push(self.name))
 
@@ -790,15 +783,58 @@ class Module:
       raise ValueError("Can't use RNGs on unbound modules")
     return self.scope.make_rng(name)
 
+  def bind(self, variables: VariableDict, *args, rngs: RNGSequences = None,
+           mutable: CollectionFilter = False):
+    """Creates an interactive Module instance by binding variables and RNGs.
+
+    bind provides an "interactive" instance of a Module directly without
+    transforming a function with ``apply``. This is particulary useful for debugging
+    and interactive use cases like notebooks where a function would limit the ability
+    split up code into different cells.
+
+    Once the variables (and optionally RNGs) are bound to a ``Module`` it becomes a
+    stateful object. Note that idiomatic JAX is functional and therefore an interactive
+    instance does not mix well well with vanilla JAX APIs. Therefore, we recommend using
+    ``apply`` when code should be reusable and compatible across the JAX software ecosystem.
+
+    Example::
+
+      class AutoEncoder(nn.Module):
+        def setup(self):
+          self.encoder = nn.Dense(3)
+          self.decoder = nn.Dense(5)
+      
+      ae = AutoEncoder()
+      model = ae.bind(variables)
+      z = model.encode(x)
+      x_reconstructed = model.decode(z)
+
+
+    Args:
+       variables: A dictionary containing variables keyed by variable
+        collections. See :mod:`flax.core.variables` for more details
+        about variables.
+      rngs: a dict of PRNGKeys to initialize the PRNG sequences.
+        The "params" PRNG sequence is used to initialize parameters.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+               treated as mutable: ``bool``: all/no collections are mutable.
+               ``str``: The name of a single mutable collection. ``list``: A
+               list of names of mutable collections.
+    Returns:
+      A copy of this instance with bound variables and RNGs.
+    """
+    scope = core.bind(variables, rngs=rngs, mutable=mutable)
+    return self.clone(parent=scope)
+
   def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
             method: Callable[..., Any] = None, 
-            mutable: Union[bool, str, Sequence[str]] = False,
+            mutable: CollectionFilter = False,
             capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
 
     Note that `method` should be set if one would like to call `apply` on a
-    different class method than `_call__`. For instance, suppose a Transformer
+    different class method than ``__call__``. For instance, suppose a Transformer
     modules has a method called `encode`, then the following calls `apply` on
     that method::
 
@@ -809,16 +845,18 @@ class Module:
       variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
         about variables.
-      rngs: The rngs for the variable collections.
-      method: The literal name of a method in this class. If provided, applies
-        this method. If not provided, applies the ``__call__`` method.
+      rngs: a dict of PRNGKeys to initialize the PRNG sequences.
+        The "params" PRNG sequence is used to initialize parameters.
+      method: A function to call apply on. This is generally a function in the
+        module. If provided, applies this method. If not provided, applies the
+        ``__call__`` method of the module.
       mutable: Can be bool, str, or list. Specifies which collections should be
                treated as mutable: ``bool``: all/no collections are mutable.
                ``str``: The name of a single mutable collection. ``list``: A
                list of names of mutable collections.
       capture_intermediates: If `True`, captures intermediate return values
         of all Modules inside the "intermediates" collection. By default only
-        the return values of all `__call__` methods are stored. A function can
+        the return values of all ``__call__`` methods are stored. A function can
         be passed to change the filter behavior. The filter function takes
         the Module instance and method name and returns a bool indicating
         whether the output of that method invocation should be stored.
@@ -828,19 +866,12 @@ class Module:
       of the modified collections.
     """
     if method is None:
-      method = self.__class__.__call__
-    else:
-      method = _get_unbound_fn(method)
-    fn = lambda scope: method(self.clone(parent=scope), *args, **kwargs)
-    if capture_intermediates is True:
-      capture_intermediates = capture_call_intermediates
-    if capture_intermediates:
-      mutable = union_filters(mutable, 'intermediates')
-    _context.capture_stack.append(capture_intermediates)
-    try:
-      return apply(fn, mutable=mutable)(variables, rngs=rngs)
-    finally:
-      _context.capture_stack.pop()
+      method = self.__call__
+    method = _get_unbound_fn(method)
+    return apply(
+        method, self,
+        mutable=mutable, capture_intermediates=capture_intermediates
+    )(variables, *args, **kwargs, rngs=rngs)
     
 
   def init_with_output(self, rngs: Union[PRNGKey, RNGSequences], *args,
@@ -857,7 +888,8 @@ class Module:
       collections.
     """
     if not isinstance(rngs, dict):
-      assert rngs.shape == (2,)
+      if rngs.shape != (2,):
+        raise errors.InitModuleInvalidRngsError(type(self).__name, rngs)
       rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
@@ -867,12 +899,12 @@ class Module:
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
-    Jitting `init` initializes a model lazily using only the shapes of the 
-    provided arguments, and avoids computing the forward pass with actual 
+    Jitting `init` initializes a model lazily using only the shapes of the
+    provided arguments, and avoids computing the forward pass with actual
     values. Example::
 
       jit_init = jax.jit(SomeModule.init)
-      jit_init(rng, jnp.ones(input_shape, jnp.float32))      
+      jit_init(rng, jnp.ones(input_shape, jnp.float32))
 
     Args:
       rngs: The rngs for the variable collections.
@@ -980,7 +1012,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.
 
   This is a utility for supporting the pattern where a Module hyper parameter
-  can be passed to `__init__` or `__call__`.
+  can be passed to ``__init__`` or ``__call__``.
 
   Example::
 
@@ -1011,61 +1043,144 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
     return a
 
 
-  # THE PART BELOW IS STILL UNDER DEVELOPMENT, PLEASE IGNORE
-  # ===========================================================
-  # @contextmanager
-  # def mutate(self, mutable=True, **updates):
-  #   cloned = self.clone(**updates)
-  #   try:
-  #     cloned.scope._variables = _unfreeze_variables(
-  #         cloned.scope._variables, mutable)
-  #     yield cloned
-  #   finally:
-  #     cloned.scope._variables = freeze(cloned.scope._variables)
+def apply(fn: Callable[..., Any], module: Module,
+          mutable: CollectionFilter = False,
+          capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False) -> Callable[..., Any]:
+  """Creates an apply function for the given function and ``Module`` instance.
 
-  # def initialized(self, rngs, *args, method='__call__', **kwargs):
-  #   if self.parent is not None:
-  #     raise ValueError("Pattern for initialized is "
-  #                      "`Module(parent=None, ...attrs...).initialized(...)`")
-  #   scope = Scope(variables={}, rngs=rngs)
-  #   with self.mutate(parent=scope) as initialized:
-  #     if method is not None:
-  #       getattr(initialized, method)(*args, **kwargs)
-  #   return initialized
+  Unlike ``Module.apply`` this function returns a new function with the signature
+  ``(variables, *args, rngs=None, **kwargs) -> T`` where `T` is the return type
+  of ``fn``. If ``mutable`` is not ``False`` the return type is a tuple where the
+  second item is a ``FrozenDict`` with the mutated variables.
 
-  # @property
-  # def variables(self):
-  #   """Get a view of Module variables with easy dot-syntax navigation."""
-  #   return DotGetter(self.scope.variables())
+  The apply function that is returned can be directly composed with
+  JAX transformations like ``jax.jit``::
 
-  # def __getattr__(self, name):
-  #   # Used for easy colab/jupyter introspection, and to provide a
-  #   # consistent top-level interface to self.<attr> for both simple
-  #   # and multi-method modules.
-  #   if name in self.children:
-  #     val = self.children[name]
-  #     if isinstance(val, str):  # variable
-  #       return self.variables[val][name]
-  #     else:  # submodule
-  #       val.scope = self.scope.push(name)
-  #       self.scope.reservations.remove(name)
-  #       return val
-  #   else:
-  #     raise AttributeError(
-  #         f"'{self.__class__.__name__}' object has no attribute '{name}'")
+    def f(foo, x):
+      z = foo.encode(x)
+      y = foo.decode(z)
+      # ...
+      return y
+    
+    foo = Foo()
+    f_jitted = jax.jit(nn.apply(f, foo))
+    f_jitted(variables, x)
 
-  # def __dir__(self):
-  #   return list(self.children.keys()) + object.__dir__(self)
+  Args:
+    fn: The function that should be applied. The first argument passed will
+      be an module instance of the ``module`` with variables and RNGs bound
+      to it.
+    module: The ``Module`` that will be used to bind variables and RNGs to.
+      The ``Module`` passed as the first argument to ``fn`` will be a clone
+      of module.
+    mutable: Can be bool, str, or list. Specifies which collections should be
+      treated as mutable: ``bool``: all/no collections are mutable.
+      ``str``: The name of a single mutable collection. ``list``: A
+      list of names of mutable collections.
+    capture_intermediates: If `True`, captures intermediate return values
+      of all Modules inside the "intermediates" collection. By default only
+      the return values of all `__call__` methods are stored. A function can
+      be passed to change the filter behavior. The filter function takes
+      the Module instance and method name and returns a bool indicating
+      whether the output of that method invocation should be stored.
+  Returns:
+    The apply function wrapping ``fn``.
+  """
+  @functools.wraps(fn)
+  def scope_fn(scope, *args, **kwargs):
+    _context.capture_stack.append(capture_intermediates)
+    try:
+      return fn(module.clone(parent=scope), *args, **kwargs)
+    finally:
+      _context.capture_stack.pop()
 
-  # TODO: Should this be what `clone` always does if you don't pass in an explicit
-  # parent?
-  # def detached(self):
-  #   return self.clone(parent=None)
+  if capture_intermediates is True:
+    capture_intermediates = capture_call_intermediates
+  if capture_intermediates:
+    mutable = union_filters(mutable, 'intermediates')
+  return core.apply(scope_fn, mutable=mutable)
 
-  # # TODO: Consider whether this is a helpful abstraction, and think about naming.
-  # # See its use in design_test/linen/weight_std.py
-  # def materialized(self, variables={}, rngs={}):
-  #   assert self.scope is None, ("Can't attach a module twice."
-  #                               " Maybe you want to clone first?")
-  #   return self.clone(parent=Scope(variables, rngs))
 
+def init_with_output(fn: Callable[..., Any], module: Module,
+                     mutable: CollectionFilter = True) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
+  """Creates an init function for the given function and ``Module`` instance that also returns output.
+
+  Unlike ``Module.init_with_output`` this function returns a new function with the signature
+  ``(rngs, *args, **kwargs) -> (T, variables)`` where `T` is the return type of ``fn``.
+  The rngs can be a dict of PRNGKeys or a single ```PRNGKey`` which is
+  equivalant to passing a dict with one PRNGKey with the name "params".
+
+  The init function that is returned can be directly composed with
+  JAX transformations like ``jax.jit``::
+
+    def f(foo, x):
+      z = foo.encode(x)
+      y = foo.decode(z)
+      # ...
+      return y
+    
+    foo = Foo()
+    f_jitted = jax.jit(nn.init_with_output(f, foo))
+    y, variables = f_jitted(rng, x)
+
+  Args:
+    fn: The function that should be applied. The first argument passed will
+      be an module instance of the ``module`` with variables and RNGs bound
+      to it.
+    module: The ``Module`` that will be used to bind variables and RNGs to.
+      The ``Module`` passed as the first argument to ``fn`` will be a clone
+      of module.
+    mutable: Can be bool, str, or list. Specifies which collections should be
+      treated as mutable: ``bool``: all/no collections are mutable.
+      ``str``: The name of a single mutable collection. ``list``: A
+      list of names of mutable collections.
+  Returns:
+    The init function wrapping ``fn``.
+  """
+  @functools.wraps(fn)
+  def scope_fn(scope, *args, **kwargs):
+    return fn(module.clone(parent=scope), *args, **kwargs)
+  return core.init(scope_fn, mutable=mutable)
+
+
+def init(fn: Callable[..., Any], module: Module,
+         mutable: CollectionFilter = True) -> Callable[..., FrozenVariableDict]:
+  """Creates an init function for the given function and ``Module`` instance.
+
+  Unlike ``Module.init`` this function returns a new function with the signature
+  ``(rngs, *args, **kwargs) -> variables``.
+  The rngs can be a dict of PRNGKeys or a single ```PRNGKey`` which is
+  equivalant to passing a dict with one PRNGKey with the name "params".
+
+  The init function that is returned can be directly composed with
+  JAX transformations like ``jax.jit``::
+
+    def f(foo, x):
+      z = foo.encode(x)
+      y = foo.decode(z)
+      # ...
+      return y
+    
+    foo = Foo()
+    f_jitted = jax.jit(nn.init(f, foo))
+    variables = f_jitted(rng, x)
+
+  Args:
+    fn: The function that should be applied. The first argument passed will
+      be an module instance of the ``module`` with variables and RNGs bound
+      to it.
+    module: The ``Module`` that will be used to bind variables and RNGs to.
+      The ``Module`` passed as the first argument to ``fn`` will be a clone
+      of module.
+    mutable: Can be bool, str, or list. Specifies which collections should be
+      treated as mutable: ``bool``: all/no collections are mutable.
+      ``str``: The name of a single mutable collection. ``list``: A
+      list of names of mutable collections.
+  Returns:
+    The init function wrapping ``fn``.
+  """
+  init_fn = init_with_output(fn, module, mutable)
+  @functools.wraps(init_fn)
+  def init_wrapper(*args, **kwargs):
+    return init_fn(*args, **kwargs)[1]
+  return init_wrapper

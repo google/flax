@@ -105,11 +105,11 @@ GPUs/TPUs).
     initial_params = CNN().init(key, init_val)['params']
     return initial_params
 
-Note that for the single-model code above, we use `jax.jit`_ to lazily model 
-(see `Module.init`_'s documentation for more details). For the ensembling
-case, `jax.pmap`_ will map over the first axis of the provided argument ``key``
-by default, so we should make sure that we provide one key for each device when
-we call this function later on.
+Note that for the single-model code above, we use `jax.jit`_ to lazily
+initialize the model (see `Module.init`_'s documentation for more details).
+For the ensembling case, `jax.pmap`_ will map over the first axis of the
+provided argument ``key`` by default, so we should make sure that we provide
+one key for each device when we call this function later on.
 
 Next we simply do the same for the functions ``create_optimizer``, 
 ``train_step``, and ``eval_step``. We also make a minor change to 
@@ -235,7 +235,8 @@ Next we transform the ``train_epoch`` function.
       batch_metrics.append(metrics)
 
     batch_metrics_np = jax.device_get(batch_metrics)
-    batch_metrics_np = jax.tree_multimap(lambda *xs: np.array(xs), *batch_metrics_np) #!
+    batch_metrics_np = jax.tree_multimap(lambda *xs: np.array(xs), #!
+                                        *batch_metrics_np) #!
     epoch_metrics_np = {
            k: np.mean(batch_metrics_np[k], axis=0) #!
            for k in batch_metrics_np} #!
@@ -268,7 +269,8 @@ than the train dataset so we can do this for the entire dataset directly.
 
   rng, init_rng = random.split(random.PRNGKey(0))
   params = get_initial_params(init_rng) #!
-  optimizer = create_optimizer(params, learning_rate=0.1, momentum=0.9) #!
+  optimizer = create_optimizer(params, learning_rate=0.1, #!
+                               momentum=0.9) #!
 
   for epoch in range(num_epochs):
     rng, input_rng = random.split(rng)
@@ -282,7 +284,8 @@ than the train dataset so we can do this for the entire dataset directly.
   test_ds = jax_utils.replicate(test_ds) #!
   
   rng, init_rng = random.split(random.PRNGKey(0))
-  params = get_initial_params(random.split(rng, jax.device_count())) #!
+  params = get_initial_params(random.split(rng, #!
+                              jax.device_count())) #!
   optimizer = create_optimizer(params, 0.1, 0.9) #!
 
   for epoch in range(num_epochs):
