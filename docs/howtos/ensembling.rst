@@ -105,11 +105,11 @@ GPUs/TPUs).
     initial_params = CNN().init(key, init_val)['params']
     return initial_params
 
-Note that for the single-model code above, we use `jax.jit`_ to lazily model 
-(see `Module.init`_'s documentation for more details). For the ensembling
-case, `jax.pmap`_ will map over the first axis of the provided argument ``key``
-by default, so we should make sure that we provide one key for each device when
-we call this function later on.
+Note that for the single-model code above, we use `jax.jit`_ to lazily
+initialize the model (see `Module.init`_'s documentation for more details).
+For the ensembling case, `jax.pmap`_ will map over the first axis of the
+provided argument ``key`` by default, so we should make sure that we provide
+one key for each device when we call this function later on.
 
 Next we simply do the same for the functions ``create_optimizer``, 
 ``train_step``, and ``eval_step``. We also make a minor change to 
