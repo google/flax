@@ -87,6 +87,7 @@ def avg_pool(inputs, window_shape, strides=None, padding="VALID"):
   return y
 
 
+# /cns/
 def max_pool(inputs, window_shape, strides=None, padding="VALID"):
   """Pools the input by taking the maximum of a window slice.
 
