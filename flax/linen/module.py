@@ -889,7 +889,7 @@ class Module:
     """
     if not isinstance(rngs, dict):
       if rngs.shape != (2,):
-        raise errors.InitModuleInvalidRngsError(type(self).__name, rngs)
+        raise errors.InitModuleInvalidRngsError(self.__class__.__name__, rngs)
       rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)

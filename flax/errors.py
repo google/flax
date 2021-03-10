@@ -69,9 +69,19 @@ class FlaxError(Exception):
     error_msg = f'{message} ({error_page}#{module_name}.{class_name})'
     super().__init__(error_msg)
 
+
 #################################################
 # scope.py errors                               #
 #################################################
+
+
+class MissingRngError(FlaxError):
+  """
+  This error is raised if a PRNG is required but it is not provided as an input.
+  Please see :class:`InvalidRngError` for more details.
+  """
+  def __init__(self, scope_name, rng_name):
+    super().__init__(f'{scope_name} needs PRNG for "{rng_name}"')
 
 
 class InvalidRngError(FlaxError):
@@ -564,5 +574,5 @@ class JaxOmnistagingError(FlaxError):
     from jax.config import config
     config.enable_omnistaging()
   """
-  def __init(self):
+  def __init__(self):
     super().__init__(f'Flax Linen requires Omnistaging to be enabled')
