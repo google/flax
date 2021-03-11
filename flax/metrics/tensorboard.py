@@ -15,6 +15,7 @@
 """Write Summaries from JAX for use with Tensorboard.
 """
 
+import os
 import sys
 import warnings
 import matplotlib as mpl
@@ -71,6 +72,8 @@ class SummaryWriter(object):
     Args:
       log_dir: path to record tfevents files in.
     """
+    log_dir = os.fspath(log_dir)
+
     # If needed, create log_dir directory as well as missing parent directories.
     if not tf.io.gfile.isdir(log_dir):
       tf.io.gfile.makedirs(log_dir)
