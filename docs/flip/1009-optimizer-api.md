@@ -83,9 +83,9 @@ Remarks:
   code illustrates how this can be a drop-in replacement for a function we also
   use in our [previous training step], where this update function already exists
   (notice how we need to invert the sign because we add the gradient update to
-  the parameters). Since
-  [schedule_hyperparams](https://github.com/deepmind/optax/pull/48) Optax
-  supports scheduling arbitrary hyper parameters, not only the learning rate.
+  the parameters). In addition, you can use
+  [`schedule_hyperparams()`](https://github.com/deepmind/optax/pull/48) to
+  schedule arbitrary hyper parameters with Optax.
 
 ## Optax Training Step
 [Optax Training Step]: #optax-training-step
