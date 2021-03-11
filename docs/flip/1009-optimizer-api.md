@@ -190,7 +190,7 @@ Remarks:
 [Train State]: #train-state
 
 In Flax it is common to hand around a `TrainState` object that can then be
-used for checkpointing. This simplifies above [Optax training step] a bit by
+used for checkpointing. This simplifies the above [Optax training step] a bit by
 reducing the number of arguments and getting rid of the `static_argnums`.
 
 ```python
