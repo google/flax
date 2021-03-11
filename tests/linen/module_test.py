@@ -760,11 +760,20 @@ class ModuleTest(absltest.TestCase):
       def __call__(self):
         self.i = 2
 
-    msg = ('Can set i=2 for Module of type Foo: Module instance is frozen '
+    msg = ('Can\'t set i=2 for Module of type Foo: Module instance is frozen '
            'outside of setup method.')
-
     with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
       Foo().init(random.PRNGKey(0))
+
+  
+  def test_module_call_not_implemented(self):
+    class Foo(nn.Module):
+      pass
+
+    msg = '"Foo" object has no attribute "__call__"'
+    with self.assertRaisesRegex(errors.ModuleAttributeNotFoundError, msg):
+      Foo().init(random.PRNGKey(0))
+
 
   def test_is_mutable_collection(self):
     class EmptyModule(nn.Module):

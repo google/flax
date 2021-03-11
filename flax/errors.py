@@ -470,7 +470,7 @@ class SetAttributeFrozenModuleError(FlaxError):
           return self.dense(x)
   """
   def __init__(self, module_cls, attr_name, attr_val):
-    super().__init__(f'Can set {attr_name}={attr_val} for Module of type '
+    super().__init__(f'Can\'t set {attr_name}={attr_val} for Module of type '
                     f'{module_cls}: Module instance is frozen outside of '
                      'setup method.')
 
