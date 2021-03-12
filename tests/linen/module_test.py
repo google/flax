@@ -253,21 +253,8 @@ class ModuleTest(absltest.TestCase):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaisesRegex(ValueError, 'bias already in use'):
-      y = Dummy(x.shape, parent=scope)(x)
-
-  def test_setup_var_collision(self):
-    rngkey = jax.random.PRNGKey(0)
-    class Dummy(nn.Module):
-      xshape: Tuple[int]
-      def setup(self):
-        self.bias = self.param('bias', initializers.ones, self.xshape)
-        self.bias = self.param('bias', initializers.ones, self.xshape)
-      def __call__(self, x):
-        return x + self.bias
-    x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaisesRegex(ValueError, 'bias already in use'):
+    msg = 'Could not create param "bias" in Module Dummy: Name in use'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_call_var_collision(self):
@@ -281,7 +268,23 @@ class ModuleTest(absltest.TestCase):
         return x + bias
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaisesRegex(ValueError, 'bias already in use'):
+    msg = 'Could not create param "bias" in Module Dummy: Name in use'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
+      y = Dummy(x.shape, parent=scope)(x)
+
+  def test_setup_var_collision(self):
+    rngkey = jax.random.PRNGKey(0)
+    class Dummy(nn.Module):
+      xshape: Tuple[int]
+      def setup(self):
+        self.bias = self.param('bias', initializers.ones, self.xshape)
+        self.bias = self.param('bias', initializers.ones, self.xshape)
+      def __call__(self, x):
+        return x + self.bias
+    x = jnp.array([1.])
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    msg = 'Could not create param "bias" in Module Dummy: Name in use'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_setattr_name_var_disagreement_allowed_in_lists(self):
@@ -357,8 +360,8 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
 
-    msg = 'A module of name "bias" exists already.'
-    with self.assertRaisesRegex(errors.ModuleNameInUseError, msg):
+    msg = 'Could not create submodule "bias" in Module Dummy: Name in use'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_submodule_var_collision_with_params(self):
@@ -378,8 +381,8 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
 
-    msg = 'Name bias already in use in Dummy.'
-    with self.assertRaisesRegex(ValueError, msg):
+    msg = 'Could not create param "bias" in Module Dummy: Name in use'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_param_name_collision(self):
@@ -392,7 +395,8 @@ class ModuleTest(absltest.TestCase):
         return x + self.bias
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    with self.assertRaisesRegex(ValueError, 'Name bias already in use'):
+    msg = 'Could not create param "bias" in Module Dummy: Name in use'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_submodule_name_collision(self):
@@ -405,8 +409,8 @@ class ModuleTest(absltest.TestCase):
         return self.bias(x)
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    msg = 'A module of name "bias" exists already.'
-    with self.assertRaisesRegex(errors.ModuleNameInUseError, msg):
+    msg = 'Could not create submodule "bias" in Module Dummy: Name in use'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
 
   def test_only_one_compact_method(self):

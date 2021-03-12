@@ -567,7 +567,8 @@ class Module:
         self.name = f"{prefix}_{cursor}"
         self.parent._state.autoname_cursor[prefix] = cursor + 1
       if self.parent._name_taken(self.name, self):
-        raise errors.ModuleNameInUseError(self.__class__.__name__, self.name)
+        parent_class = self.parent.__class__.__name__
+        raise errors.NameInUseError('submodule', self.name, parent_class)
       self.parent._state.children[self.name] = self
       object.__setattr__(self, 'scope', self.parent.scope.push(self.name))
 
@@ -710,8 +711,7 @@ class Module:
           'Variables must be initialized in `setup()` or in a method '
           'wrapped in `@compact`')
     if self._name_taken(name):
-      raise ValueError(
-          f'Name {name} already in use in {self.__class__.__name__}.')
+      raise errors.NameInUseError('variable', name, self.__class__.__name__)
     v = self.scope.variable(col, name, init_fn, *init_args)
     self._state.children[name] = col
     return v
@@ -737,8 +737,7 @@ class Module:
           'Parameters must be initialized in `setup()` or in a method '
           'wrapped in `@compact`')
     if self._name_taken(name):
-      raise ValueError(
-          f'Name {name} already in use in {self.__class__.__name__}.')
+      raise errors.NameInUseError('param', name, self.__class__.__name__)
     v = self.scope.param(name, init_fn, *init_args)
     self._state.children[name] = 'params'
     return v

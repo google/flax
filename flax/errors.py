@@ -284,20 +284,16 @@ class ModifyScopeVariableError(FlaxError):
 #################################################
 
 
-class  ModuleNameInUseError(FlaxError):
+class  NameInUseError(FlaxError):
   """
-  This error is raised when trying to create a submodule with an exsiting name.
-  Within a scope, submodules should have unique names, because each of them 
-  is stored as a unique key in the variable dict (for more explanation on 
-  variable dicts,  please see :mod:`flax.core.variables`)::
+  This error is raised when trying to create a submodule, param, or variable
+  with an existing name. They are all considered to be in the same namespace::
 
     class Foo(nn.Module):
       @nn.compact
       def __call__(self, x):
         dense = nn.Dense(features=3, name='bar')
         embed = nn.Embed(num_embeddings=2, features=5, name='bar')  # <-- ERROR!
-
-    Foo().init(random.PRNGKey(0), np.arange(5))
 
   Similarly, a submodule name can collide with an existing parameter name, since
   they are both stored in the same variable dict::
@@ -307,6 +303,15 @@ class  ModuleNameInUseError(FlaxError):
       def __call__(self, x):
         bar = self.param('bar', nn.initializers.zeros, (1, ))
         embed = nn.Embed(num_embeddings=2, features=5, name='bar')  # <-- ERROR!
+  
+  Variables should also have unique names, even if they have their own
+  collection::
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, inputs):
+        _ = self.param('mean', initializers.lecun_normal(), (2, 2))
+        _ = self.variable('stats', 'mean', initializers.zeros, (2, 2))
 
   If submodules are not provided with a name, a unique name will be given to
   them automatically::
@@ -318,8 +323,10 @@ class  ModuleNameInUseError(FlaxError):
         x = MySubModule()(x)  # This is fine.
         return x
   """
-  def __init__(self, module_name, variable_name):
-    super().__init__(f'A module of name "{variable_name}" exists already.')
+  def __init__(self, key_type, value, module_name):
+    # key_type is in {param, variable, submodule}.
+    super().__init__(f'Could not create {key_type} "{value}" in Module '
+                     f'{module_name}: Name in use.')
 
 
 class AssignSubModuleError(FlaxError):
