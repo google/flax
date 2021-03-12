@@ -103,29 +103,37 @@ class SummaryWriter(object):
     with self._event_writer.as_default():
       tf.summary.scalar(name=tag, data=value, step=step)
 
-  def image(self, tag, image, step):
+  def image(self, tag, image, step, max_outputs=3):
     """Saves RGB image summary from np.ndarray [H,W], [H,W,1], or [H,W,3].
 
     Args:
       tag: str: label for this data
-      image: ndarray: [H,W], [H,W,1], [H,W,3] save image in greyscale or colors.
+      image: ndarray: [H,W], [H,W,1], [H,W,3], [K,H,W], [K,H,W,1], [K,H,W,3]
+        Save image in greyscale or colors.
         Pixel values could be either uint8 or float.
         Floating point values should be in range [0, 1).
       step: int: training step
+      max_outputs: At most this many images will be emitted at each step.
+        Defaults to 3.
     """
     image = np.array(image)
-    if len(np.shape(image)) == 2:
-      image = image[:, :, np.newaxis]
-    if np.shape(image)[-1] == 1:
-      image = np.repeat(image, 3, axis=-1)
     # tf.summary.image expects image to have shape [k, h, w, c] where,
     # k = number of samples, h = height, w = width, c = number of channels.
-    image = image[np.newaxis, :, :, :]
+    if len(np.shape(image)) == 2:
+      image = image[np.newaxis, :, :, np.newaxis]
+    elif len(np.shape(image)) == 3:
+      # this could be either [k, h, w] or [h, w, c]
+      if np.shape(image)[-1] in (1, 3):
+        image = image[np.newaxis, :, :, :]
+      else:
+        image = image[:, :, :, np.newaxis]
+    if np.shape(image)[-1] == 1:
+      image = np.repeat(image, 3, axis=-1)
 
     # Convert to tensor value as tf.summary.image expects data to be a tensor.
     image = tf.convert_to_tensor(image)
     with self._event_writer.as_default():
-      tf.summary.image(name=tag, data=image, step=step)
+      tf.summary.image(name=tag, data=image, step=step, max_outputs=max_outputs)
 
   def audio(self, tag, audiodata, step, sample_rate=44100, max_outputs=3):
     """Saves audio as wave.

@@ -134,6 +134,33 @@ class TensorboardTest(absltest.TestCase):
     # assert the image was increased in dimension
     self.assertEqual(actual_img.shape, (30, 30, 3))
 
+  def test_summarywriter_multiple_images(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    expected_img = np.random.uniform(low=0., high=255., size=(2, 30, 30, 3))
+    expected_img = expected_img.astype(np.uint8)
+    summary_writer.image(tag='multiple_images_test', image=expected_img, step=1)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+
+    self.assertEqual(summary_value.tag, 'multiple_images_test')
+    actual_imgs = [tf.image.decode_image(s)
+                   for s in summary_value.tensor.string_val[2:]]
+    self.assertTrue(np.allclose(np.stack(actual_imgs, axis=0), expected_img))
+
+  def test_summarywriter_multiple_2dimages_scaled(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    img = np.random.uniform(low=0., high=255., size=(2, 30, 30))
+    img = img.astype(np.uint8)
+    summary_writer.image(tag='multiple_2dimages_test', image=img, step=1)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+
+    self.assertEqual(summary_value.tag, 'multiple_2dimages_test')
+    actual_imgs = [tf.image.decode_image(s)
+                   for s in summary_value.tensor.string_val[2:]]
+    # assert the images were increased in dimension
+    self.assertEqual(np.stack(actual_imgs, axis=0).shape, (2, 30, 30, 3))
+
   def test_summarywriter_audio(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
