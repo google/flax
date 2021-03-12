@@ -1137,6 +1137,17 @@ class ModuleTest(absltest.TestCase):
     bs_2 = foo_b.variables['batch_stats']
     for x, y in zip(jax.tree_leaves(bs_1), jax.tree_leaves(bs_2)):
       np.testing.assert_allclose(x, y)
+  
+  def test_passing_mutable_variables(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(2)(x)
+    x = jnp.ones((3,))
+    variables = Foo().init(random.PRNGKey(0), x)
+    variables = variables.unfreeze()
+    y = Foo().apply(variables, x)
+    self.assertEqual(y.shape, (2,))
 
 
 if __name__ == '__main__':

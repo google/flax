@@ -28,7 +28,7 @@ from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
-from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, union_filters, intersect_filters, group_collections
+from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, union_filters, intersect_filters, subtract_filters, group_collections
 
 from . import axes_scan
 
@@ -163,7 +163,7 @@ def pack(fn: Callable[..., Any],
         inner_scope._validate_trace_level()
         mutable_variables = {key: val for key, val
                              in inner_scope._variables.items()
-                             if not isinstance(val, FrozenDict)}
+                             if in_filter(inner_scope.mutable, key)}
         out_variable_groups = group_collections(
             mutable_variables, tuple(out_variable_filters) + (True,))
         remainder = tuple(out_variable_groups[-1].keys())
@@ -236,7 +236,7 @@ def transform(
 
   is_target_out = mutable or init
   in_vars = (target, variables)
-  out_vars = (target, variables) if is_target_out else ((), variables)
+  out_vars = in_vars if is_target_out else (False, subtract_filters(variables, target))
   wrapper = pack(wrapper, in_vars, out_vars, (rngs,), name='transform')
   @functools.wraps(wrapper)
   def catch_treedef(scopes, *args):
