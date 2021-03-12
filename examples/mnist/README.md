@@ -23,7 +23,7 @@ I0828 08:51:42.248714 139971964110656 train.py:180] eval epoch: 10, loss: 0.0299
 
 ### How to run
 
-`python main.py --workdir=/tmp/mnist`
+`python main.py --workdir=/tmp/mnist --config=configs/default.py`
 
 #### Overriding Hyperparameter configurations
 
