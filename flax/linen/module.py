@@ -701,6 +701,16 @@ class Module:
     for a shorthand way to define read-only variables in the "params"
     collection.
 
+    Contrary to :meth:`param`, all arguments passing using `init_fn` should be
+    passed on explictly::
+
+      key = self.make_rng('stats')
+      mean = self.variable('stats', 'mean', lecun_normal(), key, (2, 2))
+
+    In the example above, the function `lecun_normal` expects two arguments:
+    `key` and `shape`, and both have to be passed on. The PRNG for `stats` has
+    to be provided explicitly when calling :meth:`init` and :meth:`apply`.
+
     Args:
       col: The variable collection name.
       name: The variable name.
@@ -729,6 +739,16 @@ class Module:
 
     Parameters are read-only variables in the collection named "params". See
     :mod:`flax.core.variables` for more details on variables.
+
+    The first argument of `init_fn` is assumed to be a PRNG key, which is
+    provided automatically and does not have to be passed using `init_args`::
+
+      mean = self.param('mean', lecun_normal(), (2, 2))
+
+    In the example above, the function `lecun_normal` expects two arguments:
+    `key` and `shape`, but only `shape` has to be provided explicitly; `key`
+    is set automatically using the PRNG for `params` that is passed when
+    initializing the module using :meth:`init`.
 
     Args:
       name: The parameter name.
