@@ -34,7 +34,7 @@ import tensorflow.compat.v2 as tf
 
 
 def _flatten_dict(input_dict, parent_key='', sep='.'):
-  """Flatten and simplify dict such that it can be used by hparams.
+  """Flattens and simplifies dict such that it can be used by hparams.
 
   Args:
     input_dict: Input dict, e.g., from ConfigDict.
