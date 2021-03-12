@@ -299,3 +299,15 @@ class ScopeNameInUseError(FlaxError):
   """
   def __init__(self, scope_name):
     super().__init__(f'Duplicate use of scope name: "{scope_name}"')
+
+
+class InvalidCheckpointError(FlaxError):
+  """
+  A checkpoint cannot be stored in a directory that already has
+  a checkpoint at the current or a later step.
+
+  You can pass `overwrite=True` to disable this behavior and
+  overwrite existing checkpoints in the target directory.
+  """
+  def __init__(self, path, step):
+    super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')

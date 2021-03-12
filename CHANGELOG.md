@@ -17,8 +17,9 @@ vNext
  -
  -
  -
- -
- -
+ - Add option to overwrite existing checkpoints in `save_checkpoint`.
+ - Raise an error when saving a checkpoint which has a smaller step than the
+   latest checkpoint already saved.
  -
  -
  -
