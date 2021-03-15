@@ -42,6 +42,7 @@ class DataSource(object):
   def __init__(self, config: ml_collections.ConfigDict, shuffle_seed: int = 1):
 
     dataset_builder = tfds.builder('cifar10')
+    dataset_builder.download_and_prepare()
     self.ds_info = dataset_builder.info
 
     # Training set
