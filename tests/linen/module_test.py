@@ -601,7 +601,8 @@ class ModuleTest(absltest.TestCase):
 
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
-    with self.assertRaisesWithLiteralMatch(AssertionError, 'Can\'t call __hash__ on modules that hold variables.'):
+    msg = 'Can\'t call __hash__ on modules that hold variables.'
+    with self.assertRaisesWithLiteralMatch(ValueError, msg):
       hash(module_a)
 
   def test_module_trace(self):
@@ -762,8 +763,11 @@ class ModuleTest(absltest.TestCase):
       def __call__(self):
         self.i = 2  # This is not allowed.
 
-    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
+    msg = ('Can\'t set i=2 for Module of type Foo: Module instance is frozen '
+           'outside of setup method.')
+    with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
       Foo().init(random.PRNGKey(0))
+
 
   def test_compact_module_frozen(self):
     class Foo(nn.Module):
@@ -771,14 +775,11 @@ class ModuleTest(absltest.TestCase):
       def __call__(self):
         self.i = 2
 
-<<<<<<< HEAD
     msg = ('Can\'t set i=2 for Module of type Foo: Module instance is frozen '
            'outside of setup method.')
     with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
       Foo().init(random.PRNGKey(0))
-=======
-    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
-      Foo().init(random.PRNGKey(0))
+
 
   def test_submodule_frozen(self):
     class Foo(nn.Module):
@@ -787,12 +788,12 @@ class ModuleTest(absltest.TestCase):
         dense = nn.Dense(10)
         dense.features = 20  # <--- This is not allowed
 
-    with self.assertRaisesWithLiteralMatch(TypeError, "Module instance is frozen outside of setup method."):
+    msg = ('Can\'t set features=20 for Module of type Dense: Module instance '
+           'is frozen outside of setup method.')
+    with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
       Foo().init(random.PRNGKey(0))
 
->>>>>>> upstream/master
 
-  
   def test_module_call_not_implemented(self):
     class Foo(nn.Module):
       pass
