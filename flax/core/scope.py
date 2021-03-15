@@ -17,6 +17,7 @@
 import contextlib
 import functools
 import hashlib
+import dataclasses
 from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
 
 from . import tracers
@@ -35,7 +36,14 @@ Array = Any
 
 RNGSequences = Dict[str, PRNGKey]
 
-Filter = Union[bool, str, Container[str]]
+
+Filter = Union[bool, str, Container[str], 'DenyList']
+
+@dataclasses.dataclass(frozen=True, eq=True)
+class DenyList:
+  deny: Filter
+
+
 CollectionFilter = Filter
 PRNGSequenceFilter = Filter
 
@@ -88,6 +96,8 @@ def in_filter(filter_like: Filter, col: str) -> bool:
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
+  if isinstance(filter_like, DenyList):
+    return not in_filter(filter_like.deny, col)
   raise errors.InvalidFilterError(filter_like)
 
 
@@ -100,7 +110,7 @@ def filter_to_set(x: Filter) -> Set[str]:
   Returns:
     The input filter represented as a set of strings.
   """
-  assert x is not True, 'Infinite set'
+  assert x is not True and not isinstance(x, DenyList), 'Infinite set'
   if x is False:
     return set()
   if isinstance(x, str):
@@ -123,9 +133,41 @@ def union_filters(a: Filter, b: Filter) -> Filter:
   """
   if a is True or b is True:
     return True
+  if isinstance(a, DenyList) and isinstance(b, DenyList):
+    return DenyList(intersect_filters(a.deny, b.deny))
+  if isinstance(b, DenyList):
+    a, b = b, a
+  if isinstance(a, DenyList):
+    return DenyList(subtract_filters(a.deny, b))
+  
   a = filter_to_set(a)
   b = filter_to_set(b)
   return a.union(b)
+
+
+def subtract_filters(a: Filter, b: Filter) -> Filter:
+  """Returns the subtraction of b from a.
+
+  Args:
+    a: a filter.
+    b: a filter.
+
+  Returns:
+    A filter matching with values in a that are not in b.
+  """
+  if b is True:
+    return False
+  if a is True:
+    return DenyList(b)
+  if isinstance(a, DenyList) and isinstance(b, DenyList):
+    return subtract_filters(b.deny, a.deny)
+  if isinstance(a, DenyList):
+    return DenyList(union_filters(a.deny, b))
+  if isinstance(b, DenyList):
+    return intersect_filters(a, b.deny)
+  a = filter_to_set(a)
+  b = filter_to_set(b)
+  return a - b
 
 
 def intersect_filters(a: Filter, b: Filter) -> Filter:
@@ -143,6 +185,12 @@ def intersect_filters(a: Filter, b: Filter) -> Filter:
     return b
   if b is True:
     return a
+  if isinstance(a, DenyList) and isinstance(b, DenyList):
+    return DenyList(union_filters(b.deny, a.deny))
+  if isinstance(b, DenyList):
+    b, a = a, b
+  if isinstance(a, DenyList):
+    return subtract_filters(b, a.deny)
   a = filter_to_set(a)
   b = filter_to_set(b)
   return a.intersection(b)
@@ -579,7 +627,7 @@ def _unfreeze_variables(variables, mutable):
     if in_filter(mutable, key):
       new_variables[key] = unfreeze(value)
     else:
-      new_variables[key] = value
+      new_variables[key] = freeze(value)
   return new_variables
 
 
