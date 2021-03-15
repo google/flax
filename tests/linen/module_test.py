@@ -736,7 +736,7 @@ class ModuleTest(absltest.TestCase):
 
     empty = EmptyModule()
     msg = r'"EmptyModule" object has no attribute "foo"'
-    with self.assertRaisesRegex(errors.ModuleAttributeNotFoundError, msg):
+    with self.assertRaisesRegex(AttributeError, msg):
       empty.bar()
      
 
@@ -799,7 +799,7 @@ class ModuleTest(absltest.TestCase):
       pass
 
     msg = '"Foo" object has no attribute "__call__"'
-    with self.assertRaisesRegex(errors.ModuleAttributeNotFoundError, msg):
+    with self.assertRaisesRegex(AttributeError, msg):
       Foo().init(random.PRNGKey(0))
 
 
@@ -868,7 +868,7 @@ class ModuleTest(absltest.TestCase):
         self.c = nn.Dense(2)
 
     msg = '"B" object has no attribute "c"'
-    with self.assertRaisesRegex(errors.ModuleAttributeNotFoundError, msg):
+    with self.assertRaisesRegex(AttributeError, msg):
       A().init(random.PRNGKey(0))
 
   def test_unbound_setup_call(self):

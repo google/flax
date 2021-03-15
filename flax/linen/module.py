@@ -533,7 +533,8 @@ class Module:
     if name in self.__dict__:
       return self.__dict__[name]
     else:
-      raise errors.ModuleAttributeNotFoundError(self.__class__.__name__, name)
+       raise AttributeError(
+          f'"{self.__class__.__name__}" object has no attribute "{name}"')
 
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""

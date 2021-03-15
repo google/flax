@@ -504,7 +504,7 @@ class Scope:
   def make_rng(self, name: str) -> PRNGKey:
     """Generates A PRNGKey from a PRNGSequence with name `name`."""
     if not self.has_rng(name):
-      raise errors.invalidRngError(f'{self.name} needs PRNG for "{name}"')
+      raise errors.InvalidRngError(f'{self.name} needs PRNG for "{name}"')
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[name] += 1

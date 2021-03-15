@@ -365,48 +365,6 @@ class AssignSubModuleError(FlaxError):
                      'method wrapped in `@compact`')
 
 
-class ModuleAttributeNotFoundError(FlaxError):
-  """
-  This error occurs when trying to access a module attribute that does not
-  exist. For instance, the following code will throw the error because attribute
-  ``unknown`` is not defined::
-
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        y = self.unknown  # <--- ERROR
-        return self.embed(x)
-
-    foo = Foo()
-    variables = foo.init(rand.PRNGKey(0), jnp.ones((1,)))
-    foo.apply(variables, jnp.ones((1,))
-
-  The error also occurs when trying to call an unbound non-compact module 
-  method::
-
-    class Foo(nn.Module):
-      def setup(self):
-        self.dense = nn.Dense(features=4)
-
-      def __call__(self, x):
-        return self.dense(x)
-    
-    foo = Foo()
-    foo(np.arange(5))
-
-  The reason is that by directly calling ``foo(np.arange(5))``, ``setup()`` is
-  not called first, so ``self.dense`` is undefined. To resolve this, the module
-  should be called using :meth:`Module.apply() <flax.linen.Module.apply>` 
-  instead, which will internally try to call ``setup``::
-
-    foo = Foo()
-    variables = foo.init(rand.PRNGKey(0), np.arange(5))
-    foo.apply(variables, np.arange(5))
-  """
-  def __init__(self, module_name, attr_name):
-    super().__init__(f'"{module_name}" object has no attribute "{attr_name}"')
-
-
 class SetAttributeInModuleSetupError(FlaxError):
   """
   You are not allowed to modify Module class attributes in
