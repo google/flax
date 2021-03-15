@@ -456,7 +456,7 @@ class Scope:
   def make_rng(self, name: str) -> PRNGKey:
     """Generates A PRNGKey from a PRNGSequence with name `name`."""
     if not self.has_rng(name):
-      raise errors.MissingRngError(self.name, name)
+      raise errors.invalidRngError(f'{self.name} needs PRNG for "{name}"')
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[name] += 1
@@ -603,7 +603,8 @@ def bind(variables: VariableDict,
   if not _is_valid_variables(variables):
     raise errors.ApplyScopeInvalidVariablesError()
   if rngs is not None and not _is_valid_rngs(rngs):
-    raise errors.BindInvalidRngsError()
+    raise errors.InvalidRngError(
+      'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
   new_variables = _unfreeze_variables(variables, mutable)
   return Scope(new_variables, rngs=rngs, mutable=mutable)
 

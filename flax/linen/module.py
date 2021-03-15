@@ -292,7 +292,8 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
 def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
   @functools.wraps(hash_fn)
   def wrapped(self):
-    assert self.scope == None, 'Can\'t call __hash__ on modules that hold variables.'
+    if self.scope is not None:
+      raise ValueError('Can\'t call __hash__ on modules that hold variables.')
     return hash_fn(self)
   return wrapped
 
@@ -833,12 +834,26 @@ class Module:
     """Applies a module method to variables and returns output and modified variables.
 
     Note that `method` should be set if one would like to call `apply` on a
-    different class method than ``__call__``. For instance, suppose a Transformer
-    modules has a method called `encode`, then the following calls `apply` on
-    that method::
+    different class method than ``__call__``. For instance, suppose a
+    Transformer modules has a method called `encode`, then the following calls
+    `apply` on that method::
 
-      model = models.Transformer(config)
-      encoded = model.apply({'params': params}, inputs, method=model.encode)
+      model = Transformer()
+      encoded = model.apply({'params': params}, x, method=Transformer.encode)
+  
+    If a function instance is provided, the unbound function is used. For 
+    instance, the example below is equivalent to the one above::
+
+      encoded = model.apply({'params': params}, x, method=model.encode)
+
+    Note ``method`` can also be a function that is not defined in
+    ``Transformer``. In that case, the function should have at least one
+    argument representing the Module class::
+
+      def other_fn(cls, ...):
+        ...
+
+      model.apply({'params': params}, x, method=other_fn)
 
     Args:
       variables: A dictionary containing variables keyed by variable
@@ -888,7 +903,9 @@ class Module:
     """
     if not isinstance(rngs, dict):
       if rngs.shape != (2,):
-        raise errors.InitModuleInvalidRngsError(self.__class__.__name__, rngs)
+        raise errors.InvalidRngError(
+            'RNGs should be of shape (2,) in Module '
+            f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)

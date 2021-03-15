@@ -75,15 +75,6 @@ class FlaxError(Exception):
 #################################################
 
 
-class MissingRngError(FlaxError):
-  """
-  This error is raised if a PRNG is required but it is not provided as an input.
-  Please see :class:`InvalidRngError` for more details.
-  """
-  def __init__(self, scope_name, rng_name):
-    super().__init__(f'{scope_name} needs PRNG for "{rng_name}"')
-
-
 class InvalidRngError(FlaxError):
   """
   All rngs used in a Module should be passed to 
@@ -137,19 +128,12 @@ class InvalidRngError(FlaxError):
 
        SomeModule().apply(variables, inputs)  # rngs=None
   """
-  def __init__(self, scope_name, col):
-    super().__init__(f'Scope {scope_name} needs PRNG for collection "{col}"')
+  def __init__(self, msg):
+    # For this error message we pass the entire message, since there are various
+    # different kinds of RNG errors and we want to be able to be more specific
+    # in the error message, while always linking to the same documentation.
+    super().__init__(msg)
 
-
-class BindInvalidRngsError(FlaxError):
-  """
-  This error is thrown when using invalid rngs when binding variables and
-  rngs to a new scope. See :class:`InvalidRngError` for more details.
-  """
-  def __init__(self):
-    super().__init__('rngs should be a dictionary mapping strings to '
-                     '`jax.PRNGKey`.')
-                   
 
 class ApplyScopeInvalidVariablesError(FlaxError):
   """
@@ -284,19 +268,38 @@ class ModifyScopeVariableError(FlaxError):
 #################################################
 
 
-class  NameInUseError(FlaxError):
+class NameInUseError(FlaxError):
   """
   This error is raised when trying to create a submodule, param, or variable
-  with an existing name. They are all considered to be in the same namespace::
+  with an existing name. They are all considered to be in the same namespace.
 
-    class Foo(nn.Module):
+  **Sharing Submodules**
+
+  This is the wrong pattern for sharing submodules::
+
+    y = nn.Dense(feature=3, name='bar')(x)
+    z = nn.Dense(feature=3, name='bar')(x+epsilon)
+
+  Instead, modules should be shared by instance::
+
+    dense = nn.Dense(feature=3, name='bar')
+    y = dense(x)
+    z = dense(x+epsilon)
+
+  If submodules are not provided with a name, a unique name will be given to
+  them automatically::
+
+    class MyModule(nn.Module):
       @nn.compact
       def __call__(self, x):
-        dense = nn.Dense(features=3, name='bar')
-        embed = nn.Embed(num_embeddings=2, features=5, name='bar')  # <-- ERROR!
+        x = MySubModule()(x)
+        x = MySubModule()(x)  # This is fine.
+        return x
 
-  Similarly, a submodule name can collide with an existing parameter name, since
-  they are both stored in the same variable dict::
+  **Parameters and Variables**
+
+  A parameter name can collide with a submodule or variable, since they are all
+  stored in the same variable dict::
 
     class Foo(nn.Module):
       @nn.compact
@@ -312,16 +315,6 @@ class  NameInUseError(FlaxError):
       def __call__(self, inputs):
         _ = self.param('mean', initializers.lecun_normal(), (2, 2))
         _ = self.variable('stats', 'mean', initializers.zeros, (2, 2))
-
-  If submodules are not provided with a name, a unique name will be given to
-  them automatically::
-
-    class MyModule(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        x = MySubModule()(x)
-        x = MySubModule()(x)  # This is fine.
-        return x
   """
   def __init__(self, key_type, value, module_name):
     # key_type is in {param, variable, submodule}.
@@ -363,9 +356,9 @@ class AssignSubModuleError(FlaxError):
 
     Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
 
-  In this case, ``self.conv(kernel_size=4)`` inside ``__call__`` constructs a 
-  ``Conv``, which, upon creation, checks where inside the parent Module ``Foo``
-  it was created, and realize this was outside of setup.
+  In this case, ``self.conv(kernel_size=4)`` is called from ``__call__``, which
+  is disallowed beause it's neither within ``setup`` nor a method wrapped in
+  x``nn.compact``.
   """
   def __init__(self, cls):
     super().__init__(f'Submodule {cls} must be defined in `setup()` or in a '
@@ -440,7 +433,10 @@ class SetAttributeInModuleSetupError(FlaxError):
         return nn.Dense(self.features)(x)
 
     variables = SomeModule(features=3).init(random.PRNGKey(0), jnp.ones((1, )))
-        
+  
+  TODO(marcvanzee): Link to a design note explaining why it's necessary for
+  modules to stay frozen (otherwise we can't safely clone them, which we use for
+  lifted transformations).
   """
   def __init__(self):
     super().__init__(f'Module construction attributes are frozen.')
@@ -490,6 +486,10 @@ class MultipleMethodsCompactError(FlaxError):
   * remove ``@compact`` and define submodules and variables using 
     :meth:`Module.setup() <flax.linen.Module.setup>`.
   * Use two separate modules that both have a unique ``@compact`` method.
+
+  TODO(marcvanzee): Link to a design note explaining the motivation behind this.
+  There is no need for an equivalent to `hk.transparent` and it makes submodules
+  much more sane because there is no need to prefix the method names.
   """
   def __init__(self):
     super().__init__(f'Only one method per class can be @compact')
@@ -507,17 +507,6 @@ class ReservedModuleAttributeError(FlaxError):
                      f'{annotations}')
 
 
-class InitModuleInvalidRngsError(FlaxError):
-  """
-  This error is thrown if the input rngs to 
-  :meth:`Module.init() <flax.linen.Module.init>` are incorrect.
-  See :class:`InvalidRngError` for more details.
-  """
-  def __init__(self, module_name, rngs):
-    super().__init__(f'RNGs should be of shape (2,) in Module {module_name}, '
-                     f'but rngs are: {rngs}')
-
-
 class ApplyModuleInvalidMethodError(FlaxError):
   """
   When calling :meth:`Module.apply() <flax.linen.Module.apply>`, you can specify
@@ -525,23 +514,8 @@ class ApplyModuleInvalidMethodError(FlaxError):
   provided parameter is not a method in the Module and not a function with at
   least one argument.
 
-  A typical call looks as follows::
-    
-    SomeModule().apply(..., method=SomeModule.some_fn)
-
-  If a function instance is provided, the unbound function is used. For 
-  instance, the example below is equivalent to the one above::
-
-    SomeModule().apply(..., method=SomeModule().some_fn)
-
-  Note ``method`` can also be a function that is not defined in ``SomeModule``.
-  In that case, the function should have at least one argument representing the
-  Module class::
-
-    def other_fn(cls, ...):
-      ...
-
-    SomeModule().apply(..., method=other_fn)
+  Learn more on the reference docs for
+  :meth:`Module.apply() <flax.linen.Module.apply>`.
   """
   def __init__(self, method):
     super().__init__(f'Cannot call apply(): {method} is not a valid function '
