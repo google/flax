@@ -21,6 +21,7 @@ from typing import Any
 from absl.testing import absltest
 import flax
 from flax import core
+from flax import errors
 from flax.training import checkpoints
 import jax
 from jax import numpy as jnp
@@ -156,6 +157,32 @@ class CheckpointsTest(absltest.TestCase):
       checkpoints.restore_checkpoint(
           tmp_dir, test_object0, step=5, prefix='test_')
 
+  def test_overwrite_checkpoints(self):
+    tmp_dir = self.create_tempdir().full_path
+    test_object0 = {'a': np.array([0, 0, 0], np.int32)}
+    test_object = {'a': np.array([1, 2, 3], np.int32)}
+
+    checkpoints.save_checkpoint(
+        tmp_dir, test_object0, 0, keep=1)
+    with self.assertRaises(errors.InvalidCheckpointError):
+      checkpoints.save_checkpoint(
+          tmp_dir, test_object, 0, keep=1)
+    checkpoints.save_checkpoint(
+          tmp_dir, test_object, 0, keep=1, overwrite=True)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
+    jtu.check_eq(new_object, test_object)
+    checkpoints.save_checkpoint(
+          tmp_dir, test_object0, 2, keep=1, overwrite=True)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object)
+    jtu.check_eq(new_object, test_object0)
+    with self.assertRaises(errors.InvalidCheckpointError):
+      checkpoints.save_checkpoint(
+            tmp_dir, test_object, 1, keep=1)
+    checkpoints.save_checkpoint(
+          tmp_dir, test_object, 1, keep=1, overwrite=True)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
+    jtu.check_eq(new_object, test_object)
+
   def test_save_restore_checkpoints_w_float_steps(self):
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
@@ -174,20 +201,14 @@ class CheckpointsTest(absltest.TestCase):
     jtu.check_eq(new_object, test_object1)
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 2.0, prefix='test_', keep=1)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 1.0, prefix='test_', keep=1)
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
-    jtu.check_eq(new_object, test_object1)
+    with self.assertRaises(errors.InvalidCheckpointError):
+      checkpoints.save_checkpoint(
+          tmp_dir, test_object2, 1.0, prefix='test_', keep=1)
     checkpoints.save_checkpoint(
         tmp_dir, test_object2, 3.0, prefix='test_', keep=2)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object1, -1.0, prefix='test_', keep=2)
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
     self.assertIn('test_3.0', os.listdir(tmp_dir))
     self.assertIn('test_2.0', os.listdir(tmp_dir))
-    jtu.check_eq(new_object, test_object2)
+    jtu.check_eq(new_object, test_object1)
 
   def test_save_restore_checkpoints_target_none(self):
     tmp_dir = self.create_tempdir().full_path

@@ -333,11 +333,16 @@ class _ModuleInternalState:
   in_compact_method: bool = False
   in_setup: bool = False
   setup_called: bool = False
+  is_initialized: bool = False
   autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
   children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
 
   def reset(self):
-    """Resets transient state."""
+    """Resets transient state. 
+    
+    This function is called after each module method, so only attributes that
+    are method-dependent are reset.
+    """
     self.in_compact_method = False
     self.in_setup = False
     self.autoname_cursor = dict()
@@ -348,6 +353,7 @@ class _ModuleInternalState:
       in_compact_method=self.in_compact_method,
       in_setup=self.in_setup,
       setup_called=False,  # setup_called is object local, not shared.
+      is_initialized=self.is_initialized,
       autoname_cursor=dict(self.autoname_cursor))
     return cloned
 
@@ -355,6 +361,7 @@ class _ModuleInternalState:
     """Re-imports transform-preserved state from across transform boundary."""
     self.in_compact_method = other.in_compact_method
     self.in_setup = other.in_setup
+    self.is_initialized = other.is_initialized
     self.autoname_cursor = dict(other.autoname_cursor)
 
 _uninitialized_module_internal_state = _ModuleInternalState()
@@ -505,7 +512,7 @@ class Module:
     """
     is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
     
-    if not self._state.in_setup and not is_dataclass_attr:
+    if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
       raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name, 
                                                  val)
@@ -578,6 +585,8 @@ class Module:
       object.__setattr__(self, 'scope', self.parent)
     else:
       raise ValueError("parent must be None, Module or Scope")
+
+    self._state.is_initialized = True
 
   def __repr__(self):
     return _module_repr(self)
@@ -787,15 +796,16 @@ class Module:
            mutable: CollectionFilter = False):
     """Creates an interactive Module instance by binding variables and RNGs.
 
-    bind provides an "interactive" instance of a Module directly without
+    ``bind`` provides an "interactive" instance of a Module directly without
     transforming a function with ``apply``. This is particulary useful for debugging
     and interactive use cases like notebooks where a function would limit the ability
     split up code into different cells.
 
     Once the variables (and optionally RNGs) are bound to a ``Module`` it becomes a
     stateful object. Note that idiomatic JAX is functional and therefore an interactive
-    instance does not mix well well with vanilla JAX APIs. Therefore, we recommend using
-    ``apply`` when code should be reusable and compatible across the JAX software ecosystem.
+    instance does not mix well well with vanilla JAX APIs. ``bind()`` should only be used
+    for interactive experimentation, and in all other cases we strongly encourage
+    to use ``apply()`` instead.
 
     Example::
 
@@ -815,7 +825,6 @@ class Module:
         collections. See :mod:`flax.core.variables` for more details
         about variables.
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
-        The "params" PRNG sequence is used to initialize parameters.
       mutable: Can be bool, str, or list. Specifies which collections should be
                treated as mutable: ``bool``: all/no collections are mutable.
                ``str``: The name of a single mutable collection. ``list``: A
@@ -1062,7 +1071,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
 def apply(fn: Callable[..., Any], module: Module,
           mutable: CollectionFilter = False,
           capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False) -> Callable[..., Any]:
-  """Creates an apply function for the given function and ``Module`` instance.
+  """Creates an apply function to call ``fn`` with a bound module.
 
   Unlike ``Module.apply`` this function returns a new function with the signature
   ``(variables, *args, rngs=None, **kwargs) -> T`` where `T` is the return type
@@ -1119,7 +1128,7 @@ def apply(fn: Callable[..., Any], module: Module,
 
 def init_with_output(fn: Callable[..., Any], module: Module,
                      mutable: CollectionFilter = True) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
-  """Creates an init function for the given function and ``Module`` instance that also returns output.
+  """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
   Unlike ``Module.init_with_output`` this function returns a new function with the signature
   ``(rngs, *args, **kwargs) -> (T, variables)`` where `T` is the return type of ``fn``.
@@ -1161,7 +1170,7 @@ def init_with_output(fn: Callable[..., Any], module: Module,
 
 def init(fn: Callable[..., Any], module: Module,
          mutable: CollectionFilter = True) -> Callable[..., FrozenVariableDict]:
-  """Creates an init function for the given function and ``Module`` instance.
+  """Creates an init function to call ``fn`` with a bound module.
 
   Unlike ``Module.init`` this function returns a new function with the signature
   ``(rngs, *args, **kwargs) -> variables``.
