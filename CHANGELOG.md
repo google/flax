@@ -16,8 +16,8 @@ vNext
  -
  -
  -
- -
- -
+ - Bug Fix: Disallow modifying attributes in Modules after they are initialized.
+ - Adds `Module.bind` for binding variables and RNGs to an interactive Module.
  -
  -
  -
