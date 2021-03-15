@@ -113,7 +113,7 @@ class _DynamicContext:
     if not hasattr(self._thread_data, 'module_stack'):
       self._thread_data.module_stack = [None,]
     return self._thread_data.module_stack
-  
+
   @property
   def capture_stack(self):
     """Keeps track of the active capture_intermediates filter functions."""
@@ -121,7 +121,7 @@ class _DynamicContext:
       self._thread_data.capture_stack = []
     return self._thread_data.capture_stack
 
-# The global context 
+# The global context
 _context = _DynamicContext()
 
 class _Sentinel:
@@ -330,6 +330,7 @@ class _ModuleInternalState:
   in_compact_method: bool = False
   in_setup: bool = False
   setup_called: bool = False
+  is_initialized: bool = False
   autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
   children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
 
@@ -345,6 +346,7 @@ class _ModuleInternalState:
       in_compact_method=self.in_compact_method,
       in_setup=self.in_setup,
       setup_called=False,  # setup_called is object local, not shared.
+      is_initialized=self.is_initialized,
       autoname_cursor=dict(self.autoname_cursor))
     return cloned
 
@@ -352,6 +354,7 @@ class _ModuleInternalState:
     """Re-imports transform-preserved state from across transform boundary."""
     self.in_compact_method = other.in_compact_method
     self.in_setup = other.in_setup
+    self.is_initialized = other.is_initialized
     self.autoname_cursor = dict(other.autoname_cursor)
 
 _uninitialized_module_internal_state = _ModuleInternalState()
@@ -490,8 +493,8 @@ class Module:
 
   def __setattr__(self, name: str, val: Any):
     """Sets an attribute on this Module.
-    
-    We overload setattr solely to support pythonic naming via assignment of 
+
+    We overload setattr solely to support pythonic naming via assignment of
     submodules in the special setup() function::
 
       self.submodule_name = MyModule(...)
@@ -506,7 +509,7 @@ class Module:
     """
     is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
     
-    if not self._state.in_setup and not is_dataclass_attr:
+    if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
       raise TypeError("Module instance is frozen outside of setup method.")
     if is_dataclass_attr:
@@ -584,6 +587,8 @@ class Module:
       object.__setattr__(self, 'scope', self.parent)
     else:
       raise ValueError("parent must be None, Module or Scope")
+
+    self._state.is_initialized = True
 
   def __repr__(self):
     return _module_repr(self)
@@ -682,9 +687,9 @@ class Module:
             parent: Optional[Union[Scope, 'Module']] = None,
             **updates) -> 'Module':
     """Creates a clone of this Module, with optionally updated arguments.
-    
+
     Args:
-      parent: The parent of the clone. The clone will have no parent if no 
+      parent: The parent of the clone. The clone will have no parent if no
         explicit parent is specified.
       **updates: Attribute updates.
     Returns:
@@ -710,7 +715,7 @@ class Module:
       *init_args: The arguments to pass to init_fn.
 
     Returns:
-      A :class:`flax.core.variables.Variable` that can be read or set via 
+      A :class:`flax.core.variables.Variable` that can be read or set via
       ".value" attribute. Throws an error if the variable exists already.
     """
     if not self._initialization_allowed:
@@ -756,7 +761,7 @@ class Module:
 
     See :mod:`flax.core.variables` for more explanation on variables and
     collections.
-    
+
     Args:
       col: The variable collection name.
       name: The name of the variable.
@@ -775,8 +780,8 @@ class Module:
 
   def make_rng(self, name: str) -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
-    
-    The new RNG key is split from the previous one. Thus, every call to 
+
+    The new RNG key is split from the previous one. Thus, every call to
     `make_rng` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
@@ -812,7 +817,7 @@ class Module:
         def setup(self):
           self.encoder = nn.Dense(3)
           self.decoder = nn.Dense(5)
-      
+
       ae = AutoEncoder()
       model = ae.bind(variables)
       z = model.encode(x)
@@ -967,7 +972,7 @@ class Module:
           return nn.Dense(2)(h)
       y, state = Foo.apply(params, x, mutable=['intermediates'])
       print(state['intermediates'])  # {'h': (...,)}
-    
+
     By default the values are stored in a tuple and each stored value
     is appended at the end. This way all intermediates can be tracked when
     the same module is called multiple times. Alternatively, a custom
@@ -1067,7 +1072,7 @@ def apply(fn: Callable[..., Any], module: Module,
       y = foo.decode(z)
       # ...
       return y
-    
+
     foo = Foo()
     f_jitted = jax.jit(nn.apply(f, foo))
     f_jitted(variables, x)
@@ -1124,7 +1129,7 @@ def init_with_output(fn: Callable[..., Any], module: Module,
       y = foo.decode(z)
       # ...
       return y
-    
+
     foo = Foo()
     f_jitted = jax.jit(nn.init_with_output(f, foo))
     y, variables = f_jitted(rng, x)
@@ -1166,7 +1171,7 @@ def init(fn: Callable[..., Any], module: Module,
       y = foo.decode(z)
       # ...
       return y
-    
+
     foo = Foo()
     f_jitted = jax.jit(nn.init(f, foo))
     variables = f_jitted(rng, x)
