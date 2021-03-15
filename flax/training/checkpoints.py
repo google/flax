@@ -25,6 +25,7 @@ import re
 
 from absl import logging
 from flax import core
+from flax import errors
 from flax import serialization
 from tensorflow.io import gfile
 
@@ -73,7 +74,8 @@ def save_checkpoint(ckpt_dir,
                     target,
                     step,
                     prefix='checkpoint_',
-                    keep=1):
+                    keep=1,
+                    overwrite=False):
   """Save a checkpoint of the model.
 
   Attempts to be pre-emption safe by writing to temporary before
@@ -85,7 +87,8 @@ def save_checkpoint(ckpt_dir,
     step: int or float: training step number or other metric number.
     prefix: str: checkpoint file name prefix.
     keep: number of past checkpoint files to keep.
-
+    overwrite: overwrite existing checkpoint files if a checkpoint
+      at the current or a later step already exits (default: False).
   Returns:
     Filename of saved checkpoint.
   """
@@ -94,16 +97,38 @@ def save_checkpoint(ckpt_dir,
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
   gfile.makedirs(os.path.dirname(ckpt_path))
+  base_path = os.path.join(ckpt_dir, prefix)
+  checkpoint_files = gfile.glob(base_path + '*')
+
+  if ckpt_path in checkpoint_files:
+    if not overwrite:
+      raise errors.InvalidCheckpointError(ckpt_path, step)
+  else:
+    checkpoint_files.append(ckpt_path)
+
+  checkpoint_files = natural_sort(checkpoint_files)
+  if ckpt_path != checkpoint_files[-1]:
+    if not overwrite:
+      raise errors.InvalidCheckpointError(ckpt_path, step)
+
   with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
     fp.write(serialization.to_bytes(target))
 
   # Rename once serialization and writing finished.
-  gfile.rename(ckpt_tmp_path, ckpt_path)
+  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
   logging.info('Saved checkpoint at %s', ckpt_path)
+  print(ckpt_path)
+
+  # Remove newer checkpoints
+  if overwrite:
+    ind = checkpoint_files.index(ckpt_path) + 1
+    newer_ckpts = checkpoint_files[ind:]
+    checkpoint_files = checkpoint_files[:ind]
+    for path in newer_ckpts:
+      logging.info('Removing checkpoint at %s', path)
+      gfile.remove(path)
 
   # Remove old checkpoint files.
-  base_path = os.path.join(ckpt_dir, f'{prefix}')
-  checkpoint_files = natural_sort(gfile.glob(base_path + '*'))
   if len(checkpoint_files) > keep:
     old_ckpts = checkpoint_files[:-keep]
     for path in old_ckpts:
