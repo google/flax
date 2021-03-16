@@ -463,7 +463,20 @@ class MultiOptimizer(OptimizerDef):
 
   def init_state(self, params):
     sub_states = []
-    for traversal, opt in zip(self.traversals, self.sub_optimizers):
+    seen = {}
+    for idx, (traversal,
+              opt) in enumerate(zip(self.traversals, self.sub_optimizers)):
+
+      keykeys = traverse_util.unflatten_dict({
+        key_tuple: '/'.join(('',) + key_tuple)
+        for key_tuple in traverse_util.flatten_dict(params)
+      })
+      for key in traversal.iterate(keykeys):
+        if key in seen:
+          raise ValueError(f'Key "{key}" processed by multiple optimizers: '
+                           f'{seen[key]}, {idx}.')
+        seen[key] = idx
+
       params_t = tuple(traversal.iterate(params))
       state = opt.init_state(params_t)
       sub_states.append(state)
