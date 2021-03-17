@@ -26,11 +26,18 @@ The model should run with other configurations and hardware, but was tested on t
 
 ### How to run
 #### 8 x Nvidia V100 (16GB), 8 x TPUv3 (16GB)
-To run training
+
+To run training:
+
 ```
-python main.py --workdir=./pixelcnn --config.batch_size=320
+python main.py --workdir=/tmp/pixelcnn --config=configs/default.py \
+               --config.batch_size=320
 ```
-To run sampling (this will automatically load model parameters from the most recent trained checkpoint)
+
+To run sampling (this will automatically load model parameters from the most
+recent trained checkpoint):
+
 ```
-python main.py --workdir=./pixelcnn --sample --config.sample_batch_size=256
+python main.py --workdir=/tmp/pixelcnn --sample --config=configs/default.py \
+               --config.sample_batch_size=256
 ```
