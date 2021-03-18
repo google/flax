@@ -34,7 +34,7 @@ While the example should run on a variety of hardware, we have tested the differ
 ### How to run
 
 ```shell
-python main.py --workdir=./imagenet
+python main.py --workdir=./imagenet --config=configs/default.py
 ```
 
 #### Overriding Hyperparameter configurations
@@ -46,7 +46,7 @@ Configuration flag is defined using
 follows:
 
 ```shell
-python main.py --workdir=./imagenet_default --config.num_epochs=100 --config=configs/default.py
+python main.py --workdir=./imagenet_default --config=configs/default.py --config.num_epochs=100
 ```
 
 #### 8 x Nvidia V100 (16GB)
