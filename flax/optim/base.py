@@ -14,7 +14,7 @@
 
 """Flax Optimizer api."""
 
-from typing import Any
+from typing import Any, Tuple
 import warnings
 
 from .. import jax_utils
@@ -116,7 +116,7 @@ class OptimizerDef:
       hp = hp.replace(**hyper_param_overrides)
     return hp
 
-  def create(self, target, focus=None):
+  def create(self, target, focus: 'ModelParamTraversal' = None):
     """Creates a new optimizer for the given target.
 
     See docstring of :class:`Optimizer` for more details.
@@ -446,7 +446,9 @@ class MultiOptimizer(OptimizerDef):
         ])
   """
 
-  def __init__(self, *traversals_and_optimizers):
+  def __init__(
+      self,
+      *traversals_and_optimizers: Tuple[traverse_util.Traversal, OptimizerDef]):
     """Create a new MultiOptimizer.
 
     See docstring of :class:`MultiOptimizer` for more details.
