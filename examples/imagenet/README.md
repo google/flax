@@ -34,7 +34,7 @@ While the example should run on a variety of hardware, we have tested the differ
 ### How to run
 
 ```shell
-python main.py --workdir=./imagenet
+python main.py --workdir=./imagenet --config=configs/default.py
 ```
 
 #### Overriding Hyperparameter configurations
@@ -46,7 +46,7 @@ Configuration flag is defined using
 follows:
 
 ```shell
-python main.py --workdir=./imagenet_default --config.num_epochs=100
+python main.py --workdir=./imagenet_default --config=configs/default.py --config.num_epochs=100
 ```
 
 #### 8 x Nvidia V100 (16GB)
@@ -66,6 +66,11 @@ python main.py \
 #### Running on Cloud
 
 See commands in [../cloud/README.md](../cloud/README.md)
+
+To use a dataset stored in a bucket, set the following shell parameter:
+
+    export TFDS_DATA_DIR="gs://$GCS_TFDS_BUCKET/tensorflow_datasets"
+
 ### Reproducibility
 
 Making the ImageNet classification example reproducible is WIP. 
