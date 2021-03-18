@@ -84,7 +84,7 @@ Remarks:
   use in our [previous training step], where this update function already exists
   (notice how we need to invert the sign because we add the gradient update to
   the parameters). In addition, you can use
-  [`schedule_hyperparams()`](https://github.com/deepmind/optax/pull/48) to
+  [`inject_hyperparams()`](https://github.com/deepmind/optax/pull/48) to
   schedule arbitrary hyper parameters with Optax.
 
 ## Optax Training Step
@@ -160,31 +160,19 @@ Optax has recently implemented `optax.masked()` that can be used for specifying
 gradient transformations that only applied to a subset of the gradients:
 
 ```python
-def dict_map_with_path(fn, d, path=''):  # a crude "ModelParamTraversal"
-    if isinstance(d, dict):
-        return {k: dict_map_with_path(fn, v, path+'/'+k) for k, v in d.items()}
-    return fn(path, d)
-
-is_bias_mask = dict_map_with_path(
-    lambda path, value: path.endswith('/bias'), variables['params'])
-not_bias_mask = jax.tree_map(lambda x: not x, is_bias_mask)
+def flattened_traversal(fn):
+  def mask(data):
+    flat = traverse_util.flatten_dict(data)
+    return traverse_util.unflatten_dict({k: fn(k, v) for k, v in flat.items()})
+  return mask
 
 tx = optax.chain(
-    optax.masked(optax.sgd(learning_rate=0.1), mask=is_bias_mask),
-    optax.masked(optax.sgd(learning_rate=0.05), mask=not_bias_mask),
+    optax.masked(optax.sgd(learning_rate=0.1),
+                 mask=flattened_traversal(lambda path, _: path[-1] == 'bias')),
+    optax.masked(optax.sgd(learning_rate=0.05),
+                 mask=flattened_traversal(lambda path, _: path[-1] != 'bias')),
 )
 ```
-
-Remarks:
-
-- Above `dict_map_with_path()` emulates `flax.optim.ModelParamTraversal`.
-- Note that now we need `variables['params']` already when the gradient
-  transformation is defined, i.e. before calling `tx.init()`.
-- Note the change in behavior when a parameter matches multiple masks: With
-  `flax.optim.ModelParamTraversal` all but the last match would be discarded.
-  With `optax.chain(optax.masked())` the gradient updates are simply chained
-  and if a gradient matches multiple masks then all those transformations are
-  applied.
 
 ## Train State
 [Train State]: #train-state
@@ -193,23 +181,50 @@ In Flax it is common to hand around a `TrainState` object that can then be
 used for checkpointing. This simplifies the above [Optax training step] a bit by
 reducing the number of arguments and getting rid of the `static_argnums`.
 
-```python
-class TrainState(flax.struct.PyTreeNode):
+We can define an `Optimizer` dataclass that wraps the common pattern of updating
+the optimizer state and parameters, and keeps `params` that are to be optimized
+separate from `model_state` that is not touched by the optimizer:
 
-  apply_fn: Callable = flax.struct.field(pytree_node=False)
-  variables: flax.core.FrozenDict[str, Any]
+```python
+class Optimizer(flax.struct.PyTreeNode):
+  params: flax.core.FrozenDict[str, Any]
+  model_state: flax.core.FrozenDict[str, Any]
   tx: optax.GradientTransformation = flax.struct.field(pytree_node=False)
   opt_state: optax.OptState
+
+  def update(self, grads, new_model_state):
+    updates, new_opt_state = self.tx.update(
+        grads, self.opt_state, self.params)
+    new_params = optax.apply_updates(self.params, updates)
+    return self.replace(
+        params=new_params,
+        opt_state=new_opt_state,
+        model_state=new_model_state,
+    )
+
+  @classmethod
+  def create(cls, variables, tx):
+    model_state, params = variables.pop('params')
+    opt_state = tx.init(params)
+    return cls(
+        params=params,
+        model_state = model_state,
+        tx=tx,
+        opt_state=opt_state,
+    )
 ```
 
-Users can subclass this state and add more fields:
+Users can then compose their own data class containing this optimizer, the
+model's `.apply()` function and arbitrary additional data:
 
 ```python
-class MyTrainState(TrainState):
+class TrainState(flax.struct.PyTreeNode):
   step: int
+  apply_fn: Callable = flax.struct.field(pytree_node=False)
+  optimizer: Optimizer
 ```
 
-And then [Optax Training Step] becomes:
+With this the [Optax Training Step] becomes:
 
 ```python
 @jax.jit
@@ -217,40 +232,43 @@ def train_step(state, inputs, labels):
 
   def loss_fn(params):
     outputs, new_model_state = state.apply_fn(
-      state.variables.copy({'params': params}), inputs, mutable=['batch_stats'])
+        state.optimizer.model_state.copy({'params': params}),
+        inputs,
+        mutable=['batch_stats'])
     loss = xent_loss(outputs, labels)
     return loss, new_model_state
 
   (loss, new_model_state), grads = jax.value_and_grad(
-      loss_fn, has_aux=True)(state.variables['params'])
-  updates, new_opt_state = state.tx.update(
-      grads, state.opt_state, state.variables['params'])
-  new_params = optax.apply_updates(state.variables['params'], updates)
-
+      loss_fn, has_aux=True)(state.optimizer.params)
   new_state = state.replace(
       step=state.step + 1,
-      opt_state=new_opt_state,
-      variables=state.variables.copy({**new_model_state, 'params': new_params}),
+      optimizer=state.optimizer.update(grads, new_model_state),
   )
 
   return new_state, loss
 
-opt_state = tx.init(variables['params'])
-state = MyTrainState(
-  apply_fn=model.apply,
-  variables=variables,
-  tx=tx,
-  opt_state=opt_state,
-  step=0,
-  )
+
+state = TrainState(
+    step=0,
+    apply_fn=model.apply,
+    optimizer=Optimizer.create(
+        variables=variables,
+        tx=tx,
+    ),
+)
 for batch in ds.as_numpy_iterator():
   state, loss = train_step(state, batch['image'], batch['label'])
 ```
 
 Remarks:
 
-- Now `MyTrainState` can be used for (re)storing checkpoints.
-- No more need for variable splitting/merging or `static_argnums`.
+- The signature has changed slightly from `optimizer.apply_gradient()` (like in
+  the [previous training step]) to `optimizer.update()` that also supplies the
+  `model_state` as an argument. This is a protection against forgetting to
+  update the `model_state`.
+- Note that we don't actually need `model_state` in `Optimizer`, but it seems
+  cleaner to keep the `params` and `model_state` together in the same data
+  structure.
 
 # Previous API
 [previous API]: #previous-api
