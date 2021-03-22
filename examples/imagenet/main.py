@@ -36,7 +36,6 @@ config_flags.DEFINE_config_file(
     None,
     'File path to the training hyperparameter configuration.',
     lock_config=True)
-flags.mark_flags_as_required(['config', 'workdir'])
 
 
 def main(argv):
@@ -61,4 +60,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+  flags.mark_flags_as_required(['config', 'workdir'])
   app.run(main)

@@ -14,7 +14,7 @@
 
 """Flax Optimizer api."""
 
-from typing import Any
+from typing import Any, Tuple
 import warnings
 
 from .. import jax_utils
@@ -116,7 +116,7 @@ class OptimizerDef:
       hp = hp.replace(**hyper_param_overrides)
     return hp
 
-  def create(self, target, focus=None):
+  def create(self, target, focus: 'ModelParamTraversal' = None):
     """Creates a new optimizer for the given target.
 
     See docstring of :class:`Optimizer` for more details.
@@ -415,6 +415,17 @@ class ReplicatedOptimizer(OptimizerDef):
     return self.optimizer_def.restore_state(target, opt_state, state_dict)
 
 
+def _get_params_dict(inputs):
+  if isinstance(inputs, base.Model):
+    return inputs.params
+  elif isinstance(inputs, (dict, FrozenDict)):
+    return unfreeze(inputs)
+  else:
+    raise ValueError(
+        'Can only traverse a flax Model instance or a nested dict, not '
+        f'{type(inputs)}')
+
+
 class MultiOptimizer(OptimizerDef):
   """ 
   A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying 
@@ -446,7 +457,9 @@ class MultiOptimizer(OptimizerDef):
         ])
   """
 
-  def __init__(self, *traversals_and_optimizers):
+  def __init__(
+      self,
+      *traversals_and_optimizers: Tuple[traverse_util.Traversal, OptimizerDef]):
     """Create a new MultiOptimizer.
 
     See docstring of :class:`MultiOptimizer` for more details.
@@ -463,7 +476,20 @@ class MultiOptimizer(OptimizerDef):
 
   def init_state(self, params):
     sub_states = []
-    for traversal, opt in zip(self.traversals, self.sub_optimizers):
+    seen = {}
+    for idx, (traversal,
+              opt) in enumerate(zip(self.traversals, self.sub_optimizers)):
+
+      keykeys = traverse_util.unflatten_dict({
+          key_tuple: '/'.join(('',) + key_tuple)
+          for key_tuple in traverse_util.flatten_dict(_get_params_dict(params))
+      })
+      for key in traversal.iterate(keykeys):
+        if key in seen:
+          raise ValueError(f'Key "{key}" processed by multiple optimizers: '
+                           f'{seen[key]}, {idx}.')
+        seen[key] = idx
+
       params_t = tuple(traversal.iterate(params))
       state = opt.init_state(params_t)
       sub_states.append(state)
@@ -532,18 +558,8 @@ class ModelParamTraversal(traverse_util.Traversal):
     """
     self._filter_fn = filter_fn
 
-  @staticmethod
-  def _get_params_dict(inputs):
-    if isinstance(inputs, base.Model):
-      return inputs.params
-    elif isinstance(inputs, (dict, FrozenDict)):
-      return unfreeze(inputs)
-    else:
-      raise ValueError(
-          'ModelParamTraversal can only traverse a flax Model instance or a nested dict.')
-
   def iterate(self, inputs):
-    params = self._get_params_dict(inputs)
+    params = _get_params_dict(inputs)
     flat_dict = traverse_util.flatten_dict(params)
     for key, value in _sorted_items(flat_dict):
       path = '/' + '/'.join(key)
@@ -551,7 +567,7 @@ class ModelParamTraversal(traverse_util.Traversal):
         yield value
 
   def update(self, fn, inputs):
-    params = self._get_params_dict(inputs)
+    params = _get_params_dict(inputs)
     flat_dict = traverse_util.flatten_dict(params, keep_empty_nodes=True)
     new_dict = {}
     for key, value in _sorted_items(flat_dict):

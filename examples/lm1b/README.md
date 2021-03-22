@@ -17,7 +17,7 @@ rate schedule. Based off of Machine Translation `wmt` example.
 
 ### How to run
 
-`python main.py --workdir=./lm1b_64 --config.per_device_batch_size=64`
+`python main.py --workdir=./lm1b_64 --config=configs/default.py --config.per_device_batch_size=64`
 
 ### How to run on Cloud TPUs
 

@@ -175,6 +175,17 @@ class TraversalTest(absltest.TestCase):
     xs_restore = traverse_util.unflatten_dict(flat_xs)
     self.assertEqual(xs, xs_restore)
 
+  def test_flatten_dict_is_leaf(self):
+    xs = {'foo': {'c': 4}, 'bar': {'a': 2, 'b': {}}}
+    flat_xs = traverse_util.flatten_dict(
+        xs,
+        is_leaf=lambda k, x: len(k) == 1 and len(x) == 2)
+    self.assertEqual(flat_xs, {
+      ('foo', 'c'): 4,
+      ('bar',): {'a': 2, 'b': {}},
+    })
+    xs_restore = traverse_util.unflatten_dict(flat_xs)
+    self.assertEqual(xs, xs_restore)
 
 if __name__ == '__main__':
   absltest.main()
