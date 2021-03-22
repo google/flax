@@ -455,6 +455,13 @@ class MultiOptimizer(OptimizerDef):
           optimizer.optimizer_def.hyper_params[0].replace(learning_rate=0.2), 
           optimizer.optimizer_def.hyper_params[1].replace(learning_rate=0.4),
         ])
+        
+  You can use this, for instance, to only optimize a part of your network
+  during part of the training. In the code above you can do the following to
+  not optimize for the first 1000 steps::
+  
+    ... learning_rate=jnp.where(step < 1000, 0., lr)
+    
   """
 
   def __init__(
