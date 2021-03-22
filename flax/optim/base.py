@@ -447,21 +447,16 @@ class MultiOptimizer(OptimizerDef):
 
   If you want to update the learning rates of both optimizers online with
   different learning rate schedules, you should update the learning rates when
-  applying the gradient as follows::
+  applying the gradient. In the following example, the second optimizer is not
+  doing any optimization during the first 1000 steps:
 
+    hparams = optimizer.optimizer_def.hyper_params
     new_optimizer = optimizer.apply_gradient(
         grads, 
         hyper_params=[
-          optimizer.optimizer_def.hyper_params[0].replace(learning_rate=0.2), 
-          optimizer.optimizer_def.hyper_params[1].replace(learning_rate=0.4),
+          hparams[0].replace(learning_rate=0.2), 
+          hparams[1].replace(learning_rate=jnp.where(step < 1000, 0., lr)),
         ])
-        
-  You can use this, for instance, to only optimize a part of your network
-  during part of the training. In the code above you can do the following to
-  not optimize for the first 1000 steps::
-  
-    ... learning_rate=jnp.where(step < 1000, 0., lr)
-    
   """
 
   def __init__(
