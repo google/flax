@@ -14,6 +14,7 @@
 
 """Flax Optimizer api."""
 
+import dataclasses
 from typing import Any, Tuple
 import warnings
 
@@ -426,6 +427,19 @@ def _get_params_dict(inputs):
         f'{type(inputs)}')
 
 
+@dataclasses.dataclass
+class _ShapeDtype:
+  shape: Any
+  dtype: Any
+  _key: Tuple[str]
+
+  @classmethod
+  def create(cls, *, key, value):
+    if not isinstance(value, jnp.ndarray):
+      value = jnp.array(value)
+    return cls(shape=value.shape, dtype=value.dtype, _key=key)
+
+
 class MultiOptimizer(OptimizerDef):
   """ 
   A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying 
@@ -479,18 +493,18 @@ class MultiOptimizer(OptimizerDef):
   def init_state(self, params):
     sub_states = []
     seen = {}
+    dummies = traverse_util.unflatten_dict({
+      k: _ShapeDtype.create(key='/'.join(k), value=v)
+      for k, v in traverse_util.flatten_dict(_get_params_dict(params)).items()
+    })
     for idx, (traversal,
               opt) in enumerate(zip(self.traversals, self.sub_optimizers)):
 
-      keykeys = traverse_util.unflatten_dict({
-          key_tuple: '/'.join(('',) + key_tuple)
-          for key_tuple in traverse_util.flatten_dict(_get_params_dict(params))
-      })
-      for key in traversal.iterate(keykeys):
-        if key in seen:
-          raise ValueError(f'Key "{key}" processed by multiple optimizers: '
-                           f'{seen[key]}, {idx}.')
-        seen[key] = idx
+      for dummy in traversal.iterate(dummies):
+        if dummy._key in seen:  # pylint: disable=protected-access
+          raise ValueError(f'Key "{dummy._key}" processed by multiple '
+                           f'optimizers: #{seen[dummy._key]}, #{idx}.')
+        seen[dummy._key] = idx  # pylint: disable=protected-access
 
       params_t = tuple(traversal.iterate(params))
       state = opt.init_state(params_t)
