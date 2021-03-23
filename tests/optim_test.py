@@ -206,8 +206,9 @@ class MultiOptimizerTest(absltest.TestCase):
       lambda path, value: value.dtype == jnp.int32 or path.endswith('/z')
     )
     optimizer_def = optim.MultiOptimizer((t_a, opt_a), (t_b, opt_b))
-    with self.assertRaisesRegex(ValueError, 'Key "./y" processed by multiple'):
-      optimizer_def.init_state(params)
+    with self.assertRaisesRegex(
+        ValueError, r"Multiple optimizers match.*'y': \[0, 1\]"):
+      jax.jit(optimizer_def.init_state)(params)
 
 
 class GradientDescentTest(absltest.TestCase):
