@@ -448,7 +448,7 @@ class MultiOptimizer(OptimizerDef):
   If you want to update the learning rates of both optimizers online with
   different learning rate schedules, you should update the learning rates when
   applying the gradient. In the following example, the second optimizer is not
-  doing any optimization during the first 1000 steps:
+  doing any optimization during the first 1000 steps::
 
     hparams = optimizer.optimizer_def.hyper_params
     new_optimizer = optimizer.apply_gradient(
