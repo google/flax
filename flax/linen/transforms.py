@@ -233,10 +233,10 @@ def vmap(target: Target,
   By using ``variable_axes={'params': 0}``, we indicate that the
   parameters themselves are mapped over and therefore not shared along
   the mapped axis. Consequently, we also split the 'params' RNG,
-  otherwise the parameters would be initialized identicaly along
+  otherwise the parameters would be initialized identically along
   the mapped axis.
 
-  Similairly, ``vmap`` could be use to add a batch axis with parameter
+  Similarly, ``vmap`` could be use to add a batch axis with parameter
   sharing::
 
     BatchFoo = nn.vmap(
@@ -379,7 +379,7 @@ def scan(target: Target,
   uses ``in_axes`` and ``out_axes`` to determine which arguments
   are scanned over and along which axis.
 
-  ``scan`` distinquishes between 3 different types of values inside the loop:
+  ``scan`` distinguishes between 3 different types of values inside the loop:
 
   1. **scan**: a value that is iterated over in a loop. All scan values must
     have the same size in the axis they are scanned over. Scanned outputs
