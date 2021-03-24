@@ -533,7 +533,7 @@ class Module:
     if name in self.__dict__:
       return self.__dict__[name]
     else:
-       raise AttributeError(
+      raise AttributeError(
           f'"{self.__class__.__name__}" object has no attribute "{name}"')
 
   def __dir__(self) -> List[str]:
@@ -878,9 +878,10 @@ class Module:
 
     Note ``method`` can also be a function that is not defined in
     ``Transformer``. In that case, the function should have at least one
-    argument representing the Module class::
+    argument representing an instance of the Module class::
 
-      def other_fn(cls, ...):
+      def other_fn(instance, ...):
+        instance.some_module_attr(...)
         ...
 
       model.apply({'params': params}, x, method=other_fn)

@@ -662,9 +662,10 @@ class ModuleTest(absltest.TestCase):
     Foo().apply({}, method=Foo.test)
     Foo().apply({}, method=Foo().test)
 
-    # We can even use a function that is not in the provided Module, although
-    # it requires an argument for the class (Foo in this case).
-    x = Foo().apply({}, method=lambda cls: cls)
+    # We also use a function that is not in the provided Module, although it
+    # should have a first argument representing an instance of the Module (Foo
+    # in this case).
+    x = Foo().apply({}, method=lambda foo_instance: foo_instance)
     self.assertEqual(type(x), type(Foo()))
 
     # This is not allowed.
