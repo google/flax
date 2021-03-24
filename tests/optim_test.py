@@ -196,18 +196,19 @@ class MultiOptimizerTest(absltest.TestCase):
     self.assertEqual(new_params, expected_params)
 
   def test_multi_optimizer_multiple_matches(self):
-    params = {'a': {'x': 0., 'y': 0.}, 'b': {'y': 0., 'z': 0.}}
+    params = {'a': {'x': 0., 'y': 0.}, 'b': {'y': 0, 'z': 0.}}
     opt_a = optim.GradientDescent(learning_rate=1.)
     opt_b = optim.GradientDescent(learning_rate=10.)
     t_a = optim.ModelParamTraversal(
       lambda path, _: path.endswith('/x') or path.endswith('/y')
     )
     t_b = optim.ModelParamTraversal(
-      lambda path, _: path.endswith('/y') or path.endswith('/z')
+      lambda path, value: value.dtype == jnp.int32 or path.endswith('/z')
     )
     optimizer_def = optim.MultiOptimizer((t_a, opt_a), (t_b, opt_b))
-    with self.assertRaisesRegex(ValueError, 'Key "/./y" processed by multiple'):
-      optimizer_def.init_state(params)
+    with self.assertRaisesRegex(
+        ValueError, r"Multiple optimizers match.*'y': \[0, 1\]"):
+      jax.jit(optimizer_def.init_state)(params)
 
 
 class GradientDescentTest(absltest.TestCase):
