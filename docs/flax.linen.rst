@@ -35,7 +35,22 @@ Compact methods
 .. currentmodule:: flax.linen
 .. autofunction:: compact
 
-	     
+
+Transformations
+----------------------
+
+.. automodule:: flax.linen.transforms
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    vmap
+    scan
+    jit
+    remat
+
+
 Linear modules
 ------------------------
 

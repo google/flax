@@ -228,9 +228,6 @@ def group_collections(
   return tuple(groups)
 
 
-T = TypeVar('T')
-
-
 class Variable(Generic[T]):
   """A Variable object allows mutable access to a variable in a VariableDict.
 

@@ -310,22 +310,44 @@ InOutAxis = Union[Axis, In[Axis], Out[Axis]]
 def vmap(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutAxis],
          split_rngs: Mapping[PRNGSequenceFilter, bool],
-         in_axes=0, out_axes=0, axis_size=None, axis_name=None) -> Callable[..., Any]:
-  """A lifted version of `jax.vmap`.
+         in_axes=0, out_axes=0,
+         axis_size: Optional[int] = None,
+         axis_name: Optional[str] = None) -> Callable[..., Any]:
+  """A lifted version of ``jax.vmap``.
 
-  See `jax.vmap` for the unlifted batch transform in Jax.
+  See ``jax.vmap`` for the unlifted batch transform in Jax.
 
-  Example::
+  ``vmap`` can be used to add a batch axis to a scope function.
+  For example we could create a version of ``dense`` with
+  a batch axis that does not share parameters::
 
-    # a dense mapping with separate parameters for axis 0.
     batch_dense = lift.vmap(
         nn.dense,
         in_axes=(0, None),
         variable_axes={'params': 0},
         split_rngs={'params': True})
 
+  By using ``variable_axes={'params': 0}``, we indicate that the
+  parameters themselves are mapped over and therefore not shared along
+  the mapped axis. Consequently, we also split the 'params' RNG,
+  otherwise the parameters would be initialized identically along
+  the mapped axis.
+
+  Similarly, ``vmap`` could be use to add a batch axis with parameter
+  sharing::
+
+    batch_foo = lift.vmap(
+        foo,
+        in_axes=0, out_axes=0,
+        variable_axes={'params': None},
+        split_rngs={'params': False})
+
+  Here we use ``variable_axes={'params': None}`` to indicate the parameter
+  variables are shared along the mapped axis. Consequently, the 'params'
+  RNG must also be shared.
+
   Args:
-    fn: the function to be transformed.
+    target: the function to be transformed.
     variable_axes: the variable collections that are lifted into the
       batching transformation. Use `None` to indicate a broadcasted
       collection or an integer to map over an axis.
@@ -399,9 +421,28 @@ def scan(fn: Callable[..., Any],
          in_axes=0, out_axes=0,
          length: Optional[int] = None,
          reverse: bool = False) -> Callable[..., Any]:
-  """A lifted version of `jax.lax.scan`.
+  """A lifted version of ``jax.lax.scan``.
 
-  See `jax.lax.scan` for the unlifted scan in Jax.
+  See ``jax.lax.scan`` for the unlifted scan in Jax.
+
+  To improve consistency with ``vmap``, this version of scan
+  uses ``in_axes`` and ``out_axes`` to determine which arguments
+  are scanned over and along which axis.
+
+  ``scan`` distinguishes between 3 different types of values inside the loop:
+
+  1. **scan**: a value that is iterated over in a loop. All scan values must
+    have the same size in the axis they are scanned over. Scanned outputs
+    will be stacked along the scan axis.
+  2. **carry**: A carried value is updated at each loop iteration. It must
+    have the same shape and dtype throughout the loop.
+  3. **broadcast**: a value that is closed over by the loop. When a variable
+    is broadcasted they are typically initialized inside the loop body but
+    independent of the loop variables.
+
+  The loop body should have the signature
+  ``(scope, body, carry, *xs) -> (carry, ys)``, where ``xs`` and ``ys``
+  are the scan values that go in and out of the loop.
 
   Example::
 
@@ -437,6 +478,9 @@ def scan(fn: Callable[..., Any],
     length: Specifies the number of loop iterations. This only needs
       to be specified if it cannot be derivied from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
+  Returns:
+    The scan function with the signature ``(scope, carry, *xxs) -> (carry, yys)``,
+    where ``xxs`` and ``yys`` are the scan values that go in and out of the loop.
   """
   variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
@@ -586,12 +630,33 @@ def custom_vjp(fn: Callable[..., Any], backward_fn: Callable[..., Any],
       name='custom_vjp')
 
 
-def remat(fn: Callable[..., Any],
-          variables: CollectionFilter = True,
-          rngs: PRNGSequenceFilter = True) -> Callable[..., Any]:
-  """Lifted version of jax.remat."""
+def checkpoint(fn: Callable[..., Any],
+               variables: CollectionFilter = True,
+               rngs: PRNGSequenceFilter = True,
+               concrete: bool = False,
+               ) -> Callable[..., Any]:
+  """Lifted version of ``jax.checkpoint``.
+
+  This function is aliased to ``lift.remat`` just like ``jax.remat``.
+
+  Args:
+    fn: scope function for which intermediate computations should be
+    re-computed when computing gradients.
+    variables: The variable collections that are lifted. By default all
+      collections are lifted.
+    rngs: The PRNG sequences that are lifted. By defualt all PRNG sequences
+      are lifted.
+    concrete: Optional, boolean indicating whether ``fun`` may involve
+      value-dependent Python control flow (default False). Support for such
+      control flow is optional, and disabled by default, because in some
+      edge-case compositions with :func:`jax.jit` it can lead to some extra
+      computation.
+  Returns:
+    A wrapped version of ``fn``. When computing gradients intermediate
+    computations will be re-computed when computing gradients.
+  """
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
-    @jax.remat
+    @functools.partial(jax.remat, concrete=concrete)
     @functools.wraps(fn)
     def rematted(variable_groups, rng_groups, *args):
       scope = scope_fn(variable_groups, rng_groups)
@@ -603,18 +668,60 @@ def remat(fn: Callable[..., Any],
 
 
 def jit(fn: Callable[..., Any],
+        variables: CollectionFilter = True,
+        rngs: PRNGSequenceFilter = True,
         static_argnums: Union[int, Iterable[int]] = (),
+        donate_argnums: Union[int, Iterable[int]] = (),
         device=None,
         backend: Union[str, None] = None,
-        variables: CollectionFilter = True,
-        rngs: PRNGSequenceFilter = True) -> Callable[..., Any]:
-  """Lifted version of jax.jit."""
+        ) -> Callable[..., Any]:
+  """Lifted version of ``jax.jit``.
+  
+  Args:
+    fn: Scope function to be jitted.
+    variables: The variable collections that are lifted. By default all
+      collections are lifted.
+    rngs: The PRNG sequences that are lifted. By defualt all PRNG sequences
+      are lifted.
+    static_argnums: An int or collection of ints specifying which positional
+      arguments to treat as static (compile-time constant). Operations that only
+      depend on static arguments will be constant-folded in Python (during
+      tracing), and so the corresponding argument values can be any Python
+      object. Static arguments should be hashable, meaning both ``__hash__`` and
+      ``__eq__`` are implemented, and immutable. Calling the jitted function
+      with different values for these constants will trigger recompilation. If
+      the jitted function is called with fewer positional arguments than
+      indicated by ``static_argnums`` then an error is raised. Arguments that
+      are not arrays or containers thereof must be marked as static.
+      Defaults to ().
+    device: This is an experimental feature and the API is likely to change.
+      Optional, the Device the jitted function will run on. (Available devices
+      can be retrieved via :py:func:`jax.devices`.) The default is inherited from
+      XLA's DeviceAssignment logic and is usually to use ``jax.devices()[0]``.
+    backend: a string representing the XLA backend: ``'cpu'``, ``'gpu'``, or
+      ``'tpu'``.
+    donate_argnums: Specify which arguments are "donated" to the computation.
+      It is safe to donate arguments if you no longer need them once the
+      computation has finished. In some cases XLA can make use of donated
+      buffers to reduce the amount of memory needed to perform a computation,
+      for example recycling one of your input buffers to store a result. You
+      should not reuse buffers that you donate to a computation, JAX will raise
+      an error if you try to.
+
+  Returns:
+    A wrapped version of ``fn``, set up for just-in-time compilation.
+  """
   if not isinstance(static_argnums, Iterable):
     static_argnums = (static_argnums,)
+  if not isinstance(donate_argnums, Iterable):
+    donate_argnums = (donate_argnums,)
+  # offset argnums by one because first argument is the scope.
   static_argnums = tuple(i + 1 for i in static_argnums if i > 0)
+  donate_argnums = tuple(i + 1 for i in donate_argnums if i > 0)
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     @functools.partial(jax.jit,
                        static_argnums=static_argnums,
+                       donate_argnums=donate_argnums,
                        device=device, backend=backend)
     @functools.wraps(fn)
     def jitted(variable_groups, rng_groups, *args):
@@ -625,6 +732,9 @@ def jit(fn: Callable[..., Any],
     return jitted(variable_groups, rng_groups, *args)
 
   return pack(inner, (variables,), (variables,), (rngs,), name='jit')
+
+
+remat = checkpoint
 
 
 def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
