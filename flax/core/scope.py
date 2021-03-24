@@ -377,9 +377,10 @@ class Scope:
       name: the name to reserve.
     """
     if not isinstance(name, str):
-      raise errors.ScopeNameTypeError(name)
+      raise TypeError('The type of scope "{name}" should be string but '
+                     f'it is {type(name)}')
     if name in self.reservations:
-      raise errors.ScopeNameInUseError(name)
+      raise ValueError(f'Duplicate use of scope name: "{name}"')
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
@@ -502,7 +503,8 @@ class Scope:
 
   def make_rng(self, name: str) -> PRNGKey:
     """Generates A PRNGKey from a PRNGSequence with name `name`."""
-    assert self.has_rng(name), f'Need PRNG for "{name}"'
+    if not self.has_rng(name):
+      raise errors.InvalidRngError(f'{self.name} needs PRNG for "{name}"')
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[name] += 1
@@ -649,7 +651,8 @@ def bind(variables: VariableDict,
   if not _is_valid_variables(variables):
     raise errors.ApplyScopeInvalidVariablesError()
   if rngs is not None and not _is_valid_rngs(rngs):
-    raise errors.ApplyScopeInvalidRngsError()
+    raise errors.InvalidRngError(
+      'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
   new_variables = _unfreeze_variables(variables, mutable)
   return Scope(new_variables, rngs=rngs, mutable=mutable)
 
@@ -696,7 +699,9 @@ def init(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
-      raise errors.InitScopeInvalidRngsError()
+      raise ValueError('First argument passed to an init function should be a '
+                       '`jax.PRNGKey` or a dictionary mapping strings to '
+                       '`jax.PRNGKey`.')
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
     return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)

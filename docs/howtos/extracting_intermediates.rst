@@ -120,8 +120,9 @@ Refactor module into submodules
 -------------------------------
 
 This is a useful pattern for cases where it's clear in what particular
-way you want to split your submodules. Any submodule you expose in ``setup`` can be used directly. In the limit, you
-can define all submodules in ``setup`` and avoid using ``nn.compact`` altogether.
+way you want to split your submodules. Any submodule you expose in ``setup`` can
+be used directly. In the limit, you can define all submodules in ``setup`` and
+avoid using ``nn.compact`` altogether.
 
 .. testcode::
 

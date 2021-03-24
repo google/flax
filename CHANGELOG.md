@@ -7,8 +7,8 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
  -
  -
- -
- -
+ - Added custom error classes to many Linen errors. See: 
+   https://flax.readthedocs.io/en/latest/flax.errors.html
  -
  -
  -

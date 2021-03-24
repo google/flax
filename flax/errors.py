@@ -69,77 +69,76 @@ class FlaxError(Exception):
     error_msg = f'{message} ({error_page}#{module_name}.{class_name})'
     super().__init__(error_msg)
 
+
 #################################################
 # scope.py errors                               #
 #################################################
 
-class InitScopeInvalidRngsError(FlaxError):
+
+class InvalidRngError(FlaxError):
   """
-  When initializing a Module with
-  :meth:`Module.init() <flax.linen.Module.init>`, the first argument can be of
-  two forms:
+  All rngs used in a Module should be passed to 
+  :meth:`Module.init() <flax.linen.Module.init>` and 
+  :meth:`Module.apply() <flax.linen.Module.apply>` appropriately. We explain
+  both separately using the following example::
 
-  1. A single PRNGKey. This is in case only one PRNGKey is needed to initialize
-     the ``params`` collection. Note that this::
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        some_param = self.param('some_param', nn.initializers.zeros, (1, ))
+        dropout_rng = self.make_rng('dropout')
+        x = nn.Dense(features=4)(x)
+        ...
 
-       SomeModule(...).init(jax.random.PRNGKey(0), ...)
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = Bar()(x)
+        ...
 
-     Is shorthand for::
+  **PRNGs for Module.init()**
+  
+  In this example, two rngs are used:
 
-       SomeModule(...).init({'params': jax.random.PRNGKey(0)}, ...)
+  * ``params`` is used for initializing the parameters of the model. This rng
+    is used to initialize the ``some_params`` parameter, and for initializing
+    the weights of the ``Dense`` Module used in ``Bar``.
+  
+  * ``dropout`` is used for the dropout rng that is used in ``Bar``.
 
-  2. A directionary mapping collections to the PRNGKey to initialize them with.
-     This is useful if the Module has more rngs than one for ``params``.
-     
-     For instance, suppose an ``EncoderDecoder`` Module that requires an RNG for
-     decoding tokens based on a categorical probability distribution. Then a 
-     typical call looks as follows::
+  So, ``Foo`` is initialized as follows::
+    
+    init_rngs = {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
+    variables = Foo().init(init_rngs, init_inputs)
 
-        EncoderDecoder(...).init({'params': rng1, 'decode': rng2}, ...)
+  If a Module only requires an rng for ``params``, you can use::
 
-     Note that even though they may be used inside submodules, the rngs for the
-     collections should be defined at the top-level. So the ``EncoderDecoder``
-     module above may contain a submodule ``Decoder``, which then uses the 
-     ``decode`` collection. The RNGs will be passed down to submodules
-     automatically.
+       SomeModule().init(rng, ...)  # Shorthand for {'params': rng}
+
+
+  **PRNGs for Module.apply()**
+  
+  When applying ``Foo``, only the rng for ``dropout`` is needed, because 
+  ``params`` is only used for initializing the Module parameters::
+
+    Foo().apply(variables, inputs, rngs={'dropout': random.PRNGKey(2)})
+
+  If a Module only requires an rng for ``params``, you don't have to provide
+  rngs for apply at all::
+
+       SomeModule().apply(variables, inputs)  # rngs=None
   """
-  def __init__(self):
-    super().__init__('First argument passed to an init function should be a '
-                     '`jax.PRNGKey` or a dictionary mapping strings to '
-                     '`jax.PRNGKey`.')
+  def __init__(self, msg):
+    # For this error message we pass the entire message, since there are various
+    # different kinds of RNG errors and we want to be able to be more specific
+    # in the error message, while always linking to the same documentation.
+    super().__init__(msg)
 
-
-class ApplyScopeInvalidRngsError(FlaxError):
-  """
-  When applying a Module, the `rng` argument should be a dictionary mapping 
-  collections to the PRNGKeys that are used when computing their new values.
-
-  For instance, suppose an ``EncoderDecoder`` Module that requires an RNG for
-  decoding tokens based on a categorical probability distribution. Then a 
-  typical call to :meth:`Module.apply() <flax.linen.Module.apply>` looks as
-  follows::
-
-     EncoderDecoder(...).apply(params, ... {'decode': rng2}, ...)
-
-  Remarks:
-
-  * While :meth:`Module.init() <flax.linen.Module.init>` requires a rngs for
-    the collection ``params``, this is not necessary when applying the module,
-    because this collection is only use to initialize the model with.
-  * Even though they may be used inside submodules, the rngs for the collections
-    should be defined at the top-level. So the ``EncoderDecoder`` module above 
-    may contain a submodule ``Decoder``, which then uses the ``decode``
-    collection. The RNGs will be passed down to submodules automatically.
-  """
-  def __init__(self):
-    super().__init__('rngs should be a dictionary mapping strings to '
-                     '`jax.PRNGKey`.')
-                   
 
 class ApplyScopeInvalidVariablesError(FlaxError):
   """
   When calling :meth:`Module.apply() <flax.linen.Module.apply>`, the first
-  argument should be a variable dict. For more explanation on variable direct,
+  argument should be a variable dict. For more explanation on variable dicts,
   please see :mod:`flax.core.variables`.
   """
   def __init__(self):
@@ -166,11 +165,8 @@ class ScopeParamNotFoundError(FlaxError):
                             (self.num_embeddings, self.features))    
       return embedding[inputs]
 
-  vars = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
-  print(jax.tree_map(lambda x : x.shape, vars))
-  _ = NoBiasDense().apply(vars, jnp.ones((5, 5, 1)), 'embed')
-  
-
+    variables = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
+    _ = NoBiasDense().apply(variables, jnp.ones((5, 5, 1)), 'embed')
   """
   def __init__(self, param_name, scope_path):
     super().__init__(f'No parameter named "{param_name}" exists in '
@@ -201,8 +197,8 @@ class ScopeParamShapeError(FlaxError):
                             (((x.ndim - 1,), (0,)), ((), ())))
         return y
 
-    vars = NoBiasDense().init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
-    _ = NoBiasDense().apply(vars, jnp.ones((5, 5)))
+    variables = NoBiasDense().init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
+    _ = NoBiasDense().apply(variables, jnp.ones((5, 5)))
   """
   def __init__(self, param_name, scope_path, value_shape, init_shape):
     super().__init__('Inconsistent shapes between value and initializer '
@@ -214,7 +210,7 @@ class ScopeVariableNotFoundError(FlaxError):
   """
   This error is thrown when trying to use a variable in a Scope in a collection
   that is immutable. In order to create this variable, mark the collection as
-  mutable explicitly using the `mutable` keyword in
+  mutable explicitly using the ``mutable`` keyword in
   :meth:`Module.apply() <flax.linen.Module.apply>`.
   """
   def __init__(self, name, col, scope_path):
@@ -257,35 +253,38 @@ class ModifyScopeVariableError(FlaxError):
         var.value = ...
         ...
     
-    vars = MyModule.init(...)
+    v = MyModule.init(...)
     ...
-    logits = MyModule.apply(vars, batch)  # This throws an error.
-    logits = MyModule.apply(vars, batch, mutable=['batch_stats'])  # This works.
+    logits = MyModule.apply(v, batch)  # This throws an error.
+    logits = MyModule.apply(v, batch, mutable=['batch_stats'])  # This works.
   """
   def __init__(self, col, variable_name, scope_path):
     super().__init__(f'Cannot update variable "{variable_name}" in '
                      f'"{scope_path}" because collection "{col}" is immutable.')
 
 
-class ScopeNameTypeError(FlaxError):
-  """
-  Scope names should be strings.
-  """
-  def __init__(self, scope_name):
-    super().__init__(f'The type of scope "{scope_name}" should be string but '
-                     f'it is {type(scope_name)}')
+#################################################
+# module.py errors                              #
+#################################################
 
 
-class ScopeNameInUseError(FlaxError):
+class NameInUseError(FlaxError):
   """
-  Module names are unique within a subscope::
+  This error is raised when trying to create a submodule, param, or variable
+  with an existing name. They are all considered to be in the same namespace.
 
-    class MyModule(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        x = MySubModule(name='m1')(x)
-        x = MySubModule(name='m1')(x)  # This is not allowed.
-        return x
+  **Sharing Submodules**
+
+  This is the wrong pattern for sharing submodules::
+
+    y = nn.Dense(feature=3, name='bar')(x)
+    z = nn.Dense(feature=3, name='bar')(x+epsilon)
+
+  Instead, modules should be shared by instance::
+
+    dense = nn.Dense(feature=3, name='bar')
+    y = dense(x)
+    z = dense(x+epsilon)
 
   If submodules are not provided with a name, a unique name will be given to
   them automatically::
@@ -296,9 +295,226 @@ class ScopeNameInUseError(FlaxError):
         x = MySubModule()(x)
         x = MySubModule()(x)  # This is fine.
         return x
+
+  **Parameters and Variables**
+
+  A parameter name can collide with a submodule or variable, since they are all
+  stored in the same variable dict::
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = self.param('bar', nn.initializers.zeros, (1, ))
+        embed = nn.Embed(num_embeddings=2, features=5, name='bar')  # <-- ERROR!
+  
+  Variables should also have unique names, even if they have their own
+  collection::
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, inputs):
+        _ = self.param('mean', initializers.lecun_normal(), (2, 2))
+        _ = self.variable('stats', 'mean', initializers.zeros, (2, 2))
   """
-  def __init__(self, scope_name):
-    super().__init__(f'Duplicate use of scope name: "{scope_name}"')
+  def __init__(self, key_type, value, module_name):
+    # key_type is in {param, variable, submodule}.
+    super().__init__(f'Could not create {key_type} "{value}" in Module '
+                     f'{module_name}: Name in use.')
+
+
+class AssignSubModuleError(FlaxError):
+  """
+  You are only allowed to create submodules in two places:
+
+  1.  If your Module is noncompact: inside 
+      :meth:`Module.setup() <flax.linen.Module.setup>`.
+  2.  If your Module is compact: inside the method wrapped in 
+      :meth:`nn.compact() <flax.linen.compact>`.
+
+  For instance, the following code throws this error, because ``nn.Conv`` is
+  created in ``__call__``, which is not marked as compact::
+
+    class Foo(nn.Module):
+      def setup(self):
+        pass
+
+      def __call__(self, x):
+        conv = nn.Conv(features=3, kernel_size=3)
+
+    Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
+
+  Note that this error is also thrown if you partially defined a Module inside
+  setup::
+
+    class Foo(nn.Module):
+      def setup(self):
+        self.conv = functools.partial(nn.Conv, features=3)
+
+      def __call__(self, x):
+        x = self.conv(kernel_size=4)(x)
+        return x
+
+    Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
+
+  In this case, ``self.conv(kernel_size=4)`` is called from ``__call__``, which
+  is disallowed beause it's neither within ``setup`` nor a method wrapped in
+  x``nn.compact``.
+  """
+  def __init__(self, cls):
+    super().__init__(f'Submodule {cls} must be defined in `setup()` or in a '
+                     'method wrapped in `@compact`')
+
+
+class SetAttributeInModuleSetupError(FlaxError):
+  """
+  You are not allowed to modify Module class attributes in
+  :meth:`Module.setup() <flax.linen.Module.setup>`::
+
+    class Foo(nn.Module):
+      features: int = 6
+
+      def setup(self):
+        self.features = 3  # <-- ERROR
+
+      def __call__(self, x):
+        return nn.Dense(self.features)(x)
+
+    variables = SomeModule().init(random.PRNGKey(0), jnp.ones((1, )))
+
+  Instead, these attributes should be set when initializing the Module::
+
+    class Foo(nn.Module):
+      features: int = 6
+
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(self.features)(x)
+
+    variables = SomeModule(features=3).init(random.PRNGKey(0), jnp.ones((1, )))
+  
+  TODO(marcvanzee): Link to a design note explaining why it's necessary for
+  modules to stay frozen (otherwise we can't safely clone them, which we use for
+  lifted transformations).
+  """
+  def __init__(self):
+    super().__init__(f'Module construction attributes are frozen.')
+
+
+class SetAttributeFrozenModuleError(FlaxError):
+  """
+  You can only assign Module attributes to ``self`` inside
+  :meth:`Module.setup() <flax.linen.Module.setup>`. Outside of that method, the
+  Module instance is frozen (i.e., immutable). This behavior is similar to
+  frozen Python dataclasses.
+  
+  For instance, this error is raised in the following case::
+
+    class SomeModule(nn.Module):
+      @nn.compact
+      def __call__(self, x, num_features=10):
+        self.num_features = num_features  # <-- ERROR!
+        x = nn.Dense(self.num_features)(x)
+        return x
+
+    s = SomeModule().init(random.PRNGKey(0), jnp.ones((5, 5)))
+
+  Similarly, the error is raised when trying to modify a submodule's attributes
+  after constructing it, even if this is done in the ``setup()`` method of the
+  parent module::
+
+    class Foo(nn.Module):
+        def setup(self):
+          self.dense = nn.Dense(features=10)
+          self.dense.features = 20  # <--- This is not allowed
+        
+        def __call__(self, x):
+          return self.dense(x)
+  """
+  def __init__(self, module_cls, attr_name, attr_val):
+    super().__init__(f'Can\'t set {attr_name}={attr_val} for Module of type '
+                    f'{module_cls}: Module instance is frozen outside of '
+                     'setup method.')
+
+
+class MultipleMethodsCompactError(FlaxError):
+  """
+  The ``@compact`` decorator may only be added to at most one method in a Flax
+  module. In order to resolve this, you can:
+  
+  * remove ``@compact`` and define submodules and variables using 
+    :meth:`Module.setup() <flax.linen.Module.setup>`.
+  * Use two separate modules that both have a unique ``@compact`` method.
+
+  TODO(marcvanzee): Link to a design note explaining the motivation behind this.
+  There is no need for an equivalent to `hk.transparent` and it makes submodules
+  much more sane because there is no need to prefix the method names.
+  """
+  def __init__(self):
+    super().__init__(f'Only one method per class can be @compact')
+
+class ReservedModuleAttributeError(FlaxError):
+  """
+  This error is thrown when creating a Module that is using reserved attributes.
+  The following attributes are reserved:
+  
+  * ``parent``: The parent Module of this Module.
+  * ``name``: The name of this Module.
+  """
+  def __init__(self, annotations):
+    super().__init__(f'properties `parent` and `name` are reserved: '
+                     f'{annotations}')
+
+
+class ApplyModuleInvalidMethodError(FlaxError):
+  """
+  When calling :meth:`Module.apply() <flax.linen.Module.apply>`, you can specify
+  the method to apply using parameter ``method``. This error is thrown if the
+  provided parameter is not a method in the Module and not a function with at
+  least one argument.
+
+  Learn more on the reference docs for
+  :meth:`Module.apply() <flax.linen.Module.apply>`.
+  """
+  def __init__(self, method):
+    super().__init__(f'Cannot call apply(): {method} is not a valid function '
+                     'for apply().')
+
+
+class CallCompactUnboundModuleError(FlaxError):
+  """
+  This error occurs when you are trying to call a Module directly, rather than
+  through :meth:`Module.apply() <flax.linen.Module.apply>`. For instance, the 
+  error will be raised when trying to run this code::
+
+    from flax import linen as nn
+    import jax.numpy as jnp
+
+    test_dense = nn.Dense(10)
+    test_dense(jnp.ones((5,5)))
+
+  Instead, you should pass the variables (parameters and other state) via 
+  :meth:`Module.apply() <flax.linen.Module.apply>` (or use 
+  :meth:`Module.init() <flax.linen.Module.init>` to get initial variables)::
+
+    from jax import random
+    variables = test_dense.init(random.PRNGKey(0), jnp.ones((5,5)))
+
+    y = test_dense.apply(variables, jnp.ones((5,5)))
+  """
+  def __init__(self):
+    super().__init__('Can\'t call compact methods on unbound modules')
+
+
+class JaxOmnistagingError(FlaxError):
+  """
+  The Flax linen API requires JAX omnistaging to be enabled. In order to enable
+  this, add this to your imports::
+    
+    from jax.config import config
+    config.enable_omnistaging()
+  """
+  def __init__(self):
+    super().__init__(f'Flax Linen requires Omnistaging to be enabled')
 
 
 class InvalidCheckpointError(FlaxError):

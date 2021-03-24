@@ -30,6 +30,7 @@ from jax import tree_util
 import numpy as np
 
 import flax
+from flax import errors
 from flax import traverse_util
 from flax import serialization
 from flax import core
@@ -53,10 +54,7 @@ _CallableT = TypeVar('_CallableT', bound=Callable)
 
 def _check_omnistaging():
   if not jax.config.omnistaging_enabled:
-    raise RuntimeError(
-        "Flax linen API requires JAX omnistaging to be enabled:\n"
-        "  from jax.config import config\n"
-        "  config.enable_omnistaging()")
+    raise errors.JaxOmnistagingError()
 
 
 def _indent(x: str, num_spaces: int):
@@ -271,7 +269,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
 
     if is_compact_method:
       if self.scope is None:
-        raise ValueError("Can't call compact methods on unbound modules")
+        raise errors.CallCompactUnboundModuleError()
       self._state.in_compact_method = True
     _context.module_stack.append(self)
     try:
@@ -303,8 +301,9 @@ def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
 def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
   """Returns an unbound function from a method that is possibly bound.
   
-  This means that the returned function does no longer depend on the instance
-  of the class, which is passed as it first argument. 
+  This means that if the passed function belongs of an instance of a class, then
+  the returned function does no longer depend on the instance, which is passed
+  as the first argument to the function.
 
   Args:
     method_or_fn: A class method or function.
@@ -312,12 +311,16 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
     An unbound version of input function.
   """
   if inspect.ismethod(method_or_fn):
-    return method_or_fn.__func__  # pytype: disable=attribute-error
-  elif callable(method_or_fn):
-    return method_or_fn
-  else:
-    raise ValueError('Expect a function or method.')
+    method_or_fn = method_or_fn.__func__  # pytype: disable=attribute-error
 
+  # The method should be callable, and it should have at least one argument
+  # representing the class that is passed in.
+  if (not callable(method_or_fn) or 
+      len(inspect.signature(method_or_fn).parameters) < 1):
+    raise errors.ApplyModuleInvalidMethodError(method_or_fn)
+  
+  return method_or_fn
+  
 
 @dataclasses.dataclass
 class _ModuleInternalState:
@@ -443,8 +446,7 @@ class Module:
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
     if 'parent' in annotations or 'name' in annotations:
-      raise ValueError(
-          f'properties `parent` and `name` are reserved: {annotations}')
+      raise errors.ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
     # argument behavior and ordering from dataclass class-transform.
@@ -475,10 +477,7 @@ class Module:
     n_compact_fns = len([method_name for method_name in methods
                          if hasattr(getattr(cls, method_name), 'compact')])
     if n_compact_fns > 1:
-      raise RuntimeError(
-          'Only one method per class can be @compact. You can remove @compact '
-          'and define submodules and variables in setup(), or use two '
-          'separate modules.')
+      raise errors.MultipleMethodsCompactError()
 
   @classmethod
   def _wrap_module_methods(cls):
@@ -499,7 +498,7 @@ class Module:
     """Sets an attribute on this Module.
     
     We overload setattr solely to support pythonic naming via assignment of 
-    submodules in the special setup() function::
+    submodules in the special :meth:`setup` function::
 
       self.submodule_name = MyModule(...)
 
@@ -515,10 +514,11 @@ class Module:
     
     if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
-      raise TypeError("Module instance is frozen outside of setup method.")
+      raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name, 
+                                                 val)
     if is_dataclass_attr:
       if self._state.in_setup:
-        raise TypeError("Module construction attributes are frozen.")
+        raise errors.SetAttributeInModuleSetupError()
       object.__setattr__(self, name, val)
     # Submodules are being defined and attached in setup()
     else:
@@ -534,7 +534,7 @@ class Module:
       return self.__dict__[name]
     else:
       raise AttributeError(
-          f"'{self.__class__.__name__}' object has no attribute '{name}'")
+          f'"{self.__class__.__name__}" object has no attribute "{name}"')
 
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
@@ -568,9 +568,7 @@ class Module:
       if self.parent._state.in_setup and self.name is None:  # pytype: disable=attribute-error
         return
       if not self.parent._initialization_allowed:
-        raise ValueError(
-            'Submodules must be defined in `setup()` or in a method wrapped '
-            'in `@compact`')
+        raise errors.AssignSubModuleError(self.__class__.__name__)
       # Autonaming of submodules.
       if self.name is None:  # pytype: disable=attribute-error
         prefix = f"{self.__class__.__name__}"
@@ -578,11 +576,8 @@ class Module:
         self.name = f"{prefix}_{cursor}"
         self.parent._state.autoname_cursor[prefix] = cursor + 1
       if self.parent._name_taken(self.name, self):
-        raise ValueError(
-            f"A variable of name {self.name} exists already, or "
-            f"trying to share submodule {self.__class__.__name__} by name "
-            f"{self.name}. To share submodules, store module instances as a"
-            f" Python object or as an attribute on self and reuse.")
+        parent_class = self.parent.__class__.__name__
+        raise errors.NameInUseError('submodule', self.name, parent_class)
       self.parent._state.children[self.name] = self
       object.__setattr__(self, 'scope', self.parent.scope.push(self.name))
 
@@ -737,8 +732,7 @@ class Module:
           'Variables must be initialized in `setup()` or in a method '
           'wrapped in `@compact`')
     if self._name_taken(name):
-      raise ValueError(
-          f'Name {name} already in use in {self.__class__.__name__}.')
+      raise errors.NameInUseError('variable', name, self.__class__.__name__)
     v = self.scope.variable(col, name, init_fn, *init_args)
     self._state.children[name] = col
     return v
@@ -774,8 +768,7 @@ class Module:
           'Parameters must be initialized in `setup()` or in a method '
           'wrapped in `@compact`')
     if self._name_taken(name):
-      raise ValueError(
-          f'Name {name} already in use in {self.__class__.__name__}.')
+      raise errors.NameInUseError('param', name, self.__class__.__name__)
     v = self.scope.param(name, init_fn, *init_args)
     self._state.children[name] = 'params'
     return v
@@ -871,12 +864,27 @@ class Module:
     """Applies a module method to variables and returns output and modified variables.
 
     Note that `method` should be set if one would like to call `apply` on a
-    different class method than ``__call__``. For instance, suppose a Transformer
-    modules has a method called `encode`, then the following calls `apply` on
-    that method::
+    different class method than ``__call__``. For instance, suppose a
+    Transformer modules has a method called `encode`, then the following calls
+    `apply` on that method::
 
-      model = models.Transformer(config)
-      encoded = model.apply({'params': params}, inputs, method=model.encode)
+      model = Transformer()
+      encoded = model.apply({'params': params}, x, method=Transformer.encode)
+  
+    If a function instance is provided, the unbound function is used. For 
+    instance, the example below is equivalent to the one above::
+
+      encoded = model.apply({'params': params}, x, method=model.encode)
+
+    Note ``method`` can also be a function that is not defined in
+    ``Transformer``. In that case, the function should have at least one
+    argument representing an instance of the Module class::
+
+      def other_fn(instance, ...):
+        instance.some_module_attr(...)
+        ...
+
+      model.apply({'params': params}, x, method=other_fn)
 
     Args:
       variables: A dictionary containing variables keyed by variable
@@ -884,8 +892,9 @@ class Module:
         about variables.
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
         The "params" PRNG sequence is used to initialize parameters.
-      method: The literal name of a method in this class. If provided, applies
-        this method. If not provided, applies the ``__call__`` method.
+      method: A function to call apply on. This is generally a function in the
+        module. If provided, applies this method. If not provided, applies the
+        ``__call__`` method of the module.
       mutable: Can be bool, str, or list. Specifies which collections should be
                treated as mutable: ``bool``: all/no collections are mutable.
                ``str``: The name of a single mutable collection. ``list``: A
@@ -924,7 +933,10 @@ class Module:
       collections.
     """
     if not isinstance(rngs, dict):
-      assert rngs.shape == (2,)
+      if rngs.shape != (2,):
+        raise errors.InvalidRngError(
+            'RNGs should be of shape (2,) in Module '
+            f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
