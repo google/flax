@@ -14,7 +14,8 @@
 
 """Flax Optimizer api."""
 
-from typing import Any, Tuple
+import dataclasses
+from typing import Any, List, Tuple
 import warnings
 
 from .. import jax_utils
@@ -426,6 +427,19 @@ def _get_params_dict(inputs):
         f'{type(inputs)}')
 
 
+@dataclasses.dataclass
+class _ShapeDtype:
+  shape: Any
+  dtype: Any
+  _indices: List[int]
+
+  @classmethod
+  def create(cls, value):
+    if not isinstance(value, jnp.ndarray):
+      value = jnp.array(value)
+    return cls(shape=value.shape, dtype=value.dtype, _indices=[])
+
+
 class MultiOptimizer(OptimizerDef):
   """ 
   A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying 
@@ -478,23 +492,23 @@ class MultiOptimizer(OptimizerDef):
 
   def init_state(self, params):
     sub_states = []
-    seen = {}
+    matches = jax.tree_map(_ShapeDtype.create, params)
+    overlap = False
     for idx, (traversal,
               opt) in enumerate(zip(self.traversals, self.sub_optimizers)):
 
-      keykeys = traverse_util.unflatten_dict({
-          key_tuple: '/'.join(('',) + key_tuple)
-          for key_tuple in traverse_util.flatten_dict(_get_params_dict(params))
-      })
-      for key in traversal.iterate(keykeys):
-        if key in seen:
-          raise ValueError(f'Key "{key}" processed by multiple optimizers: '
-                           f'{seen[key]}, {idx}.')
-        seen[key] = idx
+      for match in traversal.iterate(matches):
+        match._indices.append(idx)
+        overlap |= len(match._indices) > 1
 
       params_t = tuple(traversal.iterate(params))
       state = opt.init_state(params_t)
       sub_states.append(state)
+
+    if overlap:
+      raise ValueError(
+          'Multiple optimizers match the same leaves : ' +
+          str(jax.tree_map(lambda match: match._indices, matches)))
     return tuple(sub_states)
 
   def apply_gradient(self, hyper_params, params, states, grads):

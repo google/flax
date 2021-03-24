@@ -8,8 +8,7 @@
 | [**What does Flax look like?**](#what-does-flax-look-like)
 | [**Documentation**](https://flax.readthedocs.io/)
 
-**See our [full documentation](https://flax.readthedocs.io/)
-to learn everything you need to know about Flax.**
+This README is a very short intro. **To learn everything you need to know about Flax, see our [full documentation](https://flax.readthedocs.io/)**
 
 Flax was originally started by engineers and researchers within the Brain Team in Google Research (in close collaboration with the JAX team), and is now developed jointly with the open source community.
 
@@ -29,11 +28,6 @@ remaining internal design docs and conversation threads to GitHub
 discussions, issues and pull requests. We hope to increasingly engage
 with the needs and clarifications of the broader ecosystem. Please let
 us know how we can help!
-
-**NOTE**: The new Flax ["Linen" module
-API](https://github.com/google/flax/tree/master/flax/linen/README.md)
-is now stable and we recommend it for all new projects. The old
-`flax.nn` API will be deprecated.
 
 Please report any feature requests,
 issues, questions or concerns in our [discussion
@@ -93,8 +87,8 @@ To upgrade to the latest version of Flax, you can use:
 
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
 
-To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) or visit our
-[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html) page for additional concrete demonstrations of best practices.
+To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
+[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html).
 
 ```py
 class MLP(nn.Module):
