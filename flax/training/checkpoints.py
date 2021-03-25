@@ -167,9 +167,12 @@ def restore_checkpoint(ckpt_dir,
 
   Sorts the checkpoint files naturally, returning the highest-valued
   file, e.g.:
-    ckpt_1, ckpt_2, ckpt_3 --> ckpt_3
-    ckpt_0.01, ckpt_0.1, ckpt_0.001 --> ckpt_0.1
-    ckpt_-1.0, ckpt_1.0, ckpt_1e5 --> ckpt_1e5
+
+  *  ``ckpt_1, ckpt_2, ckpt_3 --> ckpt_3``
+
+  *  ``ckpt_0.01, ckpt_0.1, ckpt_0.001 --> ckpt_0.1``
+
+  *  ``ckpt_-1.0, ckpt_1.0, ckpt_1e5 --> ckpt_1e5``
 
   Args:
     ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
@@ -244,7 +247,7 @@ def convert_pre_linen(params):
   submodule class. With Linen this behavior has changed to keep separate
   submodule counts per module class.
 
-  Consider the following module:
+  Consider the following module::
 
     class Model(nn.Module):
       @nn.compact
@@ -254,26 +257,28 @@ def convert_pre_linen(params):
         return x
 
   In pre-Linen the resulting params would have had the structure:
-    {'Conv_0': { ... }, 'Dense_1': { ... } }
+
+    ``{'Conv_0': { ... }, 'Dense_1': { ... } }``
 
   With Linen the resulting params would instead have had the structure:
-    {'Conv_0': { ... }, 'Dense_0': { ... } }
 
-  To convert from pre-Linen format to Linen simply call:
+    ``{'Conv_0': { ... }, 'Dense_0': { ... } }``
+
+  To convert from pre-Linen format to Linen simply call::
 
     params = convert_pre_linen(pre_linen_params)
 
   Note that you can also use this utility to convert pre-Linen collections
   because they're following the same module naming. Note though that collections
   were "flat" in pre-Linen and first need to be unflattened before they can be
-  used with this function:
+  used with this function::
 
     batch_stats = convert_pre_linen(flax.traverse_util.unflatten_dict({
         tuple(k.split('/')[1:]): v
         for k, v in pre_linen_model_state.as_dict().items()
     }))
 
-  Then Linen variables can be defined from these converted collections:
+  Then Linen variables can be defined from these converted collections::
 
     variables = {'params': params, 'batch_stats': batch_stats}
 
