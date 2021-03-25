@@ -7,12 +7,10 @@ each other, and improving our documentation are extremely valuable to our
 ecosystem.
 
 We also appreciate if you spread the word, for instance by starring our Github
-repo, referencing Flax in blog posts of projects that used it, or giving us a
-Twitter shoutout by using the hashtag "#flax".
+repo, or referencing Flax in blog posts of projects that used it.
 
 This project follows
 [Google's Open Source Community Guidelines](https://opensource.google/conduct/).
-
 
 ## Ways to contribute
 
