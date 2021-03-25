@@ -76,8 +76,8 @@ Remarks:
   scope of the higher order functions returning the `GradientTransformation`.
   Such a gradient transformation is currently defined as a `NamedTuple` of the
   `init()` and the `update()` function. In principle this pattern could be
-  extended to also store parameters, maybe a point to discuss on the [Optax]
-  repo.
+  extended to also store hyperparameters, maybe a point to discuss on the
+  [Optax] repo.
 - We can use a `get_learning_rate()` that returns the learning rate depending on
   the step number when defining the Optax gradient update transformation. Above
   code illustrates how this can be a drop-in replacement for a function we also
