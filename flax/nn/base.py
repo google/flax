@@ -38,6 +38,7 @@ import jax
 from jax import random
 
 
+
 _module_stack = utils.CallStack()
 _module_output_trackers = utils.CallStack()
 _state_stack = utils.CallStack()
