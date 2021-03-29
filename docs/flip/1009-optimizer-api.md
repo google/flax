@@ -228,27 +228,27 @@ With this the [Optax Training Step] becomes:
 
 ```python
 @jax.jit
-def train_step(state, inputs, labels):
+def train_step(train_state, inputs, labels):
 
   def loss_fn(params):
-    outputs, new_model_state = state.apply_fn(
-        state.optimizer.model_state.copy({'params': params}),
+    outputs, new_model_state = train_state.apply_fn(
+        {'params': params, **train_state.optimizer.model_state},
         inputs,
         mutable=['batch_stats'])
     loss = xent_loss(outputs, labels)
     return loss, new_model_state
 
   (loss, new_model_state), grads = jax.value_and_grad(
-      loss_fn, has_aux=True)(state.optimizer.params)
-  new_state = state.replace(
-      step=state.step + 1,
-      optimizer=state.optimizer.update(grads, new_model_state),
+      loss_fn, has_aux=True)(train_state.optimizer.params)
+  new_state = train_state.replace(
+      step=train_state.step + 1,
+      optimizer=train_state.optimizer.update(grads, new_model_state),
   )
 
   return new_state, loss
 
 
-state = TrainState(
+train_state = TrainState(
     step=0,
     apply_fn=model.apply,
     optimizer=Optimizer.create(
@@ -257,7 +257,7 @@ state = TrainState(
     ),
 )
 for batch in ds.as_numpy_iterator():
-  state, loss = train_step(state, batch['image'], batch['label'])
+  train_state, loss = train_step(train_state, batch['image'], batch['label'])
 ```
 
 Remarks:
@@ -383,12 +383,16 @@ Remarks:
 2. Test existing optimizers for numerical equivalence (e.g. `flax.optim.Adam`
    and `optax.adamw`).
 3. Update examples to use Optax and verify that they reach the same final
-   performance with the same computational cost. We probably want some examples
-   to directly use the optimizer while others might use [Linen helper].
+   performance with the same computational cost.
 4. Port missing optimizers to Optax (e.g. Adafactor) - and verify above points.
 5. Update all documentation (including README, Flax guided tour, HOWTOs, ...) to
    talk exclusively about Optax optimizers.
-6. Mark optimizers in `flax.optim` as deprecated.
+6. Create a transition guide for updating users from `flax.optim` to using
+   Optax. This transition guide should also point to Optax's [equivalence tests]
+   and the pull requests updating the examples.
+7. Mark optimizers in `flax.optim` as deprecated.
+
+[equivalence tests]: https://github.com/deepmind/optax/blob/master/optax/_src/equivalence_test.py
 
 Note that all current Flax examples use an optimizer that is already available
 in Optax:
