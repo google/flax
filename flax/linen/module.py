@@ -537,6 +537,7 @@ class Module:
     return object.__dir__(self)  # pytype: disable=attribute-error
 
   def __post_init__(self):
+    # DO NOT REMOVE - Marker for internal logging.
     # In dataclasses, __init__ is overridden to process dataclass arguments,
     # and __post_init__ is called immediately afterwards. Here, depending on the
     # type of `parent` passed to initialize the Module, we either defer 
