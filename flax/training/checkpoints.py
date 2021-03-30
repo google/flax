@@ -94,7 +94,8 @@ def save_checkpoint(ckpt_dir,
   """
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
-  ckpt_dir = os.path.realpath(ckpt_dir)
+  if ckpt_dir.startswith('./'):
+    ckpt_dir = ckpt_dir[2:]  # gfile.glob() can remove leading './'
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
   gfile.makedirs(os.path.dirname(ckpt_path))
