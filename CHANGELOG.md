@@ -7,8 +7,6 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
  -
  -
- - Added custom error classes to many Linen errors. See: 
-   https://flax.readthedocs.io/en/latest/flax.errors.html
  -
  -
  -
@@ -16,19 +14,34 @@ vNext
  -
  -
  -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+
+
+0.3.3
+------
+
+Possible breaking changes:
  - Bug Fix: Disallow modifying attributes in Modules after they are initialized.
- - Adds `Module.bind` for binding variables and RNGs to an interactive Module.
- -
- -
- -
- - Add option to overwrite existing checkpoints in `save_checkpoint`.
  - Raise an error when saving a checkpoint which has a smaller step than the
    latest checkpoint already saved.
- -
- -
- -
- -
- -
+  
+Other changes:
+ - Added custom error classes to many Linen errors. See: 
+   https://flax.readthedocs.io/en/latest/flax.errors.html
+ - Adds `Module.bind` for binding variables and RNGs to an interactive Module.
+ - Add option to overwrite existing checkpoints in `save_checkpoint`.
+ - Remove JAX omnistaging check for forward compatibility.
 
 0.3.2
 ------
