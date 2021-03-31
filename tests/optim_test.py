@@ -94,12 +94,12 @@ class OptimizerDefTest(absltest.TestCase):
     opt_def = optim.GradientDescent(learning_rate=1.)
     t_a = traverse_util.t_identity['a']
     optimizer = opt_def.create(params, focus=t_a)
-    expected_state = (optim.OptimizerState(0, ((),)),)
+    expected_state = optim.OptimizerState(0, {'a': (), 'b': None})
     self.assertEqual(optimizer.state, expected_state)
     grads = {'a': -1., 'b': -2.}
     new_optimizer = optimizer.apply_gradient(grads)
     expected_params = {'a': 1., 'b': 0.}
-    expected_state = (optim.OptimizerState(1, ((),)),)
+    expected_state = optim.OptimizerState(1, {'a': (), 'b': None})
     self.assertEqual(new_optimizer.state, expected_state)
     self.assertEqual(new_optimizer.target, expected_params)
 
@@ -179,13 +179,13 @@ class MultiOptimizerTest(absltest.TestCase):
         _GradientDescentHyperParams(10.)
     ]
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
-    expected_state = (optim.OptimizerState(0, ((),)),) * 2
+    expected_state = optim.OptimizerState(0, {'a': (), 'b': (), 'c': {}})
     self.assertEqual(state, expected_state)
     grads = {'a': -1., 'b': -2., 'c': {}}
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_params = {'a': 1., 'b': 20., 'c': {}}
-    expected_state = (optim.OptimizerState(1, ((),)),) * 2
+    expected_state = optim.OptimizerState(1, {'a': (), 'b': (), 'c': {}})
     self.assertEqual(new_state, expected_state)
     self.assertEqual(new_params, expected_params)
     # override learning_rate
