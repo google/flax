@@ -63,7 +63,7 @@ class Template(FlaxError):
 
 class FlaxError(Exception):
   def __init__(self, message):
-    error_page = 'https://flax.readthedocs.io/en/improve-error/flax.errors.html'
+    error_page = 'https://flax.readthedocs.io/en/latest/flax.errors.html'
     module_name = self.__class__.__module__
     class_name = self.__class__.__name__
     error_msg = f'{message} ({error_page}#{module_name}.{class_name})'
