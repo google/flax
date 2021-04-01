@@ -26,8 +26,6 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class MnistLibTest(absltest.TestCase):

@@ -21,8 +21,6 @@ import numpy as np
 from flax import linen as nn
 from flax.linen import Module, Dense, compact
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 # A concise MLP defined via lazy submodule initialization
