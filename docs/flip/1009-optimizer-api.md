@@ -96,7 +96,7 @@ def train_step(opt_state, variables, inputs, labels, apply_fn, tx_update_fn):
 
   def loss_fn(params):
     logits, new_model_state = apply_fn(
-        variables.copy(dict(params=params)), inputs, mutable=['batch_stats'])
+        {**variables, 'params': params}, inputs, mutable=['batch_stats'])
     loss = xent_loss(logits, labels)
     return loss, new_model_state
 
@@ -105,7 +105,7 @@ def train_step(opt_state, variables, inputs, labels, apply_fn, tx_update_fn):
       params)
   updates, new_opt_state = tx_update_fn(grads, opt_state, params)
   new_params = optax.apply_updates(params, updates)
-  new_variables = variables.copy(dict(params=new_params, **new_model_state))
+  new_variables = {**variables, **new_model_state, 'params': params}
   return new_opt_state, new_variables, loss
 
 
@@ -181,47 +181,48 @@ In Flax it is common to hand around a `TrainState` object that can then be
 used for checkpointing. This simplifies the above [Optax training step] a bit by
 reducing the number of arguments and getting rid of the `static_argnums`.
 
-We can define an `Optimizer` dataclass that wraps the common pattern of updating
-the optimizer state and parameters, and keeps `params` that are to be optimized
-separate from `model_state` that is not touched by the optimizer:
-
+We can define a `TrainState` dataclass that wraps the common pattern of updating
+the optimizer state and parameters by applying the gradients.
 ```python
-class Optimizer(flax.struct.PyTreeNode):
+# Small helper class in flax.training
+class TrainState(flax.struct.PyTreeNode):
+  step: int
+  apply_fn: Callable = flax.struct.field(pytree_node=False)
   params: flax.core.FrozenDict[str, Any]
-  model_state: flax.core.FrozenDict[str, Any]
   tx: optax.GradientTransformation = flax.struct.field(pytree_node=False)
   opt_state: optax.OptState
 
-  def update(self, grads, new_model_state):
+  def update(self, *, grads, **kwargs):
     updates, new_opt_state = self.tx.update(
         grads, self.opt_state, self.params)
     new_params = optax.apply_updates(self.params, updates)
     return self.replace(
+        step=self.step + 1,
         params=new_params,
         opt_state=new_opt_state,
-        model_state=new_model_state,
+        **kwargs,
     )
 
   @classmethod
-  def create(cls, variables, tx):
+  def create(cls, *, apply_fn, params, tx, **kwargs):
     model_state, params = variables.pop('params')
     opt_state = tx.init(params)
     return cls(
+        step=1,
+        apply_fn=apply_fn,
         params=params,
-        model_state = model_state,
         tx=tx,
         opt_state=opt_state,
+        **kwargs,
     )
 ```
 
-Users can then compose their own data class containing this optimizer, the
-model's `.apply()` function and arbitrary additional data:
+Users can then derive from this dataclass and add more fields, for example
+mutable model state:
 
 ```python
-class TrainState(flax.struct.PyTreeNode):
-  step: int
-  apply_fn: Callable = flax.struct.field(pytree_node=False)
-  optimizer: Optimizer
+class TrainState(flax.training.TrainState):
+  batch_stats: flax.core.FrozenDict[str, Any]
 ```
 
 With this the [Optax Training Step] becomes:
@@ -232,29 +233,53 @@ def train_step(train_state, inputs, labels):
 
   def loss_fn(params):
     outputs, new_model_state = train_state.apply_fn(
-        {'params': params, **train_state.optimizer.model_state},
+        {'params': params, 'batch_stats': train_state.batch_stats},
         inputs,
         mutable=['batch_stats'])
     loss = xent_loss(outputs, labels)
     return loss, new_model_state
 
   (loss, new_model_state), grads = jax.value_and_grad(
-      loss_fn, has_aux=True)(train_state.optimizer.params)
-  new_state = train_state.replace(
-      step=train_state.step + 1,
-      optimizer=train_state.optimizer.update(grads, new_model_state),
+      loss_fn, has_aux=True)(train_state.params)
+  new_state = train_state.update(
+      grads=grads,
+      batch_stats=new_model_state['batch_stats'],
   )
 
   return new_state, loss
 
 
-train_state = TrainState(
-    step=0,
+train_state = TrainState.create(
     apply_fn=model.apply,
-    optimizer=Optimizer.create(
-        variables=variables,
-        tx=tx,
-    ),
+    params=variables['params'],
+    tx=tx,
+    batch_stats=variables['batch_stats'],
+)
+for batch in ds.as_numpy_iterator():
+  train_state, loss = train_step(train_state, batch['image'], batch['label'])
+```
+
+The train step without mutable state reduces to:
+
+```python
+@jax.jit
+def train_step(train_state, inputs, labels):
+
+  def loss_fn(params):
+    outputs = train_state.apply_fn({'params': params}, inputs)
+    loss = xent_loss(outputs, labels)
+    return loss
+
+  loss, grads = jax.value_and_grad(loss_fn)(train_state.params)
+  new_state = train_state.update(grads=grads)
+
+  return new_state, loss
+
+
+train_state = flax.training.TrainState.create(
+    apply_fn=model.apply,
+    params=variables['params'],
+    tx=tx,
 )
 for batch in ds.as_numpy_iterator():
   train_state, loss = train_step(train_state, batch['image'], batch['label'])
@@ -262,13 +287,15 @@ for batch in ds.as_numpy_iterator():
 
 Remarks:
 
-- The signature has changed slightly from `optimizer.apply_gradient()` (like in
-  the [previous training step]) to `optimizer.update()` that also supplies the
-  `model_state` as an argument. This is a protection against forgetting to
-  update the `model_state`.
-- Note that we don't actually need `model_state` in `Optimizer`, but it seems
-  cleaner to keep the `params` and `model_state` together in the same data
-  structure.
+- It is a common pattern in Flax training loops to have a `TrainState` dataclass
+  that is updated with new state after every step.
+- The simple solution proposed in `flax.training.TrainState` an be extended with
+  additional data, but advanced usecases (e.g. multiple different models and/or
+  optimizers) are not supported. Users should instead fork the dataclass and
+  re-implement it to their needs.
+- As opposed to the `Optimizer` abstraction in the [previous API], the
+  `TrainState` now directly contains the `.params`, without having to to through
+  `.optimizer`
 
 # Previous API
 [previous API]: #previous-api
@@ -380,8 +407,8 @@ Remarks:
 [Update Plan]: #update-plan
 
 1. Finalize discussions on this FLIP
-2. Test existing optimizers for numerical equivalence (e.g. `flax.optim.Adam`
-   and `optax.adamw`).
+2. Add [equivalence tests] to Optax that guarantee that existing `flax.optim`
+   optimizers return identical values with corresponding `optax` optimizers.
 3. Update examples to use Optax and verify that they reach the same final
    performance with the same computational cost.
 4. Port missing optimizers to Optax (e.g. Adafactor) - and verify above points.
