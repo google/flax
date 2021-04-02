@@ -40,8 +40,6 @@ from flax.core import Scope, freeze, tracers
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 def tree_equals(x, y):
