@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from flax import errors
 from flax.core import Scope, init, apply, lift, nn
 
 from jax import random
@@ -22,7 +23,7 @@ import numpy as np
 
 from absl.testing import absltest
 
-class ScopeTest(absltest.TestCase):
+class LiftTest(absltest.TestCase):
 
   def test_aliasing(self):
     def f(scope):
@@ -44,7 +45,8 @@ class ScopeTest(absltest.TestCase):
                         split_rngs={'params': True})
       dense(scope.push('dense'), np.ones((3, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/vmap(dense)".'):
+    msg = r'No parameter named "kernel" exists in "/vmap\(dense\)".'
+    with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({})
 
 

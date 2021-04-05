@@ -23,7 +23,7 @@ Running `python ppo_main.py` will run the example with default
 (hyper)parameters, i.e. for 40M frames on the Pong game.
 
 By default logging info and checkpoints will be stored in `/tmp/ppo_training`
-directory. This can be overriden as follows:
+directory. This can be overridden as follows:
 
 ```python ppo_main.py --config=configs/default.py --workdir=/my_fav_directory```
 

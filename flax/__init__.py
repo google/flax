@@ -32,8 +32,9 @@
 
 from .version import __version__
 
-# Allow `import flax`; `flax.nn.[...]`, and the same for `flax.optim.[...]`
+# Allow `import flax`; `flax.optim.[...]`, etc
 from . import core
 from . import linen
 from . import nn
 from . import optim
+# DO NOT REMOVE - Marker for internal logging.

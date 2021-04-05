@@ -8,6 +8,15 @@ This example uses linear learning rate warmup and cosine learning rate schedule.
 [He *et al.*, 2015]: https://www.cv-foundation.org/openaccess/content_iccv_2015/papers/He_Delving_Deep_into_ICCV_2015_paper.pdf
 [Russakovsky *et al.*, 2015]: https://arxiv.org/pdf/1409.0575.pdf
 
+You can run this code and even modify it directly in Google Colab, no
+installation required:
+
+https://colab.research.google.com/github/google/flax/blob/master/examples/imagenet/imagenet.ipynb
+
+The Colab also demonstrates how to load pretrained checkpoints from Cloud
+storage at
+[gs://flax_public/examples/imagenet/](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet)
+
 ### Requirements
 
 * TensorFlow dataset `imagenet2012:5.*.*`
@@ -25,7 +34,7 @@ While the example should run on a variety of hardware, we have tested the differ
 ### How to run
 
 ```shell
-python main.py --workdir=./imagenet
+python main.py --workdir=./imagenet --config=configs/default.py
 ```
 
 #### Overriding Hyperparameter configurations
@@ -37,7 +46,7 @@ Configuration flag is defined using
 follows:
 
 ```shell
-python main.py --workdir=./imagenet_default --config.num_epochs=100
+python main.py --workdir=./imagenet_default --config=configs/default.py --config.num_epochs=100
 ```
 
 #### 8 x Nvidia V100 (16GB)
@@ -54,6 +63,13 @@ python main.py \
 --workdir=./imagenet_v100_x8_mixed_precision \
 --config=configs/v100_x8_mixed_precision.py
 ```
+#### Running on Cloud
+
+See commands in [../cloud/README.md](../cloud/README.md)
+
+To use a dataset stored in a bucket, set the following shell parameter:
+
+    export TFDS_DATA_DIR="gs://$GCS_TFDS_BUCKET/tensorflow_datasets"
 
 ### Reproducibility
 

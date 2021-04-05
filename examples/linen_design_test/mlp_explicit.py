@@ -22,8 +22,6 @@ import numpy as np
 from pprint import pprint
 from dense import Dense
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 # Add `in_features` to the built-in Dense layer that normally works
 # via shape inference.

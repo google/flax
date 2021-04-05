@@ -92,14 +92,16 @@ def cosine_decay(lr, step, total_steps):
   return mult * lr
 
 
-def create_learning_rate_fn(base_learning_rate, steps_per_epoch, num_epochs):
-  warmup_epochs = 5
+def create_learning_rate_fn(config: ml_collections.ConfigDict,
+                            base_learning_rate: float,
+                            steps_per_epoch: int):
+
   def step_fn(step):
     epoch = step / steps_per_epoch
     lr = cosine_decay(base_learning_rate,
-                      epoch - warmup_epochs,
-                      num_epochs - warmup_epochs)
-    warmup = jnp.minimum(1., epoch / warmup_epochs)
+                      epoch - config.warmup_epochs,
+                      config.num_epochs - config.warmup_epochs)
+    warmup = jnp.minimum(1., epoch / config.warmup_epochs)
     return lr * warmup
   return step_fn
 
@@ -239,7 +241,8 @@ def create_train_state(rng, config: ml_collections.ConfigDict,
   return state
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict,
+                       workdir: str) -> TrainState:
   """Execute model training and evaluation loop.
 
   Args:
@@ -269,7 +272,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   else:
     input_dtype = tf.float32
 
-  dataset_builder = tfds.builder('imagenet2012:5.*.*')
+  dataset_builder = tfds.builder(config.dataset)
   train_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=True,
       cache=config.cache)
@@ -282,7 +285,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   )
 
   if config.num_train_steps == -1:
-    num_steps = steps_per_epoch * config.num_epochs
+    num_steps = int(steps_per_epoch * config.num_epochs)
   else:
     num_steps = config.num_train_steps
 
@@ -308,7 +311,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   state = jax_utils.replicate(state)
 
   learning_rate_fn = create_learning_rate_fn(
-      base_learning_rate, steps_per_epoch, config.num_epochs)
+      config, base_learning_rate, steps_per_epoch)
 
   p_train_step = jax.pmap(
       functools.partial(train_step, model.apply,
@@ -320,13 +323,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   epoch_metrics = []
   hooks = []
   if jax.host_id() == 0:
-    hooks += [periodic_actions.Profile(logdir=workdir, num_profile_steps=5)]
+    hooks += [periodic_actions.Profile(num_profile_steps=5, logdir=workdir)]
   t_loop_start = time.time()
   logging.info('Initial compilation, this might take some minutes...')
   for step, batch in zip(range(step_offset, num_steps), train_iter):
     state, metrics = p_train_step(state, batch)
     for h in hooks:
       h(step)
+    if step == step_offset:
+      logging.info('Initial compilation completed.')
     epoch_metrics.append(metrics)
     if (step + 1) % steps_per_epoch == 0:
       epoch = step // steps_per_epoch
@@ -367,3 +372,5 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   # Wait until computations are done before exiting
   jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
+
+  return state

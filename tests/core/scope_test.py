@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from flax import errors
 from flax.core import Scope, scope, freeze, init, apply, nn
 
 from jax import random
@@ -44,6 +45,43 @@ class ScopeTest(absltest.TestCase):
     filter_false([], 'one')
     filter_false([], None)
 
+  def test_union_filter(self):
+    def union_check(a, b, ans):
+      self.assertEqual(scope.union_filters(a, b), ans)
+      self.assertEqual(scope.union_filters(b, a), ans)
+
+    union_check(['a', 'b'], ['b', 'c'], set(['a', 'b', 'c']))
+    union_check(True, False, True)
+    union_check(False, False, set())
+    union_check(True, True, True)
+    union_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), scope.DenyList(set(['b'])))
+    union_check(scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a'])))
+  
+  def test_intersect_filter(self):
+    def intersect_check(a, b, ans):
+      self.assertEqual(scope.intersect_filters(a, b), ans)
+      self.assertEqual(scope.intersect_filters(b, a), ans)
+
+    intersect_check(['a', 'b'], ['b', 'c'], set(['b']))
+    intersect_check(True, False, False)
+    intersect_check(False, False, set())
+    intersect_check(True, True, True)
+    intersect_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), scope.DenyList(set(['a', 'b', 'c'])))
+    intersect_check(scope.DenyList(['a', 'b']), ['b', 'c'], set(['c']))
+  
+  def test_subtract_filter(self):
+    def subtract_check(a, b, ans):
+      self.assertEqual(scope.subtract_filters(a, b), ans)
+
+    subtract_check(['a', 'b'], ['b', 'c'], set(['a']))
+    subtract_check(True, False, scope.DenyList(False))
+    subtract_check(False, False, set())
+    subtract_check(True, True, False)
+    subtract_check(True, 'a', scope.DenyList('a'))
+    subtract_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c']))
+    subtract_check(scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a', 'b', 'c'])))
+
+
   def test_group_collections(self):
     params = { 'dense1': { 'x': [10, 20] } }
     batch_stats = { 'dense1': { 'ema': 5 } }
@@ -64,24 +102,33 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       scope.param('test', nn.initializers.ones, (4,))
     
-    msg = 'Inconsistent shapes between value and initializer for parameter "test" in "/": (2,), (4,)'
-    with self.assertRaisesWithLiteralMatch(ValueError, msg):
+    msg = r'Inconsistent shapes between value and initializer for parameter "test" in "/": \(2,\), \(4,\).'
+    with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
       apply(f)(freeze({'params': {'test': np.ones((2,))}}))
 
   def test_mutate_undefined_collection(self):
     def f(scope):
       scope.put_variable('state', 'test', 123)
 
-    msg = 'Trying to update variable "test" in "/" but collection "state" is immutable.'
-    with self.assertRaisesWithLiteralMatch(ValueError, msg):
+    msg = r'Cannot update variable "test" in "/" because collection "state" is immutable.'
+    with self.assertRaisesRegex(errors.ModifyScopeVariableError, msg):
       init(f, mutable='params')(random.PRNGKey(0))
 
   def test_undefined_param(self):
     def f(scope):
       nn.dense(scope.push('dense'), np.ones((1, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No paramater named "kernel" exists in "/dense".'):
+    msg = r'No parameter named "kernel" exists in "/dense".'
+    with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({})
+
+  def test_variable_is_mutable(self):
+    def f(scope, should_be_mutable):
+      test = scope.variable('state', 'test', lambda: 1)
+      self.assertEqual(test.is_mutable(), should_be_mutable)
+
+    _, variables = apply(f, mutable='state')({}, True)
+    apply(f, mutable=False)(variables, False)
 
 
 if __name__ == '__main__':

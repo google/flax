@@ -23,8 +23,6 @@ import numpy as np
 from dense import Dense
 from flax.core.frozen_dict import freeze, unfreeze, FrozenDict
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 def standardize(x, axis, eps=1e-8):
   x = x - jnp.mean(x, axis=axis, keepdims=True)

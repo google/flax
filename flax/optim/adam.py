@@ -17,30 +17,49 @@ from .. import struct
 import jax.numpy as jnp
 from jax import lax
 
-import numpy as onp
+import numpy as np
 
 from .base import OptimizerDef
 
 
 @struct.dataclass
 class _AdamHyperParams:
-  learning_rate: onp.ndarray
-  beta1: onp.ndarray
-  beta2: onp.ndarray
-  eps: onp.ndarray
-  weight_decay: onp.ndarray
+  learning_rate: np.ndarray
+  beta1: np.ndarray
+  beta2: np.ndarray
+  eps: np.ndarray
+  weight_decay: np.ndarray
 
 
 @struct.dataclass
 class _AdamParamState:
-  grad_ema: onp.ndarray
-  grad_sq_ema: onp.ndarray
+  grad_ema: np.ndarray
+  grad_sq_ema: np.ndarray
 
 
 class Adam(OptimizerDef):
   """Adam optimizer.
+
+  Implements Adam - a stochastic gradient descent method (SGD) that computes
+  individual adaptive learning rates for different parameters from estimates of
+  first- and second-order moments of the gradients. 
   
-  See: http://arxiv.org/abs/1412.6980
+  Reference: [Adam: A Method
+  for Stochastic Optimization](https://arxiv.org/abs/1412.6980v8) (Kingma and
+  Ba, 2014).
+
+  Attributes:
+    learning_rate: The learning rate — the step size used to update the
+      parameters.
+    beta1: The exponentian decay rate for the 1st moment estimates. The
+      coefficient used to calculate the first moments of the gradients (the
+      moving average of the gradient) (default: 0.9).
+    beta2: The exponentian decay rate for the 2nd moment estimates. The
+      coefficient used to calculate the second moments of the gradients (the
+      moving average of the gradient magnitude) (default: 0.999).
+    eps: A small scalar added to the gradient magnitude estimate to improve
+      numerical stability (default: 1e-8).
+    weight_decay: The learning rate decay (default: 0.0).
   """
 
   def __init__(self,
@@ -52,15 +71,15 @@ class Adam(OptimizerDef):
     """Constructor for the Adam optimizer.
 
     Args:
-      learning_rate: the step size used to update the parameters.
-      beta1: the coefficient used for the moving average of the
+      learning_rate: The step size used to update the parameters.
+      beta1: The coefficient used for the moving average of the
         gradient (default: 0.9).
-      beta2: the coefficient used for the moving average of the
+      beta2: The coefficient used for the moving average of the
         gradient magnitude (default: 0.999).
-      eps: the term added to the gradient magnitude estimate for
-        numerical stability.
+      eps: The term added to the gradient magnitude estimate for
+        numerical stability (default: 1e-8).
       weight_decay: AdamW style weight decay rate
-        (relative to learning rate).
+        (relative to learning rate) (default: 0.0).
     """
     hyper_params = _AdamHyperParams(learning_rate, beta1, beta2, eps,
                                     weight_decay)
@@ -79,7 +98,7 @@ class Adam(OptimizerDef):
     grad_sq_ema = beta2 * state.grad_sq_ema + (1. - beta2) * grad_sq
 
     # bias correction
-    t = step + 1.
+    t = jnp.array(step + 1, lax.dtype(param.dtype))
     grad_ema_corr = grad_ema / (1 - beta1 ** t)
     grad_sq_ema_corr = grad_sq_ema / (1 - beta2 ** t)
 

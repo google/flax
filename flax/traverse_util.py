@@ -72,7 +72,8 @@ class _EmptyNode:
 
 empty_node = _EmptyNode()
 
-def flatten_dict(xs, keep_empty_nodes=False):
+
+def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None):
   """Flatten a nested dictionary.
 
   The nested keys are flattened to a tuple.
@@ -98,12 +99,17 @@ def flatten_dict(xs, keep_empty_nodes=False):
       with `traverse_util.empty_node`. This must
       be set to `True` for `unflatten_dict` to
       correctly restore empty dictionaries.
+    is_leaf: an optional function that takes the
+      next nested dictionary and nested keys and
+      returns True if the nested dictionary is a
+      leaf (i.e., should not be flattened further).
   Returns:
     The flattened dictionary.
   """
   assert isinstance(xs, dict), 'input is not a dict'
+
   def _flatten(xs, prefix):
-    if not isinstance(xs, dict):
+    if not isinstance(xs, dict) or (is_leaf and is_leaf(prefix, xs)):
       return {prefix: xs}
     result = {}
     is_empty = True

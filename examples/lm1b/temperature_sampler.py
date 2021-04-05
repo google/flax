@@ -14,36 +14,14 @@
 
 """Fast decoding routines for inference from a trained language model."""
 
-import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
-import numpy as np
 
 
-def multinomial(rng, logits):
-  """Draws samples from a multinomial distribution given by logits.
-
-  Args:
-    rng: A JAX PRNGKey.
-    logits: array with unnormalized log-probabilities in last axis.
-
-  Returns:
-    Array with sampled categories in last axis.
-  """
-  probs = jax.nn.softmax(logits)
-  cum_probs = jnp.cumsum(probs, axis=-1)
-  uniform_variates = jax.random.uniform(rng, logits.shape[:-1] + (1,))
-  return jnp.argmin(uniform_variates > cum_probs, axis=-1)
-
-
-def top_k(x, k):
-  """Select the top k slices from the last dimension."""
-  bcast_idxs = jnp.broadcast_to(np.arange(x.shape[-1]), x.shape)
-  sorted_vals, sorted_idxs = lax.sort_key_val(x, bcast_idxs)
-  topk_vals = lax.slice_in_dim(sorted_vals, -k, sorted_vals.shape[-1], axis=-1)
-  topk_idxs = lax.slice_in_dim(sorted_idxs, -k, sorted_idxs.shape[-1], axis=-1)
-  return topk_vals, topk_idxs
+# Constants
+# The default End-of-Sentence token id is 2 (SentencePiece).
+EOS_ID = 2
 
 
 def temperature_sample(prompt_inputs,
@@ -52,7 +30,7 @@ def temperature_sample(prompt_inputs,
                        prng_key,
                        temperature=1.0,
                        topk=20,
-                       eos_token=1):
+                       eos_token=EOS_ID):
   """Temperature sampling for language model generation.
 
   Args:
@@ -110,14 +88,15 @@ def temperature_sample(prompt_inputs,
     # TODO(levskaya): add top-p "nucleus" sampling option.
     if topk:
       # Get top-k logits and their indices, sample within these top-k tokens.
-      topk_logits, topk_idxs = top_k(logits, topk)
-      topk_token = jnp.expand_dims(multinomial(
+      topk_logits, topk_idxs = lax.top_k(logits, topk)
+      topk_token = jnp.expand_dims(random.categorical(
           rng1, topk_logits / temperature).astype(jnp.int32), axis=-1)
       # Return the original indices corresponding to the sampled top-k tokens.
       next_token = jnp.squeeze(
           jnp.take_along_axis(topk_idxs, topk_token, axis=-1), axis=-1)
     else:
-      next_token = multinomial(rng1, logits / temperature).astype(jnp.int32)
+      next_token = random.categorical(
+          rng1, logits / temperature).astype(jnp.int32)
     # Only use sampled tokens if we're past provided prefix tokens.
     out_of_prompt = (sequences[:, i+1] == 0)
     next_token = (next_token * out_of_prompt +

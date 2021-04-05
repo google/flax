@@ -33,7 +33,6 @@ from typing import Any, Callable, Tuple
 import jax
 import jax.numpy as jnp
 from jax.config import config
-config.enable_omnistaging()
 
 import numpy as np
 

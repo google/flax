@@ -18,6 +18,10 @@ jobs:
       matrix:
         python-version: [3.6]
     steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@0.8.0
+      with:
+        access_token: ${{ github.token }}          
     - name: Install native dependencies
       run: |
         sudo apt-get -y install pandoc
@@ -31,6 +35,9 @@ jobs:
         pip install .
         pip install .[testing]
         pip install -r docs/requirements.txt
+    - name: Test testcode blocks in documentation
+      run: |
+        sphinx-build -M doctest docs docs/_build
     - name: Build documentation
       run: |
         sphinx-build -M html docs docs/_build

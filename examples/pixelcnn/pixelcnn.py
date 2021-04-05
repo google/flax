@@ -46,7 +46,7 @@ import jax
 from jax import lax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
-import numpy as onp
+import numpy as np
 
 
 class PixelCNNPP(nn.Module):
@@ -57,14 +57,17 @@ class PixelCNNPP(nn.Module):
   dropout_p: float = 0.5
 
   @nn.compact
-  def __call__(self, images):
+  def __call__(self, images, *, train):
     # Special convolutional and resnet blocks which allow information flow
     # downwards and to the right.
     conv_down = partial(ConvDown, features=self.features)
     conv_down_right = partial(ConvDownRight, features=self.features)
 
-    res_down = partial(ResDown, dropout_p=self.dropout_p)
-    res_down_right = partial(ResDownRight, dropout_p=self.dropout_p)
+    dropout = partial(
+      nn.Dropout, rate=self.dropout_p, deterministic=not train)
+
+    res_down = partial(ResDown, dropout=dropout)
+    res_down_right = partial(ResDownRight, dropout=dropout)
 
     # Conv Modules which halve or double the spatial dimensions
     halve_down = partial(conv_down, strides=(2, 2))
@@ -277,7 +280,7 @@ class ConvTransposeDown(nn.Module):
   @nn.compact
   def __call__(self, inputs):
     _, k_w = self.kernel_size
-    out_h, out_w = onp.multiply(self.strides, inputs.shape[1:3])
+    out_h, out_w = np.multiply(self.strides, inputs.shape[1:3])
     return ConvTranspose(self.features, self.kernel_size, self.strides)(inputs)[
         :, :out_h, (k_w - 1) // 2:out_w + (k_w - 1) // 2, :]
 
@@ -293,7 +296,7 @@ class ConvTransposeDownRight(nn.Module):
 
   @nn.compact
   def __call__(self, inputs):
-    out_h, out_w = onp.multiply(self.strides, inputs.shape[1:3])
+    out_h, out_w = np.multiply(self.strides, inputs.shape[1:3])
     return ConvTranspose(self.features, self.kernel_size,
                          self.strides)(inputs)[:, :out_h, :out_w]
 
@@ -301,8 +304,8 @@ class ConvTransposeDownRight(nn.Module):
 # Resnet modules
 class GatedResnet(nn.Module):
   conv_module: Callable[..., Any]
+  dropout: Callable[..., Any]
   nonlinearity: Callable[..., Any] = concat_elu
-  dropout_p: float = 0.
 
   @nn.compact
   def __call__(self, inputs, aux=None):
@@ -311,8 +314,7 @@ class GatedResnet(nn.Module):
     if aux is not None:
       y = self.nonlinearity(y + ConvOneByOne(c)(self.nonlinearity(aux)))
 
-    if self.dropout_p > 0:
-      y = nn.Dropout(rate=self.dropout_p)(y)
+    y = self.dropout()(y)
 
     # Set init_scale=0.1 so that the res block is close to the identity at
     # initialization.

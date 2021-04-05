@@ -14,7 +14,7 @@
 
 """Transformer-based machine translation model."""
 
-# pylint: disable=attribute-defined-outside-init
+# pylint: disable=attribute-defined-outside-init,g-bare-generic
 # See issue #620.
 # pytype: disable=wrong-arg-count
 # pytype: disable=wrong-keyword-args
@@ -22,12 +22,11 @@
 
 from typing import Callable, Any, Optional
 
+from flax import linen as nn
+from flax import struct
 from jax import lax
 import jax.numpy as jnp
 import numpy as np
-
-from flax import linen as nn
-from flax import struct
 
 
 @struct.dataclass
@@ -95,7 +94,7 @@ def sinusoidal_init(max_len=2048,
 class AddPositionEmbs(nn.Module):
   """Adds (optionally learned) positional embeddings to the inputs.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
     decode: whether to run in single-position autoregressive mode.
   """
@@ -158,7 +157,7 @@ class AddPositionEmbs(nn.Module):
 class MlpBlock(nn.Module):
   """Transformer MLP / feed-forward block.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
     out_dim: optionally specify out dimension.
   """
@@ -188,9 +187,9 @@ class MlpBlock(nn.Module):
 
 
 class Encoder1DBlock(nn.Module):
-  """Transformer decoder layer.
+  """Transformer encoder layer.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
   config: TransformerConfig
@@ -238,7 +237,7 @@ class Encoder1DBlock(nn.Module):
 class EncoderDecoder1DBlock(nn.Module):
   """Transformer encoder-decoder layer.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
   config: TransformerConfig
@@ -308,7 +307,7 @@ class EncoderDecoder1DBlock(nn.Module):
 class Encoder(nn.Module):
   """Transformer Model Encoder for sequence to sequence translation.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
     shared_embedding: a shared embedding layer to use.
   """
@@ -363,7 +362,7 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
   """Transformer Model Decoder for sequence to sequence translation.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
     shared_embedding: a shared embedding layer to use.
   """
@@ -443,7 +442,7 @@ class Decoder(nn.Module):
 class Transformer(nn.Module):
   """Transformer Model for sequence to sequence translation.
 
-  Args:
+  Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
   config: TransformerConfig

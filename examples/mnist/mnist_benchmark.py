@@ -14,29 +14,39 @@
 
 """Benchmark for the MNIST example."""
 import time
+
+from absl import flags
 from absl.testing import absltest
+from absl.testing.flagsaver import flagsaver
+
+import main
+from configs import default
+from flax.testing import Benchmark
 
 import jax
 import numpy as np
-from flax.testing import Benchmark
-
-import train
-from configs import default
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+
+FLAGS = flags.FLAGS
 
 
 class MnistBenchmark(Benchmark):
   """Benchmarks for the MNIST Flax example."""
 
+  @flagsaver
   def test_cpu(self):
     """Run full training for MNIST CPU training."""
+    # Prepare and set flags defined in main.py.
     workdir = self.get_tmp_model_dir()
     config = default.get_config()
 
+    FLAGS.workdir = workdir
+    FLAGS.config = config
+
     start_time = time.time()
-    train.train_and_evaluate(config=config, workdir=workdir)
+    main.main([])
     benchmark_time = time.time() - start_time
 
     summaries = self.read_summaries(workdir)

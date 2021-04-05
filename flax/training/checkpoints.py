@@ -22,9 +22,11 @@ checkpoint files.
 from concurrent.futures import thread
 import os
 import re
+from typing import Union
 
 from absl import logging
-
+from flax import core
+from flax import errors
 from flax import serialization
 from tensorflow.io import gfile
 
@@ -36,6 +38,8 @@ SIGNED_FLOAT_RE = re.compile(
 # does not capture sign:
 UNSIGNED_FLOAT_RE = re.compile(
     r'[-+]?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
+# Module name folowed by number.
+MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
 
 
 def _checkpoint_path(ckpt_dir, step, prefix='checkpoint_'):
@@ -67,41 +71,68 @@ def natural_sort(file_list, signed=True):
   return sorted(file_list, key=split_keys)
 
 
-def save_checkpoint(ckpt_dir,
+def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     target,
                     step,
                     prefix='checkpoint_',
-                    keep=1):
+                    keep=1,
+                    overwrite=False):
   """Save a checkpoint of the model.
 
   Attempts to be pre-emption safe by writing to temporary before
   a final rename and cleanup of past files.
 
   Args:
-    ckpt_dir: str: path to store checkpoint files in.
+    ckpt_dir: str or pathlib-like path to store checkpoint files in.
     target: serializable flax object, usually a flax optimizer.
     step: int or float: training step number or other metric number.
     prefix: str: checkpoint file name prefix.
     keep: number of past checkpoint files to keep.
-
+    overwrite: overwrite existing checkpoint files if a checkpoint
+      at the current or a later step already exits (default: False).
   Returns:
     Filename of saved checkpoint.
   """
+  ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
+  if ckpt_dir.startswith('./'):
+    ckpt_dir = ckpt_dir[2:]  # gfile.glob() can remove leading './'
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
   gfile.makedirs(os.path.dirname(ckpt_path))
+  base_path = os.path.join(ckpt_dir, prefix)
+  checkpoint_files = gfile.glob(base_path + '*')
+
+  if ckpt_path in checkpoint_files:
+    if not overwrite:
+      raise errors.InvalidCheckpointError(ckpt_path, step)
+  else:
+    checkpoint_files.append(ckpt_path)
+
+  checkpoint_files = natural_sort(checkpoint_files)
+  if ckpt_path != checkpoint_files[-1]:
+    if not overwrite:
+      raise errors.InvalidCheckpointError(ckpt_path, step)
+
   with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
     fp.write(serialization.to_bytes(target))
 
   # Rename once serialization and writing finished.
-  gfile.rename(ckpt_tmp_path, ckpt_path)
+  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
   logging.info('Saved checkpoint at %s', ckpt_path)
+  print(ckpt_path)
+
+  # Remove newer checkpoints
+  if overwrite:
+    ind = checkpoint_files.index(ckpt_path) + 1
+    newer_ckpts = checkpoint_files[ind:]
+    checkpoint_files = checkpoint_files[:ind]
+    for path in newer_ckpts:
+      logging.info('Removing checkpoint at %s', path)
+      gfile.remove(path)
 
   # Remove old checkpoint files.
-  base_path = os.path.join(ckpt_dir, f'{prefix}')
-  checkpoint_files = natural_sort(gfile.glob(base_path + '*'))
   if len(checkpoint_files) > keep:
     old_ckpts = checkpoint_files[:-keep]
     for path in old_ckpts:
@@ -145,25 +176,36 @@ def restore_checkpoint(ckpt_dir,
     ckpt_-1.0, ckpt_1.0, ckpt_1e5 --> ckpt_1e5
 
   Args:
-    ckpt_dir: str: directory of checkpoints to restore from.
+    ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
     target: matching object to rebuild via deserialized state-dict. If None,
       the deserialized state-dict is returned as-is.
-    step: int: step number to load or None to load latest.
+    step: int: step number to load or None to load latest. If specified,
+      ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
     no checkpoint files present, returns the passed-in `target` unchanged.
+    If a file path is specified and is not found, the passed-in `target` will be
+    returned. This is to match the behavior of the case where a directory path
+    is specified but the directory has not yet been created.
   """
   if step:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
-    ckpt_path = latest_checkpoint(ckpt_dir, prefix)
-    if not ckpt_path:
-      return target
+    if gfile.isdir(ckpt_dir):
+      ckpt_path = latest_checkpoint(ckpt_dir, prefix)
+      if not ckpt_path:
+        logging.info(f'Found no checkpoint files in {ckpt_dir}')
+        return target
+    else:
+      ckpt_path = ckpt_dir
+      if not gfile.exists(ckpt_path):
+        logging.info(f'Found no checkpoint file at {ckpt_path}')
+        return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
   with gfile.GFile(ckpt_path, 'rb') as fp:
@@ -197,3 +239,69 @@ def restore_checkpoint(ckpt_dir,
       return serialization.msgpack_restore(checkpoint_contents)
     else:
       return serialization.from_bytes(target, checkpoint_contents)
+
+
+def convert_pre_linen(params):
+  """Converts a pre-Linen parameter pytree.
+
+  In pre-Linen API submodules were numbered incrementally, independent of the
+  submodule class. With Linen this behavior has changed to keep separate
+  submodule counts per module class.
+
+  Consider the following module:
+
+    class Model(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Conv(1, 1)(x)
+        x = nn.Dense(1)(x)
+        return x
+
+  In pre-Linen the resulting params would have had the structure:
+    {'Conv_0': { ... }, 'Dense_1': { ... } }
+
+  With Linen the resulting params would instead have had the structure:
+    {'Conv_0': { ... }, 'Dense_0': { ... } }
+
+  To convert from pre-Linen format to Linen simply call:
+
+    params = convert_pre_linen(pre_linen_params)
+
+  Note that you can also use this utility to convert pre-Linen collections
+  because they're following the same module naming. Note though that collections
+  were "flat" in pre-Linen and first need to be unflattened before they can be
+  used with this function:
+
+    batch_stats = convert_pre_linen(flax.traverse_util.unflatten_dict({
+        tuple(k.split('/')[1:]): v
+        for k, v in pre_linen_model_state.as_dict().items()
+    }))
+
+  Then Linen variables can be defined from these converted collections:
+
+    variables = {'params': params, 'batch_stats': batch_stats}
+
+  Args:
+    params: Parameter pytree in pre-Linen format. If the pytree is already in
+      Linen format, then the returned pytree is unchanged (i.e. this function
+      can safely be called on any loaded checkpoint for use with Linen).
+
+  Returns:
+    Parameter pytree with Linen submodule naming.
+  """
+  if not isinstance(params, (dict, core.FrozenDict)):
+    return params
+  params_renamed = {}
+  counts = {}
+  names = natural_sort(params.keys())
+  for name in names:
+    value = params[name]
+    match = MODULE_NUM_RE.match(name)
+    if match:
+      module = match.group(1)
+      num = counts.get(module, 0)
+      name = f'{module}_{num}'
+      counts[module] = num + 1
+    params_renamed[name] = convert_pre_linen(value)
+
+  return core.freeze(params_renamed)

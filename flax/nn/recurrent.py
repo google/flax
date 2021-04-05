@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Recurrent neural network modules.
+"""DEPRECATION WARNING:
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  Recurrent neural network modules.
 
 THe RNNCell modules are designed to fit in with the scan function in JAX::
 
@@ -37,7 +41,11 @@ import numpy as np
 
 
 class RNNCellBase(base.Module):
-  """RNN cell base class."""
+  """DEPRECATION WARNING:
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  RNN cell base class."""
 
   @staticmethod
   @abc.abstractmethod
@@ -56,7 +64,11 @@ class RNNCellBase(base.Module):
 
 
 class LSTMCell(RNNCellBase):
-  """LSTM cell."""
+  """DEPRECATION WARNING:
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  LSTM cell."""
 
   def apply(self, carry, inputs,
             gate_fn=activation.sigmoid, activation_fn=activation.tanh,
@@ -129,7 +141,11 @@ class LSTMCell(RNNCellBase):
 
 
 class OptimizedLSTMCell(RNNCellBase):
-  """More efficient LSTM Cell that concatenates state components before matmul.
+  """DEPRECATION WARNING:
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  More efficient LSTM Cell that concatenates state components before matmul.
 
   Parameters are compatible with `flax.nn.LSTMCell`.
   """
@@ -249,7 +265,11 @@ class OptimizedLSTMCell(RNNCellBase):
 
 
 class GRUCell(RNNCellBase):
-  """GRU cell."""
+  """DEPRECATION WARNING:
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  GRU cell."""
 
   def apply(self, carry, inputs,
             gate_fn=activation.sigmoid, activation_fn=activation.tanh,
@@ -317,7 +337,11 @@ class GRUCell(RNNCellBase):
 
 
 class ConvLSTM(RNNCellBase):
-  r"""A convolutional LSTM cell.
+  r"""DEPRECATION WARNING:
+  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
+  Learn more and find an upgrade guide at 
+  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  A convolutional LSTM cell.
 
   The implementation is based on xingjian2015convolutional.
   Given x_t and the previous state (h_{t-1}, c_{t-1})

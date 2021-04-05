@@ -12,7 +12,15 @@ Module
 ------------------------
 
 .. autoclass:: Module
-   :members: setup, variable, param, apply, init, init_with_output, make_rng, variables, Variable, __setattr__
+   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, variables, Variable, __setattr__
+
+Init/Apply
+------------------------
+
+.. currentmodule:: flax.linen
+.. autofunction:: apply
+.. autofunction:: init
+.. autofunction:: init_with_output
 
 Variables
 ----------------------
@@ -27,7 +35,22 @@ Compact methods
 .. currentmodule:: flax.linen
 .. autofunction:: compact
 
-	     
+
+Transformations
+----------------------
+
+.. automodule:: flax.linen.transforms
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    vmap
+    scan
+    jit
+    remat
+
+
 Linear modules
 ------------------------
 
@@ -37,6 +60,7 @@ Linear modules
     Dense
     DenseGeneral
     Conv
+    ConvTranspose
     Embed
 
 

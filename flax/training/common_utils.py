@@ -17,7 +17,7 @@
 import jax
 from jax import lax
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 
 
 def shard(xs):
@@ -41,11 +41,13 @@ def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
 
 
 def stack_forest(forest):
-  stack_args = lambda *args: onp.stack(args)
+  stack_args = lambda *args: np.stack(args)
   return jax.tree_multimap(stack_args, *forest)
 
 
 def get_metrics(device_metrics):
+  # We select the first element of x in order to get a single copy of a
+  # device-replicated metric.
   device_metrics = jax.tree_map(lambda x: x[0], device_metrics)
   metrics_np = jax.device_get(device_metrics)
   return stack_forest(metrics_np)

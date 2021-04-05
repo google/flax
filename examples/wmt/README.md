@@ -25,8 +25,7 @@ TPU v3-8 | 256        | 1h 35m        | 25.13 | [2020-04-21](https://tensorboard
 
 ### How to run
 
-`python main.py --workdir=./wmt_256 --config.batch_size=256
---config.reverse_translation=True`
+`python main.py --workdir=./wmt_256 --config=configs/default.py --config.reverse_translation=True`
 
 ### How to run on Cloud TPUs
 

@@ -14,7 +14,8 @@
 
 """Flax Optimizer api."""
 
-from typing import Any
+import dataclasses
+from typing import Any, List, Tuple
 import warnings
 
 from .. import jax_utils
@@ -116,14 +117,16 @@ class OptimizerDef:
       hp = hp.replace(**hyper_param_overrides)
     return hp
 
-  def create(self, target, focus=None):
+  def create(self, target, focus: 'ModelParamTraversal' = None):
     """Creates a new optimizer for the given target.
 
     See docstring of :class:`Optimizer` for more details.
 
     Args:
-      target: the object to be optimized. This will typically be
-        an instance of `flax.nn.Model`.
+      target: the object to be optimized. This is typically a variable dict
+        returned by `flax.linen.Module.init()`, but it can also be a container
+        of variables dicts, e.g. `(v1, v2)` and  `('var1': v1, 'var2': v2)`
+        are valid inputs as well.
       focus: a `flax.traverse_util.Traversal` that selects which subset of
         the target is optimized. See docstring of :class:`MultiOptimizer` 
         for an example of how to define a `Traversal` object.
@@ -413,6 +416,31 @@ class ReplicatedOptimizer(OptimizerDef):
     return self.optimizer_def.restore_state(target, opt_state, state_dict)
 
 
+def _get_params_dict(inputs):
+  if isinstance(inputs, base.Model):
+    return inputs.params
+  elif isinstance(inputs, (dict, FrozenDict)):
+    return unfreeze(inputs)
+  else:
+    raise ValueError(
+        'Can only traverse a flax Model instance or a nested dict, not '
+        f'{type(inputs)}')
+
+
+@dataclasses.dataclass
+class _ShapeDtype:
+  shape: Any
+  dtype: Any
+  _value: Any
+  _indices: List[int]
+
+  @classmethod
+  def create(cls, value):
+    if not isinstance(value, jnp.ndarray):
+      value = jnp.array(value)
+    return cls(shape=value.shape, dtype=value.dtype, _value=value, _indices=[])
+
+
 class MultiOptimizer(OptimizerDef):
   """ 
   A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying 
@@ -434,17 +462,21 @@ class MultiOptimizer(OptimizerDef):
 
   If you want to update the learning rates of both optimizers online with
   different learning rate schedules, you should update the learning rates when
-  applying the gradient as follows::
+  applying the gradient. In the following example, the second optimizer is not
+  doing any optimization during the first 1000 steps::
 
+    hparams = optimizer.optimizer_def.hyper_params
     new_optimizer = optimizer.apply_gradient(
         grads, 
         hyper_params=[
-          optimizer.optimizer_def.hyper_params[0].replace(learning_rate=0.2), 
-          optimizer.optimizer_def.hyper_params[1].replace(learning_rate=0.4),
+          hparams[0].replace(learning_rate=0.2), 
+          hparams[1].replace(learning_rate=jnp.where(step < 1000, 0., lr)),
         ])
   """
 
-  def __init__(self, *traversals_and_optimizers):
+  def __init__(
+      self,
+      *traversals_and_optimizers: Tuple[traverse_util.Traversal, OptimizerDef]):
     """Create a new MultiOptimizer.
 
     See docstring of :class:`MultiOptimizer` for more details.
@@ -460,24 +492,45 @@ class MultiOptimizer(OptimizerDef):
     self.sub_optimizers = sub_optimizers
 
   def init_state(self, params):
-    sub_states = []
-    for traversal, opt in zip(self.traversals, self.sub_optimizers):
-      params_t = list(traversal.iterate(params))
-      state = opt.init_state(params_t)
-      sub_states.append(state)
-    return sub_states
+    param_states = jax.tree_map(_ShapeDtype.create, params)
+    overlap = False
+    for idx, (traversal,
+              opt) in enumerate(zip(self.traversals, self.sub_optimizers)):
 
-  def apply_gradient(self, hyper_params, params, states, grads):
+      for match in traversal.iterate(param_states):
+        match._indices.append(idx)
+        overlap |= len(match._indices) > 1
+
+    if overlap:
+      raise ValueError(
+          'Multiple optimizers match the same leaves : ' +
+          str(jax.tree_map(lambda match: match._indices, param_states)))
+    for traversal, opt in zip(self.traversals, self.sub_optimizers):
+      param_states = traversal.update(lambda x: opt.init_param_state(x._value), param_states)
+    # Use None as initial state for params that are not optimized by any sub optimizer.
+    param_states = jax.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, param_states)
+
+    return OptimizerState(jnp.asarray(0, dtype=jnp.int32), param_states)
+
+  def apply_gradient(self, hyper_params, params, state, grads):
     new_params = params
-    new_states = []
-    it = zip(self.traversals, self.sub_optimizers, hyper_params, states)
-    for focus, opt, hp, s in it:
-      p = list(focus.iterate(params))
-      g = list(focus.iterate(grads))
-      new_p, new_s = opt.apply_gradient(hp, p, s, g)
-      new_params = focus.set(new_p, new_params)
-      new_states.append(new_s)
-    return new_params, new_states
+    it = zip(self.traversals, self.sub_optimizers, hyper_params)
+    new_param_states = jax.tree_map(_ShapeDtype.create, params)
+    for focus, opt, hp in it:
+      ps = tuple(focus.iterate(params))
+      gs = tuple(focus.iterate(grads))
+      ss = tuple(focus.iterate(state.param_states))
+      new_ps = []
+      new_ss = []
+      for p, g, s in zip(ps, gs, ss):
+        new_p, new_s = opt.apply_param_gradient(state.step, hp, p, s, g)
+        new_ps.append(new_p)
+        new_ss.append(new_s)
+      new_params = focus.set(new_ps, new_params)
+      new_param_states = focus.set(new_ss, new_param_states)
+    # Update state to None when param is not optimized by any sub optimizer.
+    new_param_states = jax.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, new_param_states)
+    return new_params, OptimizerState(state.step + 1, new_param_states)
 
   def update_hyper_params(self, **hyper_param_overrides):
     """Updates the hyper parameters with a set of overrides.
@@ -530,18 +583,8 @@ class ModelParamTraversal(traverse_util.Traversal):
     """
     self._filter_fn = filter_fn
 
-  @staticmethod
-  def _get_params_dict(inputs):
-    if isinstance(inputs, base.Model):
-      return inputs.params
-    elif isinstance(inputs, (dict, FrozenDict)):
-      return unfreeze(inputs)
-    else:
-      raise ValueError(
-          'ModelParamTraversal can only traverse a flax Model instance or a nested dict.')
-
   def iterate(self, inputs):
-    params = self._get_params_dict(inputs)
+    params = _get_params_dict(inputs)
     flat_dict = traverse_util.flatten_dict(params)
     for key, value in _sorted_items(flat_dict):
       path = '/' + '/'.join(key)
@@ -549,7 +592,7 @@ class ModelParamTraversal(traverse_util.Traversal):
         yield value
 
   def update(self, fn, inputs):
-    params = self._get_params_dict(inputs)
+    params = _get_params_dict(inputs)
     flat_dict = traverse_util.flatten_dict(params, keep_empty_nodes=True)
     new_dict = {}
     for key, value in _sorted_items(flat_dict):

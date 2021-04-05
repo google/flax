@@ -28,8 +28,6 @@ import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class PoolTest(absltest.TestCase):
@@ -91,7 +89,7 @@ class NormalizationTest(absltest.TestCase):
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (4, 3, 2))
-    model_cls = nn.BatchNorm(momentum=0.9)
+    model_cls = nn.BatchNorm(momentum=0.9, use_running_average=False)
     y, initial_params = model_cls.init_with_output(key2, x)
 
     mean = y.mean((0, 1))
