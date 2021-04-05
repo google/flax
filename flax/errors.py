@@ -505,18 +505,6 @@ class CallCompactUnboundModuleError(FlaxError):
     super().__init__('Can\'t call compact methods on unbound modules')
 
 
-class JaxOmnistagingError(FlaxError):
-  """
-  The Flax linen API requires JAX omnistaging to be enabled. In order to enable
-  this, add this to your imports::
-    
-    from jax.config import config
-    config.enable_omnistaging()
-  """
-  def __init__(self):
-    super().__init__(f'Flax Linen requires Omnistaging to be enabled')
-
-
 class InvalidCheckpointError(FlaxError):
   """
   A checkpoint cannot be stored in a directory that already has

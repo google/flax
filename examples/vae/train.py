@@ -24,7 +24,6 @@ import jax.numpy as jnp
 import jax
 from jax import random
 from jax.config import config
-config.enable_omnistaging()
 from flax import linen as nn
 from flax import optim
 import tensorflow as tf
