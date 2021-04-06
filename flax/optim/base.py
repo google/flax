@@ -520,14 +520,10 @@ class MultiOptimizer(OptimizerDef):
       ps = tuple(focus.iterate(params))
       gs = tuple(focus.iterate(grads))
       ss = tuple(focus.iterate(state.param_states))
-      new_ps = []
-      new_ss = []
-      for p, g, s in zip(ps, gs, ss):
-        new_p, new_s = opt.apply_param_gradient(state.step, hp, p, s, g)
-        new_ps.append(new_p)
-        new_ss.append(new_s)
-      new_params = focus.set(new_ps, new_params)
-      new_param_states = focus.set(new_ss, new_param_states)
+      prev_ss = OptimizerState(state.step, ss)
+      new_ps, new_ss = opt.apply_gradient(hp, ps, prev_ss, gs)
+      new_params = focus.set(list(new_ps), new_params)
+      new_param_states = focus.set(list(new_ss.param_states), new_param_states)
     # Update state to None when param is not optimized by any sub optimizer.
     new_param_states = jax.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, new_param_states)
     return new_params, OptimizerState(state.step + 1, new_param_states)
