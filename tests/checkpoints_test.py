@@ -182,6 +182,11 @@ class CheckpointsTest(absltest.TestCase):
           tmp_dir, test_object, 1, keep=1, overwrite=True)
     new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
     jtu.check_eq(new_object, test_object)
+    os.chdir(os.path.dirname(tmp_dir))
+    rel_tmp_dir = './' + os.path.basename(tmp_dir)
+    checkpoints.save_checkpoint(rel_tmp_dir, test_object, 3, keep=1)
+    new_object = checkpoints.restore_checkpoint(rel_tmp_dir, test_object0)
+    jtu.check_eq(new_object, test_object)
 
   def test_save_restore_checkpoints_w_float_steps(self):
     tmp_dir = self.create_tempdir().full_path

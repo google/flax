@@ -25,7 +25,6 @@ import numpy.testing as np_testing
 from jax import random
 import jax.numpy as np
 from jax.config import config
-config.enable_omnistaging()
 
 
 class ModelTest(absltest.TestCase):

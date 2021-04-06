@@ -22,6 +22,7 @@ checkpoint files.
 from concurrent.futures import thread
 import os
 import re
+from typing import Union
 
 from absl import logging
 from flax import core
@@ -70,7 +71,7 @@ def natural_sort(file_list, signed=True):
   return sorted(file_list, key=split_keys)
 
 
-def save_checkpoint(ckpt_dir,
+def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     target,
                     step,
                     prefix='checkpoint_',
@@ -82,7 +83,7 @@ def save_checkpoint(ckpt_dir,
   a final rename and cleanup of past files.
 
   Args:
-    ckpt_dir: str: path to store checkpoint files in.
+    ckpt_dir: str or pathlib-like path to store checkpoint files in.
     target: serializable flax object, usually a flax optimizer.
     step: int or float: training step number or other metric number.
     prefix: str: checkpoint file name prefix.
@@ -92,8 +93,11 @@ def save_checkpoint(ckpt_dir,
   Returns:
     Filename of saved checkpoint.
   """
+  ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
+  if ckpt_dir.startswith('./'):
+    ckpt_dir = ckpt_dir[2:]  # gfile.glob() can remove leading './'
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
   gfile.makedirs(os.path.dirname(ckpt_path))
@@ -190,7 +194,7 @@ def restore_checkpoint(ckpt_dir,
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
-  if step:
+  if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')

@@ -177,7 +177,8 @@ class MultiHeadDotProductAttention(Module):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    deterministic = merge_param('deterministic', self.deterministic, deterministic)
+    if self.dropout_rate > 0.:  # Require `deterministic` only if using dropout.
+      deterministic = merge_param('deterministic', self.deterministic, deterministic)
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (

@@ -40,8 +40,6 @@ from flax.core import Scope, freeze, tracers
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 def tree_equals(x, y):
@@ -1073,6 +1071,42 @@ class ModuleTest(absltest.TestCase):
                 'Dense_0': {
                     'kernel': (2, 2),
                 },
+            },
+        },
+    })
+    self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
+
+  def test_toplevel_named_submodule_adoption(self):
+    dense = functools.partial(nn.Dense, use_bias=False)
+
+    class A(nn.Module):
+      def setup(self):
+        self.dense = dense(4)
+      def __call__(self, x):
+        return self.dense(x)
+
+    class B(nn.Module):
+      a: A
+      def setup(self):
+        self.proj = dense(6)
+      def __call__(self, x):
+        return self.proj(self.a(x))
+
+    a = A(name='foo')
+    b = B(a=a)
+    k = jax.random.PRNGKey(0)
+    x = jnp.zeros((5,5))
+    init_vars = b.init(k, x)
+    var_shapes = jax.tree_map(jnp.shape, init_vars)
+    ref_var_shapes = freeze({
+        'params': {
+            'a': {
+                'dense': {
+                    'kernel': (5, 4),
+                },
+            },
+            'proj': {
+                    'kernel': (4, 6),
             },
         },
     })

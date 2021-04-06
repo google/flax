@@ -523,7 +523,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       is_last_step = step == config.num_train_steps - 1
 
       # Shard data to devices and do a training step.
-      with jax.profiler.StepTraceContext("train", step_num=step):
+      with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = common_utils.shard(jax.tree_map(np.asarray, next(train_iter)))
         optimizer, metrics = p_train_step(
             optimizer, batch, dropout_rng=dropout_rngs)

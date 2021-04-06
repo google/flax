@@ -52,11 +52,6 @@ _CallableT = TypeVar('_CallableT', bound=Callable)
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
-def _check_omnistaging():
-  if not jax.config.omnistaging_enabled:
-    raise errors.JaxOmnistagingError()
-
-
 def _indent(x: str, num_spaces: int):
   indent_str = ' ' * num_spaces
   lines = x.split('\n')
@@ -542,7 +537,7 @@ class Module:
     return object.__dir__(self)  # pytype: disable=attribute-error
 
   def __post_init__(self):
-    _check_omnistaging()
+    # DO NOT REMOVE - Marker for internal logging.
     # In dataclasses, __init__ is overridden to process dataclass arguments,
     # and __post_init__ is called immediately afterwards. Here, depending on the
     # type of `parent` passed to initialize the Module, we either defer 
@@ -636,7 +631,9 @@ class Module:
     def adopt_attr_modules(cache, queue, suffix, subvalue):
       if isinstance(subvalue, Module):
         if subvalue.parent is None:
-          # module was passed from outside. It needs to be cloned
+          # Module was passed from outside. It needs to be cloned.
+          # Outside modules are named by attachment, not an outer name.
+          object.__setattr__(subvalue, 'name', None)
           key = id(subvalue)
           if key not in cache:
             cache[key] = subvalue.clone()

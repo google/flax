@@ -63,7 +63,7 @@ class Template(FlaxError):
 
 class FlaxError(Exception):
   def __init__(self, message):
-    error_page = 'https://flax.readthedocs.io/en/improve-error/flax.errors.html'
+    error_page = 'https://flax.readthedocs.io/en/latest/flax.errors.html'
     module_name = self.__class__.__module__
     class_name = self.__class__.__name__
     error_msg = f'{message} ({error_page}#{module_name}.{class_name})'
@@ -503,18 +503,6 @@ class CallCompactUnboundModuleError(FlaxError):
   """
   def __init__(self):
     super().__init__('Can\'t call compact methods on unbound modules')
-
-
-class JaxOmnistagingError(FlaxError):
-  """
-  The Flax linen API requires JAX omnistaging to be enabled. In order to enable
-  this, add this to your imports::
-    
-    from jax.config import config
-    config.enable_omnistaging()
-  """
-  def __init__(self):
-    super().__init__(f'Flax Linen requires Omnistaging to be enabled')
 
 
 class InvalidCheckpointError(FlaxError):
