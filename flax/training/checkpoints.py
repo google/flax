@@ -111,6 +111,8 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     checkpoint_files.append(ckpt_path)
 
   checkpoint_files = natural_sort(checkpoint_files)
+  # Handle the case if the job was preempted after the temporary checkpoint was
+  # written, but before it was renamed to the final checkpoint name
   if checkpoint_files[-1] == ckpt_tmp_path:
     checkpoint_files.pop(-1)
   if ckpt_path != checkpoint_files[-1]:
