@@ -459,7 +459,9 @@ class Module:
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
-    dataclasses.dataclass(cls, unsafe_hash=True, repr=False)  # pytype: disable=wrong-keyword-args
+    # Do generate a hash function only if not provided by the class.
+    dataclasses.dataclass(
+      cls, unsafe_hash="__hash__" not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):

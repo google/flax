@@ -597,6 +597,18 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(hash(module_a), hash(module_a_2))
     self.assertNotEqual(hash(module_a), hash(module_b))
 
+  def test_module_custom_hash(self):
+    class Test(nn.Module):
+      x: int = 3
+      y: int = 5
+      def __hash__(self):
+        return 42 + self.x
+    module_a = Test(1, 2)
+    module_a_2 = Test(1, 5)
+    module_b = Test(2, 2)
+    self.assertEqual(hash(module_a), hash(module_a_2))
+    self.assertNotEqual(hash(module_a), hash(module_b))
+
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
     msg = 'Can\'t call __hash__ on modules that hold variables.'
