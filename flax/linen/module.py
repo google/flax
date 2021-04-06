@@ -631,7 +631,9 @@ class Module:
     def adopt_attr_modules(cache, queue, suffix, subvalue):
       if isinstance(subvalue, Module):
         if subvalue.parent is None:
-          # module was passed from outside. It needs to be cloned
+          # Module was passed from outside. It needs to be cloned.
+          # Outside modules are named by attachment, not an outer name.
+          object.__setattr__(subvalue, 'name', None)
           key = id(subvalue)
           if key not in cache:
             cache[key] = subvalue.clone()
