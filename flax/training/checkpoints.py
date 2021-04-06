@@ -191,7 +191,7 @@ def restore_checkpoint(ckpt_dir,
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
-  if step:
+  if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
