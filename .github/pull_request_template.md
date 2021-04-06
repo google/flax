@@ -19,7 +19,7 @@ persons (sometimes notifications get lost).
 Fixes # (issue)
 
 ## Checklist
-- [ ] This PR fixes a minor typo or improves the docs (you can dismiss the other
+- [ ] This PR fixes a minor issue (e.g.: typo or small bug) or improves the docs (you can dismiss the other
       checks if that's the case).
 - [ ] This change is discussed in a Github issue/
       [discussion](https://github.com/google/flax/discussions) (please add a
