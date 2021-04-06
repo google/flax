@@ -478,7 +478,8 @@ class Module:
   def _wrap_module_methods(cls):
     """Wraps user-defined non-inherited methods with state management functions."""
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
-                  ['__eq__', '__repr__', '__init__', '__hash__'])
+                  ['__eq__', '__repr__', '__init__', '__hash__',
+                   '__post_init__'])
     for key in _get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       wrapped_method = wrap_method_once(method)
