@@ -242,12 +242,16 @@ class GroupNorm(Module):
                        'specified, but not both of them.')
     num_groups = self.num_groups
 
+    channels = x.shape[-1]
     if self.group_size is not None:
-      channels = x.shape[-1]
       if channels % self.group_size != 0:
         raise ValueError('Number of channels ({}) is not multiple of the '
                          'group size ({}).'.format(channels, self.group_size))
       num_groups = channels // self.group_size
+
+    if num_groups <= 0 or channels % num_groups != 0:
+      raise ValueError('Number of groups ({}) does not divide the number'
+                       ' of channels ({}).'.format(num_groups, channels))
 
     input_shape = x.shape
     group_shape = x.shape[:-1] + (num_groups, x.shape[-1] // num_groups)
