@@ -210,15 +210,18 @@ def save_checkpoint(state, workdir):
     checkpoints.save_checkpoint(workdir, state, step, keep=3)
 
 
+# pmean only works inside pmap because it needs an axis name.
+# This function will average the inputs across all devices.
+cross_replica_mean = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
+
+
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
-  # An axis_name is passed to pmap which can then be used by pmean.
-  # In this case each device has its own version of the batch statistics and
-  # we average them.
-  avg = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
 
+  # Each device has its own version of the running average batch statistics and
+  # we sync them before evaluation.
   new_model_state = state.model_state.copy({
-      'batch_stats': avg(state.model_state['batch_stats'])})
+      'batch_stats': cross_replica_mean(state.model_state['batch_stats'])})
   return state.replace(model_state=new_model_state)
 
 
