@@ -1026,17 +1026,18 @@ class Module:
         def __call__(self, x):
           init_fn = lambda: 0
           reduce_fn = lambda a, b: a + b
-          self.sow('intermediates', x, h,
+          self.sow('intermediates', 'h', x,
                    init_fn=init_fn, reduce_fn=reduce_fn)
-          self.sow('intermediates', x * 2, h,
+          self.sow('intermediates', 'h', x * 2,
                    init_fn=init_fn, reduce_fn=reduce_fn)
           return x
       y, state = Foo.apply(params, 1, mutable=['intermediates'])
       print(state['intermediates'])  # ==> {'h': 3}
 
     Args:
-      col: the variable collection.
-      name: the name of the variable.
+      col: The name of the variable collection.
+      name: The name of the variable.
+      value: The value of the variable.
       reduce_fn: The function used to combine the existing value with
         the new value the default is to append the value to a tuple.
       init_fn: For the first value stored reduce_fn will be passed
@@ -1044,7 +1045,7 @@ class Module:
         The default is an empty tuple.
 
     Returns:
-      `True` if the value has been stored succesfully, `False` otherwise.
+      `True` if the value has been stored successfully, `False` otherwise.
     """
     if self.scope is None:
       raise ValueError("Can't store variables on unbound modules")
