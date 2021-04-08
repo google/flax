@@ -134,6 +134,14 @@ def module_class_lift_transform(
         all args must be passed via methods kwarg.""")
     class_trafo_args = {k: ((), v) for k, v in methods.items()}
 
+  # Handle partially initialized module class constructors.
+  if (isinstance(module_class, functools.partial) and
+      issubclass(module_class.func, Module)):
+    partial_object = module_class
+    module_class = module_class.func
+  else:
+    partial_object = None
+
   def create_trans_fn(fn_name, fn_trafo_args):
     # get existing unbound method from class
     fn = getattr(module_class, fn_name)
@@ -161,9 +169,15 @@ def module_class_lift_transform(
   transformed_fns = {fn_name: create_trans_fn(fn_name, fn_trafo_args)
                      for fn_name, fn_trafo_args in class_trafo_args.items()}
   # construct new dynamic class w. transformed methods
-  transformed_cls = type(transform.__name__.capitalize() + module_class.__name__,
-                         (module_class,),
-                         transformed_fns)
+  transformed_cls = type(
+      transform.__name__.capitalize() + module_class.__name__,
+      (module_class,),
+      transformed_fns)
+  # Handle partially initialized module class constructors.
+  if partial_object is not None:
+    transformed_cls = functools.partial(transformed_cls,
+                                        *partial_object.args,
+                                        **partial_object.keywords)
   return transformed_cls
 
 
@@ -192,7 +206,8 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
 # -----------------------------------------------------------------------------
 def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs):
   """Applies to class or as a decorator on class fns."""
-  if inspect.isclass(target) and issubclass(target, Module):
+  if (inspect.isclass(target) and issubclass(target, Module)
+      or isinstance(target, functools.partial)):
     return module_class_lift_transform(
         transform, target, *trafo_args, methods=methods, **trafo_kwargs)
   # we presume this is being used as a function decorator in class definition
