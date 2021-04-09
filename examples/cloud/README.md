@@ -55,7 +55,7 @@ Use the following command to launch the MNIST example on cloud (make sure to set
 ```shell
 python examples/cloud/launch_gce.py \
   --project=$PROJECT \
-  --zone=us-central1-a \
+  --zone=us-west1-a \
   --machine_type=n2-standard-2 \
   --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --repo=${REPO:-https://github.com/google/flax} \
