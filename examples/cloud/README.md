@@ -93,7 +93,7 @@ accordingly):
 ```shell
 python examples/cloud/launch_gce.py \
   --project=$PROJECT \
-  --zone=us-central1-a \
+  --zone=us-west1-a \
   --machine_type=n1-standard-96 \
   --accelerator_type=nvidia-tesla-v100 --accelerator_count=8 \
   --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
