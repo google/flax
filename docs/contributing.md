@@ -103,6 +103,44 @@ Follow these steps to contribute code:
    Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/)
    for more information on using pull requests.
 
+
+## Troubleshooting
+
+### Too many commits in a PR
+
+If your PR has too many commits associated with it, then our build process will
+fail with an error message. This is because of two reasons:
+
+* We prefer to keep our commit history clean.
+
+* Our source sync process will actually fail if our commit tree is too large.
+
+If you encounter this error message, you should squash your commits. You can do
+this in various ways, and we demonstrate two options here.
+
+* If you simply want to squash the last 8 commits and write a new commit
+  message from scratch, make sure you checkout your branch and run:
+
+  ```bash
+  git reset --soft HEAD~8 && git commit
+  ```
+
+* Alternatively, you can use `git rebase` as follows:
+
+  ```bash
+  git rebase -i HEAD~8
+  ```
+  
+  This will open an editor allowing interactive rebasing. You can now edit the
+  commits which are rebased. If you want to squash all commits except the first
+  one, simple replace `pick` with `fixup` in all lines except the first one.
+  `fixup` means the commit is squashed into the previous commit and its commit
+  message is discarded. If you'd like to use the previous commit mesages, use
+  `squash`.
+
+Once you successfully rebased your branch, you should push your changes. Since
+you are changing the commit history, you should use `git push --force`.
+
 ## Contributor License Agreement
 
 Contributions to this project must be accompanied by a Contributor License

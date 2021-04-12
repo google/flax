@@ -26,10 +26,29 @@ jobs:
       run: |
         sudo apt-get -y install pandoc
     - uses: actions/checkout@v2
+      with:
+        fetch-depth: 10
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
+    # We allow at most 5 commits in a branch to ensure our CI doesn't break.
+    - name: Check commit count in PR
+      if: always()
+      shell: bash
+      run: |
+        set -x 
+        git fetch origin $GITHUB_REF:commit-count
+        git fetch origin master
+        diff=$(git rev-list --count origin/master...commit-count)
+        # $GITHUB_REF adds an additional commit to the commit tree, so $diff is
+        # one too high when executing this as a Github Action.
+        if (( $diff > 6)); then
+          echo "ERROR! More than 5 commits in PR -- please squash your commits."
+          url=https://flax.readthedocs.io/en/latest/contributing.html#too-many-commits-in-a-pr
+          echo "See $url for help on how to resolve this."
+          exit 1
+        fi
     - name: Install dependencies
       run: |
         pip install .
