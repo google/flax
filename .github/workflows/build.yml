@@ -1,0 +1,82 @@
+# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
+# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
+
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+      - 'test_*'
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.6]
+    steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@0.8.0
+      with:
+        access_token: ${{ github.token }}   
+    - name: Install native dependencies
+      run: |
+        sudo apt-get -y install pandoc
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
+    # We allow at most 5 commits in a branch to ensure our CI doesn't break.
+    - name: Check commit count in PR
+      if: always()
+      shell: bash
+      run: |
+        set -x
+        count_base=$(git rev-list --count origin/master)
+        count_eval=$(git rev-list --count "$GITHUB_SHA")
+        count_diff=$((count_eval-count_base))
+        if (( $count_diff > 5)); then
+          echo "ERROR! More than 5 commits in PR -- please squash your commits."
+          exit 1
+        fi
+        exit 1
+    - name: Install dependencies
+      run: |
+        pip install .
+        pip install .[testing]
+        pip install -r docs/requirements.txt
+    - name: Test testcode blocks in documentation
+      run: |
+        sphinx-build -M doctest docs docs/_build
+    - name: Build documentation
+      run: |
+        sphinx-build -M html docs docs/_build
+    - name: Test with pytest and generate coverage report
+      run: |
+        tests/run_all_tests.sh --with-cov
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v1
+      with:
+        file: ./coverage.xml
+    # The below step just reports the success or failure of tests as a "commit status".
+    # This is needed for copybara integration.
+    - name: Report success or failure as github status
+      if: always()
+      shell: bash
+      run: |
+        status="${{ job.status }}"
+        lowercase_status=$(echo $status | tr '[:upper:]' '[:lower:]')
+        curl -sS --request POST \
+        --url https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }} \
+        --header 'authorization: Bearer ${{ secrets.GITHUB_TOKEN }}' \
+        --header 'content-type: application/json' \
+        --data '{
+           "state": "'$lowercase_status'",
+           "target_url": "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+           "description": "'$status'",
+           "context": "github-actions/Build"
+           }'
