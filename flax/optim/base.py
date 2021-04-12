@@ -14,6 +14,7 @@
 
 """Flax Optimizer api."""
 
+from absl import logging
 import dataclasses
 from typing import Any, List, Tuple
 import warnings
@@ -505,11 +506,18 @@ class MultiOptimizer(OptimizerDef):
       raise ValueError(
           'Multiple optimizers match the same leaves : ' +
           str(jax.tree_map(lambda match: match._indices, param_states)))
-    for traversal, opt in zip(self.traversals, self.sub_optimizers):
-      param_states = traversal.update(lambda x: opt.init_param_state(x._value), param_states)
-    # Use None as initial state for params that are not optimized by any sub optimizer.
-    param_states = jax.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, param_states)
 
+    for name, value in _sorted_items(
+        traverse_util.flatten_dict(_get_params_dict(param_states))):
+      logging.info('Optimizer: {}   Var Name: {}'.format(
+          value._indices, '/'.join(name)))
+
+    for traversal, opt in zip(self.traversals, self.sub_optimizers):
+      param_states = traversal.update(
+          lambda x: opt.init_param_state(x._value), param_states)
+    # Use None as initial state for params that are not optimized by any sub optimizer.
+    param_states = jax.tree_map(
+        lambda x: None if isinstance(x, _ShapeDtype) else x, param_states)
     return OptimizerState(jnp.asarray(0, dtype=jnp.int32), param_states)
 
   def apply_gradient(self, hyper_params, params, state, grads):
@@ -525,7 +533,8 @@ class MultiOptimizer(OptimizerDef):
       new_params = focus.set(list(new_ps), new_params)
       new_param_states = focus.set(list(new_ss.param_states), new_param_states)
     # Update state to None when param is not optimized by any sub optimizer.
-    new_param_states = jax.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, new_param_states)
+    new_param_states = jax.tree_map(
+        lambda x: None if isinstance(x, _ShapeDtype) else x, new_param_states)
     return new_params, OptimizerState(state.step + 1, new_param_states)
 
   def update_hyper_params(self, **hyper_param_overrides):
