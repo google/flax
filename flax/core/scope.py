@@ -281,7 +281,7 @@ class Scope:
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
                parent: Optional['Scope'] = None,
-               path: Tuple[str] = ()):
+               path: Iterable[str] = ()):
     """Initializes a Scope.
 
     Args:
@@ -295,7 +295,7 @@ class Scope:
     self._variables = variables
     self.parent = parent
     self.name = name
-    self.path = path
+    self.path = tuple(path)
     self.rngs = rngs if rngs else {}
     self.mutable = mutable
 
