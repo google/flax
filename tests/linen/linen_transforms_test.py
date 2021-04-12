@@ -16,6 +16,7 @@
 
 from functools import partial
 from typing import Any, Tuple, Iterable, Callable, Sequence
+import operator
 
 from absl.testing import absltest
 import jax
@@ -27,6 +28,12 @@ from flax.core import freeze
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+
+
+
+def tree_equals(x, y):
+  return jax.tree_util.tree_all(
+      jax.tree_multimap(operator.eq, x, y))
 
 
 id_fn = lambda x: x
@@ -746,6 +753,24 @@ class TransformTest(absltest.TestCase):
             lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
             cntrs, ref_cntrs)
         ))
+
+  def test_partially_applied_module_constructor_transform(self):
+    k = random.PRNGKey(0)
+    x = jnp.ones((3,4,4))
+    dense = partial(nn.Dense, use_bias=False)
+    vmap_dense = nn.vmap(
+        dense,
+        variable_axes={'params':0},
+        split_rngs={'params':True})(4)
+    init_vars = vmap_dense.init(k, x)
+    init_vars_shapes = jax.tree_map(jnp.shape, init_vars)
+    ref_var_shapes = freeze({
+        'params': {
+            'kernel': (3, 4, 4),
+        },
+    })
+    self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
+
 
 if __name__ == '__main__':
   absltest.main()

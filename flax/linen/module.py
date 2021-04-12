@@ -259,12 +259,16 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
     is_compact_method = hasattr(fun, 'compact')
     is_setup_method = fun.__name__ == 'setup'
     # We lazily call setup() only when needed.
-    if not is_setup_method:
+    if is_setup_method:
+      is_recurrent = self._state.in_setup
+      self._state.in_setup = True
+    else:
       self._try_setup()
 
     if is_compact_method:
       if self.scope is None:
         raise errors.CallCompactUnboundModuleError()
+      is_recurrent = self._state.in_compact_method
       self._state.in_compact_method = True
     _context.module_stack.append(self)
     try:
@@ -278,7 +282,10 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
       _context.module_stack.pop()
       if is_compact_method:
         object.__setattr__(self, 'scope', self.scope.rewound())
-      if is_compact_method or is_setup_method:
+      # setup or compact calls can be recurrent for example due to super calls
+      # resetting the state would cause is compact/setup method
+      # to be set to False prematurely.
+      if (is_compact_method or is_setup_method) and not is_recurrent:
         self._state.reset()
   wrapped_module_method.method_handler_wrapped = True
   return wrapped_module_method
@@ -459,7 +466,9 @@ class Module:
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
-    dataclasses.dataclass(cls, unsafe_hash=True, repr=False)  # pytype: disable=wrong-keyword-args
+    # Do generate a hash function only if not provided by the class.
+    dataclasses.dataclass(
+      cls, unsafe_hash="__hash__" not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
     if dataclasses.is_dataclass(cls.__bases__[0]):
@@ -478,7 +487,8 @@ class Module:
   def _wrap_module_methods(cls):
     """Wraps user-defined non-inherited methods with state management functions."""
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
-                  ['__eq__', '__repr__', '__init__', '__hash__'])
+                  ['__eq__', '__repr__', '__init__', '__hash__',
+                   '__post_init__'])
     for key in _get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       wrapped_method = wrap_method_once(method)

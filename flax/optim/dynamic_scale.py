@@ -106,7 +106,7 @@ class DynamicScale(struct.PyTreeNode):
       A function that takes the same arguments as `fun` and
       returns a DynamicScaleResult
     """
-    functools.wraps(fun)
+    @functools.wraps(fun)
     def loss_wrapper(*args):
       aux = fun(*args)
       if has_aux:

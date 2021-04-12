@@ -597,6 +597,18 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(hash(module_a), hash(module_a_2))
     self.assertNotEqual(hash(module_a), hash(module_b))
 
+  def test_module_custom_hash(self):
+    class Test(nn.Module):
+      x: int = 3
+      y: int = 5
+      def __hash__(self):
+        return 42 + self.x
+    module_a = Test(1, 2)
+    module_a_2 = Test(1, 5)
+    module_b = Test(2, 2)
+    self.assertEqual(hash(module_a), hash(module_a_2))
+    self.assertNotEqual(hash(module_a), hash(module_b))
+
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
     msg = 'Can\'t call __hash__ on modules that hold variables.'
@@ -1273,6 +1285,51 @@ class ModuleTest(absltest.TestCase):
     y = Foo().apply(variables, x)
     self.assertEqual(y.shape, (2,))
 
+  def test_super_compact(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(4)(x)
+
+    class Bar(Foo):
+      @nn.compact
+      def __call__(self, x):
+        y = super().__call__(x)
+        return nn.Dense(3)(y)
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((4, 7))
+
+    variables = Bar().init(k, x)
+    shapes = jax.tree_map(np.shape, variables['params'])
+    self.assertEqual(shapes, {
+      'Dense_0': {'kernel': (7, 4), 'bias': (4,)},
+      'Dense_1': {'kernel': (4, 3), 'bias': (3,)},
+    })
+    y = Bar().apply(variables, x)
+    self.assertEqual(y.shape, (4, 3))
+  
+  def test_super_setup(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(4)
+
+    class Bar(Foo):
+
+      def setup(self):
+        super().setup()
+        self.b = nn.Dense(3)
+
+      def __call__(self, x):
+        y = self.a(x)
+        return self.b(y)
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((4, 7))
+
+    variables = Bar().init(k, x)
+    y = Bar().apply(variables, x)
+    self.assertEqual(y.shape, (4, 3))
 
 if __name__ == '__main__':
   absltest.main()
