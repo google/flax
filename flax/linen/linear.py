@@ -37,7 +37,7 @@ default_kernel_init = lecun_normal()
 
 def _normalize_axes(axes, ndim):
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
-  return tuple([ax if ax >= 0 else ndim + ax for ax in axes])
+  return tuple(sorted([ax if ax >= 0 else ndim + ax for ax in axes]))
 
 
 def _canonicalize_tuple(x):
@@ -107,6 +107,10 @@ class DenseGeneral(Module):
       return jnp.reshape(kernel, shape)
 
     batch_shape = tuple([inputs.shape[ax] for ax in batch_dims])
+    # batch and non-contracting dims of input with 1s for batch dims.
+    expanded_batch_shape = tuple(
+        inputs.shape[ax] if ax in batch_dims else 1
+        for ax in range(inputs.ndim) if ax not in axis)
     kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
     kernel = self.param('kernel', kernel_init_wrap, batch_shape + kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
@@ -117,6 +121,7 @@ class DenseGeneral(Module):
                           kernel,
                           ((axis, contract_ind), (batch_dims, batch_ind)),
                           precision=self.precision)
+    # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
         size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
@@ -126,12 +131,8 @@ class DenseGeneral(Module):
         return jnp.reshape(bias, shape)
 
       bias = self.param('bias', bias_init_wrap, batch_shape + features)
-
-      # Reshape bias for broadcast.
-      expand_dims = sorted(
-          set(range(inputs.ndim)) - set(axis) - set(batch_dims))
-      for ax in expand_dims:
-        bias = jnp.expand_dims(bias, ax)
+      # expand bias shape to broadcast bias over batch dims.
+      bias = jnp.reshape(bias, expanded_batch_shape + features)
       bias = jnp.asarray(bias, self.dtype)
       out = out + bias
     return out

@@ -144,7 +144,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, target)
 
   @parameterized.parameters([((-2, 3), (), 'bijk,jklm->bilm'),
-                             ((3, -2), (), 'bijk,kjlm->bilm'),
+                             ((3, -2), (), 'bijk,jklm->bilm'),
                              ((-2, 3), (0,), 'bijk,bjklm->bilm')])
   def test_dense_general_vs_numpy(self, axis, batch_dims, einsum_expr):
     rng = dict(params=random.PRNGKey(0))
@@ -271,6 +271,18 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, dummy_embedding[None])
     z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
     np.testing.assert_allclose(z, 3. * jnp.arange(4))
+  
+  def test_non_final_axis(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.DenseGeneral(features=6, axis=1, name='dense')(x)
+
+    x = jnp.ones((2, 4, 8))
+    params = Foo().init(random.PRNGKey(0), x)['params']
+    self.assertEqual(jax.tree_map(jnp.shape, params), {
+      'dense': {'kernel': (4, 6), 'bias': (6,)}
+    })
 
 
 if __name__ == '__main__':
