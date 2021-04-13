@@ -11,3 +11,4 @@ build/
 *.rej
 .pytype
 .vscode/*
+/.devcontainer
