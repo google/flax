@@ -58,12 +58,13 @@ def create_stepped_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   by specified amounts at specified epochs. The steps are given as
   the `lr_sched_steps` parameter. A common ImageNet schedule decays the
   learning rate by a factor of 0.1 at epochs 30, 60 and 80. This would be
-  specified as:
-  [
-    [30, 0.1],
-    [60, 0.01],
-    [80, 0.001]
-  ]
+  specified as::
+
+    [
+      [30, 0.1],
+      [60, 0.01],
+      [80, 0.001]
+    ]
 
   This function also offers a learing rate warmup as per
   https://arxiv.org/abs/1706.02677, for the purpose of training with large
