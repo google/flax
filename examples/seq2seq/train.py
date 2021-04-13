@@ -304,8 +304,8 @@ def compute_metrics(logits, labels, lengths):
   return metrics
 
 
-IN_SHAPES = [{'query': '(n, _)', 'answer': '(m + 1, _)'}]
-OUT_ELEM = f'(m, {CTABLE.vocab_size})'
+IN_SHAPES = [{'query': '(n, _)', 'answer': '(m + 2, _)'}]
+OUT_ELEM = f'(m + 1, {CTABLE.vocab_size})'
 OUT_SHAPE = (OUT_ELEM, OUT_ELEM)
 def apply_model(batch, in_masks, out_masks, params, key, teacher_force=True):
   @functools.partial(jax.mask, in_shapes=IN_SHAPES, out_shape=OUT_SHAPE)
