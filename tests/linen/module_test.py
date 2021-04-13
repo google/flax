@@ -29,7 +29,7 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as np
-from typing import Any, Tuple, Iterable, Callable
+from typing import Any, Tuple, Iterable, Callable, Mapping
 
 from flax import linen as nn
 from flax import errors
@@ -382,6 +382,14 @@ class ModuleTest(absltest.TestCase):
     msg = 'Could not create param "bias" in Module Dummy: Name in use'
     with self.assertRaisesRegex(errors.NameInUseError, msg):
       y = Dummy(x.shape, parent=scope)(x)
+
+  def test_attr_empty_container(self):
+    class Foo(nn.Module):
+      bar: Mapping[str, Any]
+      @compact
+      def __call__(self):
+        pass
+    Foo({"a": ()}).apply({})
 
   def test_attr_param_name_collision(self):
     rngkey = jax.random.PRNGKey(0)
