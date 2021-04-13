@@ -205,10 +205,9 @@ class TrainState(flax.struct.PyTreeNode):
 
   @classmethod
   def create(cls, *, apply_fn, params, tx, **kwargs):
-    model_state, params = variables.pop('params')
     opt_state = tx.init(params)
     return cls(
-        step=1,
+        step=0,
         apply_fn=apply_fn,
         params=params,
         tx=tx,
