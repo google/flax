@@ -48,6 +48,7 @@ For a quick introduction and short example snippets, see our `README
    :titlesonly:
 
    design_notes/*
+   FLIPs <https://github.com/google/flax/tree/master/docs/flip>
 
 .. toctree::
    :maxdepth: 1
