@@ -279,10 +279,24 @@ class LinearTest(parameterized.TestCase):
         return nn.DenseGeneral(features=6, axis=1, name='dense')(x)
 
     x = jnp.ones((2, 4, 8))
-    params = Foo().init(random.PRNGKey(0), x)['params']
-    self.assertEqual(jax.tree_map(jnp.shape, params), {
+    y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+    self.assertEqual(jax.tree_map(jnp.shape, variables['params']), {
       'dense': {'kernel': (4, 6), 'bias': (6,)}
     })
+    self.assertEqual(y.shape, (2, 8, 6))
+  
+  def test_non_final_axes(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.DenseGeneral(features=6, axis=(0, 1), name='dense')(x)
+
+    x = jnp.ones((2, 4, 8))
+    y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+    self.assertEqual(jax.tree_map(jnp.shape, variables['params']), {
+      'dense': {'kernel': (2, 4, 6), 'bias': (6,)}
+    })
+    self.assertEqual(y.shape, (8, 6))
 
 
 if __name__ == '__main__':
