@@ -40,6 +40,7 @@ For a quick introduction and short example snippets, see our `README
    howtos/lr_schedule
    howtos/extracting_intermediates
    howtos/model_surgery
+   howtos/early_stopping
 
 .. toctree::
    :maxdepth: 1
