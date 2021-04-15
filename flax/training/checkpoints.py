@@ -125,7 +125,6 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   # Rename once serialization and writing finished.
   gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
   logging.info('Saved checkpoint at %s', ckpt_path)
-  print(ckpt_path)
 
   # Remove newer checkpoints
   if overwrite:
