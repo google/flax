@@ -156,11 +156,13 @@ class NormalizationTest(absltest.TestCase):
             axis_name="batch",
         )
         x = norm(x)
-        return norm(x)
+        return x, norm(x)
 
     key = random.PRNGKey(0)
     model = Foo()
-    variables = model.init(key, jnp.ones((10,)))
+    x = random.normal(random.PRNGKey(1), (2, 4))
+    (y1, y2), variables = model.init_with_output(key, x)
+    np.testing.assert_allclose(y1, y2, rtol=1e-4)
 
 class StochasticTest(absltest.TestCase):
 
