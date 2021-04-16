@@ -146,6 +146,21 @@ class NormalizationTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       model_cls.init_with_output(key2, x)
 
+  def test_batch_norm_multi_init(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        norm = nn.BatchNorm(
+            name="norm",
+            use_running_average=False,
+            axis_name="batch",
+        )
+        x = norm(x)
+        return norm(x)
+
+    key = random.PRNGKey(0)
+    model = Foo()
+    variables = model.init(key, jnp.ones((10,)))
 
 class StochasticTest(absltest.TestCase):
 
