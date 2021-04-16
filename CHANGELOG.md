@@ -20,7 +20,7 @@ vNext
  -
  -
  -
- -
+ - `BatchNorm` instances will behave correctly during init when called multiple times.
  -
  -
  -
