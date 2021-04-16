@@ -76,6 +76,13 @@ class BatchNorm(Module):
   def __call__(self, x, use_running_average: Optional[bool] = None):
     """Normalizes the input using batch statistics.
 
+    NOTE:
+    During initialization (when parameters are mutable) the running average
+    of the batch statistics will not be updated. Therefore, the inputs
+    fed during initialization don't need to match that of the actual input
+    distribution and the reduction axis (set with `axis_name`) does not have
+    to exist.
+
     Args:
       x: the input to be normalized.
       use_running_average: if true, the statistics stored in batch_stats
@@ -93,8 +100,8 @@ class BatchNorm(Module):
     reduced_feature_shape = tuple(d for i, d in enumerate(x.shape) if i in axis)
     reduction_axis = tuple(i for i in range(x.ndim) if i not in axis)
 
-    # we detect if we're in initialization via empty variable tree.
-    initializing = not self.has_variable('batch_stats', 'mean')
+    # see NOTE above on initialization behavior
+    initializing = self.is_mutable_collection('params')
 
     ra_mean = self.variable('batch_stats', 'mean',
                             lambda s: jnp.zeros(s, jnp.float32),
