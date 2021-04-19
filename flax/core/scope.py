@@ -41,6 +41,18 @@ Filter = Union[bool, str, Container[str], 'DenyList']
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
+  """DenyList represents an opt-out based mutability filter.
+  
+  DenyList can be used to make every collection mutable except the ones
+  defined in the given filter.
+  To for example make everything but the params collection mutable::
+
+    nn.apply(fn, mutable=nn.DenyList(["params"]))
+
+  Attributes:
+    deny: The filter representing the collections that are not mutable.
+
+  """
   deny: Filter
 
 
