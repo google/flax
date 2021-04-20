@@ -18,11 +18,13 @@ This script trains a ResNet-50 on the ImageNet dataset.
 The data is loaded using tensorflow_datasets.
 """
 
+import collections
 import functools
 import time
 from typing import Any
 
 from absl import logging
+from clu import metric_writers
 from clu import periodic_actions
 
 import flax
@@ -260,9 +262,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     Final TrainState.
   """
 
-  if jax.host_id() == 0:
-    summary_writer = tensorboard.SummaryWriter(workdir)
-    summary_writer.hparams(dict(config))
+  writer = metric_writers.create_default_writer(
+      logdir=workdir, just_logging=jax.host_id() != 0)
 
   rng = random.PRNGKey(0)
 
@@ -350,11 +351,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       steps_per_sec = steps_per_epoch / (time.time() - t_loop_start)
       t_loop_start = time.time()
       if jax.host_id() == 0:
+        writer.write_scalars(step, {'steps per second': steps_per_sec})
+        by_step = collections.defaultdict(dict)
         for key, vals in epoch_metrics.items():
           tag = 'train_%s' % key
           for i, val in enumerate(vals):
-            summary_writer.scalar(tag, val, step - len(vals) + i + 1)
-        summary_writer.scalar('steps per second', steps_per_sec, step)
+            by_step[step - len(vals) + i + 1][tag] = val
+        for metric_step, step_metrics in sorted(by_step.items()):
+          writer.write_scalars(metric_step, step_metrics)
 
       epoch_metrics = []
       eval_metrics = []
@@ -369,11 +373,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
       logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                    epoch, summary['loss'], summary['accuracy'] * 100)
-      if jax.host_id() == 0:
-        for key, val in eval_metrics.items():
-          tag = 'eval_%s' % key
-          summary_writer.scalar(tag, val.mean(), step)
-        summary_writer.flush()
+      writer.write_scalars(
+          step, {f'eval_{key}': val for key, val in summary.items()})
+      writer.flush()
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
       state = sync_batch_stats(state)
       save_checkpoint(state, workdir)
