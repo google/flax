@@ -106,7 +106,7 @@ class _DynamicContext:
     if not hasattr(self._thread_data, 'module_stack'):
       self._thread_data.module_stack = [None,]
     return self._thread_data.module_stack
-  
+
   @property
   def capture_stack(self):
     """Keeps track of the active capture_intermediates filter functions."""
@@ -114,7 +114,7 @@ class _DynamicContext:
       self._thread_data.capture_stack = []
     return self._thread_data.capture_stack
 
-# The global context 
+# The global context
 _context = _DynamicContext()
 
 class _Sentinel:
@@ -317,12 +317,12 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
 
   # The method should be callable, and it should have at least one argument
   # representing the class that is passed in.
-  if (not callable(method_or_fn) or 
+  if (not callable(method_or_fn) or
       len(inspect.signature(method_or_fn).parameters) < 1):
     raise errors.ApplyModuleInvalidMethodError(method_or_fn)
-  
+
   return method_or_fn
-  
+
 
 @dataclasses.dataclass
 class _ModuleInternalState:
@@ -452,13 +452,18 @@ class Module:
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
     # argument behavior and ordering from dataclass class-transform.
-    parent_dataclass_fields = dict(getattr(cls, '__dataclass_fields__', {}))
-    # Remove 'parent' and 'name' from parents because we always want parent and
-    # name to show up last in the dataclass args.
-    if 'parent' in parent_dataclass_fields:
-      cls.__dataclass_fields__.pop('parent')  # pytype: disable=attribute-error
-    if 'name' in parent_dataclass_fields:
-      cls.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
+    parent_dataclass_fields = []
+    for clz in cls.__mro__[1:]:
+      pdf = dict(getattr(clz, '__dataclass_fields__', {}))
+      parent_dataclass_fields.append(pdf)
+
+      # Remove 'parent' and 'name' from parents because we always want parent
+      # and name to show up last in the dataclass args.
+      if 'parent' in pdf:
+        clz.__dataclass_fields__.pop('parent')  # pytype: disable=attribute-error
+      if 'name' in pdf:
+        clz.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
+
     annotations['parent'] = Union[Type["Module"], Type["Scope"],
                                   Type["_Sentinel"], None]
     cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
@@ -471,8 +476,9 @@ class Module:
       cls, unsafe_hash="__hash__" not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
-    if dataclasses.is_dataclass(cls.__bases__[0]):
-      cls.__bases__[0].__dataclass_fields__ = parent_dataclass_fields
+    for clz, pdf in zip(cls.__mro__[1:], parent_dataclass_fields):
+      if dataclasses.is_dataclass(clz):
+        clz.__dataclass_fields__ = pdf
 
   @classmethod
   def _verify_single_or_no_compact(cls):
@@ -516,10 +522,10 @@ class Module:
       val: Value of the attribute.
     """
     is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
-    
+
     if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
-      raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name, 
+      raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name,
                                                  val)
     if is_dataclass_attr:
       if self._state.in_setup:
@@ -550,7 +556,7 @@ class Module:
     # DO NOT REMOVE - Marker for internal logging.
     # In dataclasses, __init__ is overridden to process dataclass arguments,
     # and __post_init__ is called immediately afterwards. Here, depending on the
-    # type of `parent` passed to initialize the Module, we either defer 
+    # type of `parent` passed to initialize the Module, we either defer
     # initialization, attach this Module as a submodule of a parent, or bind
     # this Module at the top-level to variables and rngs.
 
@@ -863,10 +869,14 @@ class Module:
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope)
 
-  def apply(self, variables: VariableDict, *args, rngs: RNGSequences = None,
-            method: Callable[..., Any] = None, 
+  def apply(self,
+            variables: VariableDict,
+            *args,
+            rngs: RNGSequences = None,
+            method: Callable[..., Any] = None,
             mutable: CollectionFilter = False,
-            capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
+            capture_intermediates: Union[bool, Callable[['Module', str],
+                                                        bool]] = False,
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
 
@@ -924,10 +934,11 @@ class Module:
         method, self,
         mutable=mutable, capture_intermediates=capture_intermediates
     )(variables, *args, **kwargs, rngs=rngs)
-    
 
-  def init_with_output(self, rngs: Union[PRNGKey, RNGSequences], *args,
-                       method: Optional[Callable[..., Any]] = None, 
+  def init_with_output(self,
+                       rngs: Union[PRNGKey, RNGSequences],
+                       *args,
+                       method: Optional[Callable[..., Any]] = None,
                        **kwargs) -> Tuple[Any, FrozenVariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
 
@@ -948,8 +959,10 @@ class Module:
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
 
-  def init(self, rngs: Union[PRNGKey, RNGSequences], *args,
-           method: Optional[Callable[..., Any]] = None, 
+  def init(self,
+           rngs: Union[PRNGKey, RNGSequences],
+           *args,
+           method: Optional[Callable[..., Any]] = None,
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
@@ -976,7 +989,7 @@ class Module:
     if self.scope is None:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.variables()
-  
+
   def get_variable(self, col: str, name: str, default: T = None) -> T:
     """Retrieves the value of a Variable.
 

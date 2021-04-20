@@ -535,15 +535,20 @@ class ModuleTest(absltest.TestCase):
       baz: int
       def __call__(self, x):
         return x
+    class Test4(Test2):
+      def __call__(self, x):
+        return x
 
     key = random.PRNGKey(0)
     x = jnp.ones((5,))
     test1 = Test(bar=4)
     test2 = Test2(bar=4, baz=2)
     test3 = Test3(bar=4, baz=2)
+    test4 = Test4(bar=5, baz=3)
     self.assertEqual(test1.init_with_output(key, x), (x, freeze({})))
     self.assertEqual(test2.init_with_output(key, x), (x, freeze({})))
     self.assertEqual(test3.init_with_output(key, x), (x, freeze({})))
+    self.assertEqual(test4.init_with_output(key, x), (x, freeze({})))
     self.assertTrue(hasattr(test1, 'bar'))
     self.assertTrue(hasattr(test1, 'name'))
     self.assertTrue(hasattr(test1, 'parent'))
@@ -555,6 +560,10 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(hasattr(test3, 'baz'))
     self.assertTrue(hasattr(test3, 'name'))
     self.assertTrue(hasattr(test3, 'parent'))
+    self.assertTrue(hasattr(test4, 'bar'))
+    self.assertTrue(hasattr(test4, 'baz'))
+    self.assertTrue(hasattr(test4, 'name'))
+    self.assertTrue(hasattr(test4, 'parent'))
     self.assertEqual(
         list(Test.__dataclass_fields__.keys()),
         ['bar', 'parent', 'name'])
@@ -563,6 +572,9 @@ class ModuleTest(absltest.TestCase):
         ['bar', 'baz', 'parent', 'name'])
     self.assertEqual(
         list(Test3.__dataclass_fields__.keys()),
+        ['bar', 'baz', 'parent', 'name'])
+    self.assertEqual(
+        list(Test4.__dataclass_fields__.keys()),
         ['bar', 'baz', 'parent', 'name'])
 
   def test_get_suffix_value_pairs(self):
