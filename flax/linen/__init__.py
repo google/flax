@@ -23,7 +23,7 @@ from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
 from .attention import (MultiHeadDotProductAttention, SelfAttention,
                         dot_product_attention, make_attention_mask,
                         make_causal_mask, combine_masks)
-from ..core import broadcast
+from ..core import broadcast, DenyList
 from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
 from .module import Module, compact, enable_named_call, disable_named_call, Variable, init, init_with_output, apply
 from .normalization import BatchNorm, GroupNorm, LayerNorm
