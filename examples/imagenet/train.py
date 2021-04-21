@@ -35,6 +35,7 @@ import models
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import common_utils
+from flax.training import train_state
 
 import jax
 from jax import lax
@@ -43,6 +44,8 @@ from jax import random
 import jax.numpy as jnp
 
 import ml_collections
+
+import optax
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -66,8 +69,7 @@ def initialized(key, image_size, model):
   def init(*args):
     return model.init(*args)
   variables = init({'params': key}, jnp.ones(input_shape, model.dtype))
-  model_state, params = variables.pop('params')
-  return params, model_state
+  return variables['params'], variables['batch_stats']
 
 
 def cross_entropy_loss(logits, labels):
@@ -106,15 +108,16 @@ def create_learning_rate_fn(config: ml_collections.ConfigDict,
   return step_fn
 
 
-def train_step(apply_fn, state, batch, learning_rate_fn):
+def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
   def loss_fn(params):
     """loss function used for training."""
-    variables = {'params': params, **state.model_state}
-    logits, new_model_state = apply_fn(
-        variables, batch['image'], mutable=['batch_stats'])
+    logits, new_model_state = state.apply_fn(
+        {'params': params, 'batch_stats': state.batch_stats},
+        batch['image'],
+        mutable=['batch_stats'])
     loss = cross_entropy_loss(logits, batch['label'])
-    weight_penalty_params = jax.tree_leaves(variables['params'])
+    weight_penalty_params = jax.tree_leaves(params)
     weight_decay = 0.0001
     weight_l2 = sum([jnp.sum(x ** 2)
                      for x in weight_penalty_params
@@ -124,42 +127,45 @@ def train_step(apply_fn, state, batch, learning_rate_fn):
     return loss, (new_model_state, logits)
 
   step = state.step
-  optimizer = state.optimizer
   dynamic_scale = state.dynamic_scale
   lr = learning_rate_fn(step)
 
   if dynamic_scale:
     grad_fn = dynamic_scale.value_and_grad(
         loss_fn, has_aux=True, axis_name='batch')
-    dynamic_scale, is_fin, aux, grad = grad_fn(optimizer.target)
+    dynamic_scale, is_fin, aux, grads = grad_fn(state.params)
     # dynamic loss takes care of averaging gradients across replicas
   else:
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    aux, grad = grad_fn(optimizer.target)
+    aux, grads = grad_fn(state.params)
     # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
-    grad = lax.pmean(grad, axis_name='batch')
+    grads = lax.pmean(grads, axis_name='batch')
   new_model_state, logits = aux[1]
-  new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr
 
+  new_state = state.apply_gradients(
+      grads=grads, batch_stats=new_model_state['batch_stats'])
   if dynamic_scale:
-    # if is_fin == False the gradients contain Inf/NaNs and the old optimizer
-    # state should be restored.
-    new_optimizer = jax.tree_multimap(
-        functools.partial(jnp.where, is_fin), new_optimizer, optimizer)
+    # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
+    # params should be restored (= skip this step).
+    new_state = new_state.replace(
+        opt_state=jax.tree_multimap(
+            functools.partial(jnp.where, is_fin),
+            new_state.opt_state,
+            state.opt_state),
+        params=jax.tree_multimap(
+            functools.partial(jnp.where, is_fin),
+            new_state.params,
+            state.params))
     metrics['scale'] = dynamic_scale.scale
 
-  new_state = state.replace(
-      step=step + 1, optimizer=new_optimizer, model_state=new_model_state,
-      dynamic_scale=dynamic_scale)
   return new_state, metrics
 
 
-def eval_step(apply_fn, state, batch):
-  params = state.optimizer.target
-  variables = {'params': params, **state.model_state}
-  logits = apply_fn(
+def eval_step(state, batch):
+  variables = {'params': state.params, 'batch_stats': state.batch_stats}
+  logits = state.apply_fn(
       variables, batch['image'], train=False, mutable=False)
   return compute_metrics(logits, batch['label'])
 
@@ -188,14 +194,9 @@ def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
   return it
 
 
-# flax.struct.dataclass enables instances of this class to be passed into jax
-# transformations like tree_map and pmap.
-@flax.struct.dataclass
-class TrainState:
-  step: int
-  optimizer: optim.Optimizer
-  model_state: Any
-  dynamic_scale: optim.DynamicScale
+class TrainState(train_state.TrainState):
+  batch_stats: Any
+  dynamic_scale: flax.optim.DynamicScale
 
 
 def restore_checkpoint(state, workdir):
@@ -217,16 +218,13 @@ cross_replica_mean = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
 
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
-
   # Each device has its own version of the running average batch statistics and
   # we sync them before evaluation.
-  new_model_state = state.model_state.copy({
-      'batch_stats': cross_replica_mean(state.model_state['batch_stats'])})
-  return state.replace(model_state=new_model_state)
+  return state.replace(batch_stats=cross_replica_mean(state.batch_stats))
 
 
 def create_train_state(rng, config: ml_collections.ConfigDict,
-                       model, image_size):
+                       model, image_size, learning_rate_fn):
   """Create initial training state."""
   dynamic_scale = None
   platform = jax.local_devices()[0].platform
@@ -235,11 +233,17 @@ def create_train_state(rng, config: ml_collections.ConfigDict,
   else:
     dynamic_scale = None
 
-  params, model_state = initialized(rng, image_size, model)
-  optimizer = optim.Momentum(
-      beta=config.momentum, nesterov=True).create(params)
-  state = TrainState(
-      step=0, optimizer=optimizer, model_state=model_state,
+  params, batch_stats = initialized(rng, image_size, model)
+  tx = optax.sgd(
+      learning_rate=learning_rate_fn,
+      momentum=config.momentum,
+      nesterov=True,
+  )
+  state = TrainState.create(
+      apply_fn=model.apply,
+      params=params,
+      tx=tx,
+      batch_stats=batch_stats,
       dynamic_scale=dynamic_scale)
   return state
 
@@ -251,6 +255,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   Args:
     config: Hyperparameter configuration for training and evaluation.
     workdir: Directory where the tensorboard summaries are written to.
+
+  Returns:
+    Final TrainState.
   """
 
   if jax.host_id() == 0:
@@ -307,21 +314,19 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   model = create_model(
       model_cls=model_cls, half_precision=config.half_precision)
 
-  state = create_train_state(rng, config, model, image_size)
+  learning_rate_fn = create_learning_rate_fn(
+      config, base_learning_rate, steps_per_epoch)
+
+  state = create_train_state(rng, config, model, image_size, learning_rate_fn)
   state = restore_checkpoint(state, workdir)
   # step_offset > 0 if restarting from checkpoint
   step_offset = int(state.step)
   state = jax_utils.replicate(state)
 
-  learning_rate_fn = create_learning_rate_fn(
-      config, base_learning_rate, steps_per_epoch)
-
   p_train_step = jax.pmap(
-      functools.partial(train_step, model.apply,
-                        learning_rate_fn=learning_rate_fn),
+      functools.partial(train_step, learning_rate_fn=learning_rate_fn),
       axis_name='batch')
-  p_eval_step = jax.pmap(
-      functools.partial(eval_step, model.apply), axis_name='batch')
+  p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   epoch_metrics = []
   hooks = []
