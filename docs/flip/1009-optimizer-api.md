@@ -192,7 +192,7 @@ class TrainState(flax.struct.PyTreeNode):
   tx: optax.GradientTransformation = flax.struct.field(pytree_node=False)
   opt_state: optax.OptState
 
-  def update(self, *, grads, **kwargs):
+  def apply_gradients(self, *, grads, **kwargs):
     updates, new_opt_state = self.tx.update(
         grads, self.opt_state, self.params)
     new_params = optax.apply_updates(self.params, updates)
@@ -240,7 +240,7 @@ def train_step(train_state, inputs, labels):
 
   (loss, new_model_state), grads = jax.value_and_grad(
       loss_fn, has_aux=True)(train_state.params)
-  new_state = train_state.update(
+  new_state = train_state.apply_gradients(
       grads=grads,
       batch_stats=new_model_state['batch_stats'],
   )
@@ -397,7 +397,7 @@ for step, batch in enumerate(ds)
 
 Remarks:
 
-- Notice how `optimizer.apply_gradients()` can take additional arguments to
+- Notice how `optimizer.apply_gradient()` can take additional arguments to
   update hyperparameters, such as learning rate from an independent function
   `get_learning_rate()` in this case.
 

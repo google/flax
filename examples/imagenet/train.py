@@ -35,6 +35,7 @@ import models
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import common_utils
+from flax.training import train_state
 
 import jax
 from jax import lax
@@ -68,8 +69,7 @@ def initialized(key, image_size, model):
   def init(*args):
     return model.init(*args)
   variables = init({'params': key}, jnp.ones(input_shape, model.dtype))
-  model_state, params = variables.pop('params')
-  return params, model_state
+  return variables['params'], variables['batch_stats']
 
 
 def cross_entropy_loss(logits, labels):
@@ -141,12 +141,10 @@ def train_step(state, batch, learning_rate_fn):
     # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
     grads = lax.pmean(grads, axis_name='batch')
   new_model_state, logits = aux[1]
-  new_state = state.update(
-      grads=grads, batch_stats=new_model_state['batch_stats'])
   metrics = compute_metrics(logits, batch['label'])
   metrics['learning_rate'] = lr
 
-  new_state = state.update(
+  new_state = state.apply_gradients(
       grads=grads, batch_stats=new_model_state['batch_stats'])
   if dynamic_scale:
     # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
@@ -196,7 +194,7 @@ def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
   return it
 
 
-class TrainState(checkpoints.TrainState):
+class TrainState(train_state.TrainState):
   batch_stats: Any
   dynamic_scale: flax.optim.DynamicScale
 
@@ -220,6 +218,8 @@ cross_replica_mean = jax.pmap(lambda x: lax.pmean(x, 'x'), 'x')
 
 def sync_batch_stats(state):
   """Sync the batch statistics across replicas."""
+  # Each device has its own version of the running average batch statistics and
+  # we sync them before evaluation.
   return state.replace(batch_stats=cross_replica_mean(state.batch_stats))
 
 
@@ -233,16 +233,17 @@ def create_train_state(rng, config: ml_collections.ConfigDict,
   else:
     dynamic_scale = None
 
-  params, model_state = initialized(rng, image_size, model)
-  tx = optax.chain(
-      optax.trace(decay=config.momentum, nesterov=True),
-      optax.scale_by_schedule(lambda step: -learning_rate_fn(step)),
+  params, batch_stats = initialized(rng, image_size, model)
+  tx = optax.sgd(
+    learning_rate=learning_rate_fn,
+    momentum=config.momentum,
+    nesterov=True,
   )
   state = TrainState.create(
       apply_fn=model.apply,
       params=params,
       tx=tx,
-      batch_stats=model_state['batch_stats'],
+      batch_stats=batch_stats,
       dynamic_scale=dynamic_scale)
   return state
 
