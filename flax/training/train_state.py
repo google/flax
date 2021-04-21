@@ -46,7 +46,7 @@ class TrainState(struct.PyTreeNode):
     to `optax.apply_updates()` to update `params` and `opt_state`.
 
     Args:
-      grads: Gradients that match `.params`.
+      grads: Gradients that have the same pytree structure as `.params`.
       kwargs: Additional dataclass attributes that should be `.replace()`-ed.
 
     Returns:
