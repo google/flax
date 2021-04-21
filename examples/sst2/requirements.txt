@@ -1,0 +1,11 @@
+absl-py
+flax
+jax
+jaxlib
+ml_collections
+tensorflow>=2.4.0
+tensorflow-text>=2.4.0
+# Replace with tensorflow-datasets when the next version is released.
+# The urls to the glue/sst2 data were updated in master.
+https://github.com/tensorflow/datasets/archive/master.zip
+clu

@@ -7,7 +7,8 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
  -
  -
- -
+ - Added an NLP text classification example (SST-2 sentiment) to examples/sst2
+   that uses a birectional LSTM (BiLSTM) to encode the input text.
  -
  -
  -
