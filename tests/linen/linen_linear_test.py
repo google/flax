@@ -272,6 +272,21 @@ class LinearTest(parameterized.TestCase):
     z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
     np.testing.assert_allclose(z, 3. * jnp.arange(4))
   
+  def test_embed_numpy(self):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.arange(4)[None]
+    dummy_embedding = np.broadcast_to(
+        np.arange(4)[..., None], (4, 3)).astype(np.float32)
+    embed_module = nn.Embed(
+        num_embeddings=4,
+        features=3,
+        embedding_init=lambda rng, shape, dtype: dummy_embedding,
+    )
+    y, initial_params = embed_module.init_with_output(rng, x)
+    np.testing.assert_allclose(y, dummy_embedding[None])
+    z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
+    np.testing.assert_allclose(z, 3. * jnp.arange(4))
+  
   def test_non_final_axis(self):
     class Foo(nn.Module):
       @nn.compact

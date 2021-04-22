@@ -407,7 +407,8 @@ class Embed(Module):
     """
     if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
-    return self.embedding[inputs]
+    # Use take because fancy indexing numpy arrays with JAX indices does not work correctly.
+    return jnp.take(self.embedding, inputs, axis=0)
 
   def attend(self, query):
     """Attend over the embedding using a query array.
