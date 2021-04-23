@@ -17,7 +17,11 @@
 
 import os
 import sys
+import tempfile
 import warnings
+
+if "MPLCONFIGDIR" not in os.environ:
+  os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp(prefix="matplotlib-")
 import matplotlib as mpl
 # Necessary to prevent attempted Tk import:
 with warnings.catch_warnings():
