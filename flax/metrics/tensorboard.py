@@ -16,25 +16,12 @@
 """
 
 import os
-import sys
-import tempfile
-import warnings
 
-if "MPLCONFIGDIR" not in os.environ:
-  os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp(prefix="matplotlib-")
-import matplotlib as mpl
-# Necessary to prevent attempted Tk import:
-with warnings.catch_warnings():
-  warnings.simplefilter('ignore')
-  if 'google.colab' in sys.modules or 'ipykernel' in sys.modules:
-    pass
-  else:
-    mpl.use('Agg')
 # pylint: disable=g-import-not-at-top
 import numpy as np
 
-from tensorboard.plugins.hparams import api as hparams_api
 import tensorflow.compat.v2 as tf
+from tensorboard.plugins.hparams import api as hparams_api
 
 
 def _flatten_dict(input_dict, parent_key='', sep='.'):
