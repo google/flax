@@ -2,21 +2,21 @@
 
 ⚠️ Advanced topic ⚠️
 
-This design note explains the underlying implementation of `flax.linen.transform` which enable JAX transformations inside `Module`.
+This design note explains the underlying implementation of `flax.linen.transform`, which enables JAX transformations inside `Module`.
 
 
 ## Introduction
 
 JAX uses a functional API meaning that it only guarantees correct behavior when using functions without side effects.
-Typically these side effects are the result of mutating an object that lives outside of the function.
+Typically, these side effects are the result of mutating an object that lives outside the function.
 
-The functional paradigm has some advantages like the ability to reason about state and stochasticity explicitly.
+The functional paradigm has some advantages like the ability to explicitly reason about state and stochasticity.
 The function output only changes when an input argument changes.
 Therefore, a function is guaranteed to behave deterministically.
 
-But pure functions offer another big advantage to JAX specifically: They enable functional transformations.
+But pure functions offer another big advantage to JAX: specifically, they enable functional transformations.
 For example `jax.vmap(f)` will vectorize a function `f`.
-Because `f` cannot have side-effects the vectorized/parallel version of `f` is well-defined. To see why we need this restriction, consider what happens if `f` would increment a counter or draw a random number.
+Because `f` cannot have side effects the vectorized/parallel version of `f` is well-defined. To see why we need this restriction, consider what happens if `f` would increment a counter or draw a random number.
 Would `f` draw the same or a different random number for each item in the vector?
 Would each item in the batch have its own counter or is the counter shared among the items?
 And in what order is the counter incremented if `f` is computed in parallel?
@@ -27,17 +27,18 @@ Flax introduces a safe way to have limited randomness and stateful variables in 
 The reason state in Flax is not problematic is because it is local. Inside a flax `Module` there are variables and PRNG sequences,
 but on the outside there are only JAX Arrays and PRNG keys.
 
-For most use cases Flax be used to define models in a stateful way.
+For most use cases, Flax is used to define models in a stateful way.
 Because a `Module` behaves pure functional externally  we can utilize the full power of JAX with all of its transformations.
-There are however cases where we want to have the best of both worlds by using transformations and Module together.
-This design note explains how we extend JAX functional transformation to work on modules that have internal state and randomness.
+There are, however, cases when we want to have the best of both worlds by using transformations and `Module` together.
+This design note explains how we extend JAX's functional transformation to work on `Module`s that have internal state and randomness.
 
 
 ## Functionalization
 
 Before we jump into the details let's consider a simple example where we would like to use `vmap` inside a `Module`.
 
-First we define a simple MLP without any transformations:
+First, we define a simple MLP without any transformations:
+
 ```
 import jax
 from jax import random, NumPy as jnp
@@ -54,7 +55,8 @@ class MLP(nn.Module):
 Now what if I want to have separate MLP parameters for each item in `xs`?
 If this where "vanilla JAX" we could imagine writing something like `jax.vmap(apply_mlp)(mlp_params, xs)`.
 But doing something like this in linen will actually fail:
-```
+
+```python
 class NaiveVmapMLP(nn.Module):
   @nn.compact
   def __call__(self, xs):
@@ -62,14 +64,15 @@ class NaiveVmapMLP(nn.Module):
     return jax.vmap(lambda mlp, x: mlp(x))(mlps, xs)  # fails
 ```
 
-JAX will refuse to transform the `mlps` because its not a JAX Array or a simple container of arrays.
+JAX will refuse to transform the `mlps` because it's not a JAX array or a simple container of arrays.
 We can not really blame JAX for refusing to perform this under-specified job.
-After all it's not even clear what should happen here.
+After all, it's not even clear what should happen here.
 The parameters inside MLP are not even initialized yet and we will need a separate PRNG key for each group of parameters.
 
 We can fix this problem by first turning `MLP` into a pure init and apply function.
 Afterwards, we use the `param` method to store the parameters:
-```
+
+```python
 class ManualVmap(nn.Module):
   @nn.compact
   def __call__(self, xs):
@@ -98,7 +101,7 @@ print(jax.tree_map(jnp.shape, variables['params']))
 """
 ```
 
-Here `MLP(parent=None)` creates a detached instance of `MLP`.
+Here, `MLP(parent=None)` creates a detached instance of `MLP`.
 This avoids reserving a name for the submodule inside the current module.
 Although not strictly necessary, this also ensures we cannot accidentally use the MLP instance in a stateful way and we are forced to use it through either `.init` or `.apply`.
 
