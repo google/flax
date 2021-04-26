@@ -24,7 +24,7 @@ The answer to all these questions is "it depends".
 The behavior is ambiguous and the functional constraint elegantly avoids this problem.
 
 Flax introduces a safe way to have limited randomness and stateful variables in a JAX compatible form.
-The reason state in Flax is not problematic is because it is local. Inside a flax `Module` there are variables and PRNG sequences,
+The reason why the state in Flax is not problematic is because it is local: inside a Flax `Module` there are variables and PRNG sequences,
 but on the outside there are only JAX Arrays and PRNG keys.
 
 For most use cases, Flax is used to define models in a stateful way.
