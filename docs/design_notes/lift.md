@@ -28,7 +28,7 @@ The reason why the state in Flax is not problematic is because it is local: insi
 but on the outside there are only JAX Arrays and PRNG keys.
 
 For most use cases, Flax is used to define models in a stateful way.
-Because a `Module` behaves pure functional externally  we can utilize the full power of JAX with all of its transformations.
+Because a `Module` behaves like a pure function externally, we can fully utilize JAX with all of its transformations.
 There are, however, cases when we want to have the best of both worlds by using transformations and `Module` together.
 This design note explains how we extend JAX's functional transformation to work on `Module`s that have internal state and randomness.
 
@@ -39,7 +39,7 @@ Before we jump into the details let's consider a simple example where we would l
 
 First, we define a simple MLP without any transformations:
 
-```
+```python
 import jax
 from jax import random, NumPy as jnp
 from flax import linen as nn
@@ -52,9 +52,9 @@ class MLP(nn.Module):
     return nn.Dense(1, name='out')(h)
 ```
 
-Now what if I want to have separate MLP parameters for each item in `xs`?
-If this where "vanilla JAX" we could imagine writing something like `jax.vmap(apply_mlp)(mlp_params, xs)`.
-But doing something like this in linen will actually fail:
+Now what if we want to have separate MLP parameters for each item in `xs`?
+If this were "vanilla JAX" we could imagine writing something like `jax.vmap(apply_mlp)(mlp_params, xs)`.
+But doing something like this in Linen will actually fail:
 
 ```python
 class NaiveVmapMLP(nn.Module):
@@ -64,10 +64,10 @@ class NaiveVmapMLP(nn.Module):
     return jax.vmap(lambda mlp, x: mlp(x))(mlps, xs)  # fails
 ```
 
-JAX will refuse to transform the `mlps` because it's not a JAX array or a simple container of arrays.
+JAX will raise an error when `vmap` is used on `mlps` because it's not a JAX array or a simple container of arrays.
 We can not really blame JAX for refusing to perform this under-specified job.
 After all, it's not even clear what should happen here.
-The parameters inside MLP are not even initialized yet and we will need a separate PRNG key for each group of parameters.
+The parameters inside the MLP are not even initialized yet and we will need a separate PRNG key for each group of parameters.
 
 We can fix this problem by first turning `MLP` into a pure init and apply function.
 Afterwards, we use the `param` method to store the parameters:
@@ -107,19 +107,19 @@ Although not strictly necessary, this also ensures we cannot accidentally use th
 
 This example is still relatively concise but it already takes a few extra "bookkeeping" statements to make it work.
 However, this implementation has a number of limitations:
-1. During initialization we call the submodule twice through `init_fn` & `apply_fn`. If the submodule used the same trick to do
+1. During initialization, we call the submodule twice through `init_fn` and `apply_fn`. If the submodule used the same trick to do
    functional transformation we will end up executing a lot of code as the number of module calls grows like 2^d where d is the number of
    nested function transformations.
 2. The implementation assumes the submodule only requires the parameter RNG sequence.
 3. The implementation assumes we init parameters once and we don't create any state variables either during init or apply.
 
-Point 3 in particular makes manual functionalization cumbersome. Feel free to try and extend the above example with a `nn.BatchNorm`
-layer in the `MLP` module. This should cause a number of complexities further growing the implementation. Like storing the updated
-batch stats after apply and making sure state isn't mutable inside vmap when it's immutable outside (eval mode).
+Point 3 in particular makes manual functionalization cumbersome.
+Feel free to try and extend the above example with a `nn.BatchNorm` layer in the `MLP` module.
+This will require dealing with some additional complexity like storing the updated batch stats and making sure the batch stats are not mutable inside `vmap` when it should be immutable (e.g.: eval mode).
 
 
 We call the process of transforming a stateful Module into a pure function "functionalization".
-By temporarily turning a stateful Module into a function we make it compatible with JAX's functional transformations.
+By temporarily turning a stateful `Module` into a function we make it compatible with JAX's functional transformations.
 
 ## Lifting
 
@@ -127,25 +127,25 @@ Flax provides an alternative for manual functionalization which we call lifted t
 Lifted transformations are defined in `flax.core.lift`.
 All the lifted JAX transformations are defined with a single generic lifting API called `pack`.
 
-A number of decision decisions had to be made in order to define `pack`. The implementation
+A number of decisions had to be made in order to define `pack`. The implementation
 of `pack` controls how variables and rngs are lifted and how fine-grained the user control is.
-It must also decide whether lifting decisions are made during variable definition or at the transformation.
+It must also decide whether lifting decisions are made at variable or transformation definition.
 
 
 ### Lifting granularity
 
 
-With the linen API, users can define arbitrary variable collections and PRNG sequences.
+With the Linen API, users can define arbitrary variable collections and PRNG sequences.
 Each variable in a collection is lifted in the same way.
 
 Collections are typically given a semantically meaningful name like "params" or "batch_stats" rather than a general purpose name like "state".
 Because collections carry semantic meaning we can decide at the transformation level how each collection should be lifted.
-For example, we might decide to share parameters if we want to vectorize add a batch dimension to a model. 
+For example, we want to share all parameter variables when we add a batch dimension to a model.
 
 At the same time we can write generic code that uses transformations without knowing exactly what kind of variables the submodules will create.
 Collections thus strike a balance between fine-grained control and generality.
 We also avoid brittle string matching code that loops over all variables and tries to split up collections in an ad-hoc way based on
-naming conventions like: does this variable name have a prefix "kernel". 
+naming conventions like: target all variables with the name prefix "kernel". 
 If more fine-grained control is necessary a user can simply split up a set of variables over multiple collections that should be handled differently.
 
 
@@ -157,26 +157,26 @@ We use transformation level definitions of lifting behavior.
 The reason for this choice is that there are many different transformations with various behaviors.
 For example: `vmap` has broadcasted and vectorized arguments, while `scan` has scan, carry, and broadcast arguments.
 A variable would have to define its behavior for all these transformations otherwise a `Module` would not be compatible with
-these transformations. Or alternatively, we would have to make default decisions for how transformations are handled.
+these transformations. Alternatively, we would have to make default decisions for how transformations are handled.
 However, this could lead to silent bugs because the behavior might not actually be valid given the users intent. 
 
-The lift package also provides a general purpose `transform` which allows an arbitrary function to transforms a variable collection.
-This can be used to for example tie the weights in a tied auto-encoder by transposing the weights.
+The lift package also provides a general purpose `transform`, which allows an arbitrary function to transform a variable collection.
+For example, this can be used to tie the weights in a tied auto-encoder by transposing the weights.
 It is unclear whether a similar general purpose transform could be defined if lifting decisions were made at variable definition.
 
 
 ### Linen
 
-The lifting module does not know about linen Modules. Instead it operates directly on instances of `flax.core.Scope`.
-A `Scope` contains the variables and PRNG sequences of a `Module`. Each module has a `Scope` instance linked to it as long
-as its bound to a parent or it was created using a `init` or `apply`.
+The lifting module does not know about the Linen `Module` API. Instead it operates directly on instances of `flax.core.Scope`.
+A `Scope` instance contains the variables and PRNG sequences of a `Module`.
+Each module has a `Scope` instance linked if it is bound to a parent or it was created using `init` or `apply`.
 
-When a `Module` is transformed we use the `flax.core.lift` APIs to lift the scope and use `Module.clone()` to create a new `Module` instance with the lifted `Scope` bound to it.
+When a `Module` is transformed, we use the `flax.core.lift` APIs to lift the scope and use `Module.clone()` to create a new `Module` instance with the lifted scope bound to it.
 
 `flax.linen.transforms` exposes wrappers for the transformations in `flax.core.lift`. The core lifting APIs operate on functions while
-the linen wrappers can transform either a `Module` class or a `Module` method.
+the Linen wrappers can transform either a `Module` class or a `Module` method.
 
-Lifting is thus implemented independently from the linen API. This separation of concern simplifies the implementation while also allowing other Module APIs that choose a different syntactic sugar for defining Modules to reuse the very generic and flexible `Scope `+ lift APIs for handling state and PRNGs. 
+Thus, lifting is implemented independently from the Linen API. This separation of concern simplifies the implementation, while potentially allowing alternative `Module` abstractions to build upon a common core for lifting and state management.
 
 
 ### Implementation
@@ -188,7 +188,7 @@ The `pack(fn, in_vars, out_vars, rngs)` API goes through the following stages:
 
     This stage is only relevant if multiple Scopes are lifted together.
     In this case we must first find the set of root scopes.
-    A scope is a root if none of its ancestors is in the set of scopes that is too be lifted.
+    A scope is a root if none of its ancestors are in the set of scopes that need to be lifted.
 
     By only lifting roots we avoid lifting the same variables twice.
 
@@ -196,50 +196,49 @@ The `pack(fn, in_vars, out_vars, rngs)` API goes through the following stages:
 
 2. *Filter stage*
 
-    Variables & PRNG sequences are split up into groups. This way `fn` can lift each group into the transformation separately.
-    A group is defined by a filter which can be specified as:
+    Variables and PRNG sequences are split up into groups. This way `fn` can lift each group into the transformation separately.
+    A group is defined by a filter specified as:
     - a list of collections/prng names
     - `True` (match everything)
     - `False` (match nothing)
     - `DenyList(filter)` (match everything but the specified filter).
 
-    A collection or PRNG sequence can only be put into a single group. If a collection matches multiple filters it will be put into
-    the first group with a matching filter.
+    A collection or PRNG sequence can only be put into a single group. If a collection matches multiple filters, it will be put into the first group with a matching filter.
     For example, `in_vars = (["params"], True)` will cause the "params" collection to be put in the first group and all other collection to be put in the second group.
 
     For each PRNG sequence that is matched we seed a new PRNG sequence by calling `make_rng`.
-    This avoids the need to update the PRNG state after the lifted transformation finishes.
+    This avoids the need to update the PRNG state after the lifted transformation is complete.
 
 3. *Transform specific lifting*
 
     `fn` is called with the variable and PRNG groups.
-    JAX transform have varying signatures and lifting options. Arguably the cleanest example is `vmap`.
-    In the case of vmap the function arguments, rngs and variable collections are passed into a `jax.vmap` wrapped function.
+    JAX transforms have varying signatures and lifting options. Arguably the cleanest example is `vmap`.
+    In the case of vmap the function arguments, PRNGs and variable collections are passed into a `jax.vmap` wrapped function.
 
 4. *Scope reconstruction*
 
-    Now that the variables and rngs are lifted inside the transformation, we want to recreate the lifted scopes. Pack calls
-    `fn` with a `scope_fn` that takes the lifted variables and rngs and returns the reconstructed scopes with the lifted variables and rng sequences.
+    Now that the variables and PRNGs are lifted inside the transformation, we want to recreate the lifted scopes. Pack calls
+    `fn` with a `scope_fn` that takes the lifted variables and PRNGs and returns the reconstructed scopes with the lifted variables and rng sequences.
 
 5. *Repack stage*
 
     After we have used the lifted scopes we have to retrieve the updated variables (PRNG sequences can simply be discarded).
     pack passes the `repack_fn` to support this.
     This stage is similar to stage 2 except that we only lift variables and immutable variables are ignored.
-    Immutable variables cannot be updated so there is no reason to return them from the lifted transformation. 
+    Immutable variables cannot be updated. Therefore, they should not be returned from the transformed function. 
 
 6. *Commit stage*
 
     `pack` expects `fn` to return a pair where the first item will simply be returned from pack and the second item should be the repacked variables.
-    The updated variables are stored in the original/un-lifted scopes such that the mutation that happened inside the transformation survive beyond the transformation boundary.
+    The updated variables are stored in the original/un-lifted scopes such that the mutations that happen inside the transformation survive after the transformation completes.
 
 
 ### Using pack example
 
 
-A minimal example of using pack:
+A minimal example of using `pack`:
 
-```
+```python
 from flax.core import lift
 from flax.core import Scope, init, apply, nn as core_nn
 
@@ -257,7 +256,7 @@ x = jnp.ones((3, 2))
 y, params = init(lift_id(core_nn.dense))(random.PRNGKey(0), x, 4)
 ```
 
-NOTE that normally you shouldn't need to interact with `pack` directly.
+NOTE that most users should not need to interact with `pack` directly.
 Please open a GitHub issue when you find a use case that is not supported yet by the existing lifted transformations.
 
 ### Supported transformations
@@ -277,9 +276,9 @@ Please open a GitHub issue when you find a use case that is not supported yet by
 
 ### Linen examples
 
-Going back to our original example we can now use the lifted vmap:
+Going back to our original example, we can now use `nn.vmap` to simplify our implementation:
 
-```
+```python
 class LinenVmap(nn.Module):
   @nn.compact
   def __call__(self, xs):
@@ -308,7 +307,7 @@ Here we use `variable_axes={'params': 0}` to indicate that parameters are vector
 
 We can also extend the example with some inner state by adding a `BatchNorm` layer:
 
-```
+```python
 class StatefulMLP(nn.Module):
   @nn.compact
   def __call__(self, x):
@@ -325,7 +324,7 @@ class LinenStatefulVmap(nn.Module):
 variables = LinenStatefulVmap().init(random.PRNGKey(0), xs)
 ```
 
-All we had to add to `nn.vmap` is `'batch_stats': 0` indicating the batch stats are vectorized rather than shared along the first axis.
+All we had to add to `nn.vmap` is `'batch_stats': 0`, indicating that the batch stats are vectorized rather than shared along the first axis.
 
 
 ## Alternatives
