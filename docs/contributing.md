@@ -55,7 +55,7 @@ Follow these steps to contribute code:
    changes.
 
    ```bash
-   git add remote upstream http://www.github.com/google/flax
+   git remote add upstream http://www.github.com/google/flax
    ```
 
 
