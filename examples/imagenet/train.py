@@ -18,7 +18,6 @@ This script trains a ResNet-50 on the ImageNet dataset.
 The data is loaded using tensorflow_datasets.
 """
 
-import collections
 import functools
 import time
 from typing import Any
@@ -329,11 +328,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       axis_name='batch')
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
-  epoch_metrics = []
+  train_metrics = []
   hooks = []
   if jax.host_id() == 0:
     hooks += [periodic_actions.Profile(num_profile_steps=5, logdir=workdir)]
-  t_loop_start = time.time()
+  train_metrics_last_t = time.time()
   logging.info('Initial compilation, this might take some minutes...')
   for step, batch in zip(range(step_offset, num_steps), train_iter):
     state, metrics = p_train_step(state, batch)
@@ -341,26 +340,23 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       h(step)
     if step == step_offset:
       logging.info('Initial compilation completed.')
-    epoch_metrics.append(metrics)
+
+    if config.get('log_every_steps'):
+      train_metrics.append(metrics)
+      if (step + 1) % config.log_every_steps == 0:
+        train_metrics = common_utils.get_metrics(train_metrics)
+        summary = {
+            f'train_{k}': v
+            for k, v in jax.tree_map(lambda x: x.mean(), train_metrics).items()
+        }
+        summary['steps_per_second'] = config.log_every_steps / (
+            time.time() - train_metrics_last_t)
+        writer.write_scalars(step + 1, summary)
+        train_metrics = []
+        train_metrics_last_t = time.time()
+
     if (step + 1) % steps_per_epoch == 0:
       epoch = step // steps_per_epoch
-      epoch_metrics = common_utils.get_metrics(epoch_metrics)
-      summary = jax.tree_map(lambda x: x.mean(), epoch_metrics)
-      logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f',
-                   epoch, summary['loss'], summary['accuracy'] * 100)
-      steps_per_sec = steps_per_epoch / (time.time() - t_loop_start)
-      t_loop_start = time.time()
-      if jax.host_id() == 0:
-        writer.write_scalars(step, {'steps per second': steps_per_sec})
-        by_step = collections.defaultdict(dict)
-        for key, vals in epoch_metrics.items():
-          tag = 'train_%s' % key
-          for i, val in enumerate(vals):
-            by_step[step - len(vals) + i + 1][tag] = val
-        for metric_step, step_metrics in sorted(by_step.items()):
-          writer.write_scalars(metric_step, step_metrics)
-
-      epoch_metrics = []
       eval_metrics = []
 
       # sync batch statistics across replicas
@@ -374,7 +370,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                    epoch, summary['loss'], summary['accuracy'] * 100)
       writer.write_scalars(
-          step, {f'eval_{key}': val for key, val in summary.items()})
+          step + 1, {f'eval_{key}': val for key, val in summary.items()})
       writer.flush()
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
       state = sync_batch_stats(state)
