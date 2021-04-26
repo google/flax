@@ -731,7 +731,8 @@ def jit(fn: Callable[..., Any],
   # Close over scope_fn & repack_fn to avoid recompilation
   # this is impure but we use the fingerprint arg to differentiate between cases
   # where scope_fn or repack_fn actually produce non-identical results.
-  scope_fn, repack_fn = None, None
+  scope_fn = None  # type: Callable
+  repack_fn = None  # type: Callable
   @functools.partial(jax.jit,
                      static_argnums=static_argnums,
                      donate_argnums=donate_argnums,
