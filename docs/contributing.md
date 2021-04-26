@@ -48,7 +48,8 @@ Follow these steps to contribute code:
    ```bash
    git clone https://github.com/YOUR_USERNAME/flax
    cd flax
-   pip install -e . .[testing]
+   pip install ".[testing]"
+   pip install -e .
    ```
 
 5. Add the Flax repo as an upstream remote, so you can use it to sync your
