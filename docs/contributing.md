@@ -86,7 +86,6 @@ Follow these steps to contribute code:
    Then sync your code with the main repo:
 
    ```bash
-   git fetch upstream
    git rebase upstream/master
    ```
 
