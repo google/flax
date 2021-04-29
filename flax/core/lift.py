@@ -28,7 +28,7 @@ from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
-from .scope import Scope, CollectionFilter, PRNGSequenceFilter, in_filter, union_filters, intersect_filters, subtract_filters, group_collections
+from .scope import Scope, DenyList, CollectionFilter, PRNGSequenceFilter, in_filter, union_filters, intersect_filters, subtract_filters, group_collections
 
 from . import axes_scan
 
@@ -667,6 +667,14 @@ def checkpoint(fn: Callable[..., Any],
   return pack(inner, (variables,), (variables,), (rngs,), name='remat')
 
 
+def _hashable_filter(x):
+  """Hashable version of CollectionFilter."""
+  if isinstance(x, Iterable):
+    return tuple(x)  # convert un-hashable list & sets to tuple
+  if isinstance(x, DenyList):
+    return DenyList(_hashable_filter(x))  # convert inner filter recursively
+  return x
+
 def jit(fn: Callable[..., Any],
         variables: CollectionFilter = True,
         rngs: PRNGSequenceFilter = True,
@@ -681,7 +689,7 @@ def jit(fn: Callable[..., Any],
     fn: Scope function to be jitted.
     variables: The variable collections that are lifted. By default all
       collections are lifted.
-    rngs: The PRNG sequences that are lifted. By defualt all PRNG sequences
+    rngs: The PRNG sequences that are lifted. By default all PRNG sequences
       are lifted.
     static_argnums: An int or collection of ints specifying which positional
       arguments to treat as static (compile-time constant). Operations that only
@@ -715,21 +723,40 @@ def jit(fn: Callable[..., Any],
     static_argnums = (static_argnums,)
   if not isinstance(donate_argnums, Iterable):
     donate_argnums = (donate_argnums,)
-  # offset argnums by one because first argument is the scope.
-  static_argnums = tuple(i + 1 for i in static_argnums if i > 0)
-  donate_argnums = tuple(i + 1 for i in donate_argnums if i > 0)
-  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
-    @functools.partial(jax.jit,
-                       static_argnums=static_argnums,
-                       donate_argnums=donate_argnums,
-                       device=device, backend=backend)
-    @functools.wraps(fn)
-    def jitted(variable_groups, rng_groups, *args):
-      scope = scope_fn(variable_groups, rng_groups)
-      y = fn(scope, *args)
-      return y, repack_fn(scope)
+  # offset argnums by two because first argument in the original function is the scope
+  # while jitted has 3 functions before the user arguments.
+  static_argnums = (0,) + tuple(i + 2 for i in static_argnums if i > 0)
+  donate_argnums = tuple(i + 2 for i in donate_argnums if i > 0)
+  
+  # Close over scope_fn & repack_fn to avoid recompilation
+  # this is impure but we use the fingerprint arg to differentiate between cases
+  # where scope_fn or repack_fn actually produce non-identical results.
+  scope_fn = None  # type: Callable
+  repack_fn = None  # type: Callable
+  @functools.partial(jax.jit,
+                     static_argnums=static_argnums,
+                     donate_argnums=donate_argnums,
+                     device=device, backend=backend)
+  @functools.wraps(fn)
+  def jitted(fingerprint, variable_groups, rng_groups, *args):
+    nonlocal scope_fn, repack_fn
+    # fingerprint is only used to differentiate the cache signature for cases
+    # where different collections are mutable.
+    del fingerprint
+    scope = scope_fn(variable_groups, rng_groups)  # pylint: disable=not-callable
+    y = fn(scope, *args)
+    return y, repack_fn(scope)  # pylint: disable=not-callable
 
-    return jitted(variable_groups, rng_groups, *args)
+  def inner(scope_fun, repack_fun, variable_groups, rng_groups, *args):
+    nonlocal scope_fn, repack_fn
+    try:
+      scope_fn = scope_fun
+      repack_fn = repack_fun
+      scopes = jax.tree_leaves(scope_fn(variable_groups, rng_groups))
+      mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
+      return jitted(mutable, variable_groups, rng_groups, *args)
+    finally:
+      scope_fn, repack_fn = None, None
 
   return pack(inner, (variables,), (variables,), (rngs,), name='jit')
 
