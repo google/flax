@@ -12,8 +12,9 @@ vNext
  -
  -
  -
- -
- -
+ - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
+ - When calling `init` the 'intermediates' collection is no longer mutable
+   Therefore, intermediates will no longer be returned from initialization by default. 
  -
  -
  -

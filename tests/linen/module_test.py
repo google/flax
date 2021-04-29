@@ -1197,7 +1197,9 @@ class ModuleTest(absltest.TestCase):
         self.sow('intermediates', 'h', x, **sow_args)
         self.sow('intermediates', 'h', 2 * x, **sow_args)
         return 3 * x
-
+    variables = Foo().init(random.PRNGKey(0), 1)
+    # during init we should not collect intermediates by default
+    self.assertTrue('intermediates' not in variables)
     _, state = Foo().apply({}, 1, mutable=['intermediates'])
     self.assertEqual(state, {
       'intermediates': {'h': (1, 2)}
