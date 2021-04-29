@@ -739,6 +739,7 @@ def jit(fn: Callable[..., Any],
                      device=device, backend=backend)
   @functools.wraps(fn)
   def jitted(fingerprint, variable_groups, rng_groups, *args):
+    nonlocal scope_fn, repack_fn
     # fingerprint is only used to differentiate the cache signature for cases
     # where different collections are mutable.
     del fingerprint
