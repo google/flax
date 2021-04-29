@@ -13,7 +13,6 @@ flax.jax_utils package
 Multi device utilities
 ------------------------
 
-.. autofunction:: replicate
 .. autofunction:: unreplicate
 
 .. autofunction:: prefetch_to_device
