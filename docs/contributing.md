@@ -65,8 +65,8 @@ Follow these steps to contribute code:
    git checkout -b name-of-change
    ```
 
-   And implement your changes using your favorite editor (we recomment
-   [Visual Studio Code](https://code.visualstudio.com/).
+   And implement your changes using your favorite editor (we recommend
+   [Visual Studio Code](https://code.visualstudio.com/)).
 
 7. Make sure the tests pass by running the following command from the top of
    the repository:
