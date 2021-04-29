@@ -72,6 +72,8 @@ def replicate(tree, devices=None):
   Returns:
     A new pytree containing the replicated arrays.
   """
+  warnings.warn('use jax.device_put_replicated',
+                DeprecationWarning)
   return jax.tree_map(lambda x: _replicate(x, devices), tree)
 
 

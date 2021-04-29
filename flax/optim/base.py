@@ -209,7 +209,7 @@ class Optimizer(struct.PyTreeNode):
     from flax import optim
     optimizer_def = optim.GradientDescent(learning_rate=0.1)
     optimizer = optimizer_def.create(model)
-    optimizer = jax_utils.replicate(optimizer)
+    optimizer = jax.device_put_replicated(optimizer)
 
     def train_step(optimizer, data):
       def loss_fn(model):
@@ -319,7 +319,7 @@ class Optimizer(struct.PyTreeNode):
 
     DEPRECATION WARNING:
     replicate() is deprecated.
-    Use jax_utils.replicate() instead.
+    Use jax.device_put_replicated() instead.
 
     Args:
       devices: an optional list of devices defining which devices this optimizer
@@ -331,7 +331,7 @@ class Optimizer(struct.PyTreeNode):
     if devices is None:
       devices = jax.local_devices()
     optimizer_def = ReplicatedOptimizer(self.optimizer_def, devices, axis_name)
-    optimizer = jax_utils.replicate(self, devices=devices)
+    optimizer = jax.device_put_replicated(self, devices=devices)
     return optimizer.replace(optimizer_def=optimizer_def)
 
   def unreplicate(self):
@@ -377,7 +377,7 @@ class ReplicatedOptimizer(OptimizerDef):
 
   DEPRECATION WARNING:
   ReplicatedOptimizer will be removed soon.
-  Use `jax_utils.replicate(optimizer)` and `lax.pmean(grad)` to explicitly
+  Use `jax.device_put_replicated(optimizer)` and `lax.pmean(grad)` to explicitly
   control the replication of the the optimizer and the cross replica averaging
   over gradients, respectively.
   """
@@ -412,7 +412,7 @@ class ReplicatedOptimizer(OptimizerDef):
 
   def restore_state(self, target, opt_state, state_dict):
     # replicate the parameters and state to all devices.
-    state_dict = jax_utils.replicate(state_dict, devices=self.devices)
+    state_dict = jax.device_put_replicated(state_dict, devices=self.devices)
     return self.optimizer_def.restore_state(target, opt_state, state_dict)
 
 

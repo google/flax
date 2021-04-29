@@ -301,7 +301,7 @@ def main(argv):
   optimizer_def = optim.Adam(learning_rate, beta1=0.9, beta2=0.98,
       eps=1e-9, weight_decay=1e-1)
   optimizer = optimizer_def.create(init_variables['params'])
-  optimizer = jax_utils.replicate(optimizer)
+  optimizer = jax.device_put_replicated(optimizer)
 
   learning_rate_fn = create_learning_rate_scheduler(
       base_learning_rate=learning_rate)
