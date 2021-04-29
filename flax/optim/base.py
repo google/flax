@@ -209,7 +209,7 @@ class Optimizer(struct.PyTreeNode):
     from flax import optim
     optimizer_def = optim.GradientDescent(learning_rate=0.1)
     optimizer = optimizer_def.create(model)
-    optimizer = jax.device_put_replicated(optimizer)
+    optimizer = jax.device_put_replicated(optimizer, jax.local_devices())
 
     def train_step(optimizer, data):
       def loss_fn(model):
@@ -377,9 +377,9 @@ class ReplicatedOptimizer(OptimizerDef):
 
   DEPRECATION WARNING:
   ReplicatedOptimizer will be removed soon.
-  Use `jax.device_put_replicated(optimizer)` and `lax.pmean(grad)` to explicitly
-  control the replication of the the optimizer and the cross replica averaging
-  over gradients, respectively.
+  Use `jax.device_put_replicated(optimizer, jax.local_devices())` and
+  `lax.pmean(grad)` to explicitly control the replication of the the optimizer
+  and the cross replica averaging over gradients, respectively.
   """
 
   def __init__(self, optimizer_def, devices=None, axis_name='batch'):

@@ -321,7 +321,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   state = restore_checkpoint(state, workdir)
   # step_offset > 0 if restarting from checkpoint
   step_offset = int(state.step)
-  state = jax.device_put_replicated(state)
+  state = jax.device_put_replicated(state, jax.local_devices())
 
   p_train_step = jax.pmap(
       functools.partial(train_step, learning_rate_fn=learning_rate_fn),

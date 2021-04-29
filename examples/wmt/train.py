@@ -499,7 +499,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     writer.write_hparams(dict(config))
 
   # Replicate optimizer.
-  optimizer = jax.device_put_replicated(optimizer)
+  optimizer = jax.device_put_replicated(optimizer, jax.local_devices())
 
   learning_rate_fn = create_learning_rate_scheduler(
       base_learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)

@@ -230,7 +230,7 @@ Next we transform the ``train_epoch`` function.
     batch_metrics = []
     for perm in perms:
       batch = {k: v[perm, ...] for k, v in train_ds.items()}
-      batch = jax.device_put_replicated(batch) #!
+      batch = jax.device_put_replicated(batch, jax.local_devices()) #!
       optimizer, metrics = train_step(optimizer, batch)
       batch_metrics.append(metrics)
 
@@ -281,7 +281,7 @@ than the train dataset so we can do this for the entire dataset directly.
                 epoch, loss, accuracy * 100)
   ---
   train_ds, test_ds = get_datasets()
-  test_ds = jax.device_put_replicated(test_ds) #!
+  test_ds = jax.device_put_replicated(test_ds, jax.local_devices()) #!
   
   rng, init_rng = random.split(random.PRNGKey(0))
   params = get_initial_params(random.split(rng, #!

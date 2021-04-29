@@ -182,7 +182,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   ema = initial_variables
   step_offset = int(optimizer.state.step)
 
-  optimizer, ema = jax.device_put_replicated((optimizer, ema))
+  optimizer, ema = jax.device_put_replicated((optimizer, ema), jax.local_devices())
 
   # Learning rate schedule
   learning_rate_fn = lambda step: config.learning_rate * config.lr_decay**step
