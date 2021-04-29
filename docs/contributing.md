@@ -65,8 +65,8 @@ Follow these steps to contribute code:
    git checkout -b name-of-change
    ```
 
-   And implement your changes using your favorite editor (we recomment
-   [Visual Studio Code](https://code.visualstudio.com/).
+   And implement your changes using your favorite editor (we recommend
+   [Visual Studio Code](https://code.visualstudio.com/)).
 
 7. Make sure the tests pass by running the following command from the top of
    the repository:
@@ -75,8 +75,8 @@ Follow these steps to contribute code:
    ./tests/run_all_tests.sh
    ```
 
-8. Once your change is done, create a commit as follows (
-   [how to write a commit message](https://chris.beams.io/posts/git-commit/)):
+8. Once your change is done, create a commit as follows 
+   ([how to write a commit message](https://chris.beams.io/posts/git-commit/)):
 
    ```bash
    git add file1.py file2.py ...
