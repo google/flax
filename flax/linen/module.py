@@ -35,7 +35,7 @@ from flax import traverse_util
 from flax import serialization
 from flax import core
 from flax.core import Scope
-from flax.core.scope import CollectionFilter, Variable, VariableDict, FrozenVariableDict, union_filters
+from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
 
 # from .dotgetter import DotGetter
@@ -939,13 +939,19 @@ class Module:
                        rngs: Union[PRNGKey, RNGSequences],
                        *args,
                        method: Optional[Callable[..., Any]] = None,
+                       mutable: CollectionFilter = DenyList("intermediates"),
                        **kwargs) -> Tuple[Any, FrozenVariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
 
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
-              provided, applies the ``__call__`` method.
+        provided, applies the ``__call__`` method.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable: ``bool``: all/no collections are mutable.
+        ``str``: The name of a single mutable collection. ``list``: A
+        list of names of mutable collections. By default all collections
+        except "intermediates" are mutable.
     Returns:
       `(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
@@ -957,12 +963,13 @@ class Module:
             f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
     return self.apply(
-        {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
+        {}, *args, rngs=rngs, method=method, mutable=mutable, **kwargs)
 
   def init(self,
            rngs: Union[PRNGKey, RNGSequences],
            *args,
            method: Optional[Callable[..., Any]] = None,
+           mutable: CollectionFilter = DenyList("intermediates"),
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
@@ -976,11 +983,18 @@ class Module:
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
-              provided, applies the ``__call__`` method.
+        provided, applies the ``__call__`` method.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable: ``bool``: all/no collections are mutable.
+        ``str``: The name of a single mutable collection. ``list``: A
+        list of names of mutable collections. By default all collections
+        except "intermediates" are mutable.
     Returns:
       The initialized variable dict.
     """
-    _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
+    _, v_out = self.init_with_output(
+        rngs, *args,
+        method=method, mutable=mutable, **kwargs)
     return v_out
 
   @property
@@ -1170,13 +1184,14 @@ def apply(fn: Callable[..., Any], module: Module,
 
 
 def init_with_output(fn: Callable[..., Any], module: Module,
-                     mutable: CollectionFilter = True) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
+                     mutable: CollectionFilter = DenyList("intermediates"),
+                     ) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
   """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
   Unlike ``Module.init_with_output`` this function returns a new function with the signature
   ``(rngs, *args, **kwargs) -> (T, variables)`` where `T` is the return type of ``fn``.
   The rngs can be a dict of PRNGKeys or a single ```PRNGKey`` which is
-  equivalant to passing a dict with one PRNGKey with the name "params".
+  equivalent to passing a dict with one PRNGKey with the name "params".
 
   The init function that is returned can be directly composed with
   JAX transformations like ``jax.jit``::
@@ -1201,7 +1216,8 @@ def init_with_output(fn: Callable[..., Any], module: Module,
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable.
       ``str``: The name of a single mutable collection. ``list``: A
-      list of names of mutable collections.
+      list of names of mutable collections. By default all collections
+      except "intermediates" are mutable.
   Returns:
     The init function wrapping ``fn``.
   """
@@ -1212,13 +1228,14 @@ def init_with_output(fn: Callable[..., Any], module: Module,
 
 
 def init(fn: Callable[..., Any], module: Module,
-         mutable: CollectionFilter = True) -> Callable[..., FrozenVariableDict]:
+         mutable: CollectionFilter = DenyList("intermediates"),
+         ) -> Callable[..., FrozenVariableDict]:
   """Creates an init function to call ``fn`` with a bound module.
 
   Unlike ``Module.init`` this function returns a new function with the signature
   ``(rngs, *args, **kwargs) -> variables``.
   The rngs can be a dict of PRNGKeys or a single ```PRNGKey`` which is
-  equivalant to passing a dict with one PRNGKey with the name "params".
+  equivalent to passing a dict with one PRNGKey with the name "params".
 
   The init function that is returned can be directly composed with
   JAX transformations like ``jax.jit``::
@@ -1243,7 +1260,8 @@ def init(fn: Callable[..., Any], module: Module,
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable.
       ``str``: The name of a single mutable collection. ``list``: A
-      list of names of mutable collections.
+      list of names of mutable collections. By default all collections
+      except "intermediates" are mutable.
   Returns:
     The init function wrapping ``fn``.
   """
