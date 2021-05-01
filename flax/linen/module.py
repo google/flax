@@ -826,7 +826,10 @@ class Module:
       raise ValueError("Can't use RNGs on unbound modules")
     return self.scope.make_rng(name)
 
-  def bind(self, variables: VariableDict, *args, rngs: RNGSequences = None,
+  def bind(self,
+           variables: VariableDict,
+           *args,
+           rngs: Optional[RNGSequences] = None,
            mutable: CollectionFilter = False):
     """Creates an interactive Module instance by binding variables and RNGs.
 
@@ -872,7 +875,7 @@ class Module:
   def apply(self,
             variables: VariableDict,
             *args,
-            rngs: RNGSequences = None,
+            rngs: Optional[RNGSequences] = None,
             method: Callable[..., Any] = None,
             mutable: CollectionFilter = False,
             capture_intermediates: Union[bool, Callable[['Module', str],
