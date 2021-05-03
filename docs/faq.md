@@ -20,7 +20,7 @@ it just traces all the shapes and inits submodules.
 
 **Question: The Model abstraction is very lightweight, is it necessary?**
 
-**Context:** Why not having a separate function for defining `params` and a pair 
+**Context:** Why not have a separate function for defining `params` and a pair 
 of `init`/`apply` methods?
 
 **Answer:** Modules have an `init` and `call` function that can be used if needed.
