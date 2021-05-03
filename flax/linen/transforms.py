@@ -411,20 +411,30 @@ def scan(target: Target,
 
   Example::
 
+    import flax
+    import flax.linen as nn
+    from jax import random
+
     class SimpleScan(nn.Module):
       @nn.compact
       def __call__(self, c, xs):
         LSTM = nn.scan(nn.LSTMCell,
                        variable_broadcast="params",
-                       split_rngs={"params": False})
+                       split_rngs={"params": False},
+                       in_axes=1,
+                       out_axes=1)
         return LSTM()(c, xs)
 
-    xs = random.uniform(rng_1, (batch_size, features))
-    carry_0 = nn.LSTMCell.initialize_carry(
-        random.PRNGKey(0), (batch_size,), features)
+    seq_len, batch_size, in_feat, out_feat = 20, 16, 3, 5
+    key_1, key_2, key_3 = random.split(random.PRNGKey(0), 3)
+
+    xs = random.uniform(key_1, (batch_size, seq_len, in_feat))
+    init_carry = nn.LSTMCell.initialize_carry(key_2, (batch_size,), out_feat)
     model = SimpleScan()
-    variables = model.init(key_2, carry_0, xs)
-    out_state, out_val = model.apply(variables, carry_0, xs)
+    variables = model.init(key_3, init_carry, xs)
+    out_carry, out_val = model.apply(variables, init_carry, xs)
+
+    assert out_val.shape == (batch_size, seq_len, out_feat)
 
 
   Args:
