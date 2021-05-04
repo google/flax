@@ -430,6 +430,7 @@ def scan(target: Target,
 
     xs = random.uniform(key_1, (batch_size, seq_len, in_feat))
     init_carry = nn.LSTMCell.initialize_carry(key_2, (batch_size,), out_feat)
+
     model = SimpleScan()
     variables = model.init(key_3, init_carry, xs)
     out_carry, out_val = model.apply(variables, init_carry, xs)
