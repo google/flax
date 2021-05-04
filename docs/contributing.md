@@ -75,8 +75,8 @@ Follow these steps to contribute code:
    ./tests/run_all_tests.sh
    ```
 
-8. Once your change is done, create a commit as follows (
-   [how to write a commit message](https://chris.beams.io/posts/git-commit/)):
+8. Once your change is done, create a commit as follows 
+   ([how to write a commit message](https://chris.beams.io/posts/git-commit/)):
 
    ```bash
    git add file1.py file2.py ...
@@ -86,7 +86,6 @@ Follow these steps to contribute code:
    Then sync your code with the main repo:
 
    ```bash
-   git fetch upstream
    git rebase upstream/master
    ```
 
