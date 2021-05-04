@@ -1,8 +1,8 @@
-# Lifted transformation
+# Lifted Transformations
 
 ⚠️ Advanced topic ⚠️
 
-This design note explains the underlying implementation of `flax.linen.transform`, which enables JAX transformations inside `Module`.
+This design note explains the underlying implementation of `flax.linen.transform`, which enables JAX transformations inside `Module`s.
 
 
 ## Introduction
@@ -23,7 +23,7 @@ And in what order is the counter incremented if `f` is computed in parallel?
 The answer to all these questions is "it depends".
 The behavior is ambiguous and the functional constraint elegantly avoids this problem.
 
-Flax introduces a safe way to have limited randomness and stateful variables in a JAX compatible form.
+Flax introduces a safe way to have limited randomness and stateful variables in a JAX-compatible form.
 The reason why the state in Flax is not problematic is because it is local: inside a Flax `Module` there are variables and PRNG sequences,
 but on the outside there are only JAX Arrays and PRNG keys.
 
@@ -41,7 +41,7 @@ First, we define a simple MLP without any transformations:
 
 ```python
 import jax
-from jax import random, NumPy as jnp
+from jax import random, numpy as jnp
 from flax import linen as nn
 
 class MLP(nn.Module):
@@ -60,11 +60,11 @@ But doing something like this in Linen will actually fail:
 class NaiveVmapMLP(nn.Module):
   @nn.compact
   def __call__(self, xs):
-    mlps = MLP()
-    return jax.vmap(lambda mlp, x: mlp(x))(mlps, xs)  # fails
+    mlp = MLP()
+    return jax.vmap(lambda mlp, x: mlp(x))(mlp, xs)  # fails
 ```
 
-JAX will raise an error when `vmap` is used on `mlps` because it's not a JAX array or a simple container of arrays.
+JAX will raise an error when `vmap` is used on `mlp` because it's not a JAX array or a simple container of arrays.
 We can not really blame JAX for refusing to perform this under-specified job.
 After all, it's not even clear what should happen here.
 The parameters inside the MLP are not even initialized yet and we will need a separate PRNG key for each group of parameters.
@@ -111,7 +111,7 @@ However, this implementation has a number of limitations:
    functional transformation we will end up executing a lot of code as the number of module calls grows like 2^d where d is the number of
    nested function transformations.
 2. The implementation assumes the submodule only requires the parameter RNG sequence.
-3. The implementation assumes we init parameters once and we don't create any state variables either during init or apply.
+3. The implementation assumes we only create variables in the "params" collection during `init`. However, it does not support other variable collections and creating/updating variables in `apply`.
 
 Point 3 in particular makes manual functionalization cumbersome.
 Feel free to try and extend the above example with a `nn.BatchNorm` layer in the `MLP` module.
@@ -167,9 +167,11 @@ It is unclear whether a similar general purpose transform could be defined if li
 
 ### Linen
 
-The lifting module does not know about the Linen `Module` API. Instead it operates directly on instances of `flax.core.Scope`.
+The lifting module does not know about the Linen `Module` API.
+Instead it operates directly on instances of `flax.core.Scope`.
 A `Scope` instance contains the variables and PRNG sequences of a `Module`.
-Each module has a `Scope` instance linked if it is bound to a parent or it was created using `init` or `apply`.
+Each `Module` instance has a `Scope` instance in the `.scope` field if it has a parent or it was created using `init` or `apply`.
+Typically, the top-level `Module` instance on which you call `init` or `apply` is the only `Module` instance that does not have a `Scope` bound to it.
 
 When a `Module` is transformed, we use the `flax.core.lift` APIs to lift the scope and use `Module.clone()` to create a new `Module` instance with the lifted scope bound to it.
 
@@ -204,12 +206,14 @@ The `pack(fn, in_vars, out_vars, rngs)` API goes through the following stages:
     - `DenyList(filter)` (match everything but the specified filter).
 
     A collection or PRNG sequence can only be put into a single group. If a collection matches multiple filters, it will be put into the first group with a matching filter.
+    If a collection or PRNG sequence does not match any filter it will not be lifted.
+    This means that it cannot be used inside the transformation and and attempting to do this will cause an error to be raised.
     For example, `in_vars = (["params"], True)` will cause the "params" collection to be put in the first group and all other collection to be put in the second group.
 
     For each PRNG sequence that is matched we seed a new PRNG sequence by calling `make_rng`.
     This avoids the need to update the PRNG state after the lifted transformation is complete.
 
-3. *Transform specific lifting*
+3. *Transform-specific lifting*
 
     `fn` is called with the variable and PRNG groups.
     JAX transforms have varying signatures and lifting options. Arguably the cleanest example is `vmap`.
@@ -236,21 +240,28 @@ The `pack(fn, in_vars, out_vars, rngs)` API goes through the following stages:
 ### Using pack example
 
 
-A minimal example of using `pack`:
+A minimal example of using `pack` to transpose each matrix in a variable collection:
 
 ```python
 from flax.core import lift
 from flax.core import Scope, init, apply, nn as core_nn
 
-def lift_id(fn, variables=True, rngs=True)
+def lift_transpose(fn, target='params', variables=True, rngs=True)
+  # by default we transpose 'params' and simply pass through all other variables.
   def wrapper(scope_fn, repack_fn, variable_groups, rng_groups, *args):
-    # normally we would first call into a JAX transform here...
+    # normally we would first call into a JAX transformed function here...
+    target, rest = variable_groups
+    def trans(x):
+      if x.ndim == 2:
+        return x.T
+      return x
+    target = jax.tree_map(trans, target)
+    variable_groups = (target, rest)
     scope = scope_fn(variable_groups, rng_groups)
     y = fn(scope, *args)
     out_variables = repack_fn(scope)
     return y, out_variables
-
-  return lift.pack(wrapper, (variables,), (variables,), (rngs,))
+  return lift.pack(wrapper, (target, variables), (variables,), (rngs,))
 
 x = jnp.ones((3, 2))
 y, params = init(lift_id(core_nn.dense))(random.PRNGKey(0), x, 4)
@@ -273,6 +284,10 @@ Please open a GitHub issue when you find a use case that is not supported yet by
 | custom_vjp | ❌ |  |
 | custom_jvp | ❌ |  |
 
+References:
+- [Linen transforms documentation](https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.linen.transforms).
+- [Linen transforms source code](https://github.com/google/flax/blob/master/flax/linen/transforms.py)
+- [Core lifting source code](https://github.com/google/flax/blob/master/flax/core/lift.py)
 
 ### Linen examples
 
@@ -310,17 +325,17 @@ We can also extend the example with some inner state by adding a `BatchNorm` lay
 ```python
 class StatefulMLP(nn.Module):
   @nn.compact
-  def __call__(self, x):
+  def __call__(self, x, *, train):
     h = nn.Dense(4, name='hidden')(x)
-    h = nn.BatchNorm(use_running_average=False, axis_name="batch")(h)
+    h = nn.BatchNorm(axis_name="batch")(h, use_running_average=not train)
     h = nn.relu(h)
     return nn.Dense(1, name='out')(h)
 
 class LinenStatefulVmap(nn.Module):
   @nn.compact
-  def __call__(self, xs):
+  def __call__(self, xs, *, train):
     VmapMLP = nn.vmap(StatefulMLP, variable_axes={'params': 0, 'batch_stats': 0}, split_rngs={'params': True}, in_axes=0)
-    return VmapMLP(name='mlp')(xs)
+    return VmapMLP(name='mlp')(xs, train=train)
 variables = LinenStatefulVmap().init(random.PRNGKey(0), xs)
 ```
 
