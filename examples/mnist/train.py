@@ -23,12 +23,13 @@ The data is loaded using tensorflow_datasets.
 
 from absl import logging
 from flax import linen as nn
-from flax import optim
 from flax.metrics import tensorboard
+from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import ml_collections
 import numpy as np
+import optax
 import tensorflow_datasets as tfds
 
 
@@ -51,18 +52,6 @@ class CNN(nn.Module):
     return x
 
 
-def get_initial_params(key):
-  init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
-  initial_params = CNN().init(key, init_val)['params']
-  return initial_params
-
-
-def create_optimizer(params, learning_rate, beta):
-  optimizer_def = optim.Momentum(learning_rate=learning_rate, beta=beta)
-  optimizer = optimizer_def.create(params)
-  return optimizer
-
-
 def onehot(labels, num_classes=10):
   x = (labels[..., None] == jnp.arange(num_classes)[None])
   return x.astype(jnp.float32)
@@ -83,17 +72,17 @@ def compute_metrics(logits, labels):
 
 
 @jax.jit
-def train_step(optimizer, batch):
+def train_step(state, batch):
   """Train for a single step."""
   def loss_fn(params):
     logits = CNN().apply({'params': params}, batch['image'])
     loss = cross_entropy_loss(logits, batch['label'])
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grad = grad_fn(optimizer.target)
-  optimizer = optimizer.apply_gradient(grad)
+  (_, logits), grads = grad_fn(state.params)
+  state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, batch['label'])
-  return optimizer, metrics
+  return state, metrics
 
 
 @jax.jit
@@ -102,7 +91,7 @@ def eval_step(params, batch):
   return compute_metrics(logits, batch['label'])
 
 
-def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+def train_epoch(state, train_ds, batch_size, epoch, rng):
   """Train for a single epoch."""
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
@@ -113,7 +102,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   batch_metrics = []
   for perm in perms:
     batch = {k: v[perm, ...] for k, v in train_ds.items()}
-    optimizer, metrics = train_step(optimizer, batch)
+    state, metrics = train_step(state, batch)
     batch_metrics.append(metrics)
 
   # compute mean of metrics across each batch in epoch.
@@ -125,7 +114,7 @@ def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
   logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
                epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
 
-  return optimizer, epoch_metrics_np
+  return state, epoch_metrics_np
 
 
 def eval_model(params, test_ds):
@@ -146,7 +135,8 @@ def get_datasets():
   return train_ds, test_ds
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict,
+                       workdir: str) -> train_state.TrainState:
   """Execute model training and evaluation loop.
 
   Args:
@@ -154,7 +144,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     workdir: Directory where the tensorboard summaries are written to.
 
   Returns:
-    The trained optimizer.
+    The train state (which includes the `.params`).
   """
   train_ds, test_ds = get_datasets()
   rng = jax.random.PRNGKey(0)
@@ -163,15 +153,17 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   summary_writer.hparams(dict(config))
 
   rng, init_rng = jax.random.split(rng)
-  params = get_initial_params(init_rng)
-  optimizer = create_optimizer(
-      params, config.learning_rate, config.momentum)
+  cnn = CNN()
+  params = cnn.init(init_rng, jnp.ones([1, 28, 28, 1]))['params']
+  tx = optax.sgd(config.learning_rate, config.momentum)
+  state = train_state.TrainState.create(
+      apply_fn=cnn.apply, params=params, tx=tx)
 
   for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = jax.random.split(rng)
-    optimizer, train_metrics = train_epoch(
-        optimizer, train_ds, config.batch_size, epoch, input_rng)
-    loss, accuracy = eval_model(optimizer.target, test_ds)
+    state, train_metrics = train_epoch(
+        state, train_ds, config.batch_size, epoch, input_rng)
+    loss, accuracy = eval_model(state.params, test_ds)
 
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                  epoch, loss, accuracy * 100)
@@ -182,4 +174,4 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     summary_writer.scalar('eval_accuracy', accuracy, epoch)
 
   summary_writer.flush()
-  return optimizer
+  return state
