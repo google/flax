@@ -63,7 +63,11 @@ def _replicate(x, devices=None):
 
 
 def replicate(tree, devices=None):
-  """Replicates arrays to multiple devices.
+  """DEPRECATION WARNING:
+  "The `flax.jax_utils.replicate` function is Deprecated, use `jax.device_put_replicated` 
+  instead." 
+  
+  Replicates arrays to multiple devices.
 
   Args:
     tree: a pytree containing the arrays that should be replicated.
@@ -72,7 +76,8 @@ def replicate(tree, devices=None):
   Returns:
     A new pytree containing the replicated arrays.
   """
-  warnings.warn('use jax.device_put_replicated',
+  warnings.warn('replicate() will be removed soon.'
+                'use jax.device_put_replicated instead.',
                 DeprecationWarning)
   return jax.tree_map(lambda x: _replicate(x, devices), tree)
 
