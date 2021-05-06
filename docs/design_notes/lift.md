@@ -7,7 +7,7 @@ This design note explains the underlying implementation of `flax.linen.transform
 
 ## Introduction
 
-JAX uses a functional API meaning that it only guarantees correct behavior when using functions without side effects.
+JAX uses a functional API meaning that it only guarantees correct behavior when using functions without side effects ([JAX docs](https://jax.readthedocs.io/en/latest/jax-101/01-jax-basics.html#differences-from-numpy)).
 Typically, these side effects are the result of mutating an object that lives outside the function.
 
 The functional paradigm has some advantages like the ability to explicitly reason about state and stochasticity.
@@ -73,7 +73,7 @@ We can fix this problem by first turning `MLP` into a pure init and apply functi
 Afterwards, we use the `param` method to store the parameters:
 
 ```python
-class ManualVmap(nn.Module):
+class ManualVmapMLP(nn.Module):
   @nn.compact
   def __call__(self, xs):
     mlp = MLP(parent=None)
@@ -83,7 +83,7 @@ class ManualVmap(nn.Module):
     return apply_fn({'params': mlp_params}, xs)
 
 xs = jnp.ones((3, 4))
-variables = ManualVmap().init(random.PRNGKey(0), xs)
+variables = ManualVmapMLP().init(random.PRNGKey(0), xs)
 print(jax.tree_map(jnp.shape, variables['params']))
 """==>
 {
@@ -171,7 +171,7 @@ The lifting module does not know about the Linen `Module` API.
 Instead it operates directly on instances of `flax.core.Scope`.
 A `Scope` instance contains the variables and PRNG sequences of a `Module`.
 Each `Module` instance has a `Scope` instance in the `.scope` field if it has a parent or it was created using `init` or `apply`.
-Typically, the top-level `Module` instance on which you call `init` or `apply` is the only `Module` instance that does not have a `Scope` bound to it.
+Typically, the top-level `Module` instance — on which you call `init` or `apply` — is the only `Module` instance that does not have a `Scope` bound to it.
 
 When a `Module` is transformed, we use the `flax.core.lift` APIs to lift the scope and use `Module.clone()` to create a new `Module` instance with the lifted scope bound to it.
 
@@ -207,7 +207,7 @@ The `pack(fn, in_vars, out_vars, rngs)` API goes through the following stages:
 
     A collection or PRNG sequence can only be put into a single group. If a collection matches multiple filters, it will be put into the first group with a matching filter.
     If a collection or PRNG sequence does not match any filter it will not be lifted.
-    This means that it cannot be used inside the transformation and and attempting to do this will cause an error to be raised.
+    This means that it cannot be used inside the transformation and attempting to do this will cause an error to be raised.
     For example, `in_vars = (["params"], True)` will cause the "params" collection to be put in the first group and all other collection to be put in the second group.
 
     For each PRNG sequence that is matched we seed a new PRNG sequence by calling `make_rng`.
@@ -261,10 +261,14 @@ def lift_transpose(fn, target='params', variables=True, rngs=True)
     y = fn(scope, *args)
     out_variables = repack_fn(scope)
     return y, out_variables
-  return lift.pack(wrapper, (target, variables), (variables,), (rngs,))
+  return lift.pack(
+      wrapper,
+      in_variable_filters=(target, variables),
+      out_variable_filters=(variables,),
+      rng_filters=(rngs,))
 
 x = jnp.ones((3, 2))
-y, params = init(lift_id(core_nn.dense))(random.PRNGKey(0), x, 4)
+y, params = init(lift_transpose(core_nn.dense))(random.PRNGKey(0), x, 4)
 ```
 
 NOTE that most users should not need to interact with `pack` directly.
@@ -294,13 +298,13 @@ References:
 Going back to our original example, we can now use `nn.vmap` to simplify our implementation:
 
 ```python
-class LinenVmap(nn.Module):
+class LinenVmapMLP(nn.Module):
   @nn.compact
   def __call__(self, xs):
     VmapMLP = nn.vmap(MLP, variable_axes={'params': 0}, split_rngs={'params': True}, in_axes=0)
     return VmapMLP(name='mlp')(xs)
 
-variables = LinenVmap().init(random.PRNGKey(0), xs)
+variables = LinenVmapMLP().init(random.PRNGKey(0), xs)
 print(jax.tree_map(jnp.shape, variables['params']))
 """==>
 {
@@ -327,16 +331,16 @@ class StatefulMLP(nn.Module):
   @nn.compact
   def __call__(self, x, *, train):
     h = nn.Dense(4, name='hidden')(x)
-    h = nn.BatchNorm(axis_name="batch")(h, use_running_average=not train)
+    h = nn.BatchNorm(axis_name='batch')(h, use_running_average=not train)
     h = nn.relu(h)
     return nn.Dense(1, name='out')(h)
 
-class LinenStatefulVmap(nn.Module):
+class LinenStatefulVmapMLP(nn.Module):
   @nn.compact
   def __call__(self, xs, *, train):
     VmapMLP = nn.vmap(StatefulMLP, variable_axes={'params': 0, 'batch_stats': 0}, split_rngs={'params': True}, in_axes=0)
     return VmapMLP(name='mlp')(xs, train=train)
-variables = LinenStatefulVmap().init(random.PRNGKey(0), xs)
+variables = LinenStatefulVmapMLP().init(random.PRNGKey(0), xs)
 ```
 
 All we had to add to `nn.vmap` is `'batch_stats': 0`, indicating that the batch stats are vectorized rather than shared along the first axis.
