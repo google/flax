@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple, Uni
 
 from absl import logging
 import flax
+from flax import struct
 from flax.metrics import tensorboard
 from flax.training import train_state
 import input_pipeline
@@ -30,11 +31,14 @@ import tensorflow as tf
 
 Array = jnp.ndarray
 Example = Dict[str, Array]
+TrainState = train_state.TrainState
 
 
-class TrainState(train_state.TrainState):
-  model_state: Any
-  dynamic_scale: Optional[flax.optim.DynamicScale]
+class Metrics(struct.PyTreeNode):
+  """Computed metrics."""
+  loss: float
+  accuracy: float
+  count: Optional[int] = None
 
 
 @jax.vmap
@@ -47,50 +51,35 @@ def sigmoid_cross_entropy_with_logits(*, labels: Array, logits: Array) -> Array:
   return relu_logits - logits * labels + jnp.log1p(jnp.exp(neg_abs_logits))
 
 
-def get_initial_params_and_state(rng, model):
-  """Returns randomly initialized parameters and a fresh model state."""
+def get_initial_params(rng, model):
+  """Returns randomly initialized parameters."""
   token_ids = jnp.ones((2, 3), jnp.int32)
   lengths = jnp.ones((2,), dtype=jnp.int32)
   variables = model.init(rng, token_ids, lengths, deterministic=True)
-  model_state, params = variables.pop('params')
-
-  # Remove intermediates for training. Otherwise our model state will fill up
-  # with intermediate outputs (exported using self.sow() commands). This will
-  # cause model_state to have a new shape on each step, triggering a new trace.
-  if 'intermediates' in model_state:
-    model_state, _ = model_state.pop('intermediates')
-
-  return params, model_state
+  return variables['params']
 
 
 def create_train_state(rng, config: ml_collections.ConfigDict, model):
   """Create initial training state."""
-  params, model_state = get_initial_params_and_state(rng, model)
+  params = get_initial_params(rng, model)
   tx = optax.chain(
       optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum),
       optax.additive_weight_decay(weight_decay=config.weight_decay))
-  state = TrainState.create(
-      apply_fn=model.apply,
-      params=params,
-      tx=tx,
-      model_state=model_state,
-      dynamic_scale=None)
+  state = TrainState.create(apply_fn=model.apply, params=params, tx=tx)
   return state
 
 
-def compute_metrics(*, labels: Array, logits: Array) -> Dict[str, Array]:
+def compute_metrics(*, labels: Array, logits: Array) -> Metrics:
   """Computes the metrics, summed across the batch if a batch is provided."""
   if labels.ndim == 1:  # Prevent the labels from broadcasting over the logits.
     labels = jnp.expand_dims(labels, axis=1)
   loss = sigmoid_cross_entropy_with_logits(labels=labels, logits=logits)
   binary_predictions = (logits >= 0.)
   binary_accuracy = jnp.equal(binary_predictions, labels)
-  metrics = {
-      'loss': jnp.sum(loss),
-      'accuracy': jnp.sum(binary_accuracy),
-      'count': logits.shape[0]
-  }
-  return metrics
+  return Metrics(
+      loss=jnp.sum(loss),
+      accuracy=jnp.sum(binary_accuracy),
+      count=logits.shape[0])
 
 
 def model_from_config(config: ml_collections.ConfigDict):
@@ -110,60 +99,64 @@ def train_step(
     state: TrainState,
     batch: Dict[str, Array],
     rngs: Dict[str, Any],
-) -> Tuple[TrainState, Dict[str, Any]]:
+) -> Tuple[TrainState, Metrics]:
   """Train for a single step."""
   # Make sure to get a new RNG at every step.
   step = state.step
   rngs = {name: jax.random.fold_in(rng, step) for name, rng in rngs.items()}
 
   def loss_fn(params):
-    variables = {'params': params, **state.model_state}
-    logits, new_model_state = state.apply_fn(
+    variables = {'params': params}
+    logits = state.apply_fn(
         variables, batch['token_ids'], batch['length'],
         deterministic=False,
-        rngs=rngs, mutable=list(state.model_state.keys()))
+        rngs=rngs)
 
     labels = batch['label']
     if labels.ndim == 1:
       labels = jnp.expand_dims(labels, 1)
     loss = jnp.mean(
         sigmoid_cross_entropy_with_logits(labels=labels, logits=logits))
-    return loss, (logits, new_model_state)
+    return loss, logits
 
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   value, grads = grad_fn(state.params)
-  (_, (logits, new_model_state)) = value
+  (_, logits) = value
 
-  new_state = state.apply_gradients(grads=grads, model_state=new_model_state)
+  new_state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(labels=batch['label'], logits=logits)
   return new_state, metrics
 
 
 def eval_step(state: TrainState, batch: Dict[str, Array],
-              rngs: Dict[str, Any]) -> Dict[str, Any]:
+              rngs: Dict[str, Any]) -> Metrics:
   """Evaluate for a single step. Model should be in deterministic mode."""
-  variables = {'params': state.params, **state.model_state}
-  logits, _ = state.apply_fn(
+  variables = {'params': state.params}
+  logits = state.apply_fn(
       variables, batch['token_ids'], batch['length'],
       deterministic=True,
-      rngs=rngs,
-      mutable=list(state.model_state.keys()))
+      rngs=rngs)
   metrics = compute_metrics(labels=batch['label'], logits=logits)
   return metrics
 
 
 def normalize_batch_metrics(
-        batch_metrics: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+        batch_metrics: Sequence[Metrics]) -> Metrics:
   """Consolidates and normalizes a list of per-batch metrics dicts."""
   # Here we sum the metrics that were already summed per batch.
-  metric_names = batch_metrics[0].keys()
-  summed_metrics = {
-      k: np.sum([metrics[k] for metrics in batch_metrics]) for k in metric_names
-  }
+  total_loss = np.sum([metrics.loss for metrics in batch_metrics])
+  total_accuracy = np.sum([metrics.accuracy for metrics in batch_metrics])
+  total = np.sum([metrics.count for metrics in batch_metrics])
   # Divide each metric by the total number of items in the data set.
-  total = np.float(summed_metrics.pop('count'))
-  metrics = jax.tree_map(lambda x: x.item() / total, summed_metrics)
-  return metrics
+  return Metrics(
+      loss=total_loss.item() / total, accuracy=total_accuracy.item() / total)
+
+
+def batch_to_numpy(batch: Dict[str, tf.Tensor]) -> Dict[str, Array]:
+  """Converts a batch with TF tensors to a batch of NumPy arrays."""
+  # _numpy() reuses memory, does not make a copy.
+  # pylint: disable=protected-access
+  return jax.tree_map(lambda x: x._numpy(), batch)
 
 
 def evaluate_model(
@@ -172,11 +165,11 @@ def evaluate_model(
         batches: Union[Iterable[Example], tf.data.Dataset],
         epoch: int,
         rngs: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+) -> Metrics:
   """Evaluate a model on a dataset."""
   batch_metrics = []
   for i, batch in enumerate(batches):
-    batch = jax.tree_map(lambda x: x._numpy(), batch)  # pylint: disable=protected-access
+    batch = batch_to_numpy(batch)
     if rngs is not None:  # New RNG for each step.
       rngs = {name: jax.random.fold_in(rng, i) for name, rng in rngs.items()}
 
@@ -186,7 +179,7 @@ def evaluate_model(
   batch_metrics = jax.device_get(batch_metrics)
   metrics = normalize_batch_metrics(batch_metrics)
   logging.info('eval  epoch %03d loss %.4f accuracy %.2f', epoch,
-               metrics['loss'], metrics['accuracy'] * 100)
+               metrics.loss, metrics.accuracy * 100)
   return metrics
 
 
@@ -194,11 +187,11 @@ def train_epoch(train_step_fn: Callable[..., Tuple[TrainState, Dict[str, Any]]],
                 state: TrainState,
                 train_batches: tf.data.Dataset,
                 epoch: int,
-                rngs: Optional[Dict[str, Any]] = None):
+                rngs: Optional[Dict[str, Any]] = None) -> Tuple[TrainState, Metrics]:
   """Train for a single epoch."""
   batch_metrics = []
   for batch in train_batches:
-    batch = jax.tree_map(lambda x: x._numpy(), batch)  # pylint: disable=protected-access
+    batch = batch_to_numpy(batch)
     state, metrics = train_step_fn(state, batch, rngs)
     batch_metrics.append(metrics)
 
@@ -207,7 +200,7 @@ def train_epoch(train_step_fn: Callable[..., Tuple[TrainState, Dict[str, Any]]],
   metrics = normalize_batch_metrics(batch_metrics)
 
   logging.info('train epoch %03d loss %.4f accuracy %.2f', epoch,
-               metrics['loss'], metrics['accuracy'] * 100)
+               metrics.loss, metrics.accuracy * 100)
 
   return state, metrics
 
@@ -236,7 +229,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       shuffle_seed=config.seed)
   eval_batches = eval_dataset.get_batches(batch_size=config.batch_size)
 
-  # Prepare configs.
+  # Keep track of vocab size in the config so that the embedder knows it.
   config.vocab_size = len(train_dataset.vocab)
 
   # Compile step functions.
@@ -265,15 +258,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     eval_metrics = evaluate_model(eval_step_fn, state, eval_batches, epoch)
 
     # Write metrics to TensorBoard.
-    summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
+    summary_writer.scalar('train_loss', train_metrics.loss, epoch)
     summary_writer.scalar(
         'train_accuracy',
-        train_metrics['accuracy'] * 100,
+        train_metrics.accuracy * 100,
         epoch)
-    summary_writer.scalar('eval_loss', eval_metrics['loss'], epoch)
+    summary_writer.scalar('eval_loss', eval_metrics.loss, epoch)
     summary_writer.scalar(
         'eval_accuracy',
-        eval_metrics['accuracy'] * 100,
+        eval_metrics.accuracy * 100,
         epoch)
 
   summary_writer.flush()

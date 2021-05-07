@@ -27,8 +27,8 @@ jax.config.parse_flags_with_absl()
 
 class TrainTest(parameterized.TestCase):
 
-  def test_train_step_returns_correct_output_shape(self):
-    """Tests if the train step function returns the correct shape."""
+  def test_train_step_updates_parameters(self):
+    """Tests if the train step updates the parameters in train state."""
     # Create model and a state that contains the parameters.
     config = default_config.get_config()
     config.vocab_size = 13
@@ -44,7 +44,13 @@ class TrainTest(parameterized.TestCase):
     train_step_fn = jax.jit(train.train_step)
     new_state, metrics = train_step_fn(state, batch, rngs)
     self.assertIsInstance(new_state, train.TrainState)
-    self.assertIsInstance(metrics, dict)
+    self.assertIsInstance(metrics, train.Metrics)
+    old_param_values = jax.tree_leaves(state.params)
+    new_param_values = jax.tree_leaves(new_state.params)
+    for old_array, new_array in zip(old_param_values, new_param_values):
+      # Make sure parameters were updated.
+      self.assertFalse(np.allclose(old_array, new_array))
+
 
 if __name__ == '__main__':
   absltest.main()
