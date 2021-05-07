@@ -204,7 +204,7 @@ def restore_checkpoint(state, workdir):
 
 
 def save_checkpoint(state, workdir):
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     # get train state from the first replica
     state = jax.device_get(jax.tree_map(lambda x: x[0], state))
     step = int(state.step)
@@ -260,7 +260,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     Final TrainState.
   """
 
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     summary_writer = tensorboard.SummaryWriter(workdir)
     summary_writer.hparams(dict(config))
 
@@ -270,7 +270,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   if config.batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
-  local_batch_size = config.batch_size // jax.host_count()
+  local_batch_size = config.batch_size // jax.process_count()
 
   platform = jax.local_devices()[0].platform
 
@@ -330,7 +330,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   epoch_metrics = []
   hooks = []
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     hooks += [periodic_actions.Profile(num_profile_steps=5, logdir=workdir)]
   t_loop_start = time.time()
   logging.info('Initial compilation, this might take some minutes...')
@@ -349,7 +349,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
                    epoch, summary['loss'], summary['accuracy'] * 100)
       steps_per_sec = steps_per_epoch / (time.time() - t_loop_start)
       t_loop_start = time.time()
-      if jax.host_id() == 0:
+      if jax.process_index() == 0:
         for key, vals in epoch_metrics.items():
           tag = 'train_%s' % key
           for i, val in enumerate(vals):
@@ -369,7 +369,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
       logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                    epoch, summary['loss'], summary['accuracy'] * 100)
-      if jax.host_id() == 0:
+      if jax.process_index() == 0:
         for key, val in eval_metrics.items():
           tag = 'eval_%s' % key
           summary_writer.scalar(tag, val.mean(), step)
