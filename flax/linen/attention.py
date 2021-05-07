@@ -34,6 +34,78 @@ Dtype = Any
 Array = Any
 
 
+def dot_product_attention_weights(query: Array,
+                                  key: Array,
+                                  bias: Optional[Array] = None,
+                                  broadcast_dropout: bool = True,
+                                  dropout_rng: Optional[PRNGKey] = None,
+                                  dropout_rate: float = 0.,
+                                  deterministic: bool = False,
+                                  dtype: Dtype = jnp.float32,
+                                  precision: Optional[lax.Precision] = None):
+  """Computes dot-product attention weights given query and key.
+  
+  Used by :func:`dot_product_attention`, which is what you'll most likely use.
+  But if you want access to the attention weights for introspection, then
+  you can directly call this function and call einsum yourself.
+
+  Args:
+    query: queries for calculating attention with shape of
+      `[batch..., q_length, num_heads, qk_depth_per_head]`.
+    key: keys for calculating attention with shape of
+      `[batch..., kv_length, num_heads, qk_depth_per_head]`.
+    bias: bias for the attention weights. This should be broadcastable to the
+      shape `[batch..., num_heads, q_length, kv_length]`.
+      This can be used for incorporating causal masks, padding masks,
+      proximity bias, etc.
+    broadcast_dropout: bool: use a broadcasted dropout along batch dims.
+    dropout_rng: JAX PRNGKey: to be used for dropout
+    dropout_rate: dropout rate
+    deterministic: bool, deterministic or not (to apply dropout)
+    dtype: the dtype of the computation (default: float32)
+    precision: numerical precision of the computation see `jax.lax.Precision`
+      for details.
+
+  Returns:
+    Output of shape `[batch..., num_heads, q_length, kv_length]`.
+  """
+  assert query.ndim == key.ndim, 'q, k must have same rank.'
+  assert query.shape[:-3] == key.shape[:-3], (
+      'q, k batch dims must match.')
+  assert query.shape[-2] == key.shape[-2], (
+      'q, k num_heads must match.')
+  assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
+
+  # calculate attention matrix
+  depth = query.shape[-1]
+  query = query / jnp.sqrt(depth).astype(dtype)
+  # attn weight shape is (batch..., num_heads, q_length, kv_length)
+  attn_weights = jnp.einsum('...qhd,...khd->...hqk', query, key,
+                            precision=precision)
+
+  # apply attention bias: masking, dropout, proximity bias, etc.
+  if bias is not None:
+    attn_weights = attn_weights + bias
+
+  # normalize the attention weights
+  attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
+
+  # apply attention dropout
+  if not deterministic and dropout_rate > 0.:
+    keep_prob = 1.0 - dropout_rate
+    if broadcast_dropout:
+      # dropout is broadcast across the batch + head dimensions
+      dropout_shape = tuple([1] * (key.ndim - 2)) + attn_weights.shape[-2:]
+      keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
+    else:
+      keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
+    multiplier = (keep.astype(attn_weights.dtype) /
+                  jnp.asarray(keep_prob, dtype=dtype))
+    attn_weights = attn_weights * multiplier
+
+  return attn_weights
+
+
 def dot_product_attention(query: Array,
                           key: Array,
                           value: Array,
@@ -72,7 +144,7 @@ def dot_product_attention(query: Array,
       for details.
 
   Returns:
-    Output of shape `[batch..., length, num_heads, v_depth_per_head]`.
+    Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
   """
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert query.shape[:-3] == key.shape[:-3] == value.shape[:-3], (
@@ -80,34 +152,11 @@ def dot_product_attention(query: Array,
   assert query.shape[-2] == key.shape[-2] == value.shape[-2], (
       'q, k, v num_heads must match.')
   assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
-  assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
 
-  # calculate attention matrix
-  depth = query.shape[-1]
-  query = query / jnp.sqrt(depth).astype(dtype)
-  # attn weight shape is (batch..., num_heads, q_length, kv_length)
-  attn_weights = jnp.einsum('...qhd,...khd->...hqk', query, key,
-                            precision=precision)
-
-  # apply attention bias: masking, dropout, proximity bias, etc.
-  if bias is not None:
-    attn_weights = attn_weights + bias
-
-  # normalize the attention weights
-  attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
-
-  # apply attention dropout
-  if not deterministic and dropout_rate > 0.:
-    keep_prob = 1.0 - dropout_rate
-    if broadcast_dropout:
-      # dropout is broadcast across the batch + head dimensions
-      dropout_shape = tuple([1] * (key.ndim - 2)) + attn_weights.shape[-2:]
-      keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
-    else:
-      keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
-    multiplier = (keep.astype(attn_weights.dtype) /
-                  jnp.asarray(keep_prob, dtype=dtype))
-    attn_weights = attn_weights * multiplier
+  # compute attention weights
+  attn_weights = dot_product_attention_weights(
+    query, key, bias, broadcast_dropout, dropout_rng, dropout_rate,
+    deterministic, dtype, precision)
 
   # return weighted sum over values for each query position
   return jnp.einsum('...hqk,...khd->...qhd', attn_weights, value,

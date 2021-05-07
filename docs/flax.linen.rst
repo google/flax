@@ -111,6 +111,7 @@ Attention primitives
 .. autosummary::
   :toctree: _autosummary
 
+    dot_product_attention_weights
     dot_product_attention
     SelfAttention
 
