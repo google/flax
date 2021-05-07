@@ -252,7 +252,7 @@ def main(argv):
     raise ValueError('Batch size must be divisible by the number of devices')
   device_batch_size = batch_size // jax.device_count()
 
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
         os.path.join(FLAGS.model_dir, FLAGS.experiment + '_train'))
     eval_summary_writer = tensorboard.SummaryWriter(
@@ -339,7 +339,7 @@ def main(argv):
       summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
       summary['learning_rate'] = lr
       logging.info('train in step: %d, loss: %.4f', step, summary['loss'])
-      if jax.host_id() == 0:
+      if jax.process_index() == 0:
         tock = time.time()
         steps_per_sec = eval_freq / (tock - tick)
         tick = tock
@@ -380,7 +380,7 @@ def main(argv):
         # TODO: save model.
       eval_summary['best_dev_score'] = best_dev_score
       logging.info('best development model score %.4f', best_dev_score)
-      if jax.host_id() == 0:
+      if jax.process_index() == 0:
         for key, val in eval_summary.items():
           eval_summary_writer.scalar(key, val, step)
         eval_summary_writer.flush()
