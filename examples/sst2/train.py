@@ -16,7 +16,6 @@
 from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple, Union
 
 from absl import logging
-import flax
 from flax import struct
 from flax.metrics import tensorboard
 from flax.training import train_state
@@ -183,11 +182,12 @@ def evaluate_model(
   return metrics
 
 
-def train_epoch(train_step_fn: Callable[..., Tuple[TrainState, Dict[str, Any]]],
+def train_epoch(train_step_fn: Callable[..., Tuple[TrainState, Metrics]],
                 state: TrainState,
                 train_batches: tf.data.Dataset,
                 epoch: int,
-                rngs: Optional[Dict[str, Any]] = None) -> Tuple[TrainState, Metrics]:
+                rngs: Optional[Dict[str, Any]] = None
+                ) -> Tuple[TrainState, Metrics]:
   """Train for a single epoch."""
   batch_metrics = []
   for batch in train_batches:
