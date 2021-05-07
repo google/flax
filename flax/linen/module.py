@@ -193,7 +193,7 @@ def _freeze_attr(val: Any) -> Any:
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
 def compact(fun: _CallableT) -> _CallableT:
-  """Marks the given module method allowing inlined submodules. 
+  """Marks the given module method allowing inlined submodules.
   
   Methods wrapped in @compact can define submodules directly within the method.
 
@@ -340,7 +340,7 @@ class _ModuleInternalState:
   children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
 
   def reset(self):
-    """Resets transient state. 
+    """Resets transient state.
     
     This function is called after each module method, so only attributes that
     are method-dependent are reset.
@@ -391,7 +391,7 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 class Module:
   """Base class for all neural network modules. Layers and models should subclass this class.
 
-  All Flax Modules are Python 3.7 
+  All Flax Modules are Python 3.7
   `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_. Since
   dataclasses take over ``__init__``, you should instead override :meth:`setup`,
   which is automatically called to initialize the module.
@@ -416,8 +416,8 @@ class Module:
       def __call__(self, x):
         return self.dense2(nn.relu(self.dense1(x)))
 
-  Optionally, for more concise module implementaions where submodules 
-  definitions are co-located with their usage, you can use the 
+  Optionally, for more concise module implementations where submodules 
+  definitions are co-located with their usage, you can use the
   :meth:`compact` wrapper.
   """
 
@@ -508,7 +508,7 @@ class Module:
   def __setattr__(self, name: str, val: Any):
     """Sets an attribute on this Module.
     
-    We overload setattr solely to support pythonic naming via assignment of 
+    We overload setattr solely to support pythonic naming via assignment of
     submodules in the special :meth:`setup` function::
 
       self.submodule_name = MyModule(...)
@@ -719,7 +719,7 @@ class Module:
     collection.
 
     Contrary to :meth:`param`, all arguments passing using `init_fn` should be
-    passed on explictly::
+    passed on explicitly::
 
       key = self.make_rng('stats')
       mean = self.variable('stats', 'mean', lecun_normal(), key, (2, 2))
@@ -737,7 +737,7 @@ class Module:
       *init_args: The arguments to pass to init_fn.
 
     Returns:
-      A :class:`flax.core.variables.Variable` that can be read or set via 
+      A :class:`flax.core.variables.Variable` that can be read or set via
       ".value" attribute. Throws an error if the variable exists already.
     """
     if not self._initialization_allowed:
@@ -811,7 +811,7 @@ class Module:
   def make_rng(self, name: str) -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
     
-    The new RNG key is split from the previous one. Thus, every call to 
+    The new RNG key is split from the previous one. Thus, every call to
     `make_rng` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
@@ -834,7 +834,7 @@ class Module:
     """Creates an interactive Module instance by binding variables and RNGs.
 
     ``bind`` provides an "interactive" instance of a Module directly without
-    transforming a function with ``apply``. This is particulary useful for debugging
+    transforming a function with ``apply``. This is particalary useful for debugging
     and interactive use cases like notebooks where a function would limit the ability
     split up code into different cells.
 
@@ -891,7 +891,7 @@ class Module:
       model = Transformer()
       encoded = model.apply({'params': params}, x, method=Transformer.encode)
   
-    If a function instance is provided, the unbound function is used. For 
+    If a function instance is provided, the unbound function is used. For
     instance, the example below is equivalent to the one above::
 
       encoded = model.apply({'params': params}, x, method=model.encode)

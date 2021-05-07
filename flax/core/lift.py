@@ -210,7 +210,7 @@ def transform(
     trans_out_fn: transforms the updated variables in the view after mutation.
     init: If True, variables are initialized before transformation.
     rngs: PRNGSequences added to the transformed scope (default: all).
-    variables: Addtional Variable collections added to the transformed scope.
+    variables: Additional Variable collections added to the transformed scope.
       Besides those specified by `target` (default: all).
   """
   def wrapper(scope_fn, repack, variable_groups, rng_groups, treedef, *args):
@@ -584,10 +584,10 @@ def custom_vjp(fn: Callable[..., Any], backward_fn: Callable[..., Any],
     dense_sign_grad = lift.custom_vjp(fwd, backward_fn=bwd, nondiff_argnums=(2,))
 
   Args:
-    fn: should return a tuple of output and auxilliary data for the backward pass.
+    fn: should return a tuple of output and auxiliary data for the backward pass.
     backward_fn: arguments are passed as (*nondiff_args, scope_fn, grad_variables, aux, g_y)
       where scope_fn takes grad_variables to create the scope,
-      aux is the auxilliary data returend by `fn`,
+      aux is the auxiliary data returned by `fn`,
       and g_y is the tangent of y.
   """
   # TODO(jheek) is this transform general/flexible enough?
@@ -644,7 +644,7 @@ def checkpoint(fn: Callable[..., Any],
     re-computed when computing gradients.
     variables: The variable collections that are lifted. By default all
       collections are lifted.
-    rngs: The PRNG sequences that are lifted. By defualt all PRNG sequences
+    rngs: The PRNG sequences that are lifted. By default all PRNG sequences
       are lifted.
     concrete: Optional, boolean indicating whether ``fun`` may involve
       value-dependent Python control flow (default False). Support for such
