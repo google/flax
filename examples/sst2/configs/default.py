@@ -42,6 +42,5 @@ def get_config():
   config.num_epochs = 10
 
   config.seed = 0
-  config.deterministic = False
 
   return config
