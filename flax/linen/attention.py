@@ -69,7 +69,11 @@ def dot_product_attention_weights(query: Array,
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
   """
-  assert key.ndim == query.ndim, 'q, k must have same rank.'
+  assert query.ndim == key.ndim, 'q, k must have same rank.'
+  assert query.shape[:-3] == key.shape[:-3], (
+      'q, k batch dims must match.')
+  assert query.shape[-2] == key.shape[-2], (
+      'q, k num_heads must match.')
   assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
 
   # calculate attention matrix
