@@ -55,7 +55,7 @@ class PrefetchIterator:
       self._cond.wait_for(lambda: self._buffer or not self._active)
       if self._buffer:
         item = self._buffer.pop(0)
-        self._cond.notifyAll()
+        self._cond.notify_all()
         return item
       if self._error:
         raise self._error  # pylint: disable=raising-bad-type
@@ -65,7 +65,7 @@ class PrefetchIterator:
   def close(self):
     with self._cond:
       self._active = False
-      self._cond.notifyAll()
+      self._cond.notify_all()
 
   def _prefetch_loop(self):
     """Prefetch loop that prefetches a tf dataset."""
@@ -77,7 +77,7 @@ class PrefetchIterator:
         item = next(self._data_iter)
         with self._cond:
           self._buffer.append(item)
-          self._cond.notifyAll()
+          self._cond.notify_all()
           self._cond.wait_for(_predicate)
           if not self._active:
             return
@@ -85,5 +85,5 @@ class PrefetchIterator:
         with self._cond:
           self._error = e
           self._active = False
-          self._cond.notifyAll()
+          self._cond.notify_all()
           return
