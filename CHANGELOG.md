@@ -17,7 +17,7 @@ vNext
    Therefore, intermediates will no longer be returned from initialization by default. 
  -
  -
- -
+ - Bug Fix: Correclty handle non-default parameters of Linen Modules with nested inheritance.
  -
  -
  -
