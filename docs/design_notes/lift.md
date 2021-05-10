@@ -68,6 +68,8 @@ JAX will raise an error when `vmap` is used on `mlp` because it's not a JAX arra
 We can not really blame JAX for refusing to perform this under-specified job.
 After all, it's not even clear what should happen here.
 The parameters inside the MLP are not even initialized yet and we will need a separate PRNG key for each group of parameters.
+`jax.vmap` can only broadcast or map over an axis but it cannot automatically split an PRNG key.
+Therefore, we have to call `jax.random.split` manually.
 
 We can fix this problem by first turning `MLP` into a pure init and apply function.
 Afterwards, we use the `param` method to store the parameters:
