@@ -203,7 +203,7 @@ The `pack(fn, in_vars, out_vars, rngs)` API goes through the following stages:
     - a list of collections/prng names
     - `True` (match everything)
     - `False` (match nothing)
-    - `DenyList(filter)` (match everything but the specified filter).
+    - `DenyList(filter)` (match everything but the specified collections (e.g.: `DenyList(['params'])` matches everything except the 'params' collection.)).
 
     A collection or PRNG sequence can only be put into a single group. If a collection matches multiple filters, it will be put into the first group with a matching filter.
     If a collection or PRNG sequence does not match any filter it will not be lifted.
