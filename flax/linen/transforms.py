@@ -302,7 +302,7 @@ def jit(target: Target,
       as its first argument.
     variables: The variable collections that are lifted. By default all
       collections are lifted.
-    rngs: The PRNG sequences that are lifted. By defualt all PRNG sequences
+    rngs: The PRNG sequences that are lifted. By default all PRNG sequences
       are lifted.
     static_argnums: An int or collection of ints specifying which positional
       arguments to treat as static (compile-time constant). Operations that only
@@ -357,7 +357,7 @@ def checkpoint(target: Target,
       re-computed when computing gradients for the target.
     variables: The variable collections that are lifted. By default all
       collections are lifted.
-    rngs: The PRNG sequences that are lifted. By defualt all PRNG sequences
+    rngs: The PRNG sequences that are lifted. By default all PRNG sequences
       are lifted.
     concrete: Optional, boolean indicating whether ``fun`` may involve
       value-dependent Python control flow (default False). Support for such
