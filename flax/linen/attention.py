@@ -286,8 +286,8 @@ class MultiHeadDotProductAttention(Module):
         # not the remaining zero elements.
         mask = combine_masks(
             mask,
-            jnp.broadcast_to(jnp.arange(max_length) <= cur_index,
-                             tuple(batch_dims) + (1, 1, max_length)))
+            jnp.broadcast_to(jnp.arange(max_length) < cur_index + updated_cache_indices,
+                             tuple(batch_dims) + (1, updated_cache_indices, max_length)))
 
     # Convert the boolean attention mask to an attention bias.
     if mask is not None:
