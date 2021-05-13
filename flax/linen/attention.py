@@ -258,23 +258,28 @@ class MultiHeadDotProductAttention(Module):
                                    jnp.zeros, value.shape, value.dtype)
       cache_index = self.variable('cache', 'cache_index',
                                   lambda: jnp.array(0, dtype=jnp.int32))
+
       if is_initialized:
         *batch_dims, max_length, num_heads, depth_per_head = (
             cached_key.value.shape)
         # shape check of cached keys against query input
         expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
-        if expected_shape != query.shape:
+        cur_index = cache_index.value
+        # first input prompt can have sequence length > 1
+        if cur_index > 0 and cache_expected_shape != query.shape:
           raise ValueError('Autoregressive cache shape error, '
                            'expected query shape %s instead got %s.' %
                            (expected_shape, query.shape))
         # update key, value caches with our new 1d spatial slices
-        cur_index = cache_index.value
         indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
         key = lax.dynamic_update_slice(cached_key.value, key, indices)
         value = lax.dynamic_update_slice(cached_value.value, value, indices)
         cached_key.value = key
         cached_value.value = value
-        cache_index.value = cache_index.value + 1
+
+        # update cache index to overwrite 
+        updated_cache_indices = query.shape[1] if cur_index == 0 else 1
+        cache_index.value = cache_index.value + updated_cache_indices
         # causal mask for cached decoder self-attention:
         # our single query position should only attend to those key
         # positions that have already been generated and cached,
