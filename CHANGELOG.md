@@ -7,28 +7,54 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
  -
  -
- - Added an NLP text classification example (SST-2 sentiment) to examples/sst2.
-   that uses a birectional LSTM (BiLSTM) to encode the input text.
- - Added flax.training.train_state to simplifying using Optax optimizers.
- - Rewrote ImageNet example to use Optax instead of flax.optim for optimizers.
- -
- - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
- - When calling `init` the 'intermediates' collection is no longer mutable
-   Therefore, intermediates will no longer be returned from initialization by default. 
- -
- -
- - Bug Fix: Correclty handle non-default parameters of Linen Modules with nested inheritance.
  -
  -
  -
  -
- - `BatchNorm` instances will behave correctly during init when called multiple times.
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
+ -
  -
  -
  -
  -
  -
 
+0.3.4
+------
+
+Possibly breaking changes:
+ - When calling `init` the 'intermediates' collection is no longer mutable.
+   Therefore, intermediates will no longer be returned from initialization by default. 
+ - Don't update batch statistics during initialization.
+ - Attention: require deterministic only if using dropout
+
+
+Other changes:
+ - Rewrote various examples to use Optax instead of Flax optimizers (e.g., Imagenet, SST2)
+ - Added an NLP text classification example (SST-2 sentiment) to examples/sst2.
+   that uses a birectional LSTM (BiLSTM) to encode the input text.
+ - Added flax.training.train_state to simplifying using Optax optimizers.
+ - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
+ - Bug Fix: Correctly handle non-default parameters of Linen Modules with nested inheritance.
+ - Expose dot_product_attention_weights, allowing access to attention weights.
+ - `BatchNorm` instances will behave correctly during init when called multiple times.
+ - Added a more extensive "how to contribute" guide in `contributing.md`.
+ - Add proper cache behavior for lift.jit, fixing cache misses.
+ - Fix bug in Embed layer: make sure it behaves correctly when embedding is np.array.
+ - Fix linen.Module for deep inheritance chains.
+ - Fix bug in DenseGeneral: correctly expand bias to account for batch & noncontracting dimensions.
+ - Allow Flax lifted transforms to work on partially applied Modules.
+ - Make MultiOptimizer use apply_gradient instead of apply_param_gradient
 
 0.3.3
 ------
