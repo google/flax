@@ -183,6 +183,7 @@ reducing the number of arguments and getting rid of the `static_argnums`.
 
 We can define a `TrainState` dataclass that wraps the common pattern of updating
 the optimizer state and parameters by applying the gradients.
+
 ```python
 # Small helper class in flax.training
 class TrainState(flax.struct.PyTreeNode):
@@ -220,7 +221,9 @@ Users can then derive from this dataclass and add more fields, for example
 mutable model state:
 
 ```python
-class TrainState(flax.training.TrainState):
+from flax.training import train_state
+
+class TrainState(train_state.TrainState):
   batch_stats: flax.core.FrozenDict[str, Any]
 ```
 
@@ -288,10 +291,10 @@ Remarks:
 
 - It is a common pattern in Flax training loops to have a `TrainState` dataclass
   that is updated with new state after every step.
-- The simple solution proposed in `flax.training.TrainState` an be extended with
-  additional data, but advanced usecases (e.g. multiple different models and/or
-  optimizers) are not supported. Users should instead fork the dataclass and
-  re-implement it to their needs.
+- The simple solution proposed in `flax.training.train_state` an be extended
+  with additional data, but advanced usecases (e.g. multiple different models
+  and/or optimizers) are not supported. Users should instead fork the dataclass
+  and re-implement it to their needs.
 - As opposed to the `Optimizer` abstraction in the [previous API], the
   `TrainState` now directly contains the `.params`, without having to to through
   `.optimizer`
