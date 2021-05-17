@@ -228,19 +228,19 @@ With this the [Optax Training Step] becomes:
 
 ```python
 @jax.jit
-def train_step(train_state, inputs, labels):
+def train_step(state, inputs, labels):
 
   def loss_fn(params):
-    outputs, new_model_state = train_state.apply_fn(
-        {'params': params, 'batch_stats': train_state.batch_stats},
+    outputs, new_model_state = state.apply_fn(
+        {'params': params, 'batch_stats': state.batch_stats},
         inputs,
         mutable=['batch_stats'])
     loss = xent_loss(outputs, labels)
     return loss, new_model_state
 
   (loss, new_model_state), grads = jax.value_and_grad(
-      loss_fn, has_aux=True)(train_state.params)
-  new_state = train_state.apply_gradients(
+      loss_fn, has_aux=True)(state.params)
+  new_state = state.apply_gradients(
       grads=grads,
       batch_stats=new_model_state['batch_stats'],
   )
@@ -248,40 +248,40 @@ def train_step(train_state, inputs, labels):
   return new_state, loss
 
 
-train_state = TrainState.create(
+state = TrainState.create(
     apply_fn=model.apply,
     params=variables['params'],
     tx=tx,
     batch_stats=variables['batch_stats'],
 )
 for batch in ds.as_numpy_iterator():
-  train_state, loss = train_step(train_state, batch['image'], batch['label'])
+  state, loss = train_step(state, batch['image'], batch['label'])
 ```
 
 The train step without mutable state reduces to:
 
 ```python
 @jax.jit
-def train_step(train_state, inputs, labels):
+def train_step(state, inputs, labels):
 
   def loss_fn(params):
-    outputs = train_state.apply_fn({'params': params}, inputs)
+    outputs = state.apply_fn({'params': params}, inputs)
     loss = xent_loss(outputs, labels)
     return loss
 
-  loss, grads = jax.value_and_grad(loss_fn)(train_state.params)
-  new_state = train_state.update(grads=grads)
+  loss, grads = jax.value_and_grad(loss_fn)(state.params)
+  new_state = state.update(grads=grads)
 
   return new_state, loss
 
 
-train_state = flax.training.TrainState.create(
+state = flax.training.TrainState.create(
     apply_fn=model.apply,
     params=variables['params'],
     tx=tx,
 )
 for batch in ds.as_numpy_iterator():
-  train_state, loss = train_step(train_state, batch['image'], batch['label'])
+  state, loss = train_step(state, batch['image'], batch['label'])
 ```
 
 Remarks:
