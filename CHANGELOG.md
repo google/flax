@@ -41,8 +41,9 @@ Possibly breaking changes:
 
 Other changes:
  - Rewrote various examples to use Optax instead of Flax optimizers (e.g., Imagenet, SST2)
- - Added an NLP text classification example (SST-2 sentiment) to examples/sst2.
-   that uses a birectional LSTM (BiLSTM) to encode the input text.
+ - Added an NLP text classification example (on the SST-2 dataset) to
+   [`examples/sst2`](https://github.com/google/flax/tree/master/examples/sst2).
+   that uses a bidirectional LSTM (BiLSTM) to encode the input text.
  - Added flax.training.train_state to simplifying using Optax optimizers.
  - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
  - Bug Fix: Correctly handle non-default parameters of Linen Modules with nested inheritance.
