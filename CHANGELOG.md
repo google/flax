@@ -40,7 +40,7 @@ Possibly breaking changes:
 
 
 Other changes:
- - Rewrote various examples to use Optax instead of Flax optimizers (e.g., Imagenet, SST2)
+ - Rewrote various examples to use Optax instead of Flax optimizers (e.g., Imagenet, SST2).
  - Added an NLP text classification example (on the SST-2 dataset) to
    [`examples/sst2`](https://github.com/google/flax/tree/master/examples/sst2).
    that uses a bidirectional LSTM (BiLSTM) to encode the input text.
