@@ -44,18 +44,19 @@ Other changes:
  - Added an NLP text classification example (on the SST-2 dataset) to
    [`examples/sst2`](https://github.com/google/flax/tree/master/examples/sst2).
    that uses a bidirectional LSTM (BiLSTM) to encode the input text.
- - Added flax.training.train_state to simplifying using Optax optimizers.
+ - Added `flax.training.train_state` to simplify using Optax optimizers.
  - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
- - Bug Fix: Correctly handle non-default parameters of Linen Modules with nested inheritance.
- - Expose dot_product_attention_weights, allowing access to attention weights.
+ - Bug fix: Correctly handle non-default parameters of Linen Modules with nested inheritance.
+ - Expose `dot_product_attention_weights`, allowing access to attention weights.
  - `BatchNorm` instances will behave correctly during init when called multiple times.
  - Added a more extensive "how to contribute" guide in `contributing.md`.
- - Add proper cache behavior for lift.jit, fixing cache misses.
+ - Add proper cache behavior for [`lift.jit`](https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.jit.html#flax.linen.jit),
+fixing cache misses.
  - Fix bug in Embed layer: make sure it behaves correctly when embedding is np.array.
- - Fix linen.Module for deep inheritance chains.
+ - Fix `linen.Module` for deep inheritance chains.
  - Fix bug in DenseGeneral: correctly expand bias to account for batch & noncontracting dimensions.
  - Allow Flax lifted transforms to work on partially applied Modules.
- - Make MultiOptimizer use apply_gradient instead of apply_param_gradient
+ - Make `MultiOptimizer` use `apply_gradient` instead of `apply_param_gradient`.
 
 0.3.3
 ------
