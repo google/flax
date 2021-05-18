@@ -49,6 +49,7 @@ tests_require = [
     "tensorflow-cpu>=2.4.0",
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
+    "tensorflow==2.4.1",  # TODO(marcvanzee): Remove once #1326 is fixed.
 ]
 
 __version__ = None
