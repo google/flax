@@ -1059,7 +1059,7 @@ class Module:
 
       x = jnp.ones(((16, 9)))
       model = Foo()
-      variables, _ = model.init(jax.random.PRNGKey(0), x).pop('intermediates')
+      variables = model.init(jax.random.PRNGKey(0), x)
       y, state = model.apply(variables, x, mutable=['intermediates'])
       print(state['intermediates'])  # {'h': (...,)}
     
