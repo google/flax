@@ -71,10 +71,10 @@ used successfully:
 ```bash
 pip install -U --upgrade pip
 pip install -U setuptools wheel
-pip install -U jax jaxlib sentencepiece tensorflow==2.2.0rc3 \
-    tensorflow-datasets==3.0.0 tensorflow-text==2.2.0rc2 tensorboard
 git clone https://github.com/google/flax
 pip install -e flax
+pip install -U --upgrade jax jaxlib sentencepiece tensorflow==2.2.0rc3 \
+    tensorflow-datasets==3.0.0 tensorflow-text==2.2.0rc2 tensorboard
 ```
 
 Then, if your TPU is at IP `192.168.0.2`:
