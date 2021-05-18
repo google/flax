@@ -23,7 +23,7 @@ import ml_collections
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-AUTOTUNE = tf.data.AUTOTUNE
+AUTOTUNE = tf.data.experimental.AUTOTUNE
 Features = Dict[str, tf.Tensor]
 
 
