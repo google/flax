@@ -36,7 +36,7 @@ Possibly breaking changes:
  - When calling `init` the 'intermediates' collection is no longer mutable.
    Therefore, intermediates will no longer be returned from initialization by default. 
  - Don't update batch statistics during initialization.
- - Attention: require deterministic only if using dropout
+ - When not using any non-determinism (e.g., dropout), it is not longer necessary to specify the `deterministic` argument in `MultiHeadDotProductAttention`.
 
 
 Other changes:
