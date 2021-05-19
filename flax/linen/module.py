@@ -35,7 +35,7 @@ from flax import traverse_util
 from flax import serialization
 from flax import core
 from flax.core import Scope
-from flax.core.scope import CollectionFilter, Variable, VariableDict, FrozenVariableDict, union_filters
+from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
 
 # from .dotgetter import DotGetter
@@ -193,7 +193,7 @@ def _freeze_attr(val: Any) -> Any:
 # Method wrapping of "compact methods" and setup()
 # -----------------------------------------------------------------------------
 def compact(fun: _CallableT) -> _CallableT:
-  """Marks the given module method allowing inlined submodules. 
+  """Marks the given module method allowing inlined submodules.
   
   Methods wrapped in @compact can define submodules directly within the method.
 
@@ -340,7 +340,7 @@ class _ModuleInternalState:
   children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
 
   def reset(self):
-    """Resets transient state. 
+    """Resets transient state.
     
     This function is called after each module method, so only attributes that
     are method-dependent are reset.
@@ -391,7 +391,7 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 class Module:
   """Base class for all neural network modules. Layers and models should subclass this class.
 
-  All Flax Modules are Python 3.7 
+  All Flax Modules are Python 3.7
   `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_. Since
   dataclasses take over ``__init__``, you should instead override :meth:`setup`,
   which is automatically called to initialize the module.
@@ -416,8 +416,8 @@ class Module:
       def __call__(self, x):
         return self.dense2(nn.relu(self.dense1(x)))
 
-  Optionally, for more concise module implementaions where submodules 
-  definitions are co-located with their usage, you can use the 
+  Optionally, for more concise module implementations where submodules 
+  definitions are co-located with their usage, you can use the
   :meth:`compact` wrapper.
   """
 
@@ -508,7 +508,7 @@ class Module:
   def __setattr__(self, name: str, val: Any):
     """Sets an attribute on this Module.
     
-    We overload setattr solely to support pythonic naming via assignment of 
+    We overload setattr solely to support pythonic naming via assignment of
     submodules in the special :meth:`setup` function::
 
       self.submodule_name = MyModule(...)
@@ -719,7 +719,7 @@ class Module:
     collection.
 
     Contrary to :meth:`param`, all arguments passing using `init_fn` should be
-    passed on explictly::
+    passed on explicitly::
 
       key = self.make_rng('stats')
       mean = self.variable('stats', 'mean', lecun_normal(), key, (2, 2))
@@ -737,7 +737,7 @@ class Module:
       *init_args: The arguments to pass to init_fn.
 
     Returns:
-      A :class:`flax.core.variables.Variable` that can be read or set via 
+      A :class:`flax.core.variables.Variable` that can be read or set via
       ".value" attribute. Throws an error if the variable exists already.
     """
     if not self._initialization_allowed:
@@ -811,7 +811,7 @@ class Module:
   def make_rng(self, name: str) -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
     
-    The new RNG key is split from the previous one. Thus, every call to 
+    The new RNG key is split from the previous one. Thus, every call to
     `make_rng` returns a new RNG key, while still guaranteeing full
     reproducibility.
 
@@ -826,12 +826,15 @@ class Module:
       raise ValueError("Can't use RNGs on unbound modules")
     return self.scope.make_rng(name)
 
-  def bind(self, variables: VariableDict, *args, rngs: RNGSequences = None,
+  def bind(self,
+           variables: VariableDict,
+           *args,
+           rngs: Optional[RNGSequences] = None,
            mutable: CollectionFilter = False):
     """Creates an interactive Module instance by binding variables and RNGs.
 
     ``bind`` provides an "interactive" instance of a Module directly without
-    transforming a function with ``apply``. This is particulary useful for debugging
+    transforming a function with ``apply``. This is particalary useful for debugging
     and interactive use cases like notebooks where a function would limit the ability
     split up code into different cells.
 
@@ -872,7 +875,7 @@ class Module:
   def apply(self,
             variables: VariableDict,
             *args,
-            rngs: RNGSequences = None,
+            rngs: Optional[RNGSequences] = None,
             method: Callable[..., Any] = None,
             mutable: CollectionFilter = False,
             capture_intermediates: Union[bool, Callable[['Module', str],
@@ -888,7 +891,7 @@ class Module:
       model = Transformer()
       encoded = model.apply({'params': params}, x, method=Transformer.encode)
   
-    If a function instance is provided, the unbound function is used. For 
+    If a function instance is provided, the unbound function is used. For
     instance, the example below is equivalent to the one above::
 
       encoded = model.apply({'params': params}, x, method=model.encode)
@@ -939,13 +942,19 @@ class Module:
                        rngs: Union[PRNGKey, RNGSequences],
                        *args,
                        method: Optional[Callable[..., Any]] = None,
+                       mutable: CollectionFilter = DenyList("intermediates"),
                        **kwargs) -> Tuple[Any, FrozenVariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
 
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
-              provided, applies the ``__call__`` method.
+        provided, applies the ``__call__`` method.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable: ``bool``: all/no collections are mutable.
+        ``str``: The name of a single mutable collection. ``list``: A
+        list of names of mutable collections. By default all collections
+        except "intermediates" are mutable.
     Returns:
       `(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
@@ -957,12 +966,13 @@ class Module:
             f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
     return self.apply(
-        {}, *args, rngs=rngs, method=method, mutable=True, **kwargs)
+        {}, *args, rngs=rngs, method=method, mutable=mutable, **kwargs)
 
   def init(self,
            rngs: Union[PRNGKey, RNGSequences],
            *args,
            method: Optional[Callable[..., Any]] = None,
+           mutable: CollectionFilter = DenyList("intermediates"),
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
@@ -976,11 +986,18 @@ class Module:
     Args:
       rngs: The rngs for the variable collections.
       method: An optional method. If provided, applies this method. If not
-              provided, applies the ``__call__`` method.
+        provided, applies the ``__call__`` method.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable: ``bool``: all/no collections are mutable.
+        ``str``: The name of a single mutable collection. ``list``: A
+        list of names of mutable collections. By default all collections
+        except "intermediates" are mutable.
     Returns:
       The initialized variable dict.
     """
-    _, v_out = self.init_with_output(rngs, *args, method=method, **kwargs)
+    _, v_out = self.init_with_output(
+        rngs, *args,
+        method=method, mutable=mutable, **kwargs)
     return v_out
 
   @property
@@ -1170,13 +1187,14 @@ def apply(fn: Callable[..., Any], module: Module,
 
 
 def init_with_output(fn: Callable[..., Any], module: Module,
-                     mutable: CollectionFilter = True) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
+                     mutable: CollectionFilter = DenyList("intermediates"),
+                     ) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
   """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
   Unlike ``Module.init_with_output`` this function returns a new function with the signature
   ``(rngs, *args, **kwargs) -> (T, variables)`` where `T` is the return type of ``fn``.
   The rngs can be a dict of PRNGKeys or a single ```PRNGKey`` which is
-  equivalant to passing a dict with one PRNGKey with the name "params".
+  equivalent to passing a dict with one PRNGKey with the name "params".
 
   The init function that is returned can be directly composed with
   JAX transformations like ``jax.jit``::
@@ -1201,7 +1219,8 @@ def init_with_output(fn: Callable[..., Any], module: Module,
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable.
       ``str``: The name of a single mutable collection. ``list``: A
-      list of names of mutable collections.
+      list of names of mutable collections. By default all collections
+      except "intermediates" are mutable.
   Returns:
     The init function wrapping ``fn``.
   """
@@ -1212,13 +1231,14 @@ def init_with_output(fn: Callable[..., Any], module: Module,
 
 
 def init(fn: Callable[..., Any], module: Module,
-         mutable: CollectionFilter = True) -> Callable[..., FrozenVariableDict]:
+         mutable: CollectionFilter = DenyList("intermediates"),
+         ) -> Callable[..., FrozenVariableDict]:
   """Creates an init function to call ``fn`` with a bound module.
 
   Unlike ``Module.init`` this function returns a new function with the signature
   ``(rngs, *args, **kwargs) -> variables``.
   The rngs can be a dict of PRNGKeys or a single ```PRNGKey`` which is
-  equivalant to passing a dict with one PRNGKey with the name "params".
+  equivalent to passing a dict with one PRNGKey with the name "params".
 
   The init function that is returned can be directly composed with
   JAX transformations like ``jax.jit``::
@@ -1243,7 +1263,8 @@ def init(fn: Callable[..., Any], module: Module,
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable.
       ``str``: The name of a single mutable collection. ``list``: A
-      list of names of mutable collections.
+      list of names of mutable collections. By default all collections
+      except "intermediates" are mutable.
   Returns:
     The init function wrapping ``fn``.
   """

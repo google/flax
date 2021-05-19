@@ -18,18 +18,21 @@ import pathlib
 import tempfile
 
 from absl.testing import absltest
-import train
-from configs import default
 import jax
 from jax import numpy as jnp
+import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
+from configs import default
+import train
 
 
+CNN_PARAMS = 825_034
 
-class MnistLibTest(absltest.TestCase):
-  """Test cases for mnist_lib."""
+
+class TrainTest(absltest.TestCase):
+  """Test cases for train."""
 
   def setUp(self):
     super().setUp()
@@ -39,14 +42,13 @@ class MnistLibTest(absltest.TestCase):
   def test_cnn(self):
     """Tests CNN module used as the trainable model."""
     rng = jax.random.PRNGKey(0)
-    inputs = jnp.ones((5, 224, 224, 3), jnp.float32)
+    inputs = jnp.ones((1, 28, 28, 3), jnp.float32)
     output, variables = train.CNN().init_with_output(rng, inputs)
 
-    self.assertEqual((5, 10), output.shape)
-
-    # TODO(mohitreddy): Consider creating a testing module which
-    # gives a parameters overview including number of parameters.
-    self.assertLen(variables["params"], 4)
+    self.assertEqual((1, 10), output.shape)
+    self.assertEqual(
+        CNN_PARAMS,
+        sum(np.prod(arr.shape) for arr in jax.tree_leaves(variables["params"])))
 
   def test_train_and_evaluate(self):
     """Tests training and evaluation code by running a single step."""

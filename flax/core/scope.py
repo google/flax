@@ -71,7 +71,7 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   """Folds a string into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
-  keys in parellel that are independent of each other.
+  keys in parallel that are independent of each other.
 
   Args:
    rng: the rng to fold the string into.
@@ -648,7 +648,7 @@ def bind(variables: VariableDict,
   """Bind variables and rngs to a new ``Scope``.
   
   bind provides a ``Scope`` instance without transforming a function
-  with ``apply``. This is particulary useful for debugging and
+  with ``apply``. This is particalary useful for debugging and
   interactive use cases like notebooks where a function would limit
   the ability split up code into different cells.
 

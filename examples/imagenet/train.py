@@ -205,7 +205,7 @@ def restore_checkpoint(state, workdir):
 
 
 def save_checkpoint(state, workdir):
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     # get train state from the first replica
     state = jax.device_get(jax.tree_map(lambda x: x[0], state))
     step = int(state.step)
@@ -270,7 +270,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   if config.batch_size % jax.device_count() > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
-  local_batch_size = config.batch_size // jax.host_count()
+  local_batch_size = config.batch_size // jax.process_count()
 
   platform = jax.local_devices()[0].platform
 
@@ -330,7 +330,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   train_metrics = []
   hooks = []
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     hooks += [periodic_actions.Profile(num_profile_steps=5, logdir=workdir)]
   train_metrics_last_t = time.time()
   logging.info('Initial compilation, this might take some minutes...')

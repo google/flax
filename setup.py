@@ -26,7 +26,7 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.2.6",
+    "jax>=0.2.13",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses;python_version<'3.7'", # will only install on py3.6
     "msgpack",
@@ -49,6 +49,7 @@ tests_require = [
     "tensorflow-cpu>=2.4.0",
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
+    "tensorflow==2.4.1",  # TODO(marcvanzee): Remove once #1326 is fixed.
 ]
 
 __version__ = None

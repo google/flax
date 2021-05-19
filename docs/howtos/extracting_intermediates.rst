@@ -81,6 +81,10 @@ The CNN can be augmented with calls to ``sow`` to store intermediates as followi
       x = nn.log_softmax(x)
       return x
 
+``sow`` acts as a no-op when the variable collection is not mutable.
+Therefore, it works perfectly for debugging and optional tracking of intermediates.
+The 'intermediates' collection is also used by the ``capture_intermediates`` API (see final section).
+
 Note that, by default ``sow`` appends values every time it is called:
 
 * This is necessary because once instantiated, a module could be called multiple
@@ -103,7 +107,8 @@ Note that, by default ``sow`` appends values every time it is called:
   @jax.jit
   def init(key, x):
     variables = SowCNN2().init(key, x)
-    variables, _ = variables.pop('intermediates')
+    # By default the 'intermediates' collection is not mutable during init.
+    # So variables will only contain 'params' here.
     return variables
 
   @jax.jit
