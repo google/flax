@@ -42,9 +42,10 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     The output of the reduction for each window slice.
   """
   strides = strides or (1,) * len(window_shape)
+  assert len(window_shape) == len(strides), (
+      f"len({window_shape}) == len({strides})")
   strides = (1,) + strides + (1,)
   dims = (1,) + window_shape + (1,)
-  assert len(dims) == len(strides)
 
   is_single_input = False
   if inputs.ndim == len(dims) - 1:
@@ -53,7 +54,7 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     inputs = inputs[None]
     is_single_input = True
 
-  assert inputs.ndim == len(dims)
+  assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
   if not isinstance(padding, str):
     padding = tuple(map(tuple, padding))
     assert(len(padding) == len(window_shape)), (
