@@ -166,7 +166,7 @@ class ScopeParamNotFoundError(FlaxError):
       return embedding[inputs]
 
     variables = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
-    _ = NoBiasDense().apply(variables, jnp.ones((5, 5, 1)), 'embed')
+    _ = Embed().apply(variables, jnp.ones((5, 5, 1)), 'embed')
   """
   def __init__(self, param_name, scope_path):
     super().__init__(f'No parameter named "{param_name}" exists in '
