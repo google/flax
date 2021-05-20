@@ -37,6 +37,7 @@ tests_require = [
     "atari-py",
     "clu",  # All examples.
     "gym",
+    "gym[atari]",
     "jaxlib",
     "ml-collections",
     "opencv-python",
