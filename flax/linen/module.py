@@ -1057,7 +1057,7 @@ class Module:
           self.sow('intermediates', 'h', h)
           return nn.Dense(2)(h)
 
-      x = jnp.ones(((16, 9)))
+      x = jnp.ones((16, 9))
       model = Foo()
       variables = model.init(jax.random.PRNGKey(0), x)
       y, state = model.apply(variables, x, mutable=['intermediates'])
@@ -1080,7 +1080,7 @@ class Module:
           return x
 
       model = Foo2()
-      variables, _ = model.init(jax.random.PRNGKey(0), x).pop('intermediates')
+      variables = model.init(jax.random.PRNGKey(0), x)
       y, state = model.apply(variables, jnp.ones((1, 1)), mutable=['intermediates'])
       print(state['intermediates'])  # ==> {'h': [[3.]]}
 
