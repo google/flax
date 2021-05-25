@@ -34,10 +34,9 @@ install_requires = [
 ]
 
 tests_require = [
-    "atari-py",
+    "atari-py==0.2.5",  # Last version does not have the ROMs we test on pre-packaged
     "clu",  # All examples.
     "gym",
-    "gym[atari]",
     "jaxlib",
     "ml-collections",
     "opencv-python",
