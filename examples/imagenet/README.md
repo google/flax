@@ -24,12 +24,57 @@ storage at
 
 ### Supported setups
 
-While the example should run on a variety of hardware, we have tested the different configurations on a 8x V100 (16GB) and got the following results:
+While the example should run on a variety of hardware, 
+we have tested the different configurations on TPU v3-8 and 8x V100 (16GB)
+and got the following results:
 
 | Name                    |   Steps | Walltime   | Top-1 accuracy   | Metrics                                                                                                                               | Workdir                                                                                                                                                              |
 |:------------------------|--------:|:-----------|:-----------------|:--------------------------------------------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| TPU v3-8                 |  125100 | 4.4h      | 76.37%           | [tfhub.dev](https://tensorboard.dev/experiment/JwxRMYrsR4O6V6fnkn3dmg/)                 | [gs://flax_public/examples/imagenet/tpu](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/tpu)                                 |
 | v100_x8                 |  250199 | 13.7h      | 76.72%           | [tfhub.dev](https://tensorboard.dev/experiment/iJzNKovmS0q6k5t6k5wvOw/#scalars&_smoothingWeight=0&regexInput=v100_x8$)                 | [gs://flax_public/examples/imagenet/v100_x8](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/v100_x8)                                 |
 | v100_x8_mixed_precision |   62499 | 5.0h       | 76.47%           | [tfhub.dev](https://tensorboard.dev/experiment/iJzNKovmS0q6k5t6k5wvOw/#scalars&_smoothingWeight=0&regexInput=v100_x8_mixed_precision) | [gs://flax_public/examples/imagenet/v100_x8_mixed_precision](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/v100_x8_mixed_precision) |
+
+### Preparing the dataset on Cloud
+
+For running the ResNet50 model on imagenet dataset, 
+you first need to prepare the `imagenet2012` dataset. 
+Download the data from http://image-net.org/ as described in the
+[tensorflow_datasets catalog](https://www.tensorflow.org/datasets/catalog/imagenet2012). 
+Then point the environment variable `$IMAGENET_DOWNLOAD_PATH` 
+to the directory where the downloads are stored and prepare the dataset 
+by running
+
+```shell
+python -c "
+import tensorflow_datasets as tfds
+tfds.builder('imagenet2012').download_and_prepare(
+    download_config=tfds.download.DownloadConfig(
+        manual_dir='$IMAGENET_DOWNLOAD_PATH'))
+"
+```
+
+The contents of the directory `~/tensorflow_datasets` should be copied to your gcs bucket. Point the environment variable `GCS_TFDS_BUCKET` to your bucket and run the following command:
+
+```shell
+gsutil cp -r ~/tensorflow_datasets gs://$GCS_TFDS_BUCKET/datasets
+```
+
+### How to run on Cloud TPU
+
+
+
+Setup the TPU VM and install the Flax dependencies on it as described 
+[here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm).
+
+Set the environment variable of `GCS_TFDS_BUCKET` to your bucket on the TPU VM 
+and run the model after setting `TFDS_DATA_DIR` parameter:
+
+```shell
+export TFDS_DATA_DIR=gs://$GCS_TFDS_BUCKET/datasets
+python3 main.py --workdir=./imagenet_tpu --config=configs/tpu.py
+```
+
+
 
 ### How to run
 
@@ -63,13 +108,9 @@ python main.py \
 --workdir=./imagenet_v100_x8_mixed_precision \
 --config=configs/v100_x8_mixed_precision.py
 ```
-#### Running on Cloud
+#### How to run on Cloud GPU
 
 See commands in [../cloud/README.md](../cloud/README.md)
-
-To use a dataset stored in a bucket, set the following shell parameter:
-
-    export TFDS_DATA_DIR="gs://$GCS_TFDS_BUCKET/tensorflow_datasets"
 
 ### Reproducibility
 
