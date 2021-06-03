@@ -1,12 +1,12 @@
 ## ImageNet classification
 
-Trains a ResNet50 model ([He *et al.*, 2015]) for the ImageNet classification task
+Trains a ResNet50 model ([He *et al.*, 2016]) for the ImageNet classification task
 ([Russakovsky *et al.*, 2015]).
 
 This example uses linear learning rate warmup and cosine learning rate schedule.
 
-[He *et al.*, 2015]: https://www.cv-foundation.org/openaccess/content_iccv_2015/papers/He_Delving_Deep_into_ICCV_2015_paper.pdf
-[Russakovsky *et al.*, 2015]: https://arxiv.org/pdf/1409.0575.pdf
+[He *et al.*, 2016]: https://arxiv.org/abs/1512.03385
+[Russakovsky *et al.*, 2015]: https://arxiv.org/abs/1409.0575
 
 You can run this code and even modify it directly in Google Colab, no
 installation required:
