@@ -11,7 +11,7 @@ vNext
  -
  -
  -
- -
+ - NamedTuples are no longer converted to tuples on assingment to a `linen.Module`.
  -
  -
  -
