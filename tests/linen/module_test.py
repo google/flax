@@ -29,7 +29,7 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as np
-from typing import Any, Tuple, Iterable, Callable, Mapping
+from typing import Any, Tuple, Iterable, Callable, Mapping, NamedTuple
 
 from flax import linen as nn
 from flax import errors
@@ -1358,6 +1358,17 @@ class ModuleTest(absltest.TestCase):
     variables = Bar().init(k, x)
     y = Bar().apply(variables, x)
     self.assertEqual(y.shape, (4, 3))
+  
+  def test_freeze_attr(self):
+    class Foo(NamedTuple):
+      a: int
+      b: int
+
+    self.assertEqual(nn.module._freeze_attr([1, 2]), (1, 2))
+    xs = nn.module._freeze_attr(Foo(1, 2))
+    self.assertEqual(xs, (1, 2))
+    self.assertEqual(type(xs), Foo)  # equality test for NamedTuple doesn't check class!
+
 
 if __name__ == '__main__':
   absltest.main()
