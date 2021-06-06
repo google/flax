@@ -1315,6 +1315,71 @@ class ModuleTest(absltest.TestCase):
     output = Foo().apply({}, 1, intercept_method=intercept_method)
     self.assertEqual(output, 4)
 
+  def test_intercept_method_works_for_gradients(self):
+    """Test that intercept_method works correctly for taking gradients."""
+    class MyModel(nn.Module):
+      hidden_size: int = 10
+      output_size: int = 1
+
+      @nn.compact
+      def __call__(self, inputs):
+        hidden = nn.Dense(self.hidden_size, name='layer1')(inputs)
+        hidden = nn.Dense(self.hidden_size, name='layer2')(hidden)
+        output = nn.Dense(self.output_size, name='output_layer')(hidden)
+        return output
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        output = MyModel()(x)
+        return jnp.squeeze(output)
+
+    input_size = 5
+    inputs = np.random.RandomState(0).normal(size=(input_size))
+    # This intercept method will allow to capture the gradients of every nn.Dense method.
+
+    def intercept_method(mdl, fun, *args, **kwargs):
+      # Add eps to the input of nn.Dense __call__.
+      if isinstance(mdl, nn.Dense):
+        inputs, = args
+        eps = mdl.variable('inter_grads', 'activation',
+                           lambda: jnp.zeros_like(inputs, dtype=jnp.float32))
+        inputs = inputs + eps.value
+        y = fun(mdl, inputs, **kwargs)
+        return y
+      return fun(mdl, *args, **kwargs)
+
+    model = Foo()
+    rng_key = jax.random.PRNGKey(0)
+    variables = model.init(rng_key, inputs, intercept_method=intercept_method)
+
+    def with_respect_to_inputs(inputs):
+      output = model.apply(
+          variables, inputs, intercept_method=intercept_method)
+      return output
+
+    def with_respect_to_vars(variables):
+      output = model.apply(
+          variables, inputs, intercept_method=intercept_method)
+      return output
+
+    expected_grads = jax.grad(with_respect_to_inputs)(inputs)
+    grads = jax.grad(with_respect_to_vars)(variables)
+    # Since we have 3 Dense layers we should get 3 vectors of gradients.
+    self.assertEqual(len(grads['inter_grads']['MyModel_0']), 3)
+    # Check that the gradients with respect to inputs of the first Dense layer
+    # match the gradients with respect to inputs to the Foo model.
+    np.testing.assert_array_equal(
+        expected_grads, 
+        grads['inter_grads']['MyModel_0']['layer1']['activation'])
+    # Check the dimentionality of the computed grads with respect to inputs
+    # the the 2nd and 3rd Dense layers, it should match the dimentionalities
+    # of the inputs to the Dense layers.
+    self.assertEqual(grads['inter_grads']['MyModel_0']
+                     ['layer2']['activation'].shape, (10,))
+    self.assertEqual(grads['inter_grads']['MyModel_0']
+                     ['output_layer']['activation'].shape, (10,))
+
   def test_intercept_method_with_multiple_functions(self):
     """Tests that intercept_method is called on each function."""
     class Bar(nn.Module):
