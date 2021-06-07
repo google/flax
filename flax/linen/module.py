@@ -191,6 +191,9 @@ def _all_names_on_object(obj: Any) -> Set[str]:
 def _freeze_attr(val: Any) -> Any:
   if isinstance(val, (dict, FrozenDict)):
     return FrozenDict({k: _freeze_attr(v) for k, v in val.items()})
+  elif  isinstance(val, tuple) and hasattr(val, '_fields'):
+    # Special case named tuple otherwise they would be downgraded to normal tuples.
+    return type(val)(*[_freeze_attr(v) for v in val])
   elif isinstance(val, (list, tuple)):
     return tuple(_freeze_attr(v) for v in val)
   else:
@@ -860,15 +863,24 @@ class Module:
 
     Example::
 
+      import jax
+      import jax.numpy as jnp
+      import flax.linen as nn
+
       class AutoEncoder(nn.Module):
         def setup(self):
           self.encoder = nn.Dense(3)
           self.decoder = nn.Dense(5)
-      
+
+        def __call__(self, x):
+          return self.decoder(self.encoder(x))
+
+      x = jnp.ones((16, 9))
       ae = AutoEncoder()
+      variables = ae.init(jax.random.PRNGKey(0), x)
       model = ae.bind(variables)
-      z = model.encode(x)
-      x_reconstructed = model.decode(z)
+      z = model.encoder(x)
+      x_reconstructed = model.decoder(z)
 
 
     Args:
@@ -1061,13 +1073,21 @@ class Module:
 
     Example::
 
+      import jax
+      import jax.numpy as jnp
+      import flax.linen as nn
+
       class Foo(nn.Module):
         @nn.compact
         def __call__(self, x):
           h = nn.Dense(4)(x)
           self.sow('intermediates', 'h', h)
           return nn.Dense(2)(h)
-      y, state = Foo.apply(params, x, mutable=['intermediates'])
+
+      x = jnp.ones((16, 9))
+      model = Foo()
+      variables = model.init(jax.random.PRNGKey(0), x)
+      y, state = model.apply(variables, x, mutable=['intermediates'])
       print(state['intermediates'])  # {'h': (...,)}
     
     By default the values are stored in a tuple and each stored value
@@ -1075,7 +1095,7 @@ class Module:
     the same module is called multiple times. Alternatively, a custom
     init/reduce function can be passed::
 
-      class Foo(nn.Module):
+      class Foo2(nn.Module):
         @nn.compact
         def __call__(self, x):
           init_fn = lambda: 0
@@ -1085,8 +1105,11 @@ class Module:
           self.sow('intermediates', 'h', x * 2,
                    init_fn=init_fn, reduce_fn=reduce_fn)
           return x
-      y, state = Foo.apply(params, 1, mutable=['intermediates'])
-      print(state['intermediates'])  # ==> {'h': 3}
+
+      model = Foo2()
+      variables = model.init(jax.random.PRNGKey(0), x)
+      y, state = model.apply(variables, jnp.ones((1, 1)), mutable=['intermediates'])
+      print(state['intermediates'])  # ==> {'h': [[3.]]}
 
     Args:
       col: The name of the variable collection.
