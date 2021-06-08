@@ -11,7 +11,7 @@ designed for flexibility. Flax is in use by a growing community of
 researchers and engineers at Google who happily use Flax for their
 daily research.
 
-Official Github repository: https://github.com/google/flax
+Official Github repository with quick intro and short examples: https://github.com/google/flax
 
 .. toctree::
    :maxdepth: 1
