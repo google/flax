@@ -13,6 +13,14 @@
 # limitations under the License.
 
 """Learning rate schedules used in FLAX image classification examples.
+
+Note that with `FLIP #1009`_ learning rate schedules in ``flax.training`` are
+**effectively deprecated** in favor of Optax_ schedules. Please refer to
+`Optimizer Schedules`_ for more information. 
+
+.. _FLIP #1009: https://github.com/google/flax/blob/master/docs/flip/1009-optimizer-api.md
+.. _Optax: https://github.com/deepmind/optax
+.. _Optimizer Schedules: https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules
 """
 
 import jax.numpy as jnp

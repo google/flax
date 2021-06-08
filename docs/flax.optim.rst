@@ -2,6 +2,8 @@
 flax.optim package
 ===================
 
+.. automodule:: flax.optim
+
 .. currentmodule:: flax.optim
 
 Optimizer Base Classes
