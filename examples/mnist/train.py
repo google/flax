@@ -52,17 +52,13 @@ class CNN(nn.Module):
     return x
 
 
-def onehot(labels, num_classes=10):
-  x = (labels[..., None] == jnp.arange(num_classes)[None])
-  return x.astype(jnp.float32)
+def cross_entropy_loss(*, logits, labels):
+  one_hot_labels = jax.nn.one_hot(labels, num_classes=10)
+  return -jnp.mean(jnp.sum(one_hot_labels * logits, axis=-1))
 
 
-def cross_entropy_loss(logits, labels):
-  return -jnp.mean(jnp.sum(onehot(labels) * logits, axis=-1))
-
-
-def compute_metrics(logits, labels):
-  loss = cross_entropy_loss(logits, labels)
+def compute_metrics(*, logits, labels):
+  loss = cross_entropy_loss(logits=logits, labels=labels)
   accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
   metrics = {
       'loss': loss,
@@ -76,19 +72,19 @@ def train_step(state, batch):
   """Train for a single step."""
   def loss_fn(params):
     logits = CNN().apply({'params': params}, batch['image'])
-    loss = cross_entropy_loss(logits, batch['label'])
+    loss = cross_entropy_loss(logits=logits, labels=batch['label'])
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grads = grad_fn(state.params)
   state = state.apply_gradients(grads=grads)
-  metrics = compute_metrics(logits, batch['label'])
+  metrics = compute_metrics(logits=logits, labels=batch['label'])
   return state, metrics
 
 
 @jax.jit
 def eval_step(params, batch):
   logits = CNN().apply({'params': params}, batch['image'])
-  return compute_metrics(logits, batch['label'])
+  return compute_metrics(logits=logits, labels=batch['label'])
 
 
 def train_epoch(state, train_ds, batch_size, epoch, rng):
@@ -135,6 +131,15 @@ def get_datasets():
   return train_ds, test_ds
 
 
+def create_train_state(rng, config):
+  """Creates initial `TrainState`."""
+  cnn = CNN()
+  params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params']
+  tx = optax.sgd(config.learning_rate, config.momentum)
+  return train_state.TrainState.create(
+      apply_fn=cnn.apply, params=params, tx=tx)
+
+
 def train_and_evaluate(config: ml_collections.ConfigDict,
                        workdir: str) -> train_state.TrainState:
   """Execute model training and evaluation loop.
@@ -153,11 +158,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   summary_writer.hparams(dict(config))
 
   rng, init_rng = jax.random.split(rng)
-  cnn = CNN()
-  params = cnn.init(init_rng, jnp.ones([1, 28, 28, 1]))['params']
-  tx = optax.sgd(config.learning_rate, config.momentum)
-  state = train_state.TrainState.create(
-      apply_fn=cnn.apply, params=params, tx=tx)
+  state = create_train_state(init_rng, config)
 
   for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = jax.random.split(rng)
