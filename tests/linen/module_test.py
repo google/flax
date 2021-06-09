@@ -1251,7 +1251,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return Bar().test(x) + 1
 
-    def intercept_method(mdl, fun, *args, **kwargs):
+    def intercept_method(mdl, fun, args, kwargs):
       # Add 1 to the output of Bar.test().
       if isinstance(mdl, Bar):
         return fun(mdl, *args, **kwargs) + 1
@@ -1283,7 +1283,7 @@ class ModuleTest(absltest.TestCase):
     inputs = np.random.RandomState(0).normal(size=(input_size))
     # This intercept method will allow to capture the gradients of every nn.Dense method.
 
-    def intercept_method(mdl, fun, *args, **kwargs):
+    def intercept_method(mdl, fun, args, kwargs):
       # Add eps to the input of nn.Dense __call__.
       if isinstance(mdl, nn.Dense):
         inputs, = args
@@ -1340,7 +1340,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return Bar().test(x) + Bar()(x) + 1
 
-    def intercept_method(mdl, fun, *args, **kwargs):
+    def intercept_method(mdl, fun, args, kwargs):
       # Add 1 to the output of Bar methods.
       if isinstance(mdl, Bar):
         return fun(mdl, *args, **kwargs) + 1
@@ -1360,22 +1360,22 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return Bar().test(x) + 1
 
-    def interceptor(mdl, fun, *args, **kwargs):
+    def interceptor(mdl, fun, args, kwargs):
       y = fun(mdl, *args, **kwargs)
       mdl.sow('intermediates', fun.__name__, y)
       return y
 
-    def intercept_method(mdl, fun, *args, **kwargs):
+    def intercept_method(mdl, fun, args, kwargs):
       # Sow the output of Bar functions.
       if isinstance(mdl, Bar):
-        return interceptor(mdl, fun, *args, **kwargs)
+        return interceptor(mdl, fun, args, kwargs)
       return fun(mdl, *args, **kwargs)
 
     _, state = Foo().apply({}, 1, intercept_method=intercept_method,
                            mutable=['intermediates'])
     self.assertEqual(state, {
         'intermediates': {'Bar_0': {'test': (2,)}}
-    })    
+    })
 
   def test_functional_apply(self):
     class Foo(nn.Module):

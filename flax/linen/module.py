@@ -286,7 +286,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
       if _context.intercept_stack and _context.intercept_stack[-1]:
         intercept_method = _context.intercept_stack[-1]
         # Intercept method is responsible for calling `fun`.
-        y = intercept_method(self, fun, *args, **kwargs)
+        y = intercept_method(self, fun, args, kwargs)
       else:
         y = fun(self, *args, **kwargs)
       # Sow output `capture_intermediates` was provided to apply.
@@ -1213,8 +1213,8 @@ def apply(fn: Callable[..., Any], module: Module,
     intercept_method: An optional hook that intercepts all function calls
       that occur when `module` is applied, and can be used to modify
       the args and kwargs of each call, and also to
-      modify its output. The provided method needs to take the form
-      `f(module, original_function, *args, **kwargs)` and is responsible for
+      modify its output. The provided method needs to have the signature
+      `f(module, original_function, args, kwargs)` and is responsible for
       calling `original_function(module, *args, **kwargs)`. Can be used to
       temporarily modify a model without making changes to the underlying code.
     capture_intermediates: If `True`, captures intermediate return values
