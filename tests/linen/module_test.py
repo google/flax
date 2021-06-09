@@ -25,6 +25,7 @@ from absl.testing import absltest
 import jax
 from jax import random
 from jax import lax
+from jax._src.api import vmap
 from jax.nn import initializers
 import jax.numpy as jnp
 
@@ -1348,6 +1349,27 @@ class ModuleTest(absltest.TestCase):
 
     output = Foo().apply({}, 1, intercept_method=intercept_method)
     self.assertEqual(output, 8)
+
+  def test_intercept_method_with_vmap(self):
+    """Tests that intercept_method works with vmap."""
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x + 1
+
+    def intercept_method(mdl, fun, args, kwargs):
+      if isinstance(mdl, Foo):
+        output = fun(mdl, *args, **kwargs) 
+        return jnp.dot(output, output)
+      return fun(mdl, *args, **kwargs)
+
+    def model_apply(inputs):
+      return Foo().apply({}, inputs, intercept_method=intercept_method)
+
+    vmapped_apply = jax.vmap(model_apply, in_axes=1)
+    output = vmapped_apply(np.array([[0, 1, 2], [0, 1, 2]]))
+    np.testing.assert_array_equal(output, [2, 8, 18])
 
   def test_intercept_method_that_captures_intermediate_output(self):
     """Applies self.sow() to the output of a call using intercept_method."""
