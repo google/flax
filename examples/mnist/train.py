@@ -48,7 +48,6 @@ class CNN(nn.Module):
     x = nn.Dense(features=256)(x)
     x = nn.relu(x)
     x = nn.Dense(features=10)(x)
-    x = nn.log_softmax(x)
     return x
 
 
@@ -57,12 +56,8 @@ def onehot(labels, num_classes=10):
   return x.astype(jnp.float32)
 
 
-def cross_entropy_loss(logits, labels):
-  return -jnp.mean(jnp.sum(onehot(labels) * logits, axis=-1))
-
-
 def compute_metrics(logits, labels):
-  loss = cross_entropy_loss(logits, labels)
+  loss = jnp.mean(optax.softmax_cross_entropy(logits, onehot(labels)))
   accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
   metrics = {
       'loss': loss,
@@ -76,7 +71,8 @@ def train_step(state, batch):
   """Train for a single step."""
   def loss_fn(params):
     logits = CNN().apply({'params': params}, batch['image'])
-    loss = cross_entropy_loss(logits, batch['label'])
+    loss = jnp.mean(optax.softmax_cross_entropy(
+        logits=logits, labels=onehot(batch['label'])))
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grads = grad_fn(state.params)
@@ -111,8 +107,9 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
       k: np.mean([metrics[k] for metrics in batch_metrics_np])
       for k in batch_metrics_np[0]}
 
-  logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-               epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
+  logging.info(
+      'train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
+      epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
 
   return state, epoch_metrics_np
 

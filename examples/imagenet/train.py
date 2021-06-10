@@ -51,6 +51,9 @@ import tensorflow as tf
 import tensorflow_datasets as tfds
 
 
+NUM_CLASSES = 1000
+
+
 def create_model(*, model_cls, half_precision, **kwargs):
   platform = jax.local_devices()[0].platform
   if half_precision:
@@ -60,7 +63,7 @@ def create_model(*, model_cls, half_precision, **kwargs):
       model_dtype = jnp.float16
   else:
     model_dtype = jnp.float32
-  return model_cls(num_classes=1000, dtype=model_dtype, **kwargs)
+  return model_cls(num_classes=NUM_CLASSES, dtype=model_dtype, **kwargs)
 
 
 def initialized(key, image_size, model):
@@ -73,8 +76,9 @@ def initialized(key, image_size, model):
 
 
 def cross_entropy_loss(logits, labels):
-  return -jnp.sum(
-      common_utils.onehot(labels, num_classes=1000) * logits) / labels.size
+  one_hot_labels = common_utils.onehot(labels, num_classes=NUM_CLASSES)
+  xentropy = optax.softmax_cross_entropy(logits=logits, labels=one_hot_labels)
+  return jnp.mean(xentropy)
 
 
 def compute_metrics(logits, labels):
@@ -88,24 +92,22 @@ def compute_metrics(logits, labels):
   return metrics
 
 
-def cosine_decay(lr, step, total_steps):
-  ratio = jnp.maximum(0., step / total_steps)
-  mult = 0.5 * (1. + jnp.cos(jnp.pi * ratio))
-  return mult * lr
-
-
-def create_learning_rate_fn(config: ml_collections.ConfigDict,
-                            base_learning_rate: float,
-                            steps_per_epoch: int):
-
-  def step_fn(step):
-    epoch = step / steps_per_epoch
-    lr = cosine_decay(base_learning_rate,
-                      epoch - config.warmup_epochs,
-                      config.num_epochs - config.warmup_epochs)
-    warmup = jnp.minimum(1., epoch / config.warmup_epochs)
-    return lr * warmup
-  return step_fn
+def create_learning_rate_fn(
+    config: ml_collections.ConfigDict,
+    base_learning_rate: float,
+    steps_per_epoch: int):
+  """Create learning rate schedule."""
+  warmup_fn = optax.linear_schedule(
+      init_value=0., end_value=base_learning_rate,
+      transition_steps=config.warmup_epochs * steps_per_epoch)
+  cosine_epochs = max(config.num_epochs - config.warmup_epochs, 1)
+  cosine_fn = optax.cosine_decay_schedule(
+      init_value=base_learning_rate,
+      decay_steps=cosine_epochs * steps_per_epoch)
+  schedule_fn = optax.join_schedules(
+      schedules=[warmup_fn, cosine_fn],
+      boundaries=[config.warmup_epochs * steps_per_epoch])
+  return schedule_fn
 
 
 def train_step(state, batch, learning_rate_fn):
