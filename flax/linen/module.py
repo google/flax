@@ -20,6 +20,7 @@ import inspect
 import os
 import threading
 import types
+import typing
 import weakref
 
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
@@ -424,9 +425,14 @@ class Module:
   :meth:`compact` wrapper.
   """
 
-  def __init__(*args, **kwargs):
-    # this stub makes sure pytype accepts constructor arguments.
-    pass
+  if typing.TYPE_CHECKING:
+    def __init__(*args, **kwargs):
+      # this stub makes sure pytype accepts constructor arguments.
+      pass
+
+    def __call__(self, *args, **kwargs) -> Any:
+      # this stub allows pytype to accept Modules as Callables.
+      pass
 
   @classmethod
   def __init_subclass__(cls):
