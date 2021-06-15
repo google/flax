@@ -49,9 +49,9 @@ def _replicate(x, devices=None):
     # match the default device assignments used in pmap:
     # for single-host, that's the XLA default device assignment
     # for multi-host, it's the order of jax.local_devices()
-    if jax.host_count() == 1:
+    if jax.process_count() == 1:
       devices = [d for d in xb.get_backend().get_default_device_assignment(
-          jax.device_count()) if d.host_id == jax.host_id()]
+          jax.device_count()) if d.process_index == jax.process_index()]
     else:
       devices = jax.local_devices()
   if hasattr(jax.api, "device_put_sharded"):  # jax >= 0.2.0
