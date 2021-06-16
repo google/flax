@@ -29,3 +29,11 @@ Learning rate schedules
 .. autofunction:: create_stepped_learning_rate_schedule
 
 .. autofunction:: create_cosine_learning_rate_schedule
+
+Train state
+------------------------
+
+.. currentmodule:: flax.training.train_state
+
+.. autoclass:: TrainState
+    :members: apply_gradients, create

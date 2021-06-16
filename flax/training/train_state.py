@@ -22,16 +22,16 @@ import optax
 class TrainState(struct.PyTreeNode):
   """Simple train state for the common case with a single Optax optimizer.
 
-  Synopsis:
+  Synopsis::
 
-    state = TrainState.create(
-        apply_fn=model.apply,
-        params=variables['params'],
-        tx=tx)
-    grad_fn = jax.grad(make_loss_fn(state.apply_fn))
-    for batch in data:
-      grads = grad_fn(state.params, batch)
-      state = state.apply_gradients(grads=grads)
+      state = TrainState.create(
+          apply_fn=model.apply,
+          params=variables['params'],
+          tx=tx)
+      grad_fn = jax.grad(make_loss_fn(state.apply_fn))
+      for batch in data:
+        grads = grad_fn(state.params, batch)
+        state = state.apply_gradients(grads=grads)
 
   Note that you can easily extend this dataclass by subclassing it for storing
   additional data (e.g. additional variable collections).
@@ -39,12 +39,13 @@ class TrainState(struct.PyTreeNode):
   For more exotic usecases (e.g. multiple optimizers) it's probably best to
   fork the class and modify it.
 
-  Attributes:
+  Args:
     step: Counter starts at 0 and is incremented by every call to
       `.apply_gradients()`.
     apply_fn: Usually set to `model.apply()`. Kept in this dataclass for
       convenience to have a shorter params list for the `train_step()` function
       in your training loop.
+    params: The parameters to be updated by `tx` and used by `apply_fn`.
     tx: An Optax gradient transformation.
     opt_state: The state for `tx`.
   """

@@ -28,6 +28,7 @@ For a quick introduction and short example snippets, see our `README
 
    notebooks/jax_for_the_impatient
    notebooks/flax_basics
+   notebooks/annotated_mnist
 
 .. toctree::
    :maxdepth: 1
