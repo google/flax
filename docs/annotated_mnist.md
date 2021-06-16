@@ -12,7 +12,6 @@ from flax import linen as nn          # The Linen API
 from flax.training import train_state
 import optax                          # The Optax gradient processing and optimization library
 
-
 import numpy as np                    # Ordinary NumPy
 import tensorflow_datasets as tfds    # TFDS for MNIST
 ```
@@ -21,7 +20,6 @@ import tensorflow_datasets as tfds    # TFDS for MNIST
 
 ```python
 class CNN(nn.Module):
-
   @nn.compact
   def __call__(self, x):
     x = nn.Conv(features=32, kernel_size=(3, 3))(x)
@@ -34,23 +32,17 @@ class CNN(nn.Module):
     x = nn.Dense(features=256)(x)
     x = nn.relu(x)
     x = nn.Dense(features=10)(x)    # There are 10 classes in MNIST
-    x = nn.log_softmax(x)
     return x
 ```
 
-3. Define a cross-entropy loss function using just [`jax.numpy`](https://jax.readthedocs.io/en/latest/jax.numpy.html) that takes the model's logits and label vectors and returns a scalar loss. The labels can be one-hot encoded with [`jax.nn.one_hot`](https://jax.readthedocs.io/en/latest/_autosummary/jax.nn.one_hot.html), as demonstrated below.
-
-```python
-def cross_entropy_loss(logits, labels):
-  one_hot_labels = jax.nn.one_hot(labels, num_classes=10)
-  return -jnp.mean(jnp.sum(one_hot_labels * logits, axis=-1))
-```
-
-4. For loss and accuracy metrics, create a separate function:
+3. For loss and accuracy metrics, create a separate function:
+  
+  - Optax has built-in softmax cross-entropy ([`optax.softmax_cross_entropy`](https://optax.readthedocs.io/en/latest/api.html#optax.softmax_cross_entropy)).
+  - The labels can be one-hot encoded with [`jax.nn.one_hot`](https://jax.readthedocs.io/en/latest/_autosummary/jax.nn.one_hot.html), as demonstrated below.
 
 ```python
 def compute_metrics(logits, labels):
-  loss = cross_entropy_loss(logits, labels)
+  loss = jnp.mean(optax.softmax_cross_entropy(logits, jax.nn.one_hot(labels, num_classes=10)))
   accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
   metrics = {
       'loss': loss,
@@ -59,7 +51,7 @@ def compute_metrics(logits, labels):
   return metrics
 ```
 
-5. Define a function that loads and prepares the MNIST dataset and converts the samples to floating-point numbers.
+4. Define a function that loads and prepares the MNIST dataset with TFDS and converts the samples to floating-point numbers.
 
 ```python
 def get_datasets():
@@ -74,7 +66,7 @@ def get_datasets():
   return train_ds, test_ds
 ```
 
-6. Write a training step function that:
+5. Write a training step function that:
 
   - Evaluates the neural network given the parameters and a batch of input images with the [`Module.apply`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply) method.
   - Computes the `cross_entropy_loss` loss function.
@@ -82,14 +74,16 @@ def get_datasets():
   - Applies a [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions) of gradients (`flax.training.train_state.TrainState.apply_gradients`) to the optimizer to update the model's parameters.
   - Returns the optimizer `state` and computes the metrics using `compute_metrics` (defined earlier).
 
-  Use JAX's [`@jit`](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator to trace the entire `train_step` function and just-in-time([`jit`]-compile with [XLA](https://www.tensorflow.org/xla) into fused device operations that run faster and more efficiently on hardware accelerators.
+  Use JAX's [`@jit`](https://jax.readthedocs.io/en/latest/jax.html#jax.jit) decorator to trace the entire `train_step` function and just-in-time(JIT-compile with [XLA](https://www.tensorflow.org/xla) into fused device operations that run faster and more efficiently on hardware accelerators.
 
 ```python
 @jax.jit
 def train_step(state, batch):
   def loss_fn(params):
     logits = CNN().apply({'params': params}, batch['image'])
-    loss = cross_entropy_loss(logits, batch['label'])
+    loss = jnp.mean(optax.softmax_cross_entropy(
+        logits=logits, 
+        labels=jax.nn.one_hot(batch['label'], num_classes=10)))
     return loss, logits
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grads = grad_fn(state.params)
@@ -98,7 +92,7 @@ def train_step(state, batch):
   return state, metrics
 ```
 
-7. Create a function that evaluates your model on the test set with [`Module.apply`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply):
+6. Create a function that evaluates your model on the test set with [`Module.apply`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply):
 
 ```python
 # JIT compile
@@ -108,7 +102,7 @@ def eval_step(params, batch):
   return compute_metrics(logits, batch['label'])
 ```
 
-8. Define a training function that:
+7. Define a training function that:
 
   - Shuffles the training data before each epoch using [`jax.random.permutation`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.permutation.html) that takes a PRNGKey as a parameter (check the [JAX - the sharp bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG)).
   - Runs an optimization step for each batch.
@@ -141,7 +135,7 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
   return state, training_epoch_metrics
 ```
 
-9. Create a model evaluation function that:
+8. Create a model evaluation function that:
 
   - Retrieves the evaluation metrics from the device with `jax.device_get`.
   - Copies the metrics [data stored](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables) in a JAX [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions).
@@ -154,13 +148,13 @@ def eval_model(model, test_ds):
   return eval_summary['loss'], eval_summary['accuracy']
 ```
 
-10. Download the dataset and preprocess it:
+9. Download the dataset and preprocess it:
 
 ```python
 train_ds, test_ds = get_datasets()
 ```
 
-11. [PRNGs](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG):
+10. [PRNGs](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG):
 
   - Get one [PRNGKey](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.PRNGKey.html#jax.random.PRNGKey) and [split](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split) it to get a second key that you'll use for parameter initialization. (Learn more about [PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables) and [JAX PRNG design](https://github.com/google/jax/blob/master/design_notes/prng.md).)
 
@@ -169,14 +163,14 @@ rng = jax.random.PRNGKey(0)
 rng, init_rng = jax.random.split(rng)
 ```
 
-12. Instantiate the `CNN` model and initialize its parameters using a PRNG:
+11. Instantiate the `CNN` model and initialize its parameters using a PRNG:
 
 ```python
 cnn = CNN()
 params = cnn.init(init_rng, jnp.ones([1, 28, 28, 1]))['params']
 ```
 
-13. Instantiate the [SGD optimizer with Optax](https://optax.readthedocs.io/en/latest/api.html#sgd):
+12. Instantiate the [SGD optimizer with Optax](https://optax.readthedocs.io/en/latest/api.html#sgd):
 
 ```python
 learning_rate = 0.1
@@ -185,13 +179,13 @@ nesterov_momentum = 0.9
 tx = optax.sgd(learning_rate=learning_rate, nesterov=nesterov_momentum)
 ```
 
-14. Create a new [`TrainState`](https://flax.readthedocs.io/en/latest/flip/1009-optimizer-api.html#train-state) data class that applies the gradients and updates the optimizer state and parameters:
+13. Create a new [`TrainState`](https://flax.readthedocs.io/en/latest/flip/1009-optimizer-api.html#train-state) data class that applies the gradients and updates the optimizer state and parameters:
 
 ```python
 state = train_state.TrainState.create(apply_fn=cnn.apply, params=params, tx=tx)
 ```
 
-15. Train the network and evaluate it:
+14. Train the network and evaluate it:
 
 ```python
 num_epochs = 10
@@ -207,25 +201,25 @@ for epoch in range(1, num_epochs + 1):
   print('Testing - epoch: %d, loss: %.2f, accuracy: %.2f' % (epoch, test_loss, test_accuracy * 100))
 ```
 
-    Training - epoch: 1, loss: 0.2008, accuracy: 93.82
-    Testing - epoch: 1, loss: 0.07, accuracy: 97.62
-    Training - epoch: 2, loss: 0.0630, accuracy: 98.02
-    Testing - epoch: 2, loss: 0.04, accuracy: 98.60
-    Training - epoch: 3, loss: 0.0433, accuracy: 98.66
-    Testing - epoch: 3, loss: 0.04, accuracy: 98.89
-    Training - epoch: 4, loss: 0.0334, accuracy: 98.97
-    Testing - epoch: 4, loss: 0.03, accuracy: 99.07
-    Training - epoch: 5, loss: 0.0265, accuracy: 99.15
-    Testing - epoch: 5, loss: 0.03, accuracy: 98.79
-    Training - epoch: 6, loss: 0.0205, accuracy: 99.36
-    Testing - epoch: 6, loss: 0.03, accuracy: 99.10
-    Training - epoch: 7, loss: 0.0170, accuracy: 99.48
-    Testing - epoch: 7, loss: 0.03, accuracy: 99.10
-    Training - epoch: 8, loss: 0.0148, accuracy: 99.53
-    Testing - epoch: 8, loss: 0.03, accuracy: 98.86
-    Training - epoch: 9, loss: 0.0113, accuracy: 99.66
-    Testing - epoch: 9, loss: 0.03, accuracy: 99.05
-    Training - epoch: 10, loss: 0.0093, accuracy: 99.73
-    Testing - epoch: 10, loss: 0.03, accuracy: 99.21
+    Training - epoch: 1, loss: 0.1963, accuracy: 93.96
+    Testing - epoch: 1, loss: 0.09, accuracy: 96.97
+    Training - epoch: 2, loss: 0.0622, accuracy: 98.10
+    Testing - epoch: 2, loss: 0.05, accuracy: 98.35
+    Training - epoch: 3, loss: 0.0428, accuracy: 98.70
+    Testing - epoch: 3, loss: 0.04, accuracy: 98.74
+    Training - epoch: 4, loss: 0.0330, accuracy: 98.98
+    Testing - epoch: 4, loss: 0.03, accuracy: 99.02
+    Training - epoch: 5, loss: 0.0263, accuracy: 99.16
+    Testing - epoch: 5, loss: 0.03, accuracy: 99.03
+    Training - epoch: 6, loss: 0.0219, accuracy: 99.31
+    Testing - epoch: 6, loss: 0.03, accuracy: 99.00
+    Training - epoch: 7, loss: 0.0178, accuracy: 99.44
+    Testing - epoch: 7, loss: 0.03, accuracy: 99.03
+    Training - epoch: 8, loss: 0.0139, accuracy: 99.58
+    Testing - epoch: 8, loss: 0.03, accuracy: 99.08
+    Training - epoch: 9, loss: 0.0116, accuracy: 99.66
+    Testing - epoch: 9, loss: 0.03, accuracy: 99.16
+    Training - epoch: 10, loss: 0.0102, accuracy: 99.70
+    Testing - epoch: 10, loss: 0.03, accuracy: 99.01
 
 Once the training and testing is done after 10 epochs, the output should show that your model was able to achieve approximately 99% accuracy.
