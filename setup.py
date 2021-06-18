@@ -43,7 +43,7 @@ tests_require = [
     "pytest",
     "pytest-cov",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
-    "pytype",
+    "pytype==2021.5.25",  # pytype 2021.6.17 complains on recurrent.py, need to investigate!
     "sentencepiece",  # WMT example.
     "svn",
     "tensorflow-cpu>=2.4.0",

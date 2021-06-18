@@ -299,7 +299,7 @@ def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
   @functools.wraps(hash_fn)
   def wrapped(self):
     if self.scope is not None:
-      raise ValueError('Can\'t call __hash__ on modules that hold variables.')
+      raise TypeError('Can\'t call __hash__ on modules that hold variables.')
     return hash_fn(self)
   return wrapped
 
