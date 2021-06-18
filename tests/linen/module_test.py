@@ -632,7 +632,7 @@ class ModuleTest(absltest.TestCase):
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
     msg = 'Can\'t call __hash__ on modules that hold variables.'
-    with self.assertRaisesWithLiteralMatch(ValueError, msg):
+    with self.assertRaisesWithLiteralMatch(TypeError, msg):
       hash(module_a)
 
   def test_module_trace(self):
