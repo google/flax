@@ -61,21 +61,26 @@ official Flax example, and start from there.
 Using Linen
 ~~~~~~~~~~~~~~~~~~~~
 
-+----------------------------------+---------------------+------------------------+----------------------------------+
-|               Link               |     Author          |       Task type        |            Reference             |
-+==================================+=====================+========================+==================================+
-| `matthias-wright/flaxmodels`_    | `@matthias-wright`_ | Various                | Various                          |
-+----------------------------------+---------------------+------------------------+----------------------------------+
-| `JAX-RL`_                        | `@henry-prior`_     | Reinforcement learning | N/A                              |
-+----------------------------------+---------------------+------------------------+----------------------------------+
-| `DCGAN`_ Colab                   | `@bkkaggle`_        | Image Synthesis        | https://arxiv.org/abs/1511.06434 |
-+----------------------------------+---------------------+------------------------+----------------------------------+
++-------------------------------+---------------------+------------------------+--------------------------------------+
+|             Link              |       Author        |       Task type        |              Reference               |
++===============================+=====================+========================+======================================+
+| `matthias-wright/flaxmodels`_ | `@matthias-wright`_ | Various                | Various                              |
++-------------------------------+---------------------+------------------------+--------------------------------------+
+| `google/vision_transformer`_  | `@andsteing`_       | Image classification,  | https://arxiv.org/abs/2010.11929 and |
+|                               |                     | fine-tuning            | https://arxiv.org/abs/2105.01601     |
++-------------------------------+---------------------+------------------------+--------------------------------------+
+| `JAX-RL`_                     | `@henry-prior`_     | Reinforcement learning | N/A                                  |
++-------------------------------+---------------------+------------------------+--------------------------------------+
+| `DCGAN`_ Colab                | `@bkkaggle`_        | Image Synthesis        | https://arxiv.org/abs/1511.06434     |
++-------------------------------+---------------------+------------------------+--------------------------------------+
 
 .. _`matthias-wright/flaxmodels`: https://github.com/matthias-wright/flaxmodels
+.. _`google/vision_transformer`: https://github.com/google-research/vision_transformer
 .. _`JAX-RL`: https://github.com/henry-prior/jax-rl
 .. _`DCGAN`: https://github.com/bkkaggle/jax-dcgan
-.. _`@bkkaggle`: https://github.com/bkkaggle
 .. _`@matthias-wright`: https://github.com/matthias-wright
+.. _`@andsteing`: https://github.com/andsteing
+.. _`@bkkaggle`: https://github.com/bkkaggle
 
 Using the Deprecated ``flax.nn`` API
 ~~~~~~~~~~~~~~~~~~~~
