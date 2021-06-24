@@ -189,13 +189,13 @@ def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
   """
   if train:
     train_examples = dataset_builder.info.splits['train'].num_examples
-    split_size = train_examples // jax.host_count()
-    start = jax.host_id() * split_size
+    split_size = train_examples // jax.process_count()
+    start = jax.process_index() * split_size
     split = 'train[{}:{}]'.format(start, start + split_size)
   else:
     validate_examples = dataset_builder.info.splits['validation'].num_examples
-    split_size = validate_examples // jax.host_count()
-    start = jax.host_id() * split_size
+    split_size = validate_examples // jax.process_count()
+    start = jax.process_index() * split_size
     split = 'validation[{}:{}]'.format(start, start + split_size)
 
   def decode_example(example):
@@ -208,8 +208,9 @@ def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
   ds = dataset_builder.as_dataset(split=split, decoders={
       'image': tfds.decode.SkipDecoding(),
   })
-  ds.options().experimental_threading.private_threadpool_size = 48
-  ds.options().experimental_threading.max_intra_op_parallelism = 1
+  options = tf.data.Options()
+  options.experimental_threading.private_threadpool_size = 48
+  ds = ds.with_options(options)
 
   if cache:
     ds = ds.cache()

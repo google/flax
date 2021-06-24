@@ -19,7 +19,7 @@ from jax import random
 from jax.nn import initializers
 import jax.numpy as jnp
 
-import numpy as onp
+import numpy as np
 from typing import Any, Tuple
 
 from flax import linen as nn
@@ -27,8 +27,6 @@ from flax.core import Scope
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 class Dummy(nn.Module):
   @nn.compact

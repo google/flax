@@ -8,8 +8,7 @@
 | [**What does Flax look like?**](#what-does-flax-look-like)
 | [**Documentation**](https://flax.readthedocs.io/)
 
-**See our [full documentation](https://flax.readthedocs.io/)
-to learn everything you need to know about Flax.**
+This README is a very short intro. **To learn everything you need to know about Flax, see our [full documentation](https://flax.readthedocs.io/)**
 
 Flax was originally started by engineers and researchers within the Brain Team in Google Research (in close collaboration with the JAX team), and is now developed jointly with the open source community.
 
@@ -30,18 +29,13 @@ discussions, issues and pull requests. We hope to increasingly engage
 with the needs and clarifications of the broader ecosystem. Please let
 us know how we can help!
 
-**NOTE**: The new Flax ["Linen" module
-API](https://github.com/google/flax/tree/master/flax/linen/README.md)
-is now stable and we recommend it for all new projects. The old
-`flax.nn` API will be deprecated.
-
 Please report any feature requests,
 issues, questions or concerns in our [discussion
 forum](https://github.com/google/flax/discussions), or just let us
 know what you're working on!
 
 We expect to improve Flax, but we don't anticipate significant
-breaking changes to the core API. We use [Changelog](CHANGELOG.md)
+breaking changes to the core API. We use [Changelog](https://github.com/google/flax/tree/master/CHANGELOG.md)
 entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
@@ -93,19 +87,30 @@ To upgrade to the latest version of Flax, you can use:
 
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
 
-To learn more about the `Module` abstraction, please check our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb) or visit our
-[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html) page for additional concrete demonstrations of best practices.
+To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
+[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html).
 
 ```py
+from typing import Sequence
+
+import jax
+import jax.numpy as jnp
+import flax.linen as nn
+
 class MLP(nn.Module):
   features: Sequence[int]
 
   @nn.compact
   def __call__(self, x):
     for feat in self.features[:-1]:
-      x = nn.relu(Dense(feat)(x))
-    x = Dense(self.features[-1])(x)
+      x = nn.relu(nn.Dense(feat)(x))
+    x = nn.Dense(self.features[-1])(x)
     return x
+
+model = MLP([12, 8, 4])
+batch = jnp.ones((32, 10))
+variables = model.init(jax.random.PRNGKey(0), batch)
+output = model.apply(variables, batch)
 ```
 
 ```py
@@ -124,17 +129,23 @@ class CNN(nn.Module):
     x = nn.Dense(features=10)(x)
     x = nn.log_softmax(x)
     return x
+
+model = CNN()
+batch = jnp.ones((32, 64, 64, 10))  # (N, H, W, C) format
+variables = model.init(jax.random.PRNGKey(0), batch)
+output = model.apply(variables, batch)
 ```
 
 ```py
-class AutoEncoder(Module):
+class AutoEncoder(nn.Module):
   encoder_widths: Sequence[int]
   decoder_widths: Sequence[int]
-  input_shape: Tuple[int] = None
+  input_shape: Sequence[int]
 
   def setup(self):
+    input_dim = jnp.prod(jnp.asarray(self.input_shape))
     self.encoder = MLP(self.encoder_widths)
-    self.decoder = MLP(self.decoder_widths + (jnp.prod(self.input_shape, ))
+    self.decoder = MLP(self.decoder_widths + (input_dim,))
 
   def __call__(self, x):
     return self.decode(self.encode(x))
@@ -148,6 +159,14 @@ class AutoEncoder(Module):
     x = nn.sigmoid(z)
     x = jnp.reshape(x, (x.shape[0],) + self.input_shape)
     return x
+
+model = AutoEncoder(encoder_widths=[20, 10, 5],
+                    decoder_widths=[5, 10, 20],
+                    input_shape=(12,))
+batch = jnp.ones((16, 12))
+variables = model.init(jax.random.PRNGKey(0), batch)
+encoded = model.apply(variables, batch, method=model.encode)
+decoded = model.apply(variables, encoded, method=model.decode)
 ```
 
 ## Citing Flax
@@ -159,7 +178,7 @@ To cite this repository:
   author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
   title = {{F}lax: A neural network library and ecosystem for {JAX}},
   url = {http://github.com/google/flax},
-  version = {0.3.0},
+  version = {0.3.4},
   year = {2020},
 }
 ```

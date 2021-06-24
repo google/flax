@@ -17,8 +17,6 @@ from jax import numpy as jnp, random, lax, jit
 from flax import linen as nn
 from dense import Dense
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 X = jnp.ones((1, 10))
 Y = jnp.ones((5,))

@@ -20,7 +20,7 @@ from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-from flax.linen.module import Module, compact
+from flax.linen.module import Module, compact, merge_param
 
 
 PRNGKey = Any
@@ -60,7 +60,7 @@ class BatchNorm(Module):
       the examples on the first two and last two devices. See `jax.lax.psum`
       for more details.
   """
-  use_running_average: bool = False
+  use_running_average: Optional[bool] = None
   axis: int = -1
   momentum: float = 0.99
   epsilon: float = 1e-5
@@ -73,15 +73,26 @@ class BatchNorm(Module):
   axis_index_groups: Any = None
 
   @compact
-  def __call__(self, x):
+  def __call__(self, x, use_running_average: Optional[bool] = None):
     """Normalizes the input using batch statistics.
+
+    NOTE:
+    During initialization (when parameters are mutable) the running average
+    of the batch statistics will not be updated. Therefore, the inputs
+    fed during initialization don't need to match that of the actual input
+    distribution and the reduction axis (set with `axis_name`) does not have
+    to exist.
 
     Args:
       x: the input to be normalized.
+      use_running_average: if true, the statistics stored in batch_stats
+        will be used instead of computing the batch statistics on the input.
 
     Returns:
       Normalized inputs (the same shape as inputs).
     """
+    use_running_average = merge_param(
+        'use_running_average', self.use_running_average, use_running_average)
     x = jnp.asarray(x, jnp.float32)
     axis = self.axis if isinstance(self.axis, tuple) else (self.axis,)
     axis = _absolute_dims(x.ndim, axis)
@@ -89,8 +100,8 @@ class BatchNorm(Module):
     reduced_feature_shape = tuple(d for i, d in enumerate(x.shape) if i in axis)
     reduction_axis = tuple(i for i in range(x.ndim) if i not in axis)
 
-    # we detect if we're in initialization via empty variable tree.
-    initializing = not self.has_variable('batch_stats', 'mean')
+    # see NOTE above on initialization behavior
+    initializing = self.is_mutable_collection('params')
 
     ra_mean = self.variable('batch_stats', 'mean',
                             lambda s: jnp.zeros(s, jnp.float32),
@@ -99,7 +110,7 @@ class BatchNorm(Module):
                            lambda s: jnp.ones(s, jnp.float32),
                            reduced_feature_shape)
 
-    if self.use_running_average:
+    if use_running_average:
       mean, var = ra_mean.value, ra_var.value
     else:
       mean = jnp.mean(x, axis=reduction_axis, keepdims=False)
@@ -238,12 +249,16 @@ class GroupNorm(Module):
                        'specified, but not both of them.')
     num_groups = self.num_groups
 
+    channels = x.shape[-1]
     if self.group_size is not None:
-      channels = x.shape[-1]
       if channels % self.group_size != 0:
         raise ValueError('Number of channels ({}) is not multiple of the '
                          'group size ({}).'.format(channels, self.group_size))
       num_groups = channels // self.group_size
+
+    if num_groups <= 0 or channels % num_groups != 0:
+      raise ValueError('Number of groups ({}) does not divide the number'
+                       ' of channels ({}).'.format(num_groups, channels))
 
     input_shape = x.shape
     group_shape = x.shape[:-1] + (num_groups, x.shape[-1] // num_groups)

@@ -13,10 +13,18 @@
 # limitations under the License.
 
 """Learning rate schedules used in FLAX image classification examples.
+
+Note that with `FLIP #1009`_ learning rate schedules in ``flax.training`` are
+**effectively deprecated** in favor of Optax_ schedules. Please refer to
+`Optimizer Schedules`_ for more information. 
+
+.. _FLIP #1009: https://github.com/google/flax/blob/master/docs/flip/1009-optimizer-api.md
+.. _Optax: https://github.com/deepmind/optax
+.. _Optimizer Schedules: https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules
 """
 
 import jax.numpy as jnp
-import numpy as onp
+import numpy as np
 
 
 def _piecewise_constant(boundaries, values, t):
@@ -58,12 +66,13 @@ def create_stepped_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   by specified amounts at specified epochs. The steps are given as
   the `lr_sched_steps` parameter. A common ImageNet schedule decays the
   learning rate by a factor of 0.1 at epochs 30, 60 and 80. This would be
-  specified as:
-  [
-    [30, 0.1],
-    [60, 0.01],
-    [80, 0.001]
-  ]
+  specified as::
+
+    [
+      [30, 0.1],
+      [60, 0.01],
+      [80, 0.001]
+    ]
 
   This function also offers a learing rate warmup as per
   https://arxiv.org/abs/1706.02677, for the purpose of training with large
@@ -84,9 +93,9 @@ def create_stepped_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   """
   boundaries = [step[0] for step in lr_sched_steps]
   decays = [step[1] for step in lr_sched_steps]
-  boundaries = onp.array(boundaries) * steps_per_epoch
-  boundaries = onp.round(boundaries).astype(int)
-  values = onp.array([1.0] + decays) * base_learning_rate
+  boundaries = np.array(boundaries) * steps_per_epoch
+  boundaries = np.round(boundaries).astype(int)
+  values = np.array([1.0] + decays) * base_learning_rate
 
   def learning_rate_fn(step):
     lr = _piecewise_constant(boundaries, values, step)

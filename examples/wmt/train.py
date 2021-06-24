@@ -416,6 +416,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   vocab_path = config.vocab_path
   if vocab_path is None:
     vocab_path = os.path.join(workdir, "sentencepiece_model")
+    config.vocab_path = vocab_path
   tf.io.gfile.makedirs(os.path.split(vocab_path)[0])
 
   # Load Dataset
@@ -424,6 +425,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   train_ds, eval_ds, predict_ds, encoder = input_pipeline.get_wmt_datasets(
       n_devices=jax.local_device_count(),
       config=config,
+      reverse_translation=config.reverse_translation,
       vocab_path=vocab_path)
 
   train_iter = iter(train_ds)
@@ -492,8 +494,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     start_step = int(optimizer.state.step)
 
   writer = metric_writers.create_default_writer(
-      workdir, just_logging=jax.host_id() > 0)
-  if start_step == 1:
+      workdir, just_logging=jax.process_index() > 0)
+  if start_step == 0:
     writer.write_hparams(dict(config))
 
   # Replicate optimizer.
@@ -513,8 +515,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       donate_argnums=(0,))  # pytype: disable=wrong-arg-types
   p_eval_step = jax.pmap(
       functools.partial(
-          eval_step, config=eval_config,
-          label_smoothing=config.label_smoothing),
+          eval_step, config=eval_config),
       axis_name="batch")
   p_init_cache = jax.pmap(
       functools.partial(
@@ -540,7 +541,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   hooks = []
   report_progress = periodic_actions.ReportProgress(
       num_train_steps=config.num_train_steps, writer=writer)
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     hooks += [
         report_progress,
         periodic_actions.Profile(logdir=workdir, num_profile_steps=5)
@@ -551,7 +552,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       is_last_step = step == config.num_train_steps - 1
 
       # Shard data to devices and do a training step.
-      with jax.profiler.StepTraceContext("train", step_num=step):
+      with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = common_utils.shard(jax.tree_map(np.asarray, next(train_iter)))
         optimizer, metrics = p_train_step(
             optimizer, batch, dropout_rng=dropout_rngs)
@@ -597,8 +598,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           writer.write_texts(step, {"samples": exemplars})
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
-      save_checkpoint = step % config.checkpoint_every_steps == 0 or is_last_step
-      if config.save_checkpoints and save_checkpoint and jax.host_id() == 0:
+      save_checkpoint = (step % config.checkpoint_every_steps == 0 or
+                         is_last_step)
+      if config.save_checkpoints and save_checkpoint and jax.process_index() == 0:
         with report_progress.timed("checkpoint"):
           checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(optimizer),
                                       step)

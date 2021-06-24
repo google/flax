@@ -17,7 +17,7 @@ import itertools
 import tempfile
 
 from absl.testing import absltest
-import numpy as onp
+import numpy as np
 
 from tensorboard.backend.event_processing import directory_watcher
 from tensorboard.backend.event_processing import event_file_loader
@@ -65,7 +65,7 @@ class TensorboardTest(absltest.TestCase):
 
     summary_value = self.parse_and_return_summary_value(path=log_dir)
     self.assertEqual(summary_value.tag, 'scalar_test')
-    self.assertTrue(onp.allclose(
+    self.assertTrue(np.allclose(
         tensor_util.make_ndarray(summary_value.tensor).item(),
         float_value))
 
@@ -84,35 +84,35 @@ class TensorboardTest(absltest.TestCase):
   def test_summarywriter_image(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    expected_img = onp.random.uniform(low=0., high=255., size=(30, 30, 3))
-    expected_img = expected_img.astype(onp.uint8)
+    expected_img = np.random.uniform(low=0., high=255., size=(30, 30, 3))
+    expected_img = expected_img.astype(np.uint8)
     summary_writer.image(tag='image_test', image=expected_img, step=1)
     summary_value = self.parse_and_return_summary_value(path=log_dir)
 
     self.assertEqual(summary_value.tag, 'image_test')
     actual_img = tf.image.decode_image(summary_value.tensor.string_val[2])
-    self.assertTrue(onp.allclose(actual_img, expected_img))
+    self.assertTrue(np.allclose(actual_img, expected_img))
 
   def test_summarywriter_image_float_pixel_values(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    expected_img = onp.random.uniform(low=0., high=1., size=(30, 30, 3))
+    expected_img = np.random.uniform(low=0., high=1., size=(30, 30, 3))
     summary_writer.image(tag='image_test', image=expected_img, step=1)
     summary_value = self.parse_and_return_summary_value(path=log_dir)
 
     # convert and scale expected_img appropriately to numpy uint8.
     expected_img = tf.image.convert_image_dtype(
-        image=expected_img, dtype=onp.uint8)
+        image=expected_img, dtype=np.uint8)
 
     self.assertEqual(summary_value.tag, 'image_test')
     actual_img = tf.image.decode_image(summary_value.tensor.string_val[2])
-    self.assertTrue(onp.allclose(actual_img, expected_img))
+    self.assertTrue(np.allclose(actual_img, expected_img))
 
   def test_summarywriter_2dimage_scaled(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    img = onp.random.uniform(low=0., high=255., size=(30, 30))
-    img = img.astype(onp.uint8)
+    img = np.random.uniform(low=0., high=255., size=(30, 30))
+    img = img.astype(np.uint8)
     summary_writer.image(tag='2dimage_test', image=img, step=1)
     summary_value = self.parse_and_return_summary_value(path=log_dir)
 
@@ -124,8 +124,8 @@ class TensorboardTest(absltest.TestCase):
   def test_summarywriter_single_channel_image_scaled(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    img = onp.random.uniform(low=0., high=255., size=(30, 30, 1))
-    img = img.astype(onp.uint8)
+    img = np.random.uniform(low=0., high=255., size=(30, 30, 1))
+    img = img.astype(np.uint8)
     summary_writer.image(tag='2dimage_1channel_test', image=img, step=1)
     summary_value = self.parse_and_return_summary_value(path=log_dir)
 
@@ -134,10 +134,37 @@ class TensorboardTest(absltest.TestCase):
     # assert the image was increased in dimension
     self.assertEqual(actual_img.shape, (30, 30, 3))
 
+  def test_summarywriter_multiple_images(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    expected_img = np.random.uniform(low=0., high=255., size=(2, 30, 30, 3))
+    expected_img = expected_img.astype(np.uint8)
+    summary_writer.image(tag='multiple_images_test', image=expected_img, step=1)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+
+    self.assertEqual(summary_value.tag, 'multiple_images_test')
+    actual_imgs = [tf.image.decode_image(s)
+                   for s in summary_value.tensor.string_val[2:]]
+    self.assertTrue(np.allclose(np.stack(actual_imgs, axis=0), expected_img))
+
+  def test_summarywriter_multiple_2dimages_scaled(self):
+    log_dir = tempfile.mkdtemp()
+    summary_writer = SummaryWriter(log_dir=log_dir)
+    img = np.random.uniform(low=0., high=255., size=(2, 30, 30))
+    img = img.astype(np.uint8)
+    summary_writer.image(tag='multiple_2dimages_test', image=img, step=1)
+    summary_value = self.parse_and_return_summary_value(path=log_dir)
+
+    self.assertEqual(summary_value.tag, 'multiple_2dimages_test')
+    actual_imgs = [tf.image.decode_image(s)
+                   for s in summary_value.tensor.string_val[2:]]
+    # assert the images were increased in dimension
+    self.assertEqual(np.stack(actual_imgs, axis=0).shape, (2, 30, 30, 3))
+
   def test_summarywriter_audio(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    expected_audio_samples = onp.random.uniform(
+    expected_audio_samples = np.random.uniform(
         low=-1., high=1., size=(2, 48000, 2))
     summary_writer.audio(
         tag='audio_test', audiodata=expected_audio_samples, step=1)
@@ -151,18 +178,18 @@ class TensorboardTest(absltest.TestCase):
     # Assert values.
     actual_audio_1 = tf.audio.decode_wav(
         summary_value.tensor.string_val[0]).audio
-    self.assertTrue(onp.allclose(
+    self.assertTrue(np.allclose(
         expected_audio_samples[0], actual_audio_1, atol=1e-04))
 
     actual_audio_2 = tf.audio.decode_wav(
         summary_value.tensor.string_val[1]).audio
-    self.assertTrue(onp.allclose(
+    self.assertTrue(np.allclose(
         expected_audio_samples[1], actual_audio_2, atol=1e-04))
 
   def test_summarywriter_audio_sampled_output(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    expected_audio_samples = onp.random.uniform(
+    expected_audio_samples = np.random.uniform(
         low=-1., high=1., size=(2, 48000, 2))
     summary_writer.audio(
         tag='audio_test', audiodata=expected_audio_samples, step=1,
@@ -177,13 +204,13 @@ class TensorboardTest(absltest.TestCase):
     # Assert values.
     actual_audio = tf.audio.decode_wav(summary_value.tensor.string_val[0]).audio
 
-    self.assertTrue(onp.allclose(
+    self.assertTrue(np.allclose(
         expected_audio_samples[0], actual_audio, atol=1e-04))
 
   def test_summarywriter_clipped_audio(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    expected_audio_samples = onp.random.uniform(
+    expected_audio_samples = np.random.uniform(
         low=-2., high=2., size=(2, 48000, 2))
     summary_writer.audio(
         tag='audio_test', audiodata=expected_audio_samples, step=1,
@@ -198,17 +225,17 @@ class TensorboardTest(absltest.TestCase):
     # actual_audio is clipped.
     actual_audio = tf.audio.decode_wav(
         summary_value.tensor.string_val[0]).audio
-    self.assertFalse(onp.allclose(
+    self.assertFalse(np.allclose(
         expected_audio_samples[0], actual_audio, atol=1e-04))
 
-    clipped_audio = onp.clip(onp.array(expected_audio_samples[0]), -1, 1)
+    clipped_audio = np.clip(np.array(expected_audio_samples[0]), -1, 1)
     self.assertTrue(
-        onp.allclose(clipped_audio, actual_audio, atol=1e-04))
+        np.allclose(clipped_audio, actual_audio, atol=1e-04))
 
   def test_summarywriter_histogram_defaultbins(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    histogram = onp.arange(1000)
+    histogram = np.arange(1000)
     # Histogram will be created for 30 (default) bins.
     summary_writer.histogram(tag='histogram_test', values=histogram, step=1)
 
@@ -217,12 +244,12 @@ class TensorboardTest(absltest.TestCase):
     actual_histogram = tensor_util.make_ndarray(summary_value.tensor)
     self.assertTrue(actual_histogram.shape, (30, 3))
     self.assertTrue(
-        onp.allclose(actual_histogram[0], (0.0, 33.3, 34.0), atol=1e-01))
+        np.allclose(actual_histogram[0], (0.0, 33.3, 34.0), atol=1e-01))
 
   def test_summarywriter_histogram_2bins(self):
     log_dir = tempfile.mkdtemp()
     summary_writer = SummaryWriter(log_dir=log_dir)
-    histogram = onp.arange(1000)
+    histogram = np.arange(1000)
     summary_writer.histogram(
         tag='histogram_test', values=histogram, step=1, bins=2)
 
@@ -231,9 +258,9 @@ class TensorboardTest(absltest.TestCase):
     actual_histogram = tensor_util.make_ndarray(summary_value.tensor)
     self.assertTrue(actual_histogram.shape, (2, 3))
     self.assertTrue(
-        onp.allclose(actual_histogram[0], (0.0, 499.5, 500.0), atol=1e-01))
+        np.allclose(actual_histogram[0], (0.0, 499.5, 500.0), atol=1e-01))
     self.assertTrue(
-        onp.allclose(actual_histogram[1], (499.5, 999.0, 500.0), atol=1e-01))
+        np.allclose(actual_histogram[1], (499.5, 999.0, 500.0), atol=1e-01))
 
 if __name__ == '__main__':
   absltest.main()

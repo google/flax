@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from flax import errors
 from flax.core import Scope, init, apply, lift, nn
 
 from jax import random
@@ -22,7 +23,7 @@ import numpy as np
 
 from absl.testing import absltest
 
-class ScopeTest(absltest.TestCase):
+class LiftTest(absltest.TestCase):
 
   def test_aliasing(self):
     def f(scope):
@@ -44,9 +45,34 @@ class ScopeTest(absltest.TestCase):
                         split_rngs={'params': True})
       dense(scope.push('dense'), np.ones((3, 2)), 2)
 
-    with self.assertRaisesWithLiteralMatch(ValueError, 'No parameter named "kernel" exists in "/vmap(dense)".'):
+    msg = r'No parameter named "kernel" exists in "/vmap\(dense\)".'
+    with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({})
 
+
+  def test_jit_cache(self):
+    compiles = 0
+    @lift.jit
+    def f(scope, x):
+      nonlocal compiles
+      compiles += 1
+      if scope.is_mutable_collection('intermediates') and not scope.is_mutable_collection('params'):
+        scope.put_variable('intermediates', 'x', x + 1)
+      return nn.dense(scope, x, 1)
+
+    x = np.ones((3, 2))
+    _, params = init(f)(random.PRNGKey(0), x)
+    init(f)(random.PRNGKey(0), x)
+    self.assertEqual(compiles, 1)
+    apply(f)(params, x)
+    self.assertEqual(compiles, 2)  # apply should cause a compile
+    apply(f)(params, x)
+    self.assertEqual(compiles, 2)  # applying again should not
+    # edge case where only the implicit return of the jitted functions changes.
+    # this should not use the previously cached apply.
+    _, state = apply(f, mutable='intermediates')(params, x)
+    self.assertEqual(compiles, 3)  # applying again should not
+    self.assertEqual(state['intermediates']['x'].sum(), 3 * 2 * 2)
 
 
 if __name__ == '__main__':

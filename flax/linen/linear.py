@@ -27,7 +27,7 @@ import numpy as np
 
 
 PRNGKey = Any
-Shape = Tuple[int]
+Shape = Iterable[int]
 Dtype = Any  # this could be a real type?
 Array = Any
 
@@ -37,7 +37,14 @@ default_kernel_init = lecun_normal()
 
 def _normalize_axes(axes, ndim):
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
-  return tuple([ax if ax >= 0 else ndim + ax for ax in axes])
+  return tuple(sorted([ax if ax >= 0 else ndim + ax for ax in axes]))
+
+
+def _canonicalize_tuple(x):
+  if isinstance(x, Iterable):
+    return tuple(x)
+  else:
+    return (x,)
 
 
 class DenseGeneral(Module):
@@ -64,23 +71,6 @@ class DenseGeneral(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: Any = None
 
-  def setup(self):
-    """Normalize hyperparameters."""
-    if not isinstance(self.features, Iterable):
-      self.features = (self.features,)
-    if not isinstance(self.axis, Iterable):
-      self.axis = (self.axis,)
-    if not isinstance(self.batch_dims, Iterable):
-      self.batch_dims = (self.batch_dims,)
-    self.features = tuple(self.features)
-    self.axis = tuple(self.axis)
-    self.batch_dims = tuple(self.batch_dims)
-    if self.batch_dims:
-      max_dim = np.max(self.batch_dims)
-      if set(self.batch_dims) != set(range(max_dim + 1)):
-        raise ValueError('batch_dims %s must be consecutive leading '
-                         'dimensions starting from 0.' % str(self.batch_dims))
-
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a linear transformation to the inputs along multiple dimensions.
@@ -91,13 +81,22 @@ class DenseGeneral(Module):
     Returns:
       The transformed input.
     """
+    features = _canonicalize_tuple(self.features)
+    axis = _canonicalize_tuple(self.axis)
+    batch_dims = _canonicalize_tuple(self.batch_dims)
+    if batch_dims:
+      max_dim = np.max(batch_dims)
+      if set(batch_dims) != set(range(max_dim + 1)):
+        raise ValueError('batch_dims %s must be consecutive leading '
+                         'dimensions starting from 0.' % str(batch_dims))
+
     inputs = jnp.asarray(inputs, self.dtype)
 
     ndim = inputs.ndim
-    n_batch_dims = len(self.batch_dims)
-    axis = _normalize_axes(self.axis, ndim)
-    batch_dims = _normalize_axes(self.batch_dims, ndim)
-    n_axis, n_features = len(axis), len(self.features)
+    n_batch_dims = len(batch_dims)
+    axis = _normalize_axes(axis, ndim)
+    batch_dims = _normalize_axes(batch_dims, ndim)
+    n_axis, n_features = len(axis), len(features)
 
     def kernel_init_wrap(rng, shape, dtype=jnp.float32):
       size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
@@ -108,7 +107,11 @@ class DenseGeneral(Module):
       return jnp.reshape(kernel, shape)
 
     batch_shape = tuple([inputs.shape[ax] for ax in batch_dims])
-    kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + self.features
+    # batch and non-contracting dims of input with 1s for batch dims.
+    expanded_batch_shape = tuple(
+        inputs.shape[ax] if ax in batch_dims else 1
+        for ax in range(inputs.ndim) if ax not in axis)
+    kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
     kernel = self.param('kernel', kernel_init_wrap, batch_shape + kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
 
@@ -118,6 +121,7 @@ class DenseGeneral(Module):
                           kernel,
                           ((axis, contract_ind), (batch_dims, batch_ind)),
                           precision=self.precision)
+    # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
         size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
@@ -126,13 +130,9 @@ class DenseGeneral(Module):
                                 for _ in range(size_batch_dims)], axis=0)
         return jnp.reshape(bias, shape)
 
-      bias = self.param('bias', bias_init_wrap, batch_shape + self.features)
-
-      # Reshape bias for broadcast.
-      expand_dims = sorted(
-          set(range(inputs.ndim)) - set(axis) - set(batch_dims))
-      for ax in expand_dims:
-        bias = jnp.expand_dims(bias, ax)
+      bias = self.param('bias', bias_init_wrap, batch_shape + features)
+      # expand bias shape to broadcast bias over batch dims.
+      bias = jnp.reshape(bias, expanded_batch_shape + features)
       bias = jnp.asarray(bias, self.dtype)
       out = out + bias
     return out
@@ -407,7 +407,8 @@ class Embed(Module):
     """
     if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
-    return self.embedding[inputs]
+    # Use take because fancy indexing numpy arrays with JAX indices does not work correctly.
+    return jnp.take(self.embedding, inputs, axis=0)
 
   def attend(self, query):
     """Attend over the embedding using a query array.

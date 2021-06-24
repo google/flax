@@ -20,8 +20,6 @@ import numpy as np
 from pprint import pprint
 from dense import Dense
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 # Here submodules are explicitly defined during init, but still materialized
 # lazily only once a first input is passed through and shapes are known.

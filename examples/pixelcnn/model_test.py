@@ -20,12 +20,11 @@ from flax import linen as nn
 from absl.testing import absltest
 from absl.testing import parameterized
 
-import numpy.testing as onp_testing
+import numpy.testing as np_testing
 
 from jax import random
 import jax.numpy as np
 from jax.config import config
-config.enable_omnistaging()
 
 
 class ModelTest(absltest.TestCase):
@@ -43,8 +42,8 @@ class ModelTest(absltest.TestCase):
   def assert_mean_and_variance(self, out):
     # Weightnorm should ensure that, at initialization time, the outputs of the
     # module have mean 0 and variance 1 over the non-feature dimensions.
-    onp_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
-    onp_testing.assert_allclose(np.var(out, (0, 1, 2)), 1., atol=1e-5)
+    np_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
+    np_testing.assert_allclose(np.var(out, (0, 1, 2)), 1., atol=1e-5)
 
 
   def test_conv(self):
@@ -126,7 +125,7 @@ class ModelTest(absltest.TestCase):
   def test_pcnn_shape(self):
     x = random.normal(self.rng, (2, 4, 4, 3))
     model = pixelcnn.PixelCNNPP(depth=0, features=2, dropout_p=0)
-    out, _ = model.init_with_output(self.rng, x)
+    out, _ = model.init_with_output(self.rng, x, train=False)
     self.assertEqual(out.shape, (2, 4, 4, 100))
 
 

@@ -25,8 +25,7 @@ TPU v3-8 | 256        | 1h 35m        | 25.13 | [2020-04-21](https://tensorboard
 
 ### How to run
 
-`python main.py --workdir=./wmt_256 --config.batch_size=256
---config.reverse_translation=True`
+`python main.py --workdir=./wmt_256 --config=configs/default.py --config.reverse_translation=True`
 
 ### How to run on Cloud TPUs
 
@@ -75,10 +74,15 @@ gcloud compute ssh $USER-user-vm-0001 -- -L 2222:localhost:8888
 
 Be sure to install the latest `jax` and `jaxlib` packages alongside the other
 requirements above. e.g. as of April 2020 the following package versions were
-used successfully: `pip install -U pip pip install -U setuptools wheel pip
-install -U pip jax jaxlib sentencepiece \ tensorflow==2.2.0rc3
-tensorflow-datasets==3.0.0 \ tensorflow-text==2.2.0rc2 tensorboard git clone
-https://github.com/google/flax pip install -e flax`
+used successfully:
+
+```
+pip install -U pip
+pip install -U setuptools wheel
+pip install -U pip jax jaxlib sentencepiece tensorflow==2.2.0rc3 tensorflow-datasets==3.0.0 tensorflow-text==2.2.0rc2 tensorboard
+git clone https://github.com/google/flax
+pip install -e flax
+```
 
 Then, if your TPU is at IP `192.168.0.2`: `python main.py --workdir=./wmt_256
 --config.batch_size=256 --jax_backend_target="grpc://192.168.0.2:8470"`

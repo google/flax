@@ -106,7 +106,7 @@ def _list_state_dict(xs):
 
 def _restore_list(xs, state_dict):
   if len(state_dict) != len(xs):
-    raise ValueError(f'The size of the list and the state dict do not match,'
+    raise ValueError('The size of the list and the state dict do not match,'
                      f' got {len(xs)} and {len(state_dict)}.')
   ys = []
   for i in range(len(state_dict)):
@@ -136,8 +136,8 @@ def _namedtuple_state_dict(nt):
 def _restore_namedtuple(xs, state_dict):
   """Rebuild namedtuple from serialized dict."""
   if len(state_dict['values']) != len(xs):
-    raise ValueError(f'The size of the list and the state dict do not match,'
-                     ' got {len(xs)} and {len(state_dict["values"])}.')
+    raise ValueError('The size of the list and the state dict do not match,'
+                     f' got {len(xs)} and {len(state_dict["values"])}.')
   fields = [state_dict['fields'][str(i)] for i in range(len(xs))]
   namedtuple_class = collections.namedtuple(
       state_dict['name'], fields)
@@ -212,7 +212,8 @@ def _msgpack_ext_pack(x):
     return msgpack.ExtType(_MsgpackExtType.ndarray, _ndarray_to_bytes(x))
   if np.issctype(type(x)):
     # pack scalar as ndarray
-    return msgpack.ExtType(_MsgpackExtType.npscalar, _ndarray_to_bytes(np.asarray(x)))
+    return msgpack.ExtType(_MsgpackExtType.npscalar,
+                           _ndarray_to_bytes(np.asarray(x)))
   elif isinstance(x, complex):
     return msgpack.ExtType(_MsgpackExtType.native_complex,
                            msgpack.packb((x.real, x.imag)))
@@ -251,7 +252,7 @@ def _np_convert_in_place(d):
       elif isinstance(v, dict):
         _np_convert_in_place(v)
   elif isinstance(d, jax.xla.DeviceArray):
-      return np.array(d)
+    return np.array(d)
   return d
 
 
@@ -265,7 +266,7 @@ def _chunk(arr):
   data = {'__msgpack_chunked_array__': True,
           'shape': _tuple_to_dict(arr.shape)}
   flatarr = arr.reshape(-1)
-  chunks = [flatarr[i: i + chunksize] for i in range(0, flatarr.size, chunksize)]
+  chunks = [flatarr[i:i + chunksize] for i in range(0, flatarr.size, chunksize)]
   data['chunks'] = _tuple_to_dict(chunks)
   return data
 

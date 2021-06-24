@@ -130,7 +130,7 @@ def launch_gce(*, vm_name: str, startup_script: str):
   args = [
       'gcloud', 'compute', 'instances', 'create', vm_name,
       f'--project={FLAGS.project}', f'--zone={FLAGS.zone}',
-      '--image=c6-deeplearning-tf2-ent-2-3-cu110-v20201112-debian-10',
+      '--image=c1-deeplearning-tf-2-4-cu110-v20210329-debian-10',
       '--image-project=ml-images', f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full', '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
@@ -222,10 +222,18 @@ def main(_):
     login_true_args = login_args[:-1] + ['true']
     while True:
       try:
-        result = subprocess.run(login_true_args, timeout=10)
-        break
+        result = subprocess.run(
+            login_true_args, timeout=10, stderr=subprocess.PIPE)
+        if result.returncode == 0:
+          break
+        stderr = result.stderr.decode('utf8')
+        if 'connection refused' in stderr.lower():
+          print('(Connection refused - waiting a little longer...)')
+          time.sleep(20)
+        else:
+          raise ValueError(f'Unknown error: {stderr}')
       except subprocess.TimeoutExpired:
-        print('(Not ready yet - waiting a little longer...)')
+        print('(Timeout - waiting a little longer...)')
         time.sleep(20)
     if 'VM_READY_CMD' in os.environ:
       os.system(os.environ['VM_READY_CMD'])

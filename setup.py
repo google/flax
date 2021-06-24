@@ -26,14 +26,15 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.2.6",
+    "jax>=0.2.13",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses;python_version<'3.7'", # will only install on py3.6
     "msgpack",
+    "optax",
 ]
 
 tests_require = [
-    "atari-py",
+    "atari-py==0.2.5",  # Last version does not have the ROMs we test on pre-packaged
     "clu",  # All examples.
     "gym",
     "jaxlib",
@@ -42,12 +43,13 @@ tests_require = [
     "pytest",
     "pytest-cov",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
-    "pytype",
+    "pytype==2021.5.25",  # pytype 2021.6.17 complains on recurrent.py, need to investigate!
     "sentencepiece",  # WMT example.
     "svn",
     "tensorflow-cpu>=2.4.0",
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
+    "tensorflow==2.4.1",  # TODO(marcvanzee): Remove once #1326 is fixed.
 ]
 
 __version__ = None

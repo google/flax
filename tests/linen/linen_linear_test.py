@@ -30,8 +30,6 @@ import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class LinearTest(parameterized.TestCase):
@@ -146,7 +144,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, target)
 
   @parameterized.parameters([((-2, 3), (), 'bijk,jklm->bilm'),
-                             ((3, -2), (), 'bijk,kjlm->bilm'),
+                             ((3, -2), (), 'bijk,jklm->bilm'),
                              ((-2, 3), (0,), 'bijk,bjklm->bilm')])
   def test_dense_general_vs_numpy(self, axis, batch_dims, einsum_expr):
     rng = dict(params=random.PRNGKey(0))
@@ -273,6 +271,47 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, dummy_embedding[None])
     z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
     np.testing.assert_allclose(z, 3. * jnp.arange(4))
+  
+  def test_embed_numpy(self):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.arange(4)[None]
+    dummy_embedding = np.broadcast_to(
+        np.arange(4)[..., None], (4, 3)).astype(np.float32)
+    embed_module = nn.Embed(
+        num_embeddings=4,
+        features=3,
+        embedding_init=lambda rng, shape, dtype: dummy_embedding,
+    )
+    y, initial_params = embed_module.init_with_output(rng, x)
+    np.testing.assert_allclose(y, dummy_embedding[None])
+    z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
+    np.testing.assert_allclose(z, 3. * jnp.arange(4))
+  
+  def test_non_final_axis(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.DenseGeneral(features=6, axis=1, name='dense')(x)
+
+    x = jnp.ones((2, 4, 8))
+    y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+    self.assertEqual(jax.tree_map(jnp.shape, variables['params']), {
+      'dense': {'kernel': (4, 6), 'bias': (6,)}
+    })
+    self.assertEqual(y.shape, (2, 8, 6))
+  
+  def test_non_final_axes(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.DenseGeneral(features=6, axis=(0, 1), name='dense')(x)
+
+    x = jnp.ones((2, 4, 8))
+    y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+    self.assertEqual(jax.tree_map(jnp.shape, variables['params']), {
+      'dense': {'kernel': (2, 4, 6), 'bias': (6,)}
+    })
+    self.assertEqual(y.shape, (8, 6))
 
 
 if __name__ == '__main__':

@@ -85,7 +85,8 @@ def train_step(config: ml_collections.ConfigDict, learning_rate_fn, optimizer,
         config,
         dropout_p=config.dropout_rate).apply({'params': params},
                                              batch['image'],
-                                             rngs={'dropout': dropout_rng})
+                                             rngs={'dropout': dropout_rng},
+                                             train=True)
     return neg_log_likelihood_loss(pcnn_out, batch['image'])
 
   lr = learning_rate_fn(optimizer.state.step)
@@ -105,7 +106,7 @@ def train_step(config: ml_collections.ConfigDict, learning_rate_fn, optimizer,
 
 def eval_step(config, params, batch):
   images = batch['image']
-  pcnn_out = model(config, dropout_p=0.).apply({'params': params}, images)
+  pcnn_out = model(config).apply({'params': params}, images, train=False)
   return {
       'loss': jax.lax.pmean(neg_log_likelihood_loss(pcnn_out, images), 'batch')
   }
@@ -143,7 +144,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   batch_size = config.batch_size
   n_devices = jax.device_count()
-  if jax.host_count() > 1:
+  if jax.process_count() > 1:
     raise ValueError('PixelCNN++ example should not be run on more than 1 host'
                      ' (for now)')
   if batch_size % n_devices > 0:
@@ -173,7 +174,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       {
           'params': init_rng,
           'dropout': dropout_rng
-      }, init_batch)['params']
+      }, init_batch, train=False)['params']
   optimizer_def = optim.Adam(beta1=0.95, beta2=0.9995)
   optimizer = optimizer_def.create(initial_variables)
 

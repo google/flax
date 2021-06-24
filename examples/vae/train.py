@@ -12,21 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# See issue #620.
-# pytype: disable=attribute-error
-# pytype: disable=wrong-arg-count
-# pytype: disable=wrong-keyword-args
-
 from absl import app
 from absl import flags
 import numpy as np
 import jax.numpy as jnp
 import jax
 from jax import random
-from jax.config import config
-config.enable_omnistaging()
 from flax import linen as nn
-from flax import optim
+from flax.training import train_state
+import optax
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -127,32 +121,31 @@ def model():
 
 
 @jax.jit
-def train_step(optimizer, batch, z_rng):
+def train_step(state, batch, z_rng):
   def loss_fn(params):
     recon_x, mean, logvar = model().apply({'params': params}, batch, z_rng)
 
     bce_loss = binary_cross_entropy_with_logits(recon_x, batch).mean()
     kld_loss = kl_divergence(mean, logvar).mean()
     loss = bce_loss + kld_loss
-    return loss, recon_x
-  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  _, grad = grad_fn(optimizer.target)
-  optimizer = optimizer.apply_gradient(grad)
-  return optimizer
+    return loss
+  grads = jax.grad(loss_fn)(state.params)
+  return state.apply_gradients(grads=grads)
 
 
 @jax.jit
 def eval(params, images, z, z_rng):
-  recon_images, mean, logvar = model().apply({'params': params}, images, z_rng)
+  def eval_model(vae):
+    recon_images, mean, logvar = vae(images, z_rng)
+    comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
+                                  recon_images[:8].reshape(-1, 28, 28, 1)])
 
-  comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
-                                recon_images[:8].reshape(-1, 28, 28, 1)])
+    generate_images = vae.generate(z)
+    generate_images = generate_images.reshape(-1, 28, 28, 1)
+    metrics = compute_metrics(recon_images, images, mean, logvar)
+    return metrics, comparison, generate_images
 
-  generate_images = model().apply({'params': params}, z, method=VAE.generate)
-  generate_images = generate_images.reshape(-1, 28, 28, 1)
-  metrics = compute_metrics(recon_images, images, mean, logvar)
-
-  return metrics, comparison, generate_images
+  return nn.apply(eval_model, model())({'params': params})
 
 
 def prepare_image(x):
@@ -186,10 +179,12 @@ def main(argv):
   test_ds = jax.device_put(test_ds)
 
   init_data = jnp.ones((FLAGS.batch_size, 784), jnp.float32)
-  params = model().init(key, init_data, rng)['params']
 
-  optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(params)
-  optimizer = jax.device_put(optimizer)
+  state = train_state.TrainState.create(
+      apply_fn=model().apply,
+      params=model().init(key, init_data, rng)['params'],
+      tx=optax.adam(FLAGS.learning_rate),
+  )
 
   rng, z_key, eval_rng = random.split(rng, 3)
   z = random.normal(z_key, (64, FLAGS.latents))
@@ -200,9 +195,9 @@ def main(argv):
     for _ in range(steps_per_epoch):
       batch = next(train_ds)
       rng, key = random.split(rng)
-      optimizer = train_step(optimizer, batch, key)
+      state = train_step(state, batch, key)
 
-    metrics, comparison, sample = eval(optimizer.target, test_ds, z, eval_rng)
+    metrics, comparison, sample = eval(state.params, test_ds, z, eval_rng)
     vae_utils.save_image(
         comparison, f'results/reconstruction_{epoch}.png', nrow=8)
     vae_utils.save_image(sample, f'results/sample_{epoch}.png', nrow=8)

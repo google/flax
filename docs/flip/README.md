@@ -27,7 +27,6 @@ the FLIP (i.e. adding the FLIP itself as well as any implementing pull requests)
 should be linked to this issue.
 
 Then create a pull request that consists of a copy of the `0000-template.md`
-renamed to `%04d-{short-title}.md` - the number should be incremented by one
-with every new FLIP so we can refer to FLIPs by ID.
+renamed to `%04d-{short-title}.md` - with the number being the issue number.
 
-[FLIP label]: https://github.com/google/flax/issues?q=label%3A%22Type%3A+FLIP%22
+[FLIP label]: https://github.com/google/flax/issues?q=label%3AFLIP

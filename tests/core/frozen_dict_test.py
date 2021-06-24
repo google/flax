@@ -58,7 +58,6 @@ class FrozenDictTest(absltest.TestCase):
 
     self.assertEqual(items, [('a', 1), ('b', freeze(xs['b']))])
 
-
   def test_frozen_dict_repr(self):
     expected = (
 """FrozenDict({
@@ -72,6 +71,14 @@ class FrozenDictTest(absltest.TestCase):
     xs = FrozenDict({'a': 1, 'b': {'c': 2, 'd': {}}})
     self.assertEqual(repr(xs), expected)
     self.assertEqual(repr(FrozenDict()), 'FrozenDict({})')
+
+  def test_frozen_dict_reduce(self):
+    before = FrozenDict(a=FrozenDict(b=1, c=2))
+    cl, data = before.__reduce__()
+    after = cl(*data)
+    self.assertIsNot(before, after)
+    self.assertEqual(before, after)
+    self.assertEqual(after, {'a': {'b': 1, 'c': 2}})
 
 
 if __name__ == '__main__':

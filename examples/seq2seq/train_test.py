@@ -25,8 +25,6 @@ from flax import optim
 import train
 
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 def create_test_optimizer():
