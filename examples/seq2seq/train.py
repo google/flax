@@ -24,6 +24,7 @@ from typing import Any, Tuple
 from absl import app
 from absl import flags
 from absl import logging
+from clu import metric_writers
 from flax import linen as nn
 from flax.training import train_state
 import jax
@@ -33,6 +34,8 @@ import optax
 
 
 FLAGS = flags.FLAGS
+
+flags.DEFINE_string('workdir', default='.', help='Where to store log output.')
 
 flags.DEFINE_float(
     'learning_rate',
@@ -116,7 +119,7 @@ def get_max_output_len():
   return FLAGS.max_len_query_digit + 3  # includes start token '=' and EOS.
 
 
-def encode_onehot(batch_inputs, max_len):
+def encode_onehot(batch_inputs, max_len=get_max_input_len()):
   """One-hot encode a string input."""
 
   def encode_str(s):
@@ -304,8 +307,8 @@ def get_batch(batch_size):
   """Returns a batch of example of size @batch_size."""
   inputs, outputs = zip(*get_examples(batch_size))
   return {
-      'query': encode_onehot(inputs, max_len=get_max_input_len()),
-      'answer': encode_onehot(outputs, max_len=get_max_output_len())
+      'query': encode_onehot(inputs),
+      'answer': encode_onehot(outputs),
   }
 
 
@@ -389,7 +392,7 @@ def decode_batch(params, batch, key):
     log_decode(question, inferred, golden)
 
 
-def train_model():
+def train_model(workdir):
   """Train for a fixed number of steps and decode during training."""
 
   key = jax.random.PRNGKey(0)
@@ -401,14 +404,14 @@ def train_model():
   state = train_state.TrainState.create(
       apply_fn=model.apply, params=params, tx=tx)
 
+  writer = metric_writers.create_default_writer(workdir)
   for step in range(FLAGS.num_train_steps):
     key, lstm_key = jax.random.split(key)
     batch = get_batch(FLAGS.batch_size)
     state, metrics = train_step(state, batch, lstm_key)
     if step % FLAGS.decode_frequency == 0:
+      writer.write_scalars(step, metrics)
       key, lstm_key = jax.random.split(key)
-      logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
-                   metrics['loss'], metrics['accuracy'] * 100)
       batch = get_batch(5)
       decode_batch(state.params, batch, lstm_key)
 
@@ -416,7 +419,7 @@ def train_model():
 
 
 def main(_):
-  _ = train_model()
+  _ = train_model(FLAGS.workdir)
 
 
 if __name__ == '__main__':
