@@ -19,17 +19,14 @@
 
 import functools
 import random
-from typing import Any, Callable, Tuple
+from typing import Any, Tuple
 
 from absl import app
 from absl import flags
 from absl import logging
-from flax import jax_utils
 from flax import linen as nn
-from flax import optim
-from flax.core import Scope, init, apply, unfreeze, lift
+from flax.training import train_state
 import jax
-from jax.config import config
 import jax.numpy as jnp
 import numpy as np
 import optax
@@ -281,17 +278,15 @@ class Seq2seq(nn.Module):
     return logits, predictions
 
 
-def model(teacher_force=True):
-  return Seq2seq(teacher_force=teacher_force, hidden_size=FLAGS.hidden_size)
-
-
-def get_initial_params(key):
+def get_initial_params(model, key):
   """Creates a seq2seq model."""
   vocab_size = CTABLE.vocab_size
   encoder_shape = jnp.ones((1, get_max_input_len(), vocab_size), jnp.float32)
   decoder_shape = jnp.ones((1, get_max_output_len(), vocab_size), jnp.float32)
-  return model().init({'params': key, 'lstm': key},
-                      encoder_shape, decoder_shape)['params']
+  return model.init({
+      'params': key,
+      'lstm': key
+  }, encoder_shape, decoder_shape)['params']
 
 
 def get_examples(num_examples):
@@ -340,26 +335,24 @@ def compute_metrics(logits, labels):
 
 
 @jax.jit
-def train_step(optimizer, batch, lstm_key):
+def train_step(state, batch, lstm_key):
   """Train one step."""
   labels = batch['answer'][:, 1:]
 
   def loss_fn(params):
-    logits, _ = model().apply(
-     {'params': params},
-     batch['query'],
-     batch['answer'],
-     rngs={'lstm': lstm_key}
-    )
+    logits, _ = state.apply_fn({'params': params},
+                               batch['query'],
+                               batch['answer'],
+                               rngs={'lstm': lstm_key})
     loss = cross_entropy_loss(logits, labels, get_sequence_lengths(labels))
     return loss, logits
 
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grad = grad_fn(optimizer.target)
-  optimizer = optimizer.apply_gradient(grad)
+  (_, logits), grads = grad_fn(state.params)
+  state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, labels)
 
-  return optimizer, metrics
+  return state, metrics
 
 
 def log_decode(question, inferred, golden):
@@ -376,10 +369,11 @@ def decode(params, inputs, key):
       CTABLE.encode('=')[0:1], CTABLE.vocab_size)
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], get_max_output_len(), 1))
-  _, predictions = model(teacher_force=False).apply({'params': params},
-                                                    inputs,
-                                                    init_decoder_inputs,
-                                                    rngs={'lstm': key})
+  model = Seq2seq(teacher_force=False, hidden_size=FLAGS.hidden_size)
+  _, predictions = model.apply({'params': params},
+                               inputs,
+                               init_decoder_inputs,
+                               rngs={'lstm': key})
   return predictions
 
 
@@ -397,21 +391,28 @@ def decode_batch(params, batch, key):
 
 def train_model():
   """Train for a fixed number of steps and decode during training."""
-  param = get_initial_params(jax.random.PRNGKey(0))
-  optimizer = optim.Adam(learning_rate=FLAGS.learning_rate).create(param)
+
   key = jax.random.PRNGKey(0)
+
+  key, init_key = jax.random.split(key)
+  model = Seq2seq(teacher_force=False, hidden_size=FLAGS.hidden_size)
+  params = get_initial_params(model, init_key)
+  tx = optax.adam(FLAGS.learning_rate)
+  state = train_state.TrainState.create(
+      apply_fn=model.apply, params=params, tx=tx)
+
   for step in range(FLAGS.num_train_steps):
     key, lstm_key = jax.random.split(key)
     batch = get_batch(FLAGS.batch_size)
-    optimizer, metrics = train_step(optimizer, batch, lstm_key)
+    state, metrics = train_step(state, batch, lstm_key)
     if step % FLAGS.decode_frequency == 0:
       key, lstm_key = jax.random.split(key)
       logging.info('train step: %d, loss: %.4f, accuracy: %.2f', step,
                    metrics['loss'], metrics['accuracy'] * 100)
       batch = get_batch(5)
-      decode_batch(optimizer.target, batch, lstm_key)
+      decode_batch(state.params, batch, lstm_key)
 
-  return optimizer.target
+  return state
 
 
 def main(_):

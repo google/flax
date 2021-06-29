@@ -17,20 +17,24 @@
 import functools
 
 from absl.testing import absltest
+from flax.training import train_state
 import jax
+import jax.numpy as jnp
 from jax import random
 import numpy as np
+import optax
 
-from flax import optim
 import train
 
 jax.config.parse_flags_with_absl()
 
 
-def create_test_optimizer():
-  rng = random.PRNGKey(0)
-  param = train.get_initial_params(rng)
-  return optim.Adam(learning_rate=0.003).create(param)
+def create_test_state():
+  model = train.Seq2seq(teacher_force=False, hidden_size=train.FLAGS.hidden_size)
+  params = train.get_initial_params(model, jax.random.PRNGKey(0))
+  tx = optax.adam(train.FLAGS.learning_rate)
+  return train_state.TrainState.create(
+      apply_fn=model.apply, params=params, tx=tx)
 
 
 class TrainTest(absltest.TestCase):
@@ -77,18 +81,18 @@ class TrainTest(absltest.TestCase):
   def test_train_one_step(self):
     batch = train.get_batch(128)
 
-    optimizer = create_test_optimizer()
+    state = create_test_state()
     key = random.PRNGKey(0)
-    _, train_metrics = train.train_step(optimizer, batch, key)
+    _, train_metrics = train.train_step(state, batch, key)
 
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
 
   def test_decode_batch(self):
     key = random.PRNGKey(0)
-    optimizer = create_test_optimizer()
+    state = create_test_state()
     batch = train.get_batch(5)
-    train.decode_batch(optimizer.target, batch, key)
+    train.decode_batch(state.params, batch, key)
 
 if __name__ == '__main__':
   absltest.main()
