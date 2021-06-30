@@ -29,7 +29,9 @@ import functools
 import inspect
 from flax.core import lift, Scope
 from flax.linen.module import Module
+from flax.linen.module import Variable
 from flax.linen.module import wrap_method_once
+from flax import struct
 import jax
 
 # Utils
@@ -44,59 +46,135 @@ def clean_clone(x):
   return x
 
 
-def get_module_scopes(module):
+@struct.dataclass
+class VariablePlaceholder:
+  """Used to mark Variables in a JAX-compatible way when lifting arguments."""
+  collection: str = struct.field(pytree_node=False)
+  name: str = struct.field(pytree_node=False)
+
+
+@struct.dataclass
+class InstancePlaceholder:
+  """Marks module instances in a JAX-compatible way when lifting arguments."""
+  cls: type = struct.field(pytree_node=False)
+  attrs: dict = struct.field(pytree_node=False)
+
+
+def get_module_scopes(module, args=None, kwargs=None):
   """Get all scopes on module, including constructor Module arguments.
 
   To properly functionalize a Module that has other bound Modules passed in
   "from the outside" as dataclass attributes, we need to traverse all dataclass
   fields to find the Scopes associated with the Module.  Additionally, because
   we allow Modules to be passed inside pytrees on the dataclass attributes, we
-  must traverse all dataclass attributes as pytrees to find all Modules.
+  must traverse all dataclass attributes as pytrees to find all Modules.  We
+  additionally handle lifting Variables (which are just references to data in
+  particular scopes) and Module instances that are passed as arguments to
+  methods.
 
   Args:
     module: a bound flax Module.
+    args: an *args list possibly containing Variables or Module instances
+      referencing a scope.
+    kwargs: a **kwargs dict possibly containing Variables or Module instances
+      referencing a scope.
 
   Returns:
     A list of all functional-core Scopes bound on self and inside dataclass
-    fields.
+    fields as well as any Scopes passed via argument Variables, an updated args
+    list, and an updated kwargs dict that have both had Variables replaced with
+    VariablePlaceholders and Module instances replaced with InstancePlaceholders
+    that are compatible with jax functions.
   """
   module._try_setup(shallow=True)
   outer_scopes = []
+  # gather scopes associated with Variables and Module instances passed as arguments
+  def get_arg_scope(x):
+    nonlocal outer_scopes
+    if isinstance(x, Variable) and isinstance(x.scope, Scope):
+      outer_scopes.append(x.scope)
+      return VariablePlaceholder(x.collection, x.name)
+    elif isinstance(x, Module) and isinstance(x.scope, Scope):
+      x._try_setup(shallow=True)
+      outer_scopes.append(x.scope)
+      attrs = {f.name: getattr(x, f.name)
+          for f in dataclasses.fields(x) if f.name != 'parent' and f.init}
+      attrs = jax.tree_map(get_arg_scope, attrs)
+      return InstancePlaceholder(x.__class__, attrs)
+    return x
+  new_args, new_kwargs = jax.tree_map(get_arg_scope, (args, kwargs))
+  # gather scopes in Variables and Submodules passed as Module attributes
   def get_scope(x):
     nonlocal outer_scopes
     if isinstance(x, Module) and isinstance(x.scope, Scope):
-      outer_scopes.extend(get_module_scopes(x))
+      module_scopes, _, _ = get_module_scopes(x)
+      outer_scopes.extend(module_scopes)
+    elif isinstance(x, Variable) and isinstance(x.scope, Scope):
+      outer_scopes.append(x.scope)
     return x
   attrs = {f.name: getattr(module, f.name)
            for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
   jax.tree_map(get_scope, attrs)
-  return outer_scopes + [module.scope,]
+  return outer_scopes + [module.scope,], new_args, new_kwargs
 
 
-def set_module_scopes(module, scopes):
+def set_module_scopes(module, args, kwargs, scopes):
   """Set all scopes on module, including those on Modules in dataclass fields.
 
   To properly functionalize a Module we must also "rehydrate" it with Scopes
   from `get_module_scopes`.  We need to set scopes not just on the Module but
   also on any Module living inside dataclass attributes or even pytrees in its
-  dataclass attributes.  The order of traversal through both methods is the
-  same, guaranteeing the correct Scopes are applied to each Module.
+  dataclass attributes.  We additionally handle restoring Variables and Module
+  instances from their placeholders in the method positional and keyword
+  arguments.  The order of traversal through this method is the same as in
+  `get_module_scopes`, guaranteeing the correct Scopes are applied to each
+  Module.
 
   Args:
     module: a flax Module.
+    args: an *args list possibly containing VariablePlaceholder or
+      InstancePlaceholder members.
+    kwargs: a **kwargs dict possibly containing VariablePlaceholder or
+      InstancePlaceholder members.
     scopes: a list of Scopes corresponding to this Module and its arguments that
       was created by the `get_module_scopes` function.
 
   Returns:
     A copy of the module with it and its attributes bound to the scopes passed
-    to this function.
+    to this function, an updated args list, and an updated kwargs dict with
+    updated Variable and Module instance references.
   """
   idx = 0
+  # set scopes associated with Variables and Module instances passed as arguments
+  def set_arg_scope(x):
+    nonlocal idx
+    if isinstance(x, VariablePlaceholder):
+      new_x = Variable(scope=scopes[idx], collection=x.collection, name=x.name)
+      idx += 1
+      return new_x
+    elif isinstance(x, InstancePlaceholder):
+      instance_scope = scopes[idx]
+      idx += 1
+      instance_attrs = jax.tree_map(set_arg_scope, x.attrs)
+      return x.cls(parent=instance_scope, **instance_attrs)
+    return x
+  is_placeholder = lambda x: isinstance(x, (VariablePlaceholder, InstancePlaceholder))
+  new_args, new_kwargs = jax.tree_map(set_arg_scope,
+                                      (args, kwargs),
+                                      is_leaf=is_placeholder)
+  # set scopes in Variables and Submodules passed as Module attributes
   def set_scopes(module):
     nonlocal idx
     def set_scopes_inner(x):
+      nonlocal idx
       if isinstance(x, Module) and isinstance(x.scope, Scope):
         return set_scopes(x)
+      elif isinstance(x, Variable) and isinstance(x.scope, Scope):
+        new_x = Variable(scope=scopes[idx],
+                         collection=x.collection,
+                         name=x.name)
+        idx += 1
+        return new_x
       else:
         return x
     attrs = {f.name: getattr(module, f.name)
@@ -107,7 +185,7 @@ def set_module_scopes(module, scopes):
     return new_module
   new_module = set_scopes(module)
   assert len(scopes) == idx, f'scope list mismatch {len(scopes)} != {idx}'
-  return new_module
+  return new_module, new_args, new_kwargs
 
 
 # Class lifting
@@ -156,14 +234,15 @@ def module_class_lift_transform(
                  for f in dataclasses.fields(self) if f.name != 'parent' and f.init}
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
-        cloned = set_module_scopes(cloned, scopes)
+        cloned, args, kwargs = set_module_scopes(cloned, args, kwargs, scopes)
         object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
         res = fn(cloned, *args, **kwargs)
         self._state.reimport(cloned._state)  # pylint: disable=protected-access
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
       trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
-      ret = trafo_fn(get_module_scopes(self), *args, **kwargs)
+      module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
+      ret = trafo_fn(module_scopes, *args, **kwargs)
       return ret
     return wrapped_fn
   transformed_fns = {fn_name: create_trans_fn(fn_name, fn_trafo_args)
@@ -191,14 +270,15 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
   def wrapped_fn(self, *args, **kwargs):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
-      cloned = set_module_scopes(self, scopes)
+      cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
       object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
-    return trafo_fn(get_module_scopes(self), *args, **kwargs)
+    module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
+    return trafo_fn(module_scopes, *args, **kwargs)
   return wrapped_fn
 
 
@@ -494,12 +574,13 @@ def named_call(class_fn):
     full_name = f'{module_name}{method_suffix}'
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
-      cloned = set_module_scopes(self, scopes)
+      cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
       object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = lift.named_call(core_fn, full_name)
-    return trafo_fn(get_module_scopes(self), *args, **kwargs)
+    module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
+    return trafo_fn(module_scopes, *args, **kwargs)
   return wrapped_fn
