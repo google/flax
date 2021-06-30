@@ -119,8 +119,11 @@ def get_max_output_len():
   return FLAGS.max_len_query_digit + 3  # includes start token '=' and EOS.
 
 
-def encode_onehot(batch_inputs, max_len=get_max_input_len()):
+def encode_onehot(batch_inputs, max_len=None):
   """One-hot encode a string input."""
+
+  if max_len is None:
+    max_len = get_max_input_len()
 
   def encode_str(s):
     tokens = CTABLE.encode(s)
