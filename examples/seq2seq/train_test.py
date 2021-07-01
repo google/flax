@@ -17,20 +17,24 @@
 import functools
 
 from absl.testing import absltest
+from flax.training import train_state
 import jax
+import jax.numpy as jnp
 from jax import random
 import numpy as np
+import optax
 
-from flax import optim
 import train
 
 jax.config.parse_flags_with_absl()
 
 
-def create_test_optimizer():
-  rng = random.PRNGKey(0)
-  param = train.get_initial_params(rng)
-  return optim.Adam(learning_rate=0.003).create(param)
+def create_test_state():
+  model = train.Seq2seq(teacher_force=False, hidden_size=train.FLAGS.hidden_size)
+  params = train.get_initial_params(model, jax.random.PRNGKey(0))
+  tx = optax.adam(train.FLAGS.learning_rate)
+  return train_state.TrainState.create(
+      apply_fn=model.apply, params=params, tx=tx)
 
 
 class TrainTest(absltest.TestCase):
@@ -42,26 +46,6 @@ class TrainTest(absltest.TestCase):
     # The text is possibly padded with whitespace, but the trimmed output should
     # be equal to the input.
     self.assertEqual(text, dec_text.strip())
-
-  def test_onehot(self):
-    np.testing.assert_equal(
-        train.onehot(np.array([0, 1, 2]), 4),
-        np.array(
-            [[1, 0, 0, 0],
-             [0, 1, 0, 0],
-             [0, 0, 1, 0]],
-            dtype=np.float32)
-    )
-    np.testing.assert_equal(
-        jax.vmap(functools.partial(train.onehot, vocab_size=4))(
-            np.array([[0, 1], [2, 3]])),
-        np.array(
-            [[[1, 0, 0, 0],
-              [0, 1, 0, 0]],
-             [[0, 0, 1, 0],
-              [0, 0, 0, 1]]],
-            dtype=np.float32)
-    )
 
   def test_mask_sequences(self):
     np.testing.assert_equal(
@@ -77,21 +61,38 @@ class TrainTest(absltest.TestCase):
         )
     )
 
-  def test_train_one_step(self):
-    batch, masks = train.get_batch(128)
+  def test_get_sequence_lengths(self):
+    oh_sequence_batch = jax.vmap(
+        functools.partial(jax.nn.one_hot, num_classes=4))(
+            np.array([[0, 1, 0], [1, 0, 2], [1, 2, 0], [1, 2, 3]]))
+    np.testing.assert_equal(
+        train.get_sequence_lengths(oh_sequence_batch, eos_id=0),
+        np.array([1, 2, 3, 3], np.int32)
+    )
+    np.testing.assert_equal(
+        train.get_sequence_lengths(oh_sequence_batch, eos_id=1),
+        np.array([2, 1, 1, 1], np.int32)
+    )
+    np.testing.assert_equal(
+        train.get_sequence_lengths(oh_sequence_batch, eos_id=2),
+        np.array([3, 3, 2, 2], np.int32)
+    )
 
-    optimizer = create_test_optimizer()
+  def test_train_one_step(self):
+    batch = train.get_batch(128)
+
+    state = create_test_state()
     key = random.PRNGKey(0)
-    _, train_metrics = train.train_step(optimizer, batch, masks, key)
+    _, train_metrics = train.train_step(state, batch, key)
 
     self.assertLessEqual(train_metrics['loss'], 5)
     self.assertGreaterEqual(train_metrics['accuracy'], 0)
 
   def test_decode_batch(self):
     key = random.PRNGKey(0)
-    optimizer = create_test_optimizer()
-    batch, masks = train.get_batch(5)
-    train.decode_batch(optimizer.target, batch, masks, key)
+    state = create_test_state()
+    batch = train.get_batch(5)
+    train.decode_batch(state.params, batch, key)
 
 if __name__ == '__main__':
   absltest.main()
