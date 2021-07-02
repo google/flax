@@ -435,8 +435,9 @@ class Module:
       pass
 
   @classmethod
-  def __init_subclass__(cls):
+  def __init_subclass__(cls, **kwargs):
     """Automatically initializes all subclasses as custom dataclasses."""
+    super().__init_subclass__(**kwargs)
     # All Flax Modules are dataclasses.  We force this convention since
     # it encourages the stateless behavior needed to clone module instances for
     # functional transformation.  Instead of using a python metaclass, we
@@ -456,7 +457,12 @@ class Module:
     """Handles final optional dataclass attributes: `parent` and `name`."""
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
-    if 'parent' in annotations or 'name' in annotations:
+    parent_annotation = Union[Type["Module"], Type["Scope"],
+                              Type["_Sentinel"], None]
+    if ('parent' in annotations
+        and annotations['parent'] != parent_annotation):
+      raise errors.ReservedModuleAttributeError(annotations)
+    if 'name' in annotations and annotations['name'] != str:
       raise errors.ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
@@ -473,8 +479,7 @@ class Module:
       if 'name' in pdf:
         clz.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
 
-    annotations['parent'] = Union[Type["Module"], Type["Scope"],
-                                  Type["_Sentinel"], None]
+    annotations['parent'] = parent_annotation
     cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
     annotations['name'] = str
     cls.name = None  # default value of name is None.

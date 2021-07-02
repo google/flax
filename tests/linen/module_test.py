@@ -29,7 +29,8 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as np
-from typing import Any, Tuple, Iterable, Callable, Mapping, NamedTuple
+from typing import (Any, Tuple, Iterable, Callable, Generic, TypeVar,
+                    Mapping, NamedTuple)
 
 from flax import linen as nn
 from flax import errors
@@ -1358,7 +1359,7 @@ class ModuleTest(absltest.TestCase):
     variables = Bar().init(k, x)
     y = Bar().apply(variables, x)
     self.assertEqual(y.shape, (4, 3))
-  
+
   def test_freeze_attr(self):
     class Foo(NamedTuple):
       a: int
@@ -1368,6 +1369,17 @@ class ModuleTest(absltest.TestCase):
     xs = nn.module._freeze_attr(Foo(1, 2))
     self.assertEqual(xs, (1, 2))
     self.assertEqual(type(xs), Foo)  # equality test for NamedTuple doesn't check class!
+
+  def test_generic_multiple_inheritance(self):
+    T = TypeVar('T')
+    class MyComponent(nn.Module, Generic[T]):
+      pass
+    class MyModule(nn.Module):
+      submodule: MyComponent[jnp.ndarray]
+    class MyComponent2(Generic[T], nn.Module):
+      pass
+    class MyModule2(nn.Module):
+      submodule: MyComponent2[jnp.ndarray]
 
 
 if __name__ == '__main__':
