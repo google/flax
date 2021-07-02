@@ -17,17 +17,18 @@
 import functools
 import multiprocessing
 import collections
+from typing import Any, Callable
 import numpy as np
 import jax
 import flax
 
 import env_utils
-import models
 
-@functools.partial(jax.jit, static_argnums=1)
+
+@functools.partial(jax.jit, static_argnums=0)
 def policy_action(
+  apply_fn: Callable[..., Any],
   params: flax.core.frozen_dict.FrozenDict,
-  module: models.ActorCritic,
   state: np.ndarray):
   """Forward pass of the network.
 
@@ -39,7 +40,7 @@ def policy_action(
   Returns:
     out: a tuple (log_probabilities, values)
   """
-  out = module.apply({'params': params}, state)
+  out = apply_fn({'params': params}, state)
   return out
 
 

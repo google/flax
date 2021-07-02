@@ -14,8 +14,9 @@
 
 """Unit tests for the PPO example."""
 
+from flax.training import train_state
 import jax
-import flax
+import ml_collections
 import numpy as np
 import numpy.testing as np_testing
 from absl.testing import absltest
@@ -24,6 +25,7 @@ import ppo_lib
 import env_utils
 import models
 import agent
+
 
 # test GAE
 class TestGAE(absltest.TestCase):
@@ -86,18 +88,13 @@ class TestModel(absltest.TestCase):
     return np.random.choice([4, 5, 6, 7, 8, 9])
 
   def test_model(self):
-    key = jax.random.PRNGKey(0)
-    key, subkey = jax.random.split(key)
     outputs = self.choose_random_outputs()
     module = models.ActorCritic(num_outputs=outputs)
-    initial_params = models.get_initial_params(subkey, module)
-    lr = 2.5e-4
-    optimizer = models.create_optimizer(initial_params, lr)
-    self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
+    params = ppo_lib.get_initial_params(jax.random.PRNGKey(0), module)
     test_batch_size, obs_shape = 10, (84, 84, 4)
     random_input = np.random.random(size=(test_batch_size,) + obs_shape)
-    log_probs, values = agent.policy_action(optimizer.target, module,
-        random_input)
+    log_probs, values = agent.policy_action(
+        module.apply, params, random_input)
     self.assertEqual(values.shape, (test_batch_size, 1))
     sum_probs = np.sum(np.exp(log_probs), axis=1)
     self.assertEqual(sum_probs.shape, (test_batch_size, ))
@@ -122,18 +119,18 @@ class TestOptimizationStep(absltest.TestCase):
     clip_param = 0.1
     vf_coeff = 0.5
     entropy_coeff = 0.01
-    lr = 2.5e-4
     batch_size = 256
-    key = jax.random.PRNGKey(0)
-    key, subkey = jax.random.split(key)
     module = models.ActorCritic(num_outputs)
-    initial_params = models.get_initial_params(subkey, module)
-    lr = 2.5e-4
-    optimizer = models.create_optimizer(initial_params, lr)
-    optimizer, _ = ppo_lib.train_step(
-        module, optimizer, trn_data, clip_param, vf_coeff, entropy_coeff, lr,
+    initial_params = ppo_lib.get_initial_params(jax.random.PRNGKey(0), module)
+    config = ml_collections.ConfigDict({
+      'learning_rate': 2.5e-4,
+      'decaying_lr_and_clip_param': True,
+    })
+    state = ppo_lib.create_train_state(initial_params, module, config, 1000)
+    state, _ = ppo_lib.train_step(
+        state, trn_data, clip_param, vf_coeff, entropy_coeff,
         batch_size)
-    self.assertTrue(isinstance(optimizer, flax.optim.base.Optimizer))
+    self.assertIsInstance(state, train_state.TrainState)
 
 if __name__ == '__main__':
   absltest.main()
