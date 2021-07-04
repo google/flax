@@ -35,12 +35,14 @@ import datetime
 
 from absl import logging
 from flax import jax_utils
-from flax import optim
+import optax
 import input_pipeline
 import pixelcnn
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import common_utils
+from flax.training import train_state
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -65,6 +67,13 @@ def model(config: ml_collections.ConfigDict, **kwargs):
       logistic_components=config.n_logistic_mix,
       **kwargs)
 
+def create_train_state(batch, config: ml_collections.ConfigDict, learning_rate_fn, **kwargs):
+  """Creates initial `TrainState`."""
+  pixelCNN = model(config, kwargs)
+  params = pixelCNN.init(kwargs, batch)['params']
+  tx = optax.adam(lr=learning_rate_fn, beta1=0.95, beta2=0.9995)
+  return train_state.TrainState.create(
+      apply_fn=pixelCNN.apply, params=params, tx=tx)
 
 def neg_log_likelihood_loss(nn_out, images):
   # The log-likelihood in bits per pixel-channel
@@ -75,8 +84,7 @@ def neg_log_likelihood_loss(nn_out, images):
   return -jnp.mean(log_likelihoods) / (jnp.log(2) * np.prod(images.shape[-3:]))
 
 
-def train_step(config: ml_collections.ConfigDict, learning_rate_fn, optimizer,
-               ema, batch, dropout_rng):
+def train_step(config: ml_collections.ConfigDict, state, ema, batch, dropout_rng):
   """Perform a single training step."""
 
   def loss_fn(params):
@@ -89,19 +97,18 @@ def train_step(config: ml_collections.ConfigDict, learning_rate_fn, optimizer,
                                              train=True)
     return neg_log_likelihood_loss(pcnn_out, batch['image'])
 
-  lr = learning_rate_fn(optimizer.state.step)
   grad_fn = jax.value_and_grad(loss_fn)
-  loss, grad = grad_fn(optimizer.target)
+  loss, grad = grad_fn(state.params)
   grad = jax.lax.pmean(grad, 'batch')
-  optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+  state = state.apply_gradients(grads=grad)
 
   # Compute exponential moving average (aka Polyak decay)
   ema_decay = config.polyak_decay
   ema = jax.tree_multimap(lambda ema, p: ema * ema_decay + (1 - ema_decay) * p,
-                          ema, optimizer.target)
+                          ema, state.params)
 
-  metrics = {'loss': jax.lax.pmean(loss, 'batch'), 'learning_rate': lr}
-  return optimizer, ema, metrics
+  metrics = {'loss': jax.lax.pmean(loss, 'batch')}
+  return state, ema, metrics
 
 
 def eval_step(config, params, batch):
@@ -169,27 +176,26 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   rng = jax.random.PRNGKey(config.seed)
   rng, init_rng, dropout_rng = jax.random.split(rng, 3)
-
-  initial_variables = model(config).init(
-      {
-          'params': init_rng,
-          'dropout': dropout_rng
-      }, init_batch, train=False)['params']
-  optimizer_def = optim.Adam(beta1=0.95, beta2=0.9995)
-  optimizer = optimizer_def.create(initial_variables)
-
-  optimizer, ema = restore_checkpoint(workdir, optimizer, initial_variables)
-  ema = initial_variables
-  step_offset = int(optimizer.state.step)
-
-  optimizer, ema = jax_utils.replicate((optimizer, ema))
-
+  
   # Learning rate schedule
   learning_rate_fn = lambda step: config.learning_rate * config.lr_decay**step
 
+  state = create_train_state(rng, init_batch, config, learning_rate_fn, {
+          'params': init_rng,
+          'dropout': dropout_rng
+      })
+
+  optimizer, ema = restore_checkpoint(workdir, state, state.params)
+  ema = state.params
+  # step_offset = int(optimizer.state.step)
+  step_offset = 1
+
+  optimizer, ema = jax_utils.replicate((optimizer, ema))
+
+
   # pmap the train and eval functions
   p_train_step = jax.pmap(
-      functools.partial(train_step, config, learning_rate_fn),
+      functools.partial(train_step, config, state),
       axis_name='batch')
   p_eval_step = jax.pmap(
       functools.partial(eval_step, config=config), axis_name='batch')
