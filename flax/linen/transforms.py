@@ -238,7 +238,7 @@ def vmap(target: Target,
   ``vmap`` can be used to add a batch axis to a ``Module``.
   For example we could create a version of ``Dense`` with
   a batch axis that does not share parameters::
-  
+
     BatchDense = nn.vmap(
         nn.Dense,
         in_axes=0, out_axes=0,
@@ -296,7 +296,7 @@ def jit(target: Target,
         backend: Union[str, None] = None,
         methods=None) -> Target:
   """Lifted version of ``jax.jit``.
-  
+
   Args:
     target: a ``Module`` or a function taking a ``Module``
       as its first argument.
@@ -348,7 +348,7 @@ def checkpoint(target: Target,
         concrete: bool = False,
         methods=None) -> Target:
   """Lifted version of ``jax.checkpoint``.
-  
+
   This function is aliased to ``lift.remat`` just like ``jax.remat``.
 
   Args:
@@ -385,6 +385,7 @@ def scan(target: Target,
          in_axes=0, out_axes=0,
          length: Optional[int] = None,
          reverse: bool = False,
+         data_transform: Optional[Callable[..., Any]] = None,
          methods=None) -> Target:
   """A lifted version of ``jax.lax.scan``.
 
@@ -458,6 +459,10 @@ def scan(target: Target,
     length: Specifies the number of loop iterations. This only needs
       to be specified if it cannot be derivied from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
+    data_transform: optional function to transform raw functional-core variable
+      and rng groups inside lifted scan body_fn, intended for inline SPMD
+      annotations.
+
   Returns:
     The scan function with the signature ``(scope, carry, *xxs) -> (carry, yys)``,
     where ``xxs`` and ``yys`` are the scan values that go in and out of the loop.
@@ -471,6 +476,7 @@ def scan(target: Target,
       in_axes=in_axes, out_axes=out_axes,
       length=length,
       reverse=reverse,
+      data_transform=data_transform,
       methods=methods)
 
 

@@ -420,7 +420,9 @@ def scan(fn: Callable[..., Any],
          split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
          in_axes=0, out_axes=0,
          length: Optional[int] = None,
-         reverse: bool = False) -> Callable[..., Any]:
+         reverse: bool = False,
+         data_transform: Optional[Callable[..., Any]] = None,
+         ) -> Callable[..., Any]:
   """A lifted version of ``jax.lax.scan``.
 
   See ``jax.lax.scan`` for the unlifted scan in Jax.
@@ -478,6 +480,9 @@ def scan(fn: Callable[..., Any],
     length: Specifies the number of loop iterations. This only needs
       to be specified if it cannot be derivied from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
+    data_transform: optional function to transform raw variable and rng groups,
+      intended for inline SPMD annotations.
+
   Returns:
     The scan function with the signature ``(scope, carry, *xxs) -> (carry, yys)``,
     where ``xxs`` and ``yys`` are the scan values that go in and out of the loop.
@@ -524,6 +529,9 @@ def scan(fn: Callable[..., Any],
     def scanned(broadcast_vars, carry, scan_variable_groups, rng_groups, args):
       carry_vars, c = carry
       variable_groups = (broadcast_vars, carry_vars) + scan_variable_groups
+      if data_transform is not None:
+        variable_groups, rng_groups = data_transform(variable_groups,
+                                                     rng_groups)
       scope = scope_fn(variable_groups, rng_groups)
       c, y = fn(scope, c, *args)
       out_vars = repack_fn(scope)
@@ -684,7 +692,7 @@ def jit(fn: Callable[..., Any],
         backend: Union[str, None] = None,
         ) -> Callable[..., Any]:
   """Lifted version of ``jax.jit``.
-  
+
   Args:
     fn: Scope function to be jitted.
     variables: The variable collections that are lifted. By default all
@@ -727,7 +735,7 @@ def jit(fn: Callable[..., Any],
   # while jitted has 3 functions before the user arguments.
   static_argnums = (0,) + tuple(i + 2 for i in static_argnums if i > 0)
   donate_argnums = tuple(i + 2 for i in donate_argnums if i > 0)
-  
+
   # Close over scope_fn & repack_fn to avoid recompilation
   # this is impure but we use the fingerprint arg to differentiate between cases
   # where scope_fn or repack_fn actually produce non-identical results.
