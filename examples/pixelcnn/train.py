@@ -130,13 +130,13 @@ def load_and_shard_tf_batch(xs):
   return jax.tree_map(_prepare, xs)
 
 
-def restore_checkpoint(workdir: str, optimizer, ema):
-  return checkpoints.restore_checkpoint(workdir, (optimizer, ema))
+def restore_checkpoint(workdir: str, state, ema):
+  return checkpoints.restore_checkpoint(workdir, (state, ema))
 
 
-def save_checkpoint(workdir: str, optimizer, ema, step):
-  optimizer, ema = jax_utils.unreplicate((optimizer, ema))
-  checkpoints.save_checkpoint(workdir, (optimizer, ema), step, keep=3)
+def save_checkpoint(workdir: str, state, ema, step):
+  state, ema = jax_utils.unreplicate((state, ema))
+  checkpoints.save_checkpoint(workdir, (state, ema), step, keep=3)
 
 
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
@@ -185,12 +185,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           'dropout': dropout_rng
       })
 
-  optimizer, ema = restore_checkpoint(workdir, state, state.params)
+  state, ema = restore_checkpoint(workdir, state, state.params)
   ema = state.params
-  # step_offset = int(optimizer.state.step)
-  step_offset = 1
-
-  optimizer, ema = jax_utils.replicate((optimizer, ema))
+  step_offset = int(state.step)
+  
+  state, ema = jax_utils.replicate((state, ema))
 
 
   # pmap the train and eval functions
@@ -212,7 +211,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     sharded_rngs = common_utils.shard_prng_key(step_rng)
 
     # Train step
-    optimizer, ema, metrics = p_train_step(optimizer, ema, batch, sharded_rngs)
+    state, ema, metrics = p_train_step(state, ema, batch, sharded_rngs)
     train_metrics.append(metrics)
 
     # Quick indication that training is happening.
@@ -252,4 +251,4 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       eval_summary_writer.flush()
 
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_train_steps:
-      save_checkpoint(workdir, optimizer, ema, step)
+      save_checkpoint(workdir, state, ema, step)
