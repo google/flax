@@ -128,8 +128,10 @@ class TestOptimizationStep(absltest.TestCase):
     })
     state = ppo_lib.create_train_state(initial_params, module, config, 1000)
     state, _ = ppo_lib.train_step(
-        state, trn_data, clip_param, vf_coeff, entropy_coeff,
-        batch_size)
+        state, trn_data, batch_size,
+        clip_param=clip_param,
+        vf_coeff=vf_coeff,
+        entropy_coeff=entropy_coeff)
     self.assertIsInstance(state, train_state.TrainState)
 
 if __name__ == '__main__':
