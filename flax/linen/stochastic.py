@@ -48,7 +48,7 @@ class Dropout(Module):
         masked, whereas if true, no mask is applied and the inputs are returned
         as is.
       rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
-        be used. `nn.make_rng()` requires passing in a rng named `dropout` to `apply()`.
+        be used. `nn.make_rng()` requires passing in an RNG named `dropout` to `apply()`.
 
     Returns:
       The masked inputs reweighted to preserve mean.
