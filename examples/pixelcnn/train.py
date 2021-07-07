@@ -69,9 +69,9 @@ def model(config: ml_collections.ConfigDict, **kwargs):
 
 def create_train_state(batch, config: ml_collections.ConfigDict, learning_rate_fn, **kwargs):
   """Creates initial `TrainState`."""
-  pixelCNN = model(config, kwargs)
-  params = pixelCNN.init(kwargs, batch)['params']
-  tx = optax.adam(lr=learning_rate_fn, beta1=0.95, beta2=0.9995)
+  pixelCNN = model(config)
+  params = pixelCNN.init(kwargs, batch, train=False)['params']
+  tx = optax.adam(learning_rate=learning_rate_fn, b1=0.95, b2=0.9995)
   return train_state.TrainState.create(
       apply_fn=pixelCNN.apply, params=params, tx=tx)
 
@@ -180,10 +180,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # Learning rate schedule
   learning_rate_fn = lambda step: config.learning_rate * config.lr_decay**step
 
-  state = create_train_state(rng, init_batch, config, learning_rate_fn, {
-          'params': init_rng,
-          'dropout': dropout_rng
-      })
+  state = create_train_state(init_batch, config, learning_rate_fn,
+          params=init_rng,
+          dropout=dropout_rng
+      )
 
   state, ema = restore_checkpoint(workdir, state, state.params)
   ema = state.params
@@ -194,7 +194,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   # pmap the train and eval functions
   p_train_step = jax.pmap(
-      functools.partial(train_step, config, state),
+      functools.partial(train_step, config),
       axis_name='batch')
   p_eval_step = jax.pmap(
       functools.partial(eval_step, config=config), axis_name='batch')
