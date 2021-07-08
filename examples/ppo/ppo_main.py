@@ -36,11 +36,9 @@ flags.DEFINE_string(
 
 config_flags.DEFINE_config_file(
     'config',
-    None,
+    "configs/default.py",
     'File path to the default configuration file.',
     lock_config=True)
-
-flags.mark_flags_as_required(['config'])
 
 
 def main(argv):
@@ -50,12 +48,8 @@ def main(argv):
   game = config.game + 'NoFrameskip-v4'
   num_actions = env_utils.get_num_actions(game)
   print(f'Playing {game} with {num_actions} actions')
-  module = models.ActorCritic(num_outputs=num_actions)
-  key = jax.random.PRNGKey(0)
-  key, subkey = jax.random.split(key)
-  initial_params = models.get_initial_params(subkey, module)
-  optimizer = models.create_optimizer(initial_params, config.learning_rate)
-  optimizer = ppo_lib.train(module, optimizer, config, FLAGS.workdir)
+  model = models.ActorCritic(num_outputs=num_actions)
+  ppo_lib.train(model, config, FLAGS.workdir)
 
 if __name__ == '__main__':
   app.run(main)
