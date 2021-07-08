@@ -73,14 +73,18 @@ Using Linen
 +-------------------------------+---------------------+------------------------+--------------------------------------+
 | `DCGAN`_ Colab                | `@bkkaggle`_        | Image Synthesis        | https://arxiv.org/abs/1511.06434     |
 +-------------------------------+---------------------+------------------------+--------------------------------------+
+| `BigBird Fine-tuning`_        | `@vasudevgupta7`_   | Question-Answering     | https://arxiv.org/abs/2007.14062     |
++-------------------------------+---------------------+------------------------+--------------------------------------+
 
 .. _`matthias-wright/flaxmodels`: https://github.com/matthias-wright/flaxmodels
 .. _`google/vision_transformer`: https://github.com/google-research/vision_transformer
 .. _`JAX-RL`: https://github.com/henry-prior/jax-rl
 .. _`DCGAN`: https://github.com/bkkaggle/jax-dcgan
+.. _`BigBird Fine-tuning`: https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/big_bird
 .. _`@matthias-wright`: https://github.com/matthias-wright
 .. _`@andsteing`: https://github.com/andsteing
 .. _`@bkkaggle`: https://github.com/bkkaggle
+.. _`@vasudevgupta7`: https://github.com/vasudevgupta7
 
 Using the Deprecated ``flax.nn`` API
 ~~~~~~~~~~~~~~~~~~~~
