@@ -50,7 +50,7 @@ def _canonicalize_tuple(x):
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
 
-    Attributes:
+    Args:
       features: int or tuple with number of output features.
       axis: int or tuple with axes to apply the transformation on. For instance,
         (-2, -1) will apply the transformation to the last two axes.
@@ -70,6 +70,10 @@ class DenseGeneral(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: Any = None
+
+  def some_fn(self):
+    """Jajaja."""
+    pass
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -141,7 +145,7 @@ class DenseGeneral(Module):
 class Dense(Module):
   """A linear transformation applied over the last dimension of the input.
 
-  Attributes:
+  Args:
     features: the number of output features.
     use_bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: float32).
@@ -194,7 +198,7 @@ def _conv_dimension_numbers(input_shape):
 class Conv(Module):
   """Convolution Module wrapping lax.conv_general_dilated.
 
-  Attributes:
+  Args:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
@@ -290,7 +294,7 @@ class Conv(Module):
 class ConvTranspose(Module):
   """Convolution Module wrapping lax.conv_transpose.
 
-  Attributes:
+  Args:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
@@ -376,7 +380,7 @@ class Embed(Module):
 
   A parameterized function from integers [0, n) to d-dimensional vectors.
 
-  Attributes:
+  Args:
     num_embeddings: number of embeddings.
     features: number of feature dimensions for each embedding.
     dtype: the dtype of the embedding vectors (default: float32).

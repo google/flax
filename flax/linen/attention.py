@@ -166,7 +166,7 @@ def dot_product_attention(query: Array,
 class MultiHeadDotProductAttention(Module):
   """Multi-head dot-product attention.
 
-    Attributes:
+    Args:
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
       dtype: the dtype of the computation (default: float32)

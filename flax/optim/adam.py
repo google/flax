@@ -48,7 +48,7 @@ class Adam(OptimizerDef):
   for Stochastic Optimization](https://arxiv.org/abs/1412.6980v8) (Kingma and
   Ba, 2014).
 
-  Attributes:
+  Args:
     learning_rate: The learning rate — the step size used to update the
       parameters.
     beta1: The exponentian decay rate for the 1st moment estimates. The

@@ -35,7 +35,7 @@ from flax import struct
 class EarlyStopping(struct.PyTreeNode):
   """Early stopping to avoid overfitting during training.
   
-  Attributes:
+  Args:
     min_delta: Minimum delta between updates to be considered an
         improvement.
     patience: Number of steps of no improvement before stopping.

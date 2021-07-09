@@ -38,7 +38,7 @@ def _absolute_dims(rank, dims):
 class BatchNorm(Module):
   """BatchNorm Module.
 
-  Attributes:
+  Args:
     use_running_average: if True, the statistics stored in batch_stats
       will be used instead of computing the batch statistics on the input.
     axis: the feature or non-batch axis of the input.
@@ -153,7 +153,7 @@ class LayerNorm(Module):
   i.e. applies a transformation that maintains the mean activation within
   each example close to 0 and the activation standard deviation close to 1.
 
-  Attributes:
+  Args:
     epsilon: A small float added to variance to avoid dividing by zero.
     dtype: the dtype of the computation (default: float32).
     use_bias:  If True, bias (beta) is added.
@@ -208,7 +208,7 @@ class GroupNorm(Module):
     The user should either specify the total number of channel groups or the
     number of channels per group.
 
-    Attributes:
+    Args:
       num_groups: the total number of channel groups. The default value of 32 is
         proposed by the original group normalization paper.
       group_size: the number of channels in a group.
