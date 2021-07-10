@@ -71,10 +71,6 @@ class DenseGeneral(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: Any = None
 
-  def some_fn(self):
-    """Jajaja."""
-    pass
-
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a linear transformation to the inputs along multiple dimensions.
