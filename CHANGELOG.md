@@ -14,7 +14,7 @@ vNext
  - NamedTuples are no longer converted to tuples on assingment to a `linen.Module`.
  -
  -
- -
+ - Fixed a bug in FrozenDict which didn't allow copying dicts with reserved names.
  -
  -
  -
