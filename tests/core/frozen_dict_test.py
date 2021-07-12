@@ -80,9 +80,9 @@ class FrozenDictTest(absltest.TestCase):
     self.assertEqual(before, after)
     self.assertEqual(after, {'a': {'b': 1, 'c': 2}})
 
-  def test_frozen_dict_copy_reserved_names(self):
-    result = FrozenDict({}).copy({'cls': 'abc'})
-    self.assertEqual(result, {'cls': 'abc'})
+  def test_frozen_dict_copy_reserved_name(self):
+    result = FrozenDict({'a': 1}).copy({'cls': 2})
+    self.assertEqual(result, {'a': 1, 'cls': 2})
 
 
 if __name__ == '__main__':
