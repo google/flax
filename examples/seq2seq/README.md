@@ -5,7 +5,7 @@ an encoder-decoder architecture. The data is generated on the fly.
 
 Colab lets you edit the source files and interact with the model:
 
-https://colab.research.google.com/github/google/flax/blob/master/examples/seq2seq/seq2seq.ipynb
+https://colab.research.google.com/github/google/flax/blob/main/examples/seq2seq/seq2seq.ipynb
 
 ### Example output
 

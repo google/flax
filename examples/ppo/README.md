@@ -40,7 +40,7 @@ Unit tests can be run using `python ppo_lib_test.py`.
 ## How to run on Google Cloud TPU
 
 It is also possible to run this code on Google Cloud TPU. For detailed
-instructions on the required setup, please refer to the [WMT example readme](https://github.com/google/flax/tree/master/examples/wmt).
+instructions on the required setup, please refer to the [WMT example readme](https://github.com/google/flax/tree/main/examples/wmt).
 
 ## Owners
 

@@ -31,7 +31,7 @@ Follow these steps to contribute code:
 2. Install Python >=3.6 and `svn` for running the tests (see below).
 
 3. (Optional) Create a virutal environment or a Docker container. See 
-   [`dev/README.md`](https://github.com/google/flax/blob/master/dev/README.md)
+   [`dev/README.md`](https://github.com/google/flax/blob/main/dev/README.md)
    for details on how to setup a Docker Contaner. To setup a virual environment,
    run the following:
 
@@ -87,7 +87,7 @@ Follow these steps to contribute code:
    Then sync your code with the main repo:
 
    ```bash
-   git rebase upstream/master
+   git rebase upstream/main
    ```
 
    Finally push your commit on your development branch and create a remote 
@@ -98,7 +98,7 @@ Follow these steps to contribute code:
    ```
 
 9. Make sure your PR passes the 
-   [PR checklist](https://github.com/google/flax/blob/master/.github/pull_request_template.md#checklist).
+   [PR checklist](https://github.com/google/flax/blob/main/.github/pull_request_template.md#checklist).
    If so, create a Pull Request from the Flax repository and send it for review.
    Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/)
    for more information on using pull requests.

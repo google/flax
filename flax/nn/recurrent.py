@@ -15,7 +15,7 @@
 """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Recurrent neural network modules.
 
 THe RNNCell modules are designed to fit in with the scan function in JAX::
@@ -44,7 +44,7 @@ class RNNCellBase(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   RNN cell base class."""
 
   @staticmethod
@@ -67,7 +67,7 @@ class LSTMCell(RNNCellBase):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   LSTM cell."""
 
   def apply(self, carry, inputs,
@@ -144,7 +144,7 @@ class OptimizedLSTMCell(RNNCellBase):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   More efficient LSTM Cell that concatenates state components before matmul.
 
   Parameters are compatible with `flax.nn.LSTMCell`.
@@ -268,7 +268,7 @@ class GRUCell(RNNCellBase):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   GRU cell."""
 
   def apply(self, carry, inputs,
@@ -340,7 +340,7 @@ class ConvLSTM(RNNCellBase):
   r"""DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A convolutional LSTM cell.
 
   The implementation is based on xingjian2015convolutional.
