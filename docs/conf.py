@@ -108,8 +108,8 @@ nbsphinx_prolog = r"""
 
     .. nbinfo::
 
-        :raw-html:`<a href="https://colab.research.google.com/github/google/flax/blob/master/{{ docname }}"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>`
-        :raw-html:`<a href="https://github.com/google/flax/blob/master/{{ docname }}"><img alt="Open On GitHub" src="https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub" style="vertical-align:text-bottom"></a>`
+        :raw-html:`<a href="https://colab.research.google.com/github/google/flax/blob/main/{{ docname }}"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>`
+        :raw-html:`<a href="https://github.com/google/flax/blob/main/{{ docname }}"><img alt="Open On GitHub" src="https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub" style="vertical-align:text-bottom"></a>`
 
 
 """

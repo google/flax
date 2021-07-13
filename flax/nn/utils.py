@@ -15,7 +15,7 @@
 """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   NN base modules for JAX."""
 
 import contextlib
@@ -27,7 +27,7 @@ class CallStack(object):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Utility for tracking data across a call stack."""
 
   def __init__(self):
@@ -63,7 +63,7 @@ def classproperty(f):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   decorator that registers a function as a read-only property of the class."""
 
   class _ClassProperty:
@@ -76,25 +76,25 @@ def classproperty(f):
   return _ClassProperty()
 
 
-def _masters():
+def _mains():
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Returns a list of currently active Jax tracers."""
   # TODO(jheek): consider re-introducing the tracer check
   # for now we pretent there are never any tracers
   return ()
 
 
-def _trace_level(master):
+def _trace_level(main):
   """DEPRECATION WARNING:
  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Returns the level of the trace of -infinity if it is None."""
-  if master:
-    return master.level
+  if main:
+    return main.level
   return float('-inf')
 
 
@@ -102,9 +102,9 @@ def _current_trace():
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Returns the innermost Jax tracer."""
-  tracers = _masters()
+  tracers = _mains()
   if tracers:
     return tracers[-1]
   return None
@@ -114,13 +114,13 @@ def _level_of_value(xs):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Returns the tracer level associated with a value if any."""
   xs = jax.tree_leaves(xs)
   max_level = float('-inf')
   # TODO(jheek): consider re-introducing the tracer check
   # for x in xs:
   #   if hasattr(x, '_trace'):
-  #     level = _trace_level(x._trace.master)
+  #     level = _trace_level(x._trace.main)
   #     max_level = max(level, max_level)
   return max_level

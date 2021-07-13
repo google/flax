@@ -35,7 +35,7 @@ forum](https://github.com/google/flax/discussions), or just let us
 know what you're working on!
 
 We expect to improve Flax, but we don't anticipate significant
-breaking changes to the core API. We use [Changelog](https://github.com/google/flax/tree/master/CHANGELOG.md)
+breaking changes to the core API. We use [Changelog](https://github.com/google/flax/tree/main/CHANGELOG.md)
 entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
@@ -62,7 +62,7 @@ comes with everything you need to start your research, including:
 
 ## Quick install
 
-You will need Python 3.6 or later and a working [JAX](https://github.com/google/jax/blob/master/README.md)
+You will need Python 3.6 or later and a working [JAX](https://github.com/google/jax/blob/main/README.md)
 installation (with or without GPU support, see instructions there). For a
 CPU-only version:
 
@@ -87,7 +87,7 @@ To upgrade to the latest version of Flax, you can use:
 
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
 
-To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
+To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
 [HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html).
 
 ```py
@@ -184,7 +184,7 @@ To cite this repository:
 ```
 
 In the above bibtex entry, names are in alphabetical order, the version number
-is intended to be that from [flax/version.py](https://github.com/google/flax/blob/master/flax/version.py), and the year corresponds to the project's open-source release.
+is intended to be that from [flax/version.py](https://github.com/google/flax/blob/main/flax/version.py), and the year corresponds to the project's open-source release.
 
 ## Note
 

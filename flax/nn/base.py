@@ -15,7 +15,7 @@
 """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   NN base modules for JAX."""
 
 from typing import Type
@@ -54,7 +54,7 @@ class _ModuleFrame:
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A ModuleFrame the context needed to initialize (init) or apply a Module.
 
   In particular, `self.params` is a dictionary where parameters are
@@ -142,7 +142,7 @@ def module_method(fn):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Decorates a function as a module method.
 
   The `module_method` allows modules to have multiple methods that make use of
@@ -213,7 +213,7 @@ class _ModuleMeta(abc.ABCMeta):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A meta class for automatically setting the doc of Modules."""
 
   def __init__(cls, name, bases, attrs):
@@ -266,11 +266,11 @@ class Module(metaclass=_ModuleMeta):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Functional modules."""
 
   def __new__(cls, *args, name=None, **kwargs):
-    warnings.warn("The `flax.nn` module is Deprecated, use `flax.linen` instead. Learn more and find an upgrade guide at https://github.com/google/flax/blob/master/flax/linen/README.md", DeprecationWarning)
+    warnings.warn("The `flax.nn` module is Deprecated, use `flax.linen` instead. Learn more and find an upgrade guide at https://github.com/google/flax/blob/main/flax/linen/README.md", DeprecationWarning)
     # DO NOT REMOVE - Marker for internal logging.
     if not _module_stack:
       raise ValueError('A Module should only be instantiated directly inside'
@@ -718,7 +718,7 @@ def module(fun):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Convert a function into the apply method of a new Module.
 
   This is convenient shortcut for writing higher level modules that don't need
@@ -757,7 +757,7 @@ class TransparentModule(Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A transparent module.
 
   A transparent module can only have one parameter named '0'.
@@ -786,7 +786,7 @@ class TruncatedModule(TransparentModule):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Wraps a Module and returns the requested intermediate outputs instead.
 
   Check `Model.truncate_at` for a simple API to get the intermediate outputs of
@@ -822,7 +822,7 @@ def capture_module_outputs():
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A context manager that captures all model outputs.
 
   Yields:
@@ -837,7 +837,7 @@ class ModuleState():
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Tracks a state variable.
 
   ModuleState instances should not be created directly. See `Module.state` on
@@ -876,7 +876,7 @@ def stateful(state=None, mutable=True):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A context manager for stateful computations.
 
   Module's that use the `Module.state` by default store state inside the
@@ -931,7 +931,7 @@ def is_stateful():
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Returns true if a stateful scope is currently active (see `flax.nn.stateful`)."""
   return bool(_state_stack)
 
@@ -955,7 +955,7 @@ class Model:
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md
+  https://github.com/google/flax/blob/main/flax/linen/README.md
 
   A Model contains the model parameters, state and definition."""
 
@@ -1000,7 +1000,7 @@ class Collection:
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A collection of tensors useful for tracking state.
 
   A Collection can be used to associate data with the application of a Module.
@@ -1021,7 +1021,7 @@ class Collection:
     self._anchor = _module_stack[-1] if _module_stack else None
 
     self._mutable = False
-    self._master_level = None
+    self._main_level = None
     self._root = None
 
   def as_dict(self):
@@ -1040,7 +1040,7 @@ class Collection:
     # pylint: disable=protected-access
     new_col = jax.tree_map(lambda x: x, self)  # clone the collection
     new_col._mutable = True
-    new_col._master_level = utils._trace_level(utils._current_trace())
+    new_col._main_level = utils._trace_level(utils._current_trace())
     try:
       yield new_col
     finally:
@@ -1074,14 +1074,14 @@ class Collection:
     if not self._mutable:
       raise ValueError('Collection is not mutable. Use the `mutate` method to'
                        ' create a mutable copy.')
-    # Use the Jax TraceMaster to determine if a Collection is modified from
+    # Use the Jax TraceMain to determine if a Collection is modified from
     # inside a nested jax transformation.
     # In this case, we throw an error because transforming a stateful function
     # is ill-defined (eg. what does vmap of BatchNorm do?).
     # TODO(jheek): Add doc guide on combining jax transforms and state.
     # TODO(jheek): Should some transformations be exempt from this error?
     value_level = utils._level_of_value(value)
-    if value_level > self._master_level:
+    if value_level > self._main_level:
       raise ValueError('Stateful operations are not allowed when the Collection'
                        ' is created outside of the current Jax transformation')
 

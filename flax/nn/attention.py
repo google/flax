@@ -48,7 +48,7 @@ def dot_product_attention(query,
   """DEPRECATION WARNING:
  "The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Computes dot-product attention given query, key, and value.
 
   This is the core function for applying attention based on
@@ -172,7 +172,7 @@ def scan_in_dim(*args, **kwargs):
 class Cache(Collection):
   """The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Collect intermediate activations for efficient autoregressive decoding."""
 
   def initialize_cache(self, shape, dtype=None):
@@ -206,7 +206,7 @@ jax.tree_util.register_pytree_node(
 class MultiHeadDotProductAttention(Module):
   """The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Multi-head dot-product attention."""
 
   def apply(self,
@@ -449,7 +449,7 @@ def make_padding_mask(padding_mask_query,
                       segmentation_mask=False):
   """The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Makes padding mask for attention weights.
 
   In case of 1d inputs (i.e., `[bs, len, features]`, the attention weights will
@@ -501,7 +501,7 @@ def make_padding_mask(padding_mask_query,
 def _make_causal_mask(key, attention_axis=None, self_mask=False):
   """The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Makes a causal mask, to be used for masking out the future for attention.
 
   In case of 1d inputs (i.e., `[bs, len, features]`, the attention weights will

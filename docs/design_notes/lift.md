@@ -292,8 +292,8 @@ Please open a GitHub issue when you find a use case that is not supported yet by
 
 References:
 - [Linen transforms documentation](https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.linen.transforms).
-- [Linen transforms source code](https://github.com/google/flax/blob/master/flax/linen/transforms.py)
-- [Core lifting source code](https://github.com/google/flax/blob/master/flax/core/lift.py)
+- [Linen transforms source code](https://github.com/google/flax/blob/main/flax/linen/transforms.py)
+- [Core lifting source code](https://github.com/google/flax/blob/main/flax/core/lift.py)
 
 ### Linen examples
 

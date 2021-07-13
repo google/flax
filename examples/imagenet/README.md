@@ -11,7 +11,7 @@ This example uses linear learning rate warmup and cosine learning rate schedule.
 You can run this code and even modify it directly in Google Colab, no
 installation required:
 
-https://colab.research.google.com/github/google/flax/blob/master/examples/imagenet/imagenet.ipynb
+https://colab.research.google.com/github/google/flax/blob/main/examples/imagenet/imagenet.ipynb
 
 The Colab also demonstrates how to load pretrained checkpoints from Cloud
 storage at

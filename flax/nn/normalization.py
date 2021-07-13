@@ -32,7 +32,7 @@ class BatchNorm(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   BatchNorm Module."""
 
   def apply(self,
@@ -130,7 +130,7 @@ class LayerNorm(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Layer normalization (https://arxiv.org/abs/1607.06450).
 
   Operates on the last axis of the input data.
@@ -185,7 +185,7 @@ class GroupNorm(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Group normalization (arxiv.org/abs/1803.08494)."""
 
   def apply(self,

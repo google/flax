@@ -283,7 +283,7 @@ class Scope:
   usually generally do not interact with ``Scopes`` directly.
 
   See `core design tests
-  <https://github.com/google/flax/tree/master/tests/core/design>`_
+  <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
 

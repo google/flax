@@ -42,7 +42,7 @@ Possibly breaking changes:
 Other changes:
  - Rewrote various examples to use Optax instead of Flax optimizers (e.g., Imagenet, SST2).
  - Added an NLP text classification example (on the SST-2 dataset) to
-   [`examples/sst2`](https://github.com/google/flax/tree/master/examples/sst2).
+   [`examples/sst2`](https://github.com/google/flax/tree/main/examples/sst2).
    that uses a bidirectional LSTM (BiLSTM) to encode the input text.
  - Added `flax.training.train_state` to simplify using Optax optimizers.
  - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
@@ -177,7 +177,7 @@ v0.2.2
  - Fix initialization RNGs to work with omnistaging for jitted inits.
  - Replaces usage of 'param' kind to 'params' collection.
  - Fix LARS optimizer for zero param initialization.
- - Added various examples in Linen API. See [README.md](https://github.com/google/flax/blob/master/flax/linen/README.md) for more information.
+ - Added various examples in Linen API. See [README.md](https://github.com/google/flax/blob/main/flax/linen/README.md) for more information.
  - Full JAX omnistaging compatibility.
 
 v0.2

@@ -22,10 +22,10 @@ def current_trace():
   return jax.core.find_top_trace(())
 
 
-def trace_level(master):
+def trace_level(main):
   """Returns the level of the trace of -infinity if it is None."""
-  if master:
-    return master.level
+  if main:
+    return main.level
   return float('-inf')
 
 
