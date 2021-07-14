@@ -508,6 +508,11 @@ class Module:
       raise errors.MultipleMethodsCompactError()
 
   @classmethod
+  def _should_wrap_method_in_named_call(cls, method_name: str):
+    """Whether a method should be wrapped with the named call transformation."""
+    return method_name != 'setup'
+
+  @classmethod
   def _wrap_module_methods(cls):
     """Wraps user-defined non-inherited methods with state management functions."""
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
@@ -516,7 +521,7 @@ class Module:
     for key in _get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       wrapped_method = wrap_method_once(method)
-      if _use_named_call and key != 'setup':
+      if _use_named_call and cls._should_wrap_method_in_named_call(key):
         # We import named_call at runtime to avoid a circular import issue.
         from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
         wrapped_method = named_call(wrapped_method)
