@@ -14,7 +14,7 @@
 
 """Main file for running the MNIST example.
 
-This file is intentionally kept short. The majority for logic is in libraries
+This file is intentionally kept short. The majority of logic is in libraries
 than can be easily tested and imported in Colab.
 """
 
@@ -42,7 +42,7 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  # Hide any GPUs form TensorFlow. Otherwise TF might reserve memory and make
+  # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
   # it unavailable to JAX.
   tf.config.experimental.set_visible_devices([], 'GPU')
 
