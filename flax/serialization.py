@@ -22,6 +22,7 @@ import enum
 import jax
 import msgpack
 import numpy as np
+from numpy.lib.arraysetops import isin
 
 
 _STATE_DICT_REGISTRY = {}
@@ -125,27 +126,24 @@ def _restore_dict(xs, states):
 
 
 def _namedtuple_state_dict(nt):
-  return {'name': nt.__class__.__name__,
-          'fields': {str(i): to_state_dict(x)
-                     for i, x in enumerate(nt._fields)},
-          'values': {str(i): to_state_dict(x)
-                     for i, x in enumerate(nt)}
-         }
+  return {key: to_state_dict(getattr(nt, key)) for key in nt._fields}
 
 
 def _restore_namedtuple(xs, state_dict):
   """Rebuild namedtuple from serialized dict."""
-  if len(state_dict['values']) != len(xs):
-    raise ValueError('The size of the list and the state dict do not match,'
-                     f' got {len(xs)} and {len(state_dict["values"])}.')
-  fields = [state_dict['fields'][str(i)] for i in range(len(xs))]
-  namedtuple_class = collections.namedtuple(
-      state_dict['name'], fields)
-  ys = []
-  for i in range(len(state_dict['values'])):
-    y = from_state_dict(xs[i], state_dict['values'][str(i)])
-    ys.append(y)
-  return namedtuple_class(*ys)
+  if set(state_dict.keys()) == {'name', 'fields', 'values'}:
+    # TODO(jheek): remove backward compatible named tuple restoration early 2022
+    state_dict = {state_dict['fields'][str(i)]: state_dict['values'][str(i)]
+                  for i in range(len(state_dict['fields']))}
+
+  sd_keys = set(state_dict.keys())
+  nt_keys = set(xs._fields)
+
+  if sd_keys != nt_keys:
+    raise ValueError('The field names of the state dict and the named tuple do not match,'
+                     f' got {sd_keys} and {nt_keys}.')
+  fields = {k: from_state_dict(getattr(xs, k), v) for k, v in state_dict.items()}
+  return type(xs)(**fields)
 
 
 register_serialization_state(dict, _dict_state_dict, _restore_dict)

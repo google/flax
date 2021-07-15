@@ -212,6 +212,20 @@ class SerializationTest(absltest.TestCase):
     x1_serialized = serialization.to_bytes(x1)
     x2 = foo_class(a=0, b=0, c=0)
     restored_x1 = serialization.from_bytes(x2, x1_serialized)
+    self.assertEqual(type(x1), type(restored_x1))
+    self.assertEqual(x1, restored_x1)
+  
+  def test_namedtuple_restore_legacy(self):
+    foo_class = collections.namedtuple('Foo', 'a b c')
+    x1 = foo_class(a=1, b=2, c=3)
+    legacy_encoding = {
+      'name': 'Foo',
+      'fields': {'0': 'a', '1': 'b', '2': 'c'},
+      'values': {'0': 1, '1': 2, '2': 3},
+    }
+    x2 = foo_class(a=0, b=0, c=0)
+    restored_x1 = serialization.from_state_dict(x2, legacy_encoding)
+    self.assertEqual(type(x1), type(restored_x1))
     self.assertEqual(x1, restored_x1)
 
   def test_model_serialization_to_bytes(self):
