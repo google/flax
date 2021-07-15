@@ -21,7 +21,7 @@ vNext
  -
  -
  -
- -
+ - Fix the serialization of named tuples. Tuple fields are no longer stored in the state dict and the named tuple class is no longer recreated ([bug](https://github.com/google/flax/issues/1429)).
  -
  -
  -
