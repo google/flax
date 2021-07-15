@@ -96,8 +96,8 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
-  if ckpt_dir.startswith('./'):
-    ckpt_dir = ckpt_dir[2:]  # gfile.glob() can remove leading './'
+  # gfile.glob() can modify path './', '//' ...
+  ckpt_dir = os.path.normpath(ckpt_dir)
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
   gfile.makedirs(os.path.dirname(ckpt_path))
