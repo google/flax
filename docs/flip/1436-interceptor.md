@@ -2,6 +2,7 @@
 - FLIP PR: [#0000](https://github.com/google/flax/pull/0000)
 - FLIP Issue: [#1436](https://github.com/google/flax/issues/1436)
 
+Authors: @alextp, @bastings, @zpolina (alphabetically)
 
 Table of contents:
 
@@ -139,3 +140,4 @@ We coded a proposal in this PR: https://github.com/google/flax/pull/1356
 This will be updated based on discussions on e.g., 
 - how to deal with multiple hooks
 - let `capture_intermediates` be implemented as a hook in the background (without changing the API for it).
+
