@@ -7,16 +7,18 @@ Typically the distinction is clear:
 * Completely fixed properties, such as the choice of kernel initializer or number of output features, are hyperparameters and should be defined as dataclass attributes. Typically two Module instances with different hyperparamaters cannot share in a meaningful way.
 * Dynamic properties, such as input data and top-level "mode switches" like `train=True/False` that should be passed as arguments to `__call__` or another method.
 
-Some cases are however ambigious. Take for example the `Dropout` module.
+Some cases are however less clear cut. Take for example the `Dropout` module.
 We have a number of clear hyperparameters:
+
 1. The dropout rate
 2. The axes for which a dropout mask is generated
 
 And some clear call time arguments:
+
 1. The input that should be masked using dropout
 2. The (optional) rng used to sample the random mask
 
-There is however one property that is ambigious -- the `deterministic` property in a Dropout module.
+There is however one property that is ambiguous -- the `deterministic` property in a Dropout module.
 
 If `deterministic` is `True` no dropout mask is sampled. This is typically used during model evaluation.
 However, if we pass `eval=True` or `train=False` to a top-level Module. The `deterministic` argument needs
