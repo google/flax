@@ -53,7 +53,7 @@ class CNN(nn.Module):
 
 @jax.jit
 def apply_model(state, images, labels):
-  """Compute loss, accurcy and gradients for a single batch."""
+  """Compute gradientsh loss and accuracy for a single batch."""
   def loss_fn(params):
     logits = CNN().apply({'params': params}, images)
     one_hot = jax.nn.one_hot(labels, 10)
@@ -62,8 +62,8 @@ def apply_model(state, images, labels):
 
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (loss, logits), grads = grad_fn(state.params)
-  accu = jnp.mean(jnp.argmax(logits, -1) == labels)
-  return grads, loss, accu
+  accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
+  return grads, loss, accuracy
 
 
 @jax.jit
@@ -81,18 +81,18 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
   perms = perms.reshape((steps_per_epoch, batch_size))
 
   epoch_loss = []
-  epoch_accu = []
+  epoch_accuracy = []
 
   for perm in perms:
     batch_images = train_ds['image'][perm, ...]
     batch_labels = train_ds['label'][perm, ...]
-    grads, loss, accu = apply_model(state, batch_images, batch_labels)
+    grads, loss, accuracy = apply_model(state, batch_images, batch_labels)
     state = update_model(state, grads)
     epoch_loss.append(loss)
-    epoch_accu.append(accu)
+    epoch_accuracy.append(accuracy)
   train_loss = np.mean(epoch_loss)
-  train_accu = np.mean(epoch_accu)
-  return state, train_loss, train_accu
+  train_accuracy = np.mean(epoch_accuracy)
+  return state, train_loss, train_accuracy
 
 
 def get_datasets():
@@ -135,19 +135,19 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = jax.random.split(rng)
-    state, train_loss, train_accu = train_epoch(
+    state, train_loss, train_accuracy = train_epoch(
       state, train_ds, config.batch_size, epoch, input_rng)
-    _, test_loss, test_accu = apply_model(
+    _, test_loss, test_accuracy = apply_model(
       state, test_ds['image'], test_ds['label'])
 
     print(
-      'epoch:% 3d, train_loss: %.4f, train_accu: %.2f, test_loss: %.4f, test_accu: %.2f' %
-      (epoch, train_loss, train_accu * 100, test_loss, test_accu * 100))
+      'epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, test_loss: %.4f, test_accuracy: %.2f' %
+      (epoch, train_loss, train_accuracy * 100, test_loss, test_accuracy * 100))
 
     summary_writer.scalar('train_loss', train_loss, epoch)
-    summary_writer.scalar('train_accu', train_accu, epoch)
+    summary_writer.scalar('train_accuracy', train_accuracy, epoch)
     summary_writer.scalar('test_loss', test_loss, epoch)
-    summary_writer.scalar('test_accu', test_accu, epoch)
+    summary_writer.scalar('test_accuracy', test_accuracy, epoch)
 
   summary_writer.flush()
   return state
