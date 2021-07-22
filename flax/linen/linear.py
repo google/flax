@@ -199,19 +199,19 @@ class Conv(Module):
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
       be a sequence of integers.
-    strides: a sequence of `n` integers, representing the inter-window
-      strides.
+    strides: an integer or a sequence of `n` integers, representing the
+      inter-window strides (default: 1).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
-    input_dilation: `None`, or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs`.
+    input_dilation: an integer or a sequence of `n` integers, giving the
+      dilation factor to apply in each spatial dimension of `inputs` (default: 1).
       Convolution with input dilation `d` is equivalent to transposed
       convolution with stride `d`.
-    kernel_dilation: `None`, or a sequence of `n` integers, giving the
+    kernel_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
-      kernel. Convolution with kernel dilation is also known as 'atrous
-      convolution'.
+      kernel (default: 1). Convolution with kernel dilation
+      is also known as 'atrous convolution'.
     feature_group_count: integer, default 1. If specified divides the input
       features into groups.
     use_bias: whether to add a bias to the output (default: True).
