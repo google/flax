@@ -26,8 +26,10 @@ vNext
  -
  -
  -
- -
- -
+ - `flax.linen.Conv` no longer interprets an int past as kernel_size as a 1d convolution. Instead a type error is raised stating that
+   a tuple/list should be provided. Stride and dilation arguments do support broadcasting a single int value now because this is not
+   ambigious when the kernel rank is known. 
+ - 
 
 0.3.4
 ------
