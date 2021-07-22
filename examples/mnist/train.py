@@ -53,7 +53,7 @@ class CNN(nn.Module):
 
 @jax.jit
 def apply_model(state, images, labels):
-  """Compute gradientsh loss and accuracy for a single batch."""
+  """Computes gradients, loss and accuracy for a single batch."""
   def loss_fn(params):
     logits = CNN().apply({'params': params}, images)
     one_hot = jax.nn.one_hot(labels, 10)
