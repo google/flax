@@ -263,6 +263,19 @@ class ModifyScopeVariableError(FlaxError):
                      f'"{scope_path}" because collection "{col}" is immutable.')
 
 
+class JaxTransformError(FlaxError):
+  """
+  JAX transforms and Flax modules cannot be mixed.
+
+  JAX's functional transformations expect pure function.
+  When you want to use JAX transformations **inside** Flax models,
+  you should make use the Flax transformations
+  (e.g.: ``flax.linen.vmap``, ``flax.linen.scan``, etc.)
+  """
+  def __init__(self):
+    super().__init__('Jax transforms and Flax models cannot be mixed.')
+
+
 #################################################
 # module.py errors                              #
 #################################################
