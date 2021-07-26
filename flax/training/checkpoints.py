@@ -41,6 +41,8 @@ UNSIGNED_FLOAT_RE = re.compile(
 # Module name folowed by number.
 MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
 
+GS_PREFIX = r'gs://'  # Google Cloud Storage Prefix
+
 
 def _checkpoint_path(ckpt_dir, step, prefix='checkpoint_'):
   return os.path.join(ckpt_dir, f'{prefix}{step}')
@@ -71,6 +73,13 @@ def natural_sort(file_list, signed=True):
   return sorted(file_list, key=split_keys)
 
 
+def safe_normpath(path):
+  """Normalize path safely to get around gfile.glob limitations."""
+  if path.startswith(GS_PREFIX):
+    return GS_PREFIX + os.path.normpath(path[len(GS_PREFIX):])
+  return os.path.normpath(path)
+
+
 def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     target,
                     step,
@@ -96,8 +105,8 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
-  if ckpt_dir.startswith('./'):
-    ckpt_dir = ckpt_dir[2:]  # gfile.glob() can remove leading './'
+  # normalize path because gfile.glob() can modify path './', '//' ...
+  ckpt_dir = safe_normpath(ckpt_dir)
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
   gfile.makedirs(os.path.dirname(ckpt_path))
@@ -197,6 +206,7 @@ def restore_checkpoint(ckpt_dir,
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
+  ckpt_dir = safe_normpath(ckpt_dir)
   if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):

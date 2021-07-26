@@ -107,6 +107,12 @@ class CheckpointsTest(absltest.TestCase):
     for test in tests:
       self.assertEqual(test, checkpoints.natural_sort(shuffle(test)))
 
+  def test_safe_normpath(self):
+    tests = ['./a/b/c', '/a//b/c', '/a/../b/c', 'a/b/./c', 'gs://a//b/c']
+    expected = ['a/b/c', '/a/b/c', '/b/c', 'a/b/c', 'gs://a/b/c']
+    for test, expect in zip(tests, expected):
+      self.assertEqual(expect, checkpoints.safe_normpath(test))
+
   def test_save_restore_checkpoints(self):
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
@@ -186,6 +192,10 @@ class CheckpointsTest(absltest.TestCase):
     rel_tmp_dir = './' + os.path.basename(tmp_dir)
     checkpoints.save_checkpoint(rel_tmp_dir, test_object, 3, keep=1)
     new_object = checkpoints.restore_checkpoint(rel_tmp_dir, test_object0)
+    jtu.check_eq(new_object, test_object)
+    non_norm_dir_path = tmp_dir + '//'
+    checkpoints.save_checkpoint(non_norm_dir_path, test_object, 4, keep=1)
+    new_object = checkpoints.restore_checkpoint(non_norm_dir_path, test_object0)
     jtu.check_eq(new_object, test_object)
 
   def test_save_restore_checkpoints_w_float_steps(self):
