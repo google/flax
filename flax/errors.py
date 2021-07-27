@@ -178,7 +178,7 @@ class ScopeParamShapeError(FlaxError):
   This error is thrown when the shape of an existing parameter is different from
   the shape of the return value of the ``init_fn``. This can happen when the 
   shape provided during :meth:`Module.apply() <flax.linen.Module.apply>` is
-  different from the one used when intializing the module.
+  different from the one used when initializing the module.
   
   For instance, the following code throws this error because the apply shape 
   (``(5, 5, 1)``) is different from the init shape (``(5, 5``). As a result, the
@@ -357,7 +357,7 @@ class AssignSubModuleError(FlaxError):
     Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
 
   In this case, ``self.conv(kernel_size=4)`` is called from ``__call__``, which
-  is disallowed beause it's neither within ``setup`` nor a method wrapped in
+  is disallowed because it's neither within ``setup`` nor a method wrapped in
   x``nn.compact``.
   """
   def __init__(self, cls):
