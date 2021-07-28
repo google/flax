@@ -309,19 +309,25 @@ def _unchunk_array_leaves_in_place(d):
 # User-facing API calls:
 
 
-def msgpack_serialize(pytree):
+def msgpack_serialize(pytree, in_place: bool = False):
   """Save data structure to bytes in msgpack format.
 
   Low-level function that only supports python trees with array leaves,
-  for custom objects use `to_bytes`.
+  for custom objects use `to_bytes`.  It splits arrays above MAX_CHUNK_SIZE into
+  multiple chunks.
 
   Args:
     pytree: python tree of dict, list, tuple with python primitives
       and array leaves.
+    in_place: boolean specifyng if pytree should be modified in place.
 
   Returns:
     msgpack-encoded bytes of pytree.
   """
+  if not in_place:
+    pytree = jax.tree_map(lambda x: x, pytree)
+  pytree = _np_convert_in_place(pytree)
+  pytree = _chunk_array_leaves_in_place(pytree)
   return msgpack.packb(pytree, default=_msgpack_ext_pack, strict_types=True)
 
 
@@ -338,8 +344,9 @@ def msgpack_restore(encoded_pytree):
     Python tree of dict, list, tuple with python primitive
     and array leaves.
   """
-  return msgpack.unpackb(
+  state_dict = msgpack.unpackb(
       encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False)
+  return _unchunk_array_leaves_in_place(state_dict)
 
 
 def from_bytes(target, encoded_bytes):
@@ -356,7 +363,6 @@ def from_bytes(target, encoded_bytes):
     leaf data from saved data.
   """
   state_dict = msgpack_restore(encoded_bytes)
-  state_dict = _unchunk_array_leaves_in_place(state_dict)
   return from_state_dict(target, state_dict)
 
 
@@ -371,6 +377,4 @@ def to_bytes(target):
     Bytes of msgpack-encoded state-dict of `target` object.
   """
   state_dict = to_state_dict(target)
-  state_dict = _np_convert_in_place(state_dict)
-  state_dict = _chunk_array_leaves_in_place(state_dict)
-  return msgpack_serialize(state_dict)
+  return msgpack_serialize(state_dict, in_place=True)
