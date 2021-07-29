@@ -17,12 +17,12 @@
 All Flax classes that carry state (e.g. ,Optimizer) can be turned into a
 state dict of numpy arrays for easy serialization.
 """
-import collections
 import enum
+from typing import Any, Dict, List
+
 import jax
 import msgpack
 import numpy as np
-from numpy.lib.arraysetops import isin
 
 
 _STATE_DICT_REGISTRY = {}
@@ -38,7 +38,7 @@ def _is_namedtuple(x):
   return isinstance(x, tuple) and hasattr(x, '_fields')
 
 
-def from_state_dict(target, state):
+def from_state_dict(target, state: Dict[str, Any]):
   """Restores the state of the given target using a state dict.
 
   This function takes the current target as an argument. This
@@ -65,7 +65,7 @@ def from_state_dict(target, state):
   return ty_from_state_dict(target, state)
 
 
-def to_state_dict(target):
+def to_state_dict(target) -> Dict[str, Any]:
   """Returns a dictionary with the state of the given target."""
   if _is_namedtuple(target):
     ty = _NamedTuple
@@ -101,11 +101,11 @@ def register_serialization_state(ty, ty_to_state_dict, ty_from_state_dict,
   _STATE_DICT_REGISTRY[ty] = (ty_to_state_dict, ty_from_state_dict)
 
 
-def _list_state_dict(xs):
+def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
   return {str(i): to_state_dict(x) for i, x in enumerate(xs)}
 
 
-def _restore_list(xs, state_dict):
+def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
   if len(state_dict) != len(xs):
     raise ValueError('The size of the list and the state dict do not match,'
                      f' got {len(xs)} and {len(state_dict)}.')
@@ -116,20 +116,20 @@ def _restore_list(xs, state_dict):
   return ys
 
 
-def _dict_state_dict(xs):
+def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
   return {key: to_state_dict(value) for key, value in xs.items()}
 
 
-def _restore_dict(xs, states):
+def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
   return {key: from_state_dict(value, states[key])
           for key, value in xs.items()}
 
 
-def _namedtuple_state_dict(nt):
+def _namedtuple_state_dict(nt) -> Dict[str, Any]:
   return {key: to_state_dict(getattr(nt, key)) for key in nt._fields}
 
 
-def _restore_namedtuple(xs, state_dict):
+def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
   """Rebuild namedtuple from serialized dict."""
   if set(state_dict.keys()) == {'name', 'fields', 'values'}:
     # TODO(jheek): remove backward compatible named tuple restoration early 2022
@@ -169,7 +169,7 @@ register_serialization_state(_NamedTuple,
 #   (real, imag).
 
 
-def _ndarray_to_bytes(arr):
+def _ndarray_to_bytes(arr) -> bytes:
   """Save ndarray to simple msgpack encoding."""
   if isinstance(arr, jax.xla.DeviceArray):
     arr = np.array(arr)
@@ -180,7 +180,7 @@ def _ndarray_to_bytes(arr):
   return msgpack.packb(tpl, use_bin_type=True)
 
 
-def _dtype_from_name(name):
+def _dtype_from_name(name: str):
   """Handle JAX bfloat16 dtype correctly."""
   if name == b'bfloat16':
     return jax.numpy.bfloat16
@@ -188,7 +188,7 @@ def _dtype_from_name(name):
     return np.dtype(name)
 
 
-def _ndarray_from_bytes(data):
+def _ndarray_from_bytes(data: bytes) -> np.ndarray:
   """Load ndarray from simple msgpack encoding."""
   shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
   return np.frombuffer(buffer,
@@ -258,7 +258,7 @@ _tuple_to_dict = lambda tpl: dict([(str(x), y) for x, y in enumerate(tpl)])
 _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
 
 
-def _chunk(arr):
+def _chunk(arr) -> Dict[str, Any]:
   """Convert array to a canonical dictionary of chunked arrays."""
   chunksize = max(1, int(MAX_CHUNK_SIZE / arr.dtype.itemsize))
   data = {'__msgpack_chunked_array__': True,
@@ -269,7 +269,7 @@ def _chunk(arr):
   return data
 
 
-def _unchunk(data):
+def _unchunk(data: Dict[str, Any]):
   """Convert canonical dictionary of chunked arrays back into array."""
   assert '__msgpack_chunked_array__' in data
   shape = _dict_to_tuple(data['shape'])
@@ -309,7 +309,7 @@ def _unchunk_array_leaves_in_place(d):
 # User-facing API calls:
 
 
-def msgpack_serialize(pytree, in_place: bool = False):
+def msgpack_serialize(pytree, in_place: bool = False) -> bytes:
   """Save data structure to bytes in msgpack format.
 
   Low-level function that only supports python trees with array leaves,
@@ -331,7 +331,7 @@ def msgpack_serialize(pytree, in_place: bool = False):
   return msgpack.packb(pytree, default=_msgpack_ext_pack, strict_types=True)
 
 
-def msgpack_restore(encoded_pytree):
+def msgpack_restore(encoded_pytree: bytes):
   """Restore data structure from bytes in msgpack format.
 
   Low-level function that only supports python trees with array leaves,
@@ -349,7 +349,7 @@ def msgpack_restore(encoded_pytree):
   return _unchunk_array_leaves_in_place(state_dict)
 
 
-def from_bytes(target, encoded_bytes):
+def from_bytes(target, encoded_bytes: bytes):
   """Restore optimizer or other object from msgpack-serialized state-dict.
 
   Args:
@@ -366,7 +366,7 @@ def from_bytes(target, encoded_bytes):
   return from_state_dict(target, state_dict)
 
 
-def to_bytes(target):
+def to_bytes(target) -> bytes:
   """Save optimizer or other object as msgpack-serialized state-dict.
 
   Args:
