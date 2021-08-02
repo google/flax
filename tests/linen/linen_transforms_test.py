@@ -121,6 +121,19 @@ class TransformTest(absltest.TestCase):
 
     self.assertTrue(np.all(y1 == y2))
 
+  def test_remat_kwargs(self):
+    class ConditionalReLU(nn.Module):
+      @nn.compact
+      def __call__(self, input, apply_relu : bool = False):
+        return nn.relu(input) if apply_relu else input
+    key = random.PRNGKey(0)
+    x = jnp.ones((4, 4)) * -1
+    remat_model = nn.remat(ConditionalReLU)()
+    p = remat_model.init(key, x)
+    y = remat_model.apply(p, x, apply_relu=True)
+
+    self.assertTrue(np.all(y == jnp.zeros_like(x)))
+
   def test_vmap(self):
     key1, key2 = random.split(random.PRNGKey(3), 2)
     x = random.uniform(key1, (4, 4))

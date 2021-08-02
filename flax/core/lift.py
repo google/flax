@@ -683,7 +683,7 @@ def checkpoint(fn: Callable[..., Any],
       return y, repack_fn(scope)
 
     return rematted(variable_groups, rng_groups, *args, **kwargs)
-  return pack(inner, (variables,), (variables,), (rngs,), name='remat', enable_kwargs=False)
+  return pack(inner, (variables,), (variables,), (rngs,), name='remat', enable_kwargs=True)
 
 
 def _hashable_filter(x):
