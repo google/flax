@@ -96,7 +96,7 @@ To creata a hyperlink, use the following syntax:
 # `Link to Google <http://www.google.com>`__
 ```
 
-### How to specifiy arguments for classes and methods
+### How to specify arguments for classes and methods
 
 *  Class attributes should be specified using the `Attributes:` tag.
 *  Method argument should be specified using the `Args:` tags. 

@@ -21,7 +21,6 @@ The data is loaded using tensorflow_datasets.
 # See issue #620.
 # pytype: disable=wrong-keyword-args
 
-from absl import logging
 from flax import linen as nn
 from flax.metrics import tensorboard
 from flax.training import train_state
@@ -51,41 +50,27 @@ class CNN(nn.Module):
     return x
 
 
-def compute_metrics(logits, labels):
-  loss = jnp.mean(
-      optax.softmax_cross_entropy(
-          logits=logits, labels=jax.nn.one_hot(labels, 10)))
-  accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
-  metrics = {
-      'loss': loss,
-      'accuracy': accuracy,
-  }
-  return metrics
-
-
 @jax.jit
-def train_step(state, batch):
-  """Train for a single step."""
+def apply_model(state, images, labels):
+  """Computes gradients, loss and accuracy for a single batch."""
   def loss_fn(params):
-    logits = CNN().apply({'params': params}, batch['image'])
-    loss = jnp.mean(
-        optax.softmax_cross_entropy(
-            logits=logits, labels=jax.nn.one_hot(batch['label'], 10)))
+    logits = CNN().apply({'params': params}, images)
+    one_hot = jax.nn.one_hot(labels, 10)
+    loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=one_hot))
     return loss, logits
+
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grads = grad_fn(state.params)
-  state = state.apply_gradients(grads=grads)
-  metrics = compute_metrics(logits=logits, labels=batch['label'])
-  return state, metrics
+  (loss, logits), grads = grad_fn(state.params)
+  accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
+  return grads, loss, accuracy
 
 
 @jax.jit
-def eval_step(params, batch):
-  logits = CNN().apply({'params': params}, batch['image'])
-  return compute_metrics(logits=logits, labels=batch['label'])
+def update_model(state, grads):
+  return state.apply_gradients(grads=grads)
 
 
-def train_epoch(state, train_ds, batch_size, epoch, rng):
+def train_epoch(state, train_ds, batch_size, rng):
   """Train for a single epoch."""
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
@@ -93,30 +78,20 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
   perms = jax.random.permutation(rng, len(train_ds['image']))
   perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
   perms = perms.reshape((steps_per_epoch, batch_size))
-  batch_metrics = []
+
+  epoch_loss = []
+  epoch_accuracy = []
+
   for perm in perms:
-    batch = {k: v[perm, ...] for k, v in train_ds.items()}
-    state, metrics = train_step(state, batch)
-    batch_metrics.append(metrics)
-
-  # compute mean of metrics across each batch in epoch.
-  batch_metrics_np = jax.device_get(batch_metrics)
-  epoch_metrics_np = {
-      k: np.mean([metrics[k] for metrics in batch_metrics_np])
-      for k in batch_metrics_np[0]}
-
-  logging.info(
-      'train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-      epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100)
-
-  return state, epoch_metrics_np
-
-
-def eval_model(params, test_ds):
-  metrics = eval_step(params, test_ds)
-  metrics = jax.device_get(metrics)
-  summary = jax.tree_map(lambda x: x.item(), metrics)
-  return summary['loss'], summary['accuracy']
+    batch_images = train_ds['image'][perm, ...]
+    batch_labels = train_ds['label'][perm, ...]
+    grads, loss, accuracy = apply_model(state, batch_images, batch_labels)
+    state = update_model(state, grads)
+    epoch_loss.append(loss)
+    epoch_accuracy.append(accuracy)
+  train_loss = np.mean(epoch_loss)
+  train_accuracy = np.mean(epoch_accuracy)
+  return state, train_loss, train_accuracy
 
 
 def get_datasets():
@@ -161,17 +136,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = jax.random.split(rng)
-    state, train_metrics = train_epoch(
-        state, train_ds, config.batch_size, epoch, input_rng)
-    loss, accuracy = eval_model(state.params, test_ds)
+    state, train_loss, train_accuracy = train_epoch(state, train_ds,
+                                                    config.batch_size,
+                                                    input_rng)
+    _, test_loss, test_accuracy = apply_model(state, test_ds['image'],
+                                              test_ds['label'])
 
-    logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
-                 epoch, loss, accuracy * 100)
+    print(
+        'epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, test_loss: %.4f, test_accuracy: %.2f'
+        % (epoch, train_loss, train_accuracy * 100, test_loss,
+           test_accuracy * 100))
 
-    summary_writer.scalar('train_loss', train_metrics['loss'], epoch)
-    summary_writer.scalar('train_accuracy', train_metrics['accuracy'], epoch)
-    summary_writer.scalar('eval_loss', loss, epoch)
-    summary_writer.scalar('eval_accuracy', accuracy, epoch)
+    summary_writer.scalar('train_loss', train_loss, epoch)
+    summary_writer.scalar('train_accuracy', train_accuracy, epoch)
+    summary_writer.scalar('test_loss', test_loss, epoch)
+    summary_writer.scalar('test_accuracy', test_accuracy, epoch)
 
   summary_writer.flush()
   return state

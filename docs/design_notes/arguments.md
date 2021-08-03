@@ -81,7 +81,7 @@ class MyDropout(nn.Module):
 In this example `nn.merge_param` will ensure that either `self.deterministic` or `deterministic` is set but not both.
 An error is raised if both values are `None` or both values are not `None`.
 This avoids confusing behavior where 2 different parts of the code set the same parameter and one is overruled by the other.
-It also avoids a default value which would problably cause either the train step or eval step of a training procedure to be broken by default.
+It also avoids a default value which would probably cause either the train step or eval step of a training procedure to be broken by default.
 
 
 
