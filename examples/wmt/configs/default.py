@@ -40,7 +40,7 @@ def get_config():
   config.reverse_translation = False
 
   # Per device batch size for training.
-  config.per_device_batch_size = 64
+  config.per_device_batch_size = 32
 
   # Beam size for inference.
   config.beam_size = 4

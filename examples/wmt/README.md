@@ -14,90 +14,70 @@ rate schedule.
 *   This example additionally depends on the `sentencepiece` and
     `tensorflow-text` packages.
 
-### Supported setups
 
-The model should run with other configurations and hardware, but was explicitly
-tested on the following.
+### How to run on Cloud TPU
 
-Hardware | Batch size | Training time | BLEU  | TensorBoard.dev
--------- | ---------- | ------------- | ----- | ---------------
-TPU v3-8 | 256        | 1h 35m        | 25.13 | [2020-04-21](https://tensorboard.dev/experiment/9lsbEw7DQzKdv881v4nIQA/)
+Setup the TPU VM and install the Flax dependencies on it as described
+[here](https://cloud.google.com/tpu/docs/jax-pods) for creating pod slices, or
+[here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm) for a single
+v3-8 TPU.
 
-### How to run
-
-`python main.py --workdir=./wmt_256 --config=configs/default.py --config.reverse_translation=True`
-
-### How to run on Cloud TPUs
-
-Creating a [Cloud TPU](https://cloud.google.com/tpu/docs/quickstart) involves
-creating the user GCE VM and the TPU node.
-
-To create a user GCE VM, run the following command from your GCP console or your
-computer terminal where you have
-[gcloud installed](https://cloud.google.com/sdk/install).
-
-Depending on current availability, you might need to choose a different
-[zone with TPUs](https://cloud.google.com/tpu/docs/types-zones).
+First create a single TPUv3-8 VM and connect to it (you can find more detailed
+instructions [here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm)):
 
 ```
-export ZONE=europe-west4-a
-gcloud compute instances create $USER-user-vm-0001 \
-   --machine-type=n1-standard-16 \
-   --image-project=ml-images \
-   --image-family=tf-2-4-2 \
-   --boot-disk-size=200GB \
-   --scopes=cloud-platform \
-   --zone=$ZONE
+ZONE=us-central1-a
+TPU_TYPE=v3-8
+TPU_NAME=$USER-flax-wmt
+
+gcloud alpha compute tpus tpu-vm create $TPU_NAME \
+    --zone $ZONE \
+    --accelerator-type $TPU_TYPE \
+    --version v2-alpha
+
+gcloud alpha compute tpus tpu-vm ssh $TPU_NAME --zone $ZONE -- \
+    -L 6006:localhost:6006
 ```
 
-To create a larger GCE VM, choose a different
-[machine type](https://cloud.google.com/compute/docs/machine-types).
+When connected install JAX:
 
 ```
-export TPU_IP_RANGE=192.168.0.0/29
-gcloud compute tpus create $USER-tpu-0001 \
-      --zone=$ZONE \
-      --network=default \
-      --accelerator-type=v3-8 \
-      --range=$TPU_IP_RANGE \
-      --version=tpu_driver_nightly
+pip install "jax[tpu]>=0.2.16" \
+    -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 ```
 
-Now that you have created both the user GCE VM and the TPU node, ssh to the GCE
-VM by executing the following command, including a local port forwarding rule
-for viewing tensorboard:
+Then install Flax + the example dependencies:
 
 ```
-gcloud compute ssh $USER-user-vm-0001 -- -L 2222:localhost:8888
+git clone --depth=1 --branch=main https://github.com/google/flax
+cd flax
+pip install -e .
+cd examples/wmt
+pip install -r requirements.txt
 ```
 
-Be sure to install the latest `jax` and `jaxlib` packages alongside the other
-requirements above. e.g. as of April 2020 the following package versions were
-used successfully:
+And finally start the training:
 
 ```
-pip3 install -U pip &&
-pip3 install -U setuptools wheel &&
-pip3 install -U pip jax jaxlib sentencepiece &&
-pip3 install -U tensorflow==2.4.1 tensorflow-datasets tensorflow-text>=2.4.0 &&
-git clone https://github.com/google/flax &&
-pip3 install -e flax
-```
-
-Assuming the TPU node is at IP `192.168.0.2` (default with above arguments; you
-can see address via `gcloud compute tpus list --zone=$ZONE`), start the
-training (see note below about setting `TFDS_DATA_DIR`):
-
-```
-cd flax/examples/wmt
-
-python3 main.py --workdir=./wmt_256 \
+python3 main.py --workdir=$HOME/logs/wmt_256 \
     --config.per_device_batch_size=32 \
     --jax_backend_target="grpc://192.168.0.2:8470"`
 ```
 
-A tensorboard instance can then be launched and viewed on your local 2222 port
-via the tunnel: `tensorboard --logdir wmt_256 --port 8888`
+Note that you might want to set `TFDS_DATA_DIR` as explained below. You probably
+also want to start the long-running command above in a `tmux` session and start
+some monitoring in a separate pane (note that we forwarded port 6006 locally
+above):
+
+```
+tensorboard --logdir=$HOME/logs
+```
+
+You should expect to get numbers similar to these:
+
+Hardware | `per_device_batch_size` | Training time |      BLEU      |                  TensorBoard.dev
+-------- | ----------------------- | ------------- | -------------- | -------------------------------------------------
+TPU v3-8 | 32                      | ?h?m<br>?h?m  | 25.??<br>??.?? | [2021-08-04](https://tensorboard.dev/experiment/)
 
 ### Downloading the WMT Datasets
 

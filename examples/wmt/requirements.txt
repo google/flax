@@ -1,5 +1,5 @@
 clu
-jax
-flax
 sentencepiece
+tensorflow
 tensorflow_text
+tensorflow_datasets
