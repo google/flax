@@ -6,7 +6,7 @@ To simplify this, one can use a so-called *cyclic learning rate*, which
 virtually eliminates the need for experimentally finding the best value and
 schedule for the global learning rate. Instead of monotonically decreasing the
 learning rate, this method lets the learning rate cyclically vary between
-reasonable boundary value.
+reasonable boundary values.
 Here we will show you how to implement a triangular learning rate scheduler,
 as described in the paper  `"Cyclical Learning Rates for Training Neural Networks" <https://arxiv.org/abs/1506.01186>`_.
 
@@ -16,7 +16,7 @@ We will show you how to...
 * train a simple model using that schedule
 
 The triangular schedule makes your learning rate vary as a triangle wave during training, so over the course of a period (``steps_per_cycle``
-training steps) the value will start at ``lr_min``, increase linearly to ``lr_max`` and then decrease again to ``lr_min``.
+training steps) the value will start at ``lr_min``, increase linearly to ``lr_max``, and then decrease again to ``lr_min``.
 
 .. testsetup::
 
@@ -36,7 +36,7 @@ training steps) the value will start at ``lr_min``, increase linearly to ``lr_ma
     return learning_rate_fn
 
 
-To use the schedule one must create a learning rate function by passing the hyperparameters to the 
+To use the schedule, one must create a learning rate function by passing the hyperparameters to the
 create_triangular_schedule function and then use that function to compute the learning rate for your updates.
 For example using this schedule on MNIST would require changing the train_step function
 
