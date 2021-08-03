@@ -38,7 +38,6 @@ tests_require = [
     "clu",  # All examples.
     "gym",
     "jaxlib",
-    "jraph>=0.0.1", # ogbg_molpcba example.
     "ml-collections",
     "opencv-python",
     "pytest",
