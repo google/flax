@@ -5,7 +5,7 @@
 In Linen we can define `Module` arguments either as dataclass attributes or as arguments to methods (usually `__call__`).
 Typically the distinction is clear:
 * Completely fixed properties, such as the choice of kernel initializer or number of output features, are hyperparameters and should be defined as dataclass attributes. Typically two Module instances with different hyperparamaters cannot share in a meaningful way.
-* Dynamic properties, such as input data and top-level "mode switches" like `train=True/False` that should be passed as arguments to `__call__` or another method.
+* Dynamic properties, such as input data and top-level "mode switches" like `train=True/False`, should be passed as arguments to `__call__` or another method.
 
 Some cases are however less clear cut. Take for example the `Dropout` module.
 We have a number of clear hyperparameters:
@@ -59,7 +59,7 @@ class SomeModule(nn.Module):
     # ...
 ```
 
-But as defined above `deterministic` would be an attribute, so this doesn't work.
+But, as defined above, `deterministic` would be an attribute, so this doesn't work.
 Here it makes sense to pass `deterministic` during `__call__` because it depends on the `train` argument.
 
 ## Solution

@@ -1107,8 +1107,8 @@ class Module:
       name: The name of the variable.
       value: The value of the variable.
       reduce_fn: The function used to combine the existing value with
-        the new value the default is to append the value to a tuple.
-      init_fn: For the first value stored reduce_fn will be passed
+        the new value. The default is to append the value to a tuple.
+      init_fn: For the first value stored, `reduce_fn` will be passed
         the result of `init_fn` together with the value to be stored.
         The default is an empty tuple.
 

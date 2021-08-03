@@ -46,9 +46,9 @@ replaced for yours):
 
 .. testcode::
 
-  def update_step(apply_fun, x, optimizer, state):
+  def update_step(apply_fn, x, optimizer, state):
     def loss(params):
-      y, updated_state = apply_fun({'params': params, **state},
+      y, updated_state = apply_fn({'params': params, **state},
                                   x, mutable=list(state.keys()))
       l = ((x - y) ** 2).sum() # Replace with your loss here.
       return l, updated_state
@@ -134,11 +134,11 @@ Secondly, we need to specify the same name when calling :code:`vmap` in our trai
 
 .. testcode::
 
-  def update_step(apply_fun, x_batch, y_batch, optimizer, state):
+  def update_step(apply_fn, x_batch, y_batch, optimizer, state):
 
     def batch_loss(params):
       def loss_fn(x, y):
-        pred, updated_state = apply_fun(
+        pred, updated_state = apply_fn(
           {'params': params, **state},
           x, mutable=list(state.keys())
         )
@@ -157,7 +157,7 @@ Secondly, we need to specify the same name when calling :code:`vmap` in our trai
     optimizer = optimizer.apply_gradient(grads)
     return optimizer, updated_state, loss
 
-Note that we also need to specify the model state does not have a batch
+Note that we also need to specify that the model state does not have a batch
 dimension. Now we are able to train the model:
 
 
