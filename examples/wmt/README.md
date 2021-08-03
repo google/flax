@@ -36,12 +36,15 @@ To create a user GCE VM, run the following command from your GCP console or your
 computer terminal where you have
 [gcloud installed](https://cloud.google.com/sdk/install).
 
+Depending on current availability, you might need to choose a different
+[zone with TPUs](https://cloud.google.com/tpu/docs/types-zones).
+
 ```
 export ZONE=europe-west4-a
 gcloud compute instances create $USER-user-vm-0001 \
    --machine-type=n1-standard-16 \
    --image-project=ml-images \
-   --image-family=tf-2-2 \
+   --image-family=tf-2-4-2 \
    --boot-disk-size=200GB \
    --scopes=cloud-platform \
    --zone=$ZONE
@@ -50,17 +53,13 @@ gcloud compute instances create $USER-user-vm-0001 \
 To create a larger GCE VM, choose a different
 [machine type](https://cloud.google.com/compute/docs/machine-types).
 
-Next, create the TPU node, following these
-[guidelines](https://cloud.google.com/tpu/docs/internal-ip-blocks) to choose a
-<TPU_IP_ADDRESS>. e.g.:
-
 ```
-export TPU_IP_ADDRESS=192.168.0.2
+export TPU_IP_RANGE=192.168.0.0/29
 gcloud compute tpus create $USER-tpu-0001 \
       --zone=$ZONE \
       --network=default \
       --accelerator-type=v3-8 \
-      --range=$TPU_IP_ADDRESS \
+      --range=$TPU_IP_RANGE \
       --version=tpu_driver_nightly
 ```
 
@@ -77,15 +76,25 @@ requirements above. e.g. as of April 2020 the following package versions were
 used successfully:
 
 ```
-pip install -U pip
-pip install -U setuptools wheel
-pip install -U pip jax jaxlib sentencepiece tensorflow==2.2.0rc3 tensorflow-datasets==3.0.0 tensorflow-text==2.2.0rc2 tensorboard
-git clone https://github.com/google/flax
-pip install -e flax
+pip3 install -U pip &&
+pip3 install -U setuptools wheel &&
+pip3 install -U pip jax jaxlib sentencepiece &&
+pip3 install -U tensorflow==2.4.1 tensorflow-datasets tensorflow-text>=2.4.0 &&
+git clone https://github.com/google/flax &&
+pip3 install -e flax
 ```
 
-Then, if your TPU is at IP `192.168.0.2`: `python main.py --workdir=./wmt_256
---config.batch_size=256 --jax_backend_target="grpc://192.168.0.2:8470"`
+Assuming the TPU node is at IP `192.168.0.2` (default with above arguments; you
+can see address via `gcloud compute tpus list --zone=$ZONE`), start the
+training (see note below about setting `TFDS_DATA_DIR`):
+
+```
+cd flax/examples/wmt
+
+python3 main.py --workdir=./wmt_256 \
+    --config.per_device_batch_size=32 \
+    --jax_backend_target="grpc://192.168.0.2:8470"`
+```
 
 A tensorboard instance can then be launched and viewed on your local 2222 port
 via the tunnel: `tensorboard --logdir wmt_256 --port 8888`
