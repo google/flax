@@ -25,6 +25,7 @@ from absl.testing import absltest
 import jax
 from jax import random
 from jax import lax
+from jax._src.api import vmap
 from jax.nn import initializers
 import jax.numpy as jnp
 
@@ -1239,6 +1240,164 @@ class ModuleTest(absltest.TestCase):
     _, state = Foo().apply({}, 1, capture_intermediates=fn)
     self.assertEqual(state, {
       'intermediates': {'Bar_0': {'test': (2,)}}
+    })
+
+  def test_intercept_method(self):
+    """Test that intercept_method is called correctly."""
+    class Bar(nn.Module):
+      def test(self, x):
+        return x + 1
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return Bar().test(x) + 1
+
+    def intercept_method(mdl, fun, args, kwargs):
+      # Add 1 to the output of Bar.test().
+      if isinstance(mdl, Bar):
+        return fun(mdl, *args, **kwargs) + 1
+      return fun(mdl, *args, **kwargs)
+
+    output = Foo().apply({}, 1, intercept_method=intercept_method)
+    self.assertEqual(output, 4)
+
+  def test_intercept_method_works_for_gradients(self):
+    """Test that intercept_method works correctly for taking gradients."""
+    class MyModel(nn.Module):
+      hidden_size: int = 10
+      output_size: int = 1
+
+      @nn.compact
+      def __call__(self, inputs):
+        hidden = nn.Dense(self.hidden_size, name='layer1')(inputs)
+        hidden = nn.Dense(self.hidden_size, name='layer2')(hidden)
+        output = nn.Dense(self.output_size, name='output_layer')(hidden)
+        return output
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        output = MyModel()(x)
+        return jnp.squeeze(output)
+
+    input_size = 5
+    inputs = np.random.RandomState(0).normal(size=(input_size))
+    # This intercept method will allow to capture the gradients of every nn.Dense method.
+
+    def intercept_method(mdl, fun, args, kwargs):
+      # Add eps to the input of nn.Dense __call__.
+      if isinstance(mdl, nn.Dense):
+        inputs, = args
+        eps = mdl.variable('inter_grads', 'activation',
+                           lambda: jnp.zeros_like(inputs, dtype=jnp.float32))
+        inputs = inputs + eps.value
+        y = fun(mdl, inputs, **kwargs)
+        return y
+      return fun(mdl, *args, **kwargs)
+
+    model = Foo()
+    rng_key = jax.random.PRNGKey(0)
+    variables = model.init(rng_key, inputs, intercept_method=intercept_method)
+
+    def with_respect_to_inputs(inputs):
+      output = model.apply(
+          variables, inputs, intercept_method=intercept_method)
+      return output
+
+    def with_respect_to_vars(variables):
+      output = model.apply(
+          variables, inputs, intercept_method=intercept_method)
+      return output
+
+    expected_grads = jax.grad(with_respect_to_inputs)(inputs)
+    grads = jax.grad(with_respect_to_vars)(variables)
+    # Since we have 3 Dense layers we should get 3 vectors of gradients.
+    self.assertEqual(len(grads['inter_grads']['MyModel_0']), 3)
+    # Check that the gradients with respect to inputs of the first Dense layer
+    # match the gradients with respect to inputs to the Foo model.
+    np.testing.assert_array_equal(
+        expected_grads, 
+        grads['inter_grads']['MyModel_0']['layer1']['activation'])
+    # Check the dimentionality of the computed grads with respect to inputs
+    # the the 2nd and 3rd Dense layers, it should match the dimentionalities
+    # of the inputs to the Dense layers.
+    self.assertEqual(grads['inter_grads']['MyModel_0']
+                     ['layer2']['activation'].shape, (10,))
+    self.assertEqual(grads['inter_grads']['MyModel_0']
+                     ['output_layer']['activation'].shape, (10,))
+
+  def test_intercept_method_with_multiple_functions(self):
+    """Tests that intercept_method is called on each function."""
+    class Bar(nn.Module):
+
+      def __call__(self, x):
+        return x + 2
+
+      def test(self, x):
+        return x + 1
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return Bar().test(x) + Bar()(x) + 1
+
+    def intercept_method(mdl, fun, args, kwargs):
+      # Add 1 to the output of Bar methods.
+      if isinstance(mdl, Bar):
+        return fun(mdl, *args, **kwargs) + 1
+      return fun(mdl, *args, **kwargs)
+
+    output = Foo().apply({}, 1, intercept_method=intercept_method)
+    self.assertEqual(output, 8)
+
+  def test_intercept_method_with_vmap(self):
+    """Tests that intercept_method works with vmap."""
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x + 1
+
+    def intercept_method(mdl, fun, args, kwargs):
+      if isinstance(mdl, Foo):
+        output = fun(mdl, *args, **kwargs) 
+        return jnp.dot(output, output)
+      return fun(mdl, *args, **kwargs)
+
+    def model_apply(inputs):
+      return Foo().apply({}, inputs, intercept_method=intercept_method)
+
+    vmapped_apply = jax.vmap(model_apply, in_axes=1)
+    output = vmapped_apply(np.array([[0, 1, 2], [0, 1, 2]]))
+    np.testing.assert_array_equal(output, [2, 8, 18])
+
+  def test_intercept_method_that_captures_intermediate_output(self):
+    """Applies self.sow() to the output of a call using intercept_method."""
+    class Bar(nn.Module):
+      def test(self, x):
+        return x + 1
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return Bar().test(x) + 1
+
+    def interceptor(mdl, fun, args, kwargs):
+      y = fun(mdl, *args, **kwargs)
+      mdl.sow('intermediates', fun.__name__, y)
+      return y
+
+    def intercept_method(mdl, fun, args, kwargs):
+      # Sow the output of Bar functions.
+      if isinstance(mdl, Bar):
+        return interceptor(mdl, fun, args, kwargs)
+      return fun(mdl, *args, **kwargs)
+
+    _, state = Foo().apply({}, 1, intercept_method=intercept_method,
+                           mutable=['intermediates'])
+    self.assertEqual(state, {
+        'intermediates': {'Bar_0': {'test': (2,)}}
     })
 
   def test_functional_apply(self):

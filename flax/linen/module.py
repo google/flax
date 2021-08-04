@@ -115,6 +115,13 @@ class _DynamicContext:
       self._thread_data.capture_stack = []
     return self._thread_data.capture_stack
 
+  @property
+  def intercept_stack(self):
+    """Keeps track of the active intercept functions."""
+    if not hasattr(self._thread_data, 'intercept_stack'):
+      self._thread_data.intercept_stack = []
+    return self._thread_data.intercept_stack
+
 # The global context
 _context = _DynamicContext()
 
@@ -280,7 +287,14 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
       self._state.in_compact_method = True
     _context.module_stack.append(self)
     try:
-      y = fun(self, *args, **kwargs)
+      # Apply intercept_method if one was provided to apply().
+      if _context.intercept_stack and _context.intercept_stack[-1]:
+        intercept_method = _context.intercept_stack[-1]
+        # Intercept method is responsible for calling `fun`.
+        y = intercept_method(self, fun, args, kwargs)
+      else:
+        y = fun(self, *args, **kwargs)
+      # Sow output `capture_intermediates` was provided to apply.
       if _context.capture_stack:
         filter_fn = _context.capture_stack[-1]
         if filter_fn and filter_fn(self, fun.__name__):
@@ -905,6 +919,7 @@ class Module:
             rngs: Optional[RNGSequences] = None,
             method: Callable[..., Any] = None,
             mutable: CollectionFilter = False,
+            intercept_method: Optional[Callable[..., Any]] = None,
             capture_intermediates: Union[bool, Callable[['Module', str],
                                                         bool]] = False,
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
@@ -946,6 +961,13 @@ class Module:
                treated as mutable: ``bool``: all/no collections are mutable.
                ``str``: The name of a single mutable collection. ``list``: A
                list of names of mutable collections.
+      intercept_method: An optional hook that intercepts all function calls and
+        can be used to modify args and kwargs before calling each original 
+        method, and also to modify its output. The provided method needs to
+        take the form `f(module, original_function, *args, **kwargs)` and is
+        responsible for calling `original_function(module, *args, **kwargs)`. 
+        Can be used to temporarily modify a model without making changes to 
+        the underlying code.
       capture_intermediates: If `True`, captures intermediate return values
         of all Modules inside the "intermediates" collection. By default only
         the return values of all ``__call__`` methods are stored. A function can
@@ -962,7 +984,9 @@ class Module:
     method = _get_unbound_fn(method)
     return apply(
         method, self,
-        mutable=mutable, capture_intermediates=capture_intermediates
+        mutable=mutable, 
+        intercept_method=intercept_method,
+        capture_intermediates=capture_intermediates
     )(variables, *args, **kwargs, rngs=rngs)
 
   def init_with_output(self,
@@ -1168,6 +1192,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
 
 def apply(fn: Callable[..., Any], module: Module,
           mutable: CollectionFilter = False,
+          intercept_method: Optional[Callable[..., Any]] = None,
           capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False) -> Callable[..., Any]:
   """Creates an apply function to call ``fn`` with a bound module.
 
@@ -1200,22 +1225,32 @@ def apply(fn: Callable[..., Any], module: Module,
       treated as mutable: ``bool``: all/no collections are mutable.
       ``str``: The name of a single mutable collection. ``list``: A
       list of names of mutable collections.
+    intercept_method: An optional hook that intercepts all function calls
+      that occur when `module` is applied, and can be used to modify
+      the args and kwargs of each call, and also to
+      modify its output. The provided method needs to have the signature
+      `f(module, original_function, args, kwargs)` and is responsible for
+      calling `original_function(module, *args, **kwargs)`. Can be used to
+      temporarily modify a model without making changes to the underlying code.
     capture_intermediates: If `True`, captures intermediate return values
       of all Modules inside the "intermediates" collection. By default only
       the return values of all `__call__` methods are stored. A function can
       be passed to change the filter behavior. The filter function takes
       the Module instance and method name and returns a bool indicating
       whether the output of that method invocation should be stored.
+
   Returns:
     The apply function wrapping ``fn``.
   """
   @functools.wraps(fn)
   def scope_fn(scope, *args, **kwargs):
     _context.capture_stack.append(capture_intermediates)
+    _context.intercept_stack.append(intercept_method)
     try:
       return fn(module.clone(parent=scope), *args, **kwargs)
     finally:
       _context.capture_stack.pop()
+      _context.intercept_stack.pop()
 
   if capture_intermediates is True:
     capture_intermediates = capture_call_intermediates
