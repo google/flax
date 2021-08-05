@@ -17,8 +17,7 @@
 import dataclasses
 import functools
 import operator
-
-
+import sys
 
 from absl.testing import absltest
 
@@ -1371,15 +1370,18 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(type(xs), Foo)  # equality test for NamedTuple doesn't check class!
 
   def test_generic_multiple_inheritance(self):
-    T = TypeVar('T')
-    class MyComponent(nn.Module, Generic[T]):
-      pass
-    class MyModule(nn.Module):
-      submodule: MyComponent[jnp.ndarray]
-    class MyComponent2(Generic[T], nn.Module):
-      pass
-    class MyModule2(nn.Module):
-      submodule: MyComponent2[jnp.ndarray]
+    if sys.version_info.major == 3 and sys.version_info.minor >= 7:
+      # Python 3.6 typing.Generic causes metaclass conflicts.
+      # This was resolved in Python 3.7
+      T = TypeVar('T')
+      class MyComponent(nn.Module, Generic[T]):
+        pass
+      class MyModule(nn.Module):
+        submodule: MyComponent[jnp.ndarray]
+      class MyComponent2(Generic[T], nn.Module):
+        pass
+      class MyModule2(nn.Module):
+        submodule: MyComponent2[jnp.ndarray]
 
 
 if __name__ == '__main__':
