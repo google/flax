@@ -30,7 +30,7 @@
 """Utilities for defining custom classes that can be used with jax transformations.
 """
 
-from typing import TypeVar
+from typing import TypeVar, Callable, Tuple, Union, Any
 
 from . import serialization
 
@@ -39,7 +39,24 @@ import dataclasses
 import jax
 
 
-def dataclass(clz: type):
+
+# This decorator is interpreted by static analysis tools as a hint
+# that a decorator or metaclass causes dataclass-like behavior.
+_T = TypeVar("_T")
+def __dataclass_transform__(
+    *,
+    eq_default: bool = True,
+    order_default: bool = False,
+    kw_only_default: bool = False,
+    field_descriptors: Tuple[Union[type, Callable[..., Any]], ...] = (()),
+) -> Callable[[_T], _T]:
+  # If used within a stub file, the following implementation can be
+  # replaced with "...".
+  return lambda a: a
+
+
+@__dataclass_transform__()
+def dataclass(clz: _T) -> _T:
   """Create a class which can be passed to functional transformations.
 
   NOTE: Inherit from ``PyTreeNode`` instead to avoid type checking issues when
@@ -143,7 +160,12 @@ def field(pytree_node=True, **kwargs):
 TNode = TypeVar('TNode', bound='PyTreeNode')
 
 
-class PyTreeNode():
+@__dataclass_transform__()
+class PyTreeNodeMeta(type):
+  pass
+
+
+class PyTreeNode(metaclass=PyTreeNodeMeta):
   """Base class for dataclasses that should act like a JAX pytree node.
 
   See ``flax.struct.dataclass`` for the ``jax.tree_util`` behavior.

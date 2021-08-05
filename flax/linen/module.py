@@ -38,6 +38,7 @@ from flax import core
 from flax.core import Scope
 from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
+from flax.struct import __dataclass_transform__
 
 # from .dotgetter import DotGetter
 
@@ -396,7 +397,14 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 # -----------------------------------------------------------------------------
 
 
-class Module:
+# This metaclass + decorator is used by static analysis tools recognize that
+# Module behaves as a dataclass (attributes are constructor args).
+@__dataclass_transform__()
+class ModuleMeta(type):
+  pass
+
+
+class Module(metaclass=ModuleMeta):
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
