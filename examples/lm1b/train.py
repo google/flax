@@ -29,17 +29,20 @@ from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
-from flax import optim
+
 import input_pipeline
 import models
 import temperature_sampler
 from flax.training import checkpoints
 from flax.training import common_utils
+from flax.training import train_state
+
 import jax
 from jax import random
 import jax.numpy as jnp
 import ml_collections
 import numpy as np
+import optax
 import tensorflow as tf
 
 
@@ -181,7 +184,7 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
 # -----------------------------------------------------------------------------
 
 
-def train_step(optimizer,
+def train_step(opt_state,
                batch,
                config,
                learning_rate_fn,
@@ -199,7 +202,7 @@ def train_step(optimizer,
 
   weights = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)
 
-  dropout_rng = jax.random.fold_in(dropout_rng, optimizer.state.step)
+  dropout_rng = jax.random.fold_in(dropout_rng, opt_state.step)
 
   def loss_fn(params):
     """loss function used for training."""
@@ -215,16 +218,16 @@ def train_step(optimizer,
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
-  step = optimizer.state.step
+  step = opt_state.step
   lr = learning_rate_fn(step)
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grad = grad_fn(optimizer.target)
-  grad = jax.lax.pmean(grad, "batch")
-  new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+  (_, logits), grads = grad_fn(opt_state.params)
+  grads = jax.lax.pmean(grads, "batch")
+  new_opt_state = opt_state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, inputs, weights)
   metrics["learning_rate"] = lr
 
-  return new_optimizer, metrics
+  return new_opt_state, metrics
 
 
 def eval_step(params, batch, config, label_smoothing=0.0):
@@ -314,7 +317,7 @@ def tohost(x):
   return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
 
 
-def evaluate(*, p_eval_step, target, eval_ds: tf.data.Dataset,
+def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset,
              num_eval_steps: int):
   """Evaluate the target an return a dictionary with the metrics."""
   logging.info("Gathering evaluation metrics.")
@@ -323,7 +326,7 @@ def evaluate(*, p_eval_step, target, eval_ds: tf.data.Dataset,
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
     eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
     eval_batch = common_utils.shard(eval_batch)
-    metrics = p_eval_step(target, eval_batch)
+    metrics = p_eval_step(params, eval_batch)
     eval_metrics.append(metrics)
   eval_metrics = common_utils.get_metrics(eval_metrics)
   eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
@@ -334,7 +337,7 @@ def evaluate(*, p_eval_step, target, eval_ds: tf.data.Dataset,
   return eval_summary
 
 
-def generate_prediction(*, p_pred_step, target,
+def generate_prediction(*, p_pred_step, params,
                         tokenized_prompts,
                         eos_id,
                         inference_rng,
@@ -358,7 +361,7 @@ def generate_prediction(*, p_pred_step, target,
     inference_rng, sub_rng = random.split(inference_rng)
     inference_rngs = random.split(sub_rng, n_devices)
 
-    predicted = p_pred_step(pred_batch, target, inference_rngs,
+    predicted = p_pred_step(pred_batch, params, inference_rngs,
                             eos_id, max_predict_length)
     predicted = tohost(predicted)
     # Iterate through non-padding examples of batch.
@@ -450,23 +453,26 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   initial_variables = jax.jit(m.init)(init_rng,
                                       jnp.ones(input_shape, jnp.float32))
 
-  # apply an optimizer to this tree
-  optimizer_def = optim.Adam(
-      config.learning_rate,
-      beta1=0.9,
-      beta2=0.98,
-      eps=1e-9,
-      weight_decay=config.weight_decay)
-  optimizer = optimizer_def.create(initial_variables["params"])
+  learning_rate_fn = create_learning_rate_scheduler(
+      base_learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
 
-  # We access model params only from optimizer below via optimizer.target.
+  optimizer = optax.adamw(
+      learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9,
+      weight_decay=config.weight_decay
+      )
+  opt_state = train_state.TrainState.create(
+      apply_fn=m.apply,
+      params=initial_variables["params"],
+      tx=optimizer
+      )
+  # We access model params only from optimizer below.
   del initial_variables
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
-    optimizer = checkpoints.restore_checkpoint(workdir, optimizer)
+    opt_state = checkpoints.restore_checkpoint(workdir, opt_state)
     # Grab last step.
-    start_step = int(optimizer.state.step)
+    start_step = int(opt_state.step)
 
   writer = metric_writers.create_default_writer(
       workdir, just_logging=jax.process_index() > 0)
@@ -474,10 +480,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     writer.write_hparams(dict(config))
 
   # Replicate optimizer.
-  optimizer = jax_utils.replicate(optimizer)
-
-  learning_rate_fn = create_learning_rate_scheduler(
-      base_learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
+  opt_state = jax_utils.replicate(opt_state)
 
   # compile multidevice versions of train/eval/predict step fn.
   p_train_step = jax.pmap(
@@ -525,8 +528,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = common_utils.shard(jax.tree_map(np.asarray, next(train_iter)))
-        optimizer, metrics = p_train_step(
-            optimizer, batch, dropout_rng=dropout_rngs)
+        opt_state, metrics = p_train_step(
+            opt_state, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -553,7 +556,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         with report_progress.timed("eval"):
           eval_results = evaluate(
               p_eval_step=p_eval_step,
-              target=optimizer.target,
+              params=opt_state.params,
               eval_ds=eval_ds,
               num_eval_steps=config.num_eval_steps)
           # (clipped) perplexity after averaging log-perplexitie
@@ -565,7 +568,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         with report_progress.timed("generate_text"):
           exemplars = generate_prediction(
               p_pred_step=p_pred_step,
-              target=optimizer.target,
+              params=opt_state.params,
               tokenized_prompts=tokenized_prompts,
               eos_id=eos_id,
               inference_rng=inference_rng,
@@ -578,5 +581,5 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                          is_last_step)
       if config.save_checkpoints and save_checkpoint and jax.process_index() == 0:
         with report_progress.timed("checkpoint"):
-          checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(optimizer),
+          checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(opt_state),
                                       step)

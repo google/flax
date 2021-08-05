@@ -1,5 +1,6 @@
 clu
 jax
 flax
+optax
 sentencepiece
 tensorflow_text
