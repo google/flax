@@ -76,7 +76,7 @@ setup(
     author_email="flax-dev@google.com",
     url="https://github.com/google/flax",
     packages=find_packages(),
-    include_package_data=False,
+    package_data={"flax": ["py.typed"]},
     zip_safe=False,
     install_requires=install_requires,
     extras_require={
