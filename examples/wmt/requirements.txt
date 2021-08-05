@@ -1,4 +1,5 @@
 clu
+optax
 sentencepiece
 tensorflow
 tensorflow_text
