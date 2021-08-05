@@ -42,6 +42,8 @@ import jax
 
 # This decorator is interpreted by static analysis tools as a hint
 # that a decorator or metaclass causes dataclass-like behavior.
+# See https://github.com/microsoft/pyright/blob/main/specs/dataclass_transforms.md
+# for more information about the __dataclass_transform__ magic.
 _T = TypeVar("_T")
 def __dataclass_transform__(
     *,
