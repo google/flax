@@ -96,7 +96,8 @@ def dataclass(clz: _T) -> _T:
   Returns:
     The new class.
   """
-  data_clz = dataclasses.dataclass(frozen=True)(clz)
+  # workaround for pytype not recognizing __dataclass_fields__
+  data_clz: Any = dataclasses.dataclass(frozen=True)(clz)
   meta_fields = []
   data_fields = []
   for name, field_info in data_clz.__dataclass_fields__.items():
