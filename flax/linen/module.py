@@ -399,9 +399,12 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 
 # This metaclass + decorator is used by static analysis tools recognize that
 # Module behaves as a dataclass (attributes are constructor args).
-@__dataclass_transform__()
-class ModuleMeta(type):
-  pass
+if typing.TYPE_CHECKING:
+  @__dataclass_transform__()
+  class ModuleMeta(type):
+    pass
+else:
+  ModuleMeta = type
 
 
 class Module(metaclass=ModuleMeta):

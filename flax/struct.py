@@ -30,6 +30,7 @@
 """Utilities for defining custom classes that can be used with jax transformations.
 """
 
+import typing
 from typing import TypeVar, Callable, Tuple, Union, Any
 
 from . import serialization
@@ -163,9 +164,12 @@ def field(pytree_node=True, **kwargs):
 TNode = TypeVar('TNode', bound='PyTreeNode')
 
 
-@__dataclass_transform__()
-class PyTreeNodeMeta(type):
-  pass
+if typing.TYPE_CHECKING:
+  @__dataclass_transform__()
+  class PyTreeNodeMeta(type):
+    pass
+else:
+  PyTreeNodeMeta = type
 
 
 class PyTreeNode(metaclass=PyTreeNodeMeta):
