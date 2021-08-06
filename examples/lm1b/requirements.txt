@@ -3,4 +3,6 @@ jax
 flax
 optax
 sentencepiece
+tensorflow
 tensorflow_text
+tensorflow_datasets
