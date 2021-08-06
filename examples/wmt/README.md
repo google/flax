@@ -75,9 +75,10 @@ tensorboard --logdir=$HOME/logs
 
 You should expect to get numbers similar to these:
 
-Hardware | `per_device_batch_size` | Training time |      BLEU      |                  TensorBoard.dev
--------- | ----------------------- | ------------- | -------------- | -------------------------------------------------
-TPU v3-8 | 32                      | ?h?m<br>?h?m  | 25.??<br>??.?? | [2021-08-04](https://tensorboard.dev/experiment/)
+
+Hardware | config  | Training time |      BLEU      |                             TensorBoard.dev                              |                                                          Workdir
+-------- | ------- | ------------- | -------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------
+TPU v3-8 | default | 24m<br>13h18m | 25.55<br>32.87 | [2021-08-04](https://tensorboard.dev/experiment/nnH7JNCxTgC1ROakWePTlg/) | [gs://flax_public/examples/wmt/default](https://console.cloud.google.com/storage/browser/flax_public/examples/wmt/default)
 
 ### Downloading the WMT Datasets
 
