@@ -46,62 +46,32 @@ import optax
 import tensorflow as tf
 
 
-def create_learning_rate_scheduler(
-    factors="constant * linear_warmup * rsqrt_decay",
-    base_learning_rate=0.5,
-    warmup_steps=1000,
-    decay_factor=0.5,
-    steps_per_decay=20000,
-    steps_per_cycle=100000):
-  """Creates learning rate schedule.
-
-  Interprets factors in the factors string which can consist of:
-  * constant: interpreted as the constant value,
-  * linear_warmup: interpreted as linear warmup until warmup_steps,
-  * rsqrt_decay: divide by square root of max(step, warmup_steps)
-  * rsqrt_normalized_decay: divide by square root of max(step/warmup_steps, 1)
-  * decay_every: Every k steps decay the learning rate by decay_factor.
-  * cosine_decay: Cyclic cosine decay, uses steps_per_cycle parameter.
-
+def rsqrt_schedule(
+    init_value: float,
+    shift: int = 0,
+):
+  """Applies a reverse square-root schedule.
+  
+  The reverse square root schedule is simply `lr = init_value / sqrt(step)`.
   Args:
-    factors: string, factors separated by "*" that defines the schedule.
-    base_learning_rate: float, the starting constant for the lr schedule.
-    warmup_steps: int, how many steps to warm up for in the warmup schedule.
-    decay_factor: float, the amount to decay the learning rate by.
-    steps_per_decay: int, how often to decay the learning rate.
-    steps_per_cycle: int, steps per cycle when using cosine decay.
-
-  Returns:
-    a function learning_rate(step): float -> {"learning_rate": float}, the
-    step-dependent lr.
+    init_value: Base learning rate (before applying the rsqrt schedule).
+    shift: How many steps the rsqrt should be shifted. Shifting the rsqrt
+      schedule makes it less steep in the beginning (close to 0).
   """
-  factors = [n.strip() for n in factors.split("*")]
 
-  def step_fn(step):
-    """Step to learning rate function."""
-    ret = 1.0
-    for name in factors:
-      if name == "constant":
-        ret *= base_learning_rate
-      elif name == "linear_warmup":
-        ret *= jnp.minimum(1.0, step / warmup_steps)
-      elif name == "rsqrt_decay":
-        ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
-      elif name == "rsqrt_normalized_decay":
-        ret *= jnp.sqrt(warmup_steps)
-        ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
-      elif name == "decay_every":
-        ret *= (decay_factor**(step // steps_per_decay))
-      elif name == "cosine_decay":
-        progress = jnp.maximum(0.0,
-                               (step - warmup_steps) / float(steps_per_cycle))
-        ret *= jnp.maximum(0.0,
-                           0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
-      else:
-        raise ValueError("Unknown factor %s." % name)
-    return jnp.asarray(ret, dtype=jnp.float32)
+  def schedule(count):
+    return init_value * (count + shift)**-.5 * shift**.5
 
-  return step_fn
+  return schedule
+
+def create_learning_rate_schedule(learning_rate: float, warmup_steps: int):
+  """Creates a rsqrt schedule with linear warmup."""
+  return optax.join_schedules([
+      optax.linear_schedule(
+          init_value=0, end_value=learning_rate, transition_steps=warmup_steps),
+      rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
+  ],
+                              boundaries=[warmup_steps])
 
 
 def compute_weighted_cross_entropy(logits,
@@ -184,7 +154,7 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
 # -----------------------------------------------------------------------------
 
 
-def train_step(opt_state,
+def train_step(state,
                batch,
                config,
                learning_rate_fn,
@@ -202,7 +172,7 @@ def train_step(opt_state,
 
   weights = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)
 
-  dropout_rng = jax.random.fold_in(dropout_rng, opt_state.step)
+  dropout_rng = jax.random.fold_in(dropout_rng, state.step)
 
   def loss_fn(params):
     """loss function used for training."""
@@ -218,16 +188,16 @@ def train_step(opt_state,
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
-  step = opt_state.step
+  step = state.step
   lr = learning_rate_fn(step)
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grads = grad_fn(opt_state.params)
+  (_, logits), grads = grad_fn(state.params)
   grads = jax.lax.pmean(grads, "batch")
-  new_opt_state = opt_state.apply_gradients(grads=grads)
+  new_state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, inputs, weights)
   metrics["learning_rate"] = lr
 
-  return new_opt_state, metrics
+  return new_state, metrics
 
 
 def eval_step(params, batch, config, label_smoothing=0.0):
@@ -453,14 +423,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   initial_variables = jax.jit(m.init)(init_rng,
                                       jnp.ones(input_shape, jnp.float32))
 
-  learning_rate_fn = create_learning_rate_scheduler(
+  learning_rate_fn = create_learning_rate_schedule(
       base_learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
 
   optimizer = optax.adamw(
       learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9,
       weight_decay=config.weight_decay
       )
-  opt_state = train_state.TrainState.create(
+  state = train_state.TrainState.create(
       apply_fn=m.apply,
       params=initial_variables["params"],
       tx=optimizer
@@ -470,9 +440,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
-    opt_state = checkpoints.restore_checkpoint(workdir, opt_state)
+    state = checkpoints.restore_checkpoint(workdir, state)
     # Grab last step.
-    start_step = int(opt_state.step)
+    start_step = int(state.step)
 
   writer = metric_writers.create_default_writer(
       workdir, just_logging=jax.process_index() > 0)
@@ -480,7 +450,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     writer.write_hparams(dict(config))
 
   # Replicate optimizer.
-  opt_state = jax_utils.replicate(opt_state)
+  state = jax_utils.replicate(state)
 
   # compile multidevice versions of train/eval/predict step fn.
   p_train_step = jax.pmap(
@@ -528,8 +498,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = common_utils.shard(jax.tree_map(np.asarray, next(train_iter)))
-        opt_state, metrics = p_train_step(
-            opt_state, batch, dropout_rng=dropout_rngs)
+        state, metrics = p_train_step(
+            state, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -556,7 +526,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         with report_progress.timed("eval"):
           eval_results = evaluate(
               p_eval_step=p_eval_step,
-              params=opt_state.params,
+              params=state.params,
               eval_ds=eval_ds,
               num_eval_steps=config.num_eval_steps)
           # (clipped) perplexity after averaging log-perplexitie
@@ -568,7 +538,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         with report_progress.timed("generate_text"):
           exemplars = generate_prediction(
               p_pred_step=p_pred_step,
-              params=opt_state.params,
+              params=state.params,
               tokenized_prompts=tokenized_prompts,
               eos_id=eos_id,
               inference_rng=inference_rng,
@@ -581,5 +551,5 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                          is_last_step)
       if config.save_checkpoints and save_checkpoint and jax.process_index() == 0:
         with report_progress.timed("checkpoint"):
-          checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(opt_state),
+          checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(state),
                                       step)
