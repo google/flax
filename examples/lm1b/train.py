@@ -424,7 +424,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                                       jnp.ones(input_shape, jnp.float32))
 
   learning_rate_fn = create_learning_rate_schedule(
-      base_learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
+      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
 
   optimizer = optax.adamw(
       learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9,
