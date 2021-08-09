@@ -73,6 +73,12 @@ above):
 tensorboard --logdir=$HOME/logs
 ```
 
+You should expect to get numbers similar to these:
+
+
+Hardware | config  | Training time |      Loss      |                             TensorBoard.dev                              |                                                          Workdir
+-------- | ------- | ------------- | -------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------
+TPU v3-8 | default | 13h18m | 3.127 | [2021-08-08](https://tensorboard.dev/experiment/n30WkNOZTJq3RHWD7wNslg/) | [gs://flax_public/examples/lm1b/default](https://console.cloud.google.com/storage/browser/flax_public/examples/lm1b/default)
 
 ### Downloading the LM1B Datasets
 

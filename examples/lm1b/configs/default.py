@@ -37,7 +37,7 @@ def get_config():
   config.eval_split = "test"
 
   # Per device batch size for training.
-  config.per_device_batch_size = 128
+  config.per_device_batch_size = 32
 
   # Per device batch size for training.
   config.eval_per_device_batch_size = 32
