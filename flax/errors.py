@@ -269,8 +269,8 @@ class JaxTransformError(FlaxError):
 
   JAX's functional transformations expect pure function.
   When you want to use JAX transformations **inside** Flax models,
-  you should make use the Flax transformations
-  (e.g.: ``flax.linen.vmap``, ``flax.linen.scan``, etc.)
+  you should make use of the Flax transformation wrappers
+  (e.g.: ``flax.linen.vmap``, ``flax.linen.scan``, etc.).
   """
   def __init__(self):
     super().__init__('Jax transforms and Flax models cannot be mixed.')
