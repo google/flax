@@ -74,7 +74,7 @@ flags.DEFINE_string(
 # Repo configuration.
 flags.DEFINE_string(
     'repo', 'https://github.com/google/flax', help='Git repository')
-flags.DEFINE_string('branch', 'master', help='Git repository')
+flags.DEFINE_string('branch', 'main', help='Git repository')
 
 # Example configuration.
 flags.DEFINE_string(
@@ -130,7 +130,7 @@ def launch_gce(*, vm_name: str, startup_script: str):
   args = [
       'gcloud', 'compute', 'instances', 'create', vm_name,
       f'--project={FLAGS.project}', f'--zone={FLAGS.zone}',
-      '--image=c1-deeplearning-tf-2-4-cu110-v20210329-debian-10',
+      '--image=c1-deeplearning-tf-2-4-cu110-v20210512-debian-10',
       '--image-project=ml-images', f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full', '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
