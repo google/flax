@@ -58,7 +58,7 @@ def get_config():
   config.num_predict_steps = -1
 
   # Base learning rate.
-  config.learning_rate = 0.05
+  config.learning_rate = 0.0016
 
   # Linear learning rate warmup.
   config.warmup_steps = 1000
