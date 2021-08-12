@@ -29,76 +29,52 @@ from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
-from flax import optim
 import bleu
 import decode
 import input_pipeline
 import models
 from flax.training import checkpoints
 from flax.training import common_utils
+from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import ml_collections
 import numpy as np
+import optax
 import tensorflow as tf
 
 
-def create_learning_rate_scheduler(
-    factors="constant * linear_warmup * rsqrt_decay",
-    base_learning_rate=0.5,
-    warmup_steps=1000,
-    decay_factor=0.5,
-    steps_per_decay=20000,
-    steps_per_cycle=100000):
-  """Creates learning rate schedule.
+def rsqrt_schedule(
+    init_value: float,
+    shift: int = 0,
+):
+  """Applies a reverse square-root schedule.
 
-  Interprets factors in the factors string which can consist of:
-  * constant: interpreted as the constant value,
-  * linear_warmup: interpreted as linear warmup until warmup_steps,
-  * rsqrt_decay: divide by square root of max(step, warmup_steps)
-  * rsqrt_normalized_decay: divide by square root of max(step/warmup_steps, 1)
-  * decay_every: Every k steps decay the learning rate by decay_factor.
-  * cosine_decay: Cyclic cosine decay, uses steps_per_cycle parameter.
+  The reverse square root schedule is simply `lr = init_value / sqrt(step)`.
 
   Args:
-    factors: string, factors separated by "*" that defines the schedule.
-    base_learning_rate: float, the starting constant for the lr schedule.
-    warmup_steps: int, how many steps to warm up for in the warmup schedule.
-    decay_factor: float, the amount to decay the learning rate by.
-    steps_per_decay: int, how often to decay the learning rate.
-    steps_per_cycle: int, steps per cycle when using cosine decay.
+    init_value: Base learning rate (before applying the rsqrt schedule).
+    shift: How many steps the rsqrt should be shifted. Shifting the rsqrt
+      schedule makes it less steep in the beginning (close to 0).
 
   Returns:
-    a function learning_rate(step): float -> {"learning_rate": float}, the
-    step-dependent lr.
+    A schedule `count -> learning_rate`.
   """
-  factors = [n.strip() for n in factors.split("*")]
 
-  def step_fn(step):
-    """Step to learning rate function."""
-    ret = 1.0
-    for name in factors:
-      if name == "constant":
-        ret *= base_learning_rate
-      elif name == "linear_warmup":
-        ret *= jnp.minimum(1.0, step / warmup_steps)
-      elif name == "rsqrt_decay":
-        ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
-      elif name == "rsqrt_normalized_decay":
-        ret *= jnp.sqrt(warmup_steps)
-        ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
-      elif name == "decay_every":
-        ret *= (decay_factor**(step // steps_per_decay))
-      elif name == "cosine_decay":
-        progress = jnp.maximum(0.0,
-                               (step - warmup_steps) / float(steps_per_cycle))
-        ret *= jnp.maximum(0.0,
-                           0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
-      else:
-        raise ValueError("Unknown factor %s." % name)
-    return jnp.asarray(ret, dtype=jnp.float32)
+  def schedule(count):
+    return init_value * (count + shift)**-.5 * shift**.5
 
-  return step_fn
+  return schedule
+
+
+def create_learning_rate_schedule(learning_rate: float, warmup_steps: int):
+  """Creates a rsqrt schedule with linear warmup."""
+  return optax.join_schedules([
+      optax.linear_schedule(
+          init_value=0, end_value=learning_rate, transition_steps=warmup_steps),
+      rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
+  ],
+                              boundaries=[warmup_steps])
 
 
 def compute_weighted_cross_entropy(logits,
@@ -181,7 +157,7 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
 # -----------------------------------------------------------------------------
 
 
-def train_step(optimizer,
+def train_step(state,
                batch,
                config,
                learning_rate_fn,
@@ -202,7 +178,7 @@ def train_step(optimizer,
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
 
-  dropout_rng = jax.random.fold_in(dropout_rng, optimizer.state.step)
+  dropout_rng = jax.random.fold_in(dropout_rng, state.step)
 
   def loss_fn(params):
     """loss function used for training."""
@@ -221,16 +197,15 @@ def train_step(optimizer,
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
-  step = optimizer.state.step
-  lr = learning_rate_fn(step)
+  step = state.step
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grad = grad_fn(optimizer.target)
-  grad = jax.lax.pmean(grad, "batch")
-  new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
+  (_, logits), grads = grad_fn(state.params)
+  grads = jax.lax.pmean(grads, "batch")
+  new_state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, targets, weights)
-  metrics["learning_rate"] = lr
+  metrics["learning_rate"] = learning_rate_fn(step)
 
-  return new_optimizer, metrics
+  return new_state, metrics
 
 
 def eval_step(params, batch, config, label_smoothing=0.0):
@@ -341,16 +316,16 @@ def tohost(x):
   return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
 
 
-def evaluate(*, p_eval_step, target, eval_ds: tf.data.Dataset,
+def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset,
              num_eval_steps: int):
-  """Evaluate the target an return a dictionary with the metrics."""
+  """Evaluate the params an return a dictionary with the metrics."""
   logging.info("Gathering evaluation metrics.")
   eval_metrics = []
   eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
     eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
     eval_batch = common_utils.shard(eval_batch)
-    metrics = p_eval_step(target, eval_batch)
+    metrics = p_eval_step(params, eval_batch)
     eval_metrics.append(metrics)
   eval_metrics = common_utils.get_metrics(eval_metrics)
   eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
@@ -361,7 +336,7 @@ def evaluate(*, p_eval_step, target, eval_ds: tf.data.Dataset,
   return eval_summary
 
 
-def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, target,
+def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, params,
                                  predict_ds: tf.data.Dataset, decode_tokens,
                                  max_predict_length: int):
   """Translates the `predict_ds` and calculates the BLEU score."""
@@ -379,7 +354,7 @@ def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, target,
           pred_batch)
     pred_batch = common_utils.shard(pred_batch)
     cache = p_init_cache(pred_batch["inputs"])
-    predicted = p_pred_step(pred_batch["inputs"], target, cache, decode.EOS_ID,
+    predicted = p_pred_step(pred_batch["inputs"], params, cache, decode.EOS_ID,
                             max_predict_length)
     predicted = tohost(predicted)
     inputs = tohost(pred_batch["inputs"])
@@ -475,34 +450,37 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
                                       jnp.ones(input_shape, jnp.float32),
                                       jnp.ones(target_shape, jnp.float32))
 
-  # apply an optimizer to this tree
-  optimizer_def = optim.Adam(
-      config.learning_rate,
-      beta1=0.9,
-      beta2=0.98,
-      eps=1e-9,
-      weight_decay=config.weight_decay)
-  optimizer = optimizer_def.create(initial_variables["params"])
+  # Create train state with Adam optimizer and weight decay.
+  learning_rate_fn = create_learning_rate_schedule(
+      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
+  state = train_state.TrainState.create(
+      apply_fn=m.apply,
+      params=initial_variables["params"],
+      tx=optax.adamw(
+          learning_rate=learning_rate_fn,
+          b1=0.9,
+          b2=0.98,
+          eps=1e-9,
+          weight_decay=config.weight_decay,
+      ),
+  )
 
-  # We access model params only from optimizer below via optimizer.target.
+  # We access model params only via state.params
   del initial_variables
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
-    optimizer = checkpoints.restore_checkpoint(workdir, optimizer)
+    state = checkpoints.restore_checkpoint(workdir, state)
     # Grab last step.
-    start_step = int(optimizer.state.step)
+    start_step = int(state.step)
 
   writer = metric_writers.create_default_writer(
       workdir, just_logging=jax.process_index() > 0)
   if start_step == 0:
     writer.write_hparams(dict(config))
 
-  # Replicate optimizer.
-  optimizer = jax_utils.replicate(optimizer)
-
-  learning_rate_fn = create_learning_rate_scheduler(
-      base_learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
+  # Replicate state.
+  state = jax_utils.replicate(state)
 
   # compile multidevice versions of train/eval/predict step and cache init fn.
   p_train_step = jax.pmap(
@@ -554,8 +532,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = common_utils.shard(jax.tree_map(np.asarray, next(train_iter)))
-        optimizer, metrics = p_train_step(
-            optimizer, batch, dropout_rng=dropout_rngs)
+        state, metrics = p_train_step(
+            state, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -580,7 +558,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
         with report_progress.timed("eval"):
           eval_results = evaluate(
               p_eval_step=p_eval_step,
-              target=optimizer.target,
+              params=state.params,
               eval_ds=eval_ds,
               num_eval_steps=config.num_eval_steps)
           writer.write_scalars(
@@ -590,7 +568,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           exemplars, bleu_score = translate_and_calculate_bleu(
               p_pred_step=p_pred_step,
               p_init_cache=p_init_cache,
-              target=optimizer.target,
+              params=state.params,
               predict_ds=predict_ds,
               decode_tokens=decode_tokens,
               max_predict_length=config.max_predict_length)
@@ -600,7 +578,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Save a checkpoint on one host after every checkpoint_freq steps.
       save_checkpoint = (step % config.checkpoint_every_steps == 0 or
                          is_last_step)
-      if config.save_checkpoints and save_checkpoint and jax.process_index() == 0:
+      if (config.save_checkpoints and save_checkpoint and
+          jax.process_index() == 0):
         with report_progress.timed("checkpoint"):
-          checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(optimizer),
+          checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(state),
                                       step)
