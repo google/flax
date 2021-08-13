@@ -61,7 +61,7 @@ And finally start the training:
 ```
 python3 main.py --workdir=$HOME/logs/wmt_256 \
     --config.per_device_batch_size=32 \
-    --jax_backend_target="grpc://192.168.0.2:8470"
+    --jax_backend_target="grpc://192.168.0.2:8470"`
 ```
 
 Note that you might want to set `TFDS_DATA_DIR` as explained below. You probably

@@ -38,6 +38,33 @@ def _absolute_dims(rank, dims):
 class BatchNorm(Module):
   """BatchNorm Module.
 
+  Usage Note:
+  If we define a model with BatchNorm, for example::
+
+    BN = nn.BatchNorm(use_running_average=False, momentum=0.9, epsilon=1e-5,
+                      dtype=jnp.float32)
+
+  The initialized variables dict will contain in addition to a 'params'
+  collection a separate 'batch_stats' collection that will contain all the
+  running statistics for all the BatchNorm layers in a model::
+
+    vars_initialized = BN.init(key, x)  # {'params': ..., 'batch_stats': ...}
+
+  We then update the batch_stats during training by specifying that the
+  `batch_stats` collection is mutable in the `apply` method for our module.::
+
+    vars_in = {'params': params, 'batch_stats': old_batch_stats}
+    y, mutated_vars = BN.apply(vars_in, x, mutable=['batch_stats'])
+    new_batch_stats = mutated_vars['batch_stats']
+
+  During eval we would define BN with `use_running_average=True` and use the
+  batch_stats collection from training to set the statistics.  In this case
+  we are not mutating the batch statistics collection, and needn't mark it
+  mutable::
+
+    vars_in = {'params': params, 'batch_stats': training_batch_stats}
+    y = BN.apply(vars_in, x)
+
   Attributes:
     use_running_average: if True, the statistics stored in batch_stats
       will be used instead of computing the batch statistics on the input.
@@ -200,7 +227,7 @@ class LayerNorm(Module):
 
 class GroupNorm(Module):
   """Group normalization (arxiv.org/abs/1803.08494).
-  
+
     This op is similar to batch normalization, but statistics are shared across
     equally-sized groups of channels and not shared across batch dimension.
     Thus, group normalization does not depend on the batch composition and does
