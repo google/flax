@@ -27,6 +27,7 @@ optimizers are being added continuously.
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
 from .adadelta import Adadelta
+from .adabelief import AdaBelief
 from .adafactor import Adafactor
 from .adagrad import Adagrad
 from .adam import Adam
@@ -41,6 +42,7 @@ from .weight_norm import WeightNorm
 
 __all__ = [
     "Adam",
+    "AdaBelief",
     "Adadelta",
     "Adafactor",
     "Adagrad",
