@@ -15,10 +15,9 @@
 """Flax Optimizer api.
 
 Note that with `FLIP #1009`_ the optimizers in ``flax.optim`` were **effectively
-deprecated** in favor of Optax_ optimizers. There is no feature parity yet (e.g.
-``AdaFactor`` is missing in Optax), but the large majority of use cases is well
-supported, and Optax is actively being developed and new features and
-optimizers are being added continuously.
+deprecated** in favor of Optax_ optimizers. By now, ``optax`` should support all
+of the original features from ``flax.optim`` (otherwise please create a Github
+issue on ``optax``).
 
 .. _FLIP #1009: https://github.com/google/flax/blob/main/docs/flip/1009-optimizer-api.md
 .. _Optax: https://github.com/deepmind/optax
