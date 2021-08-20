@@ -35,10 +35,19 @@ Natural language processing
    -  `Sequence to sequence for number
       addition <https://github.com/google/flax/tree/main/examples/seq2seq/>`__
       (featuring simple code, LSTM state handling, on the fly data generation).
-   -  `Transformer model on
-      WMT <https://github.com/google/flax/tree/main/examples/wmt/>`__ :
-      Translating English/German (featuring multihost SPMD, dynamic bucketing, attention cache,
-      packed sequences, recipe for TPU training on GCP).
+   -  `Parts-of-speech tagging
+      <https://github.com/google/flax/tree/main/examples/nlp_seq/>`__ : Simple
+      transformer encoder model using the universal dependency dataset.
+   -  `Sentiment classification
+      <https://github.com/google/flax/tree/main/examples/sst2/>`__ : 
+      with a LSTM model.
+   -  `Transformer encoder/decoder model trained on WMT
+      <https://github.com/google/flax/tree/main/examples/wmt/>`__ :
+      Translating English/German (featuring multihost SPMD, dynamic bucketing,
+      attention cache, packed sequences, recipe for TPU training on GCP).
+   -  `Transformer encoder trained on one billion word benchmark
+      <https://github.com/google/flax/tree/main/examples/lm1b/>`__ :
+      for autoregressive language modeling, based on the WMT example above.
 
 Generative models
 
