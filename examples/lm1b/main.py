@@ -61,5 +61,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
-  jax.config.parse_flags_with_absl()
+  jax.config.config_with_absl()
   app.run(main)
