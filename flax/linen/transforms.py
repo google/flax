@@ -426,6 +426,7 @@ def checkpoint(target: Target,
         variables: lift.CollectionFilter = True,
         rngs: lift.PRNGSequenceFilter = True,
         concrete: bool = False,
+        prevent_cse: bool = True,
         methods=None) -> Target:
   """Lifted version of ``jax.checkpoint``.
 
@@ -444,14 +445,22 @@ def checkpoint(target: Target,
       control flow is optional, and disabled by default, because in some
       edge-case compositions with :func:`jax.jit` it can lead to some extra
       computation.
+    prevent_cse: Optional, boolean indicating whether to prevent common
+      subexpression elimination (CSE) optimizations in the HLO generated from
+      differentiation. This CSE prevention has costs because it can foil other
+      optimizations, and because it can incur high overheads on some backends,
+      especially GPU. The default is True because otherwise, under a ``jit`` or
+      ``pmap``, CSE can defeat the purpose of this decorator. But in some
+      settings, like when used inside a ``scan``, this CSE prevention mechanism
+      is unnecessary, in which case ``prevent_cse`` should be set to False.
   Returns:
     A wrapped version of ``target``. When computing gradients intermediate
     computations will be re-computed on the backward pass.
   """
   return lift_transform(
       lift.checkpoint, target,
-      variables=variables, rngs=rngs,
-      concrete=concrete, methods=methods)
+      variables=variables, rngs=rngs, concrete=concrete,
+      prevent_cse=prevent_cse, methods=methods)
 
 
 remat = checkpoint
