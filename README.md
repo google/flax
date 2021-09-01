@@ -137,13 +137,15 @@ output = model.apply(variables, batch)
 ```
 
 ```py
+import numpy as np
+
 class AutoEncoder(nn.Module):
   encoder_widths: Sequence[int]
   decoder_widths: Sequence[int]
   input_shape: Sequence[int]
 
   def setup(self):
-    input_dim = jnp.prod(jnp.asarray(self.input_shape))
+    input_dim = np.prod(self.input_shape)
     self.encoder = MLP(self.encoder_widths)
     self.decoder = MLP(self.decoder_widths + (input_dim,))
 
