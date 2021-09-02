@@ -93,6 +93,7 @@ To learn more about the `Module` abstraction, see our [docs](https://flax.readth
 ```py
 from typing import Sequence
 
+import numpy as np
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -137,8 +138,6 @@ output = model.apply(variables, batch)
 ```
 
 ```py
-import numpy as np
-
 class AutoEncoder(nn.Module):
   encoder_widths: Sequence[int]
   decoder_widths: Sequence[int]
