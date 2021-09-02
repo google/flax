@@ -29,6 +29,8 @@ import jax
 from jax import numpy as jnp
 from jax import random
 
+jax.config.update('jax_enable_custom_prng', True)
+
 T = TypeVar('T')
 
 PRNGKey = Any

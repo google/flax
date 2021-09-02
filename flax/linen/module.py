@@ -40,6 +40,8 @@ from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, 
 from flax.core.frozen_dict import FrozenDict, freeze
 from flax.struct import __dataclass_transform__
 
+jax.config.update('jax_enable_custom_prng', True)
+
 # from .dotgetter import DotGetter
 
 PRNGKey = Any  # pylint: disable=invalid-name
