@@ -38,6 +38,7 @@ from flax import core
 from flax.core import Scope
 from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
+from flax.struct import __dataclass_transform__
 
 # from .dotgetter import DotGetter
 
@@ -262,39 +263,9 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
     # otherwise call the wrapped function as is.
     if args and isinstance(args[0], Module):
       self, args = args[0], args[1:]
+      return self._call_wrapped_method(fun, args, kwargs)
     else:
       return fun(*args, **kwargs)
-    is_compact_method = hasattr(fun, 'compact')
-    is_setup_method = fun.__name__ == 'setup'
-    # We lazily call setup() only when needed.
-    if is_setup_method:
-      is_recurrent = self._state.in_setup
-      self._state.in_setup = True
-    else:
-      self._try_setup()
-
-    if is_compact_method:
-      if self.scope is None:
-        raise errors.CallCompactUnboundModuleError()
-      is_recurrent = self._state.in_compact_method
-      self._state.in_compact_method = True
-    _context.module_stack.append(self)
-    try:
-      y = fun(self, *args, **kwargs)
-      if _context.capture_stack:
-        filter_fn = _context.capture_stack[-1]
-        if filter_fn and filter_fn(self, fun.__name__):
-          self.sow('intermediates', fun.__name__, y)
-      return y
-    finally:
-      _context.module_stack.pop()
-      if is_compact_method:
-        object.__setattr__(self, 'scope', self.scope.rewound())
-      # setup or compact calls can be recurrent for example due to super calls
-      # resetting the state would cause is compact/setup method
-      # to be set to False prematurely.
-      if (is_compact_method or is_setup_method) and not is_recurrent:
-        self._state.reset()
   wrapped_module_method.method_handler_wrapped = True
   return wrapped_module_method
 
@@ -304,7 +275,13 @@ def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
   def wrapped(self):
     if self.scope is not None:
       raise TypeError('Can\'t call __hash__ on modules that hold variables.')
-    return hash_fn(self)
+    try:
+      hash_value = hash_fn(self)
+    except TypeError as exc:
+      raise TypeError('Failed to hash Flax Module.  '
+                      'The module probably contains unhashable attributes.  '
+                      f'Module={self}') from exc
+    return hash_value
   return wrapped
 
 
@@ -396,7 +373,17 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 # -----------------------------------------------------------------------------
 
 
-class Module:
+# This metaclass + decorator is used by static analysis tools recognize that
+# Module behaves as a dataclass (attributes are constructor args).
+if typing.TYPE_CHECKING:
+  @__dataclass_transform__()
+  class ModuleMeta(type):
+    pass
+else:
+  ModuleMeta = type
+
+
+class Module(metaclass=ModuleMeta):
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
@@ -522,6 +509,46 @@ class Module:
         wrapped_method = named_call(wrapped_method)
       setattr(cls, key, wrapped_method)
     return cls
+
+  def _call_wrapped_method(self, fun, args, kwargs):
+    """"Calls a wrapped method.
+    
+    This function is responsible for setting up the thread local state
+    correctly before calling the method and cleaning up afterwards.
+    This includes storing intermediates, setup of the compact scope,
+    and making sure setup is called before any other method.
+    """
+    is_compact_method = hasattr(fun, 'compact')
+    is_setup_method = fun.__name__ == 'setup'
+    # We lazily call setup() only when needed.
+    if is_setup_method:
+      is_recurrent = self._state.in_setup
+      self._state.in_setup = True
+    else:
+      self._try_setup()
+
+    if is_compact_method:
+      if self.scope is None:
+        raise errors.CallCompactUnboundModuleError()
+      is_recurrent = self._state.in_compact_method
+      self._state.in_compact_method = True
+    _context.module_stack.append(self)
+    try:
+      y = fun(self, *args, **kwargs)
+      if _context.capture_stack:
+        filter_fn = _context.capture_stack[-1]
+        if filter_fn and filter_fn(self, fun.__name__):
+          self.sow('intermediates', fun.__name__, y)
+      return y
+    finally:
+      _context.module_stack.pop()
+      if is_compact_method:
+        object.__setattr__(self, 'scope', self.scope.rewound())
+      # setup or compact calls can be recurrent for example due to super calls
+      # resetting the state would cause is compact/setup method
+      # to be set to False prematurely.
+      if (is_compact_method or is_setup_method) and not is_recurrent:
+        self._state.reset()
 
   def __setattr__(self, name: str, val: Any):
     """Sets an attribute on this Module.
@@ -1107,8 +1134,8 @@ class Module:
       name: The name of the variable.
       value: The value of the variable.
       reduce_fn: The function used to combine the existing value with
-        the new value the default is to append the value to a tuple.
-      init_fn: For the first value stored reduce_fn will be passed
+        the new value. The default is to append the value to a tuple.
+      init_fn: For the first value stored, `reduce_fn` will be passed
         the result of `init_fn` together with the value to be stored.
         The default is an empty tuple.
 

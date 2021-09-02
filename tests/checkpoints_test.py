@@ -16,6 +16,7 @@
 
 import copy
 import os
+import pathlib
 from typing import Any
 
 from absl.testing import absltest
@@ -114,7 +115,7 @@ class CheckpointsTest(absltest.TestCase):
       self.assertEqual(expect, checkpoints.safe_normpath(test))
 
   def test_save_restore_checkpoints(self):
-    tmp_dir = self.create_tempdir().full_path
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
     test_object1 = {'a': np.array([1, 2, 3], np.int32),

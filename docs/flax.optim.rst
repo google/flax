@@ -32,6 +32,7 @@ Available optimizers
   :toctree: _autosummary
 
     Adam
+    AdaBelief
     AdaFactor
     Adagrad
     DynamicScale

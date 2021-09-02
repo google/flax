@@ -24,6 +24,7 @@ from flax.optim.adadelta import _AdadeltaHyperParams, _AdadeltaParamState
 from flax.optim.adafactor import _AdafactorHyperParams, _AdafactorParamState
 from flax.optim.adagrad import _AdagradHyperParams, _AdagradParamState
 from flax.optim.adam import _AdamHyperParams, _AdamParamState
+from flax.optim.adabelief import _AdaBeliefHyperParams, _AdaBeliefParamState
 from flax.optim.momentum import _MomentumHyperParams, _MomentumParamState
 from flax.optim.rmsprop import _RMSPropHyperParams, _RMSPropParamState
 from flax.optim.sgd import _GradientDescentHyperParams
@@ -294,6 +295,36 @@ class AdamTest(absltest.TestCase):
     expected_new_state = optim.OptimizerState(
         2, _AdamParamState(np.array([3.22]), np.array([2.41])))
     expected_new_params = np.array([0.906085])
+    np.testing.assert_allclose(new_params, expected_new_params)
+    self.assertEqual(new_state, expected_new_state)
+
+
+class AdaBeliefTest(absltest.TestCase):
+
+  def test_init_state(self):
+    params = np.zeros((1,))
+    optimizer_def = optim.AdaBelief(
+        learning_rate=0.1, beta1=0.2, beta2=0.9, eps=0.01, weight_decay=0.0)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _AdaBeliefHyperParams(0.1, 0.2, 0.9, 0.01, 0.0)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
+        0, _AdaBeliefParamState(np.zeros((1,)), np.zeros((1,))))
+    self.assertEqual(state, expected_state)
+
+  def test_apply_gradient(self):
+    optimizer_def = optim.AdaBelief(
+        learning_rate=0.1, beta1=0.2, beta2=0.9, eps=0.01, weight_decay=0.0)
+    params = np.array([1.])
+    state = optim.OptimizerState(
+        1, _AdaBeliefParamState(np.array([0.1]), np.array([0.9])))
+    grads = np.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _AdaBeliefParamState(np.array([3.22]), np.array([0.88084])))
+    expected_new_params = np.array([0.8449397])
     np.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 

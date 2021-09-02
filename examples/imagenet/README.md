@@ -24,12 +24,13 @@ storage at
 
 ### Supported setups
 
-While the example should run on a variety of hardware, 
-we have tested the different configurations on TPU v3-8 and 8x V100 (16GB)
-and got the following results:
+While the example should run on a variety of hardware,
+we have tested the following GPU and TPU configurations:
 
 |          Name           | Steps  | Walltime | Top-1 accuracy |                                                                       Metrics                                                                        |                                                                               Workdir                                                                                |
 | :---------------------- | -----: | :------- | :------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TPU v3-32                | 125100 | 2.1h     | 76.54%         | [tfhub.dev](https://tensorboard.dev/experiment/GhPHRoLzTqu7c8vynTk6bg/)                                                                              | [gs://flax_public/examples/imagenet/tpu_v3_32](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/tpu_v3_32)                                         |
+| TPU v2-32                | 125100 | 2.5h     | 76.67%         | [tfhub.dev](https://tensorboard.dev/experiment/qBJ7T9VPSgO5yeb0HAKbIA/)                                                                              | [gs://flax_public/examples/imagenet/tpu_v2_32](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/tpu_v2_32)                                         |
 | TPU v3-8                | 125100 | 4.4h     | 76.37%         | [tfhub.dev](https://tensorboard.dev/experiment/JwxRMYrsR4O6V6fnkn3dmg/)                                                                              | [gs://flax_public/examples/imagenet/tpu](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/tpu)                                         |
 | v100_x8                 | 250200 | 13.2h    | 76.72%         | [tfhub.dev](https://tensorboard.dev/experiment/venzpsNXR421XLkvvzSkqQ/#scalars&_smoothingWeight=0&regexInput=%5Eimagenet/v100_x8%24)                 | [gs://flax_public/examples/imagenet/v100_x8](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/v100_x8)                                 |
 | v100_x8_mixed_precision |  62500 | 4.3h     | 76.27%         | [tfhub.dev](https://tensorboard.dev/experiment/venzpsNXR421XLkvvzSkqQ/#scalars&_smoothingWeight=0&regexInput=%5Eimagenet/v100_x8_mixed_precision%24) | [gs://flax_public/examples/imagenet/v100_x8_mixed_precision](https://console.cloud.google.com/storage/browser/flax_public/examples/imagenet/v100_x8_mixed_precision) |
@@ -37,12 +38,12 @@ and got the following results:
 
 ### Preparing the dataset on Cloud
 
-For running the ResNet50 model on imagenet dataset, 
-you first need to prepare the `imagenet2012` dataset. 
+For running the ResNet50 model on imagenet dataset,
+you first need to prepare the `imagenet2012` dataset.
 Download the data from http://image-net.org/ as described in the
-[tensorflow_datasets catalog](https://www.tensorflow.org/datasets/catalog/imagenet2012). 
-Then point the environment variable `$IMAGENET_DOWNLOAD_PATH` 
-to the directory where the downloads are stored and prepare the dataset 
+[tensorflow_datasets catalog](https://www.tensorflow.org/datasets/catalog/imagenet2012).
+Then point the environment variable `$IMAGENET_DOWNLOAD_PATH`
+to the directory where the downloads are stored and prepare the dataset
 by running
 
 ```shell
@@ -54,7 +55,9 @@ tfds.builder('imagenet2012').download_and_prepare(
 "
 ```
 
-The contents of the directory `~/tensorflow_datasets` should be copied to your gcs bucket. Point the environment variable `GCS_TFDS_BUCKET` to your bucket and run the following command:
+The contents of the directory `~/tensorflow_datasets` should be copied to your
+gcs bucket. Point the environment variable `GCS_TFDS_BUCKET` to your bucket and
+run the following command:
 
 ```shell
 gsutil cp -r ~/tensorflow_datasets gs://$GCS_TFDS_BUCKET/datasets
@@ -64,20 +67,36 @@ gsutil cp -r ~/tensorflow_datasets gs://$GCS_TFDS_BUCKET/datasets
 
 
 
-Setup the TPU VM and install the Flax dependencies on it as described 
-[here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm).
+Setup the TPU VM and install the Flax dependencies on it as described
+[here](https://cloud.google.com/tpu/docs/jax-pods) for creating pod slices, or
+[here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm) for a single
+v3-8 TPU.
 
-Set the environment variable of `GCS_TFDS_BUCKET` to your bucket on the TPU VM 
+If running on the single v3-8 TPU, set the environment variable of
+`GCS_TFDS_BUCKET` to your bucket on the TPU VM
 and run the model after setting `TFDS_DATA_DIR` parameter:
 
 ```shell
 export TFDS_DATA_DIR=gs://$GCS_TFDS_BUCKET/datasets
 python3 main.py --workdir=./imagenet_tpu --config=configs/tpu.py
 ```
+When running on pod slices, after making the TPU VM with the size you wish, and
+installing JAX, the same command must run on all the machines.
+There are multiple ways to run the training on pods, one example command that
+will run on each of the pod's machines while sshing to them is:
+
+```shell
+gcloud alpha compute tpus tpu-vm ssh $VM_NAME   --zone $ZONE \
+--worker=all  --command "pip install --user git+https://github.com/google/flax.git;
+git clone https://github.com/google/flax.git;
+cd flax/examples/imagenet; pip install -r requirements.txt;
+export TFDS_DATA_DIR=gs://$GCS_TFDS_BUCKET/datasets;
+python3 main.py --workdir=gs://$YOUR_BUCKET/imagenet --config=configs/tpu.py"
+```
 
 
 
-### How to run
+### Running locally
 
 ```shell
 python main.py --workdir=./imagenet --config=configs/default.py
@@ -92,7 +111,8 @@ Configuration flag is defined using
 follows:
 
 ```shell
-python main.py --workdir=./imagenet_default --config=configs/default.py --config.num_epochs=100
+python main.py --workdir=./imagenet_default --config=configs/default.py \
+--config.num_epochs=100
 ```
 
 #### 8 x Nvidia V100 (16GB)
@@ -115,5 +135,5 @@ See commands in [../cloud/README.md](../cloud/README.md)
 
 ### Reproducibility
 
-Making the ImageNet classification example reproducible is WIP. 
+Making the ImageNet classification example reproducible is WIP.
 See: [#291](https://github.com/google/flax/issues/291).

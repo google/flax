@@ -33,7 +33,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('workdir', None, 'Directory to store model data.')
 config_flags.DEFINE_config_file(
     'config',
-    None,
+    'configs/default.py',
     'File path to the training hyperparameter configuration.',
     lock_config=True)
 flags.mark_flags_as_required(['config', 'workdir'])
@@ -61,4 +61,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+  jax.config.parse_flags_with_absl()
   app.run(main)

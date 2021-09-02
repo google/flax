@@ -23,7 +23,7 @@ vNext
  -
  - Fix the serialization of named tuples. Tuple fields are no longer stored in the state dict and the named tuple class is no longer recreated ([bug](https://github.com/google/flax/issues/1429)).
  -
- -
+ - linen Modules and dataclasses made with `flax.struct.dataclass` or `flax.struct.PyTreeNode` are now correctly recognized as dataclasses by static analysis tools like PyLance. Autocomplete of constructors has been verified to work with VSCode.
  -
  -
  - `flax.linen.Conv` no longer interprets an int past as kernel_size as a 1d convolution. Instead a type error is raised stating that

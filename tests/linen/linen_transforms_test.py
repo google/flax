@@ -784,6 +784,125 @@ class TransformTest(absltest.TestCase):
     })
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
+  def test_variable_in_args_transform(self):
+    class Test(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        y = self.mutate_variable_in_method(x, baz)
+        return y
+      @nn.jit
+      def mutate_variable_in_method(self, x, baz):
+        baz.value += x
+        return baz.value
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = Test().init(k, x)
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([1.0,]), atol=1e-7)
+    y, variables = Test().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([2.0,]), atol=1e-7)
+
+  def test_module_instance_in_args_transform(self):
+    class Inner(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        baz.value += x
+        return baz.value
+
+    class Test(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        inner = Inner(name="inner")
+        y = self.call_instance_arg_in_method(x, inner)
+        return y
+      @nn.jit
+      def call_instance_arg_in_method(self, x, inner):
+        return inner(x)
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = Test().init(k, x)
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([1.0,]), atol=1e-7)
+    y, variables = Test().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([2.0,]), atol=1e-7)
+
+  def test_module_instance_in_args_transform_nested(self):
+    class Inner(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        baz.value += x
+        return baz.value
+
+    class Outer(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, inner, x):
+        y = self.call_instance_arg_in_method(x, inner)
+        return y
+      @nn.jit
+      def call_instance_arg_in_method(self, x, inner):
+        return inner(x)
+
+    class Test(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        inner = Inner(name="inner")
+        outer = Outer(name="outer")
+        return outer(inner, x)
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = Test().init(k, x)
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([1.0,]), atol=1e-7)
+    y, variables = Test().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([2.0,]), atol=1e-7)
+
+
+  def test_nested_variable_passing(self):
+    class NestedVarUser(nn.Module):
+      somevar: nn.Variable
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        self.somevar.value += x
+        return x
+    class VarUser(nn.Module):
+      somevar: nn.Variable
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return NestedVarUser(self.somevar)(x)
+    class VarPasser(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        y = VarUser(baz)(x)
+        return y
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = VarPasser().init(k, x)
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([1.0,]), atol=1e-7)
+    y, variables = VarPasser().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([2.0,]), atol=1e-7)
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -23,7 +23,7 @@ research ecosystem -- both within Alphabet and with the broader community,
 and to explore the use-cases where JAX shines. We use GitHub for almost
 all of our coordination and planning, as well as where we discuss
 upcoming design changes. We welcome feedback on any of our discussion,
-issue and pull request thread. We are in the process of moving some
+issue and pull request threads. We are in the process of moving some
 remaining internal design docs and conversation threads to GitHub
 discussions, issues and pull requests. We hope to increasingly engage
 with the needs and clarifications of the broader ecosystem. Please let

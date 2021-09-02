@@ -18,8 +18,6 @@ import dataclasses
 import functools
 import operator
 
-
-
 from absl.testing import absltest
 
 import jax

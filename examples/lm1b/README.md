@@ -15,77 +15,70 @@ rate schedule. Based off of Machine Translation `wmt` example.
 *   This example additionally depends on the `sentencepiece` and
     `tensorflow-text` packages.
 
-### How to run
-
-`python main.py --workdir=./lm1b_64 --config=configs/default.py --config.per_device_batch_size=64`
 
 ### How to run on Cloud TPUs
 
-Creating a [Cloud TPU](https://cloud.google.com/tpu/docs/quickstart) involves
-creating the user GCE VM and the TPU node.
+Setup the TPU VM and install the Flax dependencies on it as described
+[here](https://cloud.google.com/tpu/docs/jax-pods) for creating pod slices, or
+[here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm) for a single
+v3-8 TPU.
 
-To create a user GCE VM, run the following command from your GCP console or your
-computer terminal where you have
-[gcloud installed](https://cloud.google.com/sdk/install).
 
-```
-export ZONE=europe-west4-a
-gcloud compute instances create $USER-user-vm-0001 \
-   --machine-type=n1-standard-16 \
-   --image-project=ml-images \
-   --image-family=tf-2-2 \
-   --boot-disk-size=200GB \
-   --scopes=cloud-platform \
-   --zone=$ZONE
-```
-
-To create a larger GCE VM, choose a different
-[machine type](https://cloud.google.com/compute/docs/machine-types).
-
-Next, create the TPU node, following these
-[guidelines](https://cloud.google.com/tpu/docs/internal-ip-blocks) to choose a
-<TPU_IP_ADDRESS>. e.g.:
+First create a single TPUv3-8 VM and connect to it (you can find more detailed
+instructions [here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm)):
 
 ```
-export TPU_IP_ADDRESS=192.168.0.2
-gcloud compute tpus create $USER-tpu-0001 \
-      --zone=$ZONE \
-      --network=default \
-      --accelerator-type=v3-8 \
-      --range=$TPU_IP_ADDRESS \
-      --version=tpu_driver_nightly
+ZONE=us-central1-a
+TPU_TYPE=v3-8
+TPU_NAME=$USER-flax-lm1b
+gcloud alpha compute tpus tpu-vm create $TPU_NAME \
+    --zone $ZONE \
+    --accelerator-type $TPU_TYPE \
+    --version v2-alpha
+gcloud alpha compute tpus tpu-vm ssh $TPU_NAME --zone $ZONE -- \
+    -L 6006:localhost:6006
 ```
 
-Now that you have created both the user GCE VM and the TPU node, ssh to the GCE
-VM by executing the following command, including a local port forwarding rule
-for viewing tensorboard:
+When connected install JAX:
 
 ```
-gcloud compute ssh $USER-user-vm-0001 -- -L 2222:localhost:8888
+pip install "jax[tpu]>=0.2.16" \
+    -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 ```
 
-Be sure to install the latest `jax` and `jaxlib` packages alongside the other
-requirements above. e.g. as of April 2020 the following package versions were
-used successfully:
+Then install Flax + the example dependencies:
 
-```bash
-pip install -U --upgrade pip
-pip install -U setuptools wheel
-git clone https://github.com/google/flax
-pip install -e flax
-pip install -U --upgrade jax jaxlib sentencepiece tensorflow==2.2.0rc3 \
-    tensorflow-datasets==3.0.0 tensorflow-text==2.2.0rc2 tensorboard
+```
+git clone --depth=1 --branch=main https://github.com/google/flax
+cd flax
+pip install -e .
+cd examples/lm1b
+pip install -r requirements.txt
 ```
 
-Then, if your TPU is at IP `192.168.0.2`:
+And finally start the training:
 
-```bash
-python main.py --workdir=./lm1b_64 --config.per_device_batch_size=64 \
+```
+python3 main.py --workdir=$HOME/logs/lm1b_256 \
+    --config.per_device_batch_size=32 \
     --jax_backend_target="grpc://192.168.0.2:8470"
 ```
 
-A tensorboard instance can then be launched and viewed on your local 2222 port
-via the tunnel: `tensorboard --logdir lm1b_256 --port 8888`
+Note that you might want to set `TFDS_DATA_DIR` as explained below. You probably
+also want to start the long-running command above in a `tmux` session and start
+some monitoring in a separate pane (note that we forwarded port 6006 locally
+above):
+
+```
+tensorboard --logdir=$HOME/logs
+```
+
+You should expect to get numbers similar to these:
+
+
+Hardware | config  | Training time |      Loss      |                             TensorBoard.dev                              |                                                          Workdir
+-------- | ------- | ------------- | -------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------
+TPU v3-8 | default | 13h18m | 3.127 | [2021-08-08](https://tensorboard.dev/experiment/n30WkNOZTJq3RHWD7wNslg/) | [gs://flax_public/examples/lm1b/default](https://console.cloud.google.com/storage/browser/flax_public/examples/lm1b/default)
 
 ### Downloading the LM1B Datasets
 

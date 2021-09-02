@@ -16,6 +16,8 @@
 
 import jax
 
+from .. import errors
+
 
 def current_trace():
   """Returns the innermost Jax tracer."""
@@ -32,4 +34,4 @@ def trace_level(main):
 def check_trace_level(base_level):
   level = trace_level(current_trace())
   if level != base_level:
-    raise ValueError('Jax transforms and modules cannot be mixed.')
+    raise errors.JaxTransformError()

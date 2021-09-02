@@ -178,7 +178,7 @@ class ScopeParamShapeError(FlaxError):
   This error is thrown when the shape of an existing parameter is different from
   the shape of the return value of the ``init_fn``. This can happen when the 
   shape provided during :meth:`Module.apply() <flax.linen.Module.apply>` is
-  different from the one used when intializing the module.
+  different from the one used when initializing the module.
   
   For instance, the following code throws this error because the apply shape 
   (``(5, 5, 1)``) is different from the init shape (``(5, 5``). As a result, the
@@ -261,6 +261,19 @@ class ModifyScopeVariableError(FlaxError):
   def __init__(self, col, variable_name, scope_path):
     super().__init__(f'Cannot update variable "{variable_name}" in '
                      f'"{scope_path}" because collection "{col}" is immutable.')
+
+
+class JaxTransformError(FlaxError):
+  """
+  JAX transforms and Flax modules cannot be mixed.
+
+  JAX's functional transformations expect pure function.
+  When you want to use JAX transformations **inside** Flax models,
+  you should make use of the Flax transformation wrappers
+  (e.g.: ``flax.linen.vmap``, ``flax.linen.scan``, etc.).
+  """
+  def __init__(self):
+    super().__init__('Jax transforms and Flax models cannot be mixed.')
 
 
 #################################################
@@ -357,7 +370,7 @@ class AssignSubModuleError(FlaxError):
     Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
 
   In this case, ``self.conv(kernel_size=4)`` is called from ``__call__``, which
-  is disallowed beause it's neither within ``setup`` nor a method wrapped in
+  is disallowed because it's neither within ``setup`` nor a method wrapped in
   x``nn.compact``.
   """
   def __init__(self, cls):

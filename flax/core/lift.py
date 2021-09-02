@@ -653,6 +653,7 @@ def checkpoint(fn: Callable[..., Any],
                variables: CollectionFilter = True,
                rngs: PRNGSequenceFilter = True,
                concrete: bool = False,
+               prevent_cse: bool = True,
                ) -> Callable[..., Any]:
   """Lifted version of ``jax.checkpoint``.
 
@@ -670,12 +671,20 @@ def checkpoint(fn: Callable[..., Any],
       control flow is optional, and disabled by default, because in some
       edge-case compositions with :func:`jax.jit` it can lead to some extra
       computation.
+    prevent_cse: Optional, boolean indicating whether to prevent common
+      subexpression elimination (CSE) optimizations in the HLO generated from
+      differentiation. This CSE prevention has costs because it can foil other
+      optimizations, and because it can incur high overheads on some backends,
+      especially GPU. The default is True because otherwise, under a ``jit`` or
+      ``pmap``, CSE can defeat the purpose of this decorator. But in some
+      settings, like when used inside a ``scan``, this CSE prevention mechanism
+      is unnecessary, in which case ``prevent_cse`` can be set to False.
   Returns:
     A wrapped version of ``fn``. When computing gradients intermediate
     computations will be re-computed when computing gradients.
   """
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args, **kwargs):
-    @functools.partial(jax.remat, concrete=concrete)
+    @functools.partial(jax.remat, concrete=concrete， prevent_cse=prevent_cse)
     @functools.wraps(fn)
     def rematted(variable_groups, rng_groups, *args, **kwargs):
       scope = scope_fn(variable_groups, rng_groups)
@@ -684,6 +693,9 @@ def checkpoint(fn: Callable[..., Any],
 
     return rematted(variable_groups, rng_groups, *args, **kwargs)
   return pack(inner, (variables,), (variables,), (rngs,), name='remat', enable_kwargs=True)
+
+
+remat = checkpoint
 
 
 def _hashable_filter(x):
@@ -778,9 +790,6 @@ def jit(fn: Callable[..., Any],
       scope_fn, repack_fn = None, None
 
   return pack(inner, (variables,), (variables,), (rngs,), name='jit')
-
-
-remat = checkpoint
 
 
 def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,

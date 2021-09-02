@@ -146,7 +146,7 @@ def get_sequence_lengths(sequence_batch, eos_id=CTABLE.eos_id):
   """Returns the length of each one-hot sequence, including the EOS token."""
   # sequence_batch.shape = (batch_size, seq_length, vocab_size)
   eos_row = sequence_batch[:, :, eos_id]
-  eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurence
+  eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurrence
   # `eos_idx` is 0 if EOS is not present, so we use full length in that case.
   return jnp.where(
       eos_row[jnp.arange(eos_row.shape[0]), eos_idx],

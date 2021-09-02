@@ -399,7 +399,7 @@ class Embed(Module):
   dtype: Dtype = jnp.float32
   embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
 
-  embedding: Array = field(init=False)
+  embedding: Array = field(init=False, compare=False, repr=False)
 
   def setup(self):
     self.embedding = self.param('embedding',

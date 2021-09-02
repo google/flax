@@ -287,6 +287,10 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, dummy_embedding[None])
     z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
     np.testing.assert_allclose(z, 3. * jnp.arange(4))
+
+  def test_embed_hash(self):
+    self.assertEqual(hash(nn.Embed(2, 3)), hash(nn.Embed(2, 3)))
+    self.assertNotEqual(hash(nn.Embed(3, 4)), hash(nn.Embed(2, 3)))
   
   def test_non_final_axis(self):
     class Foo(nn.Module):
