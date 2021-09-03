@@ -162,7 +162,7 @@ def spatial_pad(pad_vertical, pad_horizontal, operand):
   """Wrapper around lax.pad which pads spatial dimensions (horizontal and
   vertical) with zeros, without any interior padding."""
   zero = (0, 0, 0)
-  return lax.pad(operand, 0.,
+  return lax.pad(operand, jnp.zeros((), operand.dtype),
                  (zero, pad_vertical + (0,), pad_horizontal + (0,), zero))
 
 
