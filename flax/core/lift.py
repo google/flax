@@ -684,7 +684,7 @@ def checkpoint(fn: Callable[..., Any],
     computations will be re-computed when computing gradients.
   """
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args, **kwargs):
-    @functools.partial(jax.remat, concrete=concrete， prevent_cse=prevent_cse)
+    @functools.partial(jax.remat, concrete=concrete, prevent_cse=prevent_cse)
     @functools.wraps(fn)
     def rematted(variable_groups, rng_groups, *args, **kwargs):
       scope = scope_fn(variable_groups, rng_groups)
