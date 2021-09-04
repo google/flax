@@ -224,6 +224,42 @@ def compact(fun: _CallableT) -> _CallableT:
   return fun
 
 
+def nowrap(fun: _CallableT) -> _CallableT:
+  """Marks the given module method as a helper method that needn't be wrapped.
+
+  Methods wrapped in @nowrap are private helper methods that needn't be wrapped
+  with the state handler or a separate named_call transform.
+
+  This is needed in several concrete instances:
+   - if you have a helper method that returns Modules or Variables to prevent
+     it from being functionalized by named_call. (Functionalized methods
+     can't return Modules/Variables.)
+   - if you're subclassing a method like Module.param and don't want this
+     overriden core function decorated with the state management wrapper.
+   - If you want a method to be callable from an unbound Module (e.g.: a
+     function of construction of arguments that doesn't depend on params/RNGs)
+
+  For instance::
+
+    @nowrap
+    def _make_dense(self, num_features):
+      return nn.Dense(num_features)
+
+    @compact
+    def __call__(self, x):
+      # now safe to use constructor helper even if using named_call
+      dense = self._dense(self.num_features)
+      return dense(x)
+
+  Args:
+    fun: The Module method to mark as nowrap.
+  Returns:
+    The given function `fun` marked as nowrap.
+  """
+  fun.nowrap = True
+  return fun
+
+
 def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]:
   """Gets method names of a class, excluding class and static methods.
 
@@ -502,6 +538,8 @@ class Module(metaclass=ModuleMeta):
                    '__post_init__'])
     for key in _get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
+      if hasattr(method, 'nowrap'):
+        continue
       wrapped_method = wrap_method_once(method)
       if _use_named_call and key != 'setup':
         # We import named_call at runtime to avoid a circular import issue.
@@ -512,7 +550,7 @@ class Module(metaclass=ModuleMeta):
 
   def _call_wrapped_method(self, fun, args, kwargs):
     """"Calls a wrapped method.
-    
+
     This function is responsible for setting up the thread local state
     correctly before calling the method and cleaning up afterwards.
     This includes storing intermediates, setup of the compact scope,

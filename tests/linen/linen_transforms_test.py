@@ -23,6 +23,7 @@ import jax
 from jax import random
 import jax.numpy as jnp
 import numpy as np
+from flax import errors
 from flax import linen as nn
 from flax.core import freeze
 
@@ -889,6 +890,61 @@ class TransformTest(absltest.TestCase):
     y, variables = VarPasser().apply(variables, x, mutable=['test'])
     np.testing.assert_allclose(variables['test']['baz'],
                                jnp.array([2.0,]), atol=1e-7)
+
+  def test_returned_module_warning(self):
+    nn.enable_named_call()
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        f = self._helper()
+        return f(x)
+      def _helper(self):
+        return Foo()
+    nn.disable_named_call()
+
+    b = Bar()
+    with self.assertRaises(errors.TransformedMethodReturnValueError):
+      b.apply({}, jnp.ones(2))
+
+  def test_nowrap_named_call(self):
+    nn.enable_named_call()
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        f = self._helper()
+        return f(x)
+      # will fail without nowrap
+      @nn.nowrap
+      def _helper(self):
+        return Foo()
+    nn.disable_named_call()
+
+    b = Bar()
+    x = jnp.ones(2)
+    y = b.apply({}, x)
+    np.testing.assert_array_equal(x, y)
+
+  def test_nowrap(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return self._helper(x)
+      @nn.nowrap
+      def _helper(self, x):
+        if len(nn.module._context.module_stack) > 2:
+          raise ValueError('Module stack too deep.')
+        return x
+
+    b = Bar()
+    b.apply({}, jnp.ones(2))
 
 
 if __name__ == '__main__':

@@ -528,3 +528,22 @@ class InvalidCheckpointError(FlaxError):
   """
   def __init__(self, path, step):
     super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')
+
+
+#################################################
+# transforms.py errors                          #
+#################################################
+
+class TransformedMethodReturnValueError(FlaxError):
+  """
+  Transformed Module methods cannot return other Modules or Variables.
+
+  This commonly occurs when named_call is automatically applied to helper
+  constructor methods when profiling is enabled, and can be mitigated by
+  using the @nn.nowrap decorator to prevent automatic wrapping.
+  """
+  def __init__(self, name):
+    super().__init__(
+      f'Transformed module method {name} cannot return Modules or Variables. '
+      f'For helper constructor methods use the @nn.nowrap decorator to prevent '
+      f'decoration by the automatic named_call transform.')
