@@ -20,8 +20,6 @@ from flax.linen import Module, compact
 import numpy as np
 from dense import Dense
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 # TODO(avital, levskaya): resurrect this example once interactive api is restored.
 

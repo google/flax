@@ -139,7 +139,7 @@ def create_sentence_with_root(attributes, vocabs):
     A list representing a sentence containing the root only,
     e.g., [[2, 1, 0]] for root word, unknown xpos, and head 0.
   """
-  # Create the token properties of an artifical root node.
+  # Create the token properties of an artificial root node.
   token_properties = [ROOT for _ in range(12)]  # CoNLL 09 has 12 columns.
   token_properties[CoNLLAttributes.ID.value] = '0'
   token_properties[CoNLLAttributes.HEAD.value] = '0'

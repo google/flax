@@ -38,6 +38,33 @@ def _absolute_dims(rank, dims):
 class BatchNorm(Module):
   """BatchNorm Module.
 
+  Usage Note:
+  If we define a model with BatchNorm, for example::
+
+    BN = nn.BatchNorm(use_running_average=False, momentum=0.9, epsilon=1e-5,
+                      dtype=jnp.float32)
+
+  The initialized variables dict will contain in addition to a 'params'
+  collection a separate 'batch_stats' collection that will contain all the
+  running statistics for all the BatchNorm layers in a model::
+
+    vars_initialized = BN.init(key, x)  # {'params': ..., 'batch_stats': ...}
+
+  We then update the batch_stats during training by specifying that the
+  `batch_stats` collection is mutable in the `apply` method for our module.::
+
+    vars_in = {'params': params, 'batch_stats': old_batch_stats}
+    y, mutated_vars = BN.apply(vars_in, x, mutable=['batch_stats'])
+    new_batch_stats = mutated_vars['batch_stats']
+
+  During eval we would define BN with `use_running_average=True` and use the
+  batch_stats collection from training to set the statistics.  In this case
+  we are not mutating the batch statistics collection, and needn't mark it
+  mutable::
+
+    vars_in = {'params': params, 'batch_stats': training_batch_stats}
+    y = BN.apply(vars_in, x)
+
   Attributes:
     use_running_average: if True, the statistics stored in batch_stats
       will be used instead of computing the batch statistics on the input.
@@ -76,6 +103,13 @@ class BatchNorm(Module):
   def __call__(self, x, use_running_average: Optional[bool] = None):
     """Normalizes the input using batch statistics.
 
+    NOTE:
+    During initialization (when parameters are mutable) the running average
+    of the batch statistics will not be updated. Therefore, the inputs
+    fed during initialization don't need to match that of the actual input
+    distribution and the reduction axis (set with `axis_name`) does not have
+    to exist.
+
     Args:
       x: the input to be normalized.
       use_running_average: if true, the statistics stored in batch_stats
@@ -93,8 +127,8 @@ class BatchNorm(Module):
     reduced_feature_shape = tuple(d for i, d in enumerate(x.shape) if i in axis)
     reduction_axis = tuple(i for i in range(x.ndim) if i not in axis)
 
-    # we detect if we're in initialization via empty variable tree.
-    initializing = not self.has_variable('batch_stats', 'mean')
+    # see NOTE above on initialization behavior
+    initializing = self.is_mutable_collection('params')
 
     ra_mean = self.variable('batch_stats', 'mean',
                             lambda s: jnp.zeros(s, jnp.float32),
@@ -193,7 +227,7 @@ class LayerNorm(Module):
 
 class GroupNorm(Module):
   """Group normalization (arxiv.org/abs/1803.08494).
-  
+
     This op is similar to batch normalization, but statistics are shared across
     equally-sized groups of channels and not shared across batch dimension.
     Thus, group normalization does not depend on the batch composition and does
@@ -242,12 +276,16 @@ class GroupNorm(Module):
                        'specified, but not both of them.')
     num_groups = self.num_groups
 
+    channels = x.shape[-1]
     if self.group_size is not None:
-      channels = x.shape[-1]
       if channels % self.group_size != 0:
         raise ValueError('Number of channels ({}) is not multiple of the '
                          'group size ({}).'.format(channels, self.group_size))
       num_groups = channels // self.group_size
+
+    if num_groups <= 0 or channels % num_groups != 0:
+      raise ValueError('Number of groups ({}) does not divide the number'
+                       ' of channels ({}).'.format(num_groups, channels))
 
     input_shape = x.shape
     group_shape = x.shape[:-1] + (num_groups, x.shape[-1] // num_groups)

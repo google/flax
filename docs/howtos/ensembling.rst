@@ -304,4 +304,4 @@ arguments, and those should be positional rather then keyword arguments.
 .. _jax.pmap: https://jax.readthedocs.io/en/latest/jax.html#jax.pmap
 .. _Module.init: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init
 .. _`JIT mechanics: tracing and static variables`: https://jax.readthedocs.io/en/latest/notebooks/thinking_in_jax.html#JIT-mechanics:-tracing-and-static-variables
-.. _`MNIST example`: https://github.com/google/flax/blob/master/examples/mnist/train.py
+.. _`MNIST example`: https://github.com/google/flax/blob/main/examples/mnist/train.py

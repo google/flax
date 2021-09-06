@@ -51,20 +51,16 @@ The CNN can be augmented with calls to ``sow`` to store intermediates as followi
     @nn.compact
     def __call__(self, x):
       x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = x.reshape((x.shape[0], -1))  # flatten
 
       x = nn.Dense(features=256)(x)
-
       x = nn.relu(x)
       x = nn.Dense(features=10)(x)
-
       x = nn.log_softmax(x)
       return x
   ---
@@ -72,56 +68,67 @@ The CNN can be augmented with calls to ``sow`` to store intermediates as followi
     @nn.compact
     def __call__(self, x):
       x = nn.Conv(features=32, kernel_size=(3, 3))(x)
-      self.sow('intermediates', 'conv1', x) #!
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = nn.Conv(features=64, kernel_size=(3, 3))(x)
-      self.sow('intermediates', 'conv2', x) #!
       x = nn.relu(x)
       x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
       x = x.reshape((x.shape[0], -1))  # flatten
       self.sow('intermediates', 'features', x) #!
       x = nn.Dense(features=256)(x)
-      self.sow('intermediates', 'conv3', x) #!
       x = nn.relu(x)
       x = nn.Dense(features=10)(x)
-      self.sow('intermediates', 'dense', x) #!
       x = nn.log_softmax(x)
       return x
 
-``sow`` only stores a value if the given variable collection is passed in
-as "mutable" in the call to :code:`Module.apply`.
+``sow`` acts as a no-op when the variable collection is not mutable.
+Therefore, it works perfectly for debugging and optional tracking of intermediates.
+The 'intermediates' collection is also used by the ``capture_intermediates`` API (see final section).
+
+Note that, by default ``sow`` appends values every time it is called:
+
+* This is necessary because once instantiated, a module could be called multiple
+  times in its parent module, and we want to catch all the sowed values.
+* So you want to make sure that you **do not** feed intermediate values back in
+  in ``variables``. Otherwise every call will increase the length of that tuple
+  and trigger a recompile.
+* To override the default append behavior, specify ``init_fn`` and ``reduce_fn``
+  - see :meth:`Module.sow() <flax.linen.Module.sow>`.
 
 .. testcode::
 
+  class SowCNN2(nn.Module):
+    @nn.compact
+    def __call__(self, x):
+      mod = SowCNN(name='SowCNN')
+      return mod(x) + mod(x)  # Calling same module instance twice.
+
   @jax.jit
   def init(key, x):
-    variables = SowCNN().init(key, x)
+    variables = SowCNN2().init(key, x)
+    # By default the 'intermediates' collection is not mutable during init.
+    # So variables will only contain 'params' here.
     return variables
 
   @jax.jit
   def predict(variables, x):
-    return SowCNN().apply(variables, x)
-
-  @jax.jit
-  def features(variables, x):
-    # `mutable=['intermediates']` specified which collections are treated as
-    # mutable during `apply`. The variables aren't actually mutated, instead
-    # `apply` returns a second value, which is a dictionary of the modified
-    # collections.
-    output, modified_variables = SowCNN().apply(variables, x, mutable=['intermediates'])
-    return modified_variables['intermediates']['features']
+    # If mutable='intermediates' is not specified, then .sow() acts as a noop.
+    output, mod_vars = SowCNN2().apply(variables, x, mutable='intermediates')
+    features = mod_vars['intermediates']['SowCNN']['features']
+    return output, features
 
   variables = init(jax.random.PRNGKey(0), batch)
-  predict(variables, batch)
-  features(variables, batch)
+  preds, feats = predict(variables, batch)
+
+  assert len(feats) == 2  # Tuple with two values since module was called twice.
 
 Refactor module into submodules
 -------------------------------
 
 This is a useful pattern for cases where it's clear in what particular
-way you want to split your submodules. Any submodule you expose in ``setup`` can be used directly. In the limit, you
-can define all submodules in ``setup`` and avoid using ``nn.compact`` altogether.
+way you want to split your submodules. Any submodule you expose in ``setup`` can
+be used directly. In the limit, you can define all submodules in ``setup`` and
+avoid using ``nn.compact`` altogether.
 
 .. testcode::
 
@@ -171,8 +178,8 @@ can define all submodules in ``setup`` and avoid using ``nn.compact`` altogether
   features(params, batch)
 
 
-Use `capture_intermediates`
----------------------------
+Use ``capture_intermediates``
+-----------------------------
 
 Linen supports the capture of intermediate return values from submodules automatically without any code changes.
 This pattern should be considered the "sledge hammer" approach to capturing intermediates.

@@ -5,18 +5,20 @@
 In Linen we can define `Module` arguments either as dataclass attributes or as arguments to methods (usually `__call__`).
 Typically the distinction is clear:
 * Completely fixed properties, such as the choice of kernel initializer or number of output features, are hyperparameters and should be defined as dataclass attributes. Typically two Module instances with different hyperparamaters cannot share in a meaningful way.
-* Dynamic properties, such as input data and top-level "mode switches" like `train=True/False` that should be passed as arguments to `__call__` or another method.
+* Dynamic properties, such as input data and top-level "mode switches" like `train=True/False`, should be passed as arguments to `__call__` or another method.
 
-Some cases are however ambigious. Take for example the `Dropout` module.
+Some cases are however less clear cut. Take for example the `Dropout` module.
 We have a number of clear hyperparameters:
+
 1. The dropout rate
 2. The axes for which a dropout mask is generated
 
 And some clear call time arguments:
+
 1. The input that should be masked using dropout
 2. The (optional) rng used to sample the random mask
 
-There is however one property that is ambigious -- the `deterministic` property in a Dropout module.
+There is however one property that is ambiguous -- the `deterministic` property in a Dropout module.
 
 If `deterministic` is `True` no dropout mask is sampled. This is typically used during model evaluation.
 However, if we pass `eval=True` or `train=False` to a top-level Module. The `deterministic` argument needs
@@ -57,7 +59,7 @@ class SomeModule(nn.Module):
     # ...
 ```
 
-But as defined above `deterministic` would be an attribute, so this doesn't work.
+But, as defined above, `deterministic` would be an attribute, so this doesn't work.
 Here it makes sense to pass `deterministic` during `__call__` because it depends on the `train` argument.
 
 ## Solution
@@ -79,7 +81,7 @@ class MyDropout(nn.Module):
 In this example `nn.merge_param` will ensure that either `self.deterministic` or `deterministic` is set but not both.
 An error is raised if both values are `None` or both values are not `None`.
 This avoids confusing behavior where 2 different parts of the code set the same parameter and one is overruled by the other.
-It also avoids a default value which would problably cause either the train step or eval step of a training procedure to be broken by default.
+It also avoids a default value which would probably cause either the train step or eval step of a training procedure to be broken by default.
 
 
 

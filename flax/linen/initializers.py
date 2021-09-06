@@ -17,6 +17,10 @@
 
 # pylint: disable=unused-import
 # re-export initializer functions from jax.nn
+from jax.nn.initializers import glorot_normal
+from jax.nn.initializers import glorot_uniform
+from jax.nn.initializers import he_normal
+from jax.nn.initializers import he_uniform
 from jax.nn.initializers import kaiming_normal
 from jax.nn.initializers import kaiming_uniform
 from jax.nn.initializers import lecun_normal

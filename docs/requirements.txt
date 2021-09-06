@@ -6,6 +6,7 @@ jaxlib>=0.1.41
 ipykernel
 nbsphinx
 recommonmark
+sphinx_markdown_tables
 # The next packages are for notebooks.
 matplotlib
 sklearn

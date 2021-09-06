@@ -21,8 +21,6 @@ import numpy as np
 from flax import linen as nn
 from flax.linen import Module, Dense, compact
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 # A concise MLP defined via lazy submodule initialization
@@ -95,7 +93,7 @@ print("var shapes", jax.tree_map(jnp.shape, params))
 # print("encoder var shapes", jax.tree_map(jnp.shape, encoder.variables))
 
 
-# # You can also acccess submodules that were defined in-line.
+# # You can also access submodules that were defined in-line.
 # # (We may add syntactic sugar here, e.g. to allow `ae.encoder.Dense_0`)
 # encoder_dense0 = ae.encoder.children['Dense_0']
 # print("encoder dense0 var shapes", jax.tree_map(jnp.shape, encoder_dense0.variables))

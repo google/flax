@@ -59,6 +59,7 @@ extensions = [
     'nbsphinx',
     'recommonmark',
     'codediff',
+    'sphinx_markdown_tables'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -86,6 +87,10 @@ autodoc_typehints = 'description'
 html_theme = 'sphinx_rtd_theme'
 html_style = 'css/flax_theme.css'
 
+# The name of an image file (relative to this directory) to place at the top
+# of the sidebar.
+html_logo = './flax.png'
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
@@ -103,8 +108,8 @@ nbsphinx_prolog = r"""
 
     .. nbinfo::
 
-        :raw-html:`<a href="https://colab.research.google.com/github/google/flax/blob/master/{{ docname }}"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>`
-        :raw-html:`<a href="https://github.com/google/flax/blob/master/{{ docname }}"><img alt="Open On GitHub" src="https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub" style="vertical-align:text-bottom"></a>`
+        :raw-html:`<a href="https://colab.research.google.com/github/google/flax/blob/main/{{ docname }}"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>`
+        :raw-html:`<a href="https://github.com/google/flax/blob/main/{{ docname }}"><img alt="Open On GitHub" src="https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub" style="vertical-align:text-bottom"></a>`
 
 
 """

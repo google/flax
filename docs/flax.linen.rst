@@ -4,7 +4,7 @@ flax.linen package
 
 .. currentmodule:: flax.linen
 
-Linen is the Flax Module system. Read more about our design goals in the `Linen README <https://github.com/google/flax/blob/master/flax/linen/README.md>`_.
+Linen is the Flax Module system. Read more about our design goals in the `Linen README <https://github.com/google/flax/blob/main/flax/linen/README.md>`_.
 
 
 
@@ -12,7 +12,7 @@ Module
 ------------------------
 
 .. autoclass:: Module
-   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, variables, Variable, __setattr__
+   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, sow, variables, Variable, __setattr__
 
 Init/Apply
 ------------------------
@@ -35,7 +35,22 @@ Compact methods
 .. currentmodule:: flax.linen
 .. autofunction:: compact
 
-	     
+
+Transformations
+----------------------
+
+.. automodule:: flax.linen.transforms
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    vmap
+    scan
+    jit
+    remat
+
+
 Linear modules
 ------------------------
 
@@ -96,6 +111,7 @@ Attention primitives
 .. autosummary::
   :toctree: _autosummary
 
+    dot_product_attention_weights
     dot_product_attention
     SelfAttention
 

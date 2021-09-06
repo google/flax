@@ -41,6 +41,18 @@ Filter = Union[bool, str, Container[str], 'DenyList']
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
+  """DenyList represents an opt-out based mutability filter.
+  
+  DenyList can be used to make every collection mutable except the ones
+  defined in the given filter.
+  To for example make everything but the params collection mutable::
+
+    nn.apply(fn, mutable=nn.DenyList(["params"]))
+
+  Attributes:
+    deny: The filter representing the collections that are not mutable.
+
+  """
   deny: Filter
 
 
@@ -59,7 +71,7 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   """Folds a string into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
-  keys in parellel that are independent of each other.
+  keys in parallel that are independent of each other.
 
   Args:
    rng: the rng to fold the string into.
@@ -228,9 +240,6 @@ def group_collections(
   return tuple(groups)
 
 
-T = TypeVar('T')
-
-
 class Variable(Generic[T]):
   """A Variable object allows mutable access to a variable in a VariableDict.
 
@@ -274,7 +283,7 @@ class Scope:
   usually generally do not interact with ``Scopes`` directly.
 
   See `core design tests
-  <https://github.com/google/flax/tree/master/tests/core/design>`_
+  <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
 
@@ -284,7 +293,7 @@ class Scope:
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
                parent: Optional['Scope'] = None,
-               path: Tuple[str] = ()):
+               path: Iterable[str] = ()):
     """Initializes a Scope.
 
     Args:
@@ -298,7 +307,7 @@ class Scope:
     self._variables = variables
     self.parent = parent
     self.name = name
-    self.path = path
+    self.path = tuple(path)
     self.rngs = rngs if rngs else {}
     self.mutable = mutable
 
@@ -377,9 +386,10 @@ class Scope:
       name: the name to reserve.
     """
     if not isinstance(name, str):
-      raise errors.ScopeNameTypeError(name)
+      raise TypeError('The type of scope "{name}" should be string but '
+                     f'it is {type(name)}')
     if name in self.reservations:
-      raise errors.ScopeNameInUseError(name)
+      raise ValueError(f'Duplicate use of scope name: "{name}"')
     self.reservations.add(name)
 
   def default_name(self, prefix: str) -> str:
@@ -502,7 +512,8 @@ class Scope:
 
   def make_rng(self, name: str) -> PRNGKey:
     """Generates A PRNGKey from a PRNGSequence with name `name`."""
-    assert self.has_rng(name), f'Need PRNG for "{name}"'
+    if not self.has_rng(name):
+      raise errors.InvalidRngError(f'{self.name} needs PRNG for "{name}"')
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[name] += 1
@@ -637,7 +648,7 @@ def bind(variables: VariableDict,
   """Bind variables and rngs to a new ``Scope``.
   
   bind provides a ``Scope`` instance without transforming a function
-  with ``apply``. This is particulary useful for debugging and
+  with ``apply``. This is particalary useful for debugging and
   interactive use cases like notebooks where a function would limit
   the ability split up code into different cells.
 
@@ -649,7 +660,8 @@ def bind(variables: VariableDict,
   if not _is_valid_variables(variables):
     raise errors.ApplyScopeInvalidVariablesError()
   if rngs is not None and not _is_valid_rngs(rngs):
-    raise errors.ApplyScopeInvalidRngsError()
+    raise errors.InvalidRngError(
+      'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
   new_variables = _unfreeze_variables(variables, mutable)
   return Scope(new_variables, rngs=rngs, mutable=mutable)
 
@@ -696,7 +708,9 @@ def init(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
-      raise errors.InitScopeInvalidRngsError()
+      raise ValueError('First argument passed to an init function should be a '
+                       '`jax.PRNGKey` or a dictionary mapping strings to '
+                       '`jax.PRNGKey`.')
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
     return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)

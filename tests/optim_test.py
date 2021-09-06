@@ -24,6 +24,7 @@ from flax.optim.adadelta import _AdadeltaHyperParams, _AdadeltaParamState
 from flax.optim.adafactor import _AdafactorHyperParams, _AdafactorParamState
 from flax.optim.adagrad import _AdagradHyperParams, _AdagradParamState
 from flax.optim.adam import _AdamHyperParams, _AdamParamState
+from flax.optim.adabelief import _AdaBeliefHyperParams, _AdaBeliefParamState
 from flax.optim.momentum import _MomentumHyperParams, _MomentumParamState
 from flax.optim.rmsprop import _RMSPropHyperParams, _RMSPropParamState
 from flax.optim.sgd import _GradientDescentHyperParams
@@ -94,12 +95,12 @@ class OptimizerDefTest(absltest.TestCase):
     opt_def = optim.GradientDescent(learning_rate=1.)
     t_a = traverse_util.t_identity['a']
     optimizer = opt_def.create(params, focus=t_a)
-    expected_state = (optim.OptimizerState(0, ((),)),)
+    expected_state = optim.OptimizerState(0, {'a': (), 'b': None})
     self.assertEqual(optimizer.state, expected_state)
     grads = {'a': -1., 'b': -2.}
     new_optimizer = optimizer.apply_gradient(grads)
     expected_params = {'a': 1., 'b': 0.}
-    expected_state = (optim.OptimizerState(1, ((),)),)
+    expected_state = optim.OptimizerState(1, {'a': (), 'b': None})
     self.assertEqual(new_optimizer.state, expected_state)
     self.assertEqual(new_optimizer.target, expected_params)
 
@@ -179,13 +180,13 @@ class MultiOptimizerTest(absltest.TestCase):
         _GradientDescentHyperParams(10.)
     ]
     self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
-    expected_state = (optim.OptimizerState(0, ((),)),) * 2
+    expected_state = optim.OptimizerState(0, {'a': (), 'b': (), 'c': {}})
     self.assertEqual(state, expected_state)
     grads = {'a': -1., 'b': -2., 'c': {}}
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     expected_params = {'a': 1., 'b': 20., 'c': {}}
-    expected_state = (optim.OptimizerState(1, ((),)),) * 2
+    expected_state = optim.OptimizerState(1, {'a': (), 'b': (), 'c': {}})
     self.assertEqual(new_state, expected_state)
     self.assertEqual(new_params, expected_params)
     # override learning_rate
@@ -194,6 +195,21 @@ class MultiOptimizerTest(absltest.TestCase):
         hp, params, state, grads)
     expected_params = {'a': 2., 'b': 4., 'c': {}}
     self.assertEqual(new_params, expected_params)
+
+  def test_multi_optimizer_multiple_matches(self):
+    params = {'a': {'x': 0., 'y': 0.}, 'b': {'y': 0, 'z': 0.}}
+    opt_a = optim.GradientDescent(learning_rate=1.)
+    opt_b = optim.GradientDescent(learning_rate=10.)
+    t_a = optim.ModelParamTraversal(
+      lambda path, _: path.endswith('/x') or path.endswith('/y')
+    )
+    t_b = optim.ModelParamTraversal(
+      lambda path, value: value.dtype == jnp.int32 or path.endswith('/z')
+    )
+    optimizer_def = optim.MultiOptimizer((t_a, opt_a), (t_b, opt_b))
+    with self.assertRaisesRegex(
+        ValueError, r"Multiple optimizers match.*'y': \[0, 1\]"):
+      jax.jit(optimizer_def.init_state)(params)
 
 
 class GradientDescentTest(absltest.TestCase):
@@ -279,6 +295,36 @@ class AdamTest(absltest.TestCase):
     expected_new_state = optim.OptimizerState(
         2, _AdamParamState(np.array([3.22]), np.array([2.41])))
     expected_new_params = np.array([0.906085])
+    np.testing.assert_allclose(new_params, expected_new_params)
+    self.assertEqual(new_state, expected_new_state)
+
+
+class AdaBeliefTest(absltest.TestCase):
+
+  def test_init_state(self):
+    params = np.zeros((1,))
+    optimizer_def = optim.AdaBelief(
+        learning_rate=0.1, beta1=0.2, beta2=0.9, eps=0.01, weight_decay=0.0)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _AdaBeliefHyperParams(0.1, 0.2, 0.9, 0.01, 0.0)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
+        0, _AdaBeliefParamState(np.zeros((1,)), np.zeros((1,))))
+    self.assertEqual(state, expected_state)
+
+  def test_apply_gradient(self):
+    optimizer_def = optim.AdaBelief(
+        learning_rate=0.1, beta1=0.2, beta2=0.9, eps=0.01, weight_decay=0.0)
+    params = np.array([1.])
+    state = optim.OptimizerState(
+        1, _AdaBeliefParamState(np.array([0.1]), np.array([0.9])))
+    grads = np.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _AdaBeliefParamState(np.array([3.22]), np.array([0.88084])))
+    expected_new_params = np.array([0.8449397])
     np.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 

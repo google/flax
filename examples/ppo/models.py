@@ -14,15 +14,8 @@
 
 """Class and functions to define and initialize the actor-critic model."""
 
-import functools
-import numpy as np
 from flax import linen as nn
-from flax import optim
-import jax
 import jax.numpy as jnp
-
-# See issue #620.
-# pytype: disable=wrong-keyword-args
 
 
 class ActorCritic(nn.Module):
@@ -62,15 +55,3 @@ class ActorCritic(nn.Module):
     policy_log_probabilities = nn.log_softmax(logits)
     value = nn.Dense(features=1, name='value', dtype=dtype)(x)
     return policy_log_probabilities, value
-
-@functools.partial(jax.jit, static_argnums=1)
-def get_initial_params(key: np.ndarray, module: ActorCritic):
-  input_dims = (1, 84, 84, 4)  # (minibatch, height, width, stacked frames)
-  init_shape = jnp.ones(input_dims, jnp.float32)
-  initial_params = module.init(key, init_shape)['params']
-  return initial_params
-
-def create_optimizer(params, learning_rate: float):
-  optimizer_def = optim.Adam(learning_rate)
-  optimizer = optimizer_def.create(params)
-  return optimizer

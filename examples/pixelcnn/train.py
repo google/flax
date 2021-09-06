@@ -144,7 +144,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   batch_size = config.batch_size
   n_devices = jax.device_count()
-  if jax.host_count() > 1:
+  if jax.process_count() > 1:
     raise ValueError('PixelCNN++ example should not be run on more than 1 host'
                      ' (for now)')
   if batch_size % n_devices > 0:

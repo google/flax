@@ -28,8 +28,6 @@ import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class PoolTest(absltest.TestCase):
@@ -138,6 +136,33 @@ class NormalizationTest(absltest.TestCase):
 
     np.testing.assert_allclose(y_test, y, atol=1e-4)
 
+  def test_group_norm_raises(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    e = 1e-5
+    x = random.normal(key1, (2, 5, 4, 4, 32))
+    model_cls = nn.GroupNorm(num_groups=3, use_bias=False, use_scale=False, epsilon=e)
+
+    with self.assertRaises(ValueError):
+      model_cls.init_with_output(key2, x)
+
+  def test_batch_norm_multi_init(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        norm = nn.BatchNorm(
+            name="norm",
+            use_running_average=False,
+            axis_name="batch",
+        )
+        x = norm(x)
+        return x, norm(x)
+
+    key = random.PRNGKey(0)
+    model = Foo()
+    x = random.normal(random.PRNGKey(1), (2, 4))
+    (y1, y2), variables = model.init_with_output(key, x)
+    np.testing.assert_allclose(y1, y2, rtol=1e-4)
 
 class StochasticTest(absltest.TestCase):
 

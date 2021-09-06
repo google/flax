@@ -8,7 +8,7 @@ Each example is designed to be self-contained and easily forkable, while
 reproducing relevant results in different areas of machine learning. These
 examples adhere to a shared style and functionality outlined in `#231`_. All
 examples are under the folder `flax/examples/
-<https://github.com/google/flax/tree/master/examples/>`__. Some of the
+<https://github.com/google/flax/tree/main/examples/>`__. Some of the
 examples below have a link [Interactive] that lets you run them directly in
 Colab.
 
@@ -17,35 +17,44 @@ Colab.
 
 Image classification
 
-   -  `MNIST <https://github.com/google/flax/tree/master/examples/mnist/>`__ [`Interactive
-      <https://colab.research.google.com/github/google/flax/blob/master/examples/mnist/mnist.ipynb>`__] :
+   -  `MNIST <https://github.com/google/flax/tree/main/examples/mnist/>`__ [`Interactive
+      <https://colab.research.google.com/github/google/flax/blob/main/examples/mnist/mnist.ipynb>`__] :
       Convolutional neural network for MNIST classification (featuring simple code).
-   -  `ImageNet <https://github.com/google/flax/tree/master/examples/imagenet/>`__ :
+   -  `ImageNet <https://github.com/google/flax/tree/main/examples/imagenet/>`__ :
       Resnet-50 on imagenet with weight decay (featuring multi host SPMD, custom
       preprocessing, checkpointing, dynamic scaling, mixed precision).
 
 Reinforcement Learning
 
    -  `Proximal Policy
-      Optimization <https://github.com/google/flax/tree/master/examples/ppo/>`__ :
+      Optimization <https://github.com/google/flax/tree/main/examples/ppo/>`__ :
       Learning to play Atari games (featuring single host SPMD, RL setup).
 
 Natural language processing
 
    -  `Sequence to sequence for number
-      addition <https://github.com/google/flax/tree/master/examples/seq2seq/>`__
+      addition <https://github.com/google/flax/tree/main/examples/seq2seq/>`__
       (featuring simple code, LSTM state handling, on the fly data generation).
-   -  `Transformer model on
-      WMT <https://github.com/google/flax/tree/master/examples/wmt/>`__ :
-      Translating English/German (featuring multihost SPMD, dynamic bucketing, attention cache,
-      packed sequences, recipe for TPU training on GCP).
+   -  `Parts-of-speech tagging
+      <https://github.com/google/flax/tree/main/examples/nlp_seq/>`__ : Simple
+      transformer encoder model using the universal dependency dataset.
+   -  `Sentiment classification
+      <https://github.com/google/flax/tree/main/examples/sst2/>`__ : 
+      with a LSTM model.
+   -  `Transformer encoder/decoder model trained on WMT
+      <https://github.com/google/flax/tree/main/examples/wmt/>`__ :
+      Translating English/German (featuring multihost SPMD, dynamic bucketing,
+      attention cache, packed sequences, recipe for TPU training on GCP).
+   -  `Transformer encoder trained on one billion word benchmark
+      <https://github.com/google/flax/tree/main/examples/lm1b/>`__ :
+      for autoregressive language modeling, based on the WMT example above.
 
 Generative models
 
    -  `Variational
-      auto-encoder <https://github.com/google/flax/tree/master/examples/vae/>`__ :
+      auto-encoder <https://github.com/google/flax/tree/main/examples/vae/>`__ :
       Trained on binarized MNIST (featuring simple code, vmap).
-   -  `PixelCNN++ <https://github.com/google/flax/tree/master/examples/pixelcnn/>`__ :
+   -  `PixelCNN++ <https://github.com/google/flax/tree/main/examples/pixelcnn/>`__ :
       Trained on cifar10 (featuring single host SPMD, checkpointing, Polyak decay).
 
 
@@ -61,17 +70,30 @@ official Flax example, and start from there.
 Using Linen
 ~~~~~~~~~~~~~~~~~~~~
 
-+----------------------------------+-----------------+------------------------+----------------------------------+
-|               Link               |     Author      |       Task type        |            Reference             |
-+==================================+=================+========================+==================================+
-| `JAX-RL`_                        | `@henry-prior`_ | Reinforcement learning | N/A                              |
-+----------------------------------+-----------------+------------------------+----------------------------------+
-| `DCGAN`_ Colab                   | `@bkkaggle`_    | Image Synthesis        | https://arxiv.org/abs/1511.06434 |
-+----------------------------------+-----------------+------------------------+----------------------------------+
++-------------------------------+---------------------+------------------------+--------------------------------------+
+|             Link              |       Author        |       Task type        |              Reference               |
++===============================+=====================+========================+======================================+
+| `matthias-wright/flaxmodels`_ | `@matthias-wright`_ | Various                | Various                              |
++-------------------------------+---------------------+------------------------+--------------------------------------+
+| `google/vision_transformer`_  | `@andsteing`_       | Image classification,  | https://arxiv.org/abs/2010.11929 and |
+|                               |                     | fine-tuning            | https://arxiv.org/abs/2105.01601     |
++-------------------------------+---------------------+------------------------+--------------------------------------+
+| `JAX-RL`_                     | `@henry-prior`_     | Reinforcement learning | N/A                                  |
++-------------------------------+---------------------+------------------------+--------------------------------------+
+| `DCGAN`_ Colab                | `@bkkaggle`_        | Image Synthesis        | https://arxiv.org/abs/1511.06434     |
++-------------------------------+---------------------+------------------------+--------------------------------------+
+| `BigBird Fine-tuning`_        | `@vasudevgupta7`_   | Question-Answering     | https://arxiv.org/abs/2007.14062     |
++-------------------------------+---------------------+------------------------+--------------------------------------+
 
+.. _`matthias-wright/flaxmodels`: https://github.com/matthias-wright/flaxmodels
+.. _`google/vision_transformer`: https://github.com/google-research/vision_transformer
 .. _`JAX-RL`: https://github.com/henry-prior/jax-rl
 .. _`DCGAN`: https://github.com/bkkaggle/jax-dcgan
+.. _`BigBird Fine-tuning`: https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/big_bird
+.. _`@matthias-wright`: https://github.com/matthias-wright
+.. _`@andsteing`: https://github.com/andsteing
 .. _`@bkkaggle`: https://github.com/bkkaggle
+.. _`@vasudevgupta7`: https://github.com/vasudevgupta7
 
 Using the Deprecated ``flax.nn`` API
 ~~~~~~~~~~~~~~~~~~~~

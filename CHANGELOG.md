@@ -11,24 +11,74 @@ vNext
  -
  -
  -
+ - NamedTuples are no longer converted to tuples on assingment to a `linen.Module`.
+ -
+ -
+ - Fixed a bug in FrozenDict which didn't allow copying dicts with reserved names.
  -
  -
  -
  -
  -
+ -
+ - Fix the serialization of named tuples. Tuple fields are no longer stored in the state dict and the named tuple class is no longer recreated ([bug](https://github.com/google/flax/issues/1429)).
+ -
+ - linen Modules and dataclasses made with `flax.struct.dataclass` or `flax.struct.PyTreeNode` are now correctly recognized as dataclasses by static analysis tools like PyLance. Autocomplete of constructors has been verified to work with VSCode.
+ -
+ -
+ - `flax.linen.Conv` no longer interprets an int past as kernel_size as a 1d convolution. Instead a type error is raised stating that
+   a tuple/list should be provided. Stride and dilation arguments do support broadcasting a single int value now because this is not
+   ambigious when the kernel rank is known. 
+ - 
+
+0.3.4
+------
+
+Possibly breaking changes:
+ - When calling `init` the 'intermediates' collection is no longer mutable.
+   Therefore, intermediates will no longer be returned from initialization by default. 
+ - Don't update batch statistics during initialization.
+ - When not using any non-determinism (e.g., dropout), it is not longer necessary to specify the `deterministic` argument in `MultiHeadDotProductAttention`.
+
+
+Other changes:
+ - Rewrote various examples to use Optax instead of Flax optimizers (e.g., Imagenet, SST2).
+ - Added an NLP text classification example (on the SST-2 dataset) to
+   [`examples/sst2`](https://github.com/google/flax/tree/main/examples/sst2).
+   that uses a bidirectional LSTM (BiLSTM) to encode the input text.
+ - Added `flax.training.train_state` to simplify using Optax optimizers.
+ - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
+ - Bug fix: Correctly handle non-default parameters of Linen Modules with nested inheritance.
+ - Expose `dot_product_attention_weights`, allowing access to attention weights.
+ - `BatchNorm` instances will behave correctly during init when called multiple times.
+ - Added a more extensive "how to contribute" guide in `contributing.md`.
+ - Add proper cache behavior for [`lift.jit`](https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.jit.html#flax.linen.jit),
+fixing cache misses.
+ - Fix bug in Embed layer: make sure it behaves correctly when embedding is np.array.
+ - Fix `linen.Module` for deep inheritance chains.
+ - Fix bug in DenseGeneral: correctly expand bias to account for batch & noncontracting dimensions.
+ - Allow Flax lifted transforms to work on partially applied Modules.
+ - Make `MultiOptimizer` use `apply_gradient` instead of `apply_param_gradient`.
+
+0.3.3
+------
+
+Possible breaking changes:
  - Bug Fix: Disallow modifying attributes in Modules after they are initialized.
- - Adds `Module.bind` for binding variables and RNGs to an interactive Module.
- -
- -
- -
- - Add option to overwrite existing checkpoints in `save_checkpoint`.
  - Raise an error when saving a checkpoint which has a smaller step than the
    latest checkpoint already saved.
- -
- -
- -
- -
- -
+ - MultiOptimizer now rejects the case where multiple sub optimizers update the
+   same parameter.
+  
+Other changes:
+ - Added custom error classes to many Linen errors. See: 
+   https://flax.readthedocs.io/en/latest/flax.errors.html
+ - Adds `Module.bind` for binding variables and RNGs to an interactive Module.
+ - Adds `nn.apply` and `nn.init` for transforming arbitrary functions that take a `linen.Module` as their first argument.
+ - Add option to overwrite existing checkpoints in `save_checkpoint`.
+ - Remove JAX omnistaging check for forward compatibility.
+ - Pathlib compatibility for checkpoint paths.
+ - `is_leaf` argument in `traverse_util.flatten_dict`
 
 0.3.2
 ------
@@ -129,7 +179,7 @@ v0.2.2
  - Fix initialization RNGs to work with omnistaging for jitted inits.
  - Replaces usage of 'param' kind to 'params' collection.
  - Fix LARS optimizer for zero param initialization.
- - Added various examples in Linen API. See [README.md](https://github.com/google/flax/blob/master/flax/linen/README.md) for more information.
+ - Added various examples in Linen API. See [README.md](https://github.com/google/flax/blob/main/flax/linen/README.md) for more information.
  - Full JAX omnistaging compatibility.
 
 v0.2

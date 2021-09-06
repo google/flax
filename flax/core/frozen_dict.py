@@ -14,10 +14,23 @@
 
 """Frozen Dictionary."""
 
+import collections
 from typing import Any, TypeVar, Mapping, Dict, Tuple
 
 from flax import serialization
 import jax
+
+
+class FrozenKeysView(collections.abc.KeysView):
+  """A wrapper for a more useful repr of the keys in a frozen dict."""
+  def __repr__(self):
+    return f"frozen_dict_keys({list(self)})"
+
+
+class FrozenValuesView(collections.abc.ValuesView):
+  """A wrapper for a more useful repr of the values in a frozen dict."""
+  def __repr__(self):
+    return f"frozen_dict_values({list(self)})"
 
 
 K = TypeVar('K')
@@ -95,7 +108,13 @@ class FrozenDict(Mapping[K, V]):
 
   def copy(self, add_or_replace: Mapping[K, V]) -> 'FrozenDict[K, V]':
     """Create a new FrozenDict with additional or replaced entries."""
-    return type(self)(self, **unfreeze(add_or_replace))
+    return type(self)({**self, **unfreeze(add_or_replace)})
+
+  def keys(self):
+    return FrozenKeysView(self)
+
+  def values(self):
+    return FrozenValuesView(self)
 
   def items(self):
     for key in self._dict:
@@ -120,9 +139,19 @@ class FrozenDict(Mapping[K, V]):
     return new_self, value
 
   def unfreeze(self) -> Dict[K, V]:
+    """Unfreeze this FrozenDict.
+
+    Returns:
+      An unfrozen version of this FrozenDict instance.
+    """
     return unfreeze(self)
 
-  def tree_flatten(self):
+  def tree_flatten(self) -> Tuple[Tuple[Dict[Any, Any]], Tuple[()]]:
+    """Flattens this FrozenDict.
+
+    Returns:
+      A flattened version of this FrozenDict instance.
+    """
     return (self._dict,), ()
 
   @classmethod

@@ -26,8 +26,6 @@ from flax.core import Scope
 
 from flax.linen import Module, compact, vmap
 
-# Require JAX omnistaging mode.
-jax.config.enable_omnistaging()
 
 
 class Dense(Module):
