@@ -27,6 +27,7 @@ from typing import Any, Type, Callable, Union, Mapping, Optional, TypeVar, Itera
 import dataclasses
 import functools
 import inspect
+from flax import errors
 from flax.core import lift, Scope
 from flax.linen.module import Module
 from flax.linen.module import Variable
@@ -188,6 +189,14 @@ def set_module_scopes(module, args, kwargs, scopes):
   return new_module, new_args, new_kwargs
 
 
+def _test_transformed_return_values(tree, method_name):
+  """Tests whether the return value contains any Modules or Variables."""
+  impure = any(jax.tree_leaves(
+      jax.tree_map(lambda x: isinstance(x, (Module, Variable)), tree)))
+  if impure:
+    raise errors.TransformedMethodReturnValueError(method_name)
+
+
 # Class lifting
 # -----------------------------------------------------------------------------
 def module_class_lift_transform(
@@ -238,6 +247,7 @@ def module_class_lift_transform(
         object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
         res = fn(cloned, *args, **kwargs)
         self._state.reimport(cloned._state)  # pylint: disable=protected-access
+        _test_transformed_return_values(res, fn_name)
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
       trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
@@ -274,6 +284,7 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
       object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
+      _test_transformed_return_values(res, class_fn.__name__)
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
@@ -587,6 +598,7 @@ def named_call(class_fn):
       object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
+      _test_transformed_return_values(res, fn_name)
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = lift.named_call(core_fn, full_name)
