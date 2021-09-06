@@ -253,7 +253,7 @@ the entire train dataset is too memory intensive we do it at the batch level.
 The rest of the changes relate to making sure the batch metrics are stored
 correctly for all devices. We use ``jax.tree_multimap`` to stack all of the
 metrics from each device into numpy arrays, such that e.g.,
-``batch_metrics_np['loss']`` has shape ``(jax.device_count(), )``.
+``batch_metrics_np['loss']`` has shape ``(steps_per_epoch, jax.device_count())``.
 
 We can now rewrite the actual training logic. This consists of two simple
 changes: making sure the RNGs are replicate when we pass them to
