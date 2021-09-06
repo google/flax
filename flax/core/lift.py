@@ -17,6 +17,7 @@
 import collections
 from dataclasses import dataclass
 import functools
+import warnings
 
 
 import jax
@@ -74,13 +75,17 @@ def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[CollectionFilter],
          out_variable_filters: Sequence[CollectionFilter],
          rng_filters: Sequence[PRNGSequenceFilter],
-         name=None) -> Callable[..., Any]:
+         name=None,
+         enable_kwargs=False) -> Callable[..., Any]:
   """Pack variables and rngs for functional transformations.
 
   The pack function is the building block for all other lifted transformations.
   """
   @functools.wraps(fn)
-  def wrapper(scope_tree: Scope, *args):
+  def wrapper(scope_tree: Scope, *args, **kwargs):
+    if not enable_kwargs and kwargs:
+      msg = 'kwargs are not supported in {}, so \"{}\" is(are) ignored'
+      warnings.warn(msg.format(name, ', '.join(kwargs.keys())), RuntimeWarning)
     # pylint: disable=protected-access
     scopes, treedef = jax.tree_flatten(scope_tree)
     scopes, paths = _dedup_scopes(scopes)
@@ -174,10 +179,16 @@ def pack(fn: Callable[..., Any],
       return _transpose(out_variable_groups_xs)
 
     try:
-      y, out_variable_groups_xs_t = fn(
-          scope_fn, repack,
-          variable_groups_xs_t, rng_groups_xs_t,
-          *args)
+      if enable_kwargs:
+        y, out_variable_groups_xs_t = fn(
+            scope_fn, repack,
+            variable_groups_xs_t, rng_groups_xs_t,
+            *args, **kwargs)
+      else:
+        y, out_variable_groups_xs_t = fn(
+            scope_fn, repack,
+            variable_groups_xs_t, rng_groups_xs_t,
+            *args)
     finally:
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
@@ -672,16 +683,16 @@ def checkpoint(fn: Callable[..., Any],
     A wrapped version of ``fn``. When computing gradients intermediate
     computations will be re-computed when computing gradients.
   """
-  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args, **kwargs):
     @functools.partial(jax.remat, concrete=concrete, prevent_cse=prevent_cse)
     @functools.wraps(fn)
-    def rematted(variable_groups, rng_groups, *args):
+    def rematted(variable_groups, rng_groups, *args, **kwargs):
       scope = scope_fn(variable_groups, rng_groups)
-      y = fn(scope, *args)
+      y = fn(scope, *args, **kwargs)
       return y, repack_fn(scope)
 
-    return rematted(variable_groups, rng_groups, *args)
-  return pack(inner, (variables,), (variables,), (rngs,), name='remat')
+    return rematted(variable_groups, rng_groups, *args, **kwargs)
+  return pack(inner, (variables,), (variables,), (rngs,), name='remat', enable_kwargs=True)
 
 
 remat = checkpoint
