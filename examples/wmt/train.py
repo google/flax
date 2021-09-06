@@ -297,7 +297,7 @@ def per_host_sum_pmap(in_tree):
   """Execute psum on in_tree"s leaves over one device per host."""
   host2devices = collections.defaultdict(list)
   for d in jax.devices():
-    host2devices[d.host_id].append(d)
+    host2devices[d.process_index].append(d)
   devices = [host2devices[k][0] for k in host2devices]
   host_psum = jax.pmap(lambda x: jax.lax.psum(x, "i"), "i", devices=devices)
 
