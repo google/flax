@@ -287,10 +287,14 @@ class MultiHeadDotProductAttention(Module):
     # Convert the boolean attention mask to an attention bias.
     if mask is not None:
       # attention mask in the form of attention bias
+      if self.dtype == jnp.float16:
+        large_compatible_negative = jnp.finfo(self.dtype).min
+      else:
+        large_compatible_negative = -1e10
       attention_bias = lax.select(
           mask > 0,
           jnp.full(mask.shape, 0.).astype(self.dtype),
-          jnp.full(mask.shape, -1e10).astype(self.dtype))
+          jnp.full(mask.shape, large_compatible_negative).astype(self.dtype))
     else:
       attention_bias = None
 
