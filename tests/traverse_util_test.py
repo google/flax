@@ -16,11 +16,9 @@
 
 
 import collections
-
 from absl.testing import absltest
-
+import flax
 from flax import traverse_util
-
 import jax
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -186,6 +184,59 @@ class TraversalTest(absltest.TestCase):
     })
     xs_restore = traverse_util.unflatten_dict(flat_xs)
     self.assertEqual(xs, xs_restore)
+
+
+class ModelParamTraversalTest(absltest.TestCase):
+
+  def test_only_works_on_model_params(self):
+    traversal = traverse_util.ModelParamTraversal(lambda *_: True)
+    with self.assertRaises(ValueError):
+      list(traversal.iterate([]))
+
+  def test_param_selection(self):
+    params = {
+        'x': {
+            'kernel': 1,
+            'bias': 2,
+            'y': {
+                'kernel': 3,
+                'bias': 4,
+            },
+            'z': {},
+        },
+    }
+    expected_params = {
+        'x': {
+            'kernel': 2,
+            'bias': 2,
+            'y': {
+                'kernel': 6,
+                'bias': 4,
+            },
+            'z': {}
+        },
+    }
+    names = []
+    def filter_fn(name, _):
+      names.append(name)  # track names passed to filter_fn for testing
+      return 'kernel' in name
+    traversal = traverse_util.ModelParamTraversal(filter_fn)
+
+    # Model
+    model = flax.nn.Model(None, params)
+    values = list(traversal.iterate(model))
+    configs = [
+      (flax.nn.Model(None, params), flax.nn.Model(None, expected_params)),
+      (params, expected_params),
+      (flax.core.FrozenDict(params), flax.core.FrozenDict(expected_params)),
+    ]
+    for model, expected_model in configs:
+      self.assertEqual(values, [1, 3])
+      self.assertEqual(set(names), set([
+          '/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias']))
+      new_model = traversal.update(lambda x: x + x, model)
+      self.assertEqual(new_model, expected_model)
+
 
 if __name__ == '__main__':
   absltest.main()
