@@ -113,58 +113,6 @@ class OptimizerDefTest(absltest.TestCase):
     self.assertEqual(new_optimizer.state, expected_state)
 
 
-class ModelParamTraversalTest(absltest.TestCase):
-
-  def test_only_works_on_model_params(self):
-    traversal = optim.ModelParamTraversal(lambda *_: True)
-    with self.assertRaises(ValueError):
-      list(traversal.iterate([]))
-
-  def test_param_selection(self):
-    params = {
-        'x': {
-            'kernel': 1,
-            'bias': 2,
-            'y': {
-                'kernel': 3,
-                'bias': 4,
-            },
-            'z': {},
-        },
-    }
-    expected_params = {
-        'x': {
-            'kernel': 2,
-            'bias': 2,
-            'y': {
-                'kernel': 6,
-                'bias': 4,
-            },
-            'z': {}
-        },
-    }
-    names = []
-    def filter_fn(name, _):
-      names.append(name)  # track names passed to filter_fn for testing
-      return 'kernel' in name
-    traversal = optim.ModelParamTraversal(filter_fn)
-
-    # Model
-    model = nn.Model(None, params)
-    values = list(traversal.iterate(model))
-    configs = [
-      (nn.Model(None, params), nn.Model(None, expected_params)),
-      (params, expected_params),
-      (FrozenDict(params), FrozenDict(expected_params)),
-    ]
-    for model, expected_model in configs:
-      self.assertEqual(values, [1, 3])
-      self.assertEqual(set(names), set([
-          '/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias']))
-      new_model = traversal.update(lambda x: x + x, model)
-      self.assertEqual(new_model, expected_model)
-
-
 class MultiOptimizerTest(absltest.TestCase):
 
   def test_multi_optimizer(self):
@@ -200,10 +148,10 @@ class MultiOptimizerTest(absltest.TestCase):
     params = {'a': {'x': 0., 'y': 0.}, 'b': {'y': 0, 'z': 0.}}
     opt_a = optim.GradientDescent(learning_rate=1.)
     opt_b = optim.GradientDescent(learning_rate=10.)
-    t_a = optim.ModelParamTraversal(
+    t_a = traverse_util.ModelParamTraversal(
       lambda path, _: path.endswith('/x') or path.endswith('/y')
     )
-    t_b = optim.ModelParamTraversal(
+    t_b = traverse_util.ModelParamTraversal(
       lambda path, value: value.dtype == jnp.int32 or path.endswith('/z')
     )
     optimizer_def = optim.MultiOptimizer((t_a, opt_a), (t_b, opt_b))

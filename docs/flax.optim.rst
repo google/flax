@@ -21,10 +21,6 @@ MultiOptimizer
 .. autoclass:: MultiOptimizer
     :members: update_hyper_params
 
-.. autoclass:: ModelParamTraversal
-    :members: __init__
-
-
 Available optimizers
 ------------------------
 
