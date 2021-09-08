@@ -12,11 +12,6 @@ Make the below changes in annotated  `MNIST example`_ to achieve early stopping.
 
 Use :code:`early_stopping.EarlyStopping` class imported from :code:`flax.training` to create an early stopping object :code:`es`.
 
-.. testcode::
-
-  from flax.training import early_stopping
-
-
 :code:`min_delta` is the minimum expected decrease in loss metric. 
 :code:`es.should_stop` becomes true if decrease in the loss metric is greater than :code:`min_delta` for consecutive :code:`patience` number of epochs. 
 Otherwise, it is :code:`false` indicating that we must continue training.
@@ -28,6 +23,8 @@ A sample training loop looks like this
 .. codediff:: 
   :title_left: With early stopping
   :title_right: Without early stopping
+
+  from flax.training import early_stopping
 
   # instantiate
   es = early_stopping.EarlyStopping(min_delta=0.2, patience=2)
