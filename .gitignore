@@ -12,3 +12,4 @@ build/
 .pytype
 .vscode/*
 /.devcontainer
+.venv/
