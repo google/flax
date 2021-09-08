@@ -8,7 +8,7 @@ Early stopping is used while building model to stop training loop when specific 
 How to use
 -----------------------------
 
-Make the below changes in annotated MNIST example (https://flax.readthedocs.io/en/latest/notebooks/annotated_mnist.html) to achieve early stopping.
+Make the below changes in annotated  `MNIST example`_ to achieve early stopping.
 
 Use :code:`early_stopping.EarlyStopping` class imported from :code:`flax.training` to create an early stopping object :code:`es`.
 
@@ -50,64 +50,63 @@ A sample training loop looks like this
     state = train_epoch(state, train_ds, batch_size, epoch, input_rng)
 
 
-And :code:`train_epoch` function looks like this after changes in annotated MNIST example
+And :code:`train_epoch` function looks like this after changes in annotated  `MNIST example`_
 
 
 .. codediff:: 
   :title_left: With early stopping
   :title_right: Without early stopping
 
-def train_epoch(state, train_ds, batch_size, epoch, rng, es):
-  """Train for a single epoch."""
-  train_ds_size = len(train_ds['image'])
-  steps_per_epoch = train_ds_size // batch_size
+  def train_epoch(state, train_ds, batch_size, epoch, rng, es):
+    """Train for a single epoch."""
+    train_ds_size = len(train_ds['image'])
+    steps_per_epoch = train_ds_size // batch_size
 
-  perms = jax.random.permutation(rng, train_ds_size)
-  perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
-  perms = perms.reshape((steps_per_epoch, batch_size))
-  batch_metrics = []
-  for perm in perms:
-    batch = {k: v[perm, ...] for k, v in train_ds.items()}
-    state, metrics = train_step(state, batch)
-    batch_metrics.append(metrics)
+    perms = jax.random.permutation(rng, train_ds_size)
+    perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+    perms = perms.reshape((steps_per_epoch, batch_size))
+    batch_metrics = []
+    for perm in perms:
+      batch = {k: v[perm, ...] for k, v in train_ds.items()}
+      state, metrics = train_step(state, batch)
+      batch_metrics.append(metrics)
 
-  # compute mean of metrics across each batch in epoch.
-  batch_metrics_np = jax.device_get(batch_metrics)
-  epoch_metrics_np = {
-      k: np.mean([metrics[k] for metrics in batch_metrics_np])
-      for k in batch_metrics_np[0]}
+    # compute mean of metrics across each batch in epoch.
+    batch_metrics_np = jax.device_get(batch_metrics)
+    epoch_metrics_np = {
+        k: np.mean([metrics[k] for metrics in batch_metrics_np])
+        for k in batch_metrics_np[0]}
 
-  print('train epoch: %d, loss: %.4f, accuracy: %.2f' % (
-      epoch, epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100))
+    print('train epoch: %d, loss: %.4f, accuracy: %.2f' % (
+        epoch, epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100))
 
-  #  early stopping check after very epoch
-  # note: `did_improve` means decrease in metric score. Not increase in metric score.
-  did_improve, es = es.update(epoch_metrics_np['loss'])
+    #  early stopping check after very epoch
+    # note: `did_improve` means decrease in metric score. Not increase in metric score.
+    did_improve, es = es.update(epoch_metrics_np['loss'])
 
-  return state, es
+    return state, es
   ---
-  for epoch in range(1, num_epochs + 1):
-def train_epoch(state, train_ds, batch_size, epoch, rng):
-  """Train for a single epoch."""
-  train_ds_size = len(train_ds['image'])
-  steps_per_epoch = train_ds_size // batch_size
+  def train_epoch(state, train_ds, batch_size, epoch, rng):
+    """Train for a single epoch."""
+    train_ds_size = len(train_ds['image'])
+    steps_per_epoch = train_ds_size // batch_size
 
-  perms = jax.random.permutation(rng, train_ds_size)
-  perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
-  perms = perms.reshape((steps_per_epoch, batch_size))
-  batch_metrics = []
-  for perm in perms:
-    batch = {k: v[perm, ...] for k, v in train_ds.items()}
-    state, metrics = train_step(state, batch)
-    batch_metrics.append(metrics)
+    perms = jax.random.permutation(rng, train_ds_size)
+    perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+    perms = perms.reshape((steps_per_epoch, batch_size))
+    batch_metrics = []
+    for perm in perms:
+      batch = {k: v[perm, ...] for k, v in train_ds.items()}
+      state, metrics = train_step(state, batch)
+      batch_metrics.append(metrics)
 
-  # compute mean of metrics across each batch in epoch.
-  batch_metrics_np = jax.device_get(batch_metrics)
-  epoch_metrics_np = {
-      k: np.mean([metrics[k] for metrics in batch_metrics_np])
-      for k in batch_metrics_np[0]}
+    # compute mean of metrics across each batch in epoch.
+    batch_metrics_np = jax.device_get(batch_metrics)
+    epoch_metrics_np = {
+        k: np.mean([metrics[k] for metrics in batch_metrics_np])
+        for k in batch_metrics_np[0]}
 
-  print('train epoch: %d, loss: %.4f, accuracy: %.2f' % (
-      epoch, epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100))
+    print('train epoch: %d, loss: %.4f, accuracy: %.2f' % (
+        epoch, epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100))
 
-  return state
+    return state
