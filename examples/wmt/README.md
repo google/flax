@@ -79,6 +79,7 @@ You should expect to get numbers similar to these:
 Hardware | config  | Training time |      BLEU      |                             TensorBoard.dev                              |                                                          Workdir
 -------- | ------- | ------------- | -------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------
 TPU v3-8 | default | 24m<br>13h18m | 25.55<br>32.87 | [2021-08-04](https://tensorboard.dev/experiment/nnH7JNCxTgC1ROakWePTlg/) | [gs://flax_public/examples/wmt/default](https://console.cloud.google.com/storage/browser/flax_public/examples/wmt/default)
+GPU V100 x8 (Mixed Precision) | gpu_mixed_precision        | 1h 58m.       | 25.69 | [2021-07-07](https://tensorboard.dev/experiment/9S2WuqNWRDemmBuQE8K6Ew/) | -
 
 ### Downloading the WMT Datasets
 

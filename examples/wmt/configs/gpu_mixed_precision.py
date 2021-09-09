@@ -45,7 +45,7 @@ def get_config():
   # Beam size for inference.
   config.beam_size = 4
 
-  config.num_train_steps = 100_000
+  config.num_train_steps = 14_000
 
   # Number of steps to take during evaluation.
   config.num_eval_steps = 20

@@ -20,6 +20,8 @@ This script trains a Transformer on a WMT dataset.
 # pytype: disable=wrong-arg-count
 # pytype: disable=attribute-error
 
+from typing import Optional
+
 import collections
 import functools
 import os
@@ -29,6 +31,8 @@ from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
+from flax import struct
+from flax import optim
 import bleu
 import decode
 import input_pipeline
@@ -42,6 +46,10 @@ import ml_collections
 import numpy as np
 import optax
 import tensorflow as tf
+
+
+class TrainState(train_state.TrainState):
+  dynamic_scale: optim.DynamicScale
 
 
 def rsqrt_schedule(
@@ -196,14 +204,34 @@ def train_step(state,
                                                       label_smoothing)
     mean_loss = loss / weight_sum
     return mean_loss, logits
-
   step = state.step
-  grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grads = grad_fn(state.params)
-  grads = jax.lax.pmean(grads, "batch")
+
+  if state.dynamic_scale:
+    # dynamic scale takes care of averaging gradients across replicas
+    grad_fn = state.dynamic_scale.value_and_grad(
+        loss_fn, has_aux=True, axis_name="batch")
+    dynamic_scale, is_fin, (_, logits), grads = grad_fn(state.params)
+    state = state.replace(dynamic_scale=dynamic_scale)
+  else:
+    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+    (_, logits), grads = grad_fn(state.params)
+    grads = jax.lax.pmean(grads, axis_name="batch")
+
   new_state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, targets, weights)
   metrics["learning_rate"] = learning_rate_fn(step)
+
+  if state.dynamic_scale:
+    # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
+    # params should be restored (= skip this step).
+    select_fn = functools.partial(jnp.where, is_fin)
+    new_state = new_state.replace(
+        opt_state=jax.tree_multimap(
+            select_fn, new_state.opt_state, state.opt_state),
+        params=jax.tree_multimap(
+            select_fn, new_state.params, state.params)
+        )
+    metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]
 
   return new_state, metrics
 
@@ -378,6 +406,16 @@ def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, params,
   return exemplars, bleu_score
 
 
+def preferred_dtype(config):
+  platform = jax.local_devices()[0].platform
+  if config.use_mixed_precision:
+    if platform == "tpu":
+      return jnp.bfloat16
+    elif platform == "gpu":
+      return jnp.float16
+  return jnp.float32
+
+
 def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   """Runs a training and evaluation loop.
 
@@ -416,6 +454,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
   logging.info("Initializing model, optimizer, and step functions.")
 
+  dtype = preferred_dtype(config)
+
   # Build Model and Optimizer
   # ---------------------------------------------------------------------------
   train_config = models.TransformerConfig(
@@ -423,7 +463,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       output_vocab_size=vocab_size,
       share_embeddings=config.share_embeddings,
       logits_via_embedding=config.logits_via_embedding,
-      dtype=jnp.bfloat16 if config.use_bfloat16 else jnp.float32,
+      dtype=dtype,
       emb_dim=config.emb_dim,
       num_heads=config.num_heads,
       num_layers=config.num_layers,
@@ -453,7 +493,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # Create train state with Adam optimizer and weight decay.
   learning_rate_fn = create_learning_rate_schedule(
       learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
-  state = train_state.TrainState.create(
+  dynamic_scale = None
+  if dtype == jnp.float16:
+    dynamic_scale = optim.DynamicScale()
+  state = TrainState.create(
       apply_fn=m.apply,
       params=initial_variables["params"],
       tx=optax.adamw(
@@ -463,6 +506,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           eps=1e-9,
           weight_decay=config.weight_decay,
       ),
+      dynamic_scale=dynamic_scale,
   )
 
   # We access model params only via state.params
