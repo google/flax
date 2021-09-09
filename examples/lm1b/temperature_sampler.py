@@ -72,7 +72,7 @@ def temperature_sample(prompt_inputs,
     """Sampling loop termination condition."""
     (i, _, _, _, ended, _) = state
     # Have we reached max decoding length?
-    not_at_end = (i <= max_decode_len)
+    not_at_end = (i < max_decode_len)
     # Have all sampled sequences reached an end marker?
     all_sequences_ended = jnp.all(ended)
     return not_at_end & (~all_sequences_ended)
