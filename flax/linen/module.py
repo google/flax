@@ -139,6 +139,18 @@ def disable_named_call():
   _use_named_call = False
 
 
+@contextmanager
+def override_named_call(enable: bool = True):
+  """Returns a context manager that enables/disables named call wrapping."""
+  global _use_named_call
+  use_named_call_prev = _use_named_call
+  _use_named_call = enable
+  try:
+    yield
+  finally:
+    _use_named_call = use_named_call_prev
+
+
 # Utilities for pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
 
@@ -541,10 +553,10 @@ class Module(metaclass=ModuleMeta):
       if hasattr(method, 'nowrap'):
         continue
       wrapped_method = wrap_method_once(method)
-      if _use_named_call and key != 'setup':
+      if key != 'setup':
         # We import named_call at runtime to avoid a circular import issue.
         from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
-        wrapped_method = named_call(wrapped_method)
+        wrapped_method = named_call(wrapped_method, force=False)
       setattr(cls, key, wrapped_method)
     return cls
 
