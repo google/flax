@@ -54,8 +54,8 @@ def _replicate(x, devices=None):
           jax.device_count()) if d.process_index == jax.process_index()]
     else:
       devices = jax.local_devices()
-  if hasattr(jax.api, "device_put_sharded"):  # jax >= 0.2.0
-    return jax.api.device_put_sharded(len(devices) * [x], devices)
+  if hasattr(jax, "device_put_sharded"):  # jax >= 0.2.0
+    return jax.device_put_sharded(len(devices) * [x], devices)
   else:
     aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
     buffers = [xla.device_put(x, device=d) for d in devices]
@@ -150,8 +150,8 @@ def prefetch_to_device(iterator, size, devices=None):
   if devices is None:
     devices = jax.local_devices()
   def _prefetch(xs):
-    if hasattr(jax.api, "device_put_sharded"):  # jax>=0.2.0
-      return jax.api.device_put_sharded(list(xs), devices)
+    if hasattr(jax, "device_put_sharded"):  # jax>=0.2.0
+      return jax.device_put_sharded(list(xs), devices)
     else:
       aval = jax.xla.abstractify(xs)
       assert xs.shape[0] == len(devices), (
