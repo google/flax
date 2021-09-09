@@ -109,12 +109,16 @@ def pack(fn: Callable[..., Any],
           if not col_in_out:
             variable_group[col_name] = freeze(collection)
     rng_groups_xs = []
+    inner_rng_counters = []
     for scope in scopes:
+      rng_counters = {}
       rng_groups = group_collections(scope.rngs, rng_filters)
       for rng_group in rng_groups:
         for kind in rng_group:
-          rng_group[kind] = scope.make_rng(kind)
+          rng_group[kind] = scope.rngs[kind]
+          rng_counters[kind] = scope.rng_counters[kind]
       rng_groups_xs.append(rng_groups)
+      inner_rng_counters.append(rng_counters)
     rng_groups_xs_t = _transpose(rng_groups_xs)
 
     inner_scopes = []
@@ -133,7 +137,7 @@ def pack(fn: Callable[..., Any],
       rng_groups_xs = _transpose(rng_groups_xs_t) or ((),) * len(scopes)
       assert len(variable_groups_xs) == len(scopes)
       assert len(rng_groups_xs) == len(scopes)
-      for variable_groups, rng_groups, scope in zip(variable_groups_xs, rng_groups_xs, scopes):
+      for variable_groups, rng_groups, scope, rng_counters in zip(variable_groups_xs, rng_groups_xs, scopes, inner_rng_counters):
         variables = {}
         rngs = {}
         for variable_group in variable_groups:
@@ -153,6 +157,7 @@ def pack(fn: Callable[..., Any],
             variables, name=scope.name, rngs=rngs,
             mutable=scope_mutable, parent=None,
             path=new_path)
+        inner_scope.rng_counters = rng_counters
         inner_scopes.append(inner_scope)
       inner_scopes = _dup_scopes(scopes, inner_scopes, paths)
       return treedef.unflatten(inner_scopes)
@@ -193,11 +198,14 @@ def pack(fn: Callable[..., Any],
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
     out_variable_groups_xs = _transpose(out_variable_groups_xs_t)
-    for scope, out_variable_groups in zip(scopes, out_variable_groups_xs):
+    for scope, out_variable_groups, rng_counters in zip(scopes, out_variable_groups_xs, inner_rng_counters):
       for out_variable_group in out_variable_groups:
         for col_name, collection in out_variable_group.items():
           for var_name, value in collection.items():
             scope.put_variable(col_name, var_name, value)
+      for kind, rng_counter in rng_counters.items():
+        assert rng_counter >= scope.rng_counters[kind]
+        scope.rng_counters[kind] = rng_counter
     return y
   return wrapper
 
