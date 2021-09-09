@@ -428,8 +428,7 @@ class TransformTest(absltest.TestCase):
 
   def test_multiscope_lifting_simple_decorator_w_named_call(self):
     # TODO: actually test jaxpr on a simpler module.
-    nn.enable_named_call()
-    try:
+    with nn.override_named_call(True):
       class Counter(nn.Module):
         @nn.jit
         @nn.compact
@@ -467,8 +466,6 @@ class TransformTest(absltest.TestCase):
                       jnp.array([2], jnp.int32))
       self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
                       jnp.array([4], jnp.int32))
-    finally:
-      nn.disable_named_call()
 
   def test_vmapped_outer_module(self):
     class Outer(nn.Module):
@@ -905,7 +902,6 @@ class TransformTest(absltest.TestCase):
                                jnp.array([2.0,]), atol=1e-7)
 
   def test_returned_module_warning(self):
-    nn.enable_named_call()
     class Foo(nn.Module):
       @nn.compact
       def __call__(self, x):
@@ -917,33 +913,31 @@ class TransformTest(absltest.TestCase):
         return f(x)
       def _helper(self):
         return Foo()
-    nn.disable_named_call()
-
-    b = Bar()
-    with self.assertRaises(errors.TransformedMethodReturnValueError):
-      b.apply({}, jnp.ones(2))
+    with nn.override_named_call(True):
+      b = Bar()
+      with self.assertRaises(errors.TransformedMethodReturnValueError):
+        b.apply({}, jnp.ones(2))
 
   def test_nowrap_named_call(self):
-    nn.enable_named_call()
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        return x
-    class Bar(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        f = self._helper()
-        return f(x)
-      # will fail without nowrap
-      @nn.nowrap
-      def _helper(self):
-        return Foo()
-    nn.disable_named_call()
+    with nn.override_named_call(True):
+      class Foo(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          return x
+      class Bar(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          f = self._helper()
+          return f(x)
+        # will fail without nowrap
+        @nn.nowrap
+        def _helper(self):
+          return Foo()
 
-    b = Bar()
-    x = jnp.ones(2)
-    y = b.apply({}, x)
-    np.testing.assert_array_equal(x, y)
+      b = Bar()
+      x = jnp.ones(2)
+      y = b.apply({}, x)
+      np.testing.assert_array_equal(x, y)
 
   def test_nowrap(self):
     class Bar(nn.Module):

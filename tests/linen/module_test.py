@@ -19,6 +19,7 @@ import functools
 import operator
 
 from absl.testing import absltest
+from flax.linen.module import override_named_call
 
 import jax
 from jax import random
@@ -1378,6 +1379,14 @@ class ModuleTest(absltest.TestCase):
       pass
     class MyModule2(nn.Module):
       submodule: MyComponent2[jnp.ndarray]
+  
+  def test_named_call_rng_equivalance(self):
+    model = nn.Dense(1, use_bias=False)
+    with override_named_call(False):
+      param = model.init(random.PRNGKey(0), np.ones((1, 1)))["params"]["kernel"]
+    with override_named_call(True):
+      param_2 = model.init(random.PRNGKey(0), np.ones((1, 1)))["params"]["kernel"]
+    self.assertEqual(param, param_2)
 
 
 if __name__ == '__main__':

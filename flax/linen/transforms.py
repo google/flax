@@ -32,6 +32,7 @@ from flax.core import lift, Scope
 from flax.linen.module import Module
 from flax.linen.module import Variable
 from flax.linen.module import wrap_method_once
+from flax.linen import module as linen_module
 from flax import struct
 import jax
 
@@ -581,13 +582,20 @@ def scan(target: Target,
 
 
 # Special case of decorator_lift_transform to handle named calls for profiling.
-def named_call(class_fn):
-  """Labels a method for labelled traces in profiles."""
+def named_call(class_fn, force=True):
+  """Labels a method for labelled traces in profiles.
+  
+  Args:
+    force: If True, the named_call transform is applied even if it is globally disabled.
+      (e.g.: by calling `flax.linen.disable_named_call()`)
+  """
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state correctly.
   prewrapped_fn = wrap_method_once(class_fn)
   @functools.wraps(prewrapped_fn)
   def wrapped_fn(self, *args, **kwargs):
+    if not force and not linen_module._use_named_call:
+      return prewrapped_fn(self, *args, **kwargs)
     fn_name = class_fn.__name__
     method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
     module_name = self.name or self.__class__.__name__
