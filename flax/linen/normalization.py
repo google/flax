@@ -156,7 +156,7 @@ class BatchNorm(Module):
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
     y = x - mean.reshape(feature_shape)
-    mul = lax.rsqrt(var + self.epsilon)
+    mul = lax.rsqrt(var + self.epsilon).reshape(feature_shape)
     if self.use_scale:
       scale = self.param('scale',
                          self.scale_init,

@@ -115,7 +115,7 @@ class BatchNorm(base.Module):
         ra_var.value = momentum * ra_var.value + (1 - momentum) * var
 
     y = x - mean.reshape(feature_shape)
-    mul = lax.rsqrt(var + epsilon)
+    mul = lax.rsqrt(var + epsilon).reshape(feature_shape)
     if scale:
       mul = mul * self.param(
           'scale', reduced_feature_shape, scale_init).reshape(feature_shape)

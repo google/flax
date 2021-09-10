@@ -211,10 +211,10 @@ class TransformTest(absltest.TestCase):
         return LSTM(name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
-    xs = random.uniform(key1, (3, 2))
+    xs = random.uniform(key1, (5, 3, 2))
     dummy_rng = random.PRNGKey(0)
     init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[:1],
+                                              xs.shape[1:-1],
                                               xs.shape[-1])
     model = SimpleScan()
     init_variables = model.init(key2, init_carry, xs)
@@ -244,11 +244,11 @@ class TransformTest(absltest.TestCase):
         return nn.LSTMCell(name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
-    xs = random.uniform(key1, (3, 2))
+    xs = random.uniform(key1, (4, 3, 2))
     b = jnp.ones((4,))
     dummy_rng = random.PRNGKey(0)
     init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[:1],
+                                              xs.shape[1:-1],
                                               xs.shape[-1])
     model = SimpleScan()
     init_variables = model.init(key2, init_carry, b, xs)
