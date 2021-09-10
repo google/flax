@@ -158,7 +158,7 @@ def get_sequence_lengths(sequence_batch, eos_id=CTABLE.eos_id):
 def mask_sequences(sequence_batch, lengths):
   """Set positions beyond the length of each sequence to 0."""
   return sequence_batch * (
-      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1]))
+      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1])[np.newaxis])
 
 
 class EncoderLSTM(nn.Module):
