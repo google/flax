@@ -192,7 +192,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       functools.partial(train_step, config, learning_rate_fn),
       axis_name='batch')
   p_eval_step = jax.pmap(
-      functools.partial(eval_step, config=config), axis_name='batch')
+      functools.partial(eval_step, config), axis_name='batch')
 
   # Gather metrics
   train_metrics = []
