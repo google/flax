@@ -31,7 +31,9 @@ from jax import tree_util
 import numpy as np
 
 import flax
+from flax import config
 from flax import errors
+from flax import traceback_util
 from flax import traverse_util
 from flax import serialization
 from flax import core
@@ -41,6 +43,7 @@ from flax.core.frozen_dict import FrozenDict, freeze
 from flax.struct import __dataclass_transform__
 
 # from .dotgetter import DotGetter
+traceback_util.register_exclusion(__file__)
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
@@ -126,7 +129,7 @@ _unspecified_parent = _Sentinel()
 
 # Enable automatic named_call wrapping for labelling profile traces.
 # -----------------------------------------------------------------------------
-_use_named_call = True if os.getenv('FLAX_PROFILE', '') else False
+_use_named_call = config.flax_profile
 
 def enable_named_call():
   """Enables named call wrapping for labelling profile traces."""
@@ -921,6 +924,7 @@ class Module(metaclass=ModuleMeta):
       raise ValueError("Can't use RNGs on unbound modules")
     return self.scope.make_rng(name)
 
+  @traceback_util.api_boundary
   def bind(self,
            variables: VariableDict,
            *args,
@@ -976,6 +980,7 @@ class Module(metaclass=ModuleMeta):
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope)
 
+  @traceback_util.api_boundary
   def apply(self,
             variables: VariableDict,
             *args,
@@ -1042,6 +1047,7 @@ class Module(metaclass=ModuleMeta):
         mutable=mutable, capture_intermediates=capture_intermediates
     )(variables, *args, **kwargs, rngs=rngs)
 
+  @traceback_util.api_boundary
   def init_with_output(self,
                        rngs: Union[PRNGKey, RNGSequences],
                        *args,
@@ -1072,6 +1078,7 @@ class Module(metaclass=ModuleMeta):
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=mutable, **kwargs)
 
+  @traceback_util.api_boundary
   def init(self,
            rngs: Union[PRNGKey, RNGSequences],
            *args,
@@ -1242,7 +1249,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   else:
     return a
 
-
+@traceback_util.api_boundary
 def apply(fn: Callable[..., Any], module: Module,
           mutable: CollectionFilter = False,
           capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False) -> Callable[..., Any]:
@@ -1301,6 +1308,7 @@ def apply(fn: Callable[..., Any], module: Module,
   return core.apply(scope_fn, mutable=mutable)
 
 
+@traceback_util.api_boundary
 def init_with_output(fn: Callable[..., Any], module: Module,
                      mutable: CollectionFilter = DenyList("intermediates"),
                      ) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
@@ -1345,6 +1353,7 @@ def init_with_output(fn: Callable[..., Any], module: Module,
   return core.init(scope_fn, mutable=mutable)
 
 
+@traceback_util.api_boundary
 def init(fn: Callable[..., Any], module: Module,
          mutable: CollectionFilter = DenyList("intermediates"),
          ) -> Callable[..., FrozenVariableDict]:
