@@ -7,7 +7,7 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
  -
  -
- -
+ - Flax no longer uses implicit rank broadcasting. Thus, you can now use Flax with `--jax_numpy_rank_promotion=raise`.
  -
  -
  -

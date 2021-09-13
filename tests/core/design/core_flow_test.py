@@ -40,11 +40,13 @@ class DenseFlow:
 
   def forward(self, scope: Scope, x: Array):
     kernel, bias = self.params(scope, x.shape[-1])
-    return jnp.dot(x, expm(kernel)) + bias
+    return jnp.dot(
+      x, expm(kernel)) + bias.reshape((1,) * (x.ndim - 1) + (-1,))
 
   def backward(self, scope: Scope, y: Array):
     kernel, bias = self.params(scope, y.shape[-1])
-    return jnp.dot(y - bias, expm(-kernel))
+    return jnp.dot(
+      y - bias.reshape((1,) * (y.ndim - 1) + (-1,)), expm(-kernel))
 
 
 @dataclass

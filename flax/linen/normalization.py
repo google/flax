@@ -156,7 +156,7 @@ class BatchNorm(Module):
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
     y = x - mean.reshape(feature_shape)
-    mul = lax.rsqrt(var + self.epsilon)
+    mul = lax.rsqrt(var + self.epsilon).reshape(feature_shape)
     if self.use_scale:
       scale = self.param('scale',
                          self.scale_init,
@@ -209,6 +209,7 @@ class LayerNorm(Module):
     """
     x = jnp.asarray(x, jnp.float32)
     features = x.shape[-1]
+    feature_shape = (1,) * (x.ndim - 1) + (features,)
     mean = jnp.mean(x, axis=-1, keepdims=True)
     mean2 = jnp.mean(lax.square(x), axis=-1, keepdims=True)
     var = mean2 - lax.square(mean)
@@ -216,12 +217,12 @@ class LayerNorm(Module):
     if self.use_scale:
       mul = mul * jnp.asarray(
           self.param('scale', self.scale_init, (features,)),
-          self.dtype)
+          self.dtype).reshape(feature_shape)
     y = (x - mean) * mul
     if self.use_bias:
-      y = y + jnp.asarray(
+      y += jnp.asarray(
           self.param('bias', self.bias_init, (features,)),
-          self.dtype)
+          self.dtype).reshape(feature_shape)
     return jnp.asarray(y, self.dtype)
 
 

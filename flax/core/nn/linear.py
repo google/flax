@@ -155,7 +155,7 @@ def dense(scope,
   if bias:
     bias = scope.param('bias', bias_init, (features,))
     bias = jnp.asarray(bias, dtype)
-    y = y + bias
+    y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
   return y
 
 
@@ -239,7 +239,7 @@ def conv(scope,
   if bias:
     bias = scope.param('bias', bias_init, (features,))
     bias = jnp.asarray(bias, dtype)
-    y = y + bias
+    y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
   return y
 
 
@@ -295,7 +295,7 @@ def conv_transpose(scope,
   if bias:
     bias = scope.param('bias', bias_init, (features,))
     bias = jnp.asarray(bias, dtype)
-    y = y + bias
+    y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
   return y
 
 
