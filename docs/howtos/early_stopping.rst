@@ -8,7 +8,7 @@ Early stopping is used while building model to stop training loop when specific 
 How to use
 -----------------------------
 
-Make the below changes in annotated  `MNIST example`_ to achieve early stopping.
+Make the below changes in annotated  `MNIST example <https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/annotated_mnist.ipynb>`_. to achieve early stopping.
 
 .. testsetup::
 
@@ -47,8 +47,8 @@ A sample training loop looks like this
   for epoch in range(1, num_epochs + 1):
     # Use a separate PRNG key to permute image data during shuffling
     rng, input_rng = jax.random.split(rng)
-    # Run an optimization step over a training batch
-    # the global `es` is overwritten with the lates
+    # Run an optimization step over a training batch.
+    # the global `es` is overwritten.
     state, es = train_epoch(state, train_ds, batch_size, epoch, input_rng, es)
     
     if es.should_stop:
@@ -62,7 +62,7 @@ A sample training loop looks like this
     state = train_epoch(state, train_ds, batch_size, epoch, input_rng)
 
 
-And :code:`train_epoch` function looks like this after changes in annotated  `MNIST example`_
+And :code:`train_epoch` function looks like this after changes in annotated  `MNIST example <https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/annotated_mnist.ipynb>`_.
 
 
 .. codediff:: 
