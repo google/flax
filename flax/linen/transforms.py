@@ -28,6 +28,7 @@ import dataclasses
 import functools
 import inspect
 from flax import errors
+from flax import traceback_util
 from flax.core import lift, Scope
 from flax.linen.module import Module
 from flax.linen.module import Variable
@@ -35,6 +36,8 @@ from flax.linen.module import wrap_method_once
 from flax.linen import module as linen_module
 from flax import struct
 import jax
+
+traceback_util.register_exclusion(__file__)
 
 # Utils
 # -----------------------------------------------------------------------------
@@ -315,6 +318,7 @@ def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs)
 TransformTarget = Union[Type[Module], Callable[..., Any]]
 
 Target = TypeVar('Target', bound=TransformTarget)
+
 
 def vmap(target: Target,
          variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis],

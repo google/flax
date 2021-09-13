@@ -68,8 +68,10 @@ For a quick introduction and short example snippets, see our `README
    flax.core.frozen_dict
    flax.struct
    flax.jax_utils
+   flax.traceback_util
    flax.traverse_util
    flax.training
+   flax.config
    flax.errors
 
 .. toctree::

@@ -20,6 +20,7 @@ import functools
 import warnings
 
 
+from flax import traceback_util
 import jax
 from jax import random
 
@@ -33,6 +34,7 @@ from .scope import Scope, DenyList, CollectionFilter, PRNGSequenceFilter, in_fil
 
 from . import axes_scan
 
+traceback_util.register_exclusion(__file__)
 
 T = TypeVar('T')
 
