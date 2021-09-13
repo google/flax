@@ -10,6 +10,22 @@ How to use
 
 Make the below changes in annotated  `MNIST example`_ to achieve early stopping.
 
+.. testsetup::
+
+  # Required (hidden) code for the templates in documnetation to work
+  import jax
+
+  rng = jax.random.PRNGKey(0)
+  rng, init_rng = jax.random.split(rng)
+  num_epochs = 0
+
+  def train_epoch(state, train_ds, batch_size, epoch, input_rng, es):
+    """ this is dummy train function """
+    if es:
+      return state, es
+    return state
+
+
 Use :code:`early_stopping.EarlyStopping` class imported from :code:`flax.training` to create an early stopping object :code:`es`.
 
 :code:`min_delta` is the minimum expected decrease in loss metric. 
@@ -18,7 +34,6 @@ Otherwise, it is :code:`false` indicating that we must continue training.
 
 
 A sample training loop looks like this
-
 
 .. codediff:: 
   :title_left: With early stopping
