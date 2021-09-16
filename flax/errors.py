@@ -535,7 +535,7 @@ class OverwriteWithNonBlockingError(FlaxError):
   You can not pass `overwrite=True` and `blocking=False` at the same time as this causes a writing race condition.
   You can either clear the directory of old checkpoints or use `blocking=True` only.
   """
-  def __init__(self, path, step):
+  def __init__(self, step):
     super().__init__(f'Trying to use `overwrite=True` with `blocking=False` which will cause a racing condition at step "{step}".')
 
 #################################################
