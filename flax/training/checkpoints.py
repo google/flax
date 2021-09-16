@@ -129,6 +129,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                         prefix: str = 'checkpoint_',
                         keep: int = 1,
                         overwrite: bool = False,
+                        keep_every_n_steps: Optional[int] = None,
                         blocking=True) -> Union[str,Future]:
 
       ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
