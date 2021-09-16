@@ -14,7 +14,7 @@
 
 """Normalization modules for Flax."""
 
-from typing import (Any, Callable, Optional, Tuple)
+from typing import (Any, Callable, Optional, Tuple, Iterable, Union)
 
 from jax import lax
 from jax.nn import initializers
@@ -28,11 +28,78 @@ Array = Any
 Shape = Tuple[int]
 Dtype = Any  # this could be a real type?
 
-_no_init = lambda rng, shape: ()
+Axes = Union[int, Iterable[int]]
 
 
-def _absolute_dims(rank, dims):
-  return tuple([rank + dim if dim < 0 else dim for dim in dims])
+def _canonicalize_axes(rank: int, axes: Axes) -> Iterable[int]:
+  """Returns a tuple of deduplicated, sorted, and positive axes."""
+  if not isinstance(axes, Iterable):
+    axes = (axes,)
+  return tuple(set([rank + axis if axis < 0 else axis for axis in axes]))
+
+
+def _compute_stats(x: Array, axes: Axes,
+                   axis_name: Optional[str] = None,
+                   axis_index_groups: Any = None):
+  """Computes mean and variance statistics.
+  
+  This implementation takes care of a few important details:
+  - Computes in float32 precision for half precision inputs
+  -  mean and variance is computable in a single XLA fusion,
+    by using Var = E[x^2] - E[x]^2 instead of Var = E[(x - E[x])^2]).
+  - Clips negative variances to zero which can happen due to
+    roundoff errors. This avoids downstream NaNs.
+  - Supports averaging across a parallel axis and subgroups of a parallel axis
+    with a single `lax.pmean` call to avoid latency.
+  """
+  x = jnp.asarray(x, jnp.float32)
+  mean = jnp.mean(x, axes)
+  mean2 = jnp.mean(lax.square(x), axes)
+  if axis_name is not None:
+    concatenated_mean = jnp.concatenate([mean, mean2])
+    mean, mean2 = jnp.split(
+        lax.pmean(
+            concatenated_mean,
+            axis_name=axis_name,
+            axis_index_groups=axis_index_groups), 2)
+  # mean2 - lax.square(mean) is not garantueed to be non-negative due
+  # to floating point round-off errors.
+  var = jnp.maximum(0., mean2 - lax.square(mean))
+  return mean, var
+
+
+def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
+               reduction_axes: Axes, feature_axes: Axes,
+               dtype: Dtype, epsilon: float,
+               use_bias: bool, use_scale: bool,
+               bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
+               scale_init: Callable[[PRNGKey, Shape, Dtype], Array]):
+  """"Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
+  
+  A seperate bias and scale is learned for each feature as specified by feature_axes.
+  """
+  reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
+  feature_axes = _canonicalize_axes(x.ndim, feature_axes)
+  stats_shape = list(x.shape)
+  for axis in reduction_axes:
+    stats_shape[axis] = 1
+  mean = mean.reshape(stats_shape)
+  var = var.reshape(stats_shape)
+  feature_shape = [1] * x.ndim
+  reduced_feature_shape = []
+  for ax in feature_axes:
+    feature_shape[ax] = x.shape[ax]
+    reduced_feature_shape.append(x.shape[ax])
+  y = x - mean
+  mul = lax.rsqrt(var + epsilon)
+  if use_scale:
+    scale = mdl.param('scale', scale_init, reduced_feature_shape).reshape(feature_shape)
+    mul *= scale
+  y *= mul
+  if use_bias:
+    bias = mdl.param('bias', bias_init, reduced_feature_shape).reshape(feature_shape)
+    y += bias
+  return jnp.asarray(y, dtype)
 
 
 class BatchNorm(Module):
@@ -118,57 +185,40 @@ class BatchNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
+
     use_running_average = merge_param(
         'use_running_average', self.use_running_average, use_running_average)
-    x = jnp.asarray(x, jnp.float32)
-    axis = self.axis if isinstance(self.axis, tuple) else (self.axis,)
-    axis = _absolute_dims(x.ndim, axis)
-    feature_shape = tuple(d if i in axis else 1 for i, d in enumerate(x.shape))
-    reduced_feature_shape = tuple(d for i, d in enumerate(x.shape) if i in axis)
-    reduction_axis = tuple(i for i in range(x.ndim) if i not in axis)
+    feature_axes = _canonicalize_axes(x.ndim, self.axis)
+    reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
+    feature_shape = [x.shape[ax] for ax in feature_axes]
 
     # see NOTE above on initialization behavior
     initializing = self.is_mutable_collection('params')
 
     ra_mean = self.variable('batch_stats', 'mean',
                             lambda s: jnp.zeros(s, jnp.float32),
-                            reduced_feature_shape)
+                            feature_shape)
     ra_var = self.variable('batch_stats', 'var',
                            lambda s: jnp.ones(s, jnp.float32),
-                           reduced_feature_shape)
+                           feature_shape)
 
     if use_running_average:
       mean, var = ra_mean.value, ra_var.value
     else:
-      mean = jnp.mean(x, axis=reduction_axis, keepdims=False)
-      mean2 = jnp.mean(lax.square(x), axis=reduction_axis, keepdims=False)
-      if self.axis_name is not None and not initializing:
-        concatenated_mean = jnp.concatenate([mean, mean2])
-        mean, mean2 = jnp.split(
-            lax.pmean(
-                concatenated_mean,
-                axis_name=self.axis_name,
-                axis_index_groups=self.axis_index_groups), 2)
-      var = mean2 - lax.square(mean)
+      mean, var = _compute_stats(
+          x, reduction_axes,
+          axis_name=self.axis_name if not initializing else None,
+          axis_index_groups=self.axis_index_groups)
 
       if not initializing:
         ra_mean.value = self.momentum * ra_mean.value + (1 - self.momentum) * mean
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
-    y = x - mean.reshape(feature_shape)
-    mul = lax.rsqrt(var + self.epsilon).reshape(feature_shape)
-    if self.use_scale:
-      scale = self.param('scale',
-                         self.scale_init,
-                         reduced_feature_shape).reshape(feature_shape)
-      mul = mul * scale
-    y = y * mul
-    if self.use_bias:
-      bias = self.param('bias',
-                        self.bias_init,
-                        reduced_feature_shape).reshape(feature_shape)
-      y = y + bias
-    return jnp.asarray(y, self.dtype)
+    return _normalize(
+        self, x, mean, var, reduction_axes, feature_axes,
+        self.dtype, self.epsilon,
+        self.use_bias, self.use_scale,
+        self.bias_init, self.scale_init)
 
 
 class LayerNorm(Module):
@@ -207,23 +257,17 @@ class LayerNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    x = jnp.asarray(x, jnp.float32)
-    features = x.shape[-1]
-    feature_shape = (1,) * (x.ndim - 1) + (features,)
-    mean = jnp.mean(x, axis=-1, keepdims=True)
-    mean2 = jnp.mean(lax.square(x), axis=-1, keepdims=True)
-    var = mean2 - lax.square(mean)
-    mul = lax.rsqrt(var + self.epsilon)
-    if self.use_scale:
-      mul = mul * jnp.asarray(
-          self.param('scale', self.scale_init, (features,)),
-          self.dtype).reshape(feature_shape)
-    y = (x - mean) * mul
-    if self.use_bias:
-      y += jnp.asarray(
-          self.param('bias', self.bias_init, (features,)),
-          self.dtype).reshape(feature_shape)
-    return jnp.asarray(y, self.dtype)
+    reduction_axes = (-1,)
+    feature_axes = (-1,)
+
+    # TODO suport axis_name for model parallelism?
+    mean, var = _compute_stats(x, reduction_axes, None, None)
+
+    return _normalize(
+        self, x, mean, var, reduction_axes, feature_axes,
+        self.dtype, self.epsilon,
+        self.use_bias, self.use_scale,
+        self.bias_init, self.scale_init)
 
 
 class GroupNorm(Module):
@@ -270,7 +314,9 @@ class GroupNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    x = jnp.asarray(x, jnp.float32)
+    reduction_axes = list(range(1, x.ndim - 1)) + [-1]
+    feature_axes = (-1,)
+
     if ((self.num_groups is None and self.group_size is None) or
         (self.num_groups is not None and self.group_size is not None)):
       raise ValueError('Either `num_groups` or `group_size` should be '
@@ -288,22 +334,20 @@ class GroupNorm(Module):
       raise ValueError('Number of groups ({}) does not divide the number'
                        ' of channels ({}).'.format(num_groups, channels))
 
-    input_shape = x.shape
-    group_shape = x.shape[:-1] + (num_groups, x.shape[-1] // num_groups)
-    x = x.reshape(group_shape)
+    group_size = x.shape[-1] // num_groups
+    group_shape = x.shape[:-1] + (num_groups, group_size)
 
-    reduction_axis = [d for d in range(1, x.ndim - 2)] + [x.ndim - 1]
-    mean = jnp.mean(x, axis=reduction_axis, keepdims=True)
-    mean_of_squares = jnp.mean(jnp.square(x), axis=reduction_axis,
-                               keepdims=True)
-    var = mean_of_squares - jnp.square(mean)
-    x = (x - mean) * lax.rsqrt(var + self.epsilon)
-    x = x.reshape(input_shape)
+    def broadcast_stat(stat):
+      stat = jnp.broadcast_to(stat[..., None], (x.shape[0], num_groups, group_size))
+      return stat.reshape((x.shape[0], num_groups * group_size))
 
-    feature_shape = tuple([1 for d in input_shape[:-1]] + [input_shape[-1]])
-    if self.use_scale:
-      x = x * self.param('scale', self.scale_init, feature_shape)
-    if self.use_bias:
-      x = x + self.param('bias', self.bias_init, feature_shape)
+    # TODO suport axis_name for model parallelism?
+    mean, var = _compute_stats(x.reshape(group_shape), reduction_axes, None, None)
+    mean = broadcast_stat(mean)
+    var = broadcast_stat(var)
 
-    return x.astype(self.dtype)
+    return _normalize(
+        self, x, mean, var, reduction_axes[:-1], feature_axes,
+        self.dtype, self.epsilon,
+        self.use_bias, self.use_scale,
+        self.bias_init, self.scale_init)
