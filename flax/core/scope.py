@@ -22,12 +22,15 @@ from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, O
 
 from . import tracers
 from flax import errors
+from flax import traceback_util
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 import jax
 from jax import numpy as jnp
 from jax import random
+
+traceback_util.register_exclusion(__file__)
 
 T = TypeVar('T')
 

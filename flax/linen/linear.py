@@ -178,7 +178,7 @@ class Dense(Module):
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -295,7 +295,7 @@ class Conv(Module):
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -376,7 +376,7 @@ class ConvTranspose(Module):
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 

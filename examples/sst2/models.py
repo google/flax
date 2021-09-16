@@ -41,7 +41,7 @@ def sequence_mask(lengths: Array, max_length: int) -> Array:
     A mask with shape: <bool>[batch_size, max_length] indicating which
     positions are valid for each sequence.
   """
-  return jnp.arange(max_length) < jnp.expand_dims(lengths, 1)
+  return jnp.arange(max_length)[None] < lengths[:, None]
 
 
 @jax.vmap

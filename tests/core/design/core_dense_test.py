@@ -36,7 +36,8 @@ class Dense:
     kernel = scope.param('kernel', self.kernel_init, (x.shape[-1], self.features))
     y = x @ kernel
     if self.bias:
-      y += scope.param('bias', self.bias_init, (self.features,))
+      bias = scope.param('bias', self.bias_init, (self.features,))
+      y += bias.reshape((1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -73,7 +74,7 @@ class ExplicitDense:
   def __call__(self, x):
     y = x @ self.kernel
     if self.bias is not None:
-      y += self.bias
+      y += self.bias.reshape((1,) * (y.ndim - 1) + (-1,))
     return y
 
 def explicit_mlp(scope, x, sizes=(3, 1)):

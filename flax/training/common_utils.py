@@ -35,7 +35,7 @@ def shard_prng_key(prng_key):
 
 
 def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
-  x = (labels[..., None] == jnp.arange(num_classes)[None])
+  x = (labels[..., None] == jnp.arange(num_classes).reshape((1,) * labels.ndim + (-1,)))
   x = lax.select(x, jnp.full(x.shape, on_value), jnp.full(x.shape, off_value))
   return x.astype(jnp.float32)
 

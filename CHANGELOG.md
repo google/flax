@@ -7,7 +7,7 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
  -
  -
- -
+ - Flax no longer uses implicit rank broadcasting. Thus, you can now use Flax with `--jax_numpy_rank_promotion=raise`.
  -
  -
  -
@@ -18,7 +18,7 @@ vNext
  -
  -
  -
- -
+ - `flax.linen.enable_named_call` and `flax.linen.disable_named_call` now work anywhere instead of only affecting Modules constructed after the enable/disable call. Additionally, there is now `flax.linen.override_named_call` that provided a context manager to locally disable/enable named_call.
  -
  -
  - Fix the serialization of named tuples. Tuple fields are no longer stored in the state dict and the named tuple class is no longer recreated ([bug](https://github.com/google/flax/issues/1429)).

@@ -133,8 +133,8 @@ class DenseGeneral(base.Module):
 
 class Dense(base.Module):
   """DEPRECATION WARNING:
-  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
-  Learn more and find an upgrade guide at 
+  The `flax.nn` module is Deprecated, use `flax.linen` instead.
+  Learn more and find an upgrade guide at
   https://github.com/google/flax/blob/main/flax/linen/README.md"
   A linear transformation applied over the last dimension of the input."""
 
@@ -169,7 +169,7 @@ class Dense(base.Module):
     if bias:
       bias = self.param('bias', (features,), bias_init)
       bias = jnp.asarray(bias, dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -275,7 +275,7 @@ class Conv(base.Module):
     if bias:
       bias = self.param('bias', (features,), bias_init)
       bias = jnp.asarray(bias, dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -349,7 +349,7 @@ class ConvTranspose(base.Module):
     if bias:
       bias = self.param('bias', (features,), bias_init)
       bias = jnp.asarray(bias, dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
