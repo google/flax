@@ -529,6 +529,14 @@ class InvalidCheckpointError(FlaxError):
   def __init__(self, path, step):
     super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')
 
+class OverwriteWithNonBlockingError(FlaxError):
+  """
+  A checkpoint cannot be overwritten with a non-blocking checkpoint.
+  You can not pass `overwrite=True` and `blocking=False` at the same time as this causes a writing race condition.
+  You can either clear the directory of old checkpoints or use `blocking=True` only.
+  """
+  def __init__(self, path, step):
+    super().__init__(f'Trying to use `overwrite=True` with `blocking=False` which will cause a racing condition at step "{step}".')
 
 #################################################
 # transforms.py errors                          #

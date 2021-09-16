@@ -19,6 +19,7 @@ other numerical metric in filename.  Cleans up older / worse-performing
 checkpoint files.
 """
 
+from concurrent.futures._base import Future
 from concurrent.futures import thread
 import os
 import re
@@ -95,12 +96,15 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                       prefix: str = 'checkpoint_',
                       keep: int = 1,
                       overwrite: bool = False,
-                      blocking:bool = True) -> str:
+                      keep_every_n_steps: Optional[int] = None,
+                      blocking:bool = True) -> Union[str,Future]:
     """Save a checkpoint of the model.
 
     Attempts to be pre-emption safe by writing to temporary before
     a final rename and cleanup of past files.
-
+    A note about parallism: This function is blocking by default (see the `blocking` argument). 
+    It's generally a good idea to try to unblock the compute thread as soon as possible to avoid blocking the training.
+    Examples of blocking operations: logging, saving model, etc.
     Args:
       ckpt_dir: str or pathlib-like path to store checkpoint files in.
       target: serializable flax object, usually a flax optimizer.
@@ -109,26 +113,31 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       keep: number of past checkpoint files to keep.
       overwrite: overwrite existing checkpoint files if a checkpoint
         at the current or a later step already exits (default: False).
-      blocking: bool: if True, wait for the file write to be completed before returning (default: True).
+      keep_every_n_steps: if defined, keep every checkpoints every n steps (in
+      addition to keeping the last 'keep' checkpoints).
+      blocking: bool: `blocking=True` will block until the checkpoint is written (default behaviour).
+      `blocking=False` will return a future that one needs to call `result()` on to make sure the checkpoint is written or not.
+        This is helpful to unblock the compute thread while the checkpoint is being written.
+      if `blocking=False`, you can't use `overwrite=True` as it will raise a `OverwriteWithNonBlockingError`.
     Returns:
-      Filename of saved checkpoint or concurrent.futures._base.Future (the handle) if blocking is False.
+      Filename of saved checkpoint or concurrent.futures._base.Future (the handle) if `blocking=False`.
     """
     _kwargs = locals()
-    del _kwargs['blocking']
-    
     def _save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                         target: PyTree,
                         step: int,
                         prefix: str = 'checkpoint_',
                         keep: int = 1,
-                        overwrite: bool = False) -> str:
+                        overwrite: bool = False,
+                        blocking=True) -> Union[str,Future]:
 
       ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
       # Write temporary checkpoint file.
       logging.info('Saving checkpoint at step: %s', step)
       # normalize path because gfile.glob() can modify path './', '//' ...
       ckpt_dir = safe_normpath(ckpt_dir)
-      ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
+      # Add the step number to the tmp checkpoint path to avoid overwritting in case of non-blocking.
+      ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp_'+str(step), prefix)
       ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
       gfile.makedirs(os.path.dirname(ckpt_path))
       base_path = os.path.join(ckpt_dir, prefix)
@@ -157,7 +166,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       logging.info('Saved checkpoint at %s', ckpt_path)
 
       # Remove newer checkpoints
-      if overwrite:
+      if overwrite and blocking:
         ind = checkpoint_files.index(ckpt_path) + 1
         newer_ckpts = checkpoint_files[ind:]
         checkpoint_files = checkpoint_files[:ind]
@@ -166,13 +175,24 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
           try:
             gfile.remove(path)
           except errors.NotFoundError:
-            # Note this is likely to happen if this write was slower than the next one, but it doesn't matter if thread i or i+n deletes it.
-            logging.info('Removing checkpoint at %s failed, likely due to it being already deleted', path)
-
+            logging.info('Removing checkpoint at %s failed', path)
+      elif overwrite and not blocking:
+         logging.info('overwriting with non-blocking mode is not supported')
+         raise errors.OverwriteWithNonBlockingError(step)
       # Remove old checkpoint files.
+      last_kept = -float('inf')
       if len(checkpoint_files) > keep:
         old_ckpts = checkpoint_files[:-keep]
+        # Note: old_ckpts is sorted from oldest to newest.
         for path in old_ckpts:
+          if keep_every_n_steps:
+            step_number = _checkpoint_path_step(path)
+            if step_number and (step_number - last_kept) >= keep_every_n_steps:
+              logging.debug('Not deleting %s, because last_kept=%f and keeping '
+                            'every %d steps.',
+                            path, last_kept, keep_every_n_steps)
+              last_kept = step_number
+              continue
           logging.info('Removing checkpoint at %s', path)
           try:
             gfile.remove(path)
@@ -189,6 +209,9 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     else:
       # if blocking is False, we will return the handle to the future.
       # NOTE: we set the max_workers to 1 because the work is serial but we want to have it done asynchronously.
+      if overwrite and not blocking:
+         logging.info('overwriting with non-blocking mode is not supported')
+         raise errors.OverwriteWithNonBlockingError(step)
       executor=thread.ThreadPoolExecutor(max_workers=1)
       future = executor.submit(_save_checkpoint, **_kwargs)
       return future
