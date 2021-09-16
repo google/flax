@@ -29,6 +29,7 @@ from .frozen_dict import unfreeze
 import jax
 from jax import numpy as jnp
 from jax import random
+import numpy as np
 
 traceback_util.register_exclusion(__file__)
 
@@ -749,7 +750,7 @@ def _is_valid_variables(variables: VariableDict) -> bool:
 
 
 def _is_valid_rng(rng: Array):
-  if not isinstance(rng, jnp.ndarray):
+  if not isinstance(rng, (np.ndarray, jnp.ndarray)):
     return False
   if rng.shape != (2,) or rng.dtype != jnp.uint32:
     return False
