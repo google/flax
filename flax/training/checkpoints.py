@@ -89,92 +89,109 @@ def safe_normpath(path: str) -> str:
   d = SCHEME_RE.match(path).groupdict()
   return (d['scheme'] or '') + os.path.normpath(d['path'])
 
-
 def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
-                    target: PyTree,
-                    step: int,
-                    prefix: str = 'checkpoint_',
-                    keep: int = 1,
-                    overwrite: bool = False,
-                    keep_every_n_steps: Optional[int] = None) -> str:
-  """Save a checkpoint of the model.
+                      target: PyTree,
+                      step: int,
+                      prefix: str = 'checkpoint_',
+                      keep: int = 1,
+                      overwrite: bool = False,
+                      blocking:bool = True) -> str:
+    """Save a checkpoint of the model.
 
-  Attempts to be pre-emption safe by writing to temporary before
-  a final rename and cleanup of past files.
+    Attempts to be pre-emption safe by writing to temporary before
+    a final rename and cleanup of past files.
 
-  Args:
-    ckpt_dir: str or pathlib-like path to store checkpoint files in.
-    target: serializable flax object, usually a flax optimizer.
-    step: int or float: training step number or other metric number.
-    prefix: str: checkpoint file name prefix.
-    keep: number of past checkpoint files to keep.
-    overwrite: overwrite existing checkpoint files if a checkpoint
-      at the current or a later step already exits (default: False).
-    keep_every_n_steps: if defined, keep every checkpoints every n steps (in
-      addition to keeping the last 'keep' checkpoints).
-  Returns:
-    Filename of saved checkpoint.
-  """
-  ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
-  # Write temporary checkpoint file.
-  logging.info('Saving checkpoint at step: %s', step)
-  # normalize path because gfile.glob() can modify path './', '//' ...
-  ckpt_dir = safe_normpath(ckpt_dir)
-  ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
-  ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
-  gfile.makedirs(os.path.dirname(ckpt_path))
-  base_path = os.path.join(ckpt_dir, prefix)
-  checkpoint_files = gfile.glob(base_path + '*')
+    Args:
+      ckpt_dir: str or pathlib-like path to store checkpoint files in.
+      target: serializable flax object, usually a flax optimizer.
+      step: int or float: training step number or other metric number.
+      prefix: str: checkpoint file name prefix.
+      keep: number of past checkpoint files to keep.
+      overwrite: overwrite existing checkpoint files if a checkpoint
+        at the current or a later step already exits (default: False).
+      blocking: bool: if True, wait for the file write to be completed before returning (default: True).
+    Returns:
+      Filename of saved checkpoint or concurrent.futures._base.Future (the handle) if blocking is False.
+    """
+    _kwargs = locals()
+    del _kwargs['blocking']
+    
+    def _save_checkpoint(ckpt_dir: Union[str, os.PathLike],
+                        target: PyTree,
+                        step: int,
+                        prefix: str = 'checkpoint_',
+                        keep: int = 1,
+                        overwrite: bool = False) -> str:
 
-  if ckpt_path in checkpoint_files:
-    if not overwrite:
-      raise errors.InvalidCheckpointError(ckpt_path, step)
-  else:
-    checkpoint_files.append(ckpt_path)
+      ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
+      # Write temporary checkpoint file.
+      logging.info('Saving checkpoint at step: %s', step)
+      # normalize path because gfile.glob() can modify path './', '//' ...
+      ckpt_dir = safe_normpath(ckpt_dir)
+      ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
+      ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
+      gfile.makedirs(os.path.dirname(ckpt_path))
+      base_path = os.path.join(ckpt_dir, prefix)
+      checkpoint_files = gfile.glob(base_path + '*')
 
-  checkpoint_files = natural_sort(checkpoint_files)
-  # Handle the case if the job was preempted after the temporary checkpoint was
-  # written, but before it was renamed to the final checkpoint name
-  if checkpoint_files[-1] == ckpt_tmp_path:
-    checkpoint_files.pop(-1)
-  if ckpt_path != checkpoint_files[-1]:
-    if not overwrite:
-      raise errors.InvalidCheckpointError(ckpt_path, step)
+      if ckpt_path in checkpoint_files:
+        if not overwrite:
+          raise errors.InvalidCheckpointError(ckpt_path, step)
+      else:
+        checkpoint_files.append(ckpt_path)
 
-  with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
-    fp.write(serialization.to_bytes(target))
+      checkpoint_files = natural_sort(checkpoint_files)
+      # Handle the case if the job was preempted after the temporary checkpoint was
+      # written, but before it was renamed to the final checkpoint name
+      if checkpoint_files[-1] == ckpt_tmp_path:
+        checkpoint_files.pop(-1)
+      if ckpt_path != checkpoint_files[-1]:
+        if not overwrite:
+          raise errors.InvalidCheckpointError(ckpt_path, step)
 
-  # Rename once serialization and writing finished.
-  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
-  logging.info('Saved checkpoint at %s', ckpt_path)
+      with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
+        fp.write(serialization.to_bytes(target))
 
-  # Remove newer checkpoints
-  if overwrite:
-    ind = checkpoint_files.index(ckpt_path) + 1
-    newer_ckpts = checkpoint_files[ind:]
-    checkpoint_files = checkpoint_files[:ind]
-    for path in newer_ckpts:
-      logging.info('Removing checkpoint at %s', path)
-      gfile.remove(path)
+      # Rename once serialization and writing finished.
+      gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
+      logging.info('Saved checkpoint at %s', ckpt_path)
 
-  # Remove old checkpoint files.
-  last_kept = -float('inf')
-  if len(checkpoint_files) > keep:
-    old_ckpts = checkpoint_files[:-keep]
-    # Note: old_ckpts is sorted from oldest to newest.
-    for path in old_ckpts:
-      if keep_every_n_steps:
-        step_number = _checkpoint_path_step(path)
-        if step_number and (step_number - last_kept) >= keep_every_n_steps:
-          logging.debug('Not deleting %s, because last_kept=%f and keeping '
-                        'every %d steps.',
-                        path, last_kept, keep_every_n_steps)
-          last_kept = step_number
-          continue
-      logging.info('Removing checkpoint at %s', path)
-      gfile.remove(path)
+      # Remove newer checkpoints
+      if overwrite:
+        ind = checkpoint_files.index(ckpt_path) + 1
+        newer_ckpts = checkpoint_files[ind:]
+        checkpoint_files = checkpoint_files[:ind]
+        for path in newer_ckpts:
+          logging.info('Removing checkpoint at %s', path)
+          try:
+            gfile.remove(path)
+          except errors.NotFoundError:
+            # Note this is likely to happen if this write was slower than the next one, but it doesn't matter if thread i or i+n deletes it.
+            logging.info('Removing checkpoint at %s failed, likely due to it being already deleted', path)
 
-  return ckpt_path
+      # Remove old checkpoint files.
+      if len(checkpoint_files) > keep:
+        old_ckpts = checkpoint_files[:-keep]
+        for path in old_ckpts:
+          logging.info('Removing checkpoint at %s', path)
+          try:
+            gfile.remove(path)
+          except errors.NotFoundError:
+            # Note this is likely to happen if this write was slower than the next one, but it doesn't matter if thread i or i+n deletes it.
+            logging.info('Removing checkpoint at %s failed, likely due to it being already deleted', path)
+
+      return ckpt_path
+
+    # Now we check if we are writing in blocking mode or not.
+    if blocking:
+      # if blocking is True, we will wait for the file write to be completed before returning.
+      return _save_checkpoint(**_kwargs)
+    else:
+      # if blocking is False, we will return the handle to the future.
+      # NOTE: we set the max_workers to 1 because the work is serial but we want to have it done asynchronously.
+      executor=thread.ThreadPoolExecutor(max_workers=1)
+      future = executor.submit(_save_checkpoint, **_kwargs)
+      return future
 
 
 def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
