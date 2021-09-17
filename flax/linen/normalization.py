@@ -62,7 +62,7 @@ def _compute_stats(x: Array, axes: Axes,
             concatenated_mean,
             axis_name=axis_name,
             axis_index_groups=axis_index_groups), 2)
-  # mean2 - lax.square(mean) is not garantueed to be non-negative due
+  # mean2 - lax.square(mean) is not guaranteed to be non-negative due
   # to floating point round-off errors.
   var = jnp.maximum(0., mean2 - lax.square(mean))
   return mean, var
