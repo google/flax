@@ -28,6 +28,7 @@ from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
 
 import jax
 from jax import tree_util
+from jax._src.numpy.lax_numpy import isin
 import numpy as np
 
 import flax
@@ -524,6 +525,17 @@ class Module(metaclass=ModuleMeta):
     annotations['parent'] = parent_annotation
     cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
     annotations['name'] = str
+
+    # any non-init field will only be set in setup
+    # During __hash__ and __eq__ the field is not set yet
+    # so it should not be used in compare, hash or repr.
+    for field in annotations.keys():
+      field_meta = getattr(cls, field, None)
+      if isinstance(field_meta, dataclasses.Field) and not field_meta.init:
+        field_meta.compare = False
+        field_meta.hash = False
+        field_meta.repr = False
+
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
