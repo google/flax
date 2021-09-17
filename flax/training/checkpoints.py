@@ -178,7 +178,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
           except errors.NotFoundError:
             logging.info('Removing checkpoint at %s failed', path)
       elif overwrite and not blocking:
-         logging.info('overwriting with non-blocking mode is not supported')
+         logging.info('Overwriting with non-blocking mode is not supported')
          raise errors.OverwriteWithNonBlockingError(step)
       # Remove old checkpoint files.
       last_kept = -float('inf')
@@ -209,13 +209,13 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       return _save_checkpoint(**_kwargs)
     else:
       # if blocking is False, we will return the handle to the future.
-      # NOTE: we set the max_workers to 1 because the work is serial but we want to have it done asynchronously.
+      # NOTE: we set the max_workers to 2 because the work is serial but we want to have it done asynchronously.
       if overwrite and not blocking:
-         logging.info('overwriting with non-blocking mode is not supported')
+         logging.info('Overwriting with non-blocking mode is not supported')
          raise errors.OverwriteWithNonBlockingError(step)
-      executor=thread.ThreadPoolExecutor(max_workers=1)
+      executor=thread.ThreadPoolExecutor()
       future = executor.submit(_save_checkpoint, **_kwargs)
-      return future
+      future.add_done_callback(lambda future: logging.info('Writing checkpoint is completed.'))
 
 
 def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
