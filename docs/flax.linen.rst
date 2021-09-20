@@ -49,6 +49,7 @@ Transformations
     scan
     jit
     remat
+    remat_scan
 
 
 Linear modules

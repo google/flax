@@ -14,7 +14,7 @@ vNext
 - 
 - 
 - 
-- 
+- Add experimental checkpoint policy argument. See `flax.linen.checkpoint`
 - 
 - 
 - 

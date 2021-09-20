@@ -664,6 +664,7 @@ def checkpoint(fn: Callable[..., Any],
                rngs: PRNGSequenceFilter = True,
                concrete: bool = False,
                prevent_cse: bool = True,
+               policy: Optional[Callable[..., bool]] = None,
                ) -> Callable[..., Any]:
   """Lifted version of ``jax.checkpoint``.
 
@@ -689,12 +690,15 @@ def checkpoint(fn: Callable[..., Any],
       ``pmap``, CSE can defeat the purpose of this decorator. But in some
       settings, like when used inside a ``scan``, this CSE prevention mechanism
       is unnecessary, in which case ``prevent_cse`` can be set to False.
+    policy: Experimental checkpoint policy, see ``jax.checkpoint``.
   Returns:
     A wrapped version of ``fn``. When computing gradients intermediate
     computations will be re-computed when computing gradients.
   """
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args, **kwargs):
-    @functools.partial(jax.remat, concrete=concrete, prevent_cse=prevent_cse)
+    @functools.partial(jax.remat,
+                       concrete=concrete, prevent_cse=prevent_cse,
+                       policy=policy)
     @functools.wraps(fn)
     def rematted(variable_groups, rng_groups, *args, **kwargs):
       scope = scope_fn(variable_groups, rng_groups)
@@ -802,23 +806,44 @@ def jit(fn: Callable[..., Any],
   return pack(inner, (variables,), (variables,), (rngs,), name='jit')
 
 
-def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
+def remat_scan(body_fn: Callable[..., Any],
                lengths: Sequence[int],
+               policy: Optional[Callable[..., bool]] = None,
                variable_broadcast: CollectionFilter = False,
                variable_carry: CollectionFilter = False,
-               variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {},
-               split_rngs: Mapping[PRNGSequenceFilter, bool] = {}):
-  """Combines `lift.remat` and `lift.scan` for memory efficient scans.
+               variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {True: 0},
+               split_rngs: Mapping[PRNGSequenceFilter, bool] = {True: True}) -> Callable[..., Any]:
+  """Combines `lift.remat` and `lift.scan` for memory efficiency and constant time compilation.
+
+  ``remat_scan`` allows for constant compile times and sublinear
+  memory usage with respect to model depth. At a small constant
+  penalty. This is typically beneficial for very deep models.
 
   Example::
+
     def body_fn(scope, x):
       return nn.dense(scope, x, features=x.shape[-1])
-
     # 100x dense with O(sqrt(N)) memory for gradient computation
-    y = lift.remat_scan(
-        body_fn, scope, x, lengths=(10, 10),
-        variable_axes={'params': 0},
-        split_rngs={'params': True})
+    y = lift.remat_scan(body_fn, lengths=(10, 10))(scope, x)
+
+  Args:
+    body_fn: Scope function to be repeated using a (nested scan)
+    lengths: number of loop iterations at the given level. The total
+      number of iterations `n = prod(lengths)`. each loop is rematerialized.
+      This way the memory consumption is proportional to `n^(1 / d)` where `d = len(lengths)`.
+      Minimal memory consumptions requires tuning the lengths such that the same amount of memory
+      is consumed at each level of the nested loop.
+    variable_broadcast: Specifies the broadcasted variable collections.
+      A broadcasted variable should not depend on any computation that cannot be lifted out of the loop.
+      This is typically used to define shared parameters inside the fn.
+    variable_carry: Specifies the variable collections that are carried through the loop.
+      Mutations to these variables are carried to the next iteration and will be preserved
+      when the scan finishes.
+    variable_axes: the variable collections that are scanned over.
+    split_rngs: Split PRNG sequences will be different for each loop iterations.
+      If split is False the PRNGs will be the same across iterations.
+  Returns:
+    A wrapped version of ``body_fn`` that repeats itself prod(lengths) times.
   """
   # TODO(jheek) should remat scan have scan inputs/outputs?
   scan_fn = functools.partial(
@@ -830,16 +855,16 @@ def remat_scan(body_fn: Callable[..., Any], scope: Scope, carry: Any,
   if len(lengths) == 1:
     def wrapper(scope, carry):
       return body_fn(scope, carry), ()
-    carry, _ = scan_fn(wrapper, length=lengths[0])(scope, carry)
+    fn = lambda scope, c: scan_fn(wrapper, length=lengths[0])(scope, c)[0]
   else:
-    @remat
+    @functools.partial(remat, policy=policy, prevent_cse=False)
     def inner_loop(scope, carry):
-      carry = remat_scan(body_fn, scope, carry, lengths[1:],
+      carry = remat_scan(body_fn, lengths[1:], policy,
                          variable_broadcast, variable_carry,
-                         variable_axes, split_rngs)
+                         variable_axes, split_rngs)(scope, carry)
       return carry, ()
-    carry, _ = scan_fn(inner_loop, length=lengths[0])(scope, carry)
-  return carry
+    fn = lambda scope, c: scan_fn(inner_loop, length=lengths[0])(scope, c)[0]
+  return fn
 
 
 def named_call(fn: Callable[..., Any], name: str) -> Callable[..., Any]:

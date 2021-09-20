@@ -50,9 +50,10 @@ def big_resnet(scope: Scope, x, blocks=(10, 5), dtype=jnp.float32,
     return residual_block(scope, x, conv, norm, act, features=x.shape[-1])
 
   return lift.remat_scan(
-      body_fn, scope, x, lengths=blocks,
+      body_fn, lengths=blocks,
       variable_axes={'params': 0, 'batch_stats': 0},
-      split_rngs={'params': True})
+      split_rngs={'params': True},
+      policy=None)(scope, x)
 
 
 class BigResnetTest(absltest.TestCase):
@@ -65,7 +66,6 @@ class BigResnetTest(absltest.TestCase):
         jax.tree_map(jnp.shape, variables['params']))
     batch_stats_shapes = unfreeze(
         jax.tree_map(jnp.shape, variables['batch_stats']))
-    print(param_shapes)
     self.assertEqual(param_shapes, {
         'conv_1': {'kernel': (10, 5, 3, 3, 8, 8)},
         'conv_2': {'kernel': (10, 5, 3, 3, 8, 8)},
