@@ -133,7 +133,7 @@ class ScopeTest(absltest.TestCase):
   def test_rngs_check_w_frozen_dict(self):
     def f(scope, x):
       return x
-    _ = apply(test)(
+    _ = apply(f)(
         {}, np.array([0.]), rngs=freeze({'a':random.PRNGKey(0)}))
 
 
