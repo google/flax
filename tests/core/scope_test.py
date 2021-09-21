@@ -130,6 +130,12 @@ class ScopeTest(absltest.TestCase):
     _, variables = apply(f, mutable='state')({}, True)
     apply(f, mutable=False)(variables, False)
 
+  def test_rngs_check_w_frozen_dict(self):
+    def f(scope, x):
+      return x
+    _ = apply(test)(
+        {}, np.array([0.]), rngs=freeze({'a':random.PRNGKey(0)}))
+
 
 if __name__ == '__main__':
   absltest.main()
