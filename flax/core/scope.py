@@ -758,7 +758,7 @@ def _is_valid_rng(rng: Array):
 
 
 def _is_valid_rngs(rngs: RNGSequences):
-  if not isinstance(rngs, dict):
+  if not isinstance(rngs, (FrozenDict, dict)):
     return False
   for key, val in rngs.items():
     if not isinstance(key, str):
