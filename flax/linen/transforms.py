@@ -22,7 +22,7 @@ versions as "lifted transformations".
 A lifted transformation can be applied to a ``Module`` class or a
 function that takes a ``Module`` instance as its first argument.
 """
-from typing import Any, Type, Callable, Union, Mapping, Optional, TypeVar, Iterable
+from typing import Any, Type, Callable, Union, Mapping, Optional, TypeVar, Iterable, Sequence
 
 import dataclasses
 import functools
@@ -443,6 +443,7 @@ def checkpoint(target: Target,
         rngs: lift.PRNGSequenceFilter = True,
         concrete: bool = False,
         prevent_cse: bool = True,
+        policy: Optional[Callable[..., bool]] = None,
         methods=None) -> Target:
   """Lifted version of ``jax.checkpoint``.
 
@@ -469,6 +470,7 @@ def checkpoint(target: Target,
       ``pmap``, CSE can defeat the purpose of this decorator. But in some
       settings, like when used inside a ``scan``, this CSE prevention mechanism
       is unnecessary, in which case ``prevent_cse`` should be set to False.
+    policy: Experimental checkpoint policy, see ``jax.checkpoint``.
   Returns:
     A wrapped version of ``target``. When computing gradients intermediate
     computations will be re-computed on the backward pass.
@@ -476,10 +478,64 @@ def checkpoint(target: Target,
   return lift_transform(
       lift.checkpoint, target,
       variables=variables, rngs=rngs, concrete=concrete,
-      prevent_cse=prevent_cse, methods=methods)
+      prevent_cse=prevent_cse, policy=policy,
+      methods=methods)
 
 
 remat = checkpoint
+
+
+def remat_scan(target: Target,
+               lengths: Sequence[int],
+               policy: Optional[Callable[..., bool]] = None,
+               variable_broadcast: lift.CollectionFilter = False,
+               variable_carry: lift.CollectionFilter = False,
+               variable_axes: Mapping[lift.CollectionFilter, lift.InOutScanAxis] = {True: 0},
+               split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = {True: True}) -> Target:
+  """Combines remat and scan for memory efficiency and constant time compilation.
+
+  ``remat_scan`` allows for constant compile times and sublinear
+  memory usage with respect to model depth. At a small constant
+  penalty. This is typically beneficial for very deep models.
+
+  Example::
+
+    class BigModel(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        DenseStack = nn.remat_scan(nn.Dense, lengths=(10, 10))
+        # 100x dense with O(sqrt(N)) memory for gradient computation
+        return DenseStack(8, name="dense_stack")(x)
+
+  Args:
+    target: a ``Module`` or a function taking a ``Module``
+      as its first argument.
+    lengths: number of loop iterations at the given level. The total
+      number of iterations `n = prod(lengths)`. each loop is rematerialized.
+      This way the memory consumption is proportional to `n^(1 / d)` where `d = len(lengths)`.
+      Minimal memory consumptions requires tuning the lengths such that the same amount of memory
+      is consumed at each level of the nested loop.
+    variable_broadcast: Specifies the broadcasted variable collections.
+      A broadcasted variable should not depend on any computation that cannot be lifted out of the loop.
+      This is typically used to define shared parameters inside the fn.
+    variable_carry: Specifies the variable collections that are carried through the loop.
+      Mutations to these variables are carried to the next iteration and will be preserved
+      when the scan finishes.
+    variable_axes: the variable collections that are scanned over.
+    split_rngs: Split PRNG sequences will be different for each loop iterations.
+      If split is False the PRNGs will be the same across iterations.
+  Returns:
+    A wrapped version of ``target`` that repeats itself prod(lengths) times.
+  """
+  return lift_transform(
+      lift.remat_scan, target,
+      lengths=lengths,
+      variable_broadcast=variable_broadcast,
+      variable_carry=variable_carry,
+      variable_axes=variable_axes,
+      split_rngs=split_rngs,
+      policy=policy,
+  )
 
 
 def scan(target: Target,

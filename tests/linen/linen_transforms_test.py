@@ -953,6 +953,24 @@ class TransformTest(absltest.TestCase):
     b = Bar()
     b.apply({}, jnp.ones(2))
 
+  def test_remat_scan(self):
+    class BigModel(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        DenseStack = nn.remat_scan(nn.Dense, lengths=(100,))
+        return DenseStack(8, name="dense_stack")(x)
+    
+    x = jnp.ones((2, 8))
+    model = BigModel()
+    variables = model.init(random.PRNGKey(0), x)
+    param_shapes = jax.tree_map(jnp.shape, variables['params'])
+    print(param_shapes)
+    self.assertEqual(param_shapes["dense_stack"]["kernel"], (100, 8, 8))
+    self.assertEqual(param_shapes["dense_stack"]["bias"], (100, 8))
+    y = model.apply(variables, x)
+    self.assertEqual(y.shape, (2, 8))
+
+
 
 if __name__ == '__main__':
   absltest.main()
