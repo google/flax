@@ -195,8 +195,8 @@ def set_module_scopes(module, args, kwargs, scopes):
 
 def _test_transformed_return_values(tree, method_name):
   """Tests whether the return value contains any Modules or Variables."""
-  impure = any(jax.tree_leaves(
-      jax.tree_map(lambda x: isinstance(x, (Module, Variable)), tree)))
+  impure = any(map(lambda x: isinstance(x, (Module, Variable)),
+                   jax.tree_leaves(tree)))
   if impure:
     raise errors.TransformedMethodReturnValueError(method_name)
 
@@ -644,7 +644,7 @@ def scan(target: Target,
 # Special case of decorator_lift_transform to handle named calls for profiling.
 def named_call(class_fn, force=True):
   """Labels a method for labelled traces in profiles.
-  
+
   Args:
     force: If True, the named_call transform is applied even if it is globally disabled.
       (e.g.: by calling `flax.linen.disable_named_call()`)
