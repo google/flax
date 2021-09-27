@@ -952,6 +952,60 @@ class TransformTest(absltest.TestCase):
 
     b = Bar()
     b.apply({}, jnp.ones(2))
+  
+  def test_map_variables_tied_autoencoder(self):
+    def trans(variables):
+      return jax.tree_map(lambda x: x.T, variables)
+      
+    class TiedAutencoder(nn.Module):
+
+      features: int
+      latents: int
+        
+      @nn.compact
+      def _call(self, x, decode):
+        def f(self):
+          return nn.Dense(self.features if decode else self.latents, use_bias=False)(x)
+
+        if decode:
+          map_fn = trans
+        else:
+          map_fn = lambda x: x
+        return nn.map_variables(f, "params", map_fn, map_fn, mutable=True)(self)
+
+      def encode(self, x):
+        return self._call(x, False)
+
+      def decode(self, x):
+        return self._call(x, True)
+
+      def __call__(self, x):
+        return self.decode(self.encode(x))
+    
+    x = jnp.ones((2, 4))
+    ae = TiedAutencoder(4, 5)
+    variables = ae.init(random.PRNGKey(0), x)
+    param_shapes = jax.tree_map(jnp.shape, variables["params"])
+    self.assertEqual(param_shapes, {
+      "Dense_0": {"kernel": (4, 5)}
+    })
+
+
+  def test_map_variables_bit_weights(self):
+    class BitWeights(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def sign(x):
+          return jax.tree_map(jnp.sign, x)
+        BitDense = nn.map_variables(nn.Dense, "params", sign, init=True)
+        return BitDense(4)(x)
+    bw = BitWeights()
+    x = jnp.ones((2, 4))
+    y, variables = bw.init_with_output(random.PRNGKey(0), x)
+    y_2 = bw.apply(variables, x)
+    np.testing.assert_allclose(y, y_2)
+
+
 
   def test_remat_scan(self):
     class BigModel(nn.Module):

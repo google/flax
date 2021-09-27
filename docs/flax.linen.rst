@@ -50,6 +50,7 @@ Transformations
     jit
     remat
     remat_scan
+    map_variables
 
 
 Linear modules

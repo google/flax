@@ -641,6 +641,49 @@ def scan(target: Target,
       methods=methods)
 
 
+def map_variables(
+    target: Target,
+    mapped_collections: lift.CollectionFilter,
+    trans_in_fn: Callable[..., Any] = lift.id_fn,
+    trans_out_fn: Callable[..., Any] = lift.id_fn,
+    init: bool = False, mutable: bool = False,
+    rngs: lift.PRNGSequenceFilter = True,
+    variables: lift.CollectionFilter = True) -> Target:
+  """Map Variables inside a module.
+
+  Example::
+
+    class OneBitDense(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def sign(x):
+          return jax.tree_map(jnp.sign, x)
+        MapDense = nn.map_variables(nn.Dense, "params", sign, init=True)
+        return MapDense(4)(x)
+
+  Args:
+    fn: the function to be transformed.
+    mapped_collections: the collection(s) to be transformed.
+    map_in_fn: creates a view of the target variables.
+    map_out_fn: transforms the updated variables in the view after mutation.
+    init: If True, variables are initialized before transformation.
+    mutable: If True, the mapped variable collections will be mutable.
+    rngs: PRNGSequences added to the transformed scope (default: all).
+    variables: Additional Variable collections added to the transformed scope.
+      Besides those specified by `target` (default: all).
+  Returns:
+    a wrapped version of ``target`` that will map the specificied collections.
+  """
+
+  return lift_transform(
+      lift.map_variables, target,
+      mapped_collections,
+      trans_in_fn, trans_out_fn,
+      init, mutable,
+      rngs, variables
+  )
+
+
 # Special case of decorator_lift_transform to handle named calls for profiling.
 def named_call(class_fn, force=True):
   """Labels a method for labelled traces in profiles.
