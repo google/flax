@@ -116,19 +116,28 @@ def _parse_spec(spec):
 
 
 def prefetch_to_device(iterator, size, devices=None):
-  """"Shard and prefetch batches on device.
+  """Shard and prefetch batches on device.
 
   This utility takes an iterator and returns a new iterator which fills an on
   device prefetch buffer. Eager prefetching can improve the performance of
   training loops significantly by overlapping compute and data transfer.
   
-  This utility is mostly useful for GPUs, for TPUs it should not be necessary.
+  This utility is mostly useful for GPUs, for TPUs and CPUs it should not be
+  necessary -- the TPU & CPU memory allocators (normally) don't pick a memory
+  location that isn't free yet so they don't block. Instead those allocators OOM.
 
   Args:
     iterator: an iterator that yields a pytree of ndarrays where the first
       dimension is sharded across devices.
+
     size: the size of the prefetch buffer.
+
+      If you're training on GPUs, 2 is generally the best choice because this
+      guarantees that you can overlap a training step on GPU with a data
+      prefetch step on CPU.
+
     devices: the list of devices to which the arrays should be prefetched.
+
   Yields:
     The original items from the iterator where each ndarray is now a sharded to
     the specified devices.
