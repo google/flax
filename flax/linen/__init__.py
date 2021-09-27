@@ -19,7 +19,7 @@
 # re-export commonly used modules and functions
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
-                         softplus, swish, silu, tanh)
+                         softplus, swish, silu, tanh, PReLU)
 from .attention import (MultiHeadDotProductAttention, SelfAttention,
                         dot_product_attention, make_attention_mask,
                         make_causal_mask, combine_masks)
