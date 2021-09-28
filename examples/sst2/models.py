@@ -147,7 +147,8 @@ class Embedder(nn.Module):
     deterministic = nn.module.merge_param(
         'deterministic', self.deterministic, deterministic)
     inputs = self.word_dropout_layer(inputs, deterministic=deterministic)
-    embedded_inputs = self.embedding[inputs]
+    # Use take because fancy indexing numpy arrays with JAX indices does not work correctly.
+    embedded_inputs = jnp.take(self.embedding, inputs, axis=0)
 
     # Keep the embeddings fixed at initial (e.g. pretrained) values.
     if self.frozen:
