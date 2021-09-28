@@ -26,7 +26,7 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.2.20",
+    "jax>=0.2.21",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses;python_version<'3.7'", # will only install on py3.6
     "msgpack",
