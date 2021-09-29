@@ -1,15 +1,25 @@
 ## Predicting Biological Activities of Molecules with Graph Neural Networks
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/examples/ogbg_molpcba/ogbg_molpcba.ipynb)
 
-This example trains a Graph Neural Network to classify molecules on the
-basis of their biological activities.
+This example trains a Graph Neural Network to classify molecules
+on the basis of their biological activities.
 
-![Prediction on a caramboxin molecule](www.gstatic.com/flax_examples/ogbg_molpcba.svg "Prediction on a caramboxin molecule")
+![Prediction on a caramboxin molecule](https://www.gstatic.com/flax_examples/ogbg_molpcba.svg "Prediction on a caramboxin molecule")
 
 We use [Jraph](https://github.com/deepmind/jraph/),
 a JAX library for Graph Neural Networks, to
 train and evaluate on the
 [ogbg-molpcba](https://ogb.stanford.edu/docs/graphprop/)
 dataset, part of the [Open Graph Benchmark](https://ogb.stanford.edu/).
+
+You can run this code and even modify it directly in Google Colab,
+no installation required!
+The [Colab notebook](https://colab.research.google.com/github/google/flax/blob/main/examples/ogbg_molpcba/ogbg_molpcba.ipynb)
+can even create visualizations of model predictions:
+
+![Visualizing predictions of a trained model]
+(https://www.gstatic.com/flax_examples/ogbg_molpcba_predictions.svg "Visualizing predictions of a trained model")
+
 
 ### Requirements
 
@@ -46,7 +56,7 @@ tested on the following.
 
 Hardware | Batch size | Training time | Test mean AP  | Validation mean AP | Metrics
 -------- | ---------- | ------------- | ------- | ------- | ---------------
-1x V100  | 256        |   3h20m       | 0.244   | 0.252   |[2021-08-03](https://tensorboard.dev/experiment//)
+1x V100  | 256        |   3h20m       | 0.244   | 0.252   |[2021-08-03](https://tensorboard.dev/experiment/AAJqfvgSRJaA1MBkc0jMWQ/)
 
 These metrics reported above are obtained at the end of training.
 We observed that slightly higher metrics can be obtained with
@@ -54,7 +64,7 @@ early-stopping based on the validation mean AP:
 
 Hardware | Batch size | Training time | Test mean AP  | Validation mean AP | Metrics
 -------- | ---------- | ------------- | ------- | ------- | ---------------
-1x V100  | 256        |   2h55m       | 0.249   | 0.257   |[2021-08-03](https://tensorboard.dev/experiment//)
+1x V100  | 256        |   2h55m       | 0.249   | 0.257   |[2021-08-03](https://tensorboard.dev/experiment/AAJqfvgSRJaA1MBkc0jMWQ/)
 
 
 ### Model Description
