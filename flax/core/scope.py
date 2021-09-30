@@ -91,6 +91,20 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   return random.fold_in(rng, jnp.uint32(hash_int))
 
 
+def is_filter_empty(filter_like: Filter) -> bool:
+  if isinstance(filter_like, str):
+    return False
+  if isinstance(filter_like, Container):
+    return len(filter_like) == 0
+  if isinstance(filter_like, bool):
+    return not filter_like
+  if isinstance(filter_like, DenyList):
+    # if any arbitrary collection is in the denylist it matches.
+    # everything so the filter is empty. This is checked with a stub.
+    return in_filter(filter_like.deny, "__flax_internal_stub__")
+  raise errors.InvalidFilterError(filter_like)
+
+
 def in_filter(filter_like: Filter, col: str) -> bool:
   """Checks whether a filter can be applied to a collection.
 

@@ -25,7 +25,7 @@ vNext
 - 
 - 
 - 
-- 
+- Add lifted transformation for mapping variables. See `flax.linen.map_variables`.
 - 
 - 
 - 
