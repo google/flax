@@ -98,7 +98,7 @@ class CharacterTable(object):
   def decode(self, inputs):
     """Decode from list of integers to string."""
     chars = []
-    for elem in inputs:
+    for elem in inputs.tolist():
       if elem == self.eos_id:
         break
       chars.append(self._indices_char[elem])
