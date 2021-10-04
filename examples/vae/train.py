@@ -24,7 +24,7 @@ import optax
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-from . import utils as vae_utils
+import utils as vae_utils
 
 
 FLAGS = flags.FLAGS
