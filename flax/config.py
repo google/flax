@@ -46,7 +46,7 @@ def bool_env(varname: str, default: bool) -> bool:
     return False
   else:
     raise ValueError(
-        "invalid truth value %r for environment %r" % (val, varname))
+        'invalid truth value %r for environment %r' % (val, varname))
 
 
 # Flax Global Configuration Variables:
