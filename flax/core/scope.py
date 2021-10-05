@@ -27,6 +27,7 @@ from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 import jax
+from jax import config as jax_config
 from jax import numpy as jnp
 from jax import random
 import numpy as np
@@ -46,7 +47,7 @@ Filter = Union[bool, str, Container[str], 'DenyList']
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
   """DenyList represents an opt-out based mutability filter.
-  
+
   DenyList can be used to make every collection mutable except the ones
   defined in the given filter.
   To for example make everything but the params collection mutable::
@@ -169,7 +170,7 @@ def union_filters(a: Filter, b: Filter) -> Filter:
     a, b = b, a
   if isinstance(a, DenyList):
     return DenyList(subtract_filters(a.deny, b))
-  
+
   a = filter_to_set(a)
   b = filter_to_set(b)
   return a.union(b)
@@ -320,7 +321,7 @@ class Scope:
       name: name of this scope.
       mutable: A CollectionFilter determining which variables are mutable.
       parent: The parent scope.
-      path: The path in the variable tree from the root scope to this scope. 
+      path: The path in the variable tree from the root scope to this scope.
     """
     self._variables = variables
     self.parent = parent
@@ -634,7 +635,7 @@ class Scope:
         # usefuleness is less obvious. We might intentionally change the dtype
         # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
-          raise errors.ScopeParamShapeError(name, self.path_text, 
+          raise errors.ScopeParamShapeError(name, self.path_text,
               jnp.shape(val), jnp.shape(abs_val))
     else:
       if not self.is_mutable_collection('params'):
@@ -664,7 +665,7 @@ def bind(variables: VariableDict,
          rngs: Optional[RNGSequences] = None,
          mutable: CollectionFilter = False):
   """Bind variables and rngs to a new ``Scope``.
-  
+
   bind provides a ``Scope`` instance without transforming a function
   with ``apply``. This is particalary useful for debugging and
   interactive use cases like notebooks where a function would limit
@@ -764,10 +765,18 @@ def _is_valid_variables(variables: VariableDict) -> bool:
 
 
 def _is_valid_rng(rng: Array):
-  if not isinstance(rng, (np.ndarray, jnp.ndarray)):
-    return False
-  if rng.shape != (2,) or rng.dtype != jnp.uint32:
-    return False
+  """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
+  # New-style JAX KeyArrays have a base type.
+  if (hasattr(jax_config, 'jax_enable_custom_prng') and
+      jax_config.jax_enable_custom_prng):
+    if not isinstance(rng, jax.random.KeyArray):
+      return False
+  # Old-style JAX PRNGKeys are plain uint32[2] arrays.
+  else:
+    if not isinstance(rng, (np.ndarray, jnp.ndarray)):
+      return False
+    if rng.shape != (2,) or rng.dtype != jnp.uint32:
+      return False
   return True
 
 

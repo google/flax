@@ -1082,9 +1082,9 @@ class Module(metaclass=ModuleMeta):
       collections.
     """
     if not isinstance(rngs, dict):
-      if rngs.shape != (2,):
+      if not core.scope._is_valid_rng(rngs):
         raise errors.InvalidRngError(
-            'RNGs should be of shape (2,) in Module '
+            'RNGs should be of shape (2,) or KeyArray in Module '
             f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
     return self.apply(
