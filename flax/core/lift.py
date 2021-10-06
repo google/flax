@@ -40,6 +40,11 @@ traceback_util.register_exclusion(__file__)
 T = TypeVar('T')
 
 
+def tree_map_rngs(fn, tree):
+  """Needed for mapping JAX random.* functions over KeyArray leaves."""
+  return jax.tree_map(fn, tree, is_leaf=lambda x: isinstance(x, random.KeyArray))
+
+
 def _dedup_scopes(scopes):
   paths = []
   # must preseve insertion order for duplication to work correctly
@@ -377,7 +382,7 @@ def vmap(fn: Callable[..., Any],
     split_fn = lambda rng: random.split(rng, d_axis_size)
 
     rng_groups = tuple(
-        jax.tree_map(split_fn, rng_group) if split else rng_group
+        tree_map_rngs(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
 
     @functools.partial(jax.vmap,
@@ -507,7 +512,7 @@ def scan(fn: Callable[..., Any],
     split_fn = lambda rng: random.split(rng, d_length)
 
     rng_groups = tuple(
-        jax.tree_map(split_fn, rng_group) if split else rng_group
+        tree_map_rngs(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
 
     @functools.partial(axes_scan.scan,
