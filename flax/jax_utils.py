@@ -30,25 +30,6 @@ import jax.numpy as jnp
 import numpy as np
 
 
-def _replicate(x, devices=None):
-  x = jax.numpy.asarray(x)
-  if devices is None:
-    # match the default device assignments used in pmap:
-    # for single-host, that's the XLA default device assignment
-    # for multi-host, it's the order of jax.local_devices()
-    if jax.process_count() == 1:
-      devices = [d for d in xb.get_backend().get_default_device_assignment(
-          jax.device_count()) if d.process_index == jax.process_index()]
-    else:
-      devices = jax.local_devices()
-  if hasattr(jax, "device_put_sharded"):  # jax >= 0.2.0
-    return jax.device_put_sharded(len(devices) * [x], devices)
-  else:
-    aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
-    buffers = [xla.device_put(x, device=d) for d in devices]
-    return jax.pxla.ShardedDeviceArray(aval, buffers)
-
-
 def replicate(tree, devices=None):
   """Replicates arrays to multiple devices.
 
@@ -59,7 +40,17 @@ def replicate(tree, devices=None):
   Returns:
     A new pytree containing the replicated arrays.
   """
-  return jax.tree_map(lambda x: _replicate(x, devices), tree)
+  if devices is None:
+    # match the default device assignments used in pmap:
+    # for single-host, that's the XLA default device assignment
+    # for multi-host, it's the order of jax.local_devices()
+    if jax.process_count() == 1:
+      devices = [d for d in xb.get_backend().get_default_device_assignment(
+          jax.device_count()) if d.process_index == jax.process_index()]
+    else:
+      devices = jax.local_devices()
+
+  return jax.device_put_replicated(tree, devices)
 
 
 def unreplicate(tree):
