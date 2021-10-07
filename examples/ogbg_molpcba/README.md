@@ -7,8 +7,8 @@ on the basis of their biological activities.
 ![Prediction on a caramboxin molecule](https://www.gstatic.com/flax_examples/ogbg_molpcba.svg "Prediction on a caramboxin molecule")
 
 We use [Jraph](https://github.com/deepmind/jraph/),
-a JAX library for Graph Neural Networks, to
-train and evaluate on the
+a JAX library for Graph Neural Networks, to define models
+which are trained on the
 [ogbg-molpcba](https://ogb.stanford.edu/docs/graphprop/)
 dataset, part of the [Open Graph Benchmark](https://ogb.stanford.edu/).
 
@@ -17,8 +17,7 @@ no installation required!
 The [Colab notebook](https://colab.research.google.com/github/google/flax/blob/main/examples/ogbg_molpcba/ogbg_molpcba.ipynb)
 can even create visualizations of model predictions:
 
-![Visualizing predictions of a trained model]
-(https://www.gstatic.com/flax_examples/ogbg_molpcba_predictions.svg "Visualizing predictions of a trained model")
+![Visualizing predictions of a trained model](https://www.gstatic.com/flax_examples/ogbg_molpcba_predictions.svg "Visualizing predictions of a trained model")
 
 
 ### Requirements
