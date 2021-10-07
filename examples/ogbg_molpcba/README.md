@@ -17,7 +17,7 @@ no installation required!
 The [Colab notebook](https://colab.research.google.com/github/google/flax/blob/main/examples/ogbg_molpcba/ogbg_molpcba.ipynb)
 can even create visualizations of model predictions:
 
-![Visualizing predictions of a trained model](https://www.gstatic.com/flax_examples/ogbg_molpcba_predictions.svg "Visualizing predictions of a trained model")
+![Visualizing predictions of a trained model](https://www.gstatic.com/flax_examples/ogbg_molpcba_predictions.svg? "Visualizing predictions of a trained model")
 
 
 ### Requirements
