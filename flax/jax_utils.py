@@ -17,6 +17,7 @@
 
 import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
+import itertools
 import warnings
 
 import jax
@@ -112,7 +113,7 @@ def prefetch_to_device(iterator, size, devices=None):
   This utility takes an iterator and returns a new iterator which fills an on
   device prefetch buffer. Eager prefetching can improve the performance of
   training loops significantly by overlapping compute and data transfer.
-  
+
   This utility is mostly useful for GPUs, for TPUs it should not be necessary.
 
   Args:
@@ -125,8 +126,8 @@ def prefetch_to_device(iterator, size, devices=None):
     the specified devices.
   """
   queue = collections.deque()
-  if devices is None:
-    devices = jax.local_devices()
+  devices = devices or jax.local_devices()
+
   def _prefetch(xs):
     if hasattr(jax, "device_put_sharded"):  # jax>=0.2.0
       return jax.device_put_sharded(list(xs), devices)
@@ -138,22 +139,15 @@ def prefetch_to_device(iterator, size, devices=None):
       buffers = [xla.device_put(x, devices[i])
                  for i, x in enumerate(xs)]
       return jax.pxla.ShardedDeviceArray(aval, buffers)
-  try:
-    while len(queue) < size:
-      queue.append(jax.tree_map(_prefetch, next(iterator)))
-  except StopIteration:
-    pass
 
-  while True:
-    try:
-      xs = queue.popleft()
-    except IndexError:
-      return
-    try:
-      queue.append(jax.tree_map(_prefetch, next(iterator)))
-    except StopIteration:
-      pass
-    yield xs
+  def enqueue(n):  # Enqueues *up to* `n` elements from the iterator.
+    for data in itertools.islice(iterator, n):
+      queue.append(jax.tree_map(_prefetch, data))
+
+  enqueue(size)  # Fill up the buffer.
+  while queue:
+    yield queue.popleft()
+    enqueue(1)
 
 
 def _scan_nd(body_fn, init, xs, n=1):
