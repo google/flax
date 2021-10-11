@@ -170,7 +170,7 @@ encoded = model.apply(variables, batch, method=model.encode)
 decoded = model.apply(variables, encoded, method=model.decode)
 ```
 
-## 🤗 Transformers
+## 🤗 Hugging Face
 
 In-detail examples to train and evaluate a variety of Flax models for 
 Natural Language Processing, Computer Vision, and Speech Recognition are 
