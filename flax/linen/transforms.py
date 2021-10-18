@@ -22,7 +22,7 @@ versions as "lifted transformations".
 A lifted transformation can be applied to a ``Module`` class or a
 function that takes a ``Module`` instance as its first argument.
 """
-from typing import Any, Type, Callable, Union, Mapping, Optional, TypeVar, Iterable, Sequence
+from typing import Any, Type, Callable, Union, Mapping, Optional, TypeVar, Iterable, Sequence, Tuple
 
 import dataclasses
 import functools
@@ -288,7 +288,7 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
       object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
-      _test_transformed_return_values(res, class_fn.__name__)
+      _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
@@ -299,14 +299,19 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
 
 # Utility to wrap a class or to use as decorator in def of class method.
 # -----------------------------------------------------------------------------
+
+def _is_module_class(target):
+  return (inspect.isclass(target) and issubclass(target, Module)
+      or (isinstance(target, functools.partial)) and _is_module_class(target.func))
+
+
 def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs):
   """Applies to class or as a decorator on class fns."""
-  if (inspect.isclass(target) and issubclass(target, Module)
-      or isinstance(target, functools.partial)):
+  if _is_module_class(target):
     return module_class_lift_transform(
         transform, target, *trafo_args, methods=methods, **trafo_kwargs)
   # we presume this is being used as a function decorator in class definition
-  elif inspect.isfunction(target):
+  elif callable(target):
     return decorator_lift_transform(
         transform, target, *trafo_args, **trafo_kwargs)
   else:

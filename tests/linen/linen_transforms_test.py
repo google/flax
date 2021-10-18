@@ -782,6 +782,30 @@ class TransformTest(absltest.TestCase):
     })
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
+  def test_partial_module_method(self):
+    k = random.PRNGKey(0)
+    x = jnp.ones((3,4,4))
+    class Foo(nn.Module):
+
+      @nn.compact
+      def inner(self, x):
+        return nn.Dense(2, use_bias=False)(x)
+      
+      def __call__(self, x):
+        return nn.vmap(
+            partial(Foo.inner),
+            variable_axes={'params':0},
+            split_rngs={'params':True})(self, x)
+
+    init_vars = Foo().init(k, x)
+    init_vars_shapes = jax.tree_map(jnp.shape, init_vars)
+    ref_var_shapes = freeze({
+        'params': {
+          'Dense_0': {'kernel': (3, 4, 2)}
+        },
+    })
+    self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
+
   def test_variable_in_args_transform(self):
     class Test(nn.Module):
       @nn.jit
