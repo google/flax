@@ -24,13 +24,13 @@ from flax import traceback_util
 import jax
 from jax import random
 
-from typing import Any, Callable, Sequence, Union, Iterable, Optional, Mapping, TypeVar, Generic
+from typing import Any, Callable, Sequence, Union, Iterable, Optional, Mapping, TypeVar, Generic, Tuple
 
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 
-from .scope import (Scope, DenyList, CollectionFilter, PRNGSequenceFilter,
+from .scope import (RNGSequences, Scope, DenyList, CollectionFilter, PRNGSequenceFilter,
     is_filter_empty, in_filter, union_filters, intersect_filters, subtract_filters, group_collections)
 
 from . import axes_scan
@@ -300,6 +300,171 @@ Axis = Optional[int]
 InOutAxis = Union[Axis, In[Axis], Out[Axis]]
 
 
+def _bwd_wrapper(treedef, bwd_fn, tangent):
+  vars_grad, inputs_grad = bwd_fn(tangent)
+  vars_grad = treedef.unflatten(vars_grad)
+  return inputs_grad, vars_grad
+
+
+def vjp(fn: Callable[..., Any], scope: Scope, *primals,
+    has_aux: bool = False, reduce_axes=(),
+    vjp_variables: CollectionFilter = "params",
+    variables: CollectionFilter = True,
+    rngs: PRNGSequenceFilter = True, 
+    ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
+  """A lifted version of ``jax.vjp``.
+
+  See ``jax.vjp`` for the unlifted vector-Jacobiam product (backward gradient).
+
+  Note that a gradient is returned for all variables in the collections
+  specified by `vjp_variables`. However, the backward funtion only expects
+  a cotangent for the return value of `fn`. If variables require a co-tangent
+  as well they can be returned from `fn` using `scope.variables()`.
+
+  Example::
+
+    def learn_scale(scope, x):
+      p = scope.param('scale', nn.initializers.zeros, ())
+      return p * x
+    def f(scope, x):
+      y, bwd = lift.vjp(learn_scale, scope, x)
+      params_grad, x_grad = bwd(jnp.ones(y.shape))
+      return y, params_grad, x_grad
+
+   Args:
+    fn: Function to be differentiated. Its arguments should be arrays, scalars,
+      or standard Python containers of arrays or scalars. It should return an
+      array, scalar, or standard Python container of arrays or scalars. It will
+      receive the scope and primals as arguments.
+    scope: The scope of which the variables will be differentiated.
+    primals: A sequence of primal values at which the Jacobian of ``fn``
+      should be evaluated. The length of ``primals`` should be equal to the
+      number of positional parameters to ``fn``. Each primal value should be a
+      tuple of arrays, scalar, or standard Python containers thereof.
+    has_aux: Optional, bool. Indicates whether ``fn`` returns a pair where the
+     first element is considered the output of the mathematical function to be
+     differentiated and the second element is auxiliary data. Default False.
+    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
+      ``fn`` implicitly broadcasts a value over that axis, the backward pass
+      will perform a ``psum`` of the corresponding gradient. Otherwise, the
+      VJP will be per-example over named axes. For example, if ``'batch'``
+      is a named batch axis, ``vjp(f, *args, reduce_axes=('batch',))`` will
+      create a VJP function that sums over the batch while ``vjp(f, *args)``
+      will create a per-example VJP.
+    vjp_variables: The vjpfun will return a cotangent vector for all
+      variable collections specified by this filter.
+    variables: other variables collections that are available inside `fn` but
+      do not receive a cotangent.
+    rngs: the prngs that are available inside `fn`.
+
+  Returns:
+    If ``has_aux`` is ``False``, returns a ``(primals_out, vjpfun)`` pair, where
+    ``primals_out`` is ``fn(*primals)``.
+    ``vjpfun`` is a function from a cotangent vector with the same shape as
+    ``primals_out`` to a tuple of cotangent vectors with the same shape as
+    ``primals``, representing the vector-Jacobian product of ``fn`` evaluated at
+    ``primals``. If ``has_aux`` is ``True``, returns a
+    ``(primals_out, vjpfun, aux)`` tuple where ``aux`` is the auxiliary data
+    returned by ``fn``.
+  """
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
+    vjp_vars, other_vars = variable_groups
+    @functools.wraps(fn)
+    def wrapper(vjp_vars, *args):
+      variable_groups = (vjp_vars, other_vars)
+      scope = scope_fn(variable_groups, rng_groups)
+      if has_aux:
+        y, aux = fn(scope, *args)
+      else:
+        y = fn(scope, *args)
+        aux = ()
+      return y, (aux, repack_fn(scope))
+    y, bwd, (aux, out_vars) = jax.vjp(
+        wrapper, vjp_vars, *args,
+        reduce_axes=reduce_axes, has_aux=True)
+    treedef = jax.tree_structure(scope)
+    bwd = jax.tree_util.Partial(
+        functools.partial(_bwd_wrapper, treedef), bwd)
+    if has_aux:
+      return (y, bwd, aux), out_vars
+    else:
+      return (y, bwd), out_vars
+  return pack(
+      inner, (vjp_variables, variables), (variables,), (rngs,),
+      name='vjp', enable_kwargs=False)(scope, *primals)
+
+
+def jvp(fn: Callable[..., Any], scope: Scope,
+    primals, tangents, variable_tangents,
+    variables: CollectionFilter = True,
+    rngs: PRNGSequenceFilter = True, 
+    ) -> Tuple[Any, Any]:
+  """A lifted version of ``jax.jvp``.
+
+  See ``jax.jvp`` for the unlifted Jacobian-vector product (forward gradient).
+
+  Note that no tangents are returned for variables. When variable tangents
+  are required their value should be returned explicitly by `fn`
+  using `scope.variables()`.
+
+  Example::
+
+    def learn_scale(scope, x):
+      p = scope.param('scale', nn.initializers.zeros, ())
+      return p * x
+
+    def f(scope, x):
+      vars_t = jax.tree_map(jnp.ones_like, scope.variables().get('params', {}))
+      x, out_t = lift.jvp(
+          learn_scale, scope, (x,), (jnp.zeros_like(x),),
+          variable_tangents={'params': vars_t})
+      return out_t
+
+   Args:
+    primals: The primal values at which the Jacobian of ``fun`` should be
+        evaluated. Should be either a tuple or a list of arguments,
+        and its length should be equal to the number of positional parameters of
+        ``fun``.
+    tangents: The tangent vector for which the Jacobian-vector product should be
+      evaluated. Should be either a tuple or a list of tangents, with the same
+      tree structure and array shapes as ``primals``.
+    variable_tangents: A dict or PyTree fo dicts with the same structure as
+      scopes. Each entry in the dict specifies the tangents for a variable
+      collection. Not specificying a collection in variable_tangents is
+      equivalent to passing a zero vector as the tangent.
+    variables: other variables collections that are available inside `fn` but
+      do not receive a tangent.
+    rngs: the prngs that are available inside `fn`.
+
+  Returns:
+    A ``(primals_out, tangents_out)`` pair, where ``primals_out`` is
+    ``fun(*primals)``, and ``tangents_out`` is the Jacobian-vector product of
+    ``function`` evaluated at ``primals`` with ``tangents``. The
+    ``tangents_out`` value has the same Python tree structure and shapes as
+    ``primals_out``.
+  """
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
+    jvp_vars, other_vars = variable_groups
+    @functools.wraps(fn)
+    def wrapper(vars_primals, args):
+      variable_groups = (vars_primals, other_vars)
+      scope = scope_fn(variable_groups, rng_groups)
+      y = fn(scope, *args)
+      return y, repack_fn(scope)
+    (y, out_vars), out_tangents = jax.jvp(wrapper, (jvp_vars, args), (variable_tangents, tangents))
+    return (y, out_tangents[0]), out_vars
+  # filter out empty tangent collections because JAX will error on non-equal tree structure
+  # for example: {"params": {}} != {}
+  treedef = jax.tree_structure(scope)
+  
+  variable_tangents =  tuple({k: v for k, v in vt.items() if v} for vt in treedef.flatten_up_to(variable_tangents))
+  target = tuple(variable_tangents[0].keys())
+  return pack(
+      inner, (target, variables), (variables,), (rngs,),
+      name='jvp', enable_kwargs=False)(scope, *primals)
+
+
+
 def vmap(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutAxis],
          split_rngs: Mapping[PRNGSequenceFilter, bool],
@@ -340,7 +505,7 @@ def vmap(fn: Callable[..., Any],
   RNG must also be shared.
 
   Args:
-    target: the function to be transformed.
+    fn: the function to be transformed.
     variable_axes: the variable collections that are lifted into the
       batching transformation. Use `None` to indicate a broadcasted
       collection or an integer to map over an axis.
