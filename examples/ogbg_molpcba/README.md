@@ -4,7 +4,7 @@
 This example trains a Graph Neural Network to classify molecules
 on the basis of their biological activities.
 
-![Prediction on a caramboxin molecule](https://www.gstatic.com/flax_examples/ogbg_molpcba.svg "Prediction on a caramboxin molecule")
+![Prediction on a caramboxin molecule](https://www.gstatic.com/flax_examples/ogbg_molpcba.png "Prediction on a caramboxin molecule")
 
 We use [Jraph](https://github.com/deepmind/jraph/),
 a JAX library for Graph Neural Networks, to define models
