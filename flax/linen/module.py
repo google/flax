@@ -584,7 +584,8 @@ class Module(metaclass=ModuleMeta):
     and making sure setup is called before any other method.
     """
     is_compact_method = hasattr(fun, 'compact')
-    is_setup_method = fun.__name__ == 'setup'
+    fun_name = getattr(fun, '__name__', 'unnamed_function')
+    is_setup_method = fun_name == 'setup'
     # We lazily call setup() only when needed.
     if is_setup_method:
       is_recurrent = self._state.in_setup
@@ -602,8 +603,8 @@ class Module(metaclass=ModuleMeta):
       y = fun(self, *args, **kwargs)
       if _context.capture_stack:
         filter_fn = _context.capture_stack[-1]
-        if filter_fn and filter_fn(self, fun.__name__):
-          self.sow('intermediates', fun.__name__, y)
+        if filter_fn and filter_fn(self, fun_name):
+          self.sow('intermediates', fun_name, y)
       return y
     finally:
       _context.module_stack.pop()
