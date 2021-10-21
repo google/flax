@@ -59,7 +59,7 @@ class PReLU(Module):
   negative_slope_init: float = 0.01
   @compact
   def __call__(self, inputs: Array) -> Array:
-    """Applies a convolution to the inputs.
+    """Applies an activation to the inputs.
 
     Args:
       inputs: the nd-array to apply the activation function to.
@@ -69,6 +69,6 @@ class PReLU(Module):
     """
     negative_slope = self.param(
       'negative_slope',
-      lambda k: jnp.array(self.negative_slope_init, inputs.dtype)
+      lambda k: jnp.asarray(self.negative_slope_init)
     )
     return jnp.where(inputs >= 0, inputs, negative_slope * inputs)
