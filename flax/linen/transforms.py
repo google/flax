@@ -314,7 +314,11 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
 # Utility to wrap a class or to use as decorator in def of class method.
 # -----------------------------------------------------------------------------
 
-def _is_module_class(target):
+TransformTarget = Union[Type[Module], Callable[..., Any]]
+Target = TypeVar('Target', bound=TransformTarget)
+
+
+def _is_module_class(target: TransformTarget) -> bool:
   return (inspect.isclass(target) and issubclass(target, Module)
       or (isinstance(target, functools.partial)) and _is_module_class(target.func))
 
@@ -347,11 +351,6 @@ def lift_direct_transform(transform, target: Callable[..., Any], mdl: Module,
   else:
     raise ValueError(
         'transform target must be callable')
-  
-
-TransformTarget = Union[Type[Module], Callable[..., Any]]
-
-Target = TypeVar('Target', bound=TransformTarget)
 
 
 def vmap(target: Target,
