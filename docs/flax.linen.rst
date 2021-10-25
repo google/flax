@@ -36,6 +36,13 @@ Compact methods
 .. autofunction:: compact
 
 
+No wrap methods
+----------------------
+
+.. currentmodule:: flax.linen
+.. autofunction:: nowrap
+
+
 Transformations
 ----------------------
 
