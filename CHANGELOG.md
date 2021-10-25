@@ -20,7 +20,7 @@ vNext
 - 
 - 
 - 
-- 
+- Add lifted versions of jvp and vjp.
 - 
 - 
 - 

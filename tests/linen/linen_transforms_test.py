@@ -709,7 +709,6 @@ class TransformTest(absltest.TestCase):
         }
     }})
 
-    print(jax.tree_map(jnp.shape, p1))
     # Test method wrapper transform.
     y2 = C(a2, b).apply(p2, x)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
@@ -1042,13 +1041,55 @@ class TransformTest(absltest.TestCase):
     model = BigModel()
     variables = model.init(random.PRNGKey(0), x)
     param_shapes = jax.tree_map(jnp.shape, variables['params'])
-    print(param_shapes)
     self.assertEqual(param_shapes["dense_stack"]["kernel"], (100, 8, 8))
     self.assertEqual(param_shapes["dense_stack"]["bias"], (100, 8))
     y = model.apply(variables, x)
     self.assertEqual(y.shape, (2, 8))
 
 
+  def test_vjp(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('test', nn.initializers.zeros, ())
+        self.variable('state', 'counter', lambda: 0)
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        y, bwd = nn.vjp(Bar.__call__, Bar(), x)
+        params_grad, x_grad = bwd(jnp.ones(y.shape))
+        return params_grad, x_grad
+    
+    x = jnp.ones((3,))
+    params = Foo().init(random.PRNGKey(0), x)
+    x_grad, params_grad = Foo().apply(params, x)
+    self.assertEqual(params_grad, {
+      'params': nn.FrozenDict({'test': 3.}),
+    })
+    np.testing.assert_allclose(x_grad, 0. * x)
+
+  def test_jvp(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('test', nn.initializers.zeros, ())
+        self.variable('state', 'counter', lambda: 0)
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = Bar()
+        vars_t = jax.tree_map(jnp.ones_like, bar.variables.get('params', {}))
+        _, out_t = nn.jvp(Bar.__call__, bar, (x,), (jnp.zeros_like(x),), {'params': vars_t})
+        return out_t
+    
+    x = jnp.ones((3,))
+    params = Foo().init(random.PRNGKey(0), x)
+    y_t = Foo().apply(params, x)
+    np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
 if __name__ == '__main__':
   absltest.main()

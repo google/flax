@@ -58,6 +58,8 @@ Transformations
     remat
     remat_scan
     map_variables
+    jvp
+    vjp
 
 
 Linear modules

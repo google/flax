@@ -13,8 +13,9 @@
 # limitations under the License.
 
 from flax import errors
-from flax.core import Scope, init, apply, lift, nn
+from flax.core import Scope, init, apply, lift, nn, FrozenDict, unfreeze
 
+import jax
 from jax import random
 from jax import numpy as jnp
 
@@ -74,6 +75,41 @@ class LiftTest(absltest.TestCase):
     self.assertEqual(compiles, 3)  # applying again should not
     self.assertEqual(state['intermediates']['x'].sum(), 3 * 2 * 2)
 
+
+  def test_vjp(self):
+    def g(scope, x):
+      p = scope.param('test', nn.initializers.zeros, ())
+      scope.variable('state', 'counter', lambda: 0)
+      return p * x
+
+    def f(scope, x):
+      y, bwd = lift.vjp(g, scope, x)
+      params_grad, x_grad = bwd(jnp.ones(y.shape))
+      return params_grad, x_grad
+    
+    x = jnp.ones((3,))
+    _, params = init(f)(random.PRNGKey(0), x)
+    x_grad, params_grad = apply(f)(params, x)
+    self.assertEqual(params_grad, {
+      'params': FrozenDict({'test': 3.}),
+    })
+    np.testing.assert_allclose(x_grad, 0. * x)
+
+  def test_jvp(self):
+    def g(scope, x):
+      p = scope.param('test', nn.initializers.zeros, ())
+      scope.variable('state', 'counter', lambda: 0)
+      return p * x
+
+    def f(scope, x):
+      vars_t = jax.tree_map(jnp.ones_like, scope.variables().get('params', {}))
+      _, out_t = lift.jvp(g, scope, (x,), (jnp.zeros_like(x),), {'params': vars_t})
+      return out_t
+    
+    x = jnp.ones((3,))
+    _, params = init(f)(random.PRNGKey(0), x)
+    y_t = apply(f)(params, x)
+    np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
 if __name__ == '__main__':
   absltest.main()
