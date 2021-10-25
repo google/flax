@@ -430,7 +430,7 @@ def jvp(fn: Callable[..., Any], scope: Scope,
       tree structure and array shapes as ``primals``.
     variable_tangents: A dict or PyTree fo dicts with the same structure as
       scopes. Each entry in the dict specifies the tangents for a variable
-      collection. Not specificying a collection in variable_tangents is
+      collection. Not specifying a collection in variable_tangents is
       equivalent to passing a zero vector as the tangent.
     variables: other variables collections that are available inside `fn` but
       do not receive a tangent.

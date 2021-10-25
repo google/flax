@@ -301,7 +301,7 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
         # TODO transforms like jvp & vjp have args that follow the pytree
         # structure of scopes. The user doesn't explicitly control shared
         # modules passed as arguments to methods or as attributes to Module
-        # constructors. Therefore, there is no obvious API for specificying
+        # constructors. Therefore, there is no obvious API for specifying
         # arguments per lifted Module.
         raise NotImplementedError(
             "This transform does not yet support"
@@ -732,15 +732,21 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
   a cotangent for the return value of `fn`. If variables require a co-tangent
   as well they can be returned from `fn` using `Module.variables`.
 
+
   Example::
 
-    def learn_scale(scope, x):
-      p = scope.param('scale', nn.initializers.zeros, ())
-      return p * x
-    def f(scope, x):
-      y, bwd = lift.vjp(learn_scale, scope, x)
-      params_grad, x_grad = bwd(jnp.ones(y.shape))
-      return y, params_grad, x_grad
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('scale', nn.initializers.zeros, ())
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        y, bwd = nn.vjp(lambda mdl, x: mdl(x), LearnScale(), x)
+        params_grad, x_grad = bwd(jnp.ones(y.shape))
+        return y, params_grad, x_grad
 
    Args:
     fn: Function to be differentiated. Its arguments should be arrays, scalars,
@@ -839,7 +845,7 @@ def jvp(fn: Callable[..., Any], mdl: Module,
       tree structure and array shapes as ``primals``.
     variable_tangents: A dict or PyTree fo dicts with the same structure as
       scopes. Each entry in the dict specifies the tangents for a variable
-      collection. Not specificying a collection in variable_tangents is
+      collection. Not specifying a collection in variable_tangents is
       equivalent to passing a zero vector as the tangent.
     variables: other variables collections that are available in `fn` but
       do not receive a tangent.
