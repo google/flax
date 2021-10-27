@@ -19,13 +19,12 @@ from collections.abc import Iterable  # pylint: disable=g-importing-member
 import warnings
 
 from flax import jax_utils
-from flax.nn.activation import softmax
-from flax.nn.base import Collection, Module, collection_from_iterable, iterate_collection
-from flax.nn.initializers import zeros
-from flax.nn.stochastic import make_rng
-from flax.nn.linear import DenseGeneral, default_kernel_init
 from flax import struct
-
+from flax.deprecated.nn.activation import softmax
+from flax.deprecated.nn.base import Collection, Module, collection_from_iterable, iterate_collection
+from flax.deprecated.nn.initializers import zeros
+from flax.deprecated.nn.linear import DenseGeneral, default_kernel_init
+from flax.deprecated.nn.stochastic import make_rng
 import jax
 from jax import lax
 from jax import random
