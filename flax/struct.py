@@ -83,7 +83,7 @@ def dataclass(clz: _T) -> _T:
   valid containers that work with JAX transformations and
   more generally the `jax.tree_util` library.
 
-  Somtimes a "smart constructor" is desired, for example because
+  Sometimes a "smart constructor" is desired, for example because
   some of the attributes can be (optionally) derived from others.
   The way to do this with Flax dataclasses is to make a static or
   class method that provides the smart constructor.
