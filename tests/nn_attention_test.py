@@ -16,10 +16,8 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-
-from flax import nn
 from flax import jax_utils
-
+from flax.deprecated import nn
 import jax
 from jax import lax
 from jax import random

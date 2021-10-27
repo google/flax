@@ -14,10 +14,10 @@
 
 """Normalization modules for Flax."""
 
-from jax import lax
-from flax.nn import initializers
-import jax.numpy as jnp
 from flax.core import Scope
+from flax.deprecated.nn import initializers
+from jax import lax
+import jax.numpy as jnp
 
 
 def _absolute_dims(rank, dims):
