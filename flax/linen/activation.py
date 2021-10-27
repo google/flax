@@ -69,6 +69,6 @@ class PReLU(Module):
     """
     negative_slope = self.param(
       'negative_slope',
-      lambda k: jnp.asarray(self.negative_slope_init)
+      lambda k: jnp.asarray(self.negative_slope_init, inputs.dtype)
     )
     return jnp.where(inputs >= 0, inputs, negative_slope * inputs)
