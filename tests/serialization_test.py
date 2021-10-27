@@ -19,10 +19,11 @@ import collections
 from typing import Any
 
 from absl.testing import absltest
+from flax import nn
 from flax import optim
 from flax import serialization
 from flax import struct
-from flax.deprecated import nn
+
 import jax
 from jax import random
 import jax.numpy as jnp
@@ -244,7 +245,7 @@ class SerializationTest(absltest.TestCase):
     restored_x1 = serialization.from_bytes(x2, x1_serialized)
     self.assertEqual(type(x1), type(restored_x1))
     self.assertEqual(x1, restored_x1)
-
+  
   def test_namedtuple_restore_legacy(self):
     foo_class = collections.namedtuple('Foo', 'a b c')
     x1 = foo_class(a=1, b=2, c=3)

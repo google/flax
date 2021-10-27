@@ -15,9 +15,13 @@
 """Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-from flax import struct
+
+from flax.nn import initializers
+
 from flax.core import Scope
-from flax.deprecated.nn import initializers
+
+from flax import struct
+
 from jax import lax
 
 import jax.numpy as jnp

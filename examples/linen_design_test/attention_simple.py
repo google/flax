@@ -14,14 +14,17 @@
 
 import functools
 from pprint import pprint
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
-from flax.core import Scope
-from flax.core.frozen_dict import freeze, unfreeze
-from flax.deprecated.nn import initializers
-from flax.linen import Module, compact, vmap
+from typing import Any, Callable, Iterable, Sequence, List, Optional, Tuple, Type, Union
+
 import jax
-from jax import lax, numpy as jnp, random
+from jax import numpy as jnp, random, lax
 import numpy as np
+
+from flax.nn import initializers
+from flax.core.frozen_dict import freeze, unfreeze
+from flax.core import Scope
+
+from flax.linen import Module, compact, vmap
 
 
 
@@ -167,10 +170,10 @@ class MultiHeadDotProductAttention(Module):
                         dropout=(None, not self.broadcast_dropout),
                         axis_size=self.num_heads)
     for axis in reversed(sorted(self.batch_axes)):
-      Attn = concise_vmap(Attn,
-                          (axis, axis, axis), axis,
-                          param=(None, False),
-                          dropout=(None, not self.broadcast_dropout))
+        Attn = concise_vmap(Attn,
+                            (axis, axis, axis), axis,
+                            param=(None, False),
+                            dropout=(None, not self.broadcast_dropout))
 
     attn = Attn(attn_module=self.attn_module,
                 qkv_features=qkv_features // self.num_heads,

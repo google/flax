@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pprint import pprint
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
-from flax.deprecated import nn
-from flax.deprecated.nn import initializers
-from dense import Dense
-from flax.linen import Module
 import jax
-from jax import lax, numpy as jnp, random
+from jax import numpy as jnp, random, lax
+from flax import nn
+from flax.nn import initializers
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
+from flax.linen import Module
 import numpy as np
+from pprint import pprint
+from dense import Dense
 
 
 # Add `in_features` to the built-in Dense layer that normally works

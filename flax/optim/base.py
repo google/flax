@@ -26,6 +26,8 @@ from .. import traverse_util
 import jax
 import jax.numpy as jnp
 
+from ..nn import base
+
 from ..core import FrozenDict, unfreeze
 
 # Backwards compatibility symbol import.

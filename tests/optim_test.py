@@ -16,15 +16,15 @@
 
 from functools import partial
 from absl.testing import absltest
+from flax import nn
 from flax import optim
 from flax import traverse_util
 from flax.core.frozen_dict import FrozenDict
-from flax.deprecated import nn
-from flax.optim.adabelief import _AdaBeliefHyperParams, _AdaBeliefParamState
 from flax.optim.adadelta import _AdadeltaHyperParams, _AdadeltaParamState
 from flax.optim.adafactor import _AdafactorHyperParams, _AdafactorParamState
 from flax.optim.adagrad import _AdagradHyperParams, _AdagradParamState
 from flax.optim.adam import _AdamHyperParams, _AdamParamState
+from flax.optim.adabelief import _AdaBeliefHyperParams, _AdaBeliefParamState
 from flax.optim.momentum import _MomentumHyperParams, _MomentumParamState
 from flax.optim.rmsprop import _RMSPropHyperParams, _RMSPropParamState
 from flax.optim.sgd import _GradientDescentHyperParams

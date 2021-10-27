@@ -19,7 +19,7 @@ import functools
 from absl.testing import absltest
 from absl.testing import parameterized
 
-from flax.deprecated import nn
+from flax import nn
 
 import jax
 from jax import random
