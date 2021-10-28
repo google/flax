@@ -44,7 +44,6 @@ def sequence_mask(lengths: Array, max_length: int) -> Array:
   return jnp.arange(max_length)[None] < lengths[:, None]
 
 
-@jax.vmap
 def flip_sequences(inputs: Array, lengths: Array) -> Array:
   """Flips a sequence of inputs along the time dimension.
 
@@ -72,10 +71,8 @@ def flip_sequences(inputs: Array, lengths: Array) -> Array:
   Returns:
     An ndarray with the flipped inputs.
   """
-  # Note: since this function is vmapped, the code below is effectively for
-  # a single example.
-  max_length = inputs.shape[0]
-  return jnp.flip(jnp.roll(inputs, max_length - lengths, axis=0), axis=0)
+  max_length = inputs.shape[1]
+  return jnp.flip(jnp.roll(inputs, max_length - lengths, axis=1), axis=1)
 
 
 class WordDropout(nn.Module):
