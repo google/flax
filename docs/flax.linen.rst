@@ -114,6 +114,7 @@ Activation functions
     softmax
     softplus
     swish
+    PReLU
 
 
 Attention primitives
