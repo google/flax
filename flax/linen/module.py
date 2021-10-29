@@ -133,19 +133,34 @@ _unspecified_parent = _Sentinel()
 _use_named_call = config.flax_profile
 
 def enable_named_call():
-  """Enables named call wrapping for labelling profile traces."""
+  """Enables named call wrapping for labelling profile traces.
+  
+  When named call wrapping is enabled all JAX ops executed in a Module
+  will be wrapped with ``jax.named_call``. The ``Module`` class name will
+  show up around the operations belonging to that Module in the
+  Tensorboard profiling UI, simplifying the profiling process.
+
+  Note that ``jax.named_call`` only works for
+  compiled functions (e.g.: using jax.jit or jax.pmap).
+  """
   global _use_named_call
   _use_named_call = True
 
 def disable_named_call():
-  """Disables named call wrapping."""
+  """Disables named call wrapping.
+  
+  See ``enable_named_call``
+  """
   global _use_named_call
   _use_named_call = False
 
 
 @contextmanager
 def override_named_call(enable: bool = True):
-  """Returns a context manager that enables/disables named call wrapping."""
+  """Returns a context manager that enables/disables named call wrapping.
+  
+  See ``enable_named_call``
+  """
   global _use_named_call
   use_named_call_prev = _use_named_call
   _use_named_call = enable

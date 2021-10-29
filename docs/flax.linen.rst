@@ -43,6 +43,20 @@ No wrap methods
 .. autofunction:: nowrap
 
 
+Profiling
+----------------------
+
+.. automodule:: flax.linen
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    enable_named_call
+    disable_named_call
+    override_named_call
+
+
 Transformations
 ----------------------
 
