@@ -201,7 +201,7 @@ class Conv(Module):
       be a sequence of integers.
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
+    padding: either the string `'SAME'`, the string `'VALID'`, the string 'CIRCULAR'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
     input_dilation: an integer or a sequence of `n` integers, giving the
@@ -282,12 +282,19 @@ class Conv(Module):
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
 
+    if self.padding == 'CIRCULAR':
+      pads = [(0, 0)] + [((k - 1) // 2, k // 2) for k in kernel_size] + [(0, 0)]
+      inputs = jnp.pad(inputs, pads, mode='wrap')
+      padding_lax = 'VALID'
+    else:
+      padding_lax = self.padding
+
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
     y = lax.conv_general_dilated(
         inputs,
         kernel,
         strides,
-        self.padding,
+        padding_lax,
         lhs_dilation=input_dilation,
         rhs_dilation=kernel_dilation,
         dimension_numbers=dimension_numbers,

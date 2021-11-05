@@ -204,6 +204,145 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 2, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 7.))
 
+  @parameterized.product(
+      n_batch=(1, 3),
+      n_features=(1, 2),
+      kernel_size=(1, 2, 3, 9),
+      n_input_features=(1, 3),
+      input_size=(1, 8),
+  )
+  def test_circular_conv_1d_constant(
+          self, n_batch, n_features, kernel_size, n_input_features, input_size
+  ):
+      """
+      1D filter with all elements equal to 1 applied on 1D input with all elements equal to 1.
+      Result should have the same shape as input (except for the feature dimension) and
+      have all elements equal to n_input_features * kernel_lin_size
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = jnp.ones((n_batch, input_size, n_input_features))
+      conv_module = nn.Conv(
+          features=n_features,
+          kernel_size=(kernel_size,),
+          padding='CIRCULAR',
+          kernel_init=initializers.ones,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(
+          initial_params['params']['kernel'].shape,
+          (kernel_size, n_input_features, n_features),
+      )
+      correct_ans = np.full(
+          (n_batch, input_size, n_features), kernel_size * n_input_features
+      )
+      np.testing.assert_allclose(y, correct_ans)
+
+  @parameterized.product(
+      n_batch=(1, 3),
+      n_features=(1, 2, 10),
+      kernel_lin_size=(1, 2, 3, 9),
+      n_input_features=(1, 5),
+      input_x_size=(14,),
+      input_y_size=(10,),
+  )
+  def test_circular_conv_2d_constant(
+          self,
+          n_batch,
+          n_features,
+          kernel_lin_size,
+          n_input_features,
+          input_x_size,
+          input_y_size,
+  ):
+      """
+      Square filter with all elements equal to 1 applied on a 2D input with all elements equal to 1.
+      Result should have the same shape as input (except for the feature dimension) and
+      have all elements equal to n_input_features * kernel_lin_size^2
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = jnp.ones((n_batch, input_x_size, input_y_size, n_input_features))
+      conv_module = nn.Conv(
+          features=n_features,
+          kernel_size=(kernel_lin_size, kernel_lin_size),
+          padding='CIRCULAR',
+          kernel_init=initializers.ones,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(
+          initial_params['params']['kernel'].shape,
+          (kernel_lin_size, kernel_lin_size, n_input_features, n_features),
+      )
+      correct_ans = np.full(
+          (n_batch, input_x_size, input_y_size, n_features),
+          kernel_lin_size * kernel_lin_size * n_input_features,
+      )
+      np.testing.assert_allclose(y, correct_ans)
+
+  def test_circular_conv_1d_custom(self):
+      """
+      `Circular 1d convolution with a stride
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = np.arange(1, 6)
+      x = np.expand_dims(x, (0, 2))
+      kernel = np.array((1, 2, 1))
+      kernel = np.expand_dims(kernel, (1, 2))
+
+      conv_module = nn.Conv(
+          features=1,
+          kernel_size=(3,),
+          strides=(3,),
+          padding='CIRCULAR',
+          kernel_init=lambda *_: kernel,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(initial_params['params']['kernel'].shape, (3, 1, 1))
+      # Compare with manually computed convolution
+      correct_ans = np.array((5 + 2 * 1 + 2, 3 + 2 * 4 + 5))
+      correct_ans = np.expand_dims(correct_ans, (0, 2))
+      np.testing.assert_allclose(y, correct_ans)
+
+  def test_circular_conv_2d_custom(self):
+      """
+      `Circular 2d convolution on a 3x3 example
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = np.array(((1, 2, 3),
+                    (4, 5, 6),
+                    (7, 8, 9)))
+      x = np.expand_dims(x, (0, 3))
+      kernel = np.array(((0, 1, 0),
+                         (1, 2, 1),
+                         (0, 1, 0)))
+      kernel = np.expand_dims(kernel, (2, 3))
+
+      conv_module = nn.Conv(
+          features=1,
+          kernel_size=(3, 3),
+          padding='CIRCULAR',
+          kernel_init=lambda *_: kernel,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 1, 1))
+      # Compare with manually computed convolution
+      correct_ans = np.array(
+          (
+              (2 * 1 + 7 + 2 + 4 + 3, 2 * 2 + 8 + 3 + 5 + 1, 2 * 3 + 9 + 1 + 6 + 2),
+              (2 * 4 + 1 + 5 + 7 + 6, 2 * 5 + 2 + 6 + 8 + 4, 2 * 6 + 3 + 4 + 9 + 5),
+              (2 * 7 + 4 + 8 + 1 + 9, 2 * 8 + 5 + 9 + 2 + 7, 2 * 9 + 6 + 7 + 3 + 8),
+          )
+      )
+      correct_ans = np.expand_dims(correct_ans, (0, 3))
+      np.testing.assert_allclose(y, correct_ans)
+
   def test_conv_transpose(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
