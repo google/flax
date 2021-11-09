@@ -39,7 +39,7 @@ sys.path.append(os.path.abspath("./_ext"))
 # -- Project information -----------------------------------------------------
 
 project = 'Flax'
-copyright = '2020, The Flax authors'  # pylint: disable=redefined-builtin
+copyright = '2021, The Flax authors'  # pylint: disable=redefined-builtin
 author = 'The Flax authors'
 
 
@@ -113,3 +113,7 @@ nbsphinx_prolog = r"""
 
 
 """
+
+html_theme_options = {
+    'prev_next_buttons_location': None
+}

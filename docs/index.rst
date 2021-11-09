@@ -3,18 +3,73 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Flax documentation
-==================
+Flax: Neural networks with JAX
+====
 
-Flax is a neural network library and ecosystem for JAX that is
-designed for flexibility. Flax is in use by a growing community of
-researchers and engineers at Google who happily use Flax for their
-daily research.
+Flax delivers an **end-to-end, flexible, user experience for researchers
+who use JAX with neural networks**. Flax exposes the full power of JAX.
+It is made up of loosely coupled libraries,
+which are showcased with end-to-end integrated guides and examples. |emphasized hyperlink|_
 
-For a quick introduction and short example snippets, see our `README
-<https://github.com/google/flax/blob/main/README.md>`_.
+.. |emphasized hyperlink| replace:: **Get started now ▶**
+.. _emphasized hyperlink: getting_started.html
+
+.. code:: python
+
+   class MLP(nn.Module):
+     @nn.compact
+     def __call__(self, x):
+       x = nn.Dense(16)(x)
+       x = nn.relu(x)
+       x = nn.Dense(16)(x)
+       return x
+
+   model = MLP()
+   initialized_variables = model.init({"params": PRNGKey(42)})
+   model.apply(initialized_variables, jnp.ones((4, 16)))
+
+----
+
+.. list-table::
+   :align: center
+
+   * - `Getting started ▶ <getting_started.html>`__
+
+       JAX, Flax, and how to use them
+
+     - `Guides ▶ <getting_started.html>`__
+
+       ...
+
+     - `End-to-end examples ▶ <getting_started.html>`__
+
+       ...
+
+     - `How Flax works ▶ <getting_started.html>`__
+
+       ...
+
+     - `API reference docs ▶ <getting_started.html>`__
+
+       ...
+
+----
+
+..
+  TODO: Make all links open in a new tab
+
+Flax is used by `hundreds of projects (and growing) <https://github.com/google/flax/network/dependents?package_id=UGFja2FnZS01MjEyMjA2MA%3D%3D>`__,
+both in the open source community and within Google.
+Notable examples include:
+
+- `🤗 Hugging Face <https://huggingface.co/transformers/#supported-frameworks>`__ for NLP
+- `NetKet <https://github.com/netket/netket>`__ for Quantum ML
+- `T5x <https://github.com/google-research/t5x>`__ for large language models
+- `Brax <https://github.com/google/brax>`__ for on-device differentiable 
+  robotics simulations.
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Quickstart
 
@@ -23,6 +78,7 @@ For a quick introduction and short example snippets, see our `README
    Examples <https://github.com/google/flax/tree/main/examples>
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Guided Tour
 
@@ -31,6 +87,7 @@ For a quick introduction and short example snippets, see our `README
    notebooks/annotated_mnist
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: How do I ...?
    :glob:
@@ -43,6 +100,7 @@ For a quick introduction and short example snippets, see our `README
    howtos/model_surgery
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Design Notes
    :glob:
@@ -52,6 +110,7 @@ For a quick introduction and short example snippets, see our `README
    FLIPs <https://github.com/google/flax/tree/main/docs/flip>
 
 .. toctree::
+   :hidden:
    :maxdepth: 1
    :caption: Additional material
 
@@ -59,6 +118,8 @@ For a quick introduction and short example snippets, see our `README
    contributing
 
 .. toctree::
+   :hidden:
+
    :maxdepth: 2
    :caption: API reference
 
@@ -75,6 +136,8 @@ For a quick introduction and short example snippets, see our `README
    flax.errors
 
 .. toctree::
+   :hidden:
+
    :maxdepth: 1
    :caption: (deprecated)
 
