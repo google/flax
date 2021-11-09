@@ -201,9 +201,9 @@ class Conv(Module):
       be a sequence of integers.
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string 'CIRCULAR'`, or a sequence
-      of `n` `(low, high)` integer pairs that give the padding to apply before
-      and after each spatial dimension.
+    padding: either the string `'SAME'`, the string `'VALID'`, the string 'CIRCULAR'` (periodic boundary conditions),
+      or a sequence of `n` `(low, high)` integer pairs that give the padding to apply
+      before and after each spatial dimension.
     input_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of `inputs` (default: 1).
       Convolution with input dilation `d` is equivalent to transposed
@@ -283,7 +283,8 @@ class Conv(Module):
     kernel = jnp.asarray(kernel, self.dtype)
 
     if self.padding == 'CIRCULAR':
-      pads = [(0, 0)] + [((k - 1) // 2, k // 2) for k in kernel_size] + [(0, 0)]
+      kernel_size_dilated = [(k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)]
+      pads = [(0, 0)] + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] + [(0, 0)]
       inputs = jnp.pad(inputs, pads, mode='wrap')
       padding_lax = 'VALID'
     else:
@@ -320,8 +321,8 @@ class ConvTranspose(Module):
       be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
-    padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-      of `n` `(low, high)` integer pairs that give the padding to apply before
+    padding: either the string `'SAME'`, the string `'VALID'`, the string 'CIRCULAR'` (periodic boundary conditions),
+      or a sequence of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
     kernel_dilation: `None`, or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
@@ -379,12 +380,34 @@ class ConvTranspose(Module):
     kernel = self.param('kernel', self.kernel_init, kernel_shape)
     kernel = jnp.asarray(kernel, self.dtype)
 
+    if self.padding == 'CIRCULAR':
+      padding_lax = 'VALID'
+    else:
+      padding_lax = self.padding
+
     y = lax.conv_transpose(inputs,
                            kernel,
                            strides,
-                           self.padding,
+                           padding_lax,
                            rhs_dilation=self.kernel_dilation,
                            precision=self.precision)
+
+    if self.padding == "CIRCULAR":
+      # Find output dimensions
+      scaled_x_dims = [
+        x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
+      ]
+      # Pad each spatial dimension to (2 * n + 1) * (output size along that dimension)
+      size_diffs = [
+        -(y_dim - x_dim) % (2 * x_dim)
+        for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
+      ]
+      total_pad = [((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs]
+      y = np.pad(y, [(0, 0)] + total_pad + [(0, 0)])
+      # Wrap the result periodically around each spatial dimension
+      for i in range(1, y.ndim - 1):
+        y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) + y.shape[i + 1:])
+        y = y.sum(axis=i)
 
     if is_single_input:
       y = jnp.squeeze(y, axis=0)

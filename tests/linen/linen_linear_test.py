@@ -209,13 +209,14 @@ class LinearTest(parameterized.TestCase):
       n_features=(1, 2),
       kernel_size=(1, 2, 3, 9),
       n_input_features=(1, 3),
-      input_size=(1, 8),
+      input_size=(1, 8, 16),
   )
   def test_circular_conv_1d_constant(
           self, n_batch, n_features, kernel_size, n_input_features, input_size
   ):
       """
-      1D filter with all elements equal to 1 applied on 1D input with all elements equal to 1.
+      Test 1D convolution with circular padding: filter with all elements equal to 1
+      applied on an input with all elements equal to 1.
       Result should have the same shape as input (except for the feature dimension) and
       have all elements equal to n_input_features * kernel_lin_size
       """
@@ -245,7 +246,7 @@ class LinearTest(parameterized.TestCase):
       kernel_lin_size=(1, 2, 3, 9),
       n_input_features=(1, 5),
       input_x_size=(14,),
-      input_y_size=(10,),
+      input_y_size=(5, 10),
   )
   def test_circular_conv_2d_constant(
           self,
@@ -257,7 +258,8 @@ class LinearTest(parameterized.TestCase):
           input_y_size,
   ):
       """
-      Square filter with all elements equal to 1 applied on a 2D input with all elements equal to 1.
+      Test 2D convolution with circular padding: square filter with all elements equal to 1
+      applied on an input with all elements equal to 1.
       Result should have the same shape as input (except for the feature dimension) and
       have all elements equal to n_input_features * kernel_lin_size^2
       """
@@ -284,7 +286,7 @@ class LinearTest(parameterized.TestCase):
 
   def test_circular_conv_1d_custom(self):
       """
-      `Circular 1d convolution with a stride
+      Test 1d convolution with circular padding and a stride
       """
       rng = dict(params=random.PRNGKey(0))
       x = np.arange(1, 6)
@@ -308,9 +310,36 @@ class LinearTest(parameterized.TestCase):
       correct_ans = np.expand_dims(correct_ans, (0, 2))
       np.testing.assert_allclose(y, correct_ans)
 
+
+  def test_circular_conv_1d_dilation(self):
+      """
+      Test 1d convolution with circular padding and kernel dilation
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = np.arange(1, 6)
+      x = np.expand_dims(x, (0, 2))
+      kernel = np.array((1, 2, 1))
+      kernel = np.expand_dims(kernel, (1, 2))
+
+      conv_module = nn.Conv(
+          features=1,
+          kernel_size=(3,),
+          padding='CIRCULAR',
+          kernel_init=lambda *_: kernel,
+          bias_init=initializers.zeros,
+          kernel_dilation=(3,)
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(initial_params['params']['kernel'].shape, (3, 1, 1))
+      # Compare with manually computed convolution
+      correct_ans = np.array((3 + 2 * 1 + 4, 4 + 2 * 2 + 5, 5 + 2 * 3 + 1, 1 + 2 * 4 + 2, 2 + 2 * 5 + 3))
+      correct_ans = np.expand_dims(correct_ans, (0, 2))
+      np.testing.assert_allclose(y, correct_ans)
+
   def test_circular_conv_2d_custom(self):
       """
-      `Circular 2d convolution on a 3x3 example
+      Test 2d convolution with circular padding on a 3x3 example
       """
       rng = dict(params=random.PRNGKey(0))
       x = np.array(((1, 2, 3),
@@ -390,6 +419,202 @@ class LinearTest(parameterized.TestCase):
                               [ 7.,  7.,  7.,  7.],
                               [ 4.,  4.,  4.,  4.]])
     np.testing.assert_allclose(y, correct_ans)
+
+  @parameterized.product(
+      n_batch=(1, 3),
+      n_features=(1, 2),
+      kernel_size=(1, 2, 3, 9),
+      n_input_features=(1, 3),
+      input_size=(1, 8, 16),
+  )
+  def test_circular_conv_transpose_1d_constant(
+          self, n_batch, n_features, kernel_size, n_input_features, input_size
+  ):
+      """
+      Test 1D transposed convolution with circular padding: filter with all elements equal to 1
+      applied on an input with all elements equal to 1.
+      Result should have the same shape as input (except for the feature dimension) and
+      have all elements equal to n_input_features * kernel_lin_size
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = jnp.ones((n_batch, input_size, n_input_features))
+      conv_module = nn.ConvTranspose(
+          features=n_features,
+          kernel_size=(kernel_size,),
+          padding="CIRCULAR",
+          kernel_init=initializers.ones,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(
+          initial_params["params"]["kernel"].shape,
+          (kernel_size, n_input_features, n_features),
+      )
+      correct_ans = np.full(
+          (n_batch, input_size, n_features), kernel_size * n_input_features
+      )
+      np.testing.assert_allclose(y, correct_ans)
+
+  @parameterized.product(
+      n_batch=(1, 3),
+      n_features=(1, 2, 10),
+      kernel_lin_size=(1, 2, 3, 9),
+      n_input_features=(1, 5),
+      input_x_size=(14,),
+      input_y_size=(5, 10),
+  )
+  def test_circular_conv_transpose_2d_constant(
+          self,
+          n_batch,
+          n_features,
+          kernel_lin_size,
+          n_input_features,
+          input_x_size,
+          input_y_size,
+  ):
+      """
+      Test 2D transposed convolution with circular padding: square filter with all elements equal to 1
+      applied on an input with all elements equal to 1.
+      Result should have the same shape as input (except for the feature dimension) and
+      have all elements equal to n_input_features * kernel_lin_size^2
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = jnp.ones((n_batch, input_x_size, input_y_size, n_input_features))
+      conv_module = nn.ConvTranspose(
+          features=n_features,
+          kernel_size=(kernel_lin_size, kernel_lin_size),
+          padding="CIRCULAR",
+          kernel_init=initializers.ones,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(
+          initial_params["params"]["kernel"].shape,
+          (kernel_lin_size, kernel_lin_size, n_input_features, n_features),
+      )
+      correct_ans = np.full(
+          (n_batch, input_x_size, input_y_size, n_features),
+          kernel_lin_size * kernel_lin_size * n_input_features,
+      )
+      np.testing.assert_allclose(y, correct_ans)
+
+  def test_circular_conv_transpose_1d_custom(self):
+      """
+      Test 1d transposed convolution with circular padding and a stride
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = np.arange(1, 6)
+      x = np.expand_dims(x, (0, 2))
+      kernel = np.array((1, 2, 1))
+      kernel = np.expand_dims(kernel, (1, 2))
+
+      conv_module = nn.ConvTranspose(
+          features=1,
+          kernel_size=(3,),
+          strides=(3,),
+          padding="CIRCULAR",
+          kernel_init=lambda *_: kernel,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(initial_params["params"]["kernel"].shape, (3, 1, 1))
+      # Compare with manually computed convolution
+      correct_ans = np.array(
+          (1 * 1, 1 * 2, 1 * 1,
+           2 * 1, 2 * 2, 2 * 1,
+           3 * 1, 3 * 2, 3 * 1,
+           4 * 1, 4 * 2, 4 * 1,
+           5 * 1, 5 * 2, 5 * 1,
+           )
+      )
+      correct_ans = np.expand_dims(correct_ans, (0, 2))
+      np.testing.assert_allclose(y, correct_ans)
+
+  def test_circular_conv_transpose_2d_custom(self):
+      """
+      Test 2d transposed convolution with circular padding on a 3x3 example
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = np.array(
+          (
+              (1, 2, 3),
+              (4, 5, 6),
+              (7, 8, 9),
+          )
+      )
+      x = np.expand_dims(x, (0, 3))
+      kernel = np.array(
+          (
+              (0, 1, 0),
+              (1, 2, 1),
+              (0, 1, 0)
+          )
+      )
+      kernel = np.expand_dims(kernel, (2, 3))
+
+      conv_module = nn.ConvTranspose(
+          features=1,
+          kernel_size=(3, 3),
+          padding="CIRCULAR",
+          kernel_init=lambda *_: kernel,
+          bias_init=initializers.zeros,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(initial_params["params"]["kernel"].shape, (3, 3, 1, 1))
+      # Compare with manually computed convolution
+      correct_ans = np.array(
+          (
+              (18, 21, 24),
+              (27, 30, 33),
+              (36, 39, 42),
+          )
+      )
+      correct_ans = np.expand_dims(correct_ans, (0, 3))
+      np.testing.assert_allclose(y, correct_ans)
+
+  def test_circular_conv_transpose_2d_custom_bias(self):
+      """
+      Test 2d transposed convolution with circular padding on a 2x2 example with bias
+      """
+      rng = dict(params=random.PRNGKey(0))
+      x = np.array(
+          (
+              (1, 2),
+              (3, 4)
+          )
+      )
+      x = np.expand_dims(x, (0, 3))
+      kernel = np.array(
+          (
+              (1, 2),
+              (3, 4),
+          )
+      )
+      kernel = np.expand_dims(kernel, (2, 3))
+
+      conv_module = nn.ConvTranspose(
+          features=1,
+          kernel_size=(2, 2),
+          padding="CIRCULAR",
+          kernel_init=lambda *_: kernel,
+          bias_init=initializers.ones,
+      )
+      y, initial_params = conv_module.init_with_output(rng, x)
+
+      self.assertEqual(initial_params["params"]["kernel"].shape, (2, 2, 1, 1))
+      # Compare with manually computed convolution
+      correct_ans = np.array(
+          (
+              (21, 23),
+              (29, 31),
+          )
+      )
+      correct_ans = np.expand_dims(correct_ans, (0, 3))
+      np.testing.assert_allclose(y, correct_ans)
 
   def test_int_kernel_size(self):
     conv = nn.Conv(features=4, kernel_size=3)
