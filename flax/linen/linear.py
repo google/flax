@@ -237,9 +237,13 @@ class Conv(Module):
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a convolution to the inputs.
-
+ 
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
+        This is the channels-last convention, i.e. NHWC for a 2d convolution
+        and NDHWC for a 3D convolution. Note: this is different from the input
+        convention used by `lax.conv_general_dilated`, which puts the spatial
+        dimensions last.
 
     Returns:
       The convolved data.
@@ -341,6 +345,10 @@ class ConvTranspose(Module):
 
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
+        This is the channels-last convention, i.e. NHWC for a 2d convolution
+        and NDHWC for a 3D convolution. Note: this is different from the input
+        convention used by `lax.conv_general_dilated`, which puts the spatial
+        dimensions last.
 
     Returns:
       The convolved data.
