@@ -12,21 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """A utility for traversing immutable datastructures.
 
 A Traversal can be used to iterate and update complex data structures.
@@ -60,12 +45,12 @@ import copy
 import dataclasses
 
 import jax
+import flax
 
 from . import struct
 
 
-# the empty node is a struct.dataclass to 
-# be compatible with JAX.
+# the empty node is a struct.dataclass to be compatible with JAX.
 @struct.dataclass
 class _EmptyNode:
   pass
@@ -381,3 +366,74 @@ class TraverseTree(Traversal):
 
   def iterate(self, inputs):
     yield from jax.tree_leaves(inputs)
+
+
+def _get_params_dict(inputs):
+  if isinstance(inputs, flax.nn.Model):
+    return inputs.params
+  elif isinstance(inputs, (dict, flax.core.FrozenDict)):
+    return flax.core.unfreeze(inputs)
+  else:
+    raise ValueError(
+        'Can only traverse a flax Model instance or a nested dict, not '
+        f'{type(inputs)}')
+
+
+def _sorted_items(x):
+  """Returns items of a dict ordered by keys."""
+  return sorted(x.items(), key=lambda x: x[0])
+
+
+class ModelParamTraversal(Traversal):
+  """Select model parameters using a name filter.
+
+  This traversal operates on a nested dictionary of parameters and selects a
+  subset based on the `filter_fn` argument.
+
+  See :class:`flax.optim.MultiOptimizer` for an example of how to use
+  :class:`ModelParamTraversal` to update subsets of the parameter tree with a
+  specific optimizer.
+
+  Backward compatibility:
+  When using the old api the parameters can be encapsulated in a
+  :class:`flax.nn.Model` instance.
+  """
+
+  def __init__(self, filter_fn):
+    """Constructor a new ModelParamTraversal.
+
+    Args:
+      filter_fn: a function that takes a parameter's full name and its value and
+        returns whether this parameter should be selected or not. The name of a
+        parameter is determined by the module hierarchy and the parameter name
+        (for example: '/module/sub_module/parameter_name').
+    """
+    self._filter_fn = filter_fn
+
+  def iterate(self, inputs):
+    params = _get_params_dict(inputs)
+    flat_dict = flatten_dict(params)
+    for key, value in _sorted_items(flat_dict):
+      path = '/' + '/'.join(key)
+      if self._filter_fn(path, value):
+        yield value
+
+  def update(self, fn, inputs):
+    params = _get_params_dict(inputs)
+    flat_dict = flatten_dict(params, keep_empty_nodes=True)
+    new_dict = {}
+    for key, value in _sorted_items(flat_dict):
+      # empty_node is not an actual leave. It's just a stub for empty nodes
+      # in the nested dict.
+      if value is not empty_node:
+        path = '/' + '/'.join(key)
+        if self._filter_fn(path, value):
+          value = fn(value)
+      new_dict[key] = value
+    new_params = unflatten_dict(new_dict)
+    if isinstance(inputs, flax.nn.base.Model):
+      return inputs.replace(params=new_params)
+    elif isinstance(inputs, flax.core.FrozenDict):
+      return flax.core.FrozenDict(new_params)
+    else:
+      return new_params

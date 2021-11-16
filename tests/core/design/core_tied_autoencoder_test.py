@@ -25,12 +25,11 @@ from flax.core import init, unfreeze, lift, nn
 
 def transpose(fn):
   def trans(variables):
-    params = variables['params']
-    params['kernel'] = params['kernel'].T
-    return variables
+    return jax.tree_map(lambda x: x.T, variables)
 
-  return lift.transform_module(
-      fn, trans_in_fn=trans, trans_out_fn=trans)
+  return lift.map_variables(
+      fn, "params", map_in_fn=trans, map_out_fn=trans,
+      mutable=True)
 
 
 @dataclass

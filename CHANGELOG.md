@@ -3,31 +3,61 @@ Changelog
 
 vNext
 ------
-
 (Add your change to a random empty line to avoid merge conflicts)
- -
- -
- -
- -
- -
- -
- - NamedTuples are no longer converted to tuples on assingment to a `linen.Module`.
- -
- -
- -
- -
- -
- -
- -
- -
- -
- -
- -
- -
- -
- -
- -
- -
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+- 
+
+
+0.3.6
+------
+Breaking changes:
+- Move `flax.nn` to `flax.deprecated.nn`.
+
+New features:
+- Add experimental checkpoint policy argument. See `flax.linen.checkpoint`
+- Add lifted versions of jvp and vjp.
+- Add lifted transformation for mapping variables. See `flax.linen.map_variables`.
+
+
+0.3.5
+------
+
+Breaking changes:
+ - You can no longer pass an int as the `kernel_size` for a `flax.linen.Conv.
+   Instead a type error is raised stating that
+   a tuple/list should be provided. Stride and dilation arguments do support broadcasting a single int value now because this is not
+   ambigious when the kernel rank is known. 
+ - `flax.linen.enable_named_call` and `flax.linen.disable_named_call` now work anywhere instead of only affecting Modules constructed after the enable/disable call. Additionally, there is now `flax.linen.override_named_call` that provided a context manager to locally disable/enable named_call.
+ - NamedTuples are no longer converted to tuples on assignment to a `linen.Module`.
+
+New features:
+ - Flax internal stack frames are now removed from exception state traces.
+ - Added `flax.linen.nowrap` to decorate method that should not be transformed
+   because they are stateful.
+ - Flax no longer uses implicit rank broadcasting. Thus, you can now use Flax with `--jax_numpy_rank_promotion=raise`.
+
+Bugfixes:
+ - linen Modules and dataclasses made with `flax.struct.dataclass` or `flax.struct.PyTreeNode` are now correctly recognized as dataclasses by static analysis tools like PyLance. Autocomplete of constructors has been verified to work with VSCode.
+ - Fixed a bug in FrozenDict which didn't allow copying dicts with reserved names.
+ - Fix the serialization of named tuples. Tuple fields are no longer stored in the state dict and the named tuple class is no longer recreated ([bug](https://github.com/google/flax/issues/1429)).
+ - Mixed precision training with float16 now works correctly with the attention layers.
+ - auto-generated linen Module `__hash__`, `__eq__`, `__repr__` no longer fail by default on non-init attributes.
+ 
+
 
 0.3.4
 ------
@@ -42,7 +72,7 @@ Possibly breaking changes:
 Other changes:
  - Rewrote various examples to use Optax instead of Flax optimizers (e.g., Imagenet, SST2).
  - Added an NLP text classification example (on the SST-2 dataset) to
-   [`examples/sst2`](https://github.com/google/flax/tree/master/examples/sst2).
+   [`examples/sst2`](https://github.com/google/flax/tree/main/examples/sst2).
    that uses a bidirectional LSTM (BiLSTM) to encode the input text.
  - Added `flax.training.train_state` to simplify using Optax optimizers.
  - `mutable` argument is now available on `Module.init` and `Module.init_with_outputs`
@@ -177,7 +207,7 @@ v0.2.2
  - Fix initialization RNGs to work with omnistaging for jitted inits.
  - Replaces usage of 'param' kind to 'params' collection.
  - Fix LARS optimizer for zero param initialization.
- - Added various examples in Linen API. See [README.md](https://github.com/google/flax/blob/master/flax/linen/README.md) for more information.
+ - Added various examples in Linen API. See [README.md](https://github.com/google/flax/blob/main/flax/linen/README.md) for more information.
  - Full JAX omnistaging compatibility.
 
 v0.2

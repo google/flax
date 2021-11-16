@@ -12,24 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2021 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Utilities we could consider upstreaming to Jax.
 """
 
 import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
+import itertools
 import warnings
 
 import jax
@@ -43,25 +31,6 @@ import jax.numpy as jnp
 import numpy as np
 
 
-def _replicate(x, devices=None):
-  x = jax.numpy.asarray(x)
-  if devices is None:
-    # match the default device assignments used in pmap:
-    # for single-host, that's the XLA default device assignment
-    # for multi-host, it's the order of jax.local_devices()
-    if jax.process_count() == 1:
-      devices = [d for d in xb.get_backend().get_default_device_assignment(
-          jax.device_count()) if d.process_index == jax.process_index()]
-    else:
-      devices = jax.local_devices()
-  if hasattr(jax.api, "device_put_sharded"):  # jax >= 0.2.0
-    return jax.api.device_put_sharded(len(devices) * [x], devices)
-  else:
-    aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
-    buffers = [xla.device_put(x, device=d) for d in devices]
-    return jax.pxla.ShardedDeviceArray(aval, buffers)
-
-
 def replicate(tree, devices=None):
   """Replicates arrays to multiple devices.
 
@@ -72,7 +41,17 @@ def replicate(tree, devices=None):
   Returns:
     A new pytree containing the replicated arrays.
   """
-  return jax.tree_map(lambda x: _replicate(x, devices), tree)
+  if devices is None:
+    # match the default device assignments used in pmap:
+    # for single-host, that's the XLA default device assignment
+    # for multi-host, it's the order of jax.local_devices()
+    if jax.process_count() == 1:
+      devices = [d for d in xb.get_backend().get_default_device_assignment(
+          jax.device_count()) if d.process_index == jax.process_index()]
+    else:
+      devices = jax.local_devices()
+
+  return jax.device_put_replicated(tree, devices)
 
 
 def unreplicate(tree):
@@ -134,7 +113,7 @@ def prefetch_to_device(iterator, size, devices=None):
   This utility takes an iterator and returns a new iterator which fills an on
   device prefetch buffer. Eager prefetching can improve the performance of
   training loops significantly by overlapping compute and data transfer.
-  
+
   This utility is mostly useful for GPUs, for TPUs it should not be necessary.
 
   Args:
@@ -147,11 +126,11 @@ def prefetch_to_device(iterator, size, devices=None):
     the specified devices.
   """
   queue = collections.deque()
-  if devices is None:
-    devices = jax.local_devices()
+  devices = devices or jax.local_devices()
+
   def _prefetch(xs):
-    if hasattr(jax.api, "device_put_sharded"):  # jax>=0.2.0
-      return jax.api.device_put_sharded(list(xs), devices)
+    if hasattr(jax, "device_put_sharded"):  # jax>=0.2.0
+      return jax.device_put_sharded(list(xs), devices)
     else:
       aval = jax.xla.abstractify(xs)
       assert xs.shape[0] == len(devices), (
@@ -160,22 +139,15 @@ def prefetch_to_device(iterator, size, devices=None):
       buffers = [xla.device_put(x, devices[i])
                  for i, x in enumerate(xs)]
       return jax.pxla.ShardedDeviceArray(aval, buffers)
-  try:
-    while len(queue) < size:
-      queue.append(jax.tree_map(_prefetch, next(iterator)))
-  except StopIteration:
-    pass
 
-  while True:
-    try:
-      xs = queue.popleft()
-    except IndexError:
-      return
-    try:
-      queue.append(jax.tree_map(_prefetch, next(iterator)))
-    except StopIteration:
-      pass
-    yield xs
+  def enqueue(n):  # Enqueues *up to* `n` elements from the iterator.
+    for data in itertools.islice(iterator, n):
+      queue.append(jax.tree_map(_prefetch, data))
+
+  enqueue(size)  # Fill up the buffer.
+  while queue:
+    yield queue.popleft()
+    enqueue(1)
 
 
 def _scan_nd(body_fn, init, xs, n=1):

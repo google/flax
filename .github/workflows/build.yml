@@ -6,17 +6,18 @@ name: Build
 on:
   push:
     branches:
-      - master
+      - main
       - 'test_*'
   pull_request:
-    branches: [ master ]
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.6]
+        python-version: [3.7]
     steps:
     - name: Cancel previous
       uses: styfle/cancel-workflow-action@0.8.0

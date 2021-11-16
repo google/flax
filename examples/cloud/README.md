@@ -45,7 +45,7 @@ Optional environment variables:
 
 - `$REPO`: Alternative repo to use instead of the default
   https://github.com/google/flax - this is useful for development.
-- `$BRANCH`: Alternative branch to use instead of the default `master`.
+- `$BRANCH`: Alternative branch to use instead of the default `main`.
 
 ## Training the MNIST example
 
@@ -59,7 +59,7 @@ python examples/cloud/launch_gce.py \
   --machine_type=n2-standard-2 \
   --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --repo=${REPO:-https://github.com/google/flax} \
-  --branch=${BRANCH:-master} \
+  --branch=${BRANCH:-main} \
   --example=mnist \
   --args='--config=configs/default.py' \
   --name=default
@@ -99,7 +99,7 @@ python examples/cloud/launch_gce.py \
   --gcs_workdir_base=gs://$GCS_BUCKET/workdir_base \
   --tfds_data_dir=gs://$GCS_TFDS_BUCKET/datasets \
   --repo=${REPO:-https://github.com/google/flax} \
-  --branch=${BRANCH:-master} \
+  --branch=${BRANCH:-main} \
   --example=imagenet \
   --args='--config=configs/v100_x8_mixed_precision.py' \
   --name=v100_x8_mixed_precision

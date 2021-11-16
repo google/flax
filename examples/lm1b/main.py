@@ -15,7 +15,7 @@
 """Main file for running the Language Modelling example with LM1B.
 
 This file is intentionally kept short. The majority for logic is in libraries
-than can be easily tested and imported in Colab.
+that can be easily tested and imported in Colab.
 """
 
 from absl import app
@@ -33,7 +33,7 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('workdir', None, 'Directory to store model data.')
 config_flags.DEFINE_config_file(
     'config',
-    None,
+    'configs/default.py',
     'File path to the training hyperparameter configuration.',
     lock_config=True)
 flags.mark_flags_as_required(['config', 'workdir'])
@@ -43,7 +43,7 @@ def main(argv):
   if len(argv) > 1:
     raise app.UsageError('Too many command-line arguments.')
 
-  # Hide any GPUs form TensorFlow. Otherwise TF might reserve memory and make
+  # Hide any GPUs from TensorFlow. Otherwise TF might reserve memory and make
   # it unavailable to JAX.
   tf.config.experimental.set_visible_devices([], 'GPU')
 
@@ -61,4 +61,5 @@ def main(argv):
 
 
 if __name__ == '__main__':
+  jax.config.config_with_absl()
   app.run(main)

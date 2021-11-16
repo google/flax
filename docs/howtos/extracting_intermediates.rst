@@ -92,9 +92,8 @@ Note that, by default ``sow`` appends values every time it is called:
 * So you want to make sure that you **do not** feed intermediate values back in
   in ``variables``. Otherwise every call will increase the length of that tuple
   and trigger a recompile.
-* To override the default append behavior, specify ``init_fn`` and ``reduce_fn`` to :meth:...
-  specifying ``init_fn`` and ``reduce_fn`` - see
-  :meth:`Module.sow() <flax.linen.Module.sow>`.
+* To override the default append behavior, specify ``init_fn`` and ``reduce_fn``
+  - see :meth:`Module.sow() <flax.linen.Module.sow>`.
 
 .. testcode::
 

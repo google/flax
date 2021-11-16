@@ -263,7 +263,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   """
 
   writer = metric_writers.create_default_writer(
-      logdir=workdir, just_logging=jax.host_id() != 0)
+      logdir=workdir, just_logging=jax.process_index() != 0)
 
   rng = random.PRNGKey(0)
 

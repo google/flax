@@ -154,16 +154,16 @@ class ScopeParamNotFoundError(FlaxError):
   does not match the apply name 'embed'::
 
     class Embed(nn.Module):
-    num_embeddings: int
-    features: int
-      
-    @nn.compact
-    def __call__(self, inputs, embed_name='embedding'):
-      inputs = inputs.astype('int32')
-      embedding = self.param(embed_name,
-                            lecun_normal(),
-                            (self.num_embeddings, self.features))    
-      return embedding[inputs]
+      num_embeddings: int
+      features: int
+
+      @nn.compact
+      def __call__(self, inputs, embed_name='embedding'):
+        inputs = inputs.astype('int32')
+        embedding = self.param(embed_name,
+                               lecun_normal(),
+                               (self.num_embeddings, self.features))
+        return embedding[inputs]
 
     variables = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
     _ = Embed().apply(variables, jnp.ones((5, 5, 1)), 'embed')
@@ -178,14 +178,14 @@ class ScopeParamShapeError(FlaxError):
   This error is thrown when the shape of an existing parameter is different from
   the shape of the return value of the ``init_fn``. This can happen when the 
   shape provided during :meth:`Module.apply() <flax.linen.Module.apply>` is
-  different from the one used when intializing the module.
+  different from the one used when initializing the module.
   
   For instance, the following code throws this error because the apply shape 
   (``(5, 5, 1)``) is different from the init shape (``(5, 5``). As a result, the
   shape of the kernel during ``init`` is ``(1, 8)``, and the shape during 
   ``apply`` is ``(5, 8)``, which results in this error.::
 
-      class NoBiasDense(nn.Module):
+    class NoBiasDense(nn.Module):
       features: int = 8
 
       @nn.compact
@@ -261,6 +261,19 @@ class ModifyScopeVariableError(FlaxError):
   def __init__(self, col, variable_name, scope_path):
     super().__init__(f'Cannot update variable "{variable_name}" in '
                      f'"{scope_path}" because collection "{col}" is immutable.')
+
+
+class JaxTransformError(FlaxError):
+  """
+  JAX transforms and Flax modules cannot be mixed.
+
+  JAX's functional transformations expect pure function.
+  When you want to use JAX transformations **inside** Flax models,
+  you should make use of the Flax transformation wrappers
+  (e.g.: ``flax.linen.vmap``, ``flax.linen.scan``, etc.).
+  """
+  def __init__(self):
+    super().__init__('Jax transforms and Flax models cannot be mixed.')
 
 
 #################################################
@@ -357,7 +370,7 @@ class AssignSubModuleError(FlaxError):
     Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
 
   In this case, ``self.conv(kernel_size=4)`` is called from ``__call__``, which
-  is disallowed beause it's neither within ``setup`` nor a method wrapped in
+  is disallowed because it's neither within ``setup`` nor a method wrapped in
   x``nn.compact``.
   """
   def __init__(self, cls):
@@ -515,3 +528,22 @@ class InvalidCheckpointError(FlaxError):
   """
   def __init__(self, path, step):
     super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')
+
+
+#################################################
+# transforms.py errors                          #
+#################################################
+
+class TransformedMethodReturnValueError(FlaxError):
+  """
+  Transformed Module methods cannot return other Modules or Variables.
+
+  This commonly occurs when named_call is automatically applied to helper
+  constructor methods when profiling is enabled, and can be mitigated by
+  using the @nn.nowrap decorator to prevent automatic wrapping.
+  """
+  def __init__(self, name):
+    super().__init__(
+      f'Transformed module method {name} cannot return Modules or Variables. '
+      f'For helper constructor methods use the @nn.nowrap decorator to prevent '
+      f'decoration by the automatic named_call transform.')

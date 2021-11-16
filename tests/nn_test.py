@@ -17,7 +17,7 @@
 import threading
 from absl.testing import absltest
 
-from flax import nn
+from flax.deprecated import nn
 
 import jax
 from jax import random
@@ -288,7 +288,7 @@ class ModuleTest(absltest.TestCase):
     _, params = MultiMethod.init(random.PRNGKey(0), x)
     model = nn.Model(MultiMethod, params)
     self.assertEqual(model.l2(), 2.)
-    
+
     y, _ = MultiMethodModel.init(random.PRNGKey(0), x)
     self.assertEqual(y, 2.)
 
@@ -695,8 +695,8 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
     (carry, y), initial_params = nn.LSTMCell.init(key2, (c0, h0), x)
-    lstm = nn.Model(nn.LSTMCell, initial_params)      
-    
+    lstm = nn.Model(nn.LSTMCell, initial_params)
+
     # Create OptimizedLSTMCell.
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
@@ -706,9 +706,9 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(h0.shape, (2, 4))
     (carry, y_opt), initial_params = nn.OptimizedLSTMCell.partial(
         name='LSTMCell').init(key2, (c0, h0), x)
-    lstm_opt = nn.Model(nn.OptimizedLSTMCell.partial(name='LSTMCell'), 
+    lstm_opt = nn.Model(nn.OptimizedLSTMCell.partial(name='LSTMCell'),
       initial_params)
-    
+
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)
     jtu.check_eq(lstm.params, lstm_opt.params)
 

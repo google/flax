@@ -16,9 +16,11 @@
 
 import copy
 import os
+import pathlib
 from typing import Any
 
 from absl.testing import absltest
+from absl.testing import parameterized
 import flax
 from flax import core
 from flax import errors
@@ -93,7 +95,7 @@ class TrainState:
   model_state: Any
 
 
-class CheckpointsTest(absltest.TestCase):
+class CheckpointsTest(parameterized.TestCase):
 
   def test_naturalsort(self):
     np.random.seed(0)
@@ -107,8 +109,14 @@ class CheckpointsTest(absltest.TestCase):
     for test in tests:
       self.assertEqual(test, checkpoints.natural_sort(shuffle(test)))
 
+  def test_safe_normpath(self):
+    tests = ['./a/b/c', '/a//b/c', '/a/../b/c', 'a/b/./c', 'gs://a//b/c']
+    expected = ['a/b/c', '/a/b/c', '/b/c', 'a/b/c', 'gs://a/b/c']
+    for test, expect in zip(tests, expected):
+      self.assertEqual(expect, checkpoints.safe_normpath(test))
+
   def test_save_restore_checkpoints(self):
-    tmp_dir = self.create_tempdir().full_path
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
     test_object1 = {'a': np.array([1, 2, 3], np.int32),
@@ -187,6 +195,39 @@ class CheckpointsTest(absltest.TestCase):
     checkpoints.save_checkpoint(rel_tmp_dir, test_object, 3, keep=1)
     new_object = checkpoints.restore_checkpoint(rel_tmp_dir, test_object0)
     jtu.check_eq(new_object, test_object)
+    non_norm_dir_path = tmp_dir + '//'
+    checkpoints.save_checkpoint(non_norm_dir_path, test_object, 4, keep=1)
+    new_object = checkpoints.restore_checkpoint(non_norm_dir_path, test_object0)
+    jtu.check_eq(new_object, test_object)
+
+  @parameterized.parameters({'keep_every_n_steps': None},
+                            {'keep_every_n_steps': 7})
+  def test_keep(self, keep_every_n_steps):
+    tmp_dir = self.create_tempdir().full_path
+    test_object = {'a': np.array([1, 2, 3], np.int32)}
+    steps_start = 17
+    steps_end = 37
+    keep = 3
+    increment = 5
+
+    for step in range(steps_start, steps_end, increment):
+      checkpoints.save_checkpoint(tmp_dir,
+                                  test_object,
+                                  step=step,
+                                  keep=keep,
+                                  keep_every_n_steps=keep_every_n_steps)
+
+    last_checkpoint = -float('inf')
+    for step in range(steps_start, steps_end, increment):
+      if ((steps_end - step) / increment <= keep) or (keep_every_n_steps and (
+          step - last_checkpoint) >= keep_every_n_steps):
+        restored = checkpoints.restore_checkpoint(
+            tmp_dir, target=None, step=step)
+        jtu.check_eq(restored, test_object)
+        last_checkpoint = step
+      else:
+        with self.assertRaises(ValueError):
+          checkpoints.restore_checkpoint(tmp_dir, target=None, step=step)
 
   def test_save_restore_checkpoints_w_float_steps(self):
     tmp_dir = self.create_tempdir().full_path

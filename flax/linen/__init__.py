@@ -19,19 +19,20 @@
 # re-export commonly used modules and functions
 from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
-                         softplus, swish, silu, tanh)
+                         softplus, swish, silu, tanh, PReLU)
 from .attention import (MultiHeadDotProductAttention, SelfAttention,
                         dot_product_attention, dot_product_attention_weights,
                         make_attention_mask, make_causal_mask, combine_masks)
-from ..core import broadcast, DenyList
+from ..core import broadcast, DenyList, FrozenDict
 from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
-from .module import (Module, compact, enable_named_call, disable_named_call,
-                     Variable, init, init_with_output, apply, merge_param)
+from .module import (Module, compact, nowrap, enable_named_call,
+                     disable_named_call, override_named_call, Variable, init,
+                     init_with_output, apply, merge_param)
 from .normalization import BatchNorm, GroupNorm, LayerNorm
 from .pooling import avg_pool, max_pool
 from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell
 from .stochastic import Dropout
-from .transforms import jit, named_call, remat, scan, vmap
+from .transforms import jit, named_call, checkpoint, remat, remat_scan, scan, vmap, map_variables, vjp, jvp
 from .initializers import zeros, ones
 
 # pylint: enable=g-multiple-import

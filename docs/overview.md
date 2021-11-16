@@ -44,7 +44,7 @@ See the [What does Flax look like](https://github.com/google/flax#what-does-flax
 
 ## TPU support
 
-We currently have a [LM1b/Wikitext-2 language model with a Transformer architecture](https://colab.research.google.com/github/google/flax/blob/master/examples/lm1b/Colab_Language_Model.ipynb)
+We currently have a [LM1b/Wikitext-2 language model with a Transformer architecture](https://colab.research.google.com/github/google/flax/blob/main/examples/lm1b/Colab_Language_Model.ipynb)
 that's been tuned. You can run it directly via Colab.
 
 At present, Cloud TPUs are network-attached, and Flax users typically feed in data from one or more additional VMs

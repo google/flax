@@ -25,6 +25,6 @@ Fixes # (issue)
       [discussion](https://github.com/google/flax/discussions) (please add a
       link).
 - [ ] The documentation and docstrings adhere to the
-      [documentation guidelines](https://github.com/google/flax/blob/master/docs/README.md#how-to-write-code-documentation).
+      [documentation guidelines](https://github.com/google/flax/blob/main/docs/README.md#how-to-write-code-documentation).
 - [ ] This change includes necessary high-coverage tests.
       (No quality testing = no merge!)

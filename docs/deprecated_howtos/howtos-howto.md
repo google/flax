@@ -14,10 +14,10 @@ instance, the "ensembling howto" is represented in two ways:
 * In the file `howtos/diffs/howto-ensembling.diff` (in the repository).
 
 The branch `howto-ensembling` is simply the result of applying 
-`howto/howto-ensembling.diff` to the master branch.
+`howto/howto-ensembling.diff` to the main branch.
 
 This setup allows us to ensure all local modifications to HOWTOs can be packed
-in diff files locally, pushed to origin and applied to the master branch 
+in diff files locally, pushed to origin and applied to the main branch 
 automatically.
 
 This process is automatic, which means that users usually won't notice this, 
@@ -53,13 +53,13 @@ The workflow script for the Github action can be found at
 This is still a work in progress. Currently, conflicts are resolved by manually
 making the required fixes. The suggestions below can help speed up that process.
 
-### Start with a clean and updated copy of `master`
+### Start with a clean and updated copy of `main`
 As an example, assuming you have `https://github.com/google/flax` set as
 `upstream`:
 ```bash
-git checkout master
+git checkout main
 git fetch upstream
-git rebase upstream/master
+git rebase upstream/main
 ```
 If your local copy of `flax` isn't clean, you may need to stash your changes
 elsewhere (e.g., via `git stash`) or otherwise remove your changes.
@@ -114,7 +114,7 @@ a `howto` is the filename without the extension (e.g., the name for the
 
 ## Modifying an existing HOWTO
 
-1. Fetch upstream and rebase onto upstream/master (see above).
+1. Fetch upstream and rebase onto upstream/main (see above).
 1. Apply the HOWTO : `git apply howtos/diffs/$name.diff`.
 2. Modify the modified files, without staging them.
 3. Re-pack the HOWTO (supplying same `$name`).

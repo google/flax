@@ -26,9 +26,10 @@ from .. import traverse_util
 import jax
 import jax.numpy as jnp
 
-from ..nn import base
-
 from ..core import FrozenDict, unfreeze
+
+# Backwards compatibility symbol import.
+ModelParamTraversal = traverse_util.ModelParamTraversal
 
 
 @struct.dataclass
@@ -416,17 +417,6 @@ class ReplicatedOptimizer(OptimizerDef):
     return self.optimizer_def.restore_state(target, opt_state, state_dict)
 
 
-def _get_params_dict(inputs):
-  if isinstance(inputs, base.Model):
-    return inputs.params
-  elif isinstance(inputs, (dict, FrozenDict)):
-    return unfreeze(inputs)
-  else:
-    raise ValueError(
-        'Can only traverse a flax Model instance or a nested dict, not '
-        f'{type(inputs)}')
-
-
 @dataclasses.dataclass
 class _ShapeDtype:
   shape: Any
@@ -442,23 +432,24 @@ class _ShapeDtype:
 
 
 class MultiOptimizer(OptimizerDef):
-  """ 
-  A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying 
-  separate optimizer algorithms to various subsets of the model parameters. 
-  
-  The example below creates two optimizers using :class:`ModelParamTraversal`:
+  """
+  A MultiOptimizer is subclass of :class:`OptimizerDef` and useful for applying
+  separate optimizer algorithms to various subsets of the model parameters.
+
+  The example below creates two optimizers using
+  :class:`flax.traverse_util.ModelParamTraversal`:
   one to optimize ``kernel`` parameters and to optimize ``bias`` parameters.
   Note each optimizer is created with a different learning rate::
 
-    kernels = optim.ModelParamTraversal(lambda path, _: 'kernel' in path)
-    biases = optim.ModelParamTraversal(lambda path, _: 'bias' in path)
+    kernels = traverse_util.ModelParamTraversal(lambda path, _: 'kernel' in path)
+    biases = traverse_util.ModelParamTraversal(lambda path, _: 'bias' in path)
     kernel_opt = optim.Momentum(learning_rate=0.01)
     bias_opt = optim.Momentum(learning_rate=0.1)
     opt_def = MultiOptimizer((kernels, kernel_opt), (biases, bias_opt))
     optimizer = opt_def.create(model)
 
   In order to train only a subset of the parameters, you can simply use a single
-  :class:`ModelParamTraversal` instance.
+  :class:`flax.traverse_util.ModelParamTraversal` instance.
 
   If you want to update the learning rates of both optimizers online with
   different learning rate schedules, you should update the learning rates when
@@ -467,9 +458,9 @@ class MultiOptimizer(OptimizerDef):
 
     hparams = optimizer.optimizer_def.hyper_params
     new_optimizer = optimizer.apply_gradient(
-        grads, 
+        grads,
         hyper_params=[
-          hparams[0].replace(learning_rate=0.2), 
+          hparams[0].replace(learning_rate=0.2),
           hparams[1].replace(learning_rate=jnp.where(step < 1000, 0., lr)),
         ])
   """
@@ -546,63 +537,3 @@ class MultiOptimizer(OptimizerDef):
     if hyper_param_overrides:
       hps = [hp.replace(**hyper_param_overrides) for hp in hps]
     return hps
-
-
-def _sorted_items(x):
-  """Returns items of a dict ordered by keys."""
-  return sorted(x.items(), key=lambda x: x[0])
-
-
-class ModelParamTraversal(traverse_util.Traversal):
-  """Select model parameters using a name filter.
-  
-  This traversal operates on a nested dictionary of parameters and selects a
-  subset based on the `filter_fn` argument.
-
-  See :class:`MultiOptimizer` for an example of how to use 
-  :class:`ModelParamTraversal` to update subsets of the parameter tree with a
-  specific optimizer.
-
-  Backward compatibility:
-  When using the old api the parameters can be encapsulated in a 
-  :class:`flax.nn.Model` instance.
-  """
-
-  def __init__(self, filter_fn):
-    """Constructor a new ModelParamTraversal.
-
-    Args:
-      filter_fn: a function that takes a parameter's full name and its value and
-        returns whether this parameter should be selected or not. The name of a
-        parameter is determined by the module hierarchy and the parameter name
-        (for example: '/module/sub_module/parameter_name').
-    """
-    self._filter_fn = filter_fn
-
-  def iterate(self, inputs):
-    params = _get_params_dict(inputs)
-    flat_dict = traverse_util.flatten_dict(params)
-    for key, value in _sorted_items(flat_dict):
-      path = '/' + '/'.join(key)
-      if self._filter_fn(path, value):
-        yield value
-
-  def update(self, fn, inputs):
-    params = _get_params_dict(inputs)
-    flat_dict = traverse_util.flatten_dict(params, keep_empty_nodes=True)
-    new_dict = {}
-    for key, value in _sorted_items(flat_dict):
-      # empty_node is not an actual leave. It's just a stub for empty nodes
-      # in the nested dict.
-      if value is not traverse_util.empty_node:
-        path = '/' + '/'.join(key)
-        if self._filter_fn(path, value):
-          value = fn(value)
-      new_dict[key] = value
-    new_params = traverse_util.unflatten_dict(new_dict)
-    if isinstance(inputs, base.Model):
-      return inputs.replace(params=new_params)
-    elif isinstance(inputs, FrozenDict):
-      return FrozenDict(new_params)
-    else:
-      return new_params

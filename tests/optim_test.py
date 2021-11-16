@@ -16,10 +16,11 @@
 
 from functools import partial
 from absl.testing import absltest
-from flax import nn
 from flax import optim
 from flax import traverse_util
 from flax.core.frozen_dict import FrozenDict
+from flax.deprecated import nn
+from flax.optim.adabelief import _AdaBeliefHyperParams, _AdaBeliefParamState
 from flax.optim.adadelta import _AdadeltaHyperParams, _AdadeltaParamState
 from flax.optim.adafactor import _AdafactorHyperParams, _AdafactorParamState
 from flax.optim.adagrad import _AdagradHyperParams, _AdagradParamState
@@ -112,58 +113,6 @@ class OptimizerDefTest(absltest.TestCase):
     self.assertEqual(new_optimizer.state, expected_state)
 
 
-class ModelParamTraversalTest(absltest.TestCase):
-
-  def test_only_works_on_model_params(self):
-    traversal = optim.ModelParamTraversal(lambda *_: True)
-    with self.assertRaises(ValueError):
-      list(traversal.iterate([]))
-
-  def test_param_selection(self):
-    params = {
-        'x': {
-            'kernel': 1,
-            'bias': 2,
-            'y': {
-                'kernel': 3,
-                'bias': 4,
-            },
-            'z': {},
-        },
-    }
-    expected_params = {
-        'x': {
-            'kernel': 2,
-            'bias': 2,
-            'y': {
-                'kernel': 6,
-                'bias': 4,
-            },
-            'z': {}
-        },
-    }
-    names = []
-    def filter_fn(name, _):
-      names.append(name)  # track names passed to filter_fn for testing
-      return 'kernel' in name
-    traversal = optim.ModelParamTraversal(filter_fn)
-
-    # Model
-    model = nn.Model(None, params)
-    values = list(traversal.iterate(model))
-    configs = [
-      (nn.Model(None, params), nn.Model(None, expected_params)),
-      (params, expected_params),
-      (FrozenDict(params), FrozenDict(expected_params)),
-    ]
-    for model, expected_model in configs:
-      self.assertEqual(values, [1, 3])
-      self.assertEqual(set(names), set([
-          '/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias']))
-      new_model = traversal.update(lambda x: x + x, model)
-      self.assertEqual(new_model, expected_model)
-
-
 class MultiOptimizerTest(absltest.TestCase):
 
   def test_multi_optimizer(self):
@@ -199,10 +148,10 @@ class MultiOptimizerTest(absltest.TestCase):
     params = {'a': {'x': 0., 'y': 0.}, 'b': {'y': 0, 'z': 0.}}
     opt_a = optim.GradientDescent(learning_rate=1.)
     opt_b = optim.GradientDescent(learning_rate=10.)
-    t_a = optim.ModelParamTraversal(
+    t_a = traverse_util.ModelParamTraversal(
       lambda path, _: path.endswith('/x') or path.endswith('/y')
     )
-    t_b = optim.ModelParamTraversal(
+    t_b = traverse_util.ModelParamTraversal(
       lambda path, value: value.dtype == jnp.int32 or path.endswith('/z')
     )
     optimizer_def = optim.MultiOptimizer((t_a, opt_a), (t_b, opt_b))
@@ -294,6 +243,36 @@ class AdamTest(absltest.TestCase):
     expected_new_state = optim.OptimizerState(
         2, _AdamParamState(np.array([3.22]), np.array([2.41])))
     expected_new_params = np.array([0.906085])
+    np.testing.assert_allclose(new_params, expected_new_params)
+    self.assertEqual(new_state, expected_new_state)
+
+
+class AdaBeliefTest(absltest.TestCase):
+
+  def test_init_state(self):
+    params = np.zeros((1,))
+    optimizer_def = optim.AdaBelief(
+        learning_rate=0.1, beta1=0.2, beta2=0.9, eps=0.01, weight_decay=0.0)
+    state = optimizer_def.init_state(params)
+
+    expected_hyper_params = _AdaBeliefHyperParams(0.1, 0.2, 0.9, 0.01, 0.0)
+    self.assertEqual(optimizer_def.hyper_params, expected_hyper_params)
+    expected_state = optim.OptimizerState(
+        0, _AdaBeliefParamState(np.zeros((1,)), np.zeros((1,))))
+    self.assertEqual(state, expected_state)
+
+  def test_apply_gradient(self):
+    optimizer_def = optim.AdaBelief(
+        learning_rate=0.1, beta1=0.2, beta2=0.9, eps=0.01, weight_decay=0.0)
+    params = np.array([1.])
+    state = optim.OptimizerState(
+        1, _AdaBeliefParamState(np.array([0.1]), np.array([0.9])))
+    grads = np.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _AdaBeliefParamState(np.array([3.22]), np.array([0.88084])))
+    expected_new_params = np.array([0.8449397])
     np.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 

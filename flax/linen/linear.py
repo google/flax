@@ -178,7 +178,7 @@ class Dense(Module):
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -199,19 +199,19 @@ class Conv(Module):
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
       be a sequence of integers.
-    strides: a sequence of `n` integers, representing the inter-window
-      strides.
+    strides: an integer or a sequence of `n` integers, representing the
+      inter-window strides (default: 1).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
-    input_dilation: `None`, or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs`.
+    input_dilation: an integer or a sequence of `n` integers, giving the
+      dilation factor to apply in each spatial dimension of `inputs` (default: 1).
       Convolution with input dilation `d` is equivalent to transposed
       convolution with stride `d`.
-    kernel_dilation: `None`, or a sequence of `n` integers, giving the
+    kernel_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
-      kernel. Convolution with kernel dilation is also known as 'atrous
-      convolution'.
+      kernel (default: 1). Convolution with kernel dilation
+      is also known as 'atrous convolution'.
     feature_group_count: integer, default 1. If specified divides the input
       features into groups.
     use_bias: whether to add a bias to the output (default: True).
@@ -222,11 +222,11 @@ class Conv(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Union[int, Iterable[int]]
-  strides: Optional[Iterable[int]] = None
+  kernel_size: Iterable[int]
+  strides: Union[None, int, Iterable[int]] = 1
   padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
-  input_dilation: Optional[Iterable[int]] = None
-  kernel_dilation: Optional[Iterable[int]] = None
+  input_dilation: Union[None, int, Iterable[int]] = 1
+  kernel_dilation: Union[None, int, Iterable[int]] = 1
   feature_group_count: int = 1
   use_bias: bool = True
   dtype: Dtype = jnp.float32
@@ -237,9 +237,13 @@ class Conv(Module):
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a convolution to the inputs.
-
+ 
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
+        This is the channels-last convention, i.e. NHWC for a 2d convolution
+        and NDHWC for a 3D convolution. Note: this is different from the input
+        convention used by `lax.conv_general_dilated`, which puts the spatial
+        dimensions last.
 
     Returns:
       The convolved data.
@@ -248,16 +252,28 @@ class Conv(Module):
     inputs = jnp.asarray(inputs, self.dtype)
 
     if isinstance(self.kernel_size, int):
-      kernel_size = (self.kernel_size,)
+      raise TypeError('The kernel size must be specified as a'
+                      ' tuple/list of integers (eg.: [3, 3]).')
     else:
-      kernel_size = self.kernel_size
+      kernel_size = tuple(self.kernel_size)
+
+    def maybe_broadcast(x):
+      if x is None:
+        # backward compatibility with using None as sentinel for
+        # broadcast 1
+        x = 1
+      if isinstance(x, int):
+        return (x,) * len(kernel_size)
+      return x
 
     is_single_input = False
     if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
-    strides = self.strides or (1,) * (inputs.ndim - 2)
+    strides = maybe_broadcast(self.strides)  # self.strides or (1,) * (inputs.ndim - 2)
+    input_dilation = maybe_broadcast(self.input_dilation)
+    kernel_dilation = maybe_broadcast(self.kernel_dilation)
 
     in_features = inputs.shape[-1]
     assert in_features % self.feature_group_count == 0
@@ -272,8 +288,8 @@ class Conv(Module):
         kernel,
         strides,
         self.padding,
-        lhs_dilation=self.input_dilation,
-        rhs_dilation=self.kernel_dilation,
+        lhs_dilation=input_dilation,
+        rhs_dilation=kernel_dilation,
         dimension_numbers=dimension_numbers,
         feature_group_count=self.feature_group_count,
         precision=self.precision)
@@ -283,7 +299,7 @@ class Conv(Module):
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -329,6 +345,10 @@ class ConvTranspose(Module):
 
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
+        This is the channels-last convention, i.e. NHWC for a 2d convolution
+        and NDHWC for a 3D convolution. Note: this is different from the input
+        convention used by `lax.conv_general_dilated`, which puts the spatial
+        dimensions last.
 
     Returns:
       The convolved data.
@@ -364,7 +384,7 @@ class ConvTranspose(Module):
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,))
       bias = jnp.asarray(bias, self.dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 

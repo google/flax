@@ -5,7 +5,7 @@ Trains a simple text classifier on the SST-2 sentiment classification dataset.
 You can run this code and even modify it directly in Google Colab, no
 installation required:
 
-https://colab.research.google.com/github/google/flax/blob/master/examples/sst2/sst2.ipynb
+https://colab.research.google.com/github/google/flax/blob/main/examples/sst2/sst2.ipynb
 
 ### Requirements
 * TensorFlow dataset `glue/sst2` will be downloaded and prepared automatically, if necessary.

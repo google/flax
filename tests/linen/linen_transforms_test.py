@@ -23,6 +23,7 @@ import jax
 from jax import random
 import jax.numpy as jnp
 import numpy as np
+from flax import errors
 from flax import linen as nn
 from flax.core import freeze
 
@@ -121,6 +122,19 @@ class TransformTest(absltest.TestCase):
 
     self.assertTrue(np.all(y1 == y2))
 
+  def test_remat_kwargs(self):
+    class ConditionalReLU(nn.Module):
+      @nn.compact
+      def __call__(self, input, apply_relu : bool = False):
+        return nn.relu(input) if apply_relu else input
+    key = random.PRNGKey(0)
+    x = jnp.ones((4, 4)) * -1
+    remat_model = nn.remat(ConditionalReLU)()
+    p = remat_model.init(key, x)
+    y = remat_model.apply(p, x, apply_relu=True)
+
+    self.assertTrue(np.all(y == jnp.zeros_like(x)))
+
   def test_vmap(self):
     key1, key2 = random.split(random.PRNGKey(3), 2)
     x = random.uniform(key1, (4, 4))
@@ -197,10 +211,10 @@ class TransformTest(absltest.TestCase):
         return LSTM(name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
-    xs = random.uniform(key1, (3, 2))
+    xs = random.uniform(key1, (5, 3, 2))
     dummy_rng = random.PRNGKey(0)
     init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[:1],
+                                              xs.shape[1:-1],
                                               xs.shape[-1])
     model = SimpleScan()
     init_variables = model.init(key2, init_carry, xs)
@@ -230,11 +244,11 @@ class TransformTest(absltest.TestCase):
         return nn.LSTMCell(name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
-    xs = random.uniform(key1, (3, 2))
+    xs = random.uniform(key1, (4, 3, 2))
     b = jnp.ones((4,))
     dummy_rng = random.PRNGKey(0)
     init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[:1],
+                                              xs.shape[1:-1],
                                               xs.shape[-1])
     model = SimpleScan()
     init_variables = model.init(key2, init_carry, b, xs)
@@ -414,8 +428,7 @@ class TransformTest(absltest.TestCase):
 
   def test_multiscope_lifting_simple_decorator_w_named_call(self):
     # TODO: actually test jaxpr on a simpler module.
-    nn.enable_named_call()
-    try:
+    with nn.override_named_call(True):
       class Counter(nn.Module):
         @nn.jit
         @nn.compact
@@ -453,8 +466,6 @@ class TransformTest(absltest.TestCase):
                       jnp.array([2], jnp.int32))
       self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
                       jnp.array([4], jnp.int32))
-    finally:
-      nn.disable_named_call()
 
   def test_vmapped_outer_module(self):
     class Outer(nn.Module):
@@ -698,7 +709,6 @@ class TransformTest(absltest.TestCase):
         }
     }})
 
-    print(jax.tree_map(jnp.shape, p1))
     # Test method wrapper transform.
     y2 = C(a2, b).apply(p2, x)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
@@ -771,6 +781,315 @@ class TransformTest(absltest.TestCase):
     })
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
+  def test_partial_module_method(self):
+    k = random.PRNGKey(0)
+    x = jnp.ones((3,4,4))
+    class Foo(nn.Module):
+
+      @nn.compact
+      def inner(self, x):
+        return nn.Dense(2, use_bias=False)(x)
+      
+      def __call__(self, x):
+        return nn.vmap(
+            partial(Foo.inner),
+            variable_axes={'params':0},
+            split_rngs={'params':True})(self, x)
+
+    init_vars = Foo().init(k, x)
+    init_vars_shapes = jax.tree_map(jnp.shape, init_vars)
+    ref_var_shapes = freeze({
+        'params': {
+          'Dense_0': {'kernel': (3, 4, 2)}
+        },
+    })
+    self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
+
+  def test_variable_in_args_transform(self):
+    class Test(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        y = self.mutate_variable_in_method(x, baz)
+        return y
+      @nn.jit
+      def mutate_variable_in_method(self, x, baz):
+        baz.value += x
+        return baz.value
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = Test().init(k, x)
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([1.0,]), atol=1e-7)
+    y, variables = Test().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([2.0,]), atol=1e-7)
+
+  def test_module_instance_in_args_transform(self):
+    class Inner(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        baz.value += x
+        return baz.value
+
+    class Test(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        inner = Inner(name="inner")
+        y = self.call_instance_arg_in_method(x, inner)
+        return y
+      @nn.jit
+      def call_instance_arg_in_method(self, x, inner):
+        return inner(x)
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = Test().init(k, x)
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([1.0,]), atol=1e-7)
+    y, variables = Test().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([2.0,]), atol=1e-7)
+
+  def test_module_instance_in_args_transform_nested(self):
+    class Inner(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        baz.value += x
+        return baz.value
+
+    class Outer(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, inner, x):
+        y = self.call_instance_arg_in_method(x, inner)
+        return y
+      @nn.jit
+      def call_instance_arg_in_method(self, x, inner):
+        return inner(x)
+
+    class Test(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        inner = Inner(name="inner")
+        outer = Outer(name="outer")
+        return outer(inner, x)
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = Test().init(k, x)
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([1.0,]), atol=1e-7)
+    y, variables = Test().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['inner']['baz'],
+                                jnp.array([2.0,]), atol=1e-7)
+
+
+  def test_nested_variable_passing(self):
+    class NestedVarUser(nn.Module):
+      somevar: nn.Variable
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        self.somevar.value += x
+        return x
+    class VarUser(nn.Module):
+      somevar: nn.Variable
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return NestedVarUser(self.somevar)(x)
+    class VarPasser(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        baz = self.variable('test', 'baz', jnp.zeros, x.shape)
+        y = VarUser(baz)(x)
+        return y
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    variables = VarPasser().init(k, x)
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([1.0,]), atol=1e-7)
+    y, variables = VarPasser().apply(variables, x, mutable=['test'])
+    np.testing.assert_allclose(variables['test']['baz'],
+                               jnp.array([2.0,]), atol=1e-7)
+
+  def test_returned_module_warning(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        f = self._helper()
+        return f(x)
+      def _helper(self):
+        return Foo()
+    with nn.override_named_call(True):
+      b = Bar()
+      with self.assertRaises(errors.TransformedMethodReturnValueError):
+        b.apply({}, jnp.ones(2))
+
+  def test_nowrap_named_call(self):
+    with nn.override_named_call(True):
+      class Foo(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          return x
+      class Bar(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          f = self._helper()
+          return f(x)
+        # will fail without nowrap
+        @nn.nowrap
+        def _helper(self):
+          return Foo()
+
+      b = Bar()
+      x = jnp.ones(2)
+      y = b.apply({}, x)
+      np.testing.assert_array_equal(x, y)
+
+  def test_nowrap(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return self._helper(x)
+      @nn.nowrap
+      def _helper(self, x):
+        if len(nn.module._context.module_stack) > 2:
+          raise ValueError('Module stack too deep.')
+        return x
+
+    b = Bar()
+    b.apply({}, jnp.ones(2))
+  
+  def test_map_variables_tied_autoencoder(self):
+    def trans(variables):
+      return jax.tree_map(lambda x: x.T, variables)
+      
+    class TiedAutencoder(nn.Module):
+
+      features: int
+      latents: int
+        
+      @nn.compact
+      def _call(self, x, decode):
+        def f(self):
+          return nn.Dense(self.features if decode else self.latents, use_bias=False)(x)
+
+        if decode:
+          map_fn = trans
+        else:
+          map_fn = lambda x: x
+        return nn.map_variables(f, "params", map_fn, map_fn, mutable=True)(self)
+
+      def encode(self, x):
+        return self._call(x, False)
+
+      def decode(self, x):
+        return self._call(x, True)
+
+      def __call__(self, x):
+        return self.decode(self.encode(x))
+    
+    x = jnp.ones((2, 4))
+    ae = TiedAutencoder(4, 5)
+    variables = ae.init(random.PRNGKey(0), x)
+    param_shapes = jax.tree_map(jnp.shape, variables["params"])
+    self.assertEqual(param_shapes, {
+      "Dense_0": {"kernel": (4, 5)}
+    })
+
+
+  def test_map_variables_bit_weights(self):
+    class BitWeights(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def sign(x):
+          return jax.tree_map(jnp.sign, x)
+        BitDense = nn.map_variables(nn.Dense, "params", sign, init=True)
+        return BitDense(4)(x)
+    bw = BitWeights()
+    x = jnp.ones((2, 4))
+    y, variables = bw.init_with_output(random.PRNGKey(0), x)
+    y_2 = bw.apply(variables, x)
+    np.testing.assert_allclose(y, y_2)
+
+
+
+  def test_remat_scan(self):
+    class BigModel(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        DenseStack = nn.remat_scan(nn.Dense, lengths=(100,))
+        return DenseStack(8, name="dense_stack")(x)
+    
+    x = jnp.ones((2, 8))
+    model = BigModel()
+    variables = model.init(random.PRNGKey(0), x)
+    param_shapes = jax.tree_map(jnp.shape, variables['params'])
+    self.assertEqual(param_shapes["dense_stack"]["kernel"], (100, 8, 8))
+    self.assertEqual(param_shapes["dense_stack"]["bias"], (100, 8))
+    y = model.apply(variables, x)
+    self.assertEqual(y.shape, (2, 8))
+
+
+  def test_vjp(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('test', nn.initializers.zeros, ())
+        self.variable('state', 'counter', lambda: 0)
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        y, bwd = nn.vjp(Bar.__call__, Bar(), x)
+        params_grad, x_grad = bwd(jnp.ones(y.shape))
+        return params_grad, x_grad
+    
+    x = jnp.ones((3,))
+    params = Foo().init(random.PRNGKey(0), x)
+    x_grad, params_grad = Foo().apply(params, x)
+    self.assertEqual(params_grad, {
+      'params': nn.FrozenDict({'test': 3.}),
+    })
+    np.testing.assert_allclose(x_grad, 0. * x)
+
+  def test_jvp(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('test', nn.initializers.zeros, ())
+        self.variable('state', 'counter', lambda: 0)
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = Bar()
+        vars_t = jax.tree_map(jnp.ones_like, bar.variables.get('params', {}))
+        _, out_t = nn.jvp(Bar.__call__, bar, (x,), (jnp.zeros_like(x),), {'params': vars_t})
+        return out_t
+    
+    x = jnp.ones((3,))
+    params = Foo().init(random.PRNGKey(0), x)
+    y_t = Foo().apply(params, x)
+    np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
 if __name__ == '__main__':
   absltest.main()

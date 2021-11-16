@@ -26,7 +26,7 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.2.13",
+    "jax>=0.2.21",
     "matplotlib",  # only needed for tensorboard export
     "dataclasses;python_version<'3.7'", # will only install on py3.6
     "msgpack",
@@ -36,8 +36,9 @@ install_requires = [
 tests_require = [
     "atari-py==0.2.5",  # Last version does not have the ROMs we test on pre-packaged
     "clu",  # All examples.
-    "gym",
+    "gym==0.18.3",
     "jaxlib",
+    "jraph",
     "ml-collections",
     "opencv-python",
     "pytest",
@@ -76,7 +77,7 @@ setup(
     author_email="flax-dev@google.com",
     url="https://github.com/google/flax",
     packages=find_packages(),
-    include_package_data=False,
+    package_data={"flax": ["py.typed"]},
     zip_safe=False,
     install_requires=install_requires,
     extras_require={

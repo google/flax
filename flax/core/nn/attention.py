@@ -16,17 +16,14 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 import functools
-import warnings
 from typing import Any
-
+import warnings
 from . import stochastic
 
 from flax import jax_utils
 from flax import struct
-from flax.nn import initializers
-
 from flax.core import Scope
-
+from flax.deprecated.nn import initializers
 import jax
 from jax import lax
 from jax import random

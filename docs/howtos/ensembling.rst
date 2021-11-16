@@ -253,7 +253,7 @@ the entire train dataset is too memory intensive we do it at the batch level.
 The rest of the changes relate to making sure the batch metrics are stored
 correctly for all devices. We use ``jax.tree_multimap`` to stack all of the
 metrics from each device into numpy arrays, such that e.g.,
-``batch_metrics_np['loss']`` has shape ``(jax.device_count(), )``.
+``batch_metrics_np['loss']`` has shape ``(steps_per_epoch, jax.device_count())``.
 
 We can now rewrite the actual training logic. This consists of two simple
 changes: making sure the RNGs are replicate when we pass them to
@@ -304,4 +304,4 @@ arguments, and those should be positional rather then keyword arguments.
 .. _jax.pmap: https://jax.readthedocs.io/en/latest/jax.html#jax.pmap
 .. _Module.init: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init
 .. _`JIT mechanics: tracing and static variables`: https://jax.readthedocs.io/en/latest/notebooks/thinking_in_jax.html#JIT-mechanics:-tracing-and-static-variables
-.. _`MNIST example`: https://github.com/google/flax/blob/master/examples/mnist/train.py
+.. _`MNIST example`: https://github.com/google/flax/blob/main/examples/mnist/train.py

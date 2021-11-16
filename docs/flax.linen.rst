@@ -4,7 +4,7 @@ flax.linen package
 
 .. currentmodule:: flax.linen
 
-Linen is the Flax Module system. Read more about our design goals in the `Linen README <https://github.com/google/flax/blob/master/flax/linen/README.md>`_.
+Linen is the Flax Module system. Read more about our design goals in the `Linen README <https://github.com/google/flax/blob/main/flax/linen/README.md>`_.
 
 
 
@@ -36,6 +36,27 @@ Compact methods
 .. autofunction:: compact
 
 
+No wrap methods
+----------------------
+
+.. currentmodule:: flax.linen
+.. autofunction:: nowrap
+
+
+Profiling
+----------------------
+
+.. automodule:: flax.linen
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    enable_named_call
+    disable_named_call
+    override_named_call
+
+
 Transformations
 ----------------------
 
@@ -49,6 +70,10 @@ Transformations
     scan
     jit
     remat
+    remat_scan
+    map_variables
+    jvp
+    vjp
 
 
 Linear modules
@@ -105,6 +130,7 @@ Activation functions
     softmax
     softplus
     swish
+    PReLU
 
 
 Attention primitives

@@ -72,7 +72,7 @@ def temperature_sample(prompt_inputs,
     """Sampling loop termination condition."""
     (i, _, _, _, ended, _) = state
     # Have we reached max decoding length?
-    not_at_end = (i <= max_decode_len)
+    not_at_end = (i < max_decode_len)
     # Have all sampled sequences reached an end marker?
     all_sequences_ended = jnp.all(ended)
     return not_at_end & (~all_sequences_ended)
@@ -102,7 +102,7 @@ def temperature_sample(prompt_inputs,
     next_token = (next_token * out_of_prompt +
                   sequences[:, i+1] * ~out_of_prompt)
     # If end-marker reached for batch item, only emit padding tokens.
-    next_token_or_endpad = next_token * ~ended
+    next_token_or_endpad = (next_token[None] * ~ended)
     ended |= (next_token_or_endpad == end_marker)
     # Add current sampled tokens to recorded sequences.
     new_sequences = lax.dynamic_update_slice(

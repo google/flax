@@ -42,3 +42,10 @@ Dict utils
 .. autofunction:: flatten_dict
 
 .. autofunction:: unflatten_dict
+
+
+Model parameter traversal
+--------------------------
+
+.. autoclass:: ModelParamTraversal
+    :members: __init__

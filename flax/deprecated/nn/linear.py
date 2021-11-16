@@ -15,7 +15,7 @@
 """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
@@ -41,7 +41,7 @@ class DenseGeneral(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A linear transformation with flexible axes."""
 
   def apply(self,
@@ -133,9 +133,9 @@ class DenseGeneral(base.Module):
 
 class Dense(base.Module):
   """DEPRECATION WARNING:
-  The `flax.nn` module is Deprecated, use `flax.linen` instead. 
-  Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  The `flax.nn` module is Deprecated, use `flax.linen` instead.
+  Learn more and find an upgrade guide at
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   A linear transformation applied over the last dimension of the input."""
 
   def apply(self,
@@ -169,7 +169,7 @@ class Dense(base.Module):
     if bias:
       bias = self.param('bias', (features,), bias_init)
       bias = jnp.asarray(bias, dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -177,7 +177,7 @@ def _conv_dimension_numbers(input_shape):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Computes the dimension numbers based on the input shape."""
   ndim = len(input_shape)
   lhs_spec = (0, ndim - 1) + tuple(range(1, ndim - 1))
@@ -190,7 +190,7 @@ class Conv(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Convolution Module wrapping lax.conv_general_dilated."""
 
   def apply(self,
@@ -275,7 +275,7 @@ class Conv(base.Module):
     if bias:
       bias = self.param('bias', (features,), bias_init)
       bias = jnp.asarray(bias, dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -283,7 +283,7 @@ class ConvTranspose(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Transposed convolution Module wrapping lax.conv_transpose."""
 
   def apply(self,
@@ -349,7 +349,7 @@ class ConvTranspose(base.Module):
     if bias:
       bias = self.param('bias', (features,), bias_init)
       bias = jnp.asarray(bias, dtype)
-      y = y + bias
+      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
 
@@ -361,7 +361,7 @@ class Embed(base.Module):
   """DEPRECATION WARNING:
   The `flax.nn` module is Deprecated, use `flax.linen` instead. 
   Learn more and find an upgrade guide at 
-  https://github.com/google/flax/blob/master/flax/linen/README.md"
+  https://github.com/google/flax/blob/main/flax/linen/README.md"
   Embedding Module.
 
   A parameterized function from integers [0, n) to d-dimensional vectors.

@@ -21,10 +21,6 @@ MultiOptimizer
 .. autoclass:: MultiOptimizer
     :members: update_hyper_params
 
-.. autoclass:: ModelParamTraversal
-    :members: __init__
-
-
 Available optimizers
 ------------------------
 
@@ -32,6 +28,7 @@ Available optimizers
   :toctree: _autosummary
 
     Adam
+    AdaBelief
     AdaFactor
     Adagrad
     Adadelta

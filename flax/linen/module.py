@@ -28,18 +28,23 @@ from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
 
 import jax
 from jax import tree_util
+from jax._src.numpy.lax_numpy import isin
 import numpy as np
 
 import flax
+from flax import config
 from flax import errors
+from flax import traceback_util
 from flax import traverse_util
 from flax import serialization
 from flax import core
 from flax.core import Scope
 from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
+from flax.struct import __dataclass_transform__
 
 # from .dotgetter import DotGetter
+traceback_util.register_exclusion(__file__)
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
@@ -125,17 +130,44 @@ _unspecified_parent = _Sentinel()
 
 # Enable automatic named_call wrapping for labelling profile traces.
 # -----------------------------------------------------------------------------
-_use_named_call = True if os.getenv('FLAX_PROFILE', '') else False
+_use_named_call = config.flax_profile
 
 def enable_named_call():
-  """Enables named call wrapping for labelling profile traces."""
+  """Enables named call wrapping for labelling profile traces.
+  
+  When named call wrapping is enabled all JAX ops executed in a Module
+  will be wrapped with ``jax.named_call``. The ``Module`` class name will
+  show up around the operations belonging to that Module in the
+  Tensorboard profiling UI, simplifying the profiling process.
+
+  Note that ``jax.named_call`` only works for
+  compiled functions (e.g.: using jax.jit or jax.pmap).
+  """
   global _use_named_call
   _use_named_call = True
 
 def disable_named_call():
-  """Disables named call wrapping."""
+  """Disables named call wrapping.
+  
+  See ``enable_named_call``
+  """
   global _use_named_call
   _use_named_call = False
+
+
+@contextmanager
+def override_named_call(enable: bool = True):
+  """Returns a context manager that enables/disables named call wrapping.
+  
+  See ``enable_named_call``
+  """
+  global _use_named_call
+  use_named_call_prev = _use_named_call
+  _use_named_call = enable
+  try:
+    yield
+  finally:
+    _use_named_call = use_named_call_prev
 
 
 # Utilities for pytrees of Modules defined inside setup()
@@ -223,6 +255,42 @@ def compact(fun: _CallableT) -> _CallableT:
   return fun
 
 
+def nowrap(fun: _CallableT) -> _CallableT:
+  """Marks the given module method as a helper method that needn't be wrapped.
+
+  Methods wrapped in @nowrap are private helper methods that needn't be wrapped
+  with the state handler or a separate named_call transform.
+
+  This is needed in several concrete instances:
+   - if you have a helper method that returns Modules or Variables to prevent
+     it from being functionalized by named_call. (Functionalized methods
+     can't return Modules/Variables.)
+   - if you're subclassing a method like Module.param and don't want this
+     overriden core function decorated with the state management wrapper.
+   - If you want a method to be callable from an unbound Module (e.g.: a
+     function of construction of arguments that doesn't depend on params/RNGs)
+
+  For instance::
+
+    @nowrap
+    def _make_dense(self, num_features):
+      return nn.Dense(num_features)
+
+    @compact
+    def __call__(self, x):
+      # now safe to use constructor helper even if using named_call
+      dense = self._dense(self.num_features)
+      return dense(x)
+
+  Args:
+    fun: The Module method to mark as nowrap.
+  Returns:
+    The given function `fun` marked as nowrap.
+  """
+  fun.nowrap = True
+  return fun
+
+
 def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]:
   """Gets method names of a class, excluding class and static methods.
 
@@ -262,39 +330,9 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
     # otherwise call the wrapped function as is.
     if args and isinstance(args[0], Module):
       self, args = args[0], args[1:]
+      return self._call_wrapped_method(fun, args, kwargs)
     else:
       return fun(*args, **kwargs)
-    is_compact_method = hasattr(fun, 'compact')
-    is_setup_method = fun.__name__ == 'setup'
-    # We lazily call setup() only when needed.
-    if is_setup_method:
-      is_recurrent = self._state.in_setup
-      self._state.in_setup = True
-    else:
-      self._try_setup()
-
-    if is_compact_method:
-      if self.scope is None:
-        raise errors.CallCompactUnboundModuleError()
-      is_recurrent = self._state.in_compact_method
-      self._state.in_compact_method = True
-    _context.module_stack.append(self)
-    try:
-      y = fun(self, *args, **kwargs)
-      if _context.capture_stack:
-        filter_fn = _context.capture_stack[-1]
-        if filter_fn and filter_fn(self, fun.__name__):
-          self.sow('intermediates', fun.__name__, y)
-      return y
-    finally:
-      _context.module_stack.pop()
-      if is_compact_method:
-        object.__setattr__(self, 'scope', self.scope.rewound())
-      # setup or compact calls can be recurrent for example due to super calls
-      # resetting the state would cause is compact/setup method
-      # to be set to False prematurely.
-      if (is_compact_method or is_setup_method) and not is_recurrent:
-        self._state.reset()
   wrapped_module_method.method_handler_wrapped = True
   return wrapped_module_method
 
@@ -304,7 +342,13 @@ def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
   def wrapped(self):
     if self.scope is not None:
       raise TypeError('Can\'t call __hash__ on modules that hold variables.')
-    return hash_fn(self)
+    try:
+      hash_value = hash_fn(self)
+    except TypeError as exc:
+      raise TypeError('Failed to hash Flax Module.  '
+                      'The module probably contains unhashable attributes.  '
+                      f'Module={self}') from exc
+    return hash_value
   return wrapped
 
 
@@ -396,7 +440,17 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 # -----------------------------------------------------------------------------
 
 
-class Module:
+# This metaclass + decorator is used by static analysis tools recognize that
+# Module behaves as a dataclass (attributes are constructor args).
+if typing.TYPE_CHECKING:
+  @__dataclass_transform__()
+  class ModuleMeta(type):
+    pass
+else:
+  ModuleMeta = type
+
+
+class Module(metaclass=ModuleMeta):
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
@@ -486,6 +540,17 @@ class Module:
     annotations['parent'] = parent_annotation
     cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
     annotations['name'] = str
+
+    # any non-init field will only be set in setup
+    # During __hash__ and __eq__ the field is not set yet
+    # so it should not be used in compare, hash or repr.
+    for field in annotations.keys():
+      field_meta = getattr(cls, field, None)
+      if isinstance(field_meta, dataclasses.Field) and not field_meta.init:
+        field_meta.compare = False
+        field_meta.hash = False
+        field_meta.repr = False
+
     cls.name = None  # default value of name is None.
     cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
@@ -515,13 +580,56 @@ class Module:
                    '__post_init__'])
     for key in _get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
+      if hasattr(method, 'nowrap'):
+        continue
       wrapped_method = wrap_method_once(method)
-      if _use_named_call and key != 'setup':
+      if key != 'setup':
         # We import named_call at runtime to avoid a circular import issue.
         from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
-        wrapped_method = named_call(wrapped_method)
+        wrapped_method = named_call(wrapped_method, force=False)
       setattr(cls, key, wrapped_method)
     return cls
+
+  def _call_wrapped_method(self, fun, args, kwargs):
+    """"Calls a wrapped method.
+
+    This function is responsible for setting up the thread local state
+    correctly before calling the method and cleaning up afterwards.
+    This includes storing intermediates, setup of the compact scope,
+    and making sure setup is called before any other method.
+    """
+    is_compact_method = hasattr(fun, 'compact')
+    fun_name = getattr(fun, '__name__', 'unnamed_function')
+    is_setup_method = fun_name == 'setup'
+    # We lazily call setup() only when needed.
+    if is_setup_method:
+      is_recurrent = self._state.in_setup
+      self._state.in_setup = True
+    else:
+      self._try_setup()
+
+    if is_compact_method:
+      if self.scope is None:
+        raise errors.CallCompactUnboundModuleError()
+      is_recurrent = self._state.in_compact_method
+      self._state.in_compact_method = True
+    _context.module_stack.append(self)
+    try:
+      y = fun(self, *args, **kwargs)
+      if _context.capture_stack:
+        filter_fn = _context.capture_stack[-1]
+        if filter_fn and filter_fn(self, fun_name):
+          self.sow('intermediates', fun_name, y)
+      return y
+    finally:
+      _context.module_stack.pop()
+      if is_compact_method:
+        object.__setattr__(self, 'scope', self.scope.rewound())
+      # setup or compact calls can be recurrent for example due to super calls
+      # resetting the state would cause is compact/setup method
+      # to be set to False prematurely.
+      if (is_compact_method or is_setup_method) and not is_recurrent:
+        self._state.reset()
 
   def __setattr__(self, name: str, val: Any):
     """Sets an attribute on this Module.
@@ -844,6 +952,7 @@ class Module:
       raise ValueError("Can't use RNGs on unbound modules")
     return self.scope.make_rng(name)
 
+  @traceback_util.api_boundary
   def bind(self,
            variables: VariableDict,
            *args,
@@ -899,6 +1008,7 @@ class Module:
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope)
 
+  @traceback_util.api_boundary
   def apply(self,
             variables: VariableDict,
             *args,
@@ -965,6 +1075,7 @@ class Module:
         mutable=mutable, capture_intermediates=capture_intermediates
     )(variables, *args, **kwargs, rngs=rngs)
 
+  @traceback_util.api_boundary
   def init_with_output(self,
                        rngs: Union[PRNGKey, RNGSequences],
                        *args,
@@ -987,14 +1098,15 @@ class Module:
       collections.
     """
     if not isinstance(rngs, dict):
-      if rngs.shape != (2,):
+      if not core.scope._is_valid_rng(rngs):
         raise errors.InvalidRngError(
-            'RNGs should be of shape (2,) in Module '
+            'RNGs should be of shape (2,) or KeyArray in Module '
             f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
     return self.apply(
         {}, *args, rngs=rngs, method=method, mutable=mutable, **kwargs)
 
+  @traceback_util.api_boundary
   def init(self,
            rngs: Union[PRNGKey, RNGSequences],
            *args,
@@ -1107,8 +1219,8 @@ class Module:
       name: The name of the variable.
       value: The value of the variable.
       reduce_fn: The function used to combine the existing value with
-        the new value the default is to append the value to a tuple.
-      init_fn: For the first value stored reduce_fn will be passed
+        the new value. The default is to append the value to a tuple.
+      init_fn: For the first value stored, `reduce_fn` will be passed
         the result of `init_fn` together with the value to be stored.
         The default is an empty tuple.
 
@@ -1165,7 +1277,7 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   else:
     return a
 
-
+@traceback_util.api_boundary
 def apply(fn: Callable[..., Any], module: Module,
           mutable: CollectionFilter = False,
           capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False) -> Callable[..., Any]:
@@ -1224,6 +1336,7 @@ def apply(fn: Callable[..., Any], module: Module,
   return core.apply(scope_fn, mutable=mutable)
 
 
+@traceback_util.api_boundary
 def init_with_output(fn: Callable[..., Any], module: Module,
                      mutable: CollectionFilter = DenyList("intermediates"),
                      ) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
@@ -1268,6 +1381,7 @@ def init_with_output(fn: Callable[..., Any], module: Module,
   return core.init(scope_fn, mutable=mutable)
 
 
+@traceback_util.api_boundary
 def init(fn: Callable[..., Any], module: Module,
          mutable: CollectionFilter = DenyList("intermediates"),
          ) -> Callable[..., FrozenVariableDict]:

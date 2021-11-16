@@ -98,7 +98,7 @@ class CharacterTable(object):
   def decode(self, inputs):
     """Decode from list of integers to string."""
     chars = []
-    for elem in inputs:
+    for elem in inputs.tolist():
       if elem == self.eos_id:
         break
       chars.append(self._indices_char[elem])
@@ -146,7 +146,7 @@ def get_sequence_lengths(sequence_batch, eos_id=CTABLE.eos_id):
   """Returns the length of each one-hot sequence, including the EOS token."""
   # sequence_batch.shape = (batch_size, seq_length, vocab_size)
   eos_row = sequence_batch[:, :, eos_id]
-  eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurence
+  eos_idx = jnp.argmax(eos_row, axis=-1)  # returns first occurrence
   # `eos_idx` is 0 if EOS is not present, so we use full length in that case.
   return jnp.where(
       eos_row[jnp.arange(eos_row.shape[0]), eos_idx],
@@ -158,7 +158,7 @@ def get_sequence_lengths(sequence_batch, eos_id=CTABLE.eos_id):
 def mask_sequences(sequence_batch, lengths):
   """Set positions beyond the length of each sequence to 0."""
   return sequence_batch * (
-      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1]))
+      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1])[np.newaxis])
 
 
 class EncoderLSTM(nn.Module):

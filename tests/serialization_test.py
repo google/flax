@@ -19,14 +19,14 @@ import collections
 from typing import Any
 
 from absl.testing import absltest
-from flax import nn
 from flax import optim
 from flax import serialization
 from flax import struct
-
+from flax.deprecated import nn
 import jax
 from jax import random
 import jax.numpy as jnp
+import msgpack
 
 import numpy as np
 
@@ -206,12 +206,56 @@ class SerializationTest(absltest.TestCase):
           serialization.msgpack_serialize(x))
       self.assertEqual(x, restored_x)
 
+  def test_restore_chunked(self):
+    old_chunksize = serialization.MAX_CHUNK_SIZE
+    serialization.MAX_CHUNK_SIZE = 91 * 8
+    try:
+      tmp = np.random.uniform(-100, 100, size=(21, 37))
+      serialized = serialization.to_bytes(tmp)
+      restored = serialization.msgpack_restore(serialized)
+    finally:
+      serialization.MAX_CHUNK_SIZE = old_chunksize
+
+    np.testing.assert_array_equal(restored, tmp)
+
+  def test_restore_unchunked(self):
+    """Check if mgspack_restore works for unchunked inputs."""
+    def msgpack_serialize_legacy(pytree):
+      """Old implementation that was not chunking."""
+      return msgpack.packb(pytree, default=serialization._msgpack_ext_pack,
+                           strict_types=True)
+
+    tmp = np.random.uniform(-100, 100, size=(21, 37))
+    serialized = msgpack_serialize_legacy(tmp)
+    old_chunksize = serialization.MAX_CHUNK_SIZE
+    serialization.MAX_CHUNK_SIZE = 91 * 8
+    try:
+      restored = serialization.msgpack_restore(serialized)
+    finally:
+      serialization.MAX_CHUNK_SIZE = old_chunksize
+
+    np.testing.assert_array_equal(restored, tmp)
+
   def test_namedtuple_serialization(self):
     foo_class = collections.namedtuple('Foo', 'a b c')
     x1 = foo_class(a=1, b=2, c=3)
     x1_serialized = serialization.to_bytes(x1)
     x2 = foo_class(a=0, b=0, c=0)
     restored_x1 = serialization.from_bytes(x2, x1_serialized)
+    self.assertEqual(type(x1), type(restored_x1))
+    self.assertEqual(x1, restored_x1)
+
+  def test_namedtuple_restore_legacy(self):
+    foo_class = collections.namedtuple('Foo', 'a b c')
+    x1 = foo_class(a=1, b=2, c=3)
+    legacy_encoding = {
+      'name': 'Foo',
+      'fields': {'0': 'a', '1': 'b', '2': 'c'},
+      'values': {'0': 1, '1': 2, '2': 3},
+    }
+    x2 = foo_class(a=0, b=0, c=0)
+    restored_x1 = serialization.from_state_dict(x2, legacy_encoding)
+    self.assertEqual(type(x1), type(restored_x1))
     self.assertEqual(x1, restored_x1)
 
   def test_model_serialization_to_bytes(self):
@@ -259,6 +303,18 @@ class SerializationTest(absltest.TestCase):
       newtmp = serialization.from_bytes(tmp, tmpbytes)
     finally:
       serialization.MAX_CHUNK_SIZE = old_chunksize
+    jax.tree_multimap(np.testing.assert_array_equal, tmp, newtmp)
+
+  def test_serialization_chunking3(self):
+    old_chunksize = serialization.MAX_CHUNK_SIZE
+    serialization.MAX_CHUNK_SIZE = 91 * 8
+    try:
+      tmp = {'a': np.ones((10, 10))}
+      tmpbytes = serialization.msgpack_serialize(tmp)
+      newtmp = serialization.msgpack_restore(tmpbytes)
+    finally:
+      serialization.MAX_CHUNK_SIZE = old_chunksize
+
     jax.tree_multimap(np.testing.assert_array_equal, tmp, newtmp)
 
 

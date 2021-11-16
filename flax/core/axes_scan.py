@@ -110,7 +110,7 @@ def scan(
       xs = jax.tree_multimap(lambda ax, arg, x: (arg if ax is broadcast else x),
                              in_axes, args, xs)
       broadcast_out, c, ys = fn(broadcast_in, c, *xs)
-      
+
       if init_mode:
         ys = jax.tree_multimap(lambda ax, y: (y if ax is broadcast else ()),
                                out_axes, ys)
@@ -121,15 +121,17 @@ def scan(
         return c, ys
     broadcast_body = functools.partial(body_fn, init_mode=True)
 
-    carry_pvals = jax.tree_map(
-        lambda x: pe.PartialVal.unknown(jax.ShapedArray(jnp.shape(x), jnp.result_type(x))),
+    carry_avals = jax.tree_map(
+        lambda x: jax.ShapedArray(jnp.shape(x), jnp.result_type(x)),
         init)
-    scan_pvals = jax.tree_map(
-        lambda x: pe.PartialVal.unknown(jax.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x))),
+    scan_avals = jax.tree_map(
+        lambda x: jax.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)),
         xs)
-    input_pvals = (carry_pvals, scan_pvals)
-    in_pvals, in_tree = jax.tree_flatten(input_pvals)
+    input_avals = (carry_avals, scan_avals)
+
+    in_avals, in_tree = jax.tree_flatten(input_avals)
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(broadcast_body), in_tree)
+    in_pvals = list(map(pe.PartialVal.unknown, in_avals))
     _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
 
     out_flat = []
@@ -138,7 +140,7 @@ def scan(
         raise ValueError('broadcasted variable has a data dependency on the scan body.')
       out_flat.append(const)
     broadcast_in, constants_out = jax.tree_unflatten(out_tree(), out_flat)
-    
+
     c, ys = lax.scan(body_fn, init, xs, length=length, reverse=reverse)
     ys = jax.tree_multimap(transpose_from_front, out_axes, ys)
     ys = jax.tree_multimap(lambda ax, const, y: (const if ax is broadcast else y),

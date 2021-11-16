@@ -40,7 +40,7 @@ def get_config():
   config.reverse_translation = False
 
   # Per device batch size for training.
-  config.per_device_batch_size = 64
+  config.per_device_batch_size = 32
 
   # Beam size for inference.
   config.beam_size = 4
@@ -54,7 +54,7 @@ def get_config():
   config.num_predict_steps = -1
 
   # Base learning rate.
-  config.learning_rate = 0.0625
+  config.learning_rate = 0.002
 
   # Linear learning rate warmup.
   config.warmup_steps = 1000
@@ -107,8 +107,8 @@ def get_config():
   # Frequency of eval during training, e.g. every 1000 steps.
   config.eval_every_steps = 1_000
 
-  # Use bfloat16 mixed precision training instead of float32.
-  config.use_bfloat16 = True
+  # Use float16 (GPU) or bfloat16 (TPU) mixed precision training instead of float32.
+  config.use_mixed_precision = True
 
   # Integer for PRNG random seed.
   config.seed = 0

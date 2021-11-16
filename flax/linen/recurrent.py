@@ -227,7 +227,7 @@ class OptimizedLSTMCell(RNNCellBase):
       y = jnp.dot(inputs, kernel)
       if use_bias:
         bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
-        y = y + bias
+        y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
 
       # Split the result back into individual (i, f, g, o) outputs.
       split_indices = np.cumsum([b.shape[0] for b in biases[:-1]])

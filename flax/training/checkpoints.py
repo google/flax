@@ -22,7 +22,7 @@ checkpoint files.
 from concurrent.futures import thread
 import os
 import re
-from typing import Union
+from typing import Any, Iterable, List, Optional, Union
 
 from absl import logging
 from flax import core
@@ -40,18 +40,31 @@ UNSIGNED_FLOAT_RE = re.compile(
     r'[-+]?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
 # Module name folowed by number.
 MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
+# Alternative schemes handled by `gfile`, e.g. on Google Cloud Storage (GCS).
+SCHEME_RE = re.compile('^(?P<scheme>[a-z][a-z0-9.+-]+://)?(?P<path>.*)', re.I)
+
+PyTree = Any
 
 
-def _checkpoint_path(ckpt_dir, step, prefix='checkpoint_'):
+def _checkpoint_path(ckpt_dir: str,
+                     step: Union[int, str],
+                     prefix: str = 'checkpoint_') -> str:
   return os.path.join(ckpt_dir, f'{prefix}{step}')
 
 
-def natural_sort(file_list, signed=True):
+def _checkpoint_path_step(path: str) -> Optional[float]:
+  """Returns the step number of a checkpoint path."""
+  for s in SIGNED_FLOAT_RE.split(path)[::-1]:
+    if SIGNED_FLOAT_RE.match(s):
+      return float(s)
+  return None
+
+
+def natural_sort(file_list: Iterable[str], signed: bool = True) -> List[str]:
   """Natural sort for filenames with numerical substrings.
 
   Args:
-    file_list: List[str]: list of paths to sort containing numerical
-      substrings.
+    file_list: list of paths to sort containing numerical substrings.
     signed: bool: if leading '-' (or '+') signs should be included in
       numerical substrings as a sign or treated as a separator.
   Returns:
@@ -71,12 +84,19 @@ def natural_sort(file_list, signed=True):
   return sorted(file_list, key=split_keys)
 
 
+def safe_normpath(path: str) -> str:
+  """Normalizes path safely to get around `gfile.glob()` limitations."""
+  d = SCHEME_RE.match(path).groupdict()
+  return (d['scheme'] or '') + os.path.normpath(d['path'])
+
+
 def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
-                    target,
-                    step,
-                    prefix='checkpoint_',
-                    keep=1,
-                    overwrite=False):
+                    target: PyTree,
+                    step: int,
+                    prefix: str = 'checkpoint_',
+                    keep: int = 1,
+                    overwrite: bool = False,
+                    keep_every_n_steps: Optional[int] = None) -> str:
   """Save a checkpoint of the model.
 
   Attempts to be pre-emption safe by writing to temporary before
@@ -90,14 +110,16 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     keep: number of past checkpoint files to keep.
     overwrite: overwrite existing checkpoint files if a checkpoint
       at the current or a later step already exits (default: False).
+    keep_every_n_steps: if defined, keep every checkpoints every n steps (in
+      addition to keeping the last 'keep' checkpoints).
   Returns:
     Filename of saved checkpoint.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
-  if ckpt_dir.startswith('./'):
-    ckpt_dir = ckpt_dir[2:]  # gfile.glob() can remove leading './'
+  # normalize path because gfile.glob() can modify path './', '//' ...
+  ckpt_dir = safe_normpath(ckpt_dir)
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
   gfile.makedirs(os.path.dirname(ckpt_path))
@@ -136,16 +158,27 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       gfile.remove(path)
 
   # Remove old checkpoint files.
+  last_kept = -float('inf')
   if len(checkpoint_files) > keep:
     old_ckpts = checkpoint_files[:-keep]
+    # Note: old_ckpts is sorted from oldest to newest.
     for path in old_ckpts:
+      if keep_every_n_steps:
+        step_number = _checkpoint_path_step(path)
+        if step_number and (step_number - last_kept) >= keep_every_n_steps:
+          logging.debug('Not deleting %s, because last_kept=%f and keeping '
+                        'every %d steps.',
+                        path, last_kept, keep_every_n_steps)
+          last_kept = step_number
+          continue
       logging.info('Removing checkpoint at %s', path)
       gfile.remove(path)
 
   return ckpt_path
 
 
-def latest_checkpoint(ckpt_dir, prefix='checkpoint_'):
+def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
+                      prefix: str = 'checkpoint_') -> Optional[str]:
   """Retrieve the path of the latest checkpoint in a directory.
 
   Args:
@@ -155,6 +188,7 @@ def latest_checkpoint(ckpt_dir, prefix='checkpoint_'):
   Returns:
     The latest checkpoint path or None if no checkpoints were found.
   """
+  ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   glob_path = os.path.join(ckpt_dir, f'{prefix}*')
   checkpoint_files = natural_sort(gfile.glob(glob_path))
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
@@ -165,11 +199,11 @@ def latest_checkpoint(ckpt_dir, prefix='checkpoint_'):
     return None
 
 
-def restore_checkpoint(ckpt_dir,
-                       target,
-                       step=None,
-                       prefix='checkpoint_',
-                       parallel=True):
+def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
+                       target: Optional[PyTree],
+                       step: Optional[int] = None,
+                       prefix: str = 'checkpoint_',
+                       parallel: bool = True) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -197,20 +231,22 @@ def restore_checkpoint(ckpt_dir,
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
+  ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
+  ckpt_dir = safe_normpath(ckpt_dir)
   if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not gfile.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
     if not gfile.exists(ckpt_dir):
-      logging.info(f'Found no checkpoint at {ckpt_dir}')
+      logging.info('Found no checkpoint at %s', ckpt_dir)
       return target
     if not gfile.isdir(ckpt_dir):
       ckpt_path = ckpt_dir
     else:
       ckpt_path = latest_checkpoint(ckpt_dir, prefix)
       if not ckpt_path:
-        logging.info(f'Found no checkpoint files in {ckpt_dir}')
+        logging.info('Found no checkpoint files in %s', ckpt_dir)
         return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
@@ -247,7 +283,7 @@ def restore_checkpoint(ckpt_dir,
       return serialization.from_bytes(target, checkpoint_contents)
 
 
-def convert_pre_linen(params):
+def convert_pre_linen(params: PyTree) -> PyTree:
   """Converts a pre-Linen parameter pytree.
 
   In pre-Linen API submodules were numbered incrementally, independent of the

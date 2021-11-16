@@ -161,13 +161,12 @@ class LinearTest(parameterized.TestCase):
     target = np.einsum(einsum_expr, x, initial_params['params']['kernel']) + 1.
     np.testing.assert_allclose(y, target, atol=1e-6)
 
-  @parameterized.parameters([((3,),), (3,)])
-  def test_conv(self, kernel_size):
+  def test_conv(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_module = nn.Conv(
         features=4,
-        kernel_size=kernel_size,
+        kernel_size=(3,),
         padding='VALID',
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -176,13 +175,12 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 10.))
 
-  @parameterized.parameters([((3,),), (3,)])
-  def test_single_input_conv(self, kernel_size):
+  def test_single_input_conv(self):
       rng = dict(params=random.PRNGKey(0))
       x = jnp.ones((8, 3))
       conv_module = nn.Conv(
           features=4,
-          kernel_size=kernel_size,
+          kernel_size=(3,),
           padding='VALID',
           kernel_init=initializers.ones,
           bias_init=initializers.ones,
@@ -191,13 +189,12 @@ class LinearTest(parameterized.TestCase):
       self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
       np.testing.assert_allclose(y, np.full((6, 4), 10.))
 
-  @parameterized.parameters([((3,),), (3,)])
-  def test_group_conv(self, kernel_size):
+  def test_group_conv(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 4))
     conv_module = nn.Conv(
         features=4,
-        kernel_size=kernel_size,
+        kernel_size=(3,),
         feature_group_count=2,
         padding='VALID',
         kernel_init=initializers.ones,
@@ -207,13 +204,12 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 2, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 7.))
 
-  @parameterized.parameters([((3,),), (3,)])
-  def test_conv_transpose(self, kernel_size):
+  def test_conv_transpose(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
-        kernel_size=kernel_size,
+        kernel_size=(3,),
         padding='VALID',
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -232,13 +228,12 @@ class LinearTest(parameterized.TestCase):
                               [ 4.,  4.,  4.,  4.]]])
     np.testing.assert_allclose(y, correct_ans)
 
-  @parameterized.parameters([((3,),), (3,)])
-  def test_single_input_conv_transpose(self, kernel_size):
+  def test_single_input_conv_transpose(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
-        kernel_size=kernel_size,
+        kernel_size=(3,),
         padding='VALID',
         kernel_init=initializers.ones,
         bias_init=initializers.ones,
@@ -256,6 +251,12 @@ class LinearTest(parameterized.TestCase):
                               [ 7.,  7.,  7.,  7.],
                               [ 4.,  4.,  4.,  4.]])
     np.testing.assert_allclose(y, correct_ans)
+
+  def test_int_kernel_size(self):
+    conv = nn.Conv(features=4, kernel_size=3)
+    x = jnp.ones((8, 3))
+    with self.assertRaises(TypeError):
+      conv.init(random.PRNGKey(0), x)
 
   def test_embed(self):
     rng = dict(params=random.PRNGKey(0))
@@ -286,6 +287,10 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, dummy_embedding[None])
     z = embed_module.apply(initial_params, jnp.ones((3,)), method=embed_module.attend)
     np.testing.assert_allclose(z, 3. * jnp.arange(4))
+
+  def test_embed_hash(self):
+    self.assertEqual(hash(nn.Embed(2, 3)), hash(nn.Embed(2, 3)))
+    self.assertNotEqual(hash(nn.Embed(3, 4)), hash(nn.Embed(2, 3)))
   
   def test_non_final_axis(self):
     class Foo(nn.Module):

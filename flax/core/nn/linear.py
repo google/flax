@@ -15,13 +15,9 @@
 """Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-
-from flax.nn import initializers
-
-from flax.core import Scope
-
 from flax import struct
-
+from flax.core import Scope
+from flax.deprecated.nn import initializers
 from jax import lax
 
 import jax.numpy as jnp
@@ -155,7 +151,7 @@ def dense(scope,
   if bias:
     bias = scope.param('bias', bias_init, (features,))
     bias = jnp.asarray(bias, dtype)
-    y = y + bias
+    y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
   return y
 
 
@@ -239,7 +235,7 @@ def conv(scope,
   if bias:
     bias = scope.param('bias', bias_init, (features,))
     bias = jnp.asarray(bias, dtype)
-    y = y + bias
+    y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
   return y
 
 
@@ -295,7 +291,7 @@ def conv_transpose(scope,
   if bias:
     bias = scope.param('bias', bias_init, (features,))
     bias = jnp.asarray(bias, dtype)
-    y = y + bias
+    y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
   return y
 
 

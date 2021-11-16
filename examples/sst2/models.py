@@ -41,7 +41,7 @@ def sequence_mask(lengths: Array, max_length: int) -> Array:
     A mask with shape: <bool>[batch_size, max_length] indicating which
     positions are valid for each sequence.
   """
-  return jnp.arange(max_length) < jnp.expand_dims(lengths, 1)
+  return jnp.arange(max_length)[None] < lengths[:, None]
 
 
 @jax.vmap
@@ -72,6 +72,8 @@ def flip_sequences(inputs: Array, lengths: Array) -> Array:
   Returns:
     An ndarray with the flipped inputs.
   """
+  # Note: since this function is vmapped, the code below is effectively for
+  # a single example.
   max_length = inputs.shape[0]
   return jnp.flip(jnp.roll(inputs, max_length - lengths, axis=0), axis=0)
 

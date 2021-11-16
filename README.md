@@ -1,6 +1,6 @@
 # Flax: A neural network library and ecosystem for JAX designed for flexibility
 
-![Build](https://github.com/google/flax/workflows/Build/badge.svg?branch=master) [![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
+![Build](https://github.com/google/flax/workflows/Build/badge.svg?branch=main) [![coverage](https://badgen.net/codecov/c/github/google/flax)](https://codecov.io/github/google/flax)
 
 
 [**Overview**](#overview)
@@ -23,7 +23,7 @@ research ecosystem -- both within Alphabet and with the broader community,
 and to explore the use-cases where JAX shines. We use GitHub for almost
 all of our coordination and planning, as well as where we discuss
 upcoming design changes. We welcome feedback on any of our discussion,
-issue and pull request thread. We are in the process of moving some
+issue and pull request threads. We are in the process of moving some
 remaining internal design docs and conversation threads to GitHub
 discussions, issues and pull requests. We hope to increasingly engage
 with the needs and clarifications of the broader ecosystem. Please let
@@ -35,7 +35,7 @@ forum](https://github.com/google/flax/discussions), or just let us
 know what you're working on!
 
 We expect to improve Flax, but we don't anticipate significant
-breaking changes to the core API. We use [Changelog](https://github.com/google/flax/tree/master/CHANGELOG.md)
+breaking changes to the core API. We use [Changelog](https://github.com/google/flax/tree/main/CHANGELOG.md)
 entries and deprecation warnings when possible.
 
 In case you want to reach us directly, we're at flax-dev@google.com.
@@ -62,7 +62,7 @@ comes with everything you need to start your research, including:
 
 ## Quick install
 
-You will need Python 3.6 or later and a working [JAX](https://github.com/google/jax/blob/master/README.md)
+You will need Python 3.6 or later and a working [JAX](https://github.com/google/jax/blob/main/README.md)
 installation (with or without GPU support, see instructions there). For a
 CPU-only version:
 
@@ -87,12 +87,13 @@ To upgrade to the latest version of Flax, you can use:
 
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
 
-To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/master/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
+To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
 [HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html).
 
 ```py
 from typing import Sequence
 
+import numpy as np
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -143,7 +144,7 @@ class AutoEncoder(nn.Module):
   input_shape: Sequence[int]
 
   def setup(self):
-    input_dim = jnp.prod(jnp.asarray(self.input_shape))
+    input_dim = np.prod(self.input_shape)
     self.encoder = MLP(self.encoder_widths)
     self.decoder = MLP(self.decoder_widths + (input_dim,))
 
@@ -169,6 +170,15 @@ encoded = model.apply(variables, batch, method=model.encode)
 decoded = model.apply(variables, encoded, method=model.decode)
 ```
 
+## 🤗 Hugging Face
+
+In-detail examples to train and evaluate a variety of Flax models for 
+Natural Language Processing, Computer Vision, and Speech Recognition are 
+actively maintained in the [🤗 Transformers repository](https://github.com/huggingface/transformers/tree/master/examples/flax).
+
+As of October 2021, the [19 most-used Transformer architectures](https://huggingface.co/transformers/#supported-frameworks) are supported in Flax 
+and over 5000 pretrained checkpoints in Flax have been uploaded to the [🤗 Hub](https://huggingface.co/models?library=jax&sort=downloads).
+
 ## Citing Flax
 
 To cite this repository:
@@ -178,13 +188,13 @@ To cite this repository:
   author = {Jonathan Heek and Anselm Levskaya and Avital Oliver and Marvin Ritter and Bertrand Rondepierre and Andreas Steiner and Marc van {Z}ee},
   title = {{F}lax: A neural network library and ecosystem for {JAX}},
   url = {http://github.com/google/flax},
-  version = {0.3.4},
+  version = {0.3.5},
   year = {2020},
 }
 ```
 
 In the above bibtex entry, names are in alphabetical order, the version number
-is intended to be that from [flax/version.py](https://github.com/google/flax/blob/master/flax/version.py), and the year corresponds to the project's open-source release.
+is intended to be that from [flax/version.py](https://github.com/google/flax/blob/main/flax/version.py), and the year corresponds to the project's open-source release.
 
 ## Note
 

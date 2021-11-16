@@ -162,7 +162,7 @@ def spatial_pad(pad_vertical, pad_horizontal, operand):
   """Wrapper around lax.pad which pads spatial dimensions (horizontal and
   vertical) with zeros, without any interior padding."""
   zero = (0, 0, 0)
-  return lax.pad(operand, 0.,
+  return lax.pad(operand, jnp.zeros((), operand.dtype),
                  (zero, pad_vertical + (0,), pad_horizontal + (0,), zero))
 
 
@@ -174,13 +174,14 @@ shift_right = partial(spatial_pad, (0, 0), (1, -1))
 def _l2_normalize(v):
   """Normalize a convolution kernel direction over the in_features and spatial
   dimensions."""
-  return v / jnp.sqrt(jnp.sum(jnp.square(v), (0, 1, 2)))
+  return v / jnp.sqrt(jnp.sum(jnp.square(v), (0, 1, 2), keepdims=True))
 
 
 def _make_kernel(direction, scale):
   """Maps weightnorm parameterization (direction, scale) to standard
   parameterization. The direction has shape (spatial..., in_features,
   out_features), scale has shape (out_features,)."""
+  scale = scale.reshape((1,) * (direction.ndim - 1) + (-1,))
   return scale * _l2_normalize(direction)
 
 
@@ -224,7 +225,9 @@ class ConvWeightNorm(nn.Module):
 
     params = self.param('weightnorm_params', initializer)
     direction, scale, bias = [params[k] for k in ('direction', 'scale', 'bias')]
-    return conv(inputs, _make_kernel(direction, scale)) + bias
+    y = conv(inputs, _make_kernel(direction, scale))
+    y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
+    return y
 
 
 ConvOneByOne = partial(ConvWeightNorm, kernel_size=(1, 1))

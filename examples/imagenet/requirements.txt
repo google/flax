@@ -1,5 +1,5 @@
-clu==0.0.1a2
-ml-collections>=0.1.0
-optax>=0.0.8
-tensorflow>=2.1
-tensorflow-datasets>=3.1.0
+clu
+ml-collections
+optax
+tensorflow
+tensorflow-datasets

@@ -12,25 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 """Utilities for defining custom classes that can be used with jax transformations.
 """
 
-from typing import TypeVar
+import typing
+from typing import TypeVar, Callable, Tuple, Union, Any
 
 from . import serialization
 
@@ -39,7 +25,26 @@ import dataclasses
 import jax
 
 
-def dataclass(clz: type):
+
+# This decorator is interpreted by static analysis tools as a hint
+# that a decorator or metaclass causes dataclass-like behavior.
+# See https://github.com/microsoft/pyright/blob/main/specs/dataclass_transforms.md
+# for more information about the __dataclass_transform__ magic.
+_T = TypeVar("_T")
+def __dataclass_transform__(
+    *,
+    eq_default: bool = True,
+    order_default: bool = False,
+    kw_only_default: bool = False,
+    field_descriptors: Tuple[Union[type, Callable[..., Any]], ...] = (()),
+) -> Callable[[_T], _T]:
+  # If used within a stub file, the following implementation can be
+  # replaced with "...".
+  return lambda a: a
+
+
+@__dataclass_transform__()
+def dataclass(clz: _T) -> _T:
   """Create a class which can be passed to functional transformations.
 
   NOTE: Inherit from ``PyTreeNode`` instead to avoid type checking issues when
@@ -53,7 +58,7 @@ def dataclass(clz: type):
     from flax import struct
 
     @struct.dataclass
-    class Model():
+    class Model:
       params: Any
       # use pytree_node=False to indicate an attribute should not be touched
       # by Jax transformations.
@@ -72,12 +77,37 @@ def dataclass(clz: type):
     model = Model(params, apply_fn)
     model_grad = jax.grad(some_loss_fn)(model)
 
+  Note that dataclasses have an auto-generated ``__init__`` where
+  the arguments of the constructor and the attributed of the created
+  instance match 1:1. This correspondance is what makes these objects
+  valid containers that work with JAX transformations and
+  more generally the `jax.tree_util` library.
+
+  Sometimes a "smart constructor" is desired, for example because
+  some of the attributes can be (optionally) derived from others.
+  The way to do this with Flax dataclasses is to make a static or
+  class method that provides the smart constructor.
+  This way the simple constructor used by `jax.tree_util` is
+  preserved. Consider the following example::
+
+    @struct.dataclass
+    class DirectionAndScaleKernel:
+      direction: Array
+      scale: Array
+
+      @classmethod
+      def create(cls, kernel):
+        scale = jax.numpy.linalg.norm(kernel, axis=0, keepdims=True)
+        directin = direction / scale
+        return cls(direction, scale)
+
   Args:
     clz: the class that will be transformed by the decorator.
   Returns:
     The new class.
   """
-  data_clz = dataclasses.dataclass(frozen=True)(clz)
+  # workaround for pytype not recognizing __dataclass_fields__
+  data_clz: Any = dataclasses.dataclass(frozen=True)(clz)
   meta_fields = []
   data_fields = []
   for name, field_info in data_clz.__dataclass_fields__.items():
@@ -143,7 +173,15 @@ def field(pytree_node=True, **kwargs):
 TNode = TypeVar('TNode', bound='PyTreeNode')
 
 
-class PyTreeNode():
+if typing.TYPE_CHECKING:
+  @__dataclass_transform__()
+  class PyTreeNodeMeta(type):
+    pass
+else:
+  PyTreeNodeMeta = type
+
+
+class PyTreeNode(metaclass=PyTreeNodeMeta):
   """Base class for dataclasses that should act like a JAX pytree node.
 
   See ``flax.struct.dataclass`` for the ``jax.tree_util`` behavior.
