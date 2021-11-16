@@ -393,28 +393,32 @@ class ConvTranspose(Module):
                            precision=self.precision)
 
     if self.padding == "CIRCULAR":
-      # For circular padding, we need to identify the size of the final output ("period") along
-      # each spatial dimension, pad each dimension to an integer number of periods, and wrap 
-      # the array periodically around each dimension. Padding should be done in such a way that 
-      # the start of the original input data inside the padded array is located at integer number
-      # of periods - otherwise the result would be circularly shifted.
+      # For circular padding, we need to identify the size of the final output
+      # ("period") along each spatial dimension, pad each dimension to an
+      # integer number of periods, and wrap the array periodically around each
+      # dimension. Padding should be done in such a way that the start of the
+      # original input data inside the padded array is located at integer
+      # number of periods - otherwise the result would be circularly shifted.
       
-      # Compute period along each spatial dimension - it's input size scaled by the stride.
+      # Compute period along each spatial dimension - it's input size scaled
+      # by the stride.
       scaled_x_dims = [
         x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
       ]
-      # Compute difference between the current size of y and the final output size, 
-      # and complement this difference to 2 * period - that gives how much we need to pad.
+      # Compute difference between the current size of y and the final output
+      # size, and complement this difference to 2 * period - that gives how
+      # much we need to pad.
       size_diffs = [
         -(y_dim - x_dim) % (2 * x_dim)
         for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
       ]
-      # Divide the padding equaly between left and right. The choice to put "+1" 
-      # on the left (and not on the right) represents a convention for aligning 
-      # even-sized kernels.
+      # Divide the padding equaly between left and right. The choice to put
+      # "+1" on the left (and not on the right) represents a convention for
+      # aligning even-sized kernels.
       total_pad = [((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs]
       y = np.pad(y, [(0, 0)] + total_pad + [(0, 0)])
-      # Wrap the result periodically around each spatial dimension, one by one.
+      # Wrap the result periodically around each spatial dimension,
+      # one by one.
       for i in range(1, y.ndim - 1):
         y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) + y.shape[i + 1:])
         y = y.sum(axis=i)
