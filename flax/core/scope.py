@@ -54,7 +54,7 @@ class DenyList:
 
     nn.apply(fn, mutable=nn.DenyList(["params"]))
 
-  Args:
+  Attributes:
     deny: The filter representing the collections that are not mutable.
 
   """

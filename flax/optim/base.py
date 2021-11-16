@@ -226,7 +226,7 @@ class Optimizer(struct.PyTreeNode):
 
     distributed_train_step = jax.pmap(train_step, axis_name='batch')
 
-  Args:
+  Attributes:
     optimizer_def: The optimizer definition.
     state: The initial state of the optimizer.
     target: The target to optimizer."""

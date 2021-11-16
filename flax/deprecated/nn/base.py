@@ -1008,7 +1008,7 @@ class Collection:
   Another common use case for collections is to track internal state.
   For example, the running averages in BatchNorm can be stored in a collection.
 
-  Args:
+  Attributes:
     state: the initial state by default an empty collection is created.
   """
 

@@ -78,7 +78,7 @@ class LSTMCell(RNNCellBase):
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
-  Args:
+  Attributes:
     gate_fn: activation function used for gates (default: sigmoid)
     activation_fn: activation function used for output and memory update
       (default: tanh).
@@ -289,7 +289,7 @@ class GRUCell(RNNCellBase):
       \end{array}
   where x is the input and h, is the output of the previous time step.
 
-  Args:
+  Attributes:
     gate_fn: activation function used for gates (default: sigmoid)
     activation_fn: activation function used for output and memory update
       (default: tanh).
@@ -385,7 +385,7 @@ class ConvLSTM(RNNCellBase):
       after initialization in order to reduce the scale of forgetting in
       the beginning of the training.
 
-  Args:
+  Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
     strides: a sequence of `n` integers, representing the inter-window

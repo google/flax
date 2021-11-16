@@ -27,7 +27,7 @@ from flax.linen.module import Module, compact, merge_param
 class Dropout(Module):
   """Create a dropout layer.
 
-    Args:
+    Attributes:
       rate: the dropout probability.  (_not_ the keep rate!)
       broadcast_dims: dimensions that will share the same dropout mask
       deterministic: if false the inputs are scaled by `1 / (1 - rate)` and

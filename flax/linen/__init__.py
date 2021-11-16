@@ -21,8 +21,8 @@ from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
                          log_softmax, relu, sigmoid, soft_sign, softmax,
                          softplus, swish, silu, tanh, PReLU)
 from .attention import (MultiHeadDotProductAttention, SelfAttention,
-                        dot_product_attention, dot_product_attention_weights,
-                        make_attention_mask, make_causal_mask, combine_masks)
+                        dot_product_attention, make_attention_mask,
+                        make_causal_mask, combine_masks)
 from ..core import broadcast, DenyList, FrozenDict
 from .linear import Conv, ConvTranspose, Dense, DenseGeneral, Embed
 from .module import (Module, compact, nowrap, enable_named_call,
