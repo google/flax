@@ -994,14 +994,15 @@ class Module(metaclass=ModuleMeta):
 
 
     Args:
-       variables: A dictionary containing variables keyed by variable
+      variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
         about variables.
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
       mutable: Can be bool, str, or list. Specifies which collections should be
-               treated as mutable: ``bool``: all/no collections are mutable.
-               ``str``: The name of a single mutable collection. ``list``: A
-               list of names of mutable collections.
+        treated as mutable: 
+          ``bool``: all/no collections are mutable.
+          ``str``: The name of a single mutable collection.
+          ``list``: A list of names of mutable collections.
     Returns:
       A copy of this instance with bound variables and RNGs.
     """
