@@ -81,6 +81,7 @@ Linear modules
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
 
     Dense
     DenseGeneral
@@ -94,6 +95,7 @@ Normalization
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
 
     BatchNorm
     LayerNorm
@@ -139,7 +141,15 @@ Attention primitives
 
     dot_product_attention_weights
     dot_product_attention
+    make_attention_mask
+    make_causal_mask
+
+.. autosummary::
+  :toctree: _autosummary
+  :template: flax_module
+
     SelfAttention
+    MultiHeadDotProductAttention
 
 
 Stochastic
@@ -147,6 +157,7 @@ Stochastic
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
   
     Dropout
     
@@ -156,6 +167,7 @@ RNN primitives
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
 
     LSTMCell
     OptimizedLSTMCell
