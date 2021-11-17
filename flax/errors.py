@@ -154,16 +154,16 @@ class ScopeParamNotFoundError(FlaxError):
   does not match the apply name 'embed'::
 
     class Embed(nn.Module):
-    num_embeddings: int
-    features: int
-      
-    @nn.compact
-    def __call__(self, inputs, embed_name='embedding'):
-      inputs = inputs.astype('int32')
-      embedding = self.param(embed_name,
-                            lecun_normal(),
-                            (self.num_embeddings, self.features))    
-      return embedding[inputs]
+      num_embeddings: int
+      features: int
+
+      @nn.compact
+      def __call__(self, inputs, embed_name='embedding'):
+        inputs = inputs.astype('int32')
+        embedding = self.param(embed_name,
+                               lecun_normal(),
+                               (self.num_embeddings, self.features))
+        return embedding[inputs]
 
     variables = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
     _ = Embed().apply(variables, jnp.ones((5, 5, 1)), 'embed')
@@ -185,7 +185,7 @@ class ScopeParamShapeError(FlaxError):
   shape of the kernel during ``init`` is ``(1, 8)``, and the shape during 
   ``apply`` is ``(5, 8)``, which results in this error.::
 
-      class NoBiasDense(nn.Module):
+    class NoBiasDense(nn.Module):
       features: int = 8
 
       @nn.compact

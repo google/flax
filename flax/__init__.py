@@ -30,11 +30,11 @@
 
 """Flax API."""
 
+from . import core
+from . import linen
+from . import optim
+from .deprecated import nn
+# DO NOT REMOVE - Marker for internal logging.
 from .version import __version__
 
 # Allow `import flax`; `flax.optim.[...]`, etc
-from . import core
-from . import linen
-from . import nn
-from . import optim
-# DO NOT REMOVE - Marker for internal logging.

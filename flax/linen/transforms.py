@@ -22,7 +22,7 @@ versions as "lifted transformations".
 A lifted transformation can be applied to a ``Module`` class or a
 function that takes a ``Module`` instance as its first argument.
 """
-from typing import Any, Type, Callable, Union, Mapping, Optional, TypeVar, Iterable, Sequence
+from typing import Any, Type, Callable, Union, Mapping, Optional, TypeVar, Iterable, Sequence, Tuple
 
 import dataclasses
 import functools
@@ -195,8 +195,8 @@ def set_module_scopes(module, args, kwargs, scopes):
 
 def _test_transformed_return_values(tree, method_name):
   """Tests whether the return value contains any Modules or Variables."""
-  impure = any(jax.tree_leaves(
-      jax.tree_map(lambda x: isinstance(x, (Module, Variable)), tree)))
+  impure = any(map(lambda x: isinstance(x, (Module, Variable)),
+                   jax.tree_leaves(tree)))
   if impure:
     raise errors.TransformedMethodReturnValueError(method_name)
 
@@ -276,7 +276,8 @@ def module_class_lift_transform(
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
-def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
+def decorator_lift_transform(transform, class_fn, *trafo_args, 
+                             multi_scope=True, **trafo_kwargs):
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state correctly.
   prewrapped_fn = wrap_method_once(class_fn)
@@ -284,29 +285,51 @@ def decorator_lift_transform(transform, class_fn, *trafo_args, **trafo_kwargs):
   def wrapped_fn(self, *args, **kwargs):
     # make a scope-function to transform
     def core_fn(scopes, *args, **kwargs):
+      if not multi_scope:
+        scopes = [scopes]
       cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
       object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
-      _test_transformed_return_values(res, class_fn.__name__)
+      _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
       return res
     # here we apply the given lifting transform to the scope-ingesting fn
     trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
     module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
+    if not multi_scope:
+      if len(module_scopes) != 1:
+        # TODO transforms like jvp & vjp have args that follow the pytree
+        # structure of scopes. The user doesn't explicitly control shared
+        # modules passed as arguments to methods or as attributes to Module
+        # constructors. Therefore, there is no obvious API for specifying
+        # arguments per lifted Module.
+        raise NotImplementedError(
+            "This transform does not yet support"
+            " Modules that include other Modules passed as arguments.")
+      module_scopes = module_scopes[0]
     return trafo_fn(module_scopes, *args, **kwargs)
   return wrapped_fn
 
 
 # Utility to wrap a class or to use as decorator in def of class method.
 # -----------------------------------------------------------------------------
+
+TransformTarget = Union[Type[Module], Callable[..., Any]]
+Target = TypeVar('Target', bound=TransformTarget)
+
+
+def _is_module_class(target: TransformTarget) -> bool:
+  return (inspect.isclass(target) and issubclass(target, Module)
+      or (isinstance(target, functools.partial)) and _is_module_class(target.func))
+
+
 def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs):
   """Applies to class or as a decorator on class fns."""
-  if (inspect.isclass(target) and issubclass(target, Module)
-      or isinstance(target, functools.partial)):
+  if _is_module_class(target):
     return module_class_lift_transform(
         transform, target, *trafo_args, methods=methods, **trafo_kwargs)
   # we presume this is being used as a function decorator in class definition
-  elif inspect.isfunction(target):
+  elif callable(target):
     return decorator_lift_transform(
         transform, target, *trafo_args, **trafo_kwargs)
   else:
@@ -315,9 +338,19 @@ def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs)
         ' in class definition.')
 
 
-TransformTarget = Union[Type[Module], Callable[..., Any]]
-
-Target = TypeVar('Target', bound=TransformTarget)
+def lift_direct_transform(transform, target: Callable[..., Any], mdl: Module,
+                          *args, multi_scope=True, **kwargs):
+  if _is_module_class(target):
+    raise ValueError(
+        f'The {transform.__name__} transform can only be applied on a Module method.'
+        ' That is function that takes a Module instance as its first arg.')
+  elif callable(target):
+    aug_transform = lambda fn: functools.partial(transform, fn)
+    return decorator_lift_transform(
+        aug_transform, target, multi_scope=multi_scope)(mdl, *args, **kwargs)
+  else:
+    raise ValueError(
+        'transform target must be callable')
 
 
 def vmap(target: Target,
@@ -641,10 +674,202 @@ def scan(target: Target,
       methods=methods)
 
 
+def map_variables(
+    target: Target,
+    mapped_collections: lift.CollectionFilter,
+    trans_in_fn: Callable[..., Any] = lift.id_fn,
+    trans_out_fn: Callable[..., Any] = lift.id_fn,
+    init: bool = False, mutable: bool = False,
+    rngs: lift.PRNGSequenceFilter = True,
+    variables: lift.CollectionFilter = True) -> Target:
+  """Map Variables inside a module.
+
+  Example::
+
+    class OneBitDense(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def sign(x):
+          return jax.tree_map(jnp.sign, x)
+        MapDense = nn.map_variables(nn.Dense, "params", sign, init=True)
+        return MapDense(4)(x)
+
+  Args:
+    fn: the function to be transformed.
+    mapped_collections: the collection(s) to be transformed.
+    map_in_fn: creates a view of the target variables.
+    map_out_fn: transforms the updated variables in the view after mutation.
+    init: If True, variables are initialized before transformation.
+    mutable: If True, the mapped variable collections will be mutable.
+    rngs: PRNGSequences added to the transformed scope (default: all).
+    variables: Additional Variable collections added to the transformed scope.
+      Besides those specified by `target` (default: all).
+  Returns:
+    a wrapped version of ``target`` that will map the specificied collections.
+  """
+
+  return lift_transform(
+      lift.map_variables, target,
+      mapped_collections,
+      trans_in_fn, trans_out_fn,
+      init, mutable,
+      rngs, variables
+  )
+
+
+def vjp(fn: Callable[..., Any], mdl: Module, *primals,
+    has_aux: bool = False, reduce_axes=(),
+    vjp_variables: lift.CollectionFilter = "params",
+    variables: lift.CollectionFilter = True,
+    rngs: lift.PRNGSequenceFilter = True, 
+    ) -> Tuple[Any, Any]:
+  """A lifted version of ``jax.vjp``.
+
+  See ``jax.vjp`` for the unlifted vector-Jacobiam product (backward gradient).
+
+  Note that a gradient is returned for all variables in the collections
+  specified by `vjp_variables`. However, the backward funtion only expects
+  a cotangent for the return value of `fn`. If variables require a co-tangent
+  as well they can be returned from `fn` using `Module.variables`.
+
+
+  Example::
+
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('scale', nn.initializers.zeros, ())
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        y, bwd = nn.vjp(lambda mdl, x: mdl(x), LearnScale(), x)
+        params_grad, x_grad = bwd(jnp.ones(y.shape))
+        return y, params_grad, x_grad
+
+   Args:
+    fn: Function to be differentiated. Its arguments should be arrays, scalars,
+      or standard Python containers of arrays or scalars. It should return an
+      array, scalar, or standard Python container of arrays or scalars. It will
+      receive the scope and primals as arguments.
+    scope: The scope of which the variables will be differentiated.
+    primals: A sequence of primal values at which the Jacobian of ``fn``
+      should be evaluated. The length of ``primals`` should be equal to the
+      number of positional parameters to ``fn``. Each primal value should be a
+      tuple of arrays, scalar, or standard Python containers thereof.
+    has_aux: Optional, bool. Indicates whether ``fn`` returns a pair where the
+     first element is considered the output of the mathematical function to be
+     differentiated and the second element is auxiliary data. Default False.
+    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
+      ``fn`` implicitly broadcasts a value over that axis, the backward pass
+      will perform a ``psum`` of the corresponding gradient. Otherwise, the
+      VJP will be per-example over named axes. For example, if ``'batch'``
+      is a named batch axis, ``vjp(f, *args, reduce_axes=('batch',))`` will
+      create a VJP function that sums over the batch while ``vjp(f, *args)``
+      will create a per-example VJP.
+    vjp_variables: The vjpfun will return a cotangent vector for all
+      variable collections specified by this filter.
+    variables: other variables collections that are available inside `fn` but
+      do not receive a cotangent.
+    rngs: the prngs that are available inside `fn`.
+
+  Returns:
+    If ``has_aux`` is ``False``, returns a ``(primals_out, vjpfun)`` pair, where
+    ``primals_out`` is ``fn(*primals)``.
+    ``vjpfun`` is a function from a cotangent vector with the same shape as
+    ``primals_out`` to a tuple of cotangent vectors with the same shape as
+    ``primals``, representing the vector-Jacobian product of ``fn`` evaluated at
+    ``primals``. If ``has_aux`` is ``True``, returns a
+    ``(primals_out, vjpfun, aux)`` tuple where ``aux`` is the auxiliary data
+    returned by ``fn``.
+  """
+  return lift_direct_transform(
+      lift.vjp, fn, mdl, *primals,
+      multi_scope=False,
+      has_aux=has_aux, reduce_axes=reduce_axes,
+      vjp_variables=vjp_variables,
+      variables=variables,
+      rngs=rngs)
+
+
+def jvp(fn: Callable[..., Any], mdl: Module,
+    primals, tangents, variable_tangents,
+    variables: lift.CollectionFilter = True,
+    rngs: lift.PRNGSequenceFilter = True, 
+    ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
+  """A lifted version of ``jax.jvp``.
+
+  See ``jax.jvp`` for the unlifted Jacobian-vector product (forward gradient).
+
+  Note that no tangents are returned for variables. When variable tangents
+  are required their value should be returned explicitly by `fn`
+  using `Module.variables`.
+
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('test', nn.initializers.zeros, ())
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        scale = LearnScale()
+        vars_t = jax.tree_map(jnp.ones_like, scale.variables.get('params', {}))
+        _, out_t = nn.jvp(
+            lambda mdl, x: mdl(x), scale, (x,), (jnp.zeros_like(x),),
+            variable_tangents={'params': vars_t})
+        return out_t
+
+  Example::
+
+    def learn_scale(scope, x):
+      p = scope.param('scale', nn.initializers.zeros, ())
+      return p * x
+
+    def f(scope, x):
+      vars_t = jax.tree_map(jnp.ones_like, scope.variables().get('params', {}))
+      x, out_t = lift.jvp(
+          learn_scale, scope, (x,), (jnp.zeros_like(x),),
+          variable_tangents={'params': vars_t})
+      return out_t
+
+   Args:
+    primals: The primal values at which the Jacobian of ``fun`` should be
+        evaluated. Should be either a tuple or a list of arguments,
+        and its length should be equal to the number of positional parameters of
+        ``fun``.
+    tangents: The tangent vector for which the Jacobian-vector product should be
+      evaluated. Should be either a tuple or a list of tangents, with the same
+      tree structure and array shapes as ``primals``.
+    variable_tangents: A dict or PyTree fo dicts with the same structure as
+      scopes. Each entry in the dict specifies the tangents for a variable
+      collection. Not specifying a collection in variable_tangents is
+      equivalent to passing a zero vector as the tangent.
+    variables: other variables collections that are available in `fn` but
+      do not receive a tangent.
+    rngs: the prngs that are available inside `fn`.
+
+  Returns:
+    A ``(primals_out, tangents_out)`` pair, where ``primals_out`` is
+    ``fun(*primals)``, and ``tangents_out`` is the Jacobian-vector product of
+    ``function`` evaluated at ``primals`` with ``tangents``. The
+    ``tangents_out`` value has the same Python tree structure and shapes as
+    ``primals_out``.
+  """
+  return lift_direct_transform(
+      lift.jvp, fn, mdl, primals, tangents, variable_tangents,
+      multi_scope=False,
+      variables=variables,
+      rngs=rngs)
+
+
+
 # Special case of decorator_lift_transform to handle named calls for profiling.
 def named_call(class_fn, force=True):
   """Labels a method for labelled traces in profiles.
-  
+
   Args:
     force: If True, the named_call transform is applied even if it is globally disabled.
       (e.g.: by calling `flax.linen.disable_named_call()`)

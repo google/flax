@@ -293,7 +293,7 @@ class GroupNorm(Module):
       bias_init: Initializer for bias, by default, zero.
       scale_init: Initializer for scale, by default, one.
   """
-  num_groups: int = 32
+  num_groups: Optional[int] = 32
   group_size: Optional[int] = None
   epsilon: float = 1e-6
   dtype: Any = jnp.float32

@@ -20,7 +20,7 @@ For a quick introduction and short example snippets, see our `README
 
    overview
    installation
-   examples
+   Examples <https://github.com/google/flax/tree/main/examples>
 
 .. toctree::
    :maxdepth: 1

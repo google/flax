@@ -29,8 +29,10 @@ import os
 
 # Config parsing utils
 
+
 def bool_env(varname: str, default: bool) -> bool:
   """Read an environment variable and interpret it as a boolean.
+  
   True values are (case insensitive): 'y', 'yes', 't', 'true', 'on', and '1';
   false values are 'n', 'no', 'f', 'false', 'off', and '0'.
   Args:
@@ -46,7 +48,7 @@ def bool_env(varname: str, default: bool) -> bool:
     return False
   else:
     raise ValueError(
-        "invalid truth value %r for environment %r" % (val, varname))
+        'invalid truth value %r for environment %r' % (val, varname))
 
 
 # Flax Global Configuration Variables:

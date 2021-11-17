@@ -36,6 +36,27 @@ Compact methods
 .. autofunction:: compact
 
 
+No wrap methods
+----------------------
+
+.. currentmodule:: flax.linen
+.. autofunction:: nowrap
+
+
+Profiling
+----------------------
+
+.. automodule:: flax.linen
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    enable_named_call
+    disable_named_call
+    override_named_call
+
+
 Transformations
 ----------------------
 
@@ -50,6 +71,9 @@ Transformations
     jit
     remat
     remat_scan
+    map_variables
+    jvp
+    vjp
 
 
 Linear modules
@@ -57,6 +81,7 @@ Linear modules
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
 
     Dense
     DenseGeneral
@@ -70,6 +95,7 @@ Normalization
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
 
     BatchNorm
     LayerNorm
@@ -104,6 +130,7 @@ Activation functions
     softmax
     softplus
     swish
+    PReLU
 
 
 Attention primitives
@@ -114,7 +141,15 @@ Attention primitives
 
     dot_product_attention_weights
     dot_product_attention
+    make_attention_mask
+    make_causal_mask
+
+.. autosummary::
+  :toctree: _autosummary
+  :template: flax_module
+
     SelfAttention
+    MultiHeadDotProductAttention
 
 
 Stochastic
@@ -122,6 +157,7 @@ Stochastic
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
   
     Dropout
     
@@ -131,6 +167,7 @@ RNN primitives
 
 .. autosummary::
   :toctree: _autosummary
+  :template: flax_module
 
     LSTMCell
     OptimizedLSTMCell

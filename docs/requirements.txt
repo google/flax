@@ -7,6 +7,11 @@ ipykernel
 nbsphinx
 recommonmark
 sphinx_markdown_tables
+
+# Need to pin docutils to 0.16 to make bulleted lists appear correctly on
+# ReadTheDocs: https://stackoverflow.com/a/68008428
+docutils==0.16
+
 # The next packages are for notebooks.
 matplotlib
 sklearn

@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
 from flax import errors
 from flax.core import Scope, scope, freeze, init, apply, nn
 
+from jax import config as jax_config
 from jax import random
 
 import numpy as np
@@ -56,7 +58,7 @@ class ScopeTest(absltest.TestCase):
     union_check(True, True, True)
     union_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), scope.DenyList(set(['b'])))
     union_check(scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a'])))
-  
+
   def test_intersect_filter(self):
     def intersect_check(a, b, ans):
       self.assertEqual(scope.intersect_filters(a, b), ans)
@@ -68,7 +70,7 @@ class ScopeTest(absltest.TestCase):
     intersect_check(True, True, True)
     intersect_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), scope.DenyList(set(['a', 'b', 'c'])))
     intersect_check(scope.DenyList(['a', 'b']), ['b', 'c'], set(['c']))
-  
+
   def test_subtract_filter(self):
     def subtract_check(a, b, ans):
       self.assertEqual(scope.subtract_filters(a, b), ans)
@@ -95,13 +97,13 @@ class ScopeTest(absltest.TestCase):
     self.assertEqual(scope.group_collections(xs, ['vars']), ({},))
 
     # False gets nothing and True retrieves all keys once.
-    self.assertEqual(scope.group_collections(xs, [False, True, True]), 
+    self.assertEqual(scope.group_collections(xs, [False, True, True]),
                                              ({}, xs, {}))
 
   def test_inconsistent_param_shapes(self):
     def f(scope):
       scope.param('test', nn.initializers.ones, (4,))
-    
+
     msg = r'Inconsistent shapes between value and initializer for parameter "test" in "/": \(2,\), \(4,\).'
     with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
       apply(f)(freeze({'params': {'test': np.ones((2,))}}))
@@ -136,6 +138,17 @@ class ScopeTest(absltest.TestCase):
     _ = apply(f)(
         {}, np.array([0.]), rngs=freeze({'a':random.PRNGKey(0)}))
 
+  @unittest.skipIf(not hasattr(jax_config, 'jax_enable_custom_prng'),
+                   'custom PRNG tests require config.jax_enable_custom_prng')
+  def test_rng_check_w_old_and_new_keys(self):
+    old_setting = jax_config.jax_enable_custom_prng
+    try:
+      jax_config.update('jax_enable_custom_prng', False)
+      self.assertTrue(scope._is_valid_rng(random.PRNGKey(0)))
+      jax_config.update('jax_enable_custom_prng', True)
+      self.assertTrue(scope._is_valid_rng(random.PRNGKey(0)))
+    finally:
+      jax_config.update('jax_enable_custom_prng', old_setting)
 
 if __name__ == '__main__':
   absltest.main()

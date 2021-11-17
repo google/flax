@@ -709,7 +709,6 @@ class TransformTest(absltest.TestCase):
         }
     }})
 
-    print(jax.tree_map(jnp.shape, p1))
     # Test method wrapper transform.
     y2 = C(a2, b).apply(p2, x)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
@@ -778,6 +777,30 @@ class TransformTest(absltest.TestCase):
     ref_var_shapes = freeze({
         'params': {
             'kernel': (3, 4, 4),
+        },
+    })
+    self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
+
+  def test_partial_module_method(self):
+    k = random.PRNGKey(0)
+    x = jnp.ones((3,4,4))
+    class Foo(nn.Module):
+
+      @nn.compact
+      def inner(self, x):
+        return nn.Dense(2, use_bias=False)(x)
+      
+      def __call__(self, x):
+        return nn.vmap(
+            partial(Foo.inner),
+            variable_axes={'params':0},
+            split_rngs={'params':True})(self, x)
+
+    init_vars = Foo().init(k, x)
+    init_vars_shapes = jax.tree_map(jnp.shape, init_vars)
+    ref_var_shapes = freeze({
+        'params': {
+          'Dense_0': {'kernel': (3, 4, 2)}
         },
     })
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
@@ -952,6 +975,60 @@ class TransformTest(absltest.TestCase):
 
     b = Bar()
     b.apply({}, jnp.ones(2))
+  
+  def test_map_variables_tied_autoencoder(self):
+    def trans(variables):
+      return jax.tree_map(lambda x: x.T, variables)
+      
+    class TiedAutencoder(nn.Module):
+
+      features: int
+      latents: int
+        
+      @nn.compact
+      def _call(self, x, decode):
+        def f(self):
+          return nn.Dense(self.features if decode else self.latents, use_bias=False)(x)
+
+        if decode:
+          map_fn = trans
+        else:
+          map_fn = lambda x: x
+        return nn.map_variables(f, "params", map_fn, map_fn, mutable=True)(self)
+
+      def encode(self, x):
+        return self._call(x, False)
+
+      def decode(self, x):
+        return self._call(x, True)
+
+      def __call__(self, x):
+        return self.decode(self.encode(x))
+    
+    x = jnp.ones((2, 4))
+    ae = TiedAutencoder(4, 5)
+    variables = ae.init(random.PRNGKey(0), x)
+    param_shapes = jax.tree_map(jnp.shape, variables["params"])
+    self.assertEqual(param_shapes, {
+      "Dense_0": {"kernel": (4, 5)}
+    })
+
+
+  def test_map_variables_bit_weights(self):
+    class BitWeights(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def sign(x):
+          return jax.tree_map(jnp.sign, x)
+        BitDense = nn.map_variables(nn.Dense, "params", sign, init=True)
+        return BitDense(4)(x)
+    bw = BitWeights()
+    x = jnp.ones((2, 4))
+    y, variables = bw.init_with_output(random.PRNGKey(0), x)
+    y_2 = bw.apply(variables, x)
+    np.testing.assert_allclose(y, y_2)
+
+
 
   def test_remat_scan(self):
     class BigModel(nn.Module):
@@ -964,13 +1041,55 @@ class TransformTest(absltest.TestCase):
     model = BigModel()
     variables = model.init(random.PRNGKey(0), x)
     param_shapes = jax.tree_map(jnp.shape, variables['params'])
-    print(param_shapes)
     self.assertEqual(param_shapes["dense_stack"]["kernel"], (100, 8, 8))
     self.assertEqual(param_shapes["dense_stack"]["bias"], (100, 8))
     y = model.apply(variables, x)
     self.assertEqual(y.shape, (2, 8))
 
 
+  def test_vjp(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('test', nn.initializers.zeros, ())
+        self.variable('state', 'counter', lambda: 0)
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        y, bwd = nn.vjp(Bar.__call__, Bar(), x)
+        params_grad, x_grad = bwd(jnp.ones(y.shape))
+        return params_grad, x_grad
+    
+    x = jnp.ones((3,))
+    params = Foo().init(random.PRNGKey(0), x)
+    x_grad, params_grad = Foo().apply(params, x)
+    self.assertEqual(params_grad, {
+      'params': nn.FrozenDict({'test': 3.}),
+    })
+    np.testing.assert_allclose(x_grad, 0. * x)
+
+  def test_jvp(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('test', nn.initializers.zeros, ())
+        self.variable('state', 'counter', lambda: 0)
+        return p * x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        bar = Bar()
+        vars_t = jax.tree_map(jnp.ones_like, bar.variables.get('params', {}))
+        _, out_t = nn.jvp(Bar.__call__, bar, (x,), (jnp.zeros_like(x),), {'params': vars_t})
+        return out_t
+    
+    x = jnp.ones((3,))
+    params = Foo().init(random.PRNGKey(0), x)
+    y_t = Foo().apply(params, x)
+    np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
 if __name__ == '__main__':
   absltest.main()

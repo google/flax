@@ -47,19 +47,6 @@ class Adam(OptimizerDef):
   Reference: [Adam: A Method
   for Stochastic Optimization](https://arxiv.org/abs/1412.6980v8) (Kingma and
   Ba, 2014).
-
-  Attributes:
-    learning_rate: The learning rate — the step size used to update the
-      parameters.
-    beta1: The exponentian decay rate for the 1st moment estimates. The
-      coefficient used to calculate the first moments of the gradients (the
-      moving average of the gradient) (default: 0.9).
-    beta2: The exponentian decay rate for the 2nd moment estimates. The
-      coefficient used to calculate the second moments of the gradients (the
-      moving average of the gradient magnitude) (default: 0.999).
-    eps: A small scalar added to the gradient magnitude estimate to improve
-      numerical stability (default: 1e-8).
-    weight_decay: The learning rate decay (default: 0.0).
   """
 
   def __init__(self,
@@ -71,15 +58,17 @@ class Adam(OptimizerDef):
     """Constructor for the Adam optimizer.
 
     Args:
-      learning_rate: The step size used to update the parameters.
-      beta1: The coefficient used for the moving average of the
-        gradient (default: 0.9).
-      beta2: The coefficient used for the moving average of the
-        gradient magnitude (default: 0.999).
-      eps: The term added to the gradient magnitude estimate for
+      learning_rate: The learning rate — the step size used to update the
+        parameters.
+      beta1: The exponentian decay rate for the 1st moment estimates. The
+        coefficient used to calculate the first moments of the gradients (the
+        moving average of the gradient) (default: 0.9).
+      beta2: The exponentian decay rate for the 2nd moment estimates. The
+        coefficient used to calculate the second moments of the gradients (the
+        moving average of the gradient magnitude) (default: 0.999).
+      eps: A small scalar added to the gradient magnitude estimate to improve
         numerical stability (default: 1e-8).
-      weight_decay: AdamW style weight decay rate
-        (relative to learning rate) (default: 0.0).
+      weight_decay: The learning rate decay (default: 0.0).
     """
     hyper_params = _AdamHyperParams(learning_rate, beta1, beta2, eps,
                                     weight_decay)

@@ -133,19 +133,34 @@ _unspecified_parent = _Sentinel()
 _use_named_call = config.flax_profile
 
 def enable_named_call():
-  """Enables named call wrapping for labelling profile traces."""
+  """Enables named call wrapping for labelling profile traces.
+  
+  When named call wrapping is enabled all JAX ops executed in a Module
+  will be wrapped with ``jax.named_call``. The ``Module`` class name will
+  show up around the operations belonging to that Module in the
+  Tensorboard profiling UI, simplifying the profiling process.
+
+  Note that ``jax.named_call`` only works for
+  compiled functions (e.g.: using jax.jit or jax.pmap).
+  """
   global _use_named_call
   _use_named_call = True
 
 def disable_named_call():
-  """Disables named call wrapping."""
+  """Disables named call wrapping.
+  
+  See ``enable_named_call``
+  """
   global _use_named_call
   _use_named_call = False
 
 
 @contextmanager
 def override_named_call(enable: bool = True):
-  """Returns a context manager that enables/disables named call wrapping."""
+  """Returns a context manager that enables/disables named call wrapping.
+  
+  See ``enable_named_call``
+  """
   global _use_named_call
   use_named_call_prev = _use_named_call
   _use_named_call = enable
@@ -584,7 +599,8 @@ class Module(metaclass=ModuleMeta):
     and making sure setup is called before any other method.
     """
     is_compact_method = hasattr(fun, 'compact')
-    is_setup_method = fun.__name__ == 'setup'
+    fun_name = getattr(fun, '__name__', 'unnamed_function')
+    is_setup_method = fun_name == 'setup'
     # We lazily call setup() only when needed.
     if is_setup_method:
       is_recurrent = self._state.in_setup
@@ -602,8 +618,8 @@ class Module(metaclass=ModuleMeta):
       y = fun(self, *args, **kwargs)
       if _context.capture_stack:
         filter_fn = _context.capture_stack[-1]
-        if filter_fn and filter_fn(self, fun.__name__):
-          self.sow('intermediates', fun.__name__, y)
+        if filter_fn and filter_fn(self, fun_name):
+          self.sow('intermediates', fun_name, y)
       return y
     finally:
       _context.module_stack.pop()
@@ -978,14 +994,15 @@ class Module(metaclass=ModuleMeta):
 
 
     Args:
-       variables: A dictionary containing variables keyed by variable
+      variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
         about variables.
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
       mutable: Can be bool, str, or list. Specifies which collections should be
-               treated as mutable: ``bool``: all/no collections are mutable.
-               ``str``: The name of a single mutable collection. ``list``: A
-               list of names of mutable collections.
+        treated as mutable: 
+          ``bool``: all/no collections are mutable.
+          ``str``: The name of a single mutable collection.
+          ``list``: A list of names of mutable collections.
     Returns:
       A copy of this instance with bound variables and RNGs.
     """
@@ -1082,9 +1099,9 @@ class Module(metaclass=ModuleMeta):
       collections.
     """
     if not isinstance(rngs, dict):
-      if rngs.shape != (2,):
+      if not core.scope._is_valid_rng(rngs):
         raise errors.InvalidRngError(
-            'RNGs should be of shape (2,) in Module '
+            'RNGs should be of shape (2,) or KeyArray in Module '
             f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
     return self.apply(

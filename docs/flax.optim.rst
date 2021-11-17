@@ -31,6 +31,7 @@ Available optimizers
     AdaBelief
     AdaFactor
     Adagrad
+    Adadelta
     DynamicScale
     GradientDescent
     LAMB

@@ -3,7 +3,6 @@ Changelog
 
 vNext
 ------
-
 (Add your change to a random empty line to avoid merge conflicts)
 - 
 - 
@@ -14,14 +13,6 @@ vNext
 - 
 - 
 - 
-- Add experimental checkpoint policy argument. See `flax.linen.checkpoint`
-- 
-- 
-- 
-- 
-- 
-- 
-- 
 - 
 - 
 - 
@@ -30,6 +21,16 @@ vNext
 - 
 - 
 
+
+0.3.6
+------
+Breaking changes:
+- Move `flax.nn` to `flax.deprecated.nn`.
+
+New features:
+- Add experimental checkpoint policy argument. See `flax.linen.checkpoint`
+- Add lifted versions of jvp and vjp.
+- Add lifted transformation for mapping variables. See `flax.linen.map_variables`.
 
 
 0.3.5

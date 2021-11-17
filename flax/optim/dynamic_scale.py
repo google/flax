@@ -51,6 +51,7 @@ class DynamicScale(struct.PyTreeNode):
   whether the gradients are finite.
 
   Example::
+  
     def loss_fn(p):
       return jnp.asarray(p, jnp.float16) ** 2
     p = jnp.array(1., jnp.float32)
