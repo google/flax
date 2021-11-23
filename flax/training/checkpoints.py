@@ -49,7 +49,11 @@ PyTree = Any
 def _checkpoint_path(ckpt_dir: str,
                      step: Union[int, str],
                      prefix: str = 'checkpoint_') -> str:
-  return os.path.join(ckpt_dir, f'{prefix}{step}')
+  if isinstance(step, int):
+    ckpt_file = f'{prefix}{step:0>9d}'
+  else:
+    ckpt_file = f'{prefix}{step}'
+  return os.path.join(ckpt_dir, ckpt_file)
 
 
 def _checkpoint_path_step(path: str) -> Optional[float]:

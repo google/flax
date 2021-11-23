@@ -130,7 +130,7 @@ class CheckpointsTest(parameterized.TestCase):
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 0, prefix='test_', keep=1)
-    self.assertIn('test_0', os.listdir(tmp_dir))
+    self.assertIn('test_000000000', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
         tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, test_object1)
@@ -153,7 +153,7 @@ class CheckpointsTest(parameterized.TestCase):
     jtu.check_eq(new_object, test_object2)
     # Restore a specific path.
     new_object = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_3'), test_object0)
+        os.path.join(tmp_dir, 'test_000000003'), test_object0)
     jtu.check_eq(new_object, test_object2)
     # If a specific path is specified, but it does not exist, the same behavior
     # as when a directory is empty should apply: the target is returned
