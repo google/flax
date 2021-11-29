@@ -1120,7 +1120,7 @@ class Module(metaclass=ModuleMeta):
     provided arguments, and avoids computing the forward pass with actual
     values. Example::
 
-      jit_init = jax.jit(SomeModule.init)
+      jit_init = jax.jit(SomeModule(...).init)
       jit_init(rng, jnp.ones(input_shape, jnp.float32))
 
     Args:
