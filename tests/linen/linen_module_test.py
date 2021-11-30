@@ -1388,6 +1388,32 @@ class ModuleTest(absltest.TestCase):
       param_2 = model.init(random.PRNGKey(0), np.ones((1, 1)))["params"]["kernel"]
     self.assertEqual(param, param_2)
 
+  def test_rng_reuse_after_rewind(self):
+    class C(nn.Module):
+      @nn.compact
+      def __call__(self):
+        # Some module that has dropouts in it, in general, 
+        # it does more than just dropout!
+        return self.make_rng('dropout')
+
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self):
+        # Some module that has dropouts in it, in general, 
+        # it does more than just dropout!
+        return C()()
+
+    class B(nn.Module):
+      @nn.compact
+      def __call__(self):
+        a = A()
+        x0 = a()
+        x1 = a()
+        return jnp.alltrue(x0 == x1)
+
+    k = random.PRNGKey(0)
+    rng_equals = B().apply({}, rngs={'dropout': k})
+    self.assertFalse(rng_equals)
 
 if __name__ == '__main__':
   absltest.main()
