@@ -189,7 +189,13 @@ def _invert_perm(perm):
 def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
   """utility for doing a scan along arbitrary dimensions.
 
-  see `lax.scan` for details on how the scan operation works.
+  See `lax.scan` for details on how the scan operation works.
+
+  Note on `unroll`: This argument gets left padded with ones to match the size
+  of `axis`. Doing so allows unrolls to performed from the innermost loop first.
+  For example, `scan_in_dim(..., axis=(1, 2, 3), unroll=5)` is equivalent to
+  `scan_in_dim(..., axis=(1, 2, 3), unroll=(1, 1, 5))`.
+
   Args:
     body_fn: the body of the loop of type (c, x) -> (c, y).
     init: initial value for the carry.
