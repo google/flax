@@ -70,21 +70,24 @@ are happy to showcase any example built by the community here! If you want to
 submit your own example, we suggest that you start by forking one of the
 official Flax example, and start from there.
 
-| Link                         | Author             | Task type                         | Reference                                                             |
-|------------------------------|--------------------|-----------------------------------|-----------------------------------------------------------------------|
+|             Link             |       Author       |             Task type             |                               Reference                               |
+| ---------------------------- | ------------------ | --------------------------------- | --------------------------------------------------------------------- |
 | [matthias-wright/flaxmodels] | [@matthias-wright] | Various                           | Various                                                               |
 | [google/vision_transformer]  | [@andsteing]       | Image classification, fine-tuning | https://arxiv.org/abs/2010.11929 and https://arxiv.org/abs/2105.01601 |
 | [JAX-RL]                     | [@henry-prior]     | Reinforcement learning            | N/A                                                                   |
 | [DCGAN] Colab                | [@bkkaggle]        | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
 | [BigBird Fine-tuning]        | [@vasudevgupta7]   | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
+| [jax-resnet]                 | [@n2cholas]        | Various resnet implementations    | `torch.hub`                                                           |
 
 [matthias-wright/flaxmodels]: https://github.com/matthias-wright/flaxmodels
 [google/vision_transformer]: https://github.com/google-research/vision_transformer
 [JAX-RL]: https://github.com/henry-prior/jax-rl
 [DCGAN]: https://github.com/bkkaggle/jax-dcgan
 [BigBird Fine-tuning]: https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/big_bird
+[jax-resnet]: https://github.com/n2cholas/jax-resnet
 [@matthias-wright]: https://github.com/matthias-wright
 [@andsteing]: https://github.com/andsteing
 [@henry-prior]: https://github.com/henry-prior
 [@bkkaggle]: https://github.com/bkkaggle
 [@vasudevgupta7]: https://github.com/vasudevgupta7
+[@n2cholas]: https://github.com/n2cholas
