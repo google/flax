@@ -18,24 +18,28 @@ from .. import struct
 
 import jax
 import jax.numpy as jnp
+from jax import lax
 
 import numpy as np
 
 from .base import OptimizerDef
 
+Array = Any
+
 
 @struct.dataclass
 class _WeightNormHyperParams:
   inner: Any
-  wn_decay: np.ndarray
-  wn_eps: np.ndarray
+  wn_decay: Array
+  wn_eps: Array
 
 
 @struct.dataclass
 class _WeightNormParamState:
   direction_state: Any
   scale_state: Any
-  mult: np.ndarray
+  direction: Array
+  scale: Array
 
 
 class WeightNorm(OptimizerDef):
@@ -75,8 +79,18 @@ class WeightNorm(OptimizerDef):
     return self.hyper_params.replace(inner=inner, wn_decay=decay, wn_eps=eps)
 
   def init_state(self, params):
+    def split_param(param):
+      if param.size > param.shape[-1]:
+        norms = jnp.sqrt(jnp.square(param).sum(
+            tuple(range(param.ndim-1)), keepdims=True) + eps)
+        direction = param / norms
+        return direction, norms
+      else:
+        return param, ()
+
     leaves, treedef = jax.tree_flatten(params)
-    directions, scales = zip(*(self._split_param(p) for p in leaves))
+    eps = self.hyper_params.wn_eps
+    directions, scales = zip(*(split_param(p) for p in leaves))
     directions = treedef.unflatten(directions)
     scales = treedef.unflatten(scales)
     wn_params = {'direction': directions, 'scale': scales}
@@ -85,71 +99,49 @@ class WeightNorm(OptimizerDef):
     scale_state = state.param_states['scale']
     param_states = jax.tree_multimap(
         lambda _, *args: _WeightNormParamState(*args),
-        params, direction_state, scale_state, scales)
+        params, direction_state, scale_state, directions, scales)
     return state.replace(param_states=param_states)
 
   def apply_gradient(self, hyper_params, params, state, grads):
-    p_leaves, treedef = jax.tree_flatten(params)
+    treedef = jax.tree_structure(params)
     s_leaves = treedef.flatten_up_to(state.param_states)
-    g_leaves = treedef.flatten_up_to(grads)
-    split_grads = zip(*(self._split_grad(p, s, g, hyper_params.wn_decay)
-                        for p, s, g in zip(p_leaves, s_leaves, g_leaves)))
-    d_p, d_s, d_g, s_p, s_s, s_g = [
-        jax.tree_unflatten(treedef, x) for x in split_grads]
-    wn_params = {'direction': d_p, 'scale': s_p}
-    wn_state = {'direction': d_s, 'scale': s_s}
-    wn_grads = {'direction': d_g, 'scale': s_g}
+    direction = treedef.unflatten(x.direction for x in s_leaves)
+    scale = treedef.unflatten(x.scale for x in s_leaves)
+    dir_state = treedef.unflatten(x.direction_state for x in s_leaves)
+    scale_state = treedef.unflatten(x.scale_state for x in s_leaves)
+    eps = hyper_params.wn_eps
+    decay = hyper_params.wn_decay
+
+    def merge_param(direction, scale):
+      if direction.size > direction.shape[-1]:
+        norm = jnp.square(direction).sum(
+          tuple(range(direction.ndim - 1)), keepdims=True) + eps
+        mult = scale * lax.rsqrt(norm)
+        return direction * mult
+      else:
+        return direction
+    merge_params = lambda d, s: jax.tree_multimap(merge_param, d, s)
+    _, vjp_fn = jax.vjp(merge_params, direction, scale)
+    dir_grad, scale_grad = vjp_fn(grads)
+    def add_decay(direction, dir_grad):
+      if direction.size > direction.shape[-1]:
+        return dir_grad + decay * direction
+      return dir_grad
+    dir_grad = jax.tree_multimap(add_decay, direction, dir_grad)
+
+    wn_params = {'direction': direction, 'scale': scale}
+    wn_state = {'direction': dir_state, 'scale': scale_state}
+    wn_grads = {'direction': dir_grad, 'scale': scale_grad}
     new_wn_params, new_state = self.wrapped_optimizer.apply_gradient(
         hyper_params.inner, wn_params,
         state.replace(param_states=wn_state), wn_grads)
-
-    directions = treedef.flatten_up_to(new_wn_params['direction'])
-    scales = treedef.flatten_up_to(new_wn_params['scale'])
-    new_params, mults = zip(*(self._merge_param(d, s, hyper_params.wn_eps)
-                              for d, s in zip(directions, scales)))
-    new_params = jax.tree_unflatten(treedef, new_params)
-    mults = jax.tree_unflatten(treedef, mults)
+    direction = new_wn_params['direction']
+    scale = new_wn_params['scale']
+    new_params = merge_params(direction, scale)
 
     direction_state = new_state.param_states['direction']
     scale_state = new_state.param_states['scale']
     param_states = jax.tree_multimap(
         lambda _, *args: _WeightNormParamState(*args),
-        params, direction_state, scale_state, mults)
+        params, direction_state, scale_state, direction, scale)
     return new_params, new_state.replace(param_states=param_states)
-
-  def _split_param(self, param):
-    if param.size > param.shape[-1]:
-      scale = jnp.sqrt(jnp.square(param).sum(
-          tuple(range(param.ndim-1)), keepdims=True))
-      direction = param / scale
-      return direction, scale
-    else:
-      return param, ()
-
-  def _merge_param(self, direction, scale, eps):
-    if direction.size > direction.shape[-1]:
-      norm = jnp.sqrt(jnp.square(direction).sum(
-          tuple(range(direction.ndim - 1)), keepdims=True))
-      mult = scale / (eps + norm)
-      param = direction * mult
-      return param, mult
-    else:
-      return direction, ()
-
-  def _split_grad(self, param, state, grad, decay):
-    """Split the gradient for the direction and scale."""
-    if param.size > param.shape[-1]:
-      red_dims = tuple(range(param.ndim-1))
-      direction = param / state.mult
-      norm = jnp.sqrt(jnp.square(param).sum(red_dims, keepdims=True))
-      scale = norm * jnp.sign(state.mult)
-      scale_grad = jnp.sum(
-          grad * direction, axis=red_dims, keepdims=True)
-      direction_grad = state.mult * (grad - scale_grad * direction)
-      if decay != 0:
-        direction_grad = direction_grad + decay * direction
-      direction_info = direction, state.direction_state, direction_grad
-      scale_info = scale, state.scale_state, scale_grad
-      return direction_info + scale_info
-    else:
-      return (param, state.direction_state, grad, (), (), ())
