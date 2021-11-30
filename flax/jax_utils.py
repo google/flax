@@ -209,7 +209,7 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
     unroll = (unroll,)
 
   # Pad unroll with ones so we start unrolling from the innermost loop
-  len_diff = len(unroll) - len(axis)
+  len_diff = len(axis) - len(unroll)
   unroll = (1,) * len_diff + unroll
 
   def transpose_in(x):
