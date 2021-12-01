@@ -294,6 +294,12 @@ class Variable(Generic[T]):
     return self.scope.is_mutable_collection(self.collection)
 
 
+class _ChildRNGSentinel:
+  pass
+# used to identify that an rng counter is meant for a child scope
+child_rng_token = _ChildRNGSentinel()
+
+
 class Scope:
   """A Scope allows easy access to variables and manages RNGS of a neural network layer.
 
@@ -450,11 +456,18 @@ class Scope:
       return self._children[name]
     self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
+    rng_key = (child_rng_token, name)
+    if rng_key in self.rng_counters:
+      rng_counters = self.rng_counters.get(rng_key)
+    else:
+      rng_counters = {key: 0 for key in rngs}
+      self.rng_counters[rng_key] = rng_counters
     scope = Scope({},
                   name=name,
                   rngs=rngs,
                   parent=self,
                   path=self.path + (name,))
+    scope.rng_counters = rng_counters
     self._children[name] = scope
     return scope
 

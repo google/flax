@@ -119,12 +119,8 @@ def pack(fn: Callable[..., Any],
     rng_groups_xs = []
     inner_rng_counters = []
     for scope in scopes:
-      rng_counters = {}
+      rng_counters = scope.rng_counters
       rng_groups = group_collections(scope.rngs, rng_filters)
-      for rng_group in rng_groups:
-        for kind in rng_group:
-          rng_group[kind] = scope.rngs[kind]
-          rng_counters[kind] = scope.rng_counters[kind]
       rng_groups_xs.append(rng_groups)
       inner_rng_counters.append(rng_counters)
     rng_groups_xs_t = _transpose(rng_groups_xs)
@@ -211,9 +207,6 @@ def pack(fn: Callable[..., Any],
         for col_name, collection in out_variable_group.items():
           for var_name, value in collection.items():
             scope.put_variable(col_name, var_name, value)
-      for kind, rng_counter in rng_counters.items():
-        assert rng_counter >= scope.rng_counters[kind]
-        scope.rng_counters[kind] = rng_counter
     return y
   return wrapper
 
