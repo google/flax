@@ -28,7 +28,7 @@ Image classification
   Resnet-50 on ImageNet with weight decay (featuring multi host SPMD, custom
   preprocessing, checkpointing, dynamic scaling, mixed precision).
 
-Reinforcement Learning
+Reinforcement learning
 
 - [Proximal Policy Optimization](https://github.com/google/flax/tree/main/examples/ppo/):
   Learning to play Atari games (featuring single host SPMD, RL setup).
@@ -59,6 +59,11 @@ Generative models
    Trained on binarized MNIST (featuring simple code, vmap).
 -  [PixelCNN++](https://github.com/google/flax/tree/main/examples/pixelcnn/):
    Trained on cifar10 (featuring single host SPMD, checkpointing, Polyak decay).
+
+Graph modeling
+
+- [Graph Neural Networks](https://github.com/google/flax/tree/main/examples/ogbg_molpcba/):
+  Molecular predictions on ogbg-molpcba from the Open Graph Benchmark.
 
 [#231]: https://github.com/google/flax/issues/231
 
