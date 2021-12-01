@@ -16,6 +16,7 @@ import unittest
 from flax import errors
 from flax.core import Scope, scope, freeze, init, apply, nn
 
+import jax
 from jax import config as jax_config
 from jax import random
 from jax import numpy as jnp
@@ -150,6 +151,14 @@ class ScopeTest(absltest.TestCase):
       self.assertTrue(scope._is_valid_rng(random.PRNGKey(0)))
     finally:
       jax_config.update('jax_enable_custom_prng', old_setting)
+  
+  def test_jax_leak_detector(self):
+    with jax.check_tracer_leaks(True):
+      def f(scope):
+        def g(scope):
+          pass
+        scope.child(g)()
+      jax.jit(init(f))(random.PRNGKey(0))
 
   def test_rng_counter_reuse(self):
     root = Scope({}, {'dropout': random.PRNGKey(0)})

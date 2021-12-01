@@ -150,7 +150,7 @@ def pack(fn: Callable[..., Any],
           rngs.update(rng_group)
         # make sure variable dicts are cloned and can't be manipulated by ref sharing.
         variables = jax.tree_map(lambda x: x, variables)
-        scope_mutable = intersect_filters(scope.root.mutable, mutable)
+        scope_mutable = intersect_filters(scope.mutable, mutable)
         new_path = scope.path
         if name:
           if new_path:
