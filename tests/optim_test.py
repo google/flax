@@ -525,14 +525,16 @@ class WeightNormTest(absltest.TestCase):
         param_states=_WeightNormParamState(
             direction_state=_MomentumParamState(momentum=(2, 2)),
             scale_state=_MomentumParamState(momentum=(1, 2)),
-            mult=(1, 2)
+            direction=(2, 2),
+            scale=(1, 2),
         )
     ))
     grads = np.ones((2, 2))
     new_params, new_state = optimizer_def.apply_gradient(
         optimizer_def.hyper_params, params, state, grads)
     np.testing.assert_allclose(new_params, np.full_like(params, 1.9))
-    np.testing.assert_allclose(new_state.param_states.mult, 1.9 * 2 ** 0.5)
+    np.testing.assert_allclose(new_state.param_states.direction, np.full_like(params, 2 ** -0.5))
+    np.testing.assert_allclose(new_state.param_states.scale, np.full((1, 2), (2 * 1.9 ** 2) ** 0.5))
 
 
 class DynamicScaleTest(absltest.TestCase):
