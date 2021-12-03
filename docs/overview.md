@@ -44,11 +44,8 @@ See the [What does Flax look like](https://github.com/google/flax#what-does-flax
 
 ## TPU support
 
-We currently have a [LM1b/Wikitext-2 language model with a Transformer architecture](https://colab.research.google.com/github/google/flax/blob/main/examples/lm1b/Colab_Language_Model.ipynb)
-that's been tuned. You can run it directly via Colab.
+All of our examples should run on TPU. See the following docs for more instructions:
 
-At present, Cloud TPUs are network-attached, and Flax users typically feed in data from one or more additional VMs
-
-When working with large-scale input data, it is important to create large enough VMs with sufficient network bandwidth to avoid having the TPUs bottlenecked waiting for input
-
-TODO: Add an example for running on Google Cloud.
+* [Launching jobs on Google Cloud](https://github.com/google/flax/tree/main/examples/cloud): provides a simple script that can be used to create a new VM on Google Cloud, train an example on that VM and then shutting it down.
+* [Flax Examples](https://github.com/google/flax/tree/main/examples): Some of our examples requiring GPU/TPU support have instructions on how to run them on these devices (see `imagenet` and `wmt`).
+* [Cloud TPU VM Quickstart](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm): A brief introduction to working with JAX and Cloud TPU.
