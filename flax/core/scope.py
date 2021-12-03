@@ -336,15 +336,17 @@ class Scope:
     self.rngs = rngs if rngs else {}
     self.mutable = mutable
 
-    self.root = parent.root if parent else self
+    self._root = parent.root if parent else None
     self.trace_level = tracers.trace_level(tracers.current_trace())
 
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = set()
 
-    self._children = {}
-
     self._invalid = False
+
+  @property
+  def root(self) -> 'Scope':
+    return self._root or self
 
   @property
   def path_text(self) -> str:
@@ -452,9 +454,8 @@ class Scope:
     self._validate_trace_level()
     if name is None:
       name = self.default_name(prefix)
-    if reuse and name in self._children:
-      return self._children[name]
-    self.reserve(name)
+    if not reuse or name not in self.reservations:
+      self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
@@ -466,9 +467,9 @@ class Scope:
                   name=name,
                   rngs=rngs,
                   parent=self,
+                  mutable=self.mutable,
                   path=self.path + (name,))
     scope.rng_counters = rng_counters
-    self._children[name] = scope
     return scope
 
   def child(self,
@@ -511,7 +512,7 @@ class Scope:
 
   def is_mutable_collection(self, col: str) -> bool:
     """Returns true if the collection `col` is mutable."""
-    return in_filter(self.root.mutable, col)
+    return in_filter(self.mutable, col)
 
   def _mutable_collection(self, col: str) -> MutableCollection:
     """Returns the collection `col` as a mutable object."""
