@@ -513,6 +513,12 @@ class Scope:
     """Returns true if the collection `col` is mutable."""
     return in_filter(self.root.mutable, col)
 
+  def is_collection_empty(self, col: str) -> bool:
+    """Returns true if the collection is emtpy."""
+    if col in self.root._variables:
+      return len(self.root._variables[col]) == 0
+    return True
+
   def _mutable_collection(self, col: str) -> MutableCollection:
     """Returns the collection `col` as a mutable object."""
     assert self.is_mutable_collection(col), f'Collection {col} is not mutable'
@@ -612,6 +618,8 @@ class Scope:
     self.reserve(name)
     if not self.has_variable(col, name):
       if not self.is_mutable_collection(col):
+        if self.is_collection_empty(col):
+          raise errors.ScopeCollectionNotFound(col, name, self.path_text)
         raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
@@ -652,6 +660,8 @@ class Scope:
               jnp.shape(val), jnp.shape(abs_val))
     else:
       if not self.is_mutable_collection('params'):
+        if self.is_collection_empty('params'):
+          raise errors.ScopeCollectionNotFound('params', name, self.path_text)
         raise errors.ScopeParamNotFoundError(name, self.path_text)
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
