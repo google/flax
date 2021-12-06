@@ -39,7 +39,7 @@ class Dropout(Module):
   deterministic: Optional[bool] = None
 
   @compact
-  def __call__(self, inputs, deterministic: Optional[bool] = None, rng=None):
+  def __call__(self, inputs, deterministic: Optional[bool] = None):
     """Applies a random dropout mask to the input.
 
     Args:
@@ -47,8 +47,6 @@ class Dropout(Module):
       deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
         masked, whereas if true, no mask is applied and the inputs are returned
         as is.
-      rng: an optional `jax.random.PRNGKey`. By default `nn.make_rng()` will
-        be used.
 
     Returns:
       The masked inputs reweighted to preserve mean.
@@ -61,8 +59,7 @@ class Dropout(Module):
     if deterministic:
       return inputs
     else:
-      if rng is None:
-        rng = self.make_rng('dropout')
+      rng = self.make_rng('dropout')
       broadcast_shape = list(inputs.shape)
       for dim in self.broadcast_dims:
         broadcast_shape[dim] = 1
