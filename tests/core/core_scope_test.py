@@ -163,10 +163,17 @@ class ScopeTest(absltest.TestCase):
   def test_empty_col_error(self):
     root = Scope({})
     with self.assertRaises(errors.ScopeCollectionNotFound):
-      root.param('test', nn.initializers.zeros)
+      root.param('test', nn.initializers.zeros, ())
     root = Scope({'params': {}})
     with self.assertRaises(errors.ScopeCollectionNotFound):
-      root.param('test', nn.initializers.zeros)
+      root.param('test', nn.initializers.zeros, ())
+
+    root = Scope({'params': {'abc': 1}})
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.variable('state', 'test', jnp.zeros, ())
+    root = Scope({'state': {}})
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.variable('state', 'test', jnp.zeros, ())
 
 
 if __name__ == '__main__':
