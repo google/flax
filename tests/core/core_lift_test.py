@@ -48,8 +48,7 @@ class LiftTest(absltest.TestCase):
 
     msg = r'No parameter named "kernel" exists in "/vmap\(dense\)".'
     with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
-      apply(f)({})
-
+      apply(f)({'params': {'dense': {'abc': np.ones((3, 3))}}})
 
   def test_jit_cache(self):
     compiles = 0

@@ -124,7 +124,7 @@ class ScopeTest(absltest.TestCase):
 
     msg = r'No parameter named "kernel" exists in "/dense".'
     with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
-      apply(f)({})
+      apply(f)({'params': {'abc': 1}})
 
   def test_variable_is_mutable(self):
     def f(scope, should_be_mutable):
@@ -168,6 +168,22 @@ class ScopeTest(absltest.TestCase):
     root = root.rewound()
     b = root.child(f)()
     self.assertFalse(jnp.allclose(a, b))
+
+  def test_empty_col_error(self):
+    root = Scope({})
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.param('test', nn.initializers.zeros, ())
+    root = Scope({'params': {}})
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.param('test', nn.initializers.zeros, ())
+
+    root = Scope({'params': {'abc': 1}})
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.variable('state', 'test', jnp.zeros, ())
+    root = Scope({'state': {}})
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.variable('state', 'test', jnp.zeros, ())
+
 
 if __name__ == '__main__':
   absltest.main()

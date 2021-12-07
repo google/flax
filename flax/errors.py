@@ -173,6 +173,23 @@ class ScopeParamNotFoundError(FlaxError):
                      f'"{scope_path}".')
 
 
+class ScopeCollectionNotFound(FlaxError):
+  """
+  This error is thrown when trying to access a variable from an empty collection.
+
+  There are two common causes:
+  1. The collection was not passed to ``apply`` correctly.
+    For example, you might have used ``module.apply(params, ...)`` instead
+    of ``module.apply({'params': params}, ...)``.
+  2. The collection is empty because the variables need to be initialized.
+    In this case, you should have made the collection mutable during
+    apply (e.g.: ``module.apply(variables, ..., mutable=['state'])``.
+  """
+  def __init__(self, col_name, var_name, scope_path):
+    super().__init__(f'Tried to access "{var_name}" from collection "{col_name}"" in '
+                     f'"{scope_path}" but the collection is emtpy.')
+
+
 class ScopeParamShapeError(FlaxError):
   """
   This error is thrown when the shape of an existing parameter is different from
