@@ -160,10 +160,14 @@ def logical_to_mesh_axes(array_dim_names: Sequence[str],
     raise ValueError('Unknown axis rule specification type.')
   # We assign mesh axes using a priority based ruleset over logical axis names.
   result = [_unassigned_axis] * len(array_dim_names)
-  for rule_model_name, rule_mesh_name in rules[::-1]:
+  for rule_model_name, rule_mesh_name in rules:
     if rule_model_name in array_dim_names:
       pos = array_dim_names.index(rule_model_name)
-      result[pos] = rule_mesh_name
+      if rule_mesh_name is None or rule_mesh_name in result:
+        if result[pos] == _unassigned_axis:
+          result[pos] = None
+      else:
+        result[pos] = result[pos] or rule_mesh_name
   if _unassigned_axis in result:
     raise ValueError(f'Unassigned axis in {array_dim_names}, the mapped '
                      f'axes are {result}')
