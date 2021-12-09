@@ -164,7 +164,8 @@ def logical_to_mesh_axes(array_dim_names: Sequence[str],
     if rule_model_name in array_dim_names:
       pos = array_dim_names.index(rule_model_name)
       if rule_mesh_name is None or rule_mesh_name in result:
-        result[pos] = None
+        if result[pos] == _unassigned_axis:
+          result[pos] = None
       else:
         result[pos] = result[pos] or rule_mesh_name
   if _unassigned_axis in result:

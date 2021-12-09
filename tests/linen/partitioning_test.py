@@ -72,6 +72,16 @@ class PartitioningTest(absltest.TestCase):
     with partitioning.axis_rules(AXIS_RULES_1):
       with self.assertRaises(ValueError):
         partitioning.logical_to_mesh_axes(('foo', 'foo', 'baz'))
+  def test_logical_to_mesh_axes_overrides(self):
+    p_rules = (
+        ('baz', 'data'),
+        ('bar', None),
+        ('foo', 'model'),
+        ('foo', 'data'))
+    with partitioning.axis_rules(p_rules):
+      self.assertEqual(
+          partitioning.logical_to_mesh_axes(('baz', 'bar', 'foo')),
+          ('data', None, 'model'))
 
   def test_logical_to_mesh_axes_priorities(self):
     p_rules = (
