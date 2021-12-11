@@ -1164,6 +1164,18 @@ class Module(metaclass=ModuleMeta):
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.get_variable(col, name, default)
 
+  def put_variable(self, col: str, name: str, value: Any):
+    """Sets the value of a Variable.
+
+    Args:
+      col: the variable collection.
+      name: the name of the variable.
+      value: the new value of the variable.
+    """
+    if self.scope is None:
+      raise ValueError("Can't access variables on unbound modules")
+    return self.scope.put_variable(col, name, value)
+
   def sow(self, col: str, name: str, value: T,
           reduce_fn: Callable[[K, T], K] = tuple_reduce,
           init_fn: Callable[[], K] = tuple_init) -> bool:

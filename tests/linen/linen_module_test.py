@@ -684,7 +684,7 @@ class ModuleTest(absltest.TestCase):
       @nn.compact
       def __call__(self):
         pass
-      
+
       def test(self):
         pass
 
@@ -769,7 +769,7 @@ class ModuleTest(absltest.TestCase):
     msg = r'"EmptyModule" object has no attribute "foo"'
     with self.assertRaisesRegex(AttributeError, msg):
       empty.bar()
-     
+
 
   def test_module_with_attrs(self):
     class Foo(nn.Module):
@@ -883,17 +883,17 @@ class ModuleTest(absltest.TestCase):
     key = random.PRNGKey(0)
     x = jnp.ones((2,))
     _ = B().init_with_output(key, x)
-  
+
   def test_module_unbound_getattr(self):
     class A(nn.Module):
       def setup(self):
         b = B()
         b.c  # B is unbound because it is not yet assigned to an attribute.
         self.b = b
-      
+
       def __call__(self):
         pass
-    
+
     class B(nn.Module):
       def setup(self):
         self.c = nn.Dense(2)
@@ -909,7 +909,7 @@ class ModuleTest(absltest.TestCase):
       def setup(self):
         nonlocal setup_called
         setup_called = True
-      
+
       def test(self):
         pass
 
@@ -920,10 +920,10 @@ class ModuleTest(absltest.TestCase):
     class A(nn.Module):
       def setup(self):
         self.b = B(nn.Dense(2))
-      
+
       def __call__(self, x):
         return self.b(x)
-        
+
     class B(nn.Module):
       foo: Any
 
@@ -946,7 +946,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_module_pass_in_closure(self):
     a = nn.Dense(2)
-        
+
     class B(nn.Module):
       def setup(self):
         self.foo = a
@@ -974,7 +974,7 @@ class ModuleTest(absltest.TestCase):
 
       def setup(self):
         self.layers = [nn.Dense(self.ch) for _ in range(self.n_layers)]
-  
+
       def __call__(self, x):
         for layer in self.layers:
           x = layer(x)
@@ -987,7 +987,7 @@ class ModuleTest(absltest.TestCase):
 
       def setup(self):
         self.dense_out = nn.Dense(self.n_out)
-  
+
       def __call__(self, x):
         x = self.encoder(x)
         return self.dense_out(x)
@@ -1177,7 +1177,7 @@ class ModuleTest(absltest.TestCase):
       },
     })
     self.assertTrue(tree_equals(cntrs, ref_cntrs))
-  
+
   def test_inner_class_def(self):
     class X(nn.Module):
       class Hyper(struct.PyTreeNode):
@@ -1249,7 +1249,7 @@ class ModuleTest(absltest.TestCase):
     def f(foo, x):
       x = foo.a(x)
       return foo.b(x)
-      
+
     foo = Foo()
     x = jnp.ones((4,))
     f_init = nn.init_with_output(f, foo)
@@ -1258,7 +1258,7 @@ class ModuleTest(absltest.TestCase):
     y2 = f_apply(variables, x)
     self.assertEqual(y1, y2)
 
-  
+
   def test_bind(self):
     class Foo(nn.Module):
       def setup(self):
@@ -1268,14 +1268,14 @@ class ModuleTest(absltest.TestCase):
     def f(foo, x):
       x = foo.a(x)
       return foo.b(x)
-      
+
     foo = Foo()
     x = jnp.ones((4,))
     f_init = nn.init_with_output(f, foo)
     y1, variables = f_init(random.PRNGKey(0), x)
     y2 = f(foo.bind(variables), x)
     self.assertEqual(y1, y2)
-  
+
   def test_bind_stateful(self):
     class Foo(nn.Module):
       def setup(self):
@@ -1287,7 +1287,7 @@ class ModuleTest(absltest.TestCase):
       x = foo.a(x)
       x = foo.bn(x, use_running_average=False)
       return foo.b(x)
-      
+
     foo = Foo()
     x = jnp.ones((4,))
     f_init = nn.init_with_output(f, foo)
@@ -1301,7 +1301,7 @@ class ModuleTest(absltest.TestCase):
     bs_2 = foo_b.variables['batch_stats']
     for x, y in zip(jax.tree_leaves(bs_1), jax.tree_leaves(bs_2)):
       np.testing.assert_allclose(x, y)
-  
+
   def test_passing_mutable_variables(self):
     class Foo(nn.Module):
       @nn.compact
@@ -1336,7 +1336,7 @@ class ModuleTest(absltest.TestCase):
     })
     y = Bar().apply(variables, x)
     self.assertEqual(y.shape, (4, 3))
-  
+
   def test_super_setup(self):
     class Foo(nn.Module):
       def setup(self):
@@ -1379,7 +1379,7 @@ class ModuleTest(absltest.TestCase):
       pass
     class MyModule2(nn.Module):
       submodule: MyComponent2[jnp.ndarray]
-  
+
   def test_named_call_rng_equivalance(self):
     model = nn.Dense(1, use_bias=False)
     with override_named_call(False):
@@ -1414,6 +1414,44 @@ class ModuleTest(absltest.TestCase):
     k = random.PRNGKey(0)
     rng_equals = B().apply({}, rngs={'dropout': k})
     self.assertFalse(rng_equals)
+
+  def test_module_get_put_has_variable(self):
+    class A(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        self.put_variable('test_col', 'a', x)
+        assert self.has_variable('test_col', 'a')
+        return self.get_variable('test_col', 'a')
+
+    class B(nn.Module):
+      def __call__(self, x):
+        self.put_variable('test_col', 'a', x)
+        assert self.has_variable('test_col', 'a')
+        return self.get_variable('test_col', 'a')
+
+    class C(nn.Module):
+      def setup(self):
+        self.put_variable('test_col', 'a', jnp.ones(2,))
+        assert self.has_variable('test_col', 'a')
+
+      def __call__(self):
+        return self.get_variable('test_col', 'a')
+
+    key = random.PRNGKey(0)
+    x = jnp.ones((2,))
+
+    y, vs = A().apply({}, x, mutable=['test_col'])
+    np.testing.assert_array_equal(x, y)
+    np.testing.assert_array_equal(x, vs['test_col']['a'])
+
+    y, vs = B().apply({}, x, mutable=['test_col'])
+    np.testing.assert_array_equal(x, y)
+    np.testing.assert_array_equal(x, vs['test_col']['a'])
+
+    y, vs = C().apply({}, mutable=['test_col'])
+    np.testing.assert_array_equal(y, jnp.ones((2,)))
+    np.testing.assert_array_equal(y, vs['test_col']['a'])
+
 
 if __name__ == '__main__':
   absltest.main()
