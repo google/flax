@@ -789,7 +789,7 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def inner(self, x):
         return nn.Dense(2, use_bias=False)(x)
-      
+
       def __call__(self, x):
         return nn.vmap(
             partial(Foo.inner),
@@ -975,16 +975,16 @@ class TransformTest(absltest.TestCase):
 
     b = Bar()
     b.apply({}, jnp.ones(2))
-  
+
   def test_map_variables_tied_autoencoder(self):
     def trans(variables):
       return jax.tree_map(lambda x: x.T, variables)
-      
+
     class TiedAutencoder(nn.Module):
 
       features: int
       latents: int
-        
+
       @nn.compact
       def _call(self, x, decode):
         def f(self):
@@ -1004,7 +1004,7 @@ class TransformTest(absltest.TestCase):
 
       def __call__(self, x):
         return self.decode(self.encode(x))
-    
+
     x = jnp.ones((2, 4))
     ae = TiedAutencoder(4, 5)
     variables = ae.init(random.PRNGKey(0), x)
@@ -1036,7 +1036,7 @@ class TransformTest(absltest.TestCase):
       def __call__(self, x):
         DenseStack = nn.remat_scan(nn.Dense, lengths=(100,))
         return DenseStack(8, name="dense_stack")(x)
-    
+
     x = jnp.ones((2, 8))
     model = BigModel()
     variables = model.init(random.PRNGKey(0), x)
@@ -1061,7 +1061,7 @@ class TransformTest(absltest.TestCase):
         y, bwd = nn.vjp(Bar.__call__, Bar(), x)
         params_grad, x_grad = bwd(jnp.ones(y.shape))
         return params_grad, x_grad
-    
+
     x = jnp.ones((3,))
     params = Foo().init(random.PRNGKey(0), x)
     x_grad, params_grad = Foo().apply(params, x)
@@ -1085,11 +1085,45 @@ class TransformTest(absltest.TestCase):
         vars_t = jax.tree_map(jnp.ones_like, bar.variables.get('params', {}))
         _, out_t = nn.jvp(Bar.__call__, bar, (x,), (jnp.zeros_like(x),), {'params': vars_t})
         return out_t
-    
+
     x = jnp.ones((3,))
     params = Foo().init(random.PRNGKey(0), x)
     y_t = Foo().apply(params, x)
     np.testing.assert_allclose(y_t, jnp.ones_like(x))
+
+  def test_complicated_alias_mutation(self):
+    with nn.module.override_named_call(True):
+      class A(nn.Module):
+        b: nn.Module
+        @nn.compact
+        def __call__(self, x):
+          return self.b(x)
+      class B(nn.Module):
+        c: nn.Module
+        @nn.compact
+        def __call__(self, x):
+          y = C(name='outer_c')(x)
+          z = self.c(x)
+          return z
+      class C(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          initialized = self.has_variable('muts', 'v')
+          v = self.variable('muts', 'v', lambda: jnp.zeros_like(x))
+          if initialized:
+            v.value += x
+          return x
+
+      a = A(b=B(c=C()))
+      k = random.PRNGKey(0)
+      x = jnp.ones((1,), jnp.float32)
+      vs = a.init(k, x)
+      y, vs_new = a.apply(vs, x, mutable=['muts',])
+      np.testing.assert_array_equal(vs_new['muts']['b']['c']['v'],
+                                    jnp.array([1.], jnp.float32))
+      np.testing.assert_array_equal(vs_new['muts']['b']['outer_c']['v'],
+                                    jnp.array([1.], jnp.float32))
+
 
 if __name__ == '__main__':
   absltest.main()
