@@ -125,8 +125,8 @@ class LinearTest(parameterized.TestCase):
     x = jnp.ones((2, 1, 3, 5))
 
     state = {'counter': 0.}
-    def _counter_init(rng, shape, dtype, state):
-      del rng, dtype
+    def _counter_init(rng, shape, state):
+      del rng
       state['counter'] += 1.
       return jnp.full(shape, state['counter'])
     counter_init = functools.partial(_counter_init, state=state)
@@ -160,6 +160,24 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = dg_module.init_with_output(rng, x)
     target = np.einsum(einsum_expr, x, initial_params['params']['kernel']) + 1.
     np.testing.assert_allclose(y, target, atol=1e-6)
+
+  def test_dense_general_initializers_dtype(self):
+    rng = random.PRNGKey(0)
+    x = jnp.ones((2, 1, 3, 5))
+
+    lecun_normal = initializers.lecun_normal(dtype=jnp.float16)
+    zeros = functools.partial(initializers.zeros, dtype=jnp.float16)
+
+    dg_module = nn.DenseGeneral(
+        features=2,
+        dtype=jnp.float32,
+        kernel_init=lecun_normal,
+        bias_init=zeros,
+    )
+    y, variables = dg_module.init_with_output(rng, x)
+    self.assertEqual(y.dtype, jnp.float32)
+    self.assertEqual(variables['params']['kernel'].dtype, jnp.float16)
+    self.assertEqual(variables['params']['bias'].dtype, jnp.float16)
 
   def test_conv(self):
     rng = dict(params=random.PRNGKey(0))
