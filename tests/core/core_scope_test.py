@@ -15,6 +15,7 @@
 import unittest
 from flax import errors
 from flax.core import Scope, scope, freeze, init, apply, nn
+from flax.core.scope import LazyRng
 
 import jax
 from jax import config as jax_config
@@ -33,7 +34,7 @@ class ScopeTest(absltest.TestCase):
       self.assertTrue(scope.has_rng('params'))
       self.assertFalse(scope.has_rng('dropout'))
       rng = scope.make_rng('params')
-      self.assertTrue(np.all(rng == random.fold_in(random.PRNGKey(0), 1)))
+      self.assertTrue(np.all(rng == LazyRng.create(random.PRNGKey(0), 1).as_jax_rng()))
     init(f)(random.PRNGKey(0))
 
   def test_in_filter(self):
