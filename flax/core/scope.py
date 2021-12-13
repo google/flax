@@ -19,7 +19,6 @@ import functools
 import hashlib
 import dataclasses
 from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
-import weakref
 
 from . import tracers
 from flax import errors
@@ -343,8 +342,22 @@ class Scope:
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = set()
 
-    self._children = weakref.WeakValueDictionary()
     self._invalid = False
+
+
+  def __eq__(self, other: Any) -> bool:
+    # If the root variable dict and path equal than two scopes behave identically
+    # effectively a scope is nothing more than a cursor into a variable dict and an
+    # rng counter dict
+    if not isinstance(other, Scope):
+      return False
+    if self is other:
+      return True
+    return self.root._variables is other.root._variables and self.path == other.path and self.rng_counters is other.rng_counters
+  
+  def __hash__(self) -> int:
+    # see __eq__
+    return hash((id(self.root._variables), self.path, id(self.rng_counters)))
 
   @property
   def root(self) -> 'Scope':
@@ -456,9 +469,8 @@ class Scope:
     self._validate_trace_level()
     if name is None:
       name = self.default_name(prefix)
-    if reuse and name in self._children:
-      return self._children[name]
-    self.reserve(name)
+    if not reuse or name not in self.reservations:
+      self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
@@ -473,7 +485,6 @@ class Scope:
                   mutable=self.mutable,
                   path=self.path + (name,))
     scope.rng_counters = rng_counters
-    self._children[name] = scope
     return scope
 
   def child(self,
