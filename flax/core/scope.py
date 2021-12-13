@@ -19,6 +19,7 @@ import functools
 import hashlib
 import dataclasses
 from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
+import weakref
 
 from . import tracers
 from flax import errors
@@ -342,6 +343,7 @@ class Scope:
     self.rng_counters = {key: 0 for key in self.rngs}
     self.reservations = set()
 
+    self._children = weakref.WeakValueDictionary()
     self._invalid = False
 
   @property
@@ -454,8 +456,9 @@ class Scope:
     self._validate_trace_level()
     if name is None:
       name = self.default_name(prefix)
-    if not reuse or name not in self.reservations:
-      self.reserve(name)
+    if reuse and name in self._children:
+      return self._children[name]
+    self.reserve(name)
     rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
@@ -470,6 +473,7 @@ class Scope:
                   mutable=self.mutable,
                   path=self.path + (name,))
     scope.rng_counters = rng_counters
+    self._children[name] = scope
     return scope
 
   def child(self,
