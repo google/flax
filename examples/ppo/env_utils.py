@@ -16,6 +16,7 @@
 
 import collections
 
+import atari_py  # build-cleaner: keep
 import gym
 import numpy as np
 

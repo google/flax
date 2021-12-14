@@ -1,8 +1,8 @@
-absl-py=1.0.0
-clu>=0.0.6
+absl-py==1.0.0
+clu==0.0.6
 flax==0.3.6
 ml-collections==0.1.0
-numpy==1.19.5
-pillow==7.1.2
-tensorflow>=2.1
-tensorflow-datasets>=4.4.0
+numpy==1.21.4
+Pillow==8.2.0
+tensorflow==2.7.0
+tensorflow-datasets==4.4.0

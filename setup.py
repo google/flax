@@ -47,10 +47,9 @@ tests_require = [
     "pytype==2021.5.25",  # pytype 2021.6.17 complains on recurrent.py, need to investigate!
     "sentencepiece",  # WMT example.
     "svn",
-    "tensorflow-cpu>=2.4.0",
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
-    "tensorflow==2.4.1",  # TODO(marcvanzee): Remove once #1326 is fixed.
+    "tensorflow",
 ]
 
 __version__ = None
