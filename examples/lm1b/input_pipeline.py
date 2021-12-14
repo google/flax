@@ -18,10 +18,11 @@ import os
 from typing import Dict, Optional, List, Union
 
 from clu import deterministic_data
-import tokenizer
 import ml_collections
 import tensorflow as tf
 import tensorflow_datasets as tfds
+
+import tokenizer
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 Features = Dict[str, tf.Tensor]

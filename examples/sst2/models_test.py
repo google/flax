@@ -15,12 +15,13 @@
 """Tests for sst2.models."""
 from absl.testing import absltest
 from absl.testing import parameterized
-
 import jax
 from jax import numpy as jnp
 import jax.test_util
 import numpy as np
+
 import models
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

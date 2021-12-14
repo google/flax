@@ -16,6 +16,7 @@
 
 import functools
 from typing import Any, Callable, Optional
+
 from flax import linen as nn
 import jax
 from jax import numpy as jnp

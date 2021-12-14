@@ -16,6 +16,7 @@
 
 import functools
 from typing import Dict, NamedTuple
+
 import jraph
 import numpy as np
 import tensorflow as tf

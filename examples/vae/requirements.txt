@@ -1,5 +1,7 @@
-jax
+absl-py
 flax
 optax
+numpy
 pillow
 tensorflow
+tensorflow-datasets

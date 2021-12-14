@@ -18,12 +18,14 @@ import time
 
 from absl import flags
 from absl.testing import absltest
-import main
-from configs import default
-from configs import test
 from flax.testing import Benchmark
 import jax
 import numpy as np
+
+import main
+from configs import default
+from configs import test
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

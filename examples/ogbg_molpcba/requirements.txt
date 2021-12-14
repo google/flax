@@ -1,8 +1,9 @@
 absl-py>=0.10.0
 clu>=0.0.6
 flax>=0.3.4
-jraph==0.0.1.dev0
+jraph==0.0.2
 ml-collections>=0.1.0
+numpy==1.19.5
 optax>=0.0.9
 scikit-learn>=0.24.0
 tensorflow>=2.1

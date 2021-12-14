@@ -14,13 +14,13 @@
 
 """Provides op for tokenizing a dataset."""
 
+import dataclasses
 import os
 import tempfile
 import time
 from typing import Any, Dict, Iterable, Tuple
 
 from absl import logging
-import dataclasses
 import jax
 import tensorflow as tf
 import tensorflow_text as tftxt

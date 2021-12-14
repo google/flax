@@ -25,13 +25,11 @@ Reusing decoder only model from examples/wmt.
 
 from typing import Callable, Any, Optional
 
+from flax import linen as nn
+from flax import struct
 from jax import lax
 import jax.numpy as jnp
 import numpy as np
-
-from flax import linen as nn
-from flax import struct
-
 
 @struct.dataclass
 class TransformerConfig:

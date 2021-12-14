@@ -1,7 +1,9 @@
-clu
-flax
-optax>=0.0.8
-ml_collections
-tensorboard
-tensorflow
-tensorflow_datasets
+absl-py==1.0.0
+clu==0.0.6
+flax==0.3.6
+optax==0.1.0
+ml_collections==0.1.0
+numpy==0.1.59
+tensorboard==2.7.0
+tensorflow==2.7.0
+tensorflow_datasets==4.0.1

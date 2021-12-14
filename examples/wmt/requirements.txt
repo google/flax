@@ -1,6 +1,11 @@
+absl-py
 clu
+flax
+ml-collections
+numpy
 optax
 sentencepiece
+six
 tensorflow
-tensorflow_text
-tensorflow_datasets
+tensorflow-text
+tensorflow-datasets

@@ -14,12 +14,12 @@
 
 from absl import app
 from absl import flags
-import numpy as np
+from flax import linen as nn
+from flax.training import train_state
 import jax.numpy as jnp
 import jax
 from jax import random
-from flax import linen as nn
-from flax.training import train_state
+import numpy as np
 import optax
 import tensorflow as tf
 import tensorflow_datasets as tfds

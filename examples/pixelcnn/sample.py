@@ -19,14 +19,15 @@
 import functools
 
 from flax import optim
-import pixelcnn
-import train
 import jax
 from jax import random
 import jax.numpy as jnp
 import ml_collections
 import numpy as np
 from PIL import Image
+
+import pixelcnn
+import train
 
 
 def generate_sample(config: ml_collections.ConfigDict, workdir: str):

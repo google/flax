@@ -1,0 +1,4 @@
+absl-py==1.0.0
+flax==0.3.6
+numpy==1.19.5
+tensorflow==2.7.0

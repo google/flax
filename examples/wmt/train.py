@@ -20,8 +20,6 @@ This script trains a Transformer on a WMT dataset.
 # pytype: disable=wrong-arg-count
 # pytype: disable=attribute-error
 
-from typing import Optional
-
 import collections
 import functools
 import os
@@ -31,12 +29,7 @@ from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
-from flax import struct
 from flax import optim
-import bleu
-import decode
-import input_pipeline
-import models
 from flax.training import checkpoints
 from flax.training import common_utils
 from flax.training import train_state
@@ -46,6 +39,11 @@ import ml_collections
 import numpy as np
 import optax
 import tensorflow as tf
+
+import bleu
+import decode
+import input_pipeline
+import models
 
 
 class TrainState(train_state.TrainState):

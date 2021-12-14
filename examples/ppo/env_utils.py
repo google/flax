@@ -15,6 +15,7 @@
 """Utilities for handling the Atari environment."""
 
 import collections
+
 import gym
 import numpy as np
 

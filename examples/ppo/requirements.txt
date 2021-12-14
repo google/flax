@@ -1,5 +1,8 @@
+absl-py
 atari-py
+flax
 gym
-jax
-jaxlib
+ml-collections
+numpy
 opencv-python
+tensorflow

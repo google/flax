@@ -29,14 +29,9 @@ from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
-
-import input_pipeline
-import models
-import temperature_sampler
 from flax.training import checkpoints
 from flax.training import common_utils
 from flax.training import train_state
-
 import jax
 from jax import random
 import jax.numpy as jnp
@@ -44,6 +39,10 @@ import ml_collections
 import numpy as np
 import optax
 import tensorflow as tf
+
+import input_pipeline
+import models
+import temperature_sampler
 
 
 def rsqrt_schedule(

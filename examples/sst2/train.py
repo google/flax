@@ -19,14 +19,16 @@ from absl import logging
 from flax import struct
 from flax.metrics import tensorboard
 from flax.training import train_state
-import input_pipeline
 import jax
 import jax.numpy as jnp
 import ml_collections
-import models
 import numpy as np
 import optax
 import tensorflow as tf
+
+import input_pipeline
+import models
+
 
 Array = jnp.ndarray
 Example = Dict[str, Array]
