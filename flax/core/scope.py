@@ -77,7 +77,7 @@ PRNGFoldable = Union[int, str]
 
 class LazyRng(struct.PyTreeNode):
   rng: PRNGKey
-  suffix: Tuple[Any, ...] = struct.field(pytree_node=False)
+  suffix: Tuple[PRNGFoldable, ...] = struct.field(pytree_node=False)
   
   def as_jax_rng(self) -> PRNGKey:
     return _fold_in_static(self.rng, self.suffix)
