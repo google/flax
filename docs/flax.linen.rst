@@ -74,6 +74,7 @@ Transformations
     map_variables
     jvp
     vjp
+    custom_vjp
 
 
 Linear modules

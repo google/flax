@@ -719,70 +719,100 @@ def scan(fn: Callable[..., Any],
       name='scan')
 
 
-def custom_vjp(fn: Callable[..., Any], backward_fn: Callable[..., Any],
-               grad_kind: CollectionFilter = 'params',
+def custom_vjp(fn: Callable[..., Any], 
+               forward_fn: Callable[..., Any],
+               backward_fn: Callable[..., Any],
+               grad_vars: CollectionFilter = 'params',
                nondiff_argnums=()):
-  """"Lifted version of `jax.custom_vjp`.
+  """Lifted version of `jax.custom_vjp`.
 
-  `backward_fn` defines a custom vjp (backward gradient) for `fn`.
+  `forward_fn` and `backward_fn` together define a custom vjp for `fn`.
+  The original `fn` will run in case a vjp (backward gradient) is not computed.
+
+  The `forward_fn` receives the same arguments as `fn` but is expected to return
+  a tuple containing the output of `fn(scope, *args)` and the residuals that are
+  passed to `backward_fn`.
+
+  The `backward_fn` receives the nondiff arguments, residuals, and the output tangents.
+  It should return a tuple containing the input and variable tangents.
+
+  Note that the vjp function returned by `lift.vjp` can be passed as residual and
+  used in the `backward_fn`. The scope is unavailable during the backward pass.
+  If the scope is required in `backward_fn`, a snapshot of the variables can be
+  taken and returned as a residual in the `forward_fn`.
 
   Example::
 
+    f = nn.dense
+
     def fwd(scope, x, features):
-      y = nn.dense(scope, x, features)
-      return y, x
+      y, vjp_fn = lift.vjp(partial(f, features=features), scope, x)
+      return y, vjp_fn
 
-    def bwd(features, scope_fn, params, res, g):
-      x = res
-      fn = lambda params, x: nn.dense(scope_fn(params), x, features)
-      _, pullback = jax.vjp(fn, params, x)
-      g_param, g_x = pullback(g)
-      g_param = jax.tree_map(jnp.sign, g_param)
-      return g_param, g_x
+    def bwd(features, vjp_fn, y_t):
+      input_t, params_t = vjp_fn(y_t)
+      params_t = jax.tree_map(jnp.sign, params_t)
+      return input_t, params_t
 
-    dense_sign_grad = lift.custom_vjp(fwd, backward_fn=bwd, nondiff_argnums=(2,))
+    dense_sign_grad = lift.custom_vjp(
+        f, forward_fn=fwd, backward_fn=bwd, nondiff_argnums=(2,))
 
   Args:
-    fn: should return a tuple of output and auxiliary data for the backward pass.
-    backward_fn: arguments are passed as (*nondiff_args, scope_fn, grad_variables, aux, g_y)
-      where scope_fn takes grad_variables to create the scope,
-      aux is the auxiliary data returned by `fn`,
-      and g_y is the tangent of y.
+    fn: The function to define a custom_vjp for. The first argument
+      should be a ``Module`` instance.
+    forward_fn: A function with the same arguments as `fn` returning an tuple
+      with the original output and the residuals that will be passsed to
+      `backward_fn`.
+    backward_fn: arguments are passed as (*nondiff_args, residuals, tangents)
+      The function should return a tuple containing the tangents for the
+      input arguments (except the scope and nondiff args) and the variable
+      tangents for the collections specified by `grad_vars`.
+    grad_vars: The collections for which a vjp will be computed
+      (default: "params").
+    nondiff_argnums: arguments for which no vjp is computed.
+  Returns:
+    A function with the same signature as `fn` with the custom vjp.
   """
-  # TODO(jheek) is this transform general/flexible enough?
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     grad_variables, other_variables = variable_groups
-
-    def simple_scope_fn(grad_variables):
-      grad_variables = tuple(freeze(x) for x in grad_variables)
-      return scope_fn((grad_variables, other_variables), rng_groups)
+    scopes_treedef = None
 
     def f(grad_variables, *args):
       scope = scope_fn((grad_variables, other_variables), rng_groups)
-      y, _ = fn(scope, *args)
+      y = fn(scope, *args)
       vars_out = repack_fn(scope)
       return y, vars_out
     f = jax.custom_vjp(f, nondiff_argnums=nondiff_argnums)
 
     def f_fwd(grad_variables, *args):
-      scope = simple_scope_fn(grad_variables)
-      y, res = fn(scope, *args)
-      vars_out = repack_fn(scope)
-      return (y, vars_out), (res, grad_variables)
+      nonlocal scopes_treedef
+      scopes = scope_fn((grad_variables, other_variables), rng_groups)
+      scopes_treedef = jax.tree_structure(scopes)
+      y, res = forward_fn(scopes, *args)
+      vars_out = repack_fn(scopes)
+      return (y, vars_out), res
 
     def f_bwd(*args):
+      # the backward function does not pass a lifted scope
+      # to the user. Currently, there is no way to have
+      # side effects flow out of backward pass.
+      # Even without mutation variables would be ill-defined.
+      # For example, would we take a snapshot of the variables
+      # before or after calling `forward_fn`?
       nondiff_args = args[:-2]
       res, g = args[-2:]
       g_y, _ = g
-      user_res, grad_variables = res
-      return backward_fn(*nondiff_args, simple_scope_fn, grad_variables, user_res, g_y)
+      input_t, var_t = backward_fn(*nondiff_args, res, g_y)
+      assert scopes_treedef is not None, 'backward called before forward?!'
+      var_t = tuple(scopes_treedef.flatten_up_to(var_t))
+      return var_t, input_t
 
     f.defvjp(f_fwd, f_bwd)
 
     return f(grad_variables, *args)
 
-  variable_in_groups = (grad_kind, True,)
-  variable_out_groups = (grad_kind, True,)
+  variable_in_groups = (grad_vars, True)
+  variable_out_groups = (grad_vars, True)
   rng_groups = (True,)
   return pack(
       inner, variable_in_groups, variable_out_groups, rng_groups,
