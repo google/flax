@@ -58,3 +58,6 @@ flax_filter_frames = bool_env('FLAX_FILTER_FRAMES', True)
 
 # Whether to automatically wrap Module methods with named_call for profiles.
 flax_profile = bool_env('FLAX_PROFILE', False)
+
+# Whether to use the lazy rng implementation for 
+flax_lazy_rng = bool_env('FLAX_LAZY_RNG', False)

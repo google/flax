@@ -24,6 +24,7 @@ from . import tracers
 from flax import errors
 from flax import traceback_util
 from flax import struct
+from flax import config
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
@@ -90,6 +91,21 @@ class LazyRng(struct.PyTreeNode):
       return LazyRng(rng, suffix)
 
 
+def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
+  for x in data:
+    if isinstance(x, str):
+      m = hashlib.sha1()
+      m.update(x.encode('utf-8'))
+      d = m.digest()
+      hash_int = int.from_bytes(d[:4], byteorder='big')
+      rng = random.fold_in(rng, jnp.uint32(hash_int))
+    elif isinstance(x, int):
+      rng = random.fold_in(rng, x)
+    else:
+      raise ValueError(f"Expected int or string, got: {x}")
+  return rng
+
+
 def _fold_in_static(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
   """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
@@ -103,6 +119,8 @@ def _fold_in_static(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
   Returns:
    The newly generated PRNG key.
   """
+  if not config.flax_lazy_rng:
+    return _legacy_rng_fold_in(rng, data)
   m = hashlib.sha1()
   for x in data:
     if isinstance(x, str):
