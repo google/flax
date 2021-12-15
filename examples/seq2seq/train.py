@@ -201,7 +201,7 @@ class Encoder(nn.Module):
     batch_size = inputs.shape[0]
     lstm = EncoderLSTM(name='encoder_lstm')
     init_lstm_state = lstm.initialize_carry(batch_size, self.hidden_size)
-    init_is_eos = jnp.zeros(batch_size, dtype=np.bool)
+    init_is_eos = jnp.zeros(batch_size, dtype=bool)
     init_carry = (init_lstm_state, init_is_eos)
     (final_state, _), _ = lstm(init_carry, inputs)
     return final_state
