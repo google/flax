@@ -43,7 +43,6 @@ python dev --versions="$(pip freeze | sed s/==/-/g) flax-0.3.6"
 
 import pathlib
 import re
-import sys
 
 from absl import app
 from absl import flags
@@ -60,6 +59,7 @@ flags.DEFINE_string(
     '(note the flax version "override") '
     'or from the "install dependencies" step in the github build action '
     'https://github.com/google/flax/actions/workflows/build.yml')
+flags.mark_flag_as_required('versions')
 flags.DEFINE_bool('verbose', False, 'enables verbose output.')
 flags.DEFINE_list('ignore', ['jax'], 'packages not to add to requirements.')
 
@@ -80,7 +80,6 @@ standard_libs = set('codecs collections dataclasses datetime enum functools math
 
 def main(argv):
   del argv
-  assert FLAGS.versions, 'Must specify --versions.'
 
   versions = {
       pkg_version[:pkg_version.rindex('-')]: pkg_version[pkg_version.rindex('-') + 1:]
