@@ -395,41 +395,6 @@ class AssignSubModuleError(FlaxError):
                      'method wrapped in `@compact`')
 
 
-class SetAttributeInModuleSetupError(FlaxError):
-  """
-  You are not allowed to modify Module class attributes in
-  :meth:`Module.setup() <flax.linen.Module.setup>`::
-
-    class Foo(nn.Module):
-      features: int = 6
-
-      def setup(self):
-        self.features = 3  # <-- ERROR
-
-      def __call__(self, x):
-        return nn.Dense(self.features)(x)
-
-    variables = SomeModule().init(random.PRNGKey(0), jnp.ones((1, )))
-
-  Instead, these attributes should be set when initializing the Module::
-
-    class Foo(nn.Module):
-      features: int = 6
-
-      @nn.compact
-      def __call__(self, x):
-        return nn.Dense(self.features)(x)
-
-    variables = SomeModule(features=3).init(random.PRNGKey(0), jnp.ones((1, )))
-  
-  TODO(marcvanzee): Link to a design note explaining why it's necessary for
-  modules to stay frozen (otherwise we can't safely clone them, which we use for
-  lifted transformations).
-  """
-  def __init__(self):
-    super().__init__(f'Module construction attributes are frozen.')
-
-
 class SetAttributeFrozenModuleError(FlaxError):
   """
   You can only assign Module attributes to ``self`` inside
