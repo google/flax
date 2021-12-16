@@ -246,6 +246,27 @@ class AdamTest(absltest.TestCase):
     np.testing.assert_allclose(new_params, expected_new_params)
     self.assertEqual(new_state, expected_new_state)
 
+  def test_apply_gradient_with_clipping(self):
+    optimizer_def = optim.Adam(
+        learning_rate=0.1,
+        beta1=0.2,
+        beta2=0.9,
+        eps=0.01,
+        weight_decay=0.0,
+        max_gradient_norm=1.0)
+    params = np.array([1.])
+    state = optim.OptimizerState(
+        1, _AdamParamState(np.array([0.1]), np.array([0.9])))
+    # Gradient will be clipped to 1.0
+    grads = np.array([4.])
+    new_params, new_state = optimizer_def.apply_gradient(
+        optimizer_def.hyper_params, params, state, grads)
+    expected_new_state = optim.OptimizerState(
+        2, _AdamParamState(np.array([0.82]), np.array([0.91])))
+    expected_new_params = np.array([0.961147])
+    np.testing.assert_allclose(new_params, expected_new_params, atol=1e-6)
+    check_eq(new_state, expected_new_state, rtol=1e-6)
+
 
 class AdaBeliefTest(absltest.TestCase):
 

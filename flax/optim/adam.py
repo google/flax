@@ -12,14 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Adam optimizer."""
+
+from typing import Optional
+
 from .. import struct
-
-import jax.numpy as jnp
-from jax import lax
-
-import numpy as np
-
 from .base import OptimizerDef
+from .base import OptimizerState
+
+import jax
+from jax import lax
+import jax.numpy as jnp
+import numpy as np
 
 
 @struct.dataclass
@@ -29,6 +33,7 @@ class _AdamHyperParams:
   beta2: np.ndarray
   eps: np.ndarray
   weight_decay: np.ndarray
+  max_gradient_norm: Optional[float] = None
 
 
 @struct.dataclass
@@ -42,8 +47,8 @@ class Adam(OptimizerDef):
 
   Implements Adam - a stochastic gradient descent method (SGD) that computes
   individual adaptive learning rates for different parameters from estimates of
-  first- and second-order moments of the gradients. 
-  
+  first- and second-order moments of the gradients.
+
   Reference: [Adam: A Method
   for Stochastic Optimization](https://arxiv.org/abs/1412.6980v8) (Kingma and
   Ba, 2014).
@@ -54,7 +59,8 @@ class Adam(OptimizerDef):
                beta1=0.9,
                beta2=0.999,
                eps=1e-8,
-               weight_decay=0.0):
+               weight_decay=0.0,
+               max_gradient_norm: Optional[float] = None):
     """Constructor for the Adam optimizer.
 
     Args:
@@ -69,13 +75,54 @@ class Adam(OptimizerDef):
       eps: A small scalar added to the gradient magnitude estimate to improve
         numerical stability (default: 1e-8).
       weight_decay: The learning rate decay (default: 0.0).
+      max_gradient_norm: If specified, will clip the gradient norm to
+        this value (default: None).
     """
     hyper_params = _AdamHyperParams(learning_rate, beta1, beta2, eps,
-                                    weight_decay)
+                                    weight_decay, max_gradient_norm)
     super().__init__(hyper_params)
 
   def init_param_state(self, param):
     return _AdamParamState(jnp.zeros_like(param), jnp.zeros_like(param))
+
+  def apply_gradient(self, hyper_params, params, state, grads):
+    """Applies a gradient for a set of parameters.
+
+    Override the base class implementation to insert gradient norm clipping.
+
+    Args:
+      hyper_params: a named tuple of hyper parameters.
+      params: the parameters that should be updated.
+      state: a named tuple containing the state of the optimizer
+      grads: the gradient tensors for the parameters.
+
+    Returns:
+      A tuple containing the new parameters and the new optimizer state.
+    """
+    step = state.step
+    params_flat, treedef = jax.tree_flatten(params)
+    states_flat = treedef.flatten_up_to(state.param_states)
+    grads_flat = treedef.flatten_up_to(grads)
+
+    if hyper_params.max_gradient_norm:
+      # Paper: http://proceedings.mlr.press/v28/pascanu13.pdf
+      # TF: https://www.tensorflow.org/api_docs/python/tf/clip_by_global_norm
+      squared_l2_norms = [jnp.sum(jnp.square(g)) for g in grads_flat]
+      global_norm = jnp.sqrt(jnp.sum(jnp.array(squared_l2_norms)))
+      scale = hyper_params.max_gradient_norm * jnp.minimum(
+          1.0 / hyper_params.max_gradient_norm, 1.0 / global_norm)
+      grads_flat = [g * scale for g in grads_flat]
+
+    out = [
+        self.apply_param_gradient(step, hyper_params, param, state, grad)
+        for param, state, grad in zip(params_flat, states_flat, grads_flat)
+    ]
+
+    new_params_flat, new_states_flat = list(zip(*out)) if out else ((), ())
+    new_params = jax.tree_unflatten(treedef, new_params_flat)
+    new_param_states = jax.tree_unflatten(treedef, new_states_flat)
+    new_state = OptimizerState(step + 1, new_param_states)
+    return new_params, new_state
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
     assert hyper_params.learning_rate is not None, 'no learning rate provided.'
