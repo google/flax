@@ -42,7 +42,7 @@ def _compute_stats(x: Array, axes: Axes,
                    axis_name: Optional[str] = None,
                    axis_index_groups: Any = None):
   """Computes mean and variance statistics.
-  
+
   This implementation takes care of a few important details:
   - Computes in float32 precision for half precision inputs
   -  mean and variance is computable in a single XLA fusion,
@@ -75,7 +75,7 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
                bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
                scale_init: Callable[[PRNGKey, Shape, Dtype], Array]):
   """"Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
-  
+
   A seperate bias and scale is learned for each feature as specified by feature_axes.
   """
   reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
