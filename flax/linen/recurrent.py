@@ -87,12 +87,16 @@ class LSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry, inputs):
@@ -114,11 +118,15 @@ class LSTMCell(RNNCellBase):
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.recurrent_kernel_init,
-                      bias_init=self.bias_init)
+                      bias_init=self.bias_init,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype)
     dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
-                      kernel_init=self.kernel_init)
+                      kernel_init=self.kernel_init,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype)
     i = self.gate_fn(dense_i(name='ii')(inputs) + dense_h(name='hi')(h))
     f = self.gate_fn(dense_i(name='if')(inputs) + dense_h(name='hf')(h))
     g = self.activation_fn(dense_i(name='ig')(inputs) + dense_h(name='hg')(h))
@@ -150,6 +158,7 @@ class DenseParams(Module):
   features: int
   use_bias: bool = True
   dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
   precision: Any = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
@@ -191,12 +200,16 @@ class OptimizedLSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable = sigmoid
   activation_fn: Callable = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry: Tuple[Array, Array],
@@ -214,6 +227,7 @@ class OptimizedLSTMCell(RNNCellBase):
     """
     c, h = carry
     hidden_features = h.shape[-1]
+    inputs = jnp.asarray(inputs, self.dtype)
 
     def _concat_dense(inputs, params, use_bias=True):
       """
@@ -222,11 +236,11 @@ class OptimizedLSTMCell(RNNCellBase):
       dot_general.
       """
       kernels, biases = zip(*params.values())
-      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), jnp.float32)
+      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), self.dtype)
 
       y = jnp.dot(inputs, kernel)
       if use_bias:
-        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
+        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), self.dtype)
         y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
 
       # Split the result back into individual (i, f, g, o) outputs.
@@ -240,10 +254,12 @@ class OptimizedLSTMCell(RNNCellBase):
     for component in ['i', 'f', 'g', 'o']:
       dense_params_i[component] = DenseParams(
           features=hidden_features, use_bias=False,
+          param_dtype=self.param_dtype,
           kernel_init=self.kernel_init, bias_init=self.bias_init,
           name=f'i{component}')(inputs)
       dense_params_h[component] = DenseParams(
           features=hidden_features, use_bias=True,
+          param_dtype=self.param_dtype,
           kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
           name=f'h{component}')(h)
     dense_h = _concat_dense(h, dense_params_h, use_bias=True)
@@ -298,6 +314,8 @@ class GRUCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
@@ -306,6 +324,8 @@ class GRUCell(RNNCellBase):
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       orthogonal())
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry, inputs):
@@ -326,11 +346,15 @@ class GRUCell(RNNCellBase):
     dense_h = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
     dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=True,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype,
                       kernel_init=self.kernel_init,
                       bias_init=self.bias_init)
     r = self.gate_fn(dense_i(name='ir')(inputs) + dense_h(name='hr')(h))
@@ -395,6 +419,7 @@ class ConvLSTM(RNNCellBase):
       and after each spatial dimension.
     bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
 
   features: int
@@ -403,6 +428,7 @@ class ConvLSTM(RNNCellBase):
   padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
   use_bias: bool = True
   dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry, inputs):
@@ -423,6 +449,7 @@ class ConvLSTM(RNNCellBase):
                               padding=self.padding,
                               use_bias=self.use_bias,
                               dtype=self.dtype,
+                              param_dtype=self.param_dtype,
                               name='ih')
 
     hidden_to_hidden = partial(Conv,
@@ -432,6 +459,7 @@ class ConvLSTM(RNNCellBase):
                                padding=self.padding,
                                use_bias=self.use_bias,
                                dtype=self.dtype,
+                               param_dtype=self.param_dtype,
                                name='hh')
 
     gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)

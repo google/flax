@@ -18,7 +18,7 @@ vNext
 - 
 - 
 - 
-- 
+- Add `param_dtype` attribute to standard Linen Modules for specifying parameter dtypes.
 - 
 
 

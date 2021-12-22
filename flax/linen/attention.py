@@ -186,6 +186,7 @@ class MultiHeadDotProductAttention(Module):
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
       dtype: the dtype of the computation (default: float32)
+      param_dtype: the dtype passed to parameter initializers (default: float32).
       qkv_features: dimension of the key, query, and value.
       out_features: dimension of the last projection
       broadcast_dropout: bool: use a broadcasted dropout along batch dims.
@@ -205,6 +206,7 @@ class MultiHeadDotProductAttention(Module):
   """
   num_heads: int
   dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None
   broadcast_dropout: bool = True
@@ -254,6 +256,8 @@ class MultiHeadDotProductAttention(Module):
 
     dense = partial(DenseGeneral,
                     axis=-1,
+                    dtype=self.dtype,
+                    param_dtype=self.param_dtype,
                     features=(self.num_heads, head_dim),
                     kernel_init=self.kernel_init,
                     bias_init=self.bias_init,
@@ -261,9 +265,9 @@ class MultiHeadDotProductAttention(Module):
                     precision=self.precision)
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
-    query, key, value = (dense(dtype=self.dtype, name='query')(inputs_q),
-                         dense(dtype=self.dtype, name='key')(inputs_kv),
-                         dense(dtype=self.dtype, name='value')(inputs_kv))
+    query, key, value = (dense(name='query')(inputs_q),
+                         dense(name='key')(inputs_kv),
+                         dense(name='value')(inputs_kv))
 
     # During fast autoregressive decoding, we feed one position at a time,
     # and cache the keys and values step by step.
@@ -325,6 +329,7 @@ class MultiHeadDotProductAttention(Module):
                        bias_init=self.bias_init,
                        use_bias=self.use_bias,
                        dtype=self.dtype,
+                       param_dtype=self.param_dtype,
                        precision=self.precision,
                        name='out')(x)
     return out
