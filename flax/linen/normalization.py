@@ -70,7 +70,8 @@ def _compute_stats(x: Array, axes: Axes,
 
 def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
                reduction_axes: Axes, feature_axes: Axes,
-               dtype: Dtype, epsilon: float,
+               dtype: Dtype, param_dtype: Dtype,
+               epsilon: float,
                use_bias: bool, use_scale: bool,
                bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
                scale_init: Callable[[PRNGKey, Shape, Dtype], Array]):
@@ -93,11 +94,13 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
   if use_scale:
-    scale = mdl.param('scale', scale_init, reduced_feature_shape).reshape(feature_shape)
+    scale = mdl.param('scale', scale_init, reduced_feature_shape,
+                      param_dtype).reshape(feature_shape)
     mul *= scale
   y *= mul
   if use_bias:
-    bias = mdl.param('bias', bias_init, reduced_feature_shape).reshape(feature_shape)
+    bias = mdl.param('bias', bias_init, reduced_feature_shape,
+                     param_dtype).reshape(feature_shape)
     y += bias
   return jnp.asarray(y, dtype)
 
@@ -140,6 +143,7 @@ class BatchNorm(Module):
       the batch statistics.
     epsilon: a small float added to variance to avoid dividing by zero.
     dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  if True, bias (beta) is added.
     use_scale: if True, multiply by scale (gamma).
       When the next layer is linear (also e.g. nn.relu), this can be disabled
@@ -159,6 +163,7 @@ class BatchNorm(Module):
   momentum: float = 0.99
   epsilon: float = 1e-5
   dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
@@ -216,7 +221,7 @@ class BatchNorm(Module):
 
     return _normalize(
         self, x, mean, var, reduction_axes, feature_axes,
-        self.dtype, self.epsilon,
+        self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)
 
@@ -233,6 +238,7 @@ class LayerNorm(Module):
   Attributes:
     epsilon: A small float added to variance to avoid dividing by zero.
     dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  If True, bias (beta) is added.
     use_scale: If True, multiply by scale (gamma). When the next layer is linear
       (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -242,6 +248,7 @@ class LayerNorm(Module):
   """
   epsilon: float = 1e-6
   dtype: Any = jnp.float32
+  param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
@@ -265,7 +272,7 @@ class LayerNorm(Module):
 
     return _normalize(
         self, x, mean, var, reduction_axes, feature_axes,
-        self.dtype, self.epsilon,
+        self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)
 
@@ -286,6 +293,7 @@ class GroupNorm(Module):
       group_size: the number of channels in a group.
       epsilon: A small float added to variance to avoid dividing by zero.
       dtype: the dtype of the computation (default: float32).
+      param_dtype: the dtype passed to parameter initializers (default: float32).
       use_bias:  If True, bias (beta) is added.
       use_scale: If True, multiply by scale (gamma). When the next layer is linear
         (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -297,6 +305,7 @@ class GroupNorm(Module):
   group_size: Optional[int] = None
   epsilon: float = 1e-6
   dtype: Any = jnp.float32
+  param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
@@ -348,6 +357,6 @@ class GroupNorm(Module):
 
     return _normalize(
         self, x, mean, var, reduction_axes[:-1], feature_axes,
-        self.dtype, self.epsilon,
+        self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)
