@@ -1124,6 +1124,33 @@ class TransformTest(absltest.TestCase):
       np.testing.assert_array_equal(vs_new['muts']['b']['outer_c']['v'],
                                     jnp.array([1.], jnp.float32))
 
+  def test_custom_vjp(self):
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def f(mdl, x):
+          return mdl(x)
+
+        def fwd(mdl, x):
+          return nn.vjp(f, mdl, x)
+
+        def bwd(vjp_fn, y_t):
+          input_t, params_t = vjp_fn(y_t)
+          params_t = jax.tree_map(jnp.sign, params_t)
+          return input_t, params_t
+
+        sign_grad = nn.custom_vjp(
+            f, forward_fn=fwd, backward_fn=bwd)
+        return sign_grad(nn.Dense(1), x).reshape(())
+    x = jnp.ones((2,))
+    variables = Foo().init(random.PRNGKey(0), x)
+    grad = jax.grad(Foo().apply)(variables, x)
+    for grad_leaf in jax.tree_leaves(grad):
+      self.assertTrue(jnp.all(jnp.abs(grad_leaf) == 1.))
+      
+
+    
 
 if __name__ == '__main__':
   absltest.main()

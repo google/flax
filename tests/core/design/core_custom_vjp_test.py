@@ -14,6 +14,7 @@
 
 
 from typing import Sequence, Callable
+from functools import partial
 
 from absl.testing import absltest
 
@@ -29,20 +30,21 @@ def mlp_custom_grad(scope: Scope, x: Array,
                     sizes: Sequence[int] = (8, 1),
                     act_fn: Callable[[Array], Array] = nn.relu):
 
-  def fwd(scope, x, features):
-    y = nn.dense(scope, x, features)
-    return y, x
+  f = nn.dense
 
-  def bwd(features, scope_fn, params, res, g):
-    x = res
-    fn = lambda params, x: nn.dense(scope_fn(params), x, features)
-    _, pullback = jax.vjp(fn, params, x)
-    g_param, g_x = pullback(g)
-    g_param = jax.tree_map(jnp.sign, g_param)
-    return g_param, g_x
+  def fwd(scope, x, features):
+    y, vjp_fn = lift.vjp(partial(f, features=features), scope, x)
+    return y, vjp_fn
+
+  def bwd(features, res, y_t):
+    del features
+    vjp_fn = res
+    input_t, params_t = vjp_fn(y_t)
+    params_t = jax.tree_map(jnp.sign, params_t)
+    return input_t, params_t
 
   dense_custom_grad = lift.custom_vjp(
-      fwd, backward_fn=bwd, nondiff_argnums=(2,))
+      f, forward_fn=fwd, backward_fn=bwd, nondiff_argnums=(2,))
 
   # hidden layers
   for size in sizes[:-1]:

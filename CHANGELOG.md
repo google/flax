@@ -14,7 +14,7 @@ vNext
 - 
 - 
 - 
-- 
+- Added `flax.linen.custom_vjp` for custom derivatives inside a `Module`.
 - 
 - 
 - 
