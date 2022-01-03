@@ -16,12 +16,13 @@
 
 import itertools
 from typing import Any, Callable
+
 import flax
 import numpy as np
 
-import env_utils
 import agent
-import models
+import env_utils
+
 
 def policy_test(
     n_episodes: int,

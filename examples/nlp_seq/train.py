@@ -17,25 +17,23 @@
 This script trains a Transformer on the Universal dependency dataset.
 """
 
-import tensorflow as tf
-
 import functools
 import os
 import time
+
 from absl import app
 from absl import flags
 from absl import logging
-from jax import random
-import jax
-import jax.numpy as jnp
-import numpy as np
-import tensorflow as tf
-
 from flax import jax_utils
 from flax import linen as nn
-from flax import optim
 from flax.metrics import tensorboard
+from flax import optim
 from flax.training import common_utils
+import jax
+import jax.numpy as jnp
+from jax import random
+import numpy as np
+import tensorflow as tf
 
 import input_pipeline
 import models

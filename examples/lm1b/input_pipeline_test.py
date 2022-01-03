@@ -17,9 +17,10 @@ import pathlib
 import tempfile
 
 from absl.testing import absltest
-import input_pipeline
-from configs import default
 import tensorflow_datasets as tfds
+
+from configs import default
+import input_pipeline
 
 # We just use different values here to verify that the input pipeline uses the
 # the correct value for the 3 different datasets.

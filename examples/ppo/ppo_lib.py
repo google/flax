@@ -16,23 +16,24 @@
 
 import functools
 from typing import Any, Callable, Tuple, List
+
 from absl import logging
-import jax
-import jax.random
-import jax.numpy as jnp
-import numpy as np
 import flax
 from flax import linen as nn
-import optax
-
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import train_state
+import jax
+import jax.random
+import jax.numpy as jnp
 import ml_collections
+import numpy as np
+import optax
 
 import agent
 import models
 import test_episodes
+
 
 @jax.jit
 @functools.partial(jax.vmap, in_axes=(1, 1, 1, None, None), out_axes=1)

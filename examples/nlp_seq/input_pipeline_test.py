@@ -17,10 +17,11 @@
 import os
 
 from absl.testing import absltest
-
-import input_pipeline
 import jax
 import tensorflow.compat.v2 as tf
+
+import input_pipeline
+
 
 # Enable direct iteration over a tf-datasets.
 tf.enable_v2_behavior()

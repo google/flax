@@ -23,16 +23,17 @@ import warnings
 from absl.testing import absltest
 from absl.testing import parameterized
 import flax
-import input_pipeline
-import train
-from configs import default
-from configs import test
 from flax.training import train_state
 import jax
 from jax import numpy as jnp
 import jraph
 import tensorflow as tf
 import tensorflow_datasets as tfds
+
+from configs import default
+from configs import test
+import input_pipeline
+import train
 
 
 def average_with_mask(arr: jnp.ndarray, mask: jnp.ndarray):

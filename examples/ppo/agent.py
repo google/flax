@@ -14,13 +14,14 @@
 
 """Agent utilities, incl. choosing the move and running in separate process."""
 
+import collections
 import functools
 import multiprocessing
-import collections
 from typing import Any, Callable
-import numpy as np
-import jax
+
 import flax
+import jax
+import numpy as np
 
 import env_utils
 

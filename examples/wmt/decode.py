@@ -15,11 +15,13 @@
 """Fast decoding routines for inference from a trained model."""
 
 import typing
+
 import flax
 import jax
 from jax import lax
 import jax.numpy as jnp
 import numpy as np
+
 
 # Constants
 # We assume the default End-of-Sentence token id is 2 (SentencePiece).

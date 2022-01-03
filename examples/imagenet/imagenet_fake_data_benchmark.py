@@ -21,7 +21,6 @@ from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
 from flax.testing import Benchmark
 import jax
-
 import tensorflow_datasets as tfds
 
 # Local imports.

@@ -15,12 +15,15 @@
 """SST-2 input pipeline."""
 
 from typing import Any, Dict, Optional
+
 from absl import logging
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import tensorflow_text as text
+
 import vocabulary
+
 
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 Example = Dict[str, tf.Tensor]

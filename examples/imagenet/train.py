@@ -25,30 +25,23 @@ from typing import Any
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
-
 import flax
 from flax import jax_utils
 from flax import optim
-
-import input_pipeline
-import models
-
 from flax.training import checkpoints
 from flax.training import common_utils
 from flax.training import train_state
-
 import jax
 from jax import lax
-from jax import random
-
 import jax.numpy as jnp
-
+from jax import random
 import ml_collections
-
 import optax
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
+
+import input_pipeline
+import models
 
 
 NUM_CLASSES = 1000

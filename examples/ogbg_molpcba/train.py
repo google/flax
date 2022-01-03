@@ -25,8 +25,6 @@ from clu import parameter_overview
 from clu import periodic_actions
 import flax
 import flax.core
-import input_pipeline
-import models
 import flax.linen as nn
 from flax.training import train_state
 import jax
@@ -37,6 +35,9 @@ import numpy as np
 import optax
 import sklearn.metrics
 import tensorflow as tf
+
+import input_pipeline
+import models
 
 
 def create_model(config: ml_collections.ConfigDict,

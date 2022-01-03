@@ -17,11 +17,10 @@ import pathlib
 import tempfile
 
 from absl.testing import absltest
+import tensorflow_datasets as tfds
+
 import input_pipeline
 import vocabulary
-from configs import default
-import numpy as np
-import tensorflow_datasets as tfds
 
 
 class InputPipelineTest(absltest.TestCase):

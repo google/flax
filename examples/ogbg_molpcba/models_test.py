@@ -16,10 +16,11 @@
 
 from absl.testing import absltest
 from absl.testing import parameterized
-import models
 import jax
 import jax.numpy as jnp
 import jraph
+
+import models
 
 
 class ModelsTest(parameterized.TestCase):

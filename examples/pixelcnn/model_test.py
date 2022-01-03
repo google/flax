@@ -15,16 +15,15 @@
 # Lint as: python3
 """Tests for PixelCNN Modules."""
 
-import pixelcnn
-from flax import linen as nn
 from absl.testing import absltest
 from absl.testing import parameterized
-
+from flax import linen as nn
+from jax import random
+import jax.numpy as jnp
+from jax.config import config
 import numpy.testing as np_testing
 
-from jax import random
-import jax.numpy as np
-from jax.config import config
+import pixelcnn
 
 
 class ModelTest(absltest.TestCase):
@@ -32,7 +31,7 @@ class ModelTest(absltest.TestCase):
   def setUp(self):
     super().setUp()
     self.rng = random.PRNGKey(0)
-    self.x = np.arange(24).reshape(1, 4, 3, 2)
+    self.x = jnp.arange(24).reshape(1, 4, 3, 2)
 
 
   def get_weightnorm(self, params):
@@ -42,8 +41,8 @@ class ModelTest(absltest.TestCase):
   def assert_mean_and_variance(self, out):
     # Weightnorm should ensure that, at initialization time, the outputs of the
     # module have mean 0 and variance 1 over the non-feature dimensions.
-    np_testing.assert_allclose(np.mean(out, (0, 1, 2)), 0., atol=1e-5)
-    np_testing.assert_allclose(np.var(out, (0, 1, 2)), 1., atol=1e-5)
+    np_testing.assert_allclose(jnp.mean(out, (0, 1, 2)), 0., atol=1e-5)
+    np_testing.assert_allclose(jnp.var(out, (0, 1, 2)), 1., atol=1e-5)
 
 
   def test_conv(self):

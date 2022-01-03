@@ -1,5 +1,9 @@
-atari-py
-gym
-jax
-jaxlib
-opencv-python
+absl-py==1.0.0
+atari-py==0.2.5
+opencv-python==4.5.4.60
+flax==0.3.6
+gym==0.18.3
+ml-collections==0.1.0
+numpy==1.21.4
+optax==0.1.0
+tensorflow==2.7.0

@@ -18,10 +18,8 @@ import pathlib
 import tempfile
 
 from absl.testing import absltest
-
 import jax
 from jax import random
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
