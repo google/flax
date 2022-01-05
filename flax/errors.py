@@ -540,7 +540,7 @@ class InvalidCheckpointError(FlaxError):
   A checkpoint cannot be stored in a directory that already has
   a checkpoint at the current or a later step.
 
-  You can pass `overwrite=True` to disable this behavior and
+  You can pass ``overwrite=True`` to disable this behavior and
   overwrite existing checkpoints in the target directory.
   """
   def __init__(self, path, step):
@@ -555,9 +555,10 @@ class TransformedMethodReturnValueError(FlaxError):
   """
   Transformed Module methods cannot return other Modules or Variables.
 
-  This commonly occurs when named_call is automatically applied to helper
-  constructor methods when profiling is enabled, and can be mitigated by
-  using the @nn.nowrap decorator to prevent automatic wrapping.
+  This commonly occurs when ``@nn.named_call`` is automatically applied to
+  helper constructor methods when profiling is enabled (``FLAX_PROFILE=true``
+  environment variable or via ``nn.enable_named_call()``), and can be mitigated
+  by using the ``@nn.nowrap`` decorator to prevent automatic wrapping.
   """
   def __init__(self, name):
     super().__init__(
