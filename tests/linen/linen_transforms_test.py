@@ -606,8 +606,7 @@ class TransformTest(absltest.TestCase):
   def test_nested_setup_calls_count(self):
     D = 3
     N = 4
-    setup_cntr = 0
-    call_cntr = 0
+    cntr = 0
     class Repeat(nn.Module):
       mdl_def: Any
       def setup(self):
@@ -619,13 +618,11 @@ class TransformTest(absltest.TestCase):
         return x
     class Counter(nn.Module):
       def setup(self):
-        nonlocal setup_cntr
-        setup_cntr += 1
+        nonlocal cntr
+        cntr += 1
         self.dense = nn.Dense(2, use_bias=False)
       @nn.remat
       def __call__(self, x):
-        nonlocal call_cntr
-        call_cntr += 1
         return self.dense(x)
 
     def nested_repeat(mdl):
@@ -633,10 +630,7 @@ class TransformTest(absltest.TestCase):
         mdl = partial(Repeat, mdl)
       return mdl()
     _ = nested_repeat(Counter).init(random.PRNGKey(0), jnp.ones((2,)))
-    # setup_cntr == 128 due to 1 call in Counter.setup by _validate_setup
-    # and 1 further "real" call.
-    self.assertEqual(setup_cntr, 128)
-    self.assertEqual(call_cntr, 64)
+    self.assertEqual(cntr, 64)
 
   def test_multimethod_setup_calls(self):
     cntr=0
@@ -663,9 +657,7 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((2,))
     (y1, y2), _ = B().init_with_output(key, x)
     np.testing.assert_array_equal(y1, y2)
-    # cntr == 3 due to 1 call by _validate_setup
-    # and two further "real" calls.
-    self.assertEqual(cntr, 3)
+    self.assertEqual(cntr, 2)
 
   def test_toplevel_submodule_adoption_transform(self):
     class A(nn.Module):
@@ -1156,72 +1148,9 @@ class TransformTest(absltest.TestCase):
     grad = jax.grad(Foo().apply)(variables, x)
     for grad_leaf in jax.tree_leaves(grad):
       self.assertTrue(jnp.all(jnp.abs(grad_leaf) == 1.))
+      
 
-  def test_transform_with_setup_and_methods_on_submodules(self):
-    # This is the archetypal example motivating the introduction of
-    # SetupState as a triple-enum to handle multiple setup() calls
-    # across transform boundaries and scope reuse.
-    class Foo(nn.Module):
-      def setup(self):
-        self.inner = nn.Dense(2)
-      def helper(self, x, m):
-        return m(x)
-      def __call__(self, x):
-        return self.helper(x, self.inner)
-    k = random.PRNGKey(0)
-    x = jnp.ones((2,))
-    with nn.module.override_named_call(True):
-      vs_foo = Foo().init(k, x)
-
-    class Bar(nn.Module):
-      def setup(self):
-        self.inner = nn.Dense(2)
-      @nn.jit
-      def helper(self, x, m):
-        return m(x)
-      @nn.jit
-      def __call__(self, x):
-        return self.helper(x, self.inner)
-    vs_bar = Bar().init(k, x)
-    self.assertTrue(tree_equals(
-      jax.tree_map(jnp.shape, vs_foo),
-      jax.tree_map(jnp.shape, vs_bar)))
-
-  def test_transform_methods_on_submodules_still_reserve_names(self):
-    class Foo(nn.Module):
-      @nn.jit
-      def helper(self, x, m):
-        conflicting_a = nn.Dense(2, name="a")
-        return m(x)
-      @nn.jit
-      @nn.compact
-      def __call__(self, x):
-        a = nn.Dense(2, name="a")
-        return self.helper(x, a)
-    k = random.PRNGKey(0)
-    x = jnp.ones((2,))
-    with self.assertRaises(errors.NameInUseError):
-      vs = Foo().init(k, x)
-
-  def test_transform_setup_still_reserve_names(self):
-    class Identity(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        return x
-    class Test(nn.Module):
-      def setup(self):
-        self.sub = Identity()
-        self.sub = Identity()
-      @nn.jit
-      def __call__(self, x):
-        return x
-
-    k = random.PRNGKey(0)
-    x = jnp.array([1.])
-
-    msg = 'Duplicate use of scope name: "sub"'
-    with self.assertRaisesWithLiteralMatch(ValueError, msg):
-      y = Test().init(k, x)
+    
 
 if __name__ == '__main__':
   absltest.main()
