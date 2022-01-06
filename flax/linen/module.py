@@ -15,6 +15,7 @@
 """Flax Modules."""
 from contextlib import contextmanager
 import dataclasses
+import enum
 import functools
 import inspect
 import os
@@ -54,6 +55,12 @@ Array = Any    # pylint: disable=invalid-name
 T = TypeVar('T')
 K = TypeVar('K')
 _CallableT = TypeVar('_CallableT', bound=Callable)
+
+
+# Used for abstractly testing module behavior.
+TestScope = type('TestScope',
+                  (Scope,),
+                  {'make_rng': lambda self, name: jax.random.PRNGKey(0)})
 
 
 # pylint: disable=protected-access,attribute-defined-outside-init
@@ -134,7 +141,7 @@ _use_named_call = config.flax_profile
 
 def enable_named_call():
   """Enables named call wrapping for labelling profile traces.
-  
+
   When named call wrapping is enabled all JAX ops executed in a Module
   will be wrapped with ``jax.named_call``. The ``Module`` class name will
   show up around the operations belonging to that Module in the
@@ -148,7 +155,7 @@ def enable_named_call():
 
 def disable_named_call():
   """Disables named call wrapping.
-  
+
   See ``enable_named_call``
   """
   global _use_named_call
@@ -158,7 +165,7 @@ def disable_named_call():
 @contextmanager
 def override_named_call(enable: bool = True):
   """Returns a context manager that enables/disables named call wrapping.
-  
+
   See ``enable_named_call``
   """
   global _use_named_call
@@ -375,6 +382,13 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
 
   return method_or_fn
 
+class SetupState(enum.IntEnum):
+  # setup() has not been called.
+  NEW = 0
+  # setup() has been called outside a transform boundary.
+  TRANSFORMED = 1
+  # setup() has been called.
+  DONE = 2
 
 @dataclasses.dataclass
 class _ModuleInternalState:
@@ -386,7 +400,7 @@ class _ModuleInternalState:
   """
   in_compact_method: bool = False
   in_setup: bool = False
-  setup_called: bool = False
+  setup_called: SetupState = SetupState.NEW
   is_initialized: bool = False
   autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
   children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
@@ -403,10 +417,11 @@ class _ModuleInternalState:
 
   def export(self):
     """Exports transform-preserved state across transform boundary."""
+    setup_state = SetupState.TRANSFORMED if self.setup_called else SetupState.NEW
     cloned = _ModuleInternalState(
       in_compact_method=self.in_compact_method,
       in_setup=self.in_setup,
-      setup_called=False,  # setup_called is object local, not shared.
+      setup_called=setup_state,
       is_initialized=self.is_initialized,
       autoname_cursor=dict(self.autoname_cursor))
     return cloned
@@ -716,7 +731,11 @@ class Module(metaclass=ModuleMeta):
         parent_class = self.parent.__class__.__name__
         raise errors.NameInUseError('submodule', self.name, parent_class)
       self.parent._state.children[self.name] = self
-      object.__setattr__(self, 'scope', self.parent.scope.push(self.name))
+      # Allow scope aliasing under transforms for submodules defined in setup.
+      reuse_scopes = (self.parent._state.in_setup and
+                      self.parent._state.setup_called == SetupState.TRANSFORMED)
+      object.__setattr__(
+          self, 'scope', self.parent.scope.push(self.name, reuse=reuse_scopes))
 
     # Top-level invocation with a functional Scope.
     elif isinstance(self.parent, Scope):
@@ -793,7 +812,9 @@ class Module(metaclass=ModuleMeta):
 
   def _try_setup(self, shallow=False):
     """Tries to setup module if scope is available and setup has not been called yet."""
-    if self.scope and not self._state.setup_called and not self._state.in_setup:
+    if (self.scope
+        and not self._state.in_setup
+        and self._state.setup_called != SetupState.DONE):
       try:
         self._state.in_setup = True
         # a shallow setup will only register attribute submodules but it does not call the user's setup
@@ -803,9 +824,21 @@ class Module(metaclass=ModuleMeta):
             self._register_submodules(field.name, getattr(self, field.name))
         if not shallow:
           self.setup()
+        # We run static checks abstractly once for setup before any transforms
+        # to detect name collisions and other python errors.
+        elif self._state.setup_called == SetupState.NEW:
+          self._validate_setup()
       finally:
         self._state.in_setup = False
-        self._state.setup_called = True
+        self._state.setup_called = SetupState.DONE
+
+  def _validate_setup(self):
+    """Abstractly evaluates setup only to run static checks."""
+    def run_setup_only(x):
+      wrapped_id = wrap_method_once(lambda m, x: x)
+      with TestScope({}, rngs={}, mutable=True).temporary() as root:
+        return wrapped_id(self.clone(parent=root), x)
+    _ = jax.eval_shape(run_setup_only, 0)
 
   def _name_taken(self, name: str, module: 'Module' = None) -> bool:
     if name in _all_names_on_object(self):
@@ -999,7 +1032,7 @@ class Module(metaclass=ModuleMeta):
         about variables.
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
       mutable: Can be bool, str, or list. Specifies which collections should be
-        treated as mutable: 
+        treated as mutable:
           ``bool``: all/no collections are mutable.
           ``str``: The name of a single mutable collection.
           ``list``: A list of names of mutable collections.
