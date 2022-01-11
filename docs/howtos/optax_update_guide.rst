@@ -4,6 +4,8 @@ Optax Update Guide
 Code samples below are executable in
 `Colab <https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/optax_update_guide.ipynb>`_.
 
+See also Optax's quick start documentation:
+https://optax.readthedocs.io/en/latest/optax-101.html
 
 .. testsetup::
 
@@ -13,6 +15,8 @@ Code samples below are executable in
   import flax.linen as nn
   import optax
 
+  # Note: this is the minimal code required to make below code run. See in the
+  # Colab linked above for a more meaningful definition of datasets etc. 
   batch = {'image': jnp.ones([1, 28, 28, 1]), 'label': jnp.array([0])}
   ds_train = [batch]
   get_ds_train = lambda: [batch]
@@ -51,16 +55,16 @@ optimizer state, parameters, and other associated data in a single dataclass.
 
   ---
 
+  tx = optax.sgd(learning_rate, momentum)
+  params = variables['params']
+  opt_state = tx.init(params)
+
   @jax.jit
   def train_step(params, opt_state, batch):
     grads = jax.grad(loss)(params, batch)
     updates, opt_state = tx.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
     return params, opt_state
-
-  tx = optax.sgd(learning_rate, momentum)
-  params = variables['params']
-  opt_state = tx.init(params)
 
   for batch in ds_train:
     params, opt_state = train_step(params, opt_state, batch)
@@ -119,6 +123,7 @@ decay can be added as another "gradient transformation"
 
   ---
 
+  # (Note that you could also use `optax.adamw()` in this case)
   tx = optax.chain(
       optax.scale_by_adam(),
       optax.add_decayed_weights(weight_decay),
@@ -170,6 +175,12 @@ inject arbitrary scalar values for other gradient updates via
 |optax.inject_hyperparams()|_.
 
 Read more about learning rate schedules in the :doc:`lr_schedule` guide.
+
+Read more about schedules defined in Optax under `Optimizer Schedules
+<https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules>`_. the
+standard optimizers (like ``optax.adam()``, ``optax.sgd()`` etc.) also accept a
+learning rate schedule as a parameter for `learning_rate`.
+
 
 .. |optax.scale_by_schedule()| replace:: ``optax.scale_by_schedule()``
 .. _optax.scale_by_schedule(): https://optax.readthedocs.io/en/latest/api.html#optax.scale_by_schedule
@@ -243,6 +254,9 @@ that is not readily available outside the outer mask).
       optax.masked(optax.scale(-learning_rate), kernels_mask),
       optax.masked(optax.scale(-learning_rate * 0.1), biases_mask),
   )
+
+Final Words
+-----------
 
 All above patterns can of course also be mixed and Optax makes it possible to
 encapsulate all these transformations into a single place outside the main
