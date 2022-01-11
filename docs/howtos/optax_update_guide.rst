@@ -4,6 +4,23 @@ Optax Update Guide
 Code samples below are executable in
 `Colab <https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/optax_update_guide.ipynb>`_.
 
+
+.. testsetup::
+
+  import flax
+  import jax
+  import jax.numpy as jnp
+  import flax.linen as nn
+  import optax
+
+  batch = {'image': jnp.ones([1, 28, 28, 1]), 'label': jnp.array([0])}
+  ds_train = [batch]
+  get_ds_train = lambda: [batch]
+  model = nn.Dense(1)
+  variables = model.init(jax.random.PRNGKey(0), batch['image'])
+  learning_rate, momentum, weight_decay, grad_clip_norm = .1, .9, 1e-3, 1.
+  loss = lambda params, batch: jnp.array(0.)
+
 Replacing ``flax.optim`` with ``optax``
 ---------------------------------------
 
@@ -151,6 +168,8 @@ argument to a function for scaling the updates added with
 |optax.scale_by_schedule()|_. Optax also allows to specify functions to
 inject arbitrary scalar values for other gradient updates via
 |optax.inject_hyperparams()|_.
+
+Read more about learning rate schedules in the :doc:`lr_schedule` guide.
 
 .. |optax.scale_by_schedule()| replace:: ``optax.scale_by_schedule()``
 .. _optax.scale_by_schedule(): https://optax.readthedocs.io/en/latest/api.html#optax.scale_by_schedule
