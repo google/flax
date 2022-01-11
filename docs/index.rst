@@ -41,6 +41,7 @@ For a quick introduction and short example snippets, see our `README
    howtos/lr_schedule
    howtos/extracting_intermediates
    howtos/model_surgery
+   howtos/optax_update_guide
 
 .. toctree::
    :maxdepth: 1
