@@ -354,7 +354,7 @@ class Scope:
     if self is other:
       return True
     return self.root._variables is other.root._variables and self.path == other.path and self.rng_counters is other.rng_counters
-  
+
   def __hash__(self) -> int:
     # see __eq__
     return hash((id(self.root._variables), self.path, id(self.rng_counters)))
@@ -803,18 +803,29 @@ def _is_valid_variables(variables: VariableDict) -> bool:
   return True
 
 
+# TODO(frostig,levskaya): remove after next jax release, when
+# random.default_prng_impl is defined
+def _default_key_shape():
+  if hasattr(random, 'default_prng_impl'):
+    return random.default_prng_impl().key_shape
+  elif jax_config.jax_default_prng_impl == 'threefry2x32':
+    return (2,)
+  else:
+    return (4,)
+
+
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
   # New-style JAX KeyArrays have a base type.
-  if (hasattr(jax_config, 'jax_enable_custom_prng') and
-      jax_config.jax_enable_custom_prng):
+  if jax_config.jax_enable_custom_prng:
     if not isinstance(rng, jax.random.KeyArray):
       return False
-  # Old-style JAX PRNGKeys are plain uint32[2] arrays.
+  # Old-style JAX PRNGKeys are plain uint32 arrays.
   else:
     if not isinstance(rng, (np.ndarray, jnp.ndarray)):
       return False
-    if rng.shape != (2,) or rng.dtype != jnp.uint32:
+    if (rng.shape != _default_key_shape() or
+        rng.dtype != jnp.uint32):
       return False
   return True
 
