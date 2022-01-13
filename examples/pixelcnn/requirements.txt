@@ -6,6 +6,6 @@ jax==0.2.21
 jaxlib==0.1.70+cuda110  # Make sure CUDA version matches the base image.
 ml-collections==0.1.0
 numpy==1.21.4
-Pillow==8.3.2
+Pillow==9.0.0
 tensorflow==2.7.0
 tensorflow-datasets==4.4.0
