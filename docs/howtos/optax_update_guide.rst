@@ -206,7 +206,7 @@ learning rate schedule as a parameter for `learning_rate`.
 Multiple Optimizers
 -------------------
 
-Flax's :py:class:`flax.optim.MultiOptimizer` can be used to compose multiple
+In Flax, Traversals are used to specify which parameters should be updated by an optimizer. And you can combine Traversals using :py:class:`flax.optim.MultiOptimizer` to apply different optimizers on different parameters. The equivalent in Optax is `optax.masked()` and `optax.chain()`.
 optimizers and only apply them to a part of the params pytree. Optax provides
 an efficient masking mechanism to achieve the same goal.
 
