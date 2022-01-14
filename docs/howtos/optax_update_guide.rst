@@ -203,7 +203,7 @@ learning rate schedule as a parameter for `learning_rate`.
       optax.scale_by_schedule(lambda step: -schedule(step)),
   )
 
-Multiple Optimizers
+Multiple Optimizers or only updating a subset of parameters
 -------------------
 
 In Flax, Traversals are used to specify which parameters should be updated by an optimizer. And you can combine Traversals using :py:class:`flax.optim.MultiOptimizer` to apply different optimizers on different parameters. The equivalent in Optax is `optax.masked()` and `optax.chain()`.
