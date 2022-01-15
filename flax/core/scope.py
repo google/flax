@@ -657,7 +657,7 @@ class Scope:
     """
     self.reserve(name)
     if self.has_variable('params', name):
-      abs_rng = jax.ShapeDtypeStruct((2,), jnp.uint32)
+      abs_rng = jax.ShapeDtypeStruct(_default_key_shape(), jnp.uint32)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
