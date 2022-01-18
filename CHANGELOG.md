@@ -22,7 +22,7 @@ vNext
 -
 -
 -
--
+- Added `sep` argument to `flax.traverse_util.flatten_dict()`.
 -
 -
 -

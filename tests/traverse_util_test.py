@@ -18,6 +18,7 @@
 import collections
 from absl.testing import absltest
 import flax
+from flax.core import freeze
 from flax import traverse_util
 import jax
 
@@ -150,14 +151,32 @@ class TraversalTest(absltest.TestCase):
         ('foo',): 1,
         ('bar', 'a'): 2,
     })
+    flat_xs = traverse_util.flatten_dict(freeze(xs))
+    self.assertEqual(flat_xs, {
+      ('foo',): 1,
+      ('bar', 'a'): 2,
+    })
+    flat_xs = traverse_util.flatten_dict(xs, sep='/')
+    self.assertEqual(flat_xs, {
+      'foo': 1,
+      'bar/a': 2,
+    })
 
   def test_unflatten_dict(self):
-    flat_xs = {
-        ('foo',): 1,
-        ('bar', 'a'): 2,
+    expected_xs = {
+      'foo': 1,
+      'bar': {'a': 2}
     }
-    xs = traverse_util.unflatten_dict(flat_xs)
-    self.assertEqual(xs, {'foo': 1, 'bar': {'a': 2}})
+    xs = traverse_util.unflatten_dict({
+      ('foo',): 1,
+      ('bar', 'a'): 2,
+    })
+    self.assertEqual(xs, expected_xs)
+    xs = traverse_util.unflatten_dict({
+      'foo': 1,
+      'bar/a': 2,
+    }, sep='/')
+    self.assertEqual(xs, expected_xs)
 
   def test_flatten_dict_keep_empty(self):
     xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
