@@ -4,14 +4,14 @@ Model Surgery
 .. testsetup::
 
   import functools
-  import numpy as np
-  import jax
-  from jax import lax, random, numpy as jnp
-  import flax
-  from flax import optim, traverse_util
 
+  import jax
+  import jax.numpy as jnp
+  from flax import traverse_util
   from flax import linen as nn
-  from flax.core import unfreeze, freeze
+  from flax.core import freeze
+  import jax
+  import optax
 
 We will show how to get a flat dict of all the tensors, and then go back to a 
 nested, frozen dict. This will be demonstrated for both Flax modules and optimizers.
@@ -44,7 +44,7 @@ Let's create a small convolutional neural network model for our demo.
     initial_params = CNN().init(rng, init_shape)['params']
     return initial_params
 
-  key = random.PRNGKey(0)
+  key = jax.random.PRNGKey(0)
   params = get_initial_params(key)
 
   print(jax.tree_map(jnp.shape, params))
@@ -75,10 +75,8 @@ Next, get a flat dict for doing model surgery as follows:
 
 .. testcode::
 
-  # Unfreeze params to normal dict.
-  params = unfreeze(params)
   # Get flattened-key: value list.
-  flat_params = {'/'.join(k): v for k, v in traverse_util.flatten_dict(params).items()}
+  flat_params = traverse_util.flatten_dict(params, sep='/')
   print(jax.tree_map(jnp.shape, flat_params))
 
 .. testoutput::
@@ -98,7 +96,7 @@ After doing whatever you want, unflatten back:
 .. testcode::
 
   # Unflatten.
-  unflat_params = traverse_util.unflatten_dict({tuple(k.split('/')): v for k, v in flat_params.items()})
+  unflat_params = traverse_util.unflatten_dict(flat_params, sep='/')
   # Refreeze.
   unflat_params = freeze(unflat_params)
   print(jax.tree_map(jnp.shape, unflat_params))
@@ -128,105 +126,67 @@ After doing whatever you want, unflatten back:
 Surgery with Optimizers
 --------------------------------
 
+When using `Optax` as an optimizer, the ``opt_state`` is actually a nested tuple
+of the states of individual gradient transformations that compose the optimizer.
+These states contain pytrees that mirror the parameter tree, and can be modified
+the same way: flattening, modifying, unflattening, and then recreating a new
+optimizer state that mirrors the original state.
+
 If you're loading from a flax optimizer, all of the variables that should be
 optimized live in ``optimizer.target``.
 
 .. testcode::
 
-  opt_def = optim.Adam(1.0)
-  opt = opt_def.create(params)
+  tx = optax.adam(1.0)
+  opt_state = tx.init(params)
 
-  # Get optimizer state and target vars by:
-  opt_state = opt.state_dict()
+  # The optimizer state is a tuple of gradient transformation states.
   print(jax.tree_map(jnp.shape, opt_state))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
+
+  (ScaleByAdamState(count=(), mu=FrozenDict({
+      Conv_0: { bias: (32,), kernel: (3, 3, 1, 32), },
+      Conv_1: { bias: (64,), kernel: (3, 3, 32, 64), },
+      Dense_0: { bias: (256,), kernel: (3136, 256), },
+      Dense_1: { bias: (10,), kernel: (256, 10), },
+  }), nu=FrozenDict({
+      Conv_0: { bias: (32,), kernel: (3, 3, 1, 32), },
+      Conv_1: { bias: (64,), kernel: (3, 3, 32, 64), },
+      Dense_0: { bias: (256,), kernel: (3136, 256), },
+      Dense_1: { bias: (10,), kernel: (256, 10), },
+  })), EmptyState())
   
-  {'state': {'param_states': {'Conv_0': {'bias': {'grad_ema': (32,),
-      'grad_sq_ema': (32,)},
-      'kernel': {'grad_ema': (3, 3, 1, 32), 'grad_sq_ema': (3, 3, 1, 32)}},
-    'Conv_1': {'bias': {'grad_ema': (64,), 'grad_sq_ema': (64,)},
-      'kernel': {'grad_ema': (3, 3, 32, 64), 'grad_sq_ema': (3, 3, 32, 64)}},
-    'Dense_0': {'bias': {'grad_ema': (256,), 'grad_sq_ema': (256,)},
-      'kernel': {'grad_ema': (3136, 256), 'grad_sq_ema': (3136, 256)}},
-    'Dense_1': {'bias': {'grad_ema': (10,), 'grad_sq_ema': (10,)},
-      'kernel': {'grad_ema': (256, 10), 'grad_sq_ema': (256, 10)}}},
-    'step': ()},
-  'target': {'Conv_0': {'bias': (32,), 'kernel': (3, 3, 1, 32)},
-    'Conv_1': {'bias': (64,), 'kernel': (3, 3, 32, 64)},
-    'Dense_0': {'bias': (256,), 'kernel': (3136, 256)},
-    'Dense_1': {'bias': (10,), 'kernel': (256, 10)}}}
+The pytrees inside the optimizer state follow the same structure as the
+parameters and can be flattened / modified exactly the same way
 
 .. testcode::
 
-  # Get flattened-key:: value list.
-  flat_opt_state = {'/'.join(k): v for k, v in traverse_util.flatten_dict(opt_state).items()}
-  print(jax.tree_map(jnp.shape, flat_opt_state))
+  flat_mu = traverse_util.flatten_dict(opt_state[0].mu, sep='/')
+  flat_nu = traverse_util.flatten_dict(opt_state[0].nu, sep='/')
+
+  print(jax.tree_map(jnp.shape, flat_mu))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
   
-  {'state/param_states/Conv_0/bias/grad_ema': (32,),
-  'state/param_states/Conv_0/bias/grad_sq_ema': (32,),
-  'state/param_states/Conv_0/kernel/grad_ema': (3, 3, 1, 32),
-  'state/param_states/Conv_0/kernel/grad_sq_ema': (3, 3, 1, 32),
-  'state/param_states/Conv_1/bias/grad_ema': (64,),
-  'state/param_states/Conv_1/bias/grad_sq_ema': (64,),
-  'state/param_states/Conv_1/kernel/grad_ema': (3, 3, 32, 64),
-  'state/param_states/Conv_1/kernel/grad_sq_ema': (3, 3, 32, 64),
-  'state/param_states/Dense_0/bias/grad_ema': (256,),
-  'state/param_states/Dense_0/bias/grad_sq_ema': (256,),
-  'state/param_states/Dense_0/kernel/grad_ema': (3136, 256),
-  'state/param_states/Dense_0/kernel/grad_sq_ema': (3136, 256),
-  'state/param_states/Dense_1/bias/grad_ema': (10,),
-  'state/param_states/Dense_1/bias/grad_sq_ema': (10,),
-  'state/param_states/Dense_1/kernel/grad_ema': (256, 10),
-  'state/param_states/Dense_1/kernel/grad_sq_ema': (256, 10),
-  'state/step': (),
-  'target/Conv_0/bias': (32,),
-  'target/Conv_0/kernel': (3, 3, 1, 32),
-  'target/Conv_1/bias': (64,),
-  'target/Conv_1/kernel': (3, 3, 32, 64),
-  'target/Dense_0/bias': (256,),
-  'target/Dense_0/kernel': (3136, 256),
-  'target/Dense_1/bias': (10,),
-  'target/Dense_1/kernel': (256, 10)}
+  {'Conv_0/bias': (32,),
+   'Conv_0/kernel': (3, 3, 1, 32),
+   'Conv_1/bias': (64,),
+   'Conv_1/kernel': (3, 3, 32, 64),
+   'Dense_0/bias': (256,),
+   'Dense_0/kernel': (3136, 256),
+   'Dense_1/bias': (10,),
+   'Dense_1/kernel': (256, 10)}
+
+After modification, re-create optimizer state:
 
 .. testcode::
 
-    # Unflatten
-    unflat_opt_state = traverse_util.unflatten_dict({tuple(k.split('/')): v for k, v in flat_opt_state.items()})
-    print(jax.tree_map(jnp.shape, unflat_opt_state))
-
-.. testoutput::
-  :options: +NORMALIZE_WHITESPACE
-  
-  {'state': {'param_states': {'Conv_0': {'bias': {'grad_ema': (32,),
-      'grad_sq_ema': (32,)},
-      'kernel': {'grad_ema': (3, 3, 1, 32), 'grad_sq_ema': (3, 3, 1, 32)}},
-    'Conv_1': {'bias': {'grad_ema': (64,), 'grad_sq_ema': (64,)},
-      'kernel': {'grad_ema': (3, 3, 32, 64), 'grad_sq_ema': (3, 3, 32, 64)}},
-    'Dense_0': {'bias': {'grad_ema': (256,), 'grad_sq_ema': (256,)},
-      'kernel': {'grad_ema': (3136, 256), 'grad_sq_ema': (3136, 256)}},
-    'Dense_1': {'bias': {'grad_ema': (10,), 'grad_sq_ema': (10,)},
-      'kernel': {'grad_ema': (256, 10), 'grad_sq_ema': (256, 10)}}},
-    'step': ()},
-  'target': {'Conv_0': {'bias': (32,), 'kernel': (3, 3, 1, 32)},
-    'Conv_1': {'bias': (64,), 'kernel': (3, 3, 32, 64)},
-    'Dense_0': {'bias': (256,), 'kernel': (3136, 256)},
-    'Dense_1': {'bias': (10,), 'kernel': (256, 10)}}}
-
-We can restore the optimizer object from the nested-dict state. The restored 
-state must agree with the shape of the existing object as a sort of "structural
-unit test".
-
-.. testcode::
-
-  restored_opt = opt.restore_state(unflat_opt_state)
-  print(jax.tree_map(jnp.shape, restored_opt))
-
-.. testoutput::
-  :options: +NORMALIZE_WHITESPACE, +ELLIPSIS
-
-  Optimizer(optimizer_def=<flax.optim.adam.Adam object at ...>, state=OptimizerState(step=(), param_states={'Conv_0': {'bias': _AdamParamState(grad_ema=(32,), grad_sq_ema=(32,)), 'kernel': _AdamParamState(grad_ema=(3, 3, 1, 32), grad_sq_ema=(3, 3, 1, 32))}, 'Conv_1': {'bias': _AdamParamState(grad_ema=(64,), grad_sq_ema=(64,)), 'kernel': _AdamParamState(grad_ema=(3, 3, 32, 64), grad_sq_ema=(3, 3, 32, 64))}, 'Dense_0': {'bias': _AdamParamState(grad_ema=(256,), grad_sq_ema=(256,)), 'kernel': _AdamParamState(grad_ema=(3136, 256), grad_sq_ema=(3136, 256))}, 'Dense_1': {'bias': _AdamParamState(grad_ema=(10,), grad_sq_ema=(10,)), 'kernel': _AdamParamState(grad_ema=(256, 10), grad_sq_ema=(256, 10))}}), target={'Conv_0': {'bias': (32,), 'kernel': (3, 3, 1, 32)}, 'Conv_1': {'bias': (64,), 'kernel': (3, 3, 32, 64)}, 'Dense_0': {'bias': (256,), 'kernel': (3136, 256)}, 'Dense_1': {'bias': (10,), 'kernel': (256, 10)}})
+  opt_state = (
+      opt_state[0]._replace(
+          mu=traverse_util.unflatten_dict(flat_mu, sep='/'),
+          nu=traverse_util.unflatten_dict(flat_nu, sep='/'),
+      ),
+  ) + opt_state[1:]
