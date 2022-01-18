@@ -1,7 +1,7 @@
 # How to Contribute
 
 Everyone can contribute to Flax, and we value everyone's contributions. 
-You can contribute in many more ways than just writing code. Anwering questions
+You can contribute in many more ways than just writing code. Answering questions
 on our [Discussions page](https://github.com/google/flax/discussions), helping
 each other, and improving our documentation are extremely valuable to our
 ecosystem.
@@ -14,7 +14,7 @@ This project follows
 
 ## Ways to contribute
 
-We welcome pull requests, in particular for those issues
+We welcome pull requests (PRs), in particular for those issues
 [marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open a Github Issue or
 Github Discussion to discuss your planned contribution.
 
@@ -30,9 +30,9 @@ Follow these steps to contribute code:
 
 2. Install Python >=3.6 and `svn` for running the tests (see below).
 
-3. (Optional) Create a virutal environment or a Docker container. See 
+3. (Optional) Create a virtual environment or a Docker container. See 
    [`dev/README.md`](https://github.com/google/flax/blob/main/dev/README.md)
-   for details on how to setup a Docker Contaner. To setup a virual environment,
+   for details on how to setup a Docker Container. To setup a virtual environment,
    run the following:
 
    ```bash
@@ -42,7 +42,7 @@ Follow these steps to contribute code:
   
    This ensures all your dependencies are installed in this environment.
 
-4. `pip` installing your fork from source. This allows you to modify the code
+4. `pip install` your fork from source. This allows you to modify the code
    and immediately test it out:
 
    ```bash
