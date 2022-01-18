@@ -52,8 +52,6 @@ comes with everything you need to start your research, including:
 
 * **Neural network API** (`flax.linen`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout
 
-* **Optimizers** (`flax.optim`): SGD, Momentum, Adam, LARS, Adagrad, LAMB, RMSprop
-
 * **Utilities and patterns**: replicated training, serialization and checkpointing, metrics, prefetching on device
 
 * **Educational examples** that work out of the box: MNIST, LSTM seq2seq, Graph Neural Networks, Sequence Tagging
