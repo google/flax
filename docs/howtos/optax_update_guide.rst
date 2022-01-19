@@ -41,7 +41,8 @@ for API details.
 The usage is very similar, with the difference that ``optax`` does not keep a
 copy of the ``params``, so they need to be passed around separately. Flax
 provides the utility :py:class:`~flax.training.train_state.TrainState` to store
-optimizer state, parameters, and other associated data in a single dataclass.
+optimizer state, parameters, and other associated data in a single dataclass
+(not used in code below).
 
 .. codediff::
   :title_left: ``flax.optim``
@@ -50,6 +51,8 @@ optimizer state, parameters, and other associated data in a single dataclass.
   @jax.jit
   def train_step(optimizer, batch):
     grads = jax.grad(loss)(optimizer.target, batch)
+
+
     return optimizer.apply_gradient(grads)
 
   optimizer_def = flax.optim.Momentum(
@@ -61,16 +64,16 @@ optimizer state, parameters, and other associated data in a single dataclass.
 
   ---
 
-  tx = optax.sgd(learning_rate, momentum)
-  params = variables['params']
-  opt_state = tx.init(params)
-
   @jax.jit
   def train_step(params, opt_state, batch):
     grads = jax.grad(loss)(params, batch)
     updates, opt_state = tx.update(grads, opt_state)
     params = optax.apply_updates(params, updates)
     return params, opt_state
+
+  tx = optax.sgd(learning_rate, momentum)
+  params = variables['params']
+  opt_state = tx.init(params)
 
   for batch in ds_train:
     params, opt_state = train_step(params, opt_state, batch)
@@ -79,10 +82,10 @@ optimizer state, parameters, and other associated data in a single dataclass.
 Composable Gradient Transformations
 -----------------------------------
 
-Note though that |optax.sgd()|_ is simply a wrapper for the sequential
-application of two gradient transformations. Instead of using this alias, it is
-common to use |optax.chain()|_ to combine multiple of these generic building
-blocks.
+The function |optax.sgd()|_ used in the code snippet above is simply a wrapper
+for the sequential application of two gradient transformations. Instead of using
+this alias, it is common to use |optax.chain()|_ to combine multiple of these
+generic building blocks.
 
 .. |optax.sgd()| replace:: ``optax.sgd()``
 .. _optax.sgd(): https://optax.readthedocs.io/en/latest/api.html#optax.sgd
@@ -99,6 +102,8 @@ blocks.
 
   ---
 
+  #
+
   tx = optax.chain(
       # 1. Step: keep a trace of past updates and add to gradients. 
       optax.trace(decay=momentum),
@@ -112,10 +117,13 @@ blocks.
 Weight Decay
 ------------
 
-Some of Flax's optimizers also include a weight decay. In Optax, the weight
-decay can be added as another "gradient transformation"
+Some of Flax's optimizers also include a weight decay. In Optax, some optimizers
+also have a weight decay parameter (such as |optax.adamw()|_), and to others the
+weight decay can be added as another "gradient transformation"
 |optax.add_decayed_weights()|_ that adds an update derived from the parameters.
 
+.. |optax.adamw()| replace:: ``optax.adamw()``
+.. _optax.adamw(): https://optax.readthedocs.io/en/latest/api.html#optax.adamw
 .. |optax.add_decayed_weights()| replace:: ``optax.add_decayed_weights()``
 .. _optax.add_decayed_weights(): https://optax.readthedocs.io/en/latest/api.html#optax.add_decayed_weights
 
@@ -185,7 +193,7 @@ Read more about learning rate schedules in the :doc:`lr_schedule` guide.
 Read more about schedules defined in Optax under `Optimizer Schedules
 <https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules>`_. the
 standard optimizers (like ``optax.adam()``, ``optax.sgd()`` etc.) also accept a
-learning rate schedule as a parameter for `learning_rate`.
+learning rate schedule as a parameter for ``learning_rate``.
 
 
 .. |optax.scale_by_schedule()| replace:: ``optax.scale_by_schedule()``
@@ -209,14 +217,15 @@ learning rate schedule as a parameter for `learning_rate`.
       optax.scale_by_schedule(lambda step: -schedule(step)),
   )
 
-Multiple Optimizers or only updating a subset of parameters
--------------------
+Multiple Optimizers / Updating a Subset of Parameters
+-----------------------------------------------------
 
-In Flax, Traversals are used to specify which parameters should be updated by an optimizer. And you can combine Traversals using :py:class:`flax.optim.MultiOptimizer` to apply different optimizers on different parameters. The equivalent in Optax is `optax.masked()` and `optax.chain()`.
-optimizers and only apply them to a part of the params pytree. Optax provides
-an efficient masking mechanism to achieve the same goal.
+In Flax, traversals are used to specify which parameters should be updated by an
+optimizer. And you can combine traversals using
+:py:class:`flax.optim.MultiOptimizer` to apply different optimizers on different
+parameters. The equivalent in Optax is |optax.masked()|_ and |optax.chain()|_.
 
-Note that below example is using :py:mod:`flax.traverse_util` to create the
+Note that the example below is using :py:mod:`flax.traverse_util` to create the
 boolean masks required by |optax.masked()|_ - alternatively you could also
 create them manually, or use |optax.multi_transform()|_ that takes a
 multivalent pytree to specify gradient transformations.
@@ -239,8 +248,11 @@ that is not readily available outside the outer mask).
 
   kernels = flax.traverse_util.ModelParamTraversal(lambda p, _: 'kernel' in p)
   biases = flax.traverse_util.ModelParamTraversal(lambda p, _: 'bias' in p)
+
   kernel_opt = flax.optim.Momentum(learning_rate, momentum)
   bias_opt = flax.optim.Momentum(learning_rate * 0.1, momentum)
+
+
   optimizer = flax.optim.MultiOptimizer(
       (kernels, kernel_opt),
       (biases, bias_opt)
