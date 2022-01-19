@@ -1,5 +1,10 @@
 Learning Rate Scheduling
 =============================
+
+Note: See "Learning Rate Schedules" in :doc:`optax_update_guide` for
+implementing learning rate schedules using ``optax``.
+
+
 The learning rate is considered one of the most important hyperparameters for
 training deep neural networks, but choosing it can be quite hard.
 To simplify this, one can use a so-called *cyclic learning rate*, which
