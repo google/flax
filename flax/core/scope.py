@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, O
 from . import tracers
 from flax import errors
 from flax import traceback_util
+from flax import struct
+from flax import config
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
@@ -71,9 +73,48 @@ VariableDict = Mapping[str, Collection]
 FrozenVariableDict = FrozenDict[str, Collection]
 MutableVariableDict = Dict[str, MutableCollection]
 
+PRNGFoldable = Union[int, str]
 
-def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
-  """Folds a string into a jax.random.PRNGKey using its SHA-1 hash.
+
+class LazyRng(struct.PyTreeNode):
+  """Wrapper around JAX PRNGKey that lazily maintains a tuple of static data to be folded into the rng."""
+  rng: PRNGKey
+  suffix: Tuple[PRNGFoldable, ...] = struct.field(pytree_node=False)
+
+  def as_jax_rng(self) -> PRNGKey:
+    return _fold_in_static(self.rng, self.suffix)
+
+  @staticmethod
+  def create(rng: Union['LazyRng', PRNGKey],
+             *suffix: PRNGFoldable) -> 'LazyRng':
+    if not config.flax_lazy_rng:
+      if isinstance(rng, LazyRng):
+        assert rng.suffix == ()
+        rng = rng.rng
+      return LazyRng(_legacy_rng_fold_in(rng, suffix), ())
+    if isinstance(rng, LazyRng):
+      return LazyRng(rng.rng, rng.suffix + suffix)
+    else:
+      return LazyRng(rng, suffix)
+
+
+def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
+  for x in data:
+    if isinstance(x, str):
+      m = hashlib.sha1()
+      m.update(x.encode('utf-8'))
+      d = m.digest()
+      hash_int = int.from_bytes(d[:4], byteorder='big')
+      rng = random.fold_in(rng, jnp.uint32(hash_int))
+    elif isinstance(x, int):
+      rng = random.fold_in(rng, x)
+    else:
+      raise ValueError(f'Expected int or string, got: {x}')
+  return rng
+
+
+def _fold_in_static(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
+  """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
   keys in parallel that are independent of each other.
@@ -85,8 +126,16 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   Returns:
    The newly generated PRNG key.
   """
+  if len(data) == 0:
+    return rng
   m = hashlib.sha1()
-  m.update(data.encode('utf-8'))
+  for x in data:
+    if isinstance(x, str):
+      m.update(x.encode('utf-8'))
+    elif isinstance(x, int):
+      m.update(x.to_bytes((x.bit_length() + 7) // 8, byteorder='big'))
+    else:
+      raise ValueError(f'Expected int or string, got: {x}')
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
   return random.fold_in(rng, jnp.uint32(hash_int))
@@ -314,7 +363,7 @@ class Scope:
 
   def __init__(self,
                variables: MutableVariableDict,
-               rngs: Optional[Dict[str, PRNGKey]] = None,
+               rngs: Optional[Dict[str, Union[PRNGKey, LazyRng]]] = None,
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
                parent: Optional['Scope'] = None,
@@ -329,11 +378,12 @@ class Scope:
       parent: The parent scope.
       path: The path in the variable tree from the root scope to this scope.
     """
+    rngs = {k: LazyRng.create(v) for k, v in rngs.items()} if rngs else {}
     self._variables = variables
     self.parent = parent
     self.name = name
     self.path = tuple(path)
-    self.rngs = rngs if rngs else {}
+    self.rngs = rngs
     self.mutable = mutable
 
     self._root = parent.root if parent else None
@@ -471,7 +521,7 @@ class Scope:
       name = self.default_name(prefix)
     if not reuse or name not in self.reservations:
       self.reserve(name)
-    rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
+    rngs = {key: LazyRng.create(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
       rng_counters = self.rng_counters.get(rng_key)
@@ -571,7 +621,7 @@ class Scope:
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[name] += 1
-    return random.fold_in(self.rngs[name], self.rng_counters[name])
+    return LazyRng.create(self.rngs[name], self.rng_counters[name]).as_jax_rng()
 
   def get_variable(self, col: str, name: str, default: T = None) -> T:
     """Retrieves the value of a Variable.

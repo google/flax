@@ -2,6 +2,7 @@
 
 export JAX_NUMPY_RANK_PROMOTION=raise
 export FLAX_PROFILE=1
+export FLAX_LAZY_RNG=1
 
 PYTEST_OPTS=
 for flag in "$@"; do
