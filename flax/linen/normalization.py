@@ -37,6 +37,13 @@ def _canonicalize_axes(rank: int, axes: Axes) -> Iterable[int]:
     axes = (axes,)
   return tuple(set([rank + axis if axis < 0 else axis for axis in axes]))
 
+def _abs_sq(x):
+  """Computes the elementwise square of the absolute value |x|^2."""
+  if jnp.iscomplexobj(x):
+    return lax.square(lax.real(x)) + lax.square(lax.imag(x))
+  else:
+    return lax.square(x)
+
 
 def _compute_stats(x: Array, axes: Axes,
                    axis_name: Optional[str] = None,
@@ -46,15 +53,17 @@ def _compute_stats(x: Array, axes: Axes,
   This implementation takes care of a few important details:
   - Computes in float32 precision for half precision inputs
   -  mean and variance is computable in a single XLA fusion,
-    by using Var = E[x^2] - E[x]^2 instead of Var = E[(x - E[x])^2]).
+    by using Var = E[|x|^2] - |E[x]|^2 instead of Var = E[|x - E[x]|^2]).
   - Clips negative variances to zero which can happen due to
     roundoff errors. This avoids downstream NaNs.
   - Supports averaging across a parallel axis and subgroups of a parallel axis
     with a single `lax.pmean` call to avoid latency.
   """
-  x = jnp.asarray(x, jnp.float32)
+  # promote x to at least float32, this avoids half precision computation
+  # but preserves double or complex floating points
+  x = jnp.asarray(x, jnp.promote_types(jnp.float32, jnp.result_type(x)))
   mean = jnp.mean(x, axes)
-  mean2 = jnp.mean(lax.square(x), axes)
+  mean2 = jnp.mean(_abs_sq(x), axes)
   if axis_name is not None:
     concatenated_mean = jnp.concatenate([mean, mean2])
     mean, mean2 = jnp.split(
@@ -62,9 +71,9 @@ def _compute_stats(x: Array, axes: Axes,
             concatenated_mean,
             axis_name=axis_name,
             axis_index_groups=axis_index_groups), 2)
-  # mean2 - lax.square(mean) is not guaranteed to be non-negative due
+  # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
   # to floating point round-off errors.
-  var = jnp.maximum(0., mean2 - lax.square(mean))
+  var = jnp.maximum(0., mean2 - _abs_sq(mean))
   return mean, var
 
 

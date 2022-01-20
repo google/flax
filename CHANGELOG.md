@@ -9,7 +9,8 @@ vNext
 - 
 - 
 - 
-- 
+- linen Normalization layers no longer downcast double and complex floats to float32
+  when computing the mean and variance.
 - 
 - 
 - 
