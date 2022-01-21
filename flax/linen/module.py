@@ -1047,7 +1047,7 @@ class Module(metaclass=ModuleMeta):
             variables: VariableDict,
             *args,
             rngs: Optional[RNGSequences] = None,
-            method: Callable[..., Any] = None,
+            method: Optional[Callable[..., Any]] = None,
             mutable: CollectionFilter = False,
             capture_intermediates: Union[bool, Callable[['Module', str],
                                                         bool]] = False,

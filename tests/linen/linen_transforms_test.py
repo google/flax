@@ -1240,6 +1240,42 @@ class TransformTest(absltest.TestCase):
     vs = scanbody().init(k, x)
     y = scanbody().apply(vs, x)
 
+  def test_compact_aliasing_collision(self):
+    class Foo(nn.Module):
+      m1: nn.Module
+      m2: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        x = self.m2(self.m1(x))
+        return x
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        dense = nn.Dense(2)
+        x = nn.jit(Foo)(dense, dense)(x)
+        return x
+    k = random.PRNGKey(0)
+    x = jnp.zeros((2, 2))
+    _ = Bar().init(k, x)
+
+
+  def test_compact_aliasing_collision_arg_and_attrib(self):
+    class Foo(nn.Module):
+      m1: nn.Module
+      @nn.compact
+      def __call__(self, x, m2):
+        x = m2(self.m1(x))
+        return x
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        dense = nn.Dense(2)
+        x = nn.jit(Foo)(dense)(x, dense)
+        return x
+    k = random.PRNGKey(0)
+    x = jnp.zeros((2, 2))
+    _ = Bar().init(k, x)
+
 
 if __name__ == '__main__':
   absltest.main()

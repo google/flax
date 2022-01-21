@@ -464,7 +464,7 @@ class Scope:
       rewind_rngs: if true, reset the RNG counter of this scope.
 
     Returns:
-      A rewound version of this scope, which means reservations and children are
+      A rewound version of this scope, which means reservations are
       emptied, and the rng counter is optionally rewound.
     """
     self._check_valid()
