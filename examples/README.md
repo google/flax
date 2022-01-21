@@ -77,7 +77,7 @@ official Flax example, and start from there.
 
 |             Link             |       Author       |             Task type             |                               Reference                               |
 | ---------------------------- | ------------------ | --------------------------------- | --------------------------------------------------------------------- |
-| [matthias-wright/flaxmodels] | [@matthias-wright] | Various                           | Various                                                               |
+| [matthias-wright/flaxmodels] | [@matthias-wright] | Various                           | GPT-2, ResNet, StyleGAN-2, VGG, ...                                   |
 | [google/vision_transformer]  | [@andsteing]       | Image classification, fine-tuning | https://arxiv.org/abs/2010.11929 and https://arxiv.org/abs/2105.01601 |
 | [JAX-RL]                     | [@henry-prior]     | Reinforcement learning            | N/A                                                                   |
 | [DCGAN] Colab                | [@bkkaggle]        | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
