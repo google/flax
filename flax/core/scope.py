@@ -18,6 +18,8 @@ import contextlib
 import functools
 import hashlib
 import dataclasses
+
+import typing
 from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
 
 from . import tracers
@@ -113,7 +115,7 @@ def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
   return rng
 
 
-def _fold_in_static(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
+def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNGKey:
   """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
