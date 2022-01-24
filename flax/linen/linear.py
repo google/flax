@@ -18,7 +18,7 @@ import abc
 from dataclasses import field
 
 from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
-                    Union)
+                    Type, Union)
 
 from flax.linen.module import Module, compact
 from flax.linen.initializers import lecun_normal, variance_scaling, zeros
@@ -32,8 +32,11 @@ import numpy as np
 
 PRNGKey = Any
 Shape = Tuple[int, ...]
-Dtype = Any  # this could be a real type?
+InexactDType = Type[jnp.inexact]
+NumericDType = Type[jnp.number]
+GenericDType = Type[np.generic]
 Array = Any
+Initializer = Callable[[PRNGKey, Shape, InexactDType], Array]
 
 
 default_kernel_init = lecun_normal()
@@ -51,6 +54,38 @@ def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
     return (x,)
 
 
+def _canonicalize_dtypes(
+    input_dtype: InexactDType,
+    param_dtype: Optional[InexactDType],
+    computation_dtype: Optional[InexactDType]) -> Tuple[InexactDType,
+                                                        InexactDType]:
+  returned_param_dtype = input_dtype if param_dtype is None else param_dtype
+  dtype = (jnp.result_type(input_dtype, returned_param_dtype)
+           if computation_dtype is None else computation_dtype)
+
+  assert jnp.issubdtype(input_dtype, jnp.inexact)
+  if jnp.issubdtype(input_dtype, jnp.complexfloating):
+    assert jnp.issubdtype(returned_param_dtype, jnp.complexfloating)
+    assert jnp.issubdtype(dtype, jnp.complexfloating)
+  return returned_param_dtype, dtype
+
+
+def _canonicalize_numeric_dtypes(
+    input_dtype: NumericDType,
+    param_dtype: Optional[NumericDType],
+    computation_dtype: Optional[NumericDType]) -> Tuple[NumericDType,
+                                                        NumericDType]:
+  returned_param_dtype = input_dtype if param_dtype is None else param_dtype
+  dtype = (jnp.result_type(input_dtype, returned_param_dtype)
+           if computation_dtype is None else computation_dtype)
+
+  assert jnp.issubdtype(input_dtype, jnp.number)
+  if jnp.issubdtype(input_dtype, jnp.complexfloating):
+    assert jnp.issubdtype(returned_param_dtype, jnp.complexfloating)
+    assert jnp.issubdtype(dtype, jnp.complexfloating)
+  return returned_param_dtype, dtype
+
+
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
 
@@ -60,8 +95,8 @@ class DenseGeneral(Module):
       (-2, -1) will apply the transformation to the last two axes.
     batch_dims: tuple with batch axes.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
     precision: numerical precision of the computation see `jax.lax.Precision`
@@ -71,10 +106,10 @@ class DenseGeneral(Module):
   axis: Union[int, Sequence[int]] = -1
   batch_dims: Sequence[int] = ()
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = zeros
   precision: Optional[lax.Precision] = None
 
   @compact
@@ -87,6 +122,9 @@ class DenseGeneral(Module):
     Returns:
       The transformed input.
     """
+    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
+                                              self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
     features = _canonicalize_tuple(self.features)
     axis = _canonicalize_tuple(self.axis)
     batch_dims = _canonicalize_tuple(self.batch_dims)
@@ -96,15 +134,13 @@ class DenseGeneral(Module):
         raise ValueError('batch_dims %s must be consecutive leading '
                          'dimensions starting from 0.' % str(batch_dims))
 
-    inputs = jnp.asarray(inputs, self.dtype)
-
     ndim = inputs.ndim
     n_batch_dims = len(batch_dims)
     axis = _normalize_axes(axis, ndim)
     batch_dims = _normalize_axes(batch_dims, ndim)
     n_axis, n_features = len(axis), len(features)
 
-    def kernel_init_wrap(rng, shape, dtype=jnp.float32):
+    def kernel_init_wrap(rng, shape, dtype):
       size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
       flat_shape = (np.prod(shape[n_batch_dims:n_axis + n_batch_dims]),
                     np.prod(shape[-n_features:]),)
@@ -119,8 +155,8 @@ class DenseGeneral(Module):
         for ax in range(inputs.ndim) if ax not in axis)
     kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
     kernel = self.param('kernel', kernel_init_wrap, batch_shape + kernel_shape,
-                        self.param_dtype)
-    kernel = jnp.asarray(kernel, self.dtype)
+                        param_dtype)
+    kernel = jnp.asarray(kernel, dtype)
 
     batch_ind = tuple(range(n_batch_dims))
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
@@ -130,7 +166,7 @@ class DenseGeneral(Module):
                           precision=self.precision)
     # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
-      def bias_init_wrap(rng, shape, dtype=jnp.float32):
+      def bias_init_wrap(rng, shape, dtype):
         size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
         flat_shape = (np.prod(shape[-n_features:]),)
         bias = jnp.concatenate([self.bias_init(rng, flat_shape, dtype)
@@ -138,10 +174,10 @@ class DenseGeneral(Module):
         return jnp.reshape(bias, shape)
 
       bias = self.param('bias', bias_init_wrap, batch_shape + features,
-                        self.param_dtype)
+                        param_dtype)
+      bias = jnp.asarray(bias, dtype)
       # expand bias shape to broadcast bias over batch dims.
       bias = jnp.reshape(bias, expanded_batch_shape + features)
-      bias = jnp.asarray(bias, self.dtype)
       out = out + bias
     return out
 
@@ -152,8 +188,8 @@ class Dense(Module):
   Attributes:
     features: the number of output features.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
     kernel_init: initializer function for the weight matrix.
@@ -161,11 +197,11 @@ class Dense(Module):
   """
   features: int
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
   precision: Optional[lax.Precision] = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -177,19 +213,21 @@ class Dense(Module):
     Returns:
       The transformed input.
     """
-    inputs = jnp.asarray(inputs, self.dtype)
+    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
+                                              self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
     kernel = self.param('kernel',
                         self.kernel_init,
                         (inputs.shape[-1], self.features),
                         self.param_dtype)
-    kernel = jnp.asarray(kernel, self.dtype)
+    kernel = jnp.asarray(kernel, dtype)
     y = lax.dot_general(inputs, kernel,
                         (((inputs.ndim - 1,), (0,)), ((), ())),
                         precision=self.precision)
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,),
                         self.param_dtype)
-      bias = jnp.asarray(bias, self.dtype)
+      bias = jnp.asarray(bias, dtype)
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
@@ -218,7 +256,8 @@ class _Conv(Module):
       high)` integer pairs that give the padding to apply before and after each
       spatial dimension.
     input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs` (default: 1).
+      dilation factor to apply in each spatial dimension of `inputs` (default:
+      1).
       Convolution with input dilation `d` is equivalent to transposed
       convolution with stride `d`.
     kernel_dilation: an integer or a sequence of `n` integers, giving the
@@ -228,8 +267,8 @@ class _Conv(Module):
     feature_group_count: integer, default 1. If specified divides the input
       features into groups.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
     kernel_init: initializer for the convolutional kernel.
@@ -243,11 +282,11 @@ class _Conv(Module):
   kernel_dilation: Union[None, int, Sequence[int]] = 1
   feature_group_count: int = 1
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  dtype: Optional[NumericDType] = None
+  param_dtype: Optional[NumericDType] = None
   precision: Optional[lax.Precision] = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = zeros
 
   @property
   @abc.abstractmethod
@@ -276,8 +315,10 @@ class _Conv(Module):
     Returns:
       The convolved data.
     """
-
-    inputs = jnp.asarray(inputs, self.dtype)
+    param_dtype, dtype = _canonicalize_numeric_dtypes(inputs.dtype,
+                                                      self.param_dtype,
+                                                      self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
 
     if isinstance(self.kernel_size, int):
       raise TypeError('The kernel size must be specified as a'
@@ -350,8 +391,8 @@ class _Conv(Module):
       kernel_shape = conv_output_shape[1:-1] + (
           np.prod(kernel_size) * in_features, self.features)
 
-    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
-    kernel = jnp.asarray(kernel, self.dtype)
+    kernel = self.param('kernel', self.kernel_init, kernel_shape, param_dtype)
+    kernel = jnp.asarray(kernel, dtype)
 
     if self.shared_weights:
       y = lax.conv_general_dilated(
@@ -386,8 +427,8 @@ class _Conv(Module):
         # One bias weight per output entry, unshared betwen pixels.
         bias_shape = y.shape[1:]
 
-      bias = self.param('bias', self.bias_init, bias_shape, self.param_dtype)
-      bias = jnp.asarray(bias, self.dtype)
+      bias = self.param('bias', self.bias_init, bias_shape, param_dtype)
+      bias = jnp.asarray(bias, dtype)
       bias = bias.reshape((1,) * (y.ndim - bias.ndim) + bias.shape)
       y += bias
 
@@ -430,8 +471,8 @@ class ConvTranspose(Module):
       kernel. Convolution with kernel dilation is also known as 'atrous
       convolution'.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
     kernel_init: initializer for the convolutional kernel.
@@ -443,11 +484,11 @@ class ConvTranspose(Module):
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  dtype: Optional[NumericDType] = None
+  param_dtype: Optional[NumericDType] = None
   precision: Optional[lax.Precision] = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -464,7 +505,10 @@ class ConvTranspose(Module):
     Returns:
       The convolved data.
     """
-    inputs = jnp.asarray(inputs, self.dtype)
+    param_dtype, dtype = _canonicalize_numeric_dtypes(inputs.dtype,
+                                                      self.param_dtype,
+                                                      self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
 
     kernel_size: Tuple[int, ...]
     if isinstance(self.kernel_size, int):
@@ -482,8 +526,8 @@ class ConvTranspose(Module):
 
     in_features = inputs.shape[-1]
     kernel_shape = kernel_size + (in_features, self.features)
-    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
-    kernel = jnp.asarray(kernel, self.dtype)
+    kernel = self.param('kernel', self.kernel_init, kernel_shape, param_dtype)
+    kernel = jnp.asarray(kernel, dtype)
 
     padding_lax: Union[str, Sequence[Tuple[int, int]]]
     if self.padding == 'CIRCULAR':
@@ -532,8 +576,8 @@ class ConvTranspose(Module):
     if is_single_input:
       y = jnp.squeeze(y, axis=0)
     if self.use_bias:
-      bias = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
-      bias = jnp.asarray(bias, self.dtype)
+      bias = self.param('bias', self.bias_init, (self.features,), param_dtype)
+      bias = jnp.asarray(bias, dtype)
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
 
@@ -549,15 +593,15 @@ class Embed(Module):
   Attributes:
     num_embeddings: number of embeddings.
     features: number of feature dimensions for each embedding.
-    dtype: the dtype of the embedding vectors (default: float32).
+    dtype: the dtype of the embedding vectors (default: None).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     embedding_init: embedding initializer.
   """
   num_embeddings: int
   features: int
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
-  embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
+  dtype: Optional[GenericDType] = None
+  param_dtype: GenericDType = jnp.float32
+  embedding_init: Initializer = default_embed_init
 
   embedding: Array = field(init=False)
 
@@ -577,10 +621,11 @@ class Embed(Module):
       Output which is embedded input data.  The output shape follows the input,
       with an additional `features` dimension appended.
     """
+    dtype = self.param_dtype if self.dtype is None else self.dtype
     if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
     # Use take because fancy indexing numpy arrays with JAX indices does not work correctly.
-    embedding = jnp.asarray(self.embedding, self.dtype)
+    embedding = jnp.asarray(self.embedding, dtype)
     return jnp.take(embedding, inputs, axis=0)
 
   def attend(self, query: Array) -> Array:
@@ -595,6 +640,7 @@ class Embed(Module):
       Commonly used for weight-sharing between embeddings and logit transform
       in NLP models.
     """
-    query = jnp.asarray(query, self.dtype)
-    embedding = jnp.asarray(self.embedding, self.dtype)
+    dtype = self.param_dtype if self.dtype is None else self.dtype
+    query = jnp.asarray(query, dtype)
+    embedding = jnp.asarray(self.embedding, dtype)
     return jnp.dot(query, embedding.T)

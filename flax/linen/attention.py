@@ -15,23 +15,42 @@
 """Attention core modules for Flax."""
 
 from functools import partial
-from typing import (Any, Callable, Tuple, Optional)
+from typing import Any, Callable, Tuple, Type, Optional
 
 import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
 import numpy as np
+from typing_extensions import Protocol
 
-from flax.linen.linear import default_kernel_init
-from flax.linen.linear import DenseGeneral
-from flax.linen.module import Module, compact, merge_param
 from flax.linen.initializers import zeros
+from flax.linen.linear import DenseGeneral
+from flax.linen.linear import _canonicalize_dtypes
+from flax.linen.linear import default_kernel_init
+from flax.linen.module import Module, compact, merge_param
 
 PRNGKey = Any
-Shape = Tuple[int]
-Dtype = Any
+Shape = Tuple[int, ...]
+InexactDType = Type[jnp.inexact]
 Array = Any
+Initializer = Callable[[PRNGKey, Shape, InexactDType], Array]
+
+
+class AttentionFunction(Protocol):
+  @staticmethod
+  def __call__(query: Array,
+               key: Array,
+               value: Array,
+               bias: Optional[Array] = None,
+               mask: Optional[Array] = None,
+               broadcast_dropout: bool = True,
+               dropout_rng: Optional[PRNGKey] = None,
+               dropout_rate: float = 0.,
+               deterministic: bool = False,
+               dtype: InexactDType = jnp.float32,
+               precision: Optional[lax.Precision] = None) -> Array:
+    ...
 
 
 def dot_product_attention_weights(query: Array,
@@ -42,7 +61,7 @@ def dot_product_attention_weights(query: Array,
                                   dropout_rng: Optional[PRNGKey] = None,
                                   dropout_rate: float = 0.,
                                   deterministic: bool = False,
-                                  dtype: Dtype = jnp.float32,
+                                  dtype: InexactDType = jnp.float32,
                                   precision: Optional[lax.Precision] = None):
   """Computes dot-product attention weights given query and key.
 
@@ -109,7 +128,7 @@ def dot_product_attention_weights(query: Array,
       keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
     else:
       keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
-    multiplier = (keep.astype(attn_weights.dtype) /
+    multiplier = (keep.astype(dtype) /
                   jnp.asarray(keep_prob, dtype=dtype))
     attn_weights = attn_weights * multiplier
 
@@ -125,8 +144,8 @@ def dot_product_attention(query: Array,
                           dropout_rng: Optional[PRNGKey] = None,
                           dropout_rate: float = 0.,
                           deterministic: bool = False,
-                          dtype: Dtype = jnp.float32,
-                          precision: Optional[lax.Precision] = None):
+                          dtype: InexactDType = jnp.float32,
+                          precision: Optional[lax.Precision] = None) -> Array:
   """Computes dot-product attention given query, key, and value.
 
   This is the core function for applying attention based on
@@ -179,52 +198,27 @@ def dot_product_attention(query: Array,
                     precision=precision)
 
 
-class MultiHeadDotProductAttention(Module):
-  """Multi-head dot-product attention.
-
-    Attributes:
-      num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
-        should be divisible by the number of heads.
-      dtype: the dtype of the computation (default: float32)
-      param_dtype: the dtype passed to parameter initializers (default: float32).
-      qkv_features: dimension of the key, query, and value.
-      out_features: dimension of the last projection
-      broadcast_dropout: bool: use a broadcasted dropout along batch dims.
-      dropout_rate: dropout rate
-      deterministic: if false, the attention weight is masked randomly
-        using dropout, whereas if true, the attention weights
-        are deterministic.
-      precision: numerical precision of the computation see `jax.lax.Precision`
-        for details.
-      kernel_init: initializer for the kernel of the Dense layers.
-      bias_init: initializer for the bias of the Dense layers.
-      use_bias: bool: whether pointwise QKVO dense transforms use bias.
-      attention_fn: dot_product_attention or compatible function. Accepts
-        query, key, value, and returns output of shape
-        `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
-      decode: whether to prepare and use an autoregressive cache.
-  """
+class _BaseMultiHeadDotProductAttention(Module):
   num_heads: int
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None
   broadcast_dropout: bool = True
   dropout_rate: float = 0.
   deterministic: Optional[bool] = None
   precision: Optional[lax.Precision] = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = zeros
   use_bias: bool = True
-  attention_fn: Callable[[Array, Array, Array], Array] = dot_product_attention
+  attention_fn: AttentionFunction = dot_product_attention
   decode: bool = False
 
-  @compact
-  def __call__(self,
-               inputs_q: Array,
-               inputs_kv: Array,
-               mask: Optional[Array] = None,
-               deterministic: Optional[bool] = None):
+  def _apply(self,
+             inputs_q: Array,
+             inputs_kv: Array,
+             mask: Optional[Array] = None,
+             deterministic: Optional[bool] = None):
     """Applies multi-head dot product attention on the input data.
 
     Projects the inputs into multi-headed query, key, and value vectors,
@@ -246,6 +240,10 @@ class MultiHeadDotProductAttention(Module):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
+    param_dtype, dtype = _canonicalize_dtypes(jnp.result_type(inputs_q,
+                                                              inputs_kv),
+                                              self.param_dtype,
+                                              self.dtype)
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (
@@ -254,8 +252,8 @@ class MultiHeadDotProductAttention(Module):
 
     dense = partial(DenseGeneral,
                     axis=-1,
-                    dtype=self.dtype,
-                    param_dtype=self.param_dtype,
+                    dtype=dtype,
+                    param_dtype=param_dtype,
                     features=(self.num_heads, head_dim),
                     kernel_init=self.kernel_init,
                     bias_init=self.bias_init,
@@ -323,7 +321,7 @@ class MultiHeadDotProductAttention(Module):
         dropout_rate=self.dropout_rate,
         broadcast_dropout=self.broadcast_dropout,
         deterministic=m_deterministic,
-        dtype=self.dtype,
+        dtype=dtype,
         precision=self.precision)  # pytype: disable=wrong-keyword-args
     # back to the original inputs dimensions
     out = DenseGeneral(features=features,
@@ -331,30 +329,64 @@ class MultiHeadDotProductAttention(Module):
                        kernel_init=self.kernel_init,
                        bias_init=self.bias_init,
                        use_bias=self.use_bias,
-                       dtype=self.dtype,
-                       param_dtype=self.param_dtype,
+                       dtype=dtype,
+                       param_dtype=param_dtype,
                        precision=self.precision,
                        name='out')(x)
     return out
 
 
-class SelfAttention(MultiHeadDotProductAttention):
-  """Self-attention special case of multi-head dot-product attention."""
+class MultiHeadDotProductAttention(_BaseMultiHeadDotProductAttention):
+  """Multi-head dot-product attention.
 
+    Attributes:
+      num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
+        should be divisible by the number of heads.
+      dtype: the dtype of the computation (default: float32)
+      param_dtype: the dtype passed to parameter initializers (default: float32).
+      qkv_features: dimension of the key, query, and value.
+      out_features: dimension of the last projection
+      broadcast_dropout: bool: use a broadcasted dropout along batch dims.
+      dropout_rate: dropout rate
+      deterministic: if false, the attention weight is masked randomly
+        using dropout, whereas if true, the attention weights
+        are deterministic.
+      precision: numerical precision of the computation see `jax.lax.Precision`
+        for details.
+      kernel_init: initializer for the kernel of the Dense layers.
+      bias_init: initializer for the bias of the Dense layers.
+      use_bias: bool: whether pointwise QKVO dense transforms use bias.
+      attention_fn: dot_product_attention or compatible function. Accepts
+        query, key, value, and returns output of shape
+        `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
+      decode: whether to prepare and use an autoregressive cache.
+  """
+  @compact
+  def __call__(self,
+               inputs_q: Array,
+               inputs_kv: Array,
+               mask: Optional[Array] = None,
+               deterministic: Optional[bool] = None):
+    return self._apply(inputs_q, inputs_kv, mask, deterministic=deterministic)
+
+
+class SelfAttention(_BaseMultiHeadDotProductAttention):
+  """Self-attention special case of multi-head dot-product attention."""
   @compact
   def __call__(self, inputs_q: Array, mask: Optional[Array] = None,
                deterministic: Optional[bool] = None):
-    return super().__call__(inputs_q, inputs_q, mask, deterministic=deterministic)
+    return self._apply(inputs_q, inputs_q, mask, deterministic=deterministic)
 
 
 # mask-making utility functions
 
 
-def make_attention_mask(query_input: Array,
-                        key_input: Array,
-                        pairwise_fn: Callable[..., Any] = jnp.multiply,
-                        extra_batch_dims: int = 0,
-                        dtype: Dtype = jnp.float32):
+def make_attention_mask(
+    query_input: Array,
+    key_input: Array,
+    pairwise_fn: Callable[[Array, Array], Array] = jnp.multiply,
+    extra_batch_dims: int = 0,
+    dtype: InexactDType = jnp.float32):
   """Mask-making helper for attention weights.
 
   In case of 1d inputs (i.e., `[batch..., len_q]`, `[batch..., len_kv]`, the
@@ -381,7 +413,7 @@ def make_attention_mask(query_input: Array,
 
 def make_causal_mask(x: Array,
                      extra_batch_dims: int = 0,
-                     dtype: Dtype = jnp.float32) -> Array:
+                     dtype: InexactDType = jnp.float32) -> Array:
   """Make a causal mask for self-attention.
 
   In case of 1d inputs (i.e., `[batch..., len]`, the self-attention weights
@@ -403,7 +435,7 @@ def make_causal_mask(x: Array,
 
 
 def combine_masks(*masks: Optional[Array],
-                  dtype: Dtype = jnp.float32) -> Array:
+                  dtype: InexactDType = jnp.float32) -> Array:
   """Combine attention masks.
 
   Args:

@@ -40,8 +40,8 @@ from jax import random
 import numpy as np
 
 PRNGKey = Any
-Shape = Tuple[int]
-Dtype = Any  # this could be a real type?
+Shape = Tuple[int, ...]
+Dtype = Any
 Array = Any
 
 

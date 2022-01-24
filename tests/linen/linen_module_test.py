@@ -657,8 +657,8 @@ class ModuleTest(absltest.TestCase):
         # attributes
         features = 3
         use_bias = True
-        dtype = float32
-        param_dtype = float32
+        dtype = None
+        param_dtype = None
         precision = None
         kernel_init = init
         bias_init = zeros
@@ -667,8 +667,8 @@ class ModuleTest(absltest.TestCase):
         # attributes
         features = 2
         use_bias = True
-        dtype = float32
-        param_dtype = float32
+        dtype = None
+        param_dtype = None
         precision = None
         kernel_init = init
         bias_init = zeros

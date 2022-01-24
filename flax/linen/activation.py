@@ -67,8 +67,11 @@ class PReLU(Module):
     Returns:
       The transformed input.
     """
+    dtype = inputs.dtype
+    assert jnp.issubdtype(dtype, jnp.floating)
     negative_slope = self.param(
       'negative_slope',
-      lambda k: jnp.asarray(self.negative_slope_init, jnp.float32)
+      lambda k: jnp.asarray(self.negative_slope_init, dtype)
     )
-    return jnp.where(inputs >= 0, inputs, jnp.asarray(negative_slope, inputs.dtype) * inputs)
+    assert negative_slope.shape == ()
+    return jnp.where(inputs >= 0, inputs, negative_slope * inputs)
