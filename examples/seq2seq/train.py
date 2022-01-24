@@ -91,6 +91,166 @@ def get_train_state(rng, ctable):
       apply_fn=model.apply, params=params, tx=tx)
   return state
 
+def mask_sequences(sequence_batch, lengths):
+  """Set positions beyond the length of each sequence to 0."""
+  return sequence_batch * (
+      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1])[np.newaxis])
+
+
+class EncoderLSTM(nn.Module):
+  def setup(self):
+    self.lstm = nn.LSTMCell()
+
+  @functools.partial(
+      nn.scan,
+      variable_broadcast='params',
+      in_axes=1,
+      out_axes=1,
+      split_rngs={'params': False})
+  def __call__(self, carry, x):
+    lstm_carry, is_eos = carry
+    new_lstm_carry, y = self.lstm(lstm_carry, x)
+    # Pass forward the previous state if EOS has already been reached.
+    def select_carried_state(new_state, old_state):
+      return jnp.where(is_eos[:, np.newaxis], old_state, new_state)
+    # LSTM state is a tuple (c, h).
+    carried_lstm_state = nn.LSTMCarry(
+      select_carried_state(new_lstm_carry.cell_state, lstm_carry.cell_state),
+      select_carried_state(new_lstm_carry.hidden_state,
+                           lstm_carry.hidden_state))
+    # Update `is_eos`.
+    is_eos = jnp.logical_or(is_eos, x[:, CTABLE.eos_id])
+    new_carry = (carried_lstm_state, is_eos)
+    return new_carry, y
+
+  def initialize_carry(self, batch_dims, hidden_size, inputs):
+    lstm_carry = self.lstm.initialize_carry(batch_dims, hidden_size,
+                                            inputs[:, 0, :])
+    is_eos = jnp.zeros(inputs.shape[:batch_dims], dtype=np.bool_)
+    return lstm_carry, is_eos
+
+
+class Encoder(nn.Module):
+  """LSTM encoder, returning state after EOS is input."""
+  hidden_size: int
+
+  @nn.compact
+  def __call__(self, inputs):
+    # inputs.shape = (batch_size, seq_length, vocab_size).
+    lstm = EncoderLSTM(name='encoder_lstm')
+    init_carry = lstm.initialize_carry(1, self.hidden_size, inputs)
+    (final_state, _), _ = lstm(init_carry, inputs)
+    return final_state
+
+
+class DecoderLSTM(nn.Module):
+  teacher_force: bool
+
+  @functools.partial(
+      nn.scan,
+      variable_broadcast='params',
+      in_axes=1,
+      out_axes=1,
+      split_rngs={'params': False})
+  @nn.compact
+  def __call__(self, carry, x):
+    rng, lstm_state, last_prediction = carry
+    carry_rng, categorical_rng = jax.random.split(rng, 2)
+    if not self.teacher_force:
+      x = last_prediction
+    lstm_state, y = nn.LSTMCell()(lstm_state, x)
+    logits = nn.Dense(features=CTABLE.vocab_size)(y)
+    predicted_token = jax.random.categorical(categorical_rng, logits)
+    prediction = jax.nn.one_hot(
+        predicted_token, CTABLE.vocab_size, dtype=jnp.float32)
+
+    return (carry_rng, lstm_state, prediction), (logits, prediction)
+
+
+class Decoder(nn.Module):
+  """LSTM decoder."""
+  init_state: Tuple[Any]
+  teacher_force: bool
+
+  @nn.compact
+  def __call__(self, inputs):
+    # inputs.shape = (seq_length, vocab_size).
+    lstm = DecoderLSTM(teacher_force=self.teacher_force)
+    init_carry = (self.make_rng('lstm'), self.init_state, inputs[:, 0])
+    _, (logits, predictions) = lstm(init_carry, inputs)
+    return logits, predictions
+
+
+class Seq2seq(nn.Module):
+  """Sequence-to-sequence class using encoder/decoder architecture.
+
+  Attributes:
+    teacher_force: bool, whether to use `decoder_inputs` as input to the
+        decoder at every step. If False, only the first input is used, followed
+        by samples taken from the previous output logits.
+    hidden_size: int, the number of hidden dimensions in the encoder and
+      decoder LSTMs.
+  """
+  teacher_force: bool
+  hidden_size: int
+
+  @nn.compact
+  def __call__(self, encoder_inputs, decoder_inputs):
+    """Run the seq2seq model.
+
+    Args:
+      encoder_inputs: padded batch of input sequences to encode, shaped
+        `[batch_size, max(encoder_input_lengths), vocab_size]`.
+      decoder_inputs: padded batch of expected decoded sequences for teacher
+        forcing, shaped `[batch_size, max(decoder_inputs_length), vocab_size]`.
+        When sampling (i.e., `teacher_force = False`), the initial time step is
+        forced into the model and samples are used for the following inputs. The
+        second dimension of this tensor determines how many steps will be
+        decoded, regardless of the value of `teacher_force`.
+
+    Returns:
+      Array of decoded logits.
+    """
+    # Encode inputs.
+    init_decoder_state = Encoder(hidden_size=self.hidden_size)(encoder_inputs)
+    # Decode outputs.
+    logits, predictions = Decoder(
+        init_state=init_decoder_state, teacher_force=self.teacher_force)(
+            decoder_inputs[:, :-1])
+
+    return logits, predictions
+
+
+def get_initial_params(model, key):
+  """Creates a seq2seq model."""
+  vocab_size = CTABLE.vocab_size
+  encoder_shape = jnp.ones((1, get_max_input_len(), vocab_size), jnp.float32)
+  decoder_shape = jnp.ones((1, get_max_output_len(), vocab_size), jnp.float32)
+  return model.init({
+      'params': key,
+      'lstm': key
+  }, encoder_shape, decoder_shape)['params']
+
+
+def get_examples(num_examples):
+  """Returns @num_examples examples."""
+  for _ in range(num_examples):
+    max_digit = pow(10, FLAGS.max_len_query_digit) - 1
+    key = tuple(sorted((random.randint(0, 99), random.randint(0, max_digit))))
+    inputs = '{}+{}'.format(key[0], key[1])
+    # Preprend output by the decoder's start token.
+    outputs = '=' + str(key[0] + key[1])
+    yield (inputs, outputs)
+
+
+def get_batch(batch_size):
+  """Returns a batch of example of size @batch_size."""
+  inputs, outputs = zip(*get_examples(batch_size))
+  return {
+      'query': encode_onehot(inputs),
+      'answer': encode_onehot(outputs),
+  }
+
 
 def cross_entropy_loss(logits, labels, lengths):
   """Returns cross-entropy loss."""
@@ -124,10 +284,12 @@ def train_step(state, batch, lstm_rng, eos_id):
   lstm_key = jax.random.fold_in(lstm_rng, state.step)
 
   def loss_fn(params):
+    # The params key is not used, but LSTMCell requires it.
     logits, _ = state.apply_fn({'params': params},
                                batch['query'],
                                batch['answer'],
-                               rngs={'lstm': lstm_key})
+                               rngs={'params': jax.random.PRNGKey(0),
+                                     'lstm': lstm_key})
     loss = cross_entropy_loss(
         logits, labels, get_sequence_lengths(labels, eos_id))
     return loss, logits
@@ -154,10 +316,12 @@ def decode(params, inputs, decode_rng, ctable):
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], ctable.max_output_len, 1))
   model = get_model(ctable, teacher_force=False)
+    # The params key is not used, but LSTMCell requires it.
   _, predictions = model.apply({'params': params},
                                inputs,
                                init_decoder_inputs,
-                               rngs={'lstm': decode_rng})
+                               rngs={'params': jax.random.PRNGKey(0),
+                                     'lstm': key})
   return predictions
 
 

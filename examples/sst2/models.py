@@ -162,20 +162,20 @@ class Embedder(nn.Module):
 class SimpleLSTM(nn.Module):
   """A simple unidirectional LSTM."""
 
+  def setup(self):
+    self.lstm = nn.OptimizedLSTMCell()
+
   @functools.partial(
       nn.transforms.scan,
       variable_broadcast='params',
       in_axes=1, out_axes=1,
       split_rngs={'params': False})
-  @nn.compact
   def __call__(self, carry, x):
-    return nn.OptimizedLSTMCell()(carry, x)
+    return self.lstm(carry, x)
 
-  @staticmethod
-  def initialize_carry(batch_dims, hidden_size):
+  def initialize_carry(self, batch_dims, hidden_size, inputs):
     # Use fixed random key since default state init fn is just zeros.
-    return nn.OptimizedLSTMCell.initialize_carry(
-        jax.random.PRNGKey(0), batch_dims, hidden_size)
+    return self.lstm.initialize_carry(batch_dims, hidden_size, inputs)
 
 
 class SimpleBiLSTM(nn.Module):
@@ -190,12 +190,16 @@ class SimpleBiLSTM(nn.Module):
     batch_size = embedded_inputs.shape[0]
 
     # Forward LSTM.
-    initial_state = SimpleLSTM.initialize_carry((batch_size,), self.hidden_size)
+    initial_state = self.forward_lstm.initialize_carry(1,
+                                                       self.hidden_size,
+                                                       embedded_inputs[:, 0])
     _, forward_outputs = self.forward_lstm(initial_state, embedded_inputs)
 
     # Backward LSTM.
     reversed_inputs = flip_sequences(embedded_inputs, lengths)
-    initial_state = SimpleLSTM.initialize_carry((batch_size,), self.hidden_size)
+    initial_state = self.backward_lstm.initialize_carry(1,
+                                                        self.hidden_size,
+                                                        reversed_inputs[:, 0])
     _, backward_outputs = self.backward_lstm(initial_state, reversed_inputs)
     backward_outputs = flip_sequences(backward_outputs, lengths)
 

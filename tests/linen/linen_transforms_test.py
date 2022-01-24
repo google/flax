@@ -31,7 +31,6 @@ from flax.core import freeze
 jax.config.parse_flags_with_absl()
 
 
-
 def tree_equals(x, y):
   return jax.tree_util.tree_all(
       jax.tree_multimap(operator.eq, x, y))
@@ -196,32 +195,37 @@ class TransformTest(absltest.TestCase):
     normal_model = MlpBn()
     vmap_model = vmap(MlpBn)(axis_name='batch')
     init_variables = normal_model.init(key2, x)
-    y1 = normal_model.apply(init_variables, x2.reshape((-1, 4)), mutable=['batch_stats'])[0]
+    y1 = normal_model.apply(init_variables, x2.reshape((-1, 4)),
+                            mutable=['batch_stats'])[0]
     y1 = y1.reshape((5, 4, 3))
     y2 = vmap_model.apply(init_variables, x2, mutable=['batch_stats'])[0]
     np.testing.assert_allclose(y1, y2, atol=1e-6)
 
   def test_scan(self):
     class SimpleScan(nn.Module):
-      @nn.compact
+      def setup(self):
+        self.lstm = nn.LSTMCell(name="lstm_cell")
+
+      @partial(nn.scan,
+               variable_broadcast='params',
+               split_rngs={'params': False})
       def __call__(self, c, xs):
-        LSTM = nn.scan(nn.LSTMCell,
-                       variable_broadcast='params',
-                       split_rngs={'params': False})
-        return LSTM(name="lstm_cell")(c, xs)
+        return self.lstm(c, xs)
+
+      def initialize_carry(self, batch_dims, size, inputs):
+        return self.lstm.initialize_carry(batch_dims, size, inputs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
     xs = random.uniform(key1, (5, 3, 2))
-    dummy_rng = random.PRNGKey(0)
-    init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[1:-1],
-                                              xs.shape[-1])
     model = SimpleScan()
-    init_variables = model.init(key2, init_carry, xs)
+    init_carry, init_variables = model.init_with_output(
+        key2, 1, xs.shape[-1], xs[0],
+        method=SimpleScan.initialize_carry)
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
-    lstmcell_variables = freeze({'params': init_variables['params']['lstm_cell']})
+    lstmcell_variables = freeze(
+      {'params': init_variables['params']['lstm_cell']})
     for i in range(xs.shape[0]):
       c, y = nn.LSTMCell().apply(lstmcell_variables, c, xs[i])
       ys.append(y[None, ...])
@@ -229,29 +233,33 @@ class TransformTest(absltest.TestCase):
 
     c2, y2 = model.apply(init_variables, init_carry, xs)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
-    np.testing.assert_allclose(c[0], c2[0], atol=1e-7)
-    np.testing.assert_allclose(c[1], c2[1], atol=1e-7)
+    np.testing.assert_allclose(c.cell_state, c2.cell_state, atol=1e-7)
+    np.testing.assert_allclose(c.hidden_state, c2.hidden_state, atol=1e-7)
 
   def test_scan_decorated(self):
     class SimpleScan(nn.Module):
+      def setup(self):
+        self.lstm = nn.LSTMCell(name="lstm_cell")
+
       @partial(nn.scan,
                variable_broadcast='params',
                in_axes=(nn.broadcast, 0),
                split_rngs={'params': False})
-      @nn.compact
-      def __call__(self, c, b, xs):
+      def __call__(self, carry, b, xs):
         assert b.shape == (4,)
-        return nn.LSTMCell(name="lstm_cell")(c, xs)
+        return self.lstm(carry, xs)
+
+      def initialize_carry(self, b, batch_dims, size, inputs):
+        return self.lstm.initialize_carry(batch_dims, size, inputs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
     xs = random.uniform(key1, (4, 3, 2))
     b = jnp.ones((4,))
     dummy_rng = random.PRNGKey(0)
-    init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[1:-1],
-                                              xs.shape[-1])
     model = SimpleScan()
-    init_variables = model.init(key2, init_carry, b, xs)
+    init_carry, init_variables = model.init_with_output(
+      key2, b, 1, xs.shape[-1], xs[0],
+      method=SimpleScan.initialize_carry)
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
@@ -263,8 +271,8 @@ class TransformTest(absltest.TestCase):
 
     c2, y2 = model.apply(init_variables, init_carry, b, xs)
     np.testing.assert_allclose(y1, y2, atol=1e-7)
-    np.testing.assert_allclose(c[0], c2[0], atol=1e-7)
-    np.testing.assert_allclose(c[1], c2[1], atol=1e-7)
+    np.testing.assert_allclose(c.cell_state, c2.cell_state, atol=1e-7)
+    np.testing.assert_allclose(c.hidden_state, c2.hidden_state, atol=1e-7)
 
   def test_multiscope_lifting_simple(self):
     class Counter(nn.Module):

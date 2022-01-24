@@ -42,7 +42,8 @@ class TrainTest(parameterized.TestCase):
     lengths = np.array([2, 3], dtype=np.int32)
     labels = np.zeros_like(lengths)
     batch = {'token_ids': token_ids, 'length': lengths, 'label': labels}
-    rngs = {'dropout': rng}
+    rngs = {'dropout': rng,
+            'params': jax.random.PRNGKey(0)}
     train_step_fn = jax.jit(train.train_step)
     new_state, metrics = train_step_fn(state, batch, rngs)
     self.assertIsInstance(new_state, train.TrainState)

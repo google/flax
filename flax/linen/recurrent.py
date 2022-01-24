@@ -14,24 +14,28 @@
 
 """Recurrent neural network modules.
 
-THe RNNCell modules are designed to fit in with the scan function in JAX::
+The RNNCell modules are designed to fit in with the scan function in JAX::
 
-  _, initial_params = LSTMCell.init(rng_1, time_series[0])
-  model = nn.Model(LSTMCell, initial_params)
-  carry = LSTMCell.initialize_carry(rng_2, (batch_size,), memory_size)
-  carry, y = jax.lax.scan(model, carry, time_series)
-
+  model = LSTMCell(...)
+  carry, vars = model.init_with_output(rng,
+                                       batch_dims,
+                                       memory_size,
+                                       time_series[0],
+                                       method=LSTMCell.initialize_carry)
+  carry, y = nn.transforms.scan(model).apply(vars, carry, time_series)
 """
 
 import abc
 from functools import partial
-from typing import (Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple,
-                    Type, Union)
+from typing import (Any, Callable, Generic, Mapping, Optional, Sequence, Tuple,
+                    Type, TypeVar, Union)
 
-from flax.linen.module import Module, compact
+from flax import struct
 from flax.linen.activation import sigmoid, tanh
 from flax.linen.initializers import orthogonal, zeros
-from flax.linen.linear import Conv, Dense, default_kernel_init
+from flax.linen.linear import (Conv, Dense, default_kernel_init,
+                               _canonicalize_dtypes)
+from flax.linen.module import Module, compact
 
 from jax import numpy as jnp
 from jax import lax
@@ -40,31 +44,74 @@ from jax import random
 import numpy as np
 
 PRNGKey = Any
-Shape = Tuple[int]
-Dtype = Any  # this could be a real type?
+Shape = Tuple[int, ...]
+InexactDType = Type[jnp.inexact]
 Array = Any
+ScalarFunction = Callable[[Array], Array]
+Initializer = Callable[[PRNGKey, Shape, InexactDType], Array]
+_Carry = TypeVar('_Carry')
 
 
-class RNNCellBase(Module):
+@struct.dataclass
+class LSTMCarry:
+    cell_state: Array
+    hidden_state: Array
+
+
+class RNNCellBase(Module, Generic[_Carry]):
   """RNN cell base class."""
+  def __call__(self, carry: _Carry, inputs: Array) -> Tuple[_Carry, Array]:
+    raise NotImplementedError
 
-  @staticmethod
-  @abc.abstractmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+  def initialize_carry(self,
+                       batch_dims: int,
+                       size: int,
+                       inputs: Array) -> _Carry:
     """Initialize the RNN cell carry.
 
     Args:
-      rng: random number generator passed to the init_fn.
-      batch_dims: a tuple providing the shape of the batch dimensions.
-      size: the size or number of features of the memory.
-      init_fn: initializer function for the carry.
+      batch_dims: the number of leading axes in inputs that constitute batch
+        dimensions.
+      size: the number of features of the memory.
+      inputs: an ndarray with the input for the current time step.  Only the
+        shape and dtype are used here.
     Returns:
       An initialized carry for the given RNN cell.
     """
     raise NotImplementedError
 
 
-class LSTMCell(RNNCellBase):
+# Currently, LSTMCellBase has no way to promise that self has attributes
+# param_dtype, dtype, and carry_init.  When keyword-only arguments are possible,
+# it will be possible to hoist these arguments into this base class.
+class LSTMCellBase(RNNCellBase[LSTMCarry]):
+  """LSTM cell base class."""
+  def initialize_carry(self,
+                       batch_dims: int,
+                       size: int,
+                       inputs: Array) -> LSTMCarry:
+    """initialize the RNN cell carry.
+
+    Args:
+      batch_dims: the number of leading axes in inputs that constitute batch
+        dimensions.
+      size: the number of features of the memory.
+      inputs: an ndarray with the input for the current time step.  Only the
+        shape and dtype are used here.
+    Returns:
+      An initialized carry for the given RNN cell.
+    """
+    _, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype, self.dtype)
+    rng = self.make_rng('params')
+    key1, key2 = random.split(rng)
+    mem_shape = inputs.shape[:batch_dims] + (size,)
+    carry = LSTMCarry(self.carry_init(key1, mem_shape, dtype),
+                      self.carry_init(key2, mem_shape, dtype))
+    self(carry, inputs)
+    return carry
+
+
+class LSTMCell(LSTMCellBase):
   r"""LSTM cell.
 
   The mathematical definition of the cell is as follows
@@ -91,19 +138,22 @@ class LSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation and carry (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
   """
-  gate_fn: Callable[..., Any] = sigmoid
-  activation_fn: Callable[..., Any] = tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  gate_fn: ScalarFunction = sigmoid
+  activation_fn: ScalarFunction = tanh
+  kernel_init: Initializer = default_kernel_init
+  recurrent_kernel_init: Initializer = orthogonal()
+  bias_init: Initializer = zeros
+  carry_init: Initializer = zeros
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
 
   @compact
-  def __call__(self, carry, inputs):
+  def __call__(self,
+               carry: LSTMCarry,
+               inputs: Array) -> Tuple[LSTMCarry, Array]:
     r"""A long short-term memory (LSTM) cell.
 
     Args:
@@ -115,7 +165,11 @@ class LSTMCell(RNNCellBase):
     Returns:
       A tuple with the new carry and the output.
     """
-    c, h = carry
+    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
+                                              self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
+    c = carry.cell_state
+    h = carry.hidden_state
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
     dense_h = partial(Dense,
@@ -123,49 +177,33 @@ class LSTMCell(RNNCellBase):
                       use_bias=True,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype)
+                      dtype=dtype,
+                      param_dtype=param_dtype)
     dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
                       kernel_init=self.kernel_init,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype)
+                      dtype=dtype,
+                      param_dtype=param_dtype)
     i = self.gate_fn(dense_i(name='ii')(inputs) + dense_h(name='hi')(h))
     f = self.gate_fn(dense_i(name='if')(inputs) + dense_h(name='hf')(h))
     g = self.activation_fn(dense_i(name='ig')(inputs) + dense_h(name='hg')(h))
     o = self.gate_fn(dense_i(name='io')(inputs) + dense_h(name='ho')(h))
     new_c = f * c + i * g
     new_h = o * self.activation_fn(new_c)
-    return (new_c, new_h), new_h
-
-  @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """Initialize the RNN cell carry.
-
-    Args:
-      rng: random number generator passed to the init_fn.
-      batch_dims: a tuple providing the shape of the batch dimensions.
-      size: the size or number of features of the memory.
-      init_fn: initializer function for the carry.
-    Returns:
-      An initialized carry for the given RNN cell.
-    """
-    key1, key2 = random.split(rng)
-    mem_shape = batch_dims + (size,)
-    return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
+    return LSTMCarry(new_c, new_h), new_h
 
 
 class DenseParams(Module):
-  """Dummy module for creating parameters matching `flax.deprecated.nn.Dense`."""
-
+  """Dummy module for creating parameters matching `flax.nn.Dense`."""
   features: int
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
   precision: Optional[lax.Precision] = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  kernel_init: Initializer = default_kernel_init
+  bias_init: Initializer = zeros
+  carry_init: Initializer = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Array]:
@@ -176,7 +214,7 @@ class DenseParams(Module):
     return k, b
 
 
-class OptimizedLSTMCell(RNNCellBase):
+class OptimizedLSTMCell(LSTMCellBase):
   r"""More efficient LSTM Cell that concatenates state components before matmul.
 
   The parameters are compatible with `LSTMCell`. Note that this cell is often
@@ -208,34 +246,40 @@ class OptimizedLSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
   """
-  gate_fn: Callable = sigmoid
-  activation_fn: Callable = tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  gate_fn: ScalarFunction = sigmoid
+  activation_fn: ScalarFunction = tanh
+  kernel_init: Initializer = default_kernel_init
+  recurrent_kernel_init: Initializer = orthogonal()
+  bias_init: Initializer = zeros
+  carry_init: Initializer = zeros
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
 
   @compact
-  def __call__(self, carry: Tuple[Array, Array],
-               inputs: Array) -> Tuple[Tuple[Array, Array], Array]:
+  def __call__(self, carry: LSTMCarry,
+               inputs: Array) -> Tuple[LSTMCarry, Array]:
     r"""An optimized long short-term memory (LSTM) cell.
 
     Args:
       carry: the hidden state of the LSTM cell, initialized using
-        `LSTMCell.initialize_carry`.
+        `initialize_carry`.
       inputs: an ndarray with the input for the current time step. All
         dimensions except the final are considered batch dimensions.
 
     Returns:
       A tuple with the new carry and the output.
     """
-    c, h = carry
+    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
+                                              self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
+    c = carry.cell_state
+    h = carry.hidden_state
+    c = jnp.asarray(c, dtype)
+    h = jnp.asarray(h, dtype)
     hidden_features = h.shape[-1]
-    inputs = jnp.asarray(inputs, self.dtype)
 
     def _concat_dense(inputs: Array,
                       params: Mapping[str, Tuple[Array, Array]],
@@ -246,11 +290,11 @@ class OptimizedLSTMCell(RNNCellBase):
       dot_general.
       """
       kernels, biases = zip(*params.values())
-      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), self.dtype)
+      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), dtype)
 
       y = jnp.dot(inputs, kernel)
       if use_bias:
-        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), self.dtype)
+        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), dtype)
         y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
 
       # Split the result back into individual (i, f, g, o) outputs.
@@ -264,12 +308,12 @@ class OptimizedLSTMCell(RNNCellBase):
     for component in ['i', 'f', 'g', 'o']:
       dense_params_i[component] = DenseParams(
           features=hidden_features, use_bias=False,
-          param_dtype=self.param_dtype,
+          param_dtype=param_dtype,
           kernel_init=self.kernel_init, bias_init=self.bias_init,
           name=f'i{component}')(inputs)
       dense_params_h[component] = DenseParams(
           features=hidden_features, use_bias=True,
-          param_dtype=self.param_dtype,
+          param_dtype=param_dtype,
           kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
           name=f'h{component}')(h)
     dense_h = _concat_dense(h, dense_params_h, use_bias=True)
@@ -282,27 +326,10 @@ class OptimizedLSTMCell(RNNCellBase):
 
     new_c = f * c + i * g
     new_h = o * self.activation_fn(new_c)
-    return (new_c, new_h), new_h
-
-  @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """Initialize the RNN cell carry.
-
-    Args:
-      rng: random number generator passed to the init_fn.
-      batch_dims: a tuple providing the shape of the batch dimensions.
-      size: the size or number of features of the memory.
-      init_fn: initializer function for the carry.
-
-    Returns:
-      An initialized carry for the given RNN cell.
-    """
-    key1, key2 = random.split(rng)
-    mem_shape = batch_dims + (size,)
-    return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
+    return LSTMCarry(new_c, new_h), new_h
 
 
-class GRUCell(RNNCellBase):
+class GRUCell(RNNCellBase[Array]):
   r"""GRU cell.
 
   The mathematical definition of the cell is as follows
@@ -327,21 +354,20 @@ class GRUCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
   """
-  gate_fn: Callable[..., Any] = sigmoid
-  activation_fn: Callable[..., Any] = tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      default_kernel_init)
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      orthogonal())
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  gate_fn: ScalarFunction = sigmoid
+  activation_fn: ScalarFunction = tanh
+  kernel_init: Initializer = default_kernel_init
+  recurrent_kernel_init: Initializer = orthogonal()
+  bias_init: Initializer = zeros
+  carry_init: Initializer = zeros
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
 
   @compact
-  def __call__(self, carry, inputs):
+  def __call__(self, carry: Array, inputs: Array) -> Tuple[Array, Array]:
     """Gated recurrent unit (GRU) cell.
 
     Args:
@@ -353,21 +379,24 @@ class GRUCell(RNNCellBase):
     Returns:
       A tuple with the new carry and the output.
     """
+    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
+                                              self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
     h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
     dense_h = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype,
+                      dtype=dtype,
+                      param_dtype=param_dtype,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
     dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=True,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype,
+                      dtype=dtype,
+                      param_dtype=param_dtype,
                       kernel_init=self.kernel_init,
                       bias_init=self.bias_init)
     r = self.gate_fn(dense_i(name='ir')(inputs) + dense_h(name='hr')(h))
@@ -378,23 +407,30 @@ class GRUCell(RNNCellBase):
     new_h = (1. - z) * n + z * h
     return new_h, new_h
 
-  @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """Initialize the RNN cell carry.
+  def initialize_carry(self,
+                       batch_dims: int,
+                       size: int,
+                       inputs: Array) -> Array:
+    """initialize the RNN cell carry.
 
     Args:
-      rng: random number generator passed to the init_fn.
-      batch_dims: a tuple providing the shape of the batch dimensions.
-      size: the size or number of features of the memory.
-      init_fn: initializer function for the carry.
+      batch_dims: the number of leading axes in inputs that constitute batch
+        dimensions.
+      size: the number of features of the memory.
+      inputs: an ndarray with the input for the current time step.  Only the
+        shape and dtype are used here.
     Returns:
       An initialized carry for the given RNN cell.
     """
-    mem_shape = batch_dims + (size,)
-    return init_fn(rng, mem_shape)
+    _, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype, self.dtype)
+    rng = self.make_rng('params')
+    mem_shape = inputs.shape[:batch_dims] + (size,)
+    carry = self.carry_init(rng, mem_shape, dtype)
+    self(carry, inputs)
+    return carry
 
 
-class ConvLSTM(RNNCellBase):
+class ConvLSTM(RNNCellBase[LSTMCarry]):
   r"""A convolutional LSTM cell.
 
   The implementation is based on xingjian2015convolutional.
@@ -431,20 +467,21 @@ class ConvLSTM(RNNCellBase):
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
     bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: None).
   """
-
   features: int
   kernel_size: Sequence[int]
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
+  carry_init: Initializer = zeros
+  dtype: Optional[InexactDType] = None
+  param_dtype: Optional[InexactDType] = None
 
   @compact
-  def __call__(self, carry, inputs):
+  def __call__(self, carry: LSTMCarry, inputs: Array) -> Tuple[LSTMCarry,
+                                                               Array]:
     """Constructs a convolutional LSTM.
 
     Args:
@@ -454,15 +491,19 @@ class ConvLSTM(RNNCellBase):
     Returns:
       A tuple with the new carry and the output.
     """
-    c, h = carry
+    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
+                                              self.dtype)
+    inputs = jnp.asarray(inputs, dtype)
+    c = carry.cell_state
+    h = carry.hidden_state
     input_to_hidden = partial(Conv,
                               features=4*self.features,
                               kernel_size=self.kernel_size,
                               strides=self.strides,
                               padding=self.padding,
                               use_bias=self.use_bias,
-                              dtype=self.dtype,
-                              param_dtype=self.param_dtype,
+                              dtype=dtype,
+                              param_dtype=param_dtype,
                               name='ih')
 
     hidden_to_hidden = partial(Conv,
@@ -471,8 +512,8 @@ class ConvLSTM(RNNCellBase):
                                strides=self.strides,
                                padding=self.padding,
                                use_bias=self.use_bias,
-                               dtype=self.dtype,
-                               param_dtype=self.param_dtype,
+                               dtype=dtype,
+                               param_dtype=param_dtype,
                                name='hh')
 
     gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)
@@ -481,20 +522,28 @@ class ConvLSTM(RNNCellBase):
     f = sigmoid(f + 1)
     new_c = f * c + sigmoid(i) * jnp.tanh(g)
     new_h = sigmoid(o) * jnp.tanh(new_c)
-    return (new_c, new_h), new_h
+    return LSTMCarry(new_c, new_h), new_h
 
-  @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+  def initialize_carry(self,
+                       batch_dims: int,
+                       size: int,
+                       inputs: Array) -> LSTMCarry:
     """Initialize the RNN cell carry.
 
     Args:
-      rng: random number generator passed to the init_fn.
-      batch_dims: a tuple providing the shape of the batch dimensions.
-      size: the input_shape + (features,).
-      init_fn: initializer function for the carry.
+      batch_dims: the number of leading axes in inputs that constitute batch
+        dimensions.
+      size: the number of features of the memory.
+      inputs: an ndarray with the input for the current time step.  Only the
+        shape and dtype are used here.
     Returns:
       An initialized carry for the given RNN cell.
     """
+    _, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype, self.dtype)
+    rng = self.make_rng('params')
     key1, key2 = random.split(rng)
-    mem_shape = batch_dims + size
-    return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
+    mem_shape = inputs.shape[: -1] + (size,)
+    carry = LSTMCarry(self.carry_init(key1, mem_shape, dtype),
+                      self.carry_init(key2, mem_shape, dtype))
+    self(carry, inputs)
+    return carry

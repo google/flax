@@ -30,7 +30,7 @@ from .module import (Module, compact, nowrap, enable_named_call,
                      init_with_output, apply, merge_param)
 from .normalization import BatchNorm, GroupNorm, LayerNorm
 from .pooling import avg_pool, max_pool, pool
-from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell
+from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell, LSTMCarry
 from .stochastic import Dropout
 from .transforms import jit, named_call, checkpoint, remat, remat_scan, scan, vmap, map_variables, vjp, jvp, custom_vjp
 from .initializers import zeros, ones
