@@ -429,12 +429,14 @@ class ConvTranspose(Module):
       # Divide the padding equaly between left and right. The choice to put
       # "+1" on the left (and not on the right) represents a convention for
       # aligning even-sized kernels.
-      total_pad = [((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs]
+      total_pad = [((size_diff + 1) // 2, size_diff // 2)
+                   for size_diff in size_diffs]
       y = np.pad(y, [(0, 0)] + total_pad + [(0, 0)])
       # Wrap the result periodically around each spatial dimension,
       # one by one.
       for i in range(1, y.ndim - 1):
-        y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) + y.shape[i + 1:])
+        y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) +
+                      y.shape[i + 1:])
         y = y.sum(axis=i)
 
     if is_single_input:
