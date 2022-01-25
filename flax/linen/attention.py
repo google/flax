@@ -246,8 +246,6 @@ class MultiHeadDotProductAttention(Module):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    if self.dropout_rate > 0.:  # Require `deterministic` only if using dropout.
-      deterministic = merge_param('deterministic', self.deterministic, deterministic)
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (
@@ -307,8 +305,13 @@ class MultiHeadDotProductAttention(Module):
                              tuple(batch_dims) + (1, 1, max_length)))
 
     dropout_rng = None
-    if not deterministic and self.dropout_rate > 0.:
-      dropout_rng = self.make_rng('dropout')
+    if self.dropout_rate > 0.:  # Require `deterministic` only if using dropout.
+      m_deterministic = merge_param('deterministic', self.deterministic,
+                                    deterministic)
+      if not m_deterministic:
+        dropout_rng = self.make_rng('dropout')
+    else:
+      m_deterministic = True
 
     # apply attention
     x = self.attention_fn(
@@ -319,7 +322,7 @@ class MultiHeadDotProductAttention(Module):
         dropout_rng=dropout_rng,
         dropout_rate=self.dropout_rate,
         broadcast_dropout=self.broadcast_dropout,
-        deterministic=deterministic,
+        deterministic=m_deterministic,
         dtype=self.dtype,
         precision=self.precision)  # pytype: disable=wrong-keyword-args
     # back to the original inputs dimensions
@@ -378,7 +381,7 @@ def make_attention_mask(query_input: Array,
 
 def make_causal_mask(x: Array,
                      extra_batch_dims: int = 0,
-                     dtype: Dtype = jnp.float32):
+                     dtype: Dtype = jnp.float32) -> Array:
   """Make a causal mask for self-attention.
 
   In case of 1d inputs (i.e., `[batch..., len]`, the self-attention weights
@@ -399,7 +402,8 @@ def make_causal_mask(x: Array,
                              extra_batch_dims=extra_batch_dims, dtype=dtype)
 
 
-def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32):
+def combine_masks(*masks: Optional[Array],
+                  dtype: Dtype = jnp.float32) -> Array:
   """Combine attention masks.
 
   Args:
@@ -409,12 +413,12 @@ def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32):
   Returns:
     Combined mask, reduced by logical and, returns None if no masks given.
   """
-  masks = [m for m in masks if m is not None]
-  if not masks:
+  masks_list = [m for m in masks if m is not None]
+  if not masks_list:
     return None
-  assert all(map(lambda x: x.ndim == masks[0].ndim, masks)), (
-      f'masks must have same rank: {tuple(map(lambda x: x.ndim, masks))}')
-  mask, *other_masks = masks
+  assert all(map(lambda x: x.ndim == masks_list[0].ndim, masks_list)), (
+      f'masks must have same rank: {tuple(map(lambda x: x.ndim, masks_list))}')
+  mask, *other_masks = masks_list
   for other_mask in other_masks:
     mask = jnp.logical_and(mask, other_mask)
   return mask.astype(dtype)

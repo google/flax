@@ -16,7 +16,8 @@
 
 from dataclasses import field
 
-from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
+from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
+                    Union)
 
 from flax.linen.module import Module, compact
 from flax.linen.initializers import lecun_normal, variance_scaling, zeros
@@ -27,7 +28,7 @@ import numpy as np
 
 
 PRNGKey = Any
-Shape = Iterable[int]
+Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Array = Any
 
@@ -35,12 +36,12 @@ Array = Any
 default_kernel_init = lecun_normal()
 
 
-def _normalize_axes(axes, ndim):
+def _normalize_axes(axes: Tuple[int, ...], ndim: int) -> Tuple[int, ...]:
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
   return tuple(sorted([ax if ax >= 0 else ndim + ax for ax in axes]))
 
 
-def _canonicalize_tuple(x):
+def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
   if isinstance(x, Iterable):
     return tuple(x)
   else:
@@ -63,9 +64,9 @@ class DenseGeneral(Module):
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
   """
-  features: Union[int, Iterable[int]]
-  axis: Union[int, Iterable[int]] = -1
-  batch_dims: Iterable[int] = ()
+  features: Union[int, Sequence[int]]
+  axis: Union[int, Sequence[int]] = -1
+  batch_dims: Sequence[int] = ()
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
@@ -232,11 +233,11 @@ class Conv(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Iterable[int]
-  strides: Union[None, int, Iterable[int]] = 1
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
-  input_dilation: Union[None, int, Iterable[int]] = 1
-  kernel_dilation: Union[None, int, Iterable[int]] = 1
+  kernel_size: Sequence[int]
+  strides: Union[None, int, Sequence[int]] = 1
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  input_dilation: Union[None, int, Sequence[int]] = 1
+  kernel_dilation: Union[None, int, Sequence[int]] = 1
   feature_group_count: int = 1
   use_bias: bool = True
   dtype: Dtype = jnp.float32
@@ -248,7 +249,7 @@ class Conv(Module):
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a convolution to the inputs.
- 
+
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
         This is the channels-last convention, i.e. NHWC for a 2d convolution
@@ -268,21 +269,23 @@ class Conv(Module):
     else:
       kernel_size = tuple(self.kernel_size)
 
-    def maybe_broadcast(x):
+    def maybe_broadcast(x: Optional[Union[int, Sequence[int]]]) -> (
+        Tuple[int, ...]):
       if x is None:
         # backward compatibility with using None as sentinel for
         # broadcast 1
         x = 1
       if isinstance(x, int):
         return (x,) * len(kernel_size)
-      return x
+      return tuple(x)
 
     is_single_input = False
     if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
-    strides = maybe_broadcast(self.strides)  # self.strides or (1,) * (inputs.ndim - 2)
+    # self.strides or (1,) * (inputs.ndim - 2)
+    strides = maybe_broadcast(self.strides)
     input_dilation = maybe_broadcast(self.input_dilation)
     kernel_dilation = maybe_broadcast(self.kernel_dilation)
 
@@ -293,9 +296,12 @@ class Conv(Module):
     kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
     kernel = jnp.asarray(kernel, self.dtype)
 
+    padding_lax: Union[str, Sequence[Tuple[int, int]]]
     if self.padding == 'CIRCULAR':
       kernel_size_dilated = [(k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)]
-      pads = [(0, 0)] + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] + [(0, 0)]
+      zero_pad: List[Tuple[int, int]] = [(0, 0)]
+      pads = (zero_pad + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] +
+              [(0, 0)])
       inputs = jnp.pad(inputs, pads, mode='wrap')
       padding_lax = 'VALID'
     else:
@@ -348,10 +354,10 @@ class ConvTranspose(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Union[int, Iterable[int]]
-  strides: Optional[Iterable[int]] = None
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
-  kernel_dilation: Optional[Iterable[int]] = None
+  kernel_size: Union[int, Tuple[int, ...]]
+  strides: Optional[Tuple[int, ...]] = None
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
@@ -376,6 +382,7 @@ class ConvTranspose(Module):
     """
     inputs = jnp.asarray(inputs, self.dtype)
 
+    kernel_size: Tuple[int, ...]
     if isinstance(self.kernel_size, int):
       kernel_size = (self.kernel_size,)
     else:
@@ -386,6 +393,7 @@ class ConvTranspose(Module):
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
+    strides: Tuple[int, ...]
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
@@ -393,6 +401,7 @@ class ConvTranspose(Module):
     kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
     kernel = jnp.asarray(kernel, self.dtype)
 
+    padding_lax: Union[str, Sequence[Tuple[int, int]]]
     if self.padding == 'CIRCULAR':
       padding_lax = 'VALID'
     else:
@@ -474,7 +483,7 @@ class Embed(Module):
                                 (self.num_embeddings, self.features),
                                 self.param_dtype)
 
-  def __call__(self, inputs):
+  def __call__(self, inputs: Array) -> Array:
     """Embeds the inputs along the last dimension.
 
     Args:
@@ -490,7 +499,7 @@ class Embed(Module):
     embedding = jnp.asarray(self.embedding, self.dtype)
     return jnp.take(embedding, inputs, axis=0)
 
-  def attend(self, query):
+  def attend(self, query: Array) -> Array:
     """Attend over the embedding using a query array.
 
     Args:

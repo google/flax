@@ -16,7 +16,7 @@
 """
 
 import functools
-from typing import NamedTuple, Any, Optional, Callable, Union, Sequence
+from typing import Any, Callable, NamedTuple, Optional, Sequence, Union
 
 from .. import struct
 

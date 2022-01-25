@@ -25,13 +25,13 @@ from flax.linen.module import Module, compact, merge_param
 
 PRNGKey = Any
 Array = Any
-Shape = Tuple[int]
+Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 
 Axes = Union[int, Iterable[int]]
 
 
-def _canonicalize_axes(rank: int, axes: Axes) -> Iterable[int]:
+def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
   """Returns a tuple of deduplicated, sorted, and positive axes."""
   if not isinstance(axes, Iterable):
     axes = (axes,)
@@ -339,7 +339,6 @@ class GroupNorm(Module):
         (self.num_groups is not None and self.group_size is not None)):
       raise ValueError('Either `num_groups` or `group_size` should be '
                        'specified, but not both of them.')
-    num_groups = self.num_groups
 
     channels = x.shape[-1]
     if self.group_size is not None:
@@ -347,6 +346,9 @@ class GroupNorm(Module):
         raise ValueError('Number of channels ({}) is not multiple of the '
                          'group size ({}).'.format(channels, self.group_size))
       num_groups = channels // self.group_size
+    else:
+      num_groups = self.num_groups
+      assert isinstance(num_groups, int)
 
     if num_groups <= 0 or channels % num_groups != 0:
       raise ValueError('Number of groups ({}) does not divide the number'

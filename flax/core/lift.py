@@ -24,7 +24,8 @@ from flax import traceback_util
 import jax
 from jax import random
 
-from typing import Any, Callable, Sequence, Union, Iterable, Optional, Mapping, TypeVar, Generic, Tuple
+from typing import (Any, Callable, Generic, Iterable, List, Mapping, Optional,
+                    Sequence, Tuple, TypeVar, Union)
 
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
@@ -125,7 +126,7 @@ def pack(fn: Callable[..., Any],
       inner_rng_counters.append(rng_counters)
     rng_groups_xs_t = _transpose(rng_groups_xs)
 
-    inner_scopes = []
+    inner_scopes: List[Scope] = []
     def scope_fn(variable_groups_xs_t, rng_groups_xs_t):
       nonlocal inner_scopes
       for inner_scope in inner_scopes:
@@ -303,7 +304,7 @@ def vjp(fn: Callable[..., Any], scope: Scope, *primals,
     has_aux: bool = False, reduce_axes=(),
     vjp_variables: CollectionFilter = "params",
     variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True, 
+    rngs: PRNGSequenceFilter = True,
     ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
   """A lifted version of ``jax.vjp``.
 
@@ -390,7 +391,7 @@ def vjp(fn: Callable[..., Any], scope: Scope, *primals,
 def jvp(fn: Callable[..., Any], scope: Scope,
     primals, tangents, variable_tangents,
     variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True, 
+    rngs: PRNGSequenceFilter = True,
     ) -> Tuple[Any, Any]:
   """A lifted version of ``jax.jvp``.
 
@@ -449,7 +450,7 @@ def jvp(fn: Callable[..., Any], scope: Scope,
   # filter out empty tangent collections because JAX will error on non-equal tree structure
   # for example: {"params": {}} != {}
   treedef = jax.tree_structure(scope)
-  
+
   variable_tangents =  tuple({k: v for k, v in vt.items() if v} for vt in treedef.flatten_up_to(variable_tangents))
   target = tuple(variable_tangents[0].keys())
   return pack(
@@ -719,7 +720,7 @@ def scan(fn: Callable[..., Any],
       name='scan')
 
 
-def custom_vjp(fn: Callable[..., Any], 
+def custom_vjp(fn: Callable[..., Any],
                forward_fn: Callable[..., Any],
                backward_fn: Callable[..., Any],
                grad_vars: CollectionFilter = 'params',

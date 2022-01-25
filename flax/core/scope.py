@@ -296,6 +296,7 @@ def group_collections(
     A sequence S with `len(S) == len(col_filters)`. Each `S[i]` is the result of
     applying filter `col_filters[i]` to the remaining keys in `xs`.
     """
+  cols: Iterable[str]
   cols = xs.keys()
   groups = []
   for col_filter in col_filters:
@@ -393,7 +394,7 @@ class Scope:
     self.trace_level = tracers.trace_level(tracers.current_trace())
 
     self.rng_counters = {key: 0 for key in self.rngs}
-    self.reservations = set()
+    self.reservations: Set[str] = set()
 
     self._invalid = False
 
@@ -626,7 +627,7 @@ class Scope:
     self.rng_counters[name] += 1
     return LazyRng.create(self.rngs[name], self.rng_counters[name]).as_jax_rng()
 
-  def get_variable(self, col: str, name: str, default: T = None) -> T:
+  def get_variable(self, col: str, name: str, default: Any = None) -> Any:
     """Retrieves the value of a Variable.
 
     Args:

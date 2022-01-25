@@ -62,8 +62,6 @@ flags.DEFINE_integer(
     help=('Maximum length of a single input digit.'))
 
 PRNGKey = Any
-Shape = Tuple[int]
-Dtype = Any
 Array = Any
 
 
