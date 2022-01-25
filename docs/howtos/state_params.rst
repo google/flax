@@ -10,10 +10,10 @@ We will show you how to...
 .. testsetup::
 
   from flax import linen as nn
-  from flax import optim
   from jax import random
   import jax.numpy as jnp
   import jax
+  import optax
 
   # Create some fake data and run only for one epoch for testing.
   dummy_input = jnp.ones((3, 4))
@@ -46,7 +46,7 @@ replaced for yours):
 
 .. testcode::
 
-  def update_step(apply_fn, x, optimizer, state):
+  def update_step(apply_fn, x, opt_state, params, state):
     def loss(params):
       y, updated_state = apply_fn({'params': params, **state},
                                   x, mutable=list(state.keys()))
@@ -54,9 +54,10 @@ replaced for yours):
       return l, updated_state
 
     (l, updated_state), grads = jax.value_and_grad(
-        loss, has_aux=True)(optimizer.target)
-    optimizer = optimizer.apply_gradient(grads)
-    return optimizer, updated_state
+        loss, has_aux=True)(params)
+    updates, opt_state = tx.update(grads, opt_state)  # Defined below.
+    params = optax.apply_updates(params, updates)
+    return opt_state, params, state
 
 Then we can write the actual training code.
 
@@ -64,12 +65,15 @@ Then we can write the actual training code.
 
   model = BiasAdderWithRunningMean()
   variables = model.init(random.PRNGKey(0), dummy_input)
-  state, params = variables.pop('params') # Split state and params to optimize for
-  del variables # Delete variables to avoid wasting resources
-  optimizer = optim.sgd.GradientDescent(learning_rate=0.02).create(params)
+  # Split state and params (which are updated by optimizer).
+  state, params = variables.pop('params')
+  del variables  # Delete variables to avoid wasting resources
+  tx = optax.sgd(learning_rate=0.02)
+  opt_state = tx.init(params)
 
   for _ in range(num_epochs):
-    optimizer, state = update_step(model.apply, dummy_input, optimizer, state)
+    opt_state, params, state = update_step(
+        model.apply, dummy_input, opt_state, params, state)
 
 
 :code:`vmap` accross the batch dimension
@@ -90,10 +94,10 @@ the :code:`axis_name` argument of :code:`lax.pmean()` directly.
 
   from functools import partial
   from flax import linen as nn
-  from flax import optim
   from jax import random
   import jax.numpy as jnp
   import jax
+  import optax
 
   # Create some fake data and run only for one epoch for testing.
   dummy_input = jnp.ones((100,))
@@ -129,12 +133,11 @@ the :code:`axis_name` argument of :code:`lax.pmean()` directly.
 
       return y
 
-
 Secondly, we need to specify the same name when calling :code:`vmap` in our training code:
 
 .. testcode::
 
-  def update_step(apply_fn, x_batch, y_batch, optimizer, state):
+  def update_step(apply_fn, x_batch, y_batch, opt_state, params, state):
 
     def batch_loss(params):
       def loss_fn(x, y):
@@ -145,29 +148,32 @@ Secondly, we need to specify the same name when calling :code:`vmap` in our trai
         return (pred - y) ** 2, updated_state
 
       loss, updated_state = jax.vmap(
-        loss_fn, out_axes=(0, None), # Exclude state from mapping
-        axis_name="batch" # Name batch dim
-      )(x_batch, y_batch)
+        loss_fn, out_axes=(0, None),  # Do not vmap `updated_state`.
+        axis_name='batch'  # Name batch dim
+      )(x_batch, y_batch)  # vmap only `x`, `y`, but not `state`.
       return jnp.mean(loss), updated_state
 
     (loss, updated_state), grads = jax.value_and_grad(
       batch_loss, has_aux=True
-    )(optimizer.target)
+    )(params)
 
-    optimizer = optimizer.apply_gradient(grads)
-    return optimizer, updated_state, loss
+    updates, opt_state = tx.update(grads, opt_state)  # Defined below.
+    params = optax.apply_updates(params, updates)
+    return opt_state, params, updated_state, loss
 
 Note that we also need to specify that the model state does not have a batch
 dimension. Now we are able to train the model:
-
 
 .. testcode::
 
   model = MLP(hidden_size=10, out_size=1)
   variables = model.init(random.PRNGKey(0), dummy_input)
-  state, params = variables.pop('params') # Split state and params to optimize for
-  del variables # Delete variables to avoid wasting resources
-  optimizer = optim.sgd.GradientDescent(learning_rate=0.02).create(params)
+  # Split state and params (which are updated by optimizer).
+  state, params = variables.pop('params')
+  del variables  # Delete variables to avoid wasting resources
+  tx = optax.sgd(learning_rate=0.02)
+  opt_state = tx.init(params)
 
   for _ in range(num_epochs):
-    optimizer, state, loss = update_step(model.apply, X, Y, optimizer, state)
+    opt_state, params, state, loss = update_step(
+        model.apply, X, Y, opt_state, params, state)
