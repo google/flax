@@ -21,6 +21,7 @@ The data is loaded using tensorflow_datasets.
 # See issue #620.
 # pytype: disable=wrong-keyword-args
 
+from absl import logging
 from flax import linen as nn
 from flax.metrics import tensorboard
 from flax.training import train_state
@@ -30,6 +31,7 @@ import ml_collections
 import numpy as np
 import optax
 import tensorflow_datasets as tfds
+
 
 class CNN(nn.Module):
   """A simple CNN model."""
@@ -141,7 +143,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     _, test_loss, test_accuracy = apply_model(state, test_ds['image'],
                                               test_ds['label'])
 
-    print(
+    logging.info(
         'epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, test_loss: %.4f, test_accuracy: %.2f'
         % (epoch, train_loss, train_accuracy * 100, test_loss,
            test_accuracy * 100))
