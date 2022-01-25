@@ -77,7 +77,7 @@ Then we can write the actual training code.
 
 
 :code:`vmap` accross the batch dimension
---------------------------------
+----------------------------------------
 When using :code:`vmap` and managing state that depends on the batch dimension,
 for example when using :code:`BatchNorm`,  the setup above must be modified
 slightly. This is because any layer whose state depends on the batch dimension

@@ -50,7 +50,7 @@ class RNNCellBase(Module):
   @staticmethod
   @abc.abstractmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -65,7 +65,7 @@ class RNNCellBase(Module):
 
 class LSTMCell(RNNCellBase):
   r"""LSTM cell.
-  
+
   The mathematical definition of the cell is as follows
 
   .. math::
@@ -77,7 +77,7 @@ class LSTMCell(RNNCellBase):
       c' = f * c + i * g \\
       h' = o * \tanh(c') \\
       \end{array}
-      
+
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
@@ -140,7 +140,7 @@ class LSTMCell(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -181,9 +181,11 @@ class OptimizedLSTMCell(RNNCellBase):
   The parameters are compatible with `LSTMCell`. Note that this cell is often
   faster than `LSTMCell` as long as the hidden size is roughly <= 2048 units.
 
-  The mathematical definition of the cell is the same as `LSTMCell` and as follows
+  The mathematical definition of the cell is the same as `LSTMCell` and as
+  follows
 
   .. math::
+
       \begin{array}{ll}
       i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
       f = \sigma(W_{if} x + W_{hf} h + b_{hf}) \\
@@ -236,8 +238,8 @@ class OptimizedLSTMCell(RNNCellBase):
 
     def _concat_dense(inputs, params, use_bias=True):
       """
-      Concatenates the individual kernels and biases, given in params, into a 
-      single kernel and single bias for efficiency before applying them using 
+      Concatenates the individual kernels and biases, given in params, into a
+      single kernel and single bias for efficiency before applying them using
       dot_general.
       """
       kernels, biases = zip(*params.values())
@@ -281,7 +283,7 @@ class OptimizedLSTMCell(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -303,6 +305,7 @@ class GRUCell(RNNCellBase):
   The mathematical definition of the cell is as follows
 
   .. math::
+
       \begin{array}{ll}
       r = \sigma(W_{ir} x + W_{hr} h + b_{hr}) \\
       z = \sigma(W_{iz} x + W_{hz} h + b_{hz}) \\
@@ -374,7 +377,7 @@ class GRUCell(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -479,7 +482,7 @@ class ConvLSTM(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.

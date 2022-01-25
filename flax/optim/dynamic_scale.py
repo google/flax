@@ -51,7 +51,7 @@ class DynamicScale(struct.PyTreeNode):
   whether the gradients are finite.
 
   Example::
-  
+
     def loss_fn(p):
       return jnp.asarray(p, jnp.float16) ** 2
     p = jnp.array(1., jnp.float32)
@@ -67,7 +67,7 @@ class DynamicScale(struct.PyTreeNode):
   selectifly ignore the gradient update using `jax.numpy.where` in case of
   non-finite gradients.
 
-  Attrs:
+  Attributes:
     growth_factor: how much to grow the scalar after a period of finite
       gradients (default: 2.).
     backoff_factor: how much to shrink the scalar after a non-finite gradient
