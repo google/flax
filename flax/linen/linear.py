@@ -247,7 +247,7 @@ class Conv(Module):
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a convolution to the inputs.
- 
+
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
         This is the channels-last convention, i.e. NHWC for a 2d convolution
@@ -293,7 +293,8 @@ class Conv(Module):
     kernel = jnp.asarray(kernel, self.dtype)
 
     if self.padding == 'CIRCULAR':
-      kernel_size_dilated = [(k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)]
+      kernel_size_dilated = [(k - 1) * d + 1 for k, d in zip(kernel_size,
+                                                             kernel_dilation)]
       pads = [(0, 0)] + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] + [(0, 0)]
       inputs = jnp.pad(inputs, pads, mode='wrap')
       padding_lax = 'VALID'
@@ -331,9 +332,10 @@ class ConvTranspose(Module):
       be a sequence of integers.
     strides: a sequence of `n` integers, representing the inter-window
       strides.
-    padding: either the string `'SAME'`, the string `'VALID'`, the string 'CIRCULAR'` (periodic boundary conditions),
-      or a sequence of `n` `(low, high)` integer pairs that give the padding to apply before
-      and after each spatial dimension.
+    padding: either the string `'SAME'`, the string `'VALID'`, the string
+      'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
+      high)` integer pairs that give the padding to apply before and after each
+      spatial dimension.
     kernel_dilation: `None`, or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel. Convolution with kernel dilation is also known as 'atrous
@@ -411,7 +413,7 @@ class ConvTranspose(Module):
       # dimension. Padding should be done in such a way that the start of the
       # original input data inside the padded array is located at integer
       # number of periods - otherwise the result would be circularly shifted.
-      
+
       # Compute period along each spatial dimension - it's input size scaled
       # by the stride.
       scaled_x_dims = [
@@ -485,8 +487,9 @@ class Embed(Module):
     """
     if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
-    # Use take because fancy indexing numpy arrays with JAX indices does not work correctly.
     embedding = jnp.asarray(self.embedding, self.dtype)
+    # Use take because fancy indexing numpy arrays with JAX indices does not
+    # work correctly.
     return jnp.take(embedding, inputs, axis=0)
 
   def attend(self, query):

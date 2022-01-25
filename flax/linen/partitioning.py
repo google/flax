@@ -111,6 +111,7 @@ class UnassignedAxis:
   def __bool__(self):
     return False
 
+
 _unassigned_axis = UnassignedAxis()
 
 

@@ -396,16 +396,16 @@ class Scope:
 
     self._invalid = False
 
-
   def __eq__(self, other: Any) -> bool:
-    # If the root variable dict and path equal than two scopes behave identically
-    # effectively a scope is nothing more than a cursor into a variable dict and an
-    # rng counter dict
+    # If the root variable dict and path equal than two scopes behave
+    # identically effectively a scope is nothing more than a cursor into a
+    # variable dict and an rng counter dict.
     if not isinstance(other, Scope):
       return False
     if self is other:
       return True
-    return self.root._variables is other.root._variables and self.path == other.path and self.rng_counters is other.rng_counters
+    return (self.root._variables is other.root._variables and
+            self.path == other.path and self.rng_counters is other.rng_counters)
 
   def __hash__(self) -> int:
     # see __eq__
@@ -431,7 +431,8 @@ class Scope:
 
   @contextlib.contextmanager
   def temporary(self):
-    """Returns a context manager that will invalidate this Scope when leaving the context."""
+    """Returns a context manager that will invalidate this Scope when leaving
+    the context."""
     try:
       yield self
     finally:
@@ -442,7 +443,8 @@ class Scope:
     self._invalid = True
 
   def mutable_variables(self) -> VariableDict:
-    """Returns an immutable copy of the mutable variables belonging to this Scope."""
+    """Returns an immutable copy of the mutable variables belonging to this
+    Scope."""
     self._populate_collections()
     xs = {k: v for k, v in self._variables.items()
           if in_filter(self.mutable, k)}
@@ -641,8 +643,7 @@ class Scope:
     variables = self._collection(col)
     if name in variables:
       return variables[name]
-    else:
-      return default
+    return default
 
   def has_variable(self, col: str, name: str) -> bool:
     """Returns true if the given variable exists in this scope.

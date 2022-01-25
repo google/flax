@@ -417,7 +417,8 @@ class _ModuleInternalState:
 
   def export(self):
     """Exports transform-preserved state across transform boundary."""
-    setup_state = SetupState.TRANSFORMED if self.setup_called else SetupState.NEW
+    setup_state = (SetupState.TRANSFORMED if self.setup_called
+                   else SetupState.NEW)
     cloned = _ModuleInternalState(
       in_compact_method=self.in_compact_method,
       in_setup=self.in_setup,
@@ -466,7 +467,8 @@ else:
 
 
 class Module(metaclass=ModuleMeta):
-  """Base class for all neural network modules. Layers and models should subclass this class.
+  """Base class for all neural network modules. Layers and models should
+  subclass this class.
 
   All Flax Modules are Python 3.7
   `dataclasses <https://docs.python.org/3/library/dataclasses.html>`_. Since
@@ -589,7 +591,8 @@ class Module(metaclass=ModuleMeta):
 
   @classmethod
   def _wrap_module_methods(cls):
-    """Wraps user-defined non-inherited methods with state management functions."""
+    """Wraps user-defined non-inherited methods with state management
+    functions."""
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__', '__hash__',
                    '__post_init__'])
@@ -662,7 +665,9 @@ class Module(metaclass=ModuleMeta):
       name: Attribute to set.
       val: Value of the attribute.
     """
-    is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
+    assert hasattr(self, '__dataclass_fields__')
+    is_dataclass_attr = (name in self.__dataclass_fields__ and
+                         self.__dataclass_fields__[name].init)
 
     if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
@@ -811,7 +816,8 @@ class Module(metaclass=ModuleMeta):
       x.__post_init__()
 
   def _try_setup(self, shallow=False):
-    """Tries to setup module if scope is available and setup has not been called yet."""
+    """Tries to setup module if scope is available and setup has not been called
+    yet."""
     if (self.scope
         and not self._state.in_setup
         and self._state.setup_called != SetupState.DONE):
@@ -866,7 +872,8 @@ class Module(metaclass=ModuleMeta):
     Returns:
       A clone of the this Module with the updated attributes and parent.
     """
-    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self) if f.init}
+    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self)
+             if f.init}
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
@@ -994,15 +1001,15 @@ class Module(metaclass=ModuleMeta):
     """Creates an interactive Module instance by binding variables and RNGs.
 
     ``bind`` provides an "interactive" instance of a Module directly without
-    transforming a function with ``apply``. This is particalary useful for debugging
-    and interactive use cases like notebooks where a function would limit the ability
-    split up code into different cells.
+    transforming a function with ``apply``. This is particalary useful for
+    debugging and interactive use cases like notebooks where a function would
+    limit the ability split up code into different cells.
 
-    Once the variables (and optionally RNGs) are bound to a ``Module`` it becomes a
-    stateful object. Note that idiomatic JAX is functional and therefore an interactive
-    instance does not mix well well with vanilla JAX APIs. ``bind()`` should only be used
-    for interactive experimentation, and in all other cases we strongly encourage
-    to use ``apply()`` instead.
+    Once the variables (and optionally RNGs) are bound to a ``Module`` it
+    becomes a stateful object. Note that idiomatic JAX is functional and
+    therefore an interactive instance does not mix well well with vanilla JAX
+    APIs. ``bind()`` should only be used for interactive experimentation, and in
+    all other cases we strongly encourage to use ``apply()`` instead.
 
     Example::
 
@@ -1052,7 +1059,8 @@ class Module(metaclass=ModuleMeta):
             capture_intermediates: Union[bool, Callable[['Module', str],
                                                         bool]] = False,
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
-    """Applies a module method to variables and returns output and modified variables.
+    """Applies a module method to variables and returns output and modified
+    variables.
 
     Note that `method` should be set if one would like to call `apply` on a
     different class method than ``__call__``. For instance, suppose a
@@ -1116,7 +1124,8 @@ class Module(metaclass=ModuleMeta):
                        method: Optional[Callable[..., Any]] = None,
                        mutable: CollectionFilter = DenyList("intermediates"),
                        **kwargs) -> Tuple[Any, FrozenVariableDict]:
-    """Initializes a module method with variables and returns output and modified variables.
+    """Initializes a module method with variables and returns output and
+    modified variables.
 
     Args:
       rngs: The rngs for the variable collections.
@@ -1314,10 +1323,13 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
 
   """
   if a is None and b is None:
-    raise ValueError(f'Parameter "{name}" must be passed to the constructor or at call time.')
+    raise ValueError(
+        f'Parameter "{name}" must be passed to the constructor or at call '
+        'time.')
   if a is not None and b is not None:
-    raise ValueError(f'Parameter "{name}" was passed to the constructor and at call time.'
-                     ' Should be passed just once.')
+    raise ValueError(
+        f'Parameter "{name}" was passed to the constructor and at call time.'
+        ' Should be passed just once.')
   if a is None:
     return b
   else:

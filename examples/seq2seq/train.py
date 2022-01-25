@@ -183,7 +183,6 @@ class EncoderLSTM(nn.Module):
     is_eos = jnp.logical_or(is_eos, x[:, CTABLE.eos_id])
     return (carried_lstm_state, is_eos), y
 
-
   @staticmethod
   def initialize_carry(batch_size, hidden_size):
     # use dummy key since default state init fn is just zeros.

@@ -75,9 +75,11 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
                use_bias: bool, use_scale: bool,
                bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
                scale_init: Callable[[PRNGKey, Shape, Dtype], Array]):
-  """"Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
+  """"Normalizes the input of a normalization layer and optionally applies a
+  learned scale and bias.
 
-  A seperate bias and scale is learned for each feature as specified by feature_axes.
+  A seperate bias and scale is learned for each feature as specified by
+  feature_axes.
   """
   reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
   feature_axes = _canonicalize_axes(x.ndim, feature_axes)
@@ -295,9 +297,9 @@ class GroupNorm(Module):
       dtype: the dtype of the computation (default: float32).
       param_dtype: the dtype passed to parameter initializers (default: float32).
       use_bias:  If True, bias (beta) is added.
-      use_scale: If True, multiply by scale (gamma). When the next layer is linear
-        (also e.g. nn.relu), this can be disabled since the scaling will be done
-        by the next layer.
+      use_scale: If True, multiply by scale (gamma). When the next layer is
+        linear (also e.g. nn.relu), this can be disabled since the scaling will
+        be done by the next layer.
       bias_init: Initializer for bias, by default, zero.
       scale_init: Initializer for scale, by default, one.
   """
@@ -347,11 +349,13 @@ class GroupNorm(Module):
     group_shape = x.shape[:-1] + (num_groups, group_size)
 
     def broadcast_stat(stat):
-      stat = jnp.broadcast_to(stat[..., None], (x.shape[0], num_groups, group_size))
+      stat = jnp.broadcast_to(stat[..., None],
+                              (x.shape[0], num_groups, group_size))
       return stat.reshape((x.shape[0], num_groups * group_size))
 
     # TODO suport axis_name for model parallelism?
-    mean, var = _compute_stats(x.reshape(group_shape), reduction_axes, None, None)
+    mean, var = _compute_stats(x.reshape(group_shape), reduction_axes, None,
+                               None)
     mean = broadcast_stat(mean)
     var = broadcast_stat(var)
 
