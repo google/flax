@@ -67,6 +67,17 @@ Graph modeling
 
 [#231]: https://github.com/google/flax/issues/231
 
+## Repositories Using Flax
+
+The following code bases use Flax and provide training frameworks and a wealth
+of examples, in many cases with pre-trained weights:
+
+- https://github.com/google-research/scenic: *Scenic* is a codebase/library
+  for computer vision research and beyond. Scenic's main focus is around
+  attention-based models. Scenic has been successfully used to develop
+  classification, segmentation, and detection models for multiple modalities
+  including images, video, audio, and multimodal combinations of them.
+
 ## Community Examples
 
 In addition to the curated list of official Flax examples, there is a growing
