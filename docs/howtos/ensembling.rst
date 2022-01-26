@@ -6,7 +6,7 @@ the ensemble is equal to the number of available devices. In short, this change
 be described as: 
 
 * make a number of functions parallel using |jax.pmap()|_,
-* split the random seed to have different parameter initialization,
+* split the random seed to obtain different parameter initialization,
 * replicate the inputs and unreplicate the outputs where necessary,
 * average probabilities across devices to compute the predictions.
 
@@ -60,7 +60,7 @@ metrics computation, but they can be found in the `MNIST example`_.
 
 
 Parallel functions
---------------------------------
+------------------
 
 We start by creating a parallel version of ``create_train_state()``, which
 retrieves the initial parameters of the models. We do this using |jax.pmap()|_.
@@ -115,7 +115,7 @@ the average *across devices*. This also requires us to specify the
     def loss_fn(params):
       logits = CNN().apply({'params': params}, images)
       one_hot = jax.nn.one_hot(labels, 10)
-      loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=one_hot))
+      loss = optax.softmax_cross_entropy(logits=logits, labels=one_hot).mean()
       return loss, logits
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -133,7 +133,7 @@ the average *across devices*. This also requires us to specify the
     def loss_fn(params):
       logits = CNN().apply({'params': params}, images)
       one_hot = jax.nn.one_hot(labels, 10)
-      loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=one_hot))
+      loss = optax.softmax_cross_entropy(logits=logits, labels=one_hot).mean()
       return loss, logits
 
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
@@ -151,7 +151,7 @@ Training the Ensemble
 
 Next we transform the ``train_epoch()`` function. When calling the pmapped
 functions from above, we mainly need to take care of duplicating the arguments
-for all devices where necessary, and de-duplicating the 
+for all devices where necessary, and de-duplicating the return values.
 
 .. codediff::
   :title_left: Single-model
@@ -162,7 +162,7 @@ for all devices where necessary, and de-duplicating the
     steps_per_epoch = train_ds_size // batch_size
 
     perms = jax.random.permutation(rng, len(train_ds['image']))
-    perms = perms[:steps_per_epoch * batch_size] 
+    perms = perms[:steps_per_epoch * batch_size]
     perms = perms.reshape((steps_per_epoch, batch_size))
 
     epoch_loss = []
