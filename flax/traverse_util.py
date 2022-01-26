@@ -44,10 +44,10 @@ import abc
 import copy
 import dataclasses
 
-import jax
 import flax
-
-from . import struct
+from flax import struct
+import flax.deprecated.nn
+import jax
 
 
 # the empty node is a struct.dataclass to be compatible with JAX.
@@ -369,7 +369,7 @@ class TraverseTree(Traversal):
 
 
 def _get_params_dict(inputs):
-  if isinstance(inputs, flax.nn.Model):
+  if isinstance(inputs, flax.deprecated.nn.Model):
     return inputs.params
   elif isinstance(inputs, (dict, flax.core.FrozenDict)):
     return flax.core.unfreeze(inputs)
@@ -396,7 +396,7 @@ class ModelParamTraversal(Traversal):
 
   Backward compatibility:
   When using the old api the parameters can be encapsulated in a
-  :class:`flax.nn.Model` instance.
+  :class:`flax.deprecated.nn.Model` instance.
   """
 
   def __init__(self, filter_fn):
@@ -431,7 +431,7 @@ class ModelParamTraversal(Traversal):
           value = fn(value)
       new_dict[key] = value
     new_params = unflatten_dict(new_dict)
-    if isinstance(inputs, flax.nn.base.Model):
+    if isinstance(inputs, flax.deprecated.nn.base.Model):
       return inputs.replace(params=new_params)
     elif isinstance(inputs, flax.core.FrozenDict):
       return flax.core.FrozenDict(new_params)
