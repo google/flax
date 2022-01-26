@@ -3,23 +3,40 @@ Changelog
 
 vNext
 ------
-(Add your change to a random empty line to avoid merge conflicts)
-- 
-- 
-- 
-- 
-- 
-- 
-- 
-- 
-- 
-- 
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+
+0.4.0
+------
+Breaking changes:
+- flax.deprecated.nn is removed. Please pin to flax==0.3.6 if you are still using it.
+- PixelCNN++ example is removed. It was not working well on TPU.
+
+New features:
 - Added `flax.linen.custom_vjp` for custom derivatives inside a `Module`.
-- 
-- 
-- 
 - Add `param_dtype` attribute to standard Linen Modules for specifying parameter dtypes.
-- 
 
 
 0.3.6
