@@ -20,7 +20,8 @@ import hashlib
 import dataclasses
 
 import typing
-from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
+from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
+                    Sequence, Set, Tuple, TypeVar, Union)
 
 from . import tracers
 from flax import errors
@@ -46,7 +47,7 @@ Array = Any
 RNGSequences = Dict[str, PRNGKey]
 
 
-Filter = Union[bool, str, Container[str], 'DenyList']
+Filter = Union[bool, str, typing.Collection[str], 'DenyList']
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
@@ -146,7 +147,7 @@ def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNG
 def is_filter_empty(filter_like: Filter) -> bool:
   if isinstance(filter_like, str):
     return False
-  if isinstance(filter_like, Container):
+  if isinstance(filter_like, typing.Collection):
     return len(filter_like) == 0
   if isinstance(filter_like, bool):
     return not filter_like
@@ -174,7 +175,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
   """
   if isinstance(filter_like, str):
     return col == filter_like
-  if isinstance(filter_like, Container):
+  if isinstance(filter_like, typing.Collection):
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
@@ -197,7 +198,7 @@ def filter_to_set(x: Filter) -> Set[str]:
     return set()
   if isinstance(x, str):
     return set([x])
-  if isinstance(x, Iterable):
+  if isinstance(x, typing.Collection):
     return set(x)
   raise errors.InvalidFilterError(x)
 
