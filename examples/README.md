@@ -57,8 +57,6 @@ Generative models
 -  [Variational
    auto-encoder](https://github.com/google/flax/tree/main/examples/vae/):
    Trained on binarized MNIST (featuring simple code, vmap).
--  [PixelCNN++](https://github.com/google/flax/tree/main/examples/pixelcnn/):
-   Trained on cifar10 (featuring single host SPMD, checkpointing, Polyak decay).
 
 Graph modeling
 
