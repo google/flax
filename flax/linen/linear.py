@@ -209,9 +209,10 @@ class Conv(Module):
       be a sequence of integers.
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string 'CIRCULAR'` (periodic boundary conditions),
-      or a sequence of `n` `(low, high)` integer pairs that give the padding to apply
-      before and after each spatial dimension.
+    padding: either the string `'SAME'`, the string `'VALID'`, the string
+      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
+      high)` integer pairs that give the padding to apply before and after each
+      spatial dimension.
     input_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of `inputs` (default: 1).
       Convolution with input dilation `d` is equivalent to transposed
@@ -329,11 +330,11 @@ class ConvTranspose(Module):
     kernel_size: shape of the convolutional kernel. For 1D convolution,
       the kernel size can be passed as an integer. For all other cases, it must
       be a sequence of integers.
-    strides: a sequence of `n` integers, representing the inter-window
-      strides.
-    padding: either the string `'SAME'`, the string `'VALID'`, the string 'CIRCULAR'` (periodic boundary conditions),
-      or a sequence of `n` `(low, high)` integer pairs that give the padding to apply before
-      and after each spatial dimension.
+    strides: a sequence of `n` integers, representing the inter-window strides.
+    padding: either the string `'SAME'`, the string `'VALID'`, the string
+      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
+      high)` integer pairs that give the padding to apply before and after each
+      spatial dimension.
     kernel_dilation: `None`, or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel. Convolution with kernel dilation is also known as 'atrous
@@ -411,7 +412,7 @@ class ConvTranspose(Module):
       # dimension. Padding should be done in such a way that the start of the
       # original input data inside the padded array is located at integer
       # number of periods - otherwise the result would be circularly shifted.
-      
+
       # Compute period along each spatial dimension - it's input size scaled
       # by the stride.
       scaled_x_dims = [
