@@ -132,9 +132,6 @@ These states contain pytrees that mirror the parameter tree, and can be modified
 the same way: flattening, modifying, unflattening, and then recreating a new
 optimizer state that mirrors the original state.
 
-If you're loading from a flax optimizer, all of the variables that should be
-optimized live in ``optimizer.target``.
-
 .. testcode::
 
   tx = optax.adam(1.0)
