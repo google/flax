@@ -21,9 +21,14 @@ from typing import Any
 
 from absl.testing import absltest
 from absl.testing import parameterized
-import flax
 from flax import core
 from flax import errors
+from flax import linen as linen_nn
+from flax import optim
+from flax import serialization
+from flax import struct
+from flax import traverse_util
+from flax.deprecated import nn as depr_nn
 from flax.training import checkpoints
 import jax
 from jax import numpy as jnp
@@ -42,56 +47,56 @@ def shuffle(l):
   return l
 
 
-class InnerPreLinen(flax.nn.Module):
-  """Inner class based on pre-Linen flax.nn."""
+class InnerPreLinen(depr_nn.Module):
+  """Inner class based on pre-Linen depr_nn."""
 
   def apply(self, x):
-    x = flax.nn.Conv(x, 10, (2, 2))
-    x = flax.nn.normalization.BatchNorm(x, use_running_average=True)
+    x = depr_nn.Conv(x, 10, (2, 2))
+    x = depr_nn.normalization.BatchNorm(x, use_running_average=True)
     return x
 
 
-class ModelPreLinen(flax.nn.Module):
-  """Simple model based on pre-Linen flax.nn."""
+class ModelPreLinen(depr_nn.Module):
+  """Simple model based on pre-Linen depr_nn."""
 
   def apply(self, inputs):
-    x = flax.nn.Conv(inputs, 10, (2, 2))
+    x = depr_nn.Conv(inputs, 10, (2, 2))
     x = InnerPreLinen(x, name='Inner_1')
     x = x.reshape([x.shape[0], -1])
-    x = flax.nn.normalization.BatchNorm(x, use_running_average=True)
-    x = flax.nn.Dense(x, 10)
-    x = flax.nn.log_softmax(x)
+    x = depr_nn.normalization.BatchNorm(x, use_running_average=True)
+    x = depr_nn.Dense(x, 10)
+    x = depr_nn.log_softmax(x)
     return x
 
 
-class Inner(flax.linen.Module):
-  """Inner class based on flax.linen."""
+class Inner(linen_nn.Module):
+  """Inner class based on linen_nn."""
 
-  @flax.linen.compact
+  @linen_nn.compact
   def __call__(self, x):
-    x = flax.linen.Conv(10, (2, 2))(x)
-    x = flax.linen.normalization.BatchNorm(True)(x)
+    x = linen_nn.Conv(10, (2, 2))(x)
+    x = linen_nn.normalization.BatchNorm(True)(x)
     return x
 
 
-class Model(flax.linen.Module):
-  """Simple model based on flax.linen."""
+class Model(linen_nn.Module):
+  """Simple model based on linen_nn."""
 
-  @flax.linen.compact
+  @linen_nn.compact
   def __call__(self, inputs):
-    x = flax.linen.Conv(10, (2, 2))(inputs)
+    x = linen_nn.Conv(10, (2, 2))(inputs)
     x = Inner()(x)
     x = x.reshape([x.shape[0], -1])
-    x = flax.linen.normalization.BatchNorm(True)(x)
-    x = flax.linen.Dense(10)(x)
-    x = flax.linen.log_softmax(x)
+    x = linen_nn.normalization.BatchNorm(True)(x)
+    x = linen_nn.Dense(10)(x)
+    x = linen_nn.log_softmax(x)
     return x
 
 
-@flax.struct.dataclass
+@struct.dataclass
 class TrainState:
   """Simple container that captures training state."""
-  optimizer: flax.optim.Optimizer
+  optimizer: optim.Optimizer
   model_state: Any
 
 
@@ -173,21 +178,17 @@ class CheckpointsTest(parameterized.TestCase):
     checkpoints.save_checkpoint(
         tmp_dir, test_object0, 0, keep=1)
     with self.assertRaises(errors.InvalidCheckpointError):
-      checkpoints.save_checkpoint(
-          tmp_dir, test_object, 0, keep=1)
-    checkpoints.save_checkpoint(
-          tmp_dir, test_object, 0, keep=1, overwrite=True)
+      checkpoints.save_checkpoint(tmp_dir, test_object, 0, keep=1)
+    checkpoints.save_checkpoint(tmp_dir, test_object, 0, keep=1, overwrite=True)
     new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
     jtu.check_eq(new_object, test_object)
     checkpoints.save_checkpoint(
-          tmp_dir, test_object0, 2, keep=1, overwrite=True)
+        tmp_dir, test_object0, 2, keep=1, overwrite=True)
     new_object = checkpoints.restore_checkpoint(tmp_dir, test_object)
     jtu.check_eq(new_object, test_object0)
     with self.assertRaises(errors.InvalidCheckpointError):
-      checkpoints.save_checkpoint(
-            tmp_dir, test_object, 1, keep=1)
-    checkpoints.save_checkpoint(
-          tmp_dir, test_object, 1, keep=1, overwrite=True)
+      checkpoints.save_checkpoint(tmp_dir, test_object, 1, keep=1)
+    checkpoints.save_checkpoint(tmp_dir, test_object, 1, keep=1, overwrite=True)
     new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
     jtu.check_eq(new_object, test_object)
     os.chdir(os.path.dirname(tmp_dir))
@@ -311,22 +312,22 @@ class CheckpointsTest(parameterized.TestCase):
     inputs = jnp.ones([2, 5, 5, 1])
     rng = jax.random.PRNGKey(0)
     # pre-Linen.
-    with flax.nn.stateful() as model_state:
+    with depr_nn.stateful() as model_state:
       y, params = ModelPreLinen.init(rng, inputs)
-    pre_linen_optimizer = flax.optim.GradientDescent(0.1).create(params)
+    pre_linen_optimizer = optim.GradientDescent(0.1).create(params)
     train_state = TrainState(
         optimizer=pre_linen_optimizer, model_state=model_state)
-    state_dict = flax.serialization.to_state_dict(train_state)
+    state_dict = serialization.to_state_dict(train_state)
     # Linen.
     model = Model()
     variables = model.init(rng, inputs)
-    optimizer = flax.optim.GradientDescent(0.1).create(variables['params'])
+    optimizer = optim.GradientDescent(0.1).create(variables['params'])
     optimizer = optimizer.restore_state(
-        flax.core.unfreeze(
+        core.unfreeze(
             checkpoints.convert_pre_linen(state_dict['optimizer'])))
     optimizer = optimizer.apply_gradient(variables['params'])
     batch_stats = checkpoints.convert_pre_linen(
-        flax.traverse_util.unflatten_dict({
+        traverse_util.unflatten_dict({
             tuple(k.split('/')[1:]): v
             for k, v in model_state.as_dict().items()
         }))
