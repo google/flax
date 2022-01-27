@@ -369,9 +369,7 @@ class TraverseTree(Traversal):
 
 
 def _get_params_dict(inputs):
-  if isinstance(inputs, flax.nn.Model):
-    return inputs.params
-  elif isinstance(inputs, (dict, flax.core.FrozenDict)):
+  if isinstance(inputs, (dict, flax.core.FrozenDict)):
     return flax.core.unfreeze(inputs)
   else:
     raise ValueError(
@@ -393,10 +391,6 @@ class ModelParamTraversal(Traversal):
   See :class:`flax.optim.MultiOptimizer` for an example of how to use
   :class:`ModelParamTraversal` to update subsets of the parameter tree with a
   specific optimizer.
-
-  Backward compatibility:
-  When using the old api the parameters can be encapsulated in a
-  :class:`flax.nn.Model` instance.
   """
 
   def __init__(self, filter_fn):
@@ -431,9 +425,7 @@ class ModelParamTraversal(Traversal):
           value = fn(value)
       new_dict[key] = value
     new_params = unflatten_dict(new_dict)
-    if isinstance(inputs, flax.nn.base.Model):
-      return inputs.replace(params=new_params)
-    elif isinstance(inputs, flax.core.FrozenDict):
+    if isinstance(inputs, flax.core.FrozenDict):
       return flax.core.FrozenDict(new_params)
     else:
       return new_params

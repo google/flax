@@ -57,8 +57,6 @@ Generative models
 -  [Variational
    auto-encoder](https://github.com/google/flax/tree/main/examples/vae/):
    Trained on binarized MNIST (featuring simple code, vmap).
--  [PixelCNN++](https://github.com/google/flax/tree/main/examples/pixelcnn/):
-   Trained on cifar10 (featuring single host SPMD, checkpointing, Polyak decay).
 
 Graph modeling
 
@@ -66,6 +64,17 @@ Graph modeling
   Molecular predictions on ogbg-molpcba from the Open Graph Benchmark.
 
 [#231]: https://github.com/google/flax/issues/231
+
+## Repositories Using Flax
+
+The following code bases use Flax and provide training frameworks and a wealth
+of examples, in many cases with pre-trained weights:
+
+- https://github.com/google-research/scenic: *Scenic* is a codebase/library
+  for computer vision research and beyond. Scenic's main focus is around
+  attention-based models. Scenic has been successfully used to develop
+  classification, segmentation, and detection models for multiple modalities
+  including images, video, audio, and multimodal combinations of them.
 
 ## Community Examples
 
@@ -77,7 +86,7 @@ official Flax example, and start from there.
 
 |             Link             |       Author       |             Task type             |                               Reference                               |
 | ---------------------------- | ------------------ | --------------------------------- | --------------------------------------------------------------------- |
-| [matthias-wright/flaxmodels] | [@matthias-wright] | Various                           | Various                                                               |
+| [matthias-wright/flaxmodels] | [@matthias-wright] | Various                           | GPT-2, ResNet, StyleGAN-2, VGG, ...                                   |
 | [google/vision_transformer]  | [@andsteing]       | Image classification, fine-tuning | https://arxiv.org/abs/2010.11929 and https://arxiv.org/abs/2105.01601 |
 | [JAX-RL]                     | [@henry-prior]     | Reinforcement learning            | N/A                                                                   |
 | [DCGAN] Colab                | [@bkkaggle]        | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |

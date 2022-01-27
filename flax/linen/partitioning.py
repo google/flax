@@ -438,8 +438,29 @@ def get_axis_names(axes_metadata):
 def _tree_map_axes(fn, tree):
   """Only map over AxisMetadata leaves in pytree - identity for other leaves."""
   safe_fn = lambda x: fn(x) if isinstance(x, AxisMetadata) else x
-  return jax.tree_map(safe_fn, tree,
-                      is_leaf=lambda x: isinstance(x, AxisMetadata))
+  return jax.tree_map(
+      safe_fn, tree, is_leaf=lambda x: isinstance(x, AxisMetadata))
+
+
+def _is_mutable(axis_col: str) -> bool:
+  """Determines whether a collection is mutable.
+
+  For example, when a module is called with `module.apply(..., mutable=['z'])`,
+  this function will return True for `axis_col='z'` and False otherwise.
+
+  If there is no module in scope, this function will return True.
+
+  Args:
+    axis_col: Name of the collection in question.
+
+  Returns:
+    Whether it is currently mutable.
+  """
+  last = nn.module._context.module_stack[-1]
+  if last:
+    return last.is_mutable_collection(axis_col)
+  else:
+    return True
 
 
 # uses this variable_transform to change 'params_axes' pytree as it bubbles
@@ -449,14 +470,16 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
   # Handle In() / Out() scan axis marker types.
   if hasattr(axis_pos, 'axis'):
     axis_pos = axis_pos.axis
+
   def insert_fn(x):
     names = list(x.names)
     names.insert(axis_pos, axis_name)
     return x.replace(names=tuple(names))
+
   return nn.transforms.map_variables(
       fn,
       axis_col,
-      mutable=True,
+      mutable=_is_mutable(axis_col),
       trans_out_fn=lambda tree: _tree_map_axes(insert_fn, tree))
 
 

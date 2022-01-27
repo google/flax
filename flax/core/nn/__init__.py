@@ -17,13 +17,13 @@
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
 from .attention import (dot_product_attention, multi_head_dot_product_attention)
-from flax.deprecated.nn import activation
-from flax.deprecated.nn import initializers
-from flax.deprecated.nn.activation import (celu, elu, gelu, glu, leaky_relu,
-                                           log_sigmoid, log_softmax, relu,
-                                           sigmoid, silu, soft_sign, softmax,
-                                           softplus, swish, tanh)
-from flax.deprecated.nn.pooling import avg_pool, max_pool
+from flax.linen import activation
+from flax.linen import initializers
+from flax.linen.activation import (celu, elu, gelu, glu, leaky_relu,
+                                   log_sigmoid, log_softmax, relu, sigmoid,
+                                   silu, soft_sign, softmax, softplus, swish,
+                                   tanh)
+from flax.linen.pooling import avg_pool, max_pool
 from .linear import Embedding, conv, conv_transpose, dense, dense_general, embedding
 from .normalization import batch_norm, group_norm, layer_norm
 from .stochastic import dropout

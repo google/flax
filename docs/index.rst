@@ -74,9 +74,3 @@ For a quick introduction and short example snippets, see our `README
    flax.training
    flax.config
    flax.errors
-
-.. toctree::
-   :maxdepth: 1
-   :caption: (deprecated)
-
-   flax.nn (deprecated) <flax.nn>

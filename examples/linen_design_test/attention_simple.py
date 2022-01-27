@@ -17,7 +17,7 @@ from pprint import pprint
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
 from flax.core import Scope
 from flax.core.frozen_dict import freeze, unfreeze
-from flax.deprecated.nn import initializers
+from flax.linen import initializers
 from flax.linen import Module, compact, vmap
 import jax
 from jax import lax, numpy as jnp, random

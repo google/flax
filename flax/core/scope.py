@@ -18,7 +18,10 @@ import contextlib
 import functools
 import hashlib
 import dataclasses
-from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
+
+import typing
+from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
+                    Sequence, Set, Tuple, TypeVar, Union)
 
 from . import tracers
 from flax import errors
@@ -44,7 +47,7 @@ Array = Any
 RNGSequences = Dict[str, PRNGKey]
 
 
-Filter = Union[bool, str, Container[str], 'DenyList']
+Filter = Union[bool, str, typing.Collection[str], 'DenyList']
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
@@ -113,7 +116,7 @@ def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
   return rng
 
 
-def _fold_in_static(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
+def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNGKey:
   """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
@@ -144,7 +147,7 @@ def _fold_in_static(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
 def is_filter_empty(filter_like: Filter) -> bool:
   if isinstance(filter_like, str):
     return False
-  if isinstance(filter_like, Container):
+  if isinstance(filter_like, typing.Collection):
     return len(filter_like) == 0
   if isinstance(filter_like, bool):
     return not filter_like
@@ -172,7 +175,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
   """
   if isinstance(filter_like, str):
     return col == filter_like
-  if isinstance(filter_like, Container):
+  if isinstance(filter_like, typing.Collection):
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
@@ -195,7 +198,7 @@ def filter_to_set(x: Filter) -> Set[str]:
     return set()
   if isinstance(x, str):
     return set([x])
-  if isinstance(x, Iterable):
+  if isinstance(x, typing.Collection):
     return set(x)
   raise errors.InvalidFilterError(x)
 

@@ -240,6 +240,9 @@ class PartitioningTest(absltest.TestCase):
     p_rules = (('emb', 'data'), ('mlp', 'model'), ('batch', 'data'))
     with partitioning.axis_rules(p_rules):
       variables = Scanned(L, E).init(k, x)
+
+      # Ensure that the module can be called when 'params_axes' is not mutable.
+      Scanned(L, E).apply(variables, x)
     self.assertIn('params', variables)
     self.assertIn('params_axes', variables)
     self.assertIn('stats', variables)

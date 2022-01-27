@@ -147,28 +147,25 @@ class TraversalTest(absltest.TestCase):
     xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
     flat_xs = traverse_util.flatten_dict(xs)
     self.assertEqual(flat_xs, {
-      ('foo',): 1,
-      ('bar', 'a'): 2,
+        ('foo',): 1,
+        ('bar', 'a'): 2,
     })
 
   def test_unflatten_dict(self):
     flat_xs = {
-      ('foo',): 1,
-      ('bar', 'a'): 2,
+        ('foo',): 1,
+        ('bar', 'a'): 2,
     }
     xs = traverse_util.unflatten_dict(flat_xs)
-    self.assertEqual(xs, {
-      'foo': 1,
-      'bar': {'a': 2}
-    })
+    self.assertEqual(xs, {'foo': 1, 'bar': {'a': 2}})
 
   def test_flatten_dict_keep_empty(self):
     xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
     flat_xs = traverse_util.flatten_dict(xs, keep_empty_nodes=True)
     self.assertEqual(flat_xs, {
-      ('foo',): 1,
-      ('bar', 'a'): 2,
-      ('bar', 'b'): traverse_util.empty_node,
+        ('foo',): 1,
+        ('bar', 'a'): 2,
+        ('bar', 'b'): traverse_util.empty_node,
     })
     xs_restore = traverse_util.unflatten_dict(flat_xs)
     self.assertEqual(xs, xs_restore)
@@ -179,8 +176,11 @@ class TraversalTest(absltest.TestCase):
         xs,
         is_leaf=lambda k, x: len(k) == 1 and len(x) == 2)
     self.assertEqual(flat_xs, {
-      ('foo', 'c'): 4,
-      ('bar',): {'a': 2, 'b': {}},
+        ('foo', 'c'): 4,
+        ('bar',): {
+            'a': 2,
+            'b': {}
+        },
     })
     xs_restore = traverse_util.unflatten_dict(flat_xs)
     self.assertEqual(xs, xs_restore)
@@ -222,13 +222,10 @@ class ModelParamTraversalTest(absltest.TestCase):
       return 'kernel' in name
     traversal = traverse_util.ModelParamTraversal(filter_fn)
 
-    # Model
-    model = flax.nn.Model(None, params)
-    values = list(traversal.iterate(model))
+    values = list(traversal.iterate(params))
     configs = [
-      (flax.nn.Model(None, params), flax.nn.Model(None, expected_params)),
-      (params, expected_params),
-      (flax.core.FrozenDict(params), flax.core.FrozenDict(expected_params)),
+        (params, expected_params),
+        (flax.core.FrozenDict(params), flax.core.FrozenDict(expected_params)),
     ]
     for model, expected_model in configs:
       self.assertEqual(values, [1, 3])

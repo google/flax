@@ -85,9 +85,9 @@ It also avoids a default value which would probably cause either the train step 
 
 
 
-## Functional Core and flax.nn
+## Functional Core
 
-The old NN api and functional core define functions rather than classes.
-Therefore, there is no clear distinction between hyper parameters and call time arguments.
-The only way to pre-determine the hyper parameters is by using `partial`.
+Functional core defines functions rather than classes.
+Therefore, there is no clear distinction between hyperparameters and call-time arguments.
+The only way to pre-determine the hyperparameters is by using `partial`.
 On the upside, there are no ambiguous cases where method arguments could also be attributes.

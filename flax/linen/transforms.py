@@ -186,10 +186,6 @@ def set_module_scopes(module, args, kwargs, scopes):
              for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
     new_attrs = jax.tree_map(set_scopes_inner, attrs)
     new_module = module.clone(parent=scopes[idx], **new_attrs)
-    if module.name == 'Dense_0':
-      print('--compare--')
-      print(id(module))
-      print(id(new_module))
     idx += 1
     return new_module
   new_module = set_scopes(module)
@@ -247,27 +243,13 @@ def module_class_lift_transform(
       # make a scope-function to transform
       def core_fn(scopes, *args, **kwargs):
         # make a clone of self using its arguments
-        m1 = self.m1
-        m2 = self.m2
-        print('--- before ---')
-        print(id(m1))
-        print(id(m2))
         attrs = {f.name: getattr(self, f.name)
                  for f in dataclasses.fields(self) if f.name != 'parent' and f.init}
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
         cloned, args, kwargs = set_module_scopes(cloned, args, kwargs, scopes)
-        print('--- after ---')
-        print(id(cloned.m1))
-        print(id(cloned.m2))
         object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
-        print('>args', *args)
-        print('>cloned', cloned)
-        print(cloned.m1.name)
-        print(cloned.m2.name)
-        print(fn)
         res = fn(cloned, *args, **kwargs)
-        return None
         self._state.reimport(cloned._state)  # pylint: disable=protected-access
         _test_transformed_return_values(res, fn_name)
         return res

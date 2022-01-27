@@ -17,7 +17,7 @@
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 from flax import struct
 from flax.core import Scope
-from flax.deprecated.nn import initializers
+from flax.linen import initializers
 from jax import lax
 
 import jax.numpy as jnp

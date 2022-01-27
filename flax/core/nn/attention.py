@@ -23,7 +23,7 @@ from . import stochastic
 from flax import jax_utils
 from flax import struct
 from flax.core import Scope
-from flax.deprecated.nn import initializers
+from flax.linen import initializers
 import jax
 from jax import lax
 from jax import random

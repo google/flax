@@ -19,7 +19,7 @@
 from . import core
 from . import linen
 from . import optim
-from .deprecated import nn
+# DO NOT REMOVE - Marker for internal deprecated API.
 # DO NOT REMOVE - Marker for internal logging.
 from .version import __version__
 

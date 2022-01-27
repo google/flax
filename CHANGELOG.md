@@ -33,6 +33,8 @@ vNext
 Breaking changes:
 - flax.deprecated.nn is removed. Please pin to flax==0.3.6 if you are still using it.
 - PixelCNN++ example is removed. It was not working well on TPU.
+- linen Normalization layers no longer downcast double and complex floats tofloat32
+  when computing the mean and variance.
 
 New features:
 - Added `flax.linen.custom_vjp` for custom derivatives inside a `Module`.
