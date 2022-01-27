@@ -1,7 +1,7 @@
 # Linen: A comfortable evolution of Flax
 
-Linen is a rewrite of Flax Modules based on learning from our users and the broader JAX community. Linen improves on much of the former `flax.nn` API, such as submodule sharing and better support for non-trainable variables.
-Moreover, Linen builds on a new "functional core", enabling direct usage of JAX transformations such as `vmap`, `remat` or `scan` inside your modules.
+Linen is a neural network API developed based on learning from our users and the broader JAX community. Linen improves on much of the former `flax.nn` API (removed since v0.4.0), such as submodule sharing and better support for non-trainable variables.
+Moreover, Linen builds on a "functional core", enabling direct usage of JAX transformations such as `vmap`, `remat` or `scan` inside your modules.
 
 In Linen, Modules behave much closer to vanilla Python objects, while still letting you opt-in to the concise single-method pattern many of our users love.
 
