@@ -24,8 +24,8 @@ Additionally, flax linen methods `param_with_axes` and `variable_with_axes`
 are introduced alongside `get_axis_names` for defining variables and parameters
 and variables with logical axis name annotations that are managed as metadata.
 
-Lastly, a version of `nn.scan` called `scan_with_axes` is introduced to add
-scanned axis information to this logical axis metadata.
+Lastly, `*_with_axes` versions of `nn.scan` and `nn.vmap` are introduced to add
+logical axis metadata to the underlying Lifted transformations.
 """
 
 import collections
@@ -529,6 +529,49 @@ def scan_with_axes(
                                       axis_name=axis_name,
                                       axis_col=f'{col}_axes')
   return scanned
+
+
+# pylint: disable=dangerous-default-value
+def vmap_with_axes(target: flax.linen.transforms.Target,
+                   variable_axes: Mapping[flax.core.lift.CollectionFilter,
+                                          flax.core.lift.InOutAxis],
+                   split_rngs: Mapping[flax.core.lift.PRNGSequenceFilter,
+                                       bool] = {},
+                   in_axes=0,
+                   out_axes=0,
+                   axis_size: Optional[int] = None,
+                   axis_name: Optional[str] = None,
+                   partitioning_axis_names: Mapping[str, str] = {},
+                   methods=None) -> flax.linen.transforms.Target:
+  """Wrapped version of nn.vmap that handles logical axis metadata."""
+
+  # tell normal vmap to broadcast axis metadata.
+  variable_axes = dict(variable_axes)  # shallow copy
+  for name in partitioning_axis_names:
+    variable_axes[f'{name}_axes'] = None
+
+  # perform usual lifted vmap
+  vmapped = flax.linen.transforms.lift_transform(
+      flax.core.lift.vmap,
+      target,
+      variable_axes=variable_axes,
+      split_rngs=split_rngs,
+      in_axes=in_axes,
+      out_axes=out_axes,
+      axis_size=axis_size,
+      axis_name=axis_name,
+      methods=methods)
+
+  for collection_name, axis in variable_axes.items():
+    if collection_name in partitioning_axis_names:
+      vmapped = _add_axis_to_metadata(  # pylint: disable=protected-access
+          vmapped,
+          axis_pos=axis,
+          axis_name=partitioning_axis_names[collection_name],
+          axis_col=f'{collection_name}_axes')
+
+  return vmapped
+
 
 # Remat abstraction bug hotfix
 # ------------------------------------------------------------------------------

@@ -12,20 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.linen.partitioning"""
+"""Tests for flax.linen.partitioning."""
 
 from absl.testing import absltest
 from flax import linen as nn
-from flax.core import freeze
 from flax.core import unfreeze
 from flax.linen import partitioning
 import jax
 from jax import random
-from jax import test_util as jtu
 from jax.experimental import pjit
-from jax.nn import initializers
 import jax.numpy as jnp
-import numpy as np
 
 
 mock = absltest.mock
@@ -72,6 +68,7 @@ class PartitioningTest(absltest.TestCase):
     with partitioning.axis_rules(AXIS_RULES_1):
       with self.assertRaises(ValueError):
         partitioning.logical_to_mesh_axes(('foo', 'foo', 'baz'))
+
   def test_logical_to_mesh_axes_overrides(self):
     p_rules = (
         ('baz', 'data'),
@@ -126,7 +123,7 @@ class PartitioningTest(absltest.TestCase):
 
     k = random.PRNGKey(0)
     x = jnp.ones((2, 2))
-    variables = ParamTest().init(k, x)
+    _ = ParamTest().init(k, x)
 
   def test_param_with_axes(self):
     class ParamTest(nn.Module):
@@ -165,7 +162,7 @@ class PartitioningTest(absltest.TestCase):
 
     k = random.PRNGKey(0)
     x = jnp.ones((2, 2))
-    variables = VarTest().init(k, x)
+    _ = VarTest().init(k, x)
 
   def test_variable_with_axes(self):
     class VarTest(nn.Module):
@@ -261,6 +258,67 @@ class PartitioningTest(absltest.TestCase):
         logical_axis_names,
         {'scanned_layer': {
             'y_st': pjit.PartitionSpec('batch', 'layer', 'emb')}})
+
+  def test_vmap_with_axes(self):
+
+    class Foo(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        return partitioning.param_with_axes(
+            'w', jax.nn.initializers.uniform(), [4, 3], axes=('out', 'in')) @ x
+
+    class Vmapped(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        FooVmapped = partitioning.vmap_with_axes(  # pylint: disable=invalid-name
+            Foo,
+            variable_axes={
+                'params': 1,
+            },
+            split_rngs={'params': True},
+            partitioning_axis_names={'params': 'vmap_axis'})
+        return FooVmapped(name='foo_vmapped')(x)
+
+    p_rules = (('out', None), ('in', 'data'), ('vmap_axis', 'model'))
+
+    # check that regular Food module is correct
+    with partitioning.axis_rules(p_rules):
+      variables = Foo().init(jax.random.PRNGKey(0), jnp.array([1, 2, 3]))
+    variables = unfreeze(variables)
+    variables['params'] = jax.tree_map(lambda x: x.shape, variables['params'])
+    self.assertDictEqual(
+        variables, {
+            'params': {
+                'w': (4, 3)
+            },
+            'params_axes': {
+                'w_axes': partitioning.AxisMetadata(names=('out', 'in'))
+            }
+        })
+
+    # check that FooVmapped adds 'vmap_axis' to axis 1
+    with partitioning.axis_rules(p_rules):
+      variables = Vmapped().init(
+          jax.random.PRNGKey(0), jnp.array([[1, 2, 3], [4, 5, 6]]))
+    variables = unfreeze(variables)
+    variables['params'] = jax.tree_map(lambda x: x.shape, variables['params'])
+    self.assertDictEqual(
+        variables, {
+            'params': {
+                'foo_vmapped': {
+                    'w': (4, 2, 3)
+                }
+            },
+            'params_axes': {
+                'foo_vmapped': {
+                    'w_axes':
+                        partitioning.AxisMetadata(
+                            names=('out', 'vmap_axis', 'in'))
+                }
+            }
+        })
 
 
 if __name__ == '__main__':
