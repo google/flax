@@ -1240,6 +1240,25 @@ class TransformTest(absltest.TestCase):
     vs = scanbody().init(k, x)
     y = scanbody().apply(vs, x)
 
+  def test_named_call_on_setup_helpers(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(2)
+        self.setup_helper()
+      def setup_helper(self):
+        self.b = nn.Dense(2)
+      def __call__(self, x):
+        return self.b(self.a(x))
+    k = random.PRNGKey(0)
+    x = jnp.ones((2,2))
+    with nn.override_named_call(True):
+      vs = Foo().init(k, x)
+      y0 = Foo().apply(vs, x)
+    with nn.override_named_call(False):
+      vs = Foo().init(k, x)
+      y1 = Foo().apply(vs, x)
+    np.testing.assert_array_equal(y0, y1)
+
 
 if __name__ == '__main__':
   absltest.main()
