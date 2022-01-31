@@ -3,7 +3,7 @@ Changelog
 
 vNext
 ------
--
+- linen_examples/ directory is removed.
 -
 -
 -
