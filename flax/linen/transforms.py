@@ -591,9 +591,9 @@ def scan(target: Target,
 
   ``scan`` distinguishes between 3 different types of values inside the loop:
 
-  #.  **scan**: a value that is iterated over in a loop. All scan values must
+  #. **scan**: a value that is iterated over in a loop. All scan values must
      have the same size in the axis they are scanned over. Scanned outputs
-     will be stacked along the scan axis.
+    will be stacked along the scan axis.
 
   #. **carry**: A carried value is updated at each loop iteration. It must
      have the same shape and dtype throughout the loop.
