@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ from setuptools import setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
-  README = open(os.path.join(here, "README.md"), encoding='utf-8').read()
+  README = open(os.path.join(here, "README.md"), encoding="utf-8").read()
 except IOError:
   README = ""
 
@@ -53,7 +53,7 @@ tests_require = [
 
 __version__ = None
 
-with open('flax/version.py') as f:
+with open("flax/version.py") as f:
   exec(f.read(), globals())
 
 setup(
@@ -61,7 +61,7 @@ setup(
     version=__version__,
     description="Flax: A neural network library for JAX designed for flexibility",
     long_description="\n\n".join([README]),
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
