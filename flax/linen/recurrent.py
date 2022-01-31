@@ -153,7 +153,7 @@ class LSTMCell(RNNCellBase):
 
 
 class DenseParams(Module):
-  """Dummy module for creating parameters matching `flax.nn.Dense`."""
+  """Dummy module for creating parameters matching `flax.deprecated.nn.Dense`."""
 
   features: int
   use_bias: bool = True

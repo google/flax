@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.nn."""
+"""Tests for flax.deprecated.nn."""
 
 from absl.testing import absltest
 
@@ -298,7 +298,7 @@ class RecurrentTest(absltest.TestCase):
         'hh': {'bias': (6*4,), 'kernel': (3, 3, 6, 6*4)},
         'ih': {'bias': (6*4,), 'kernel': (3, 3, 3, 6*4)},
     })
-    
+
   def test_optimized_lstm_cell_matches_regular(self):
 
     # Create regular LSTMCell.
@@ -309,8 +309,8 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
     lstm = nn.LSTMCell()
-    (_, y), lstm_params = lstm.init_with_output(key2, (c0, h0), x)    
-    
+    (_, y), lstm_params = lstm.init_with_output(key2, (c0, h0), x)
+
     # Create OptimizedLSTMCell.
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
@@ -319,10 +319,10 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
     lstm_opt = nn.OptimizedLSTMCell()
-    (_, y_opt), lstm_opt_params = lstm_opt.init_with_output(key2, (c0, h0), x)    
-    
+    (_, y_opt), lstm_opt_params = lstm_opt.init_with_output(key2, (c0, h0), x)
+
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)
-    jtu.check_eq(lstm_params, lstm_opt_params)      
+    jtu.check_eq(lstm_params, lstm_opt_params)
 
 
 if __name__ == '__main__':
