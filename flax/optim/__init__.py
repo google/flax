@@ -59,3 +59,7 @@ __all__ = [
     "WeightNorm",
 ]
 # pylint: enable=g-multiple-import
+
+import warnings
+# Makes sure the user sees the warning, as deprecation warnings are silent by default
+warnings.filterwarnings("always", category=DeprecationWarning, module=__name__)
