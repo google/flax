@@ -42,6 +42,8 @@ For a quick introduction and short example snippets, see our `README
    howtos/extracting_intermediates
    howtos/model_surgery
    howtos/optax_update_guide
+   howtos/convert_pytorch_to_flax
+
 
 .. toctree::
    :maxdepth: 1
