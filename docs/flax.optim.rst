@@ -29,7 +29,7 @@ Available optimizers
 
     Adam
     AdaBelief
-    AdaFactor
+    Adafactor
     Adagrad
     Adadelta
     DynamicScale
