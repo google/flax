@@ -49,6 +49,7 @@ tests_require = [
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
     "tensorflow",
+    "torch",
 ]
 
 __version__ = None
