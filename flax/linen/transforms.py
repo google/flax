@@ -622,14 +622,16 @@ def scan(target: Target,
 
   ``scan`` distinguishes between 3 different types of values inside the loop:
 
-  1. **scan**: a value that is iterated over in a loop. All scan values must
-    have the same size in the axis they are scanned over. Scanned outputs
-    will be stacked along the scan axis.
-  2. **carry**: A carried value is updated at each loop iteration. It must
-    have the same shape and dtype throughout the loop.
-  3. **broadcast**: a value that is closed over by the loop. When a variable
-    is broadcasted they are typically initialized inside the loop body but
-    independent of the loop variables.
+  #. **scan**: a value that is iterated over in a loop. All scan values must
+     have the same size in the axis they are scanned over. Scanned outputs
+     will be stacked along the scan axis.
+
+  #. **carry**: A carried value is updated at each loop iteration. It must
+     have the same shape and dtype throughout the loop.
+
+  #. **broadcast**: a value that is closed over by the loop. When a variable
+     is broadcasted they are typically initialized inside the loop body but
+     independent of the loop variables.
 
   The loop body should have the signature
   ``(scope, body, carry, *xs) -> (carry, ys)``, where ``xs`` and ``ys``
@@ -662,7 +664,6 @@ def scan(target: Target,
     out_carry, out_val = model.apply(variables, init_carry, xs)
 
     assert out_val.shape == (batch_size, seq_len, out_feat)
-
 
   Args:
     target: a ``Module`` or a function taking a ``Module``
@@ -763,7 +764,6 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
   a cotangent for the return value of `fn`. If variables require a co-tangent
   as well they can be returned from `fn` using `Module.variables`.
 
-
   Example::
 
     class LearnScale(nn.Module):
@@ -779,7 +779,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
         params_grad, x_grad = bwd(jnp.ones(y.shape))
         return y, params_grad, x_grad
 
-   Args:
+  Args:
     fn: Function to be differentiated. Its arguments should be arrays, scalars,
       or standard Python containers of arrays or scalars. It should return an
       array, scalar, or standard Python container of arrays or scalars. It will
@@ -835,7 +835,7 @@ def jvp(fn: Callable[..., Any], mdl: Module,
 
   Note that no tangents are returned for variables. When variable tangents
   are required their value should be returned explicitly by `fn`
-  using `Module.variables`.
+  using `Module.variables`::
 
     class LearnScale(nn.Module):
       @nn.compact
@@ -866,11 +866,11 @@ def jvp(fn: Callable[..., Any], mdl: Module,
           variable_tangents={'params': vars_t})
       return out_t
 
-   Args:
+  Args:
     primals: The primal values at which the Jacobian of ``fun`` should be
-        evaluated. Should be either a tuple or a list of arguments,
-        and its length should be equal to the number of positional parameters of
-        ``fun``.
+      evaluated. Should be either a tuple or a list of arguments,
+      and its length should be equal to the number of positional parameters of
+      ``fun``.
     tangents: The tangent vector for which the Jacobian-vector product should be
       evaluated. Should be either a tuple or a list of tangents, with the same
       tree structure and array shapes as ``primals``.
@@ -962,7 +962,7 @@ def custom_vjp(fn: Callable[..., Any],
     forward_fn: A function with the same arguments as `fn` returning an tuple
       with the original output and the residuals that will be passsed to
       `backward_fn`.
-    backward_fn: arguments are passed as (*nondiff_args, residuals, tangents)
+    backward_fn: arguments are passed as (\*nondiff_args, residuals, tangents)
       The function should return a tuple containing the tangents for the
       input arguments (except the module and nondiff args) and the variable
       tangents for the collections specified by `grad_vars`.
@@ -997,7 +997,7 @@ def named_call(class_fn, force=True):
   prewrapped_fn = wrap_method_once(class_fn)
   @functools.wraps(prewrapped_fn)
   def wrapped_fn(self, *args, **kwargs):
-    if not force and not linen_module._use_named_call:
+    if (not force and not linen_module._use_named_call) or self._state.in_setup:
       return prewrapped_fn(self, *args, **kwargs)
     fn_name = class_fn.__name__
     method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
