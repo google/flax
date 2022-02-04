@@ -64,7 +64,6 @@ For a quick introduction and short example snippets, see our `README
    :caption: API reference
 
    flax.linen
-   flax.optim
    flax.serialization
    flax.core.frozen_dict
    flax.struct

@@ -58,7 +58,7 @@ class _EmptyNode:
 empty_node = _EmptyNode()
 
 
-def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None):
+def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
   """Flatten a nested dictionary.
 
   The nested keys are flattened to a tuple.
@@ -88,14 +88,23 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None):
       next nested dictionary and nested keys and
       returns True if the nested dictionary is a
       leaf (i.e., should not be flattened further).
+    sep: if specified, then the keys of the returned
+      dictionary will be `sep`-joined strings (if
+      `None`, then keys will be tuples).
   Returns:
     The flattened dictionary.
   """
-  assert isinstance(xs, dict), 'input is not a dict'
+  assert isinstance(xs, (flax.core.FrozenDict, dict)), 'expected (frozen)dict'
+
+  def _key(path):
+    if sep is None:
+      return path
+    return sep.join(path)
 
   def _flatten(xs, prefix):
-    if not isinstance(xs, dict) or (is_leaf and is_leaf(prefix, xs)):
-      return {prefix: xs}
+    if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
+        is_leaf and is_leaf(prefix, xs)):
+      return {_key(prefix): xs}
     result = {}
     is_empty = True
     for key, value in xs.items():
@@ -103,12 +112,12 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None):
       path = prefix + (key,)
       result.update(_flatten(value, path))
     if keep_empty_nodes and is_empty:
-      return {prefix: empty_node}
+      return {_key(prefix): empty_node}
     return result
   return _flatten(xs, ())
 
 
-def unflatten_dict(xs):
+def unflatten_dict(xs, sep=None):
   """Unflatten a dictionary.
 
   See `flatten_dict`
@@ -128,12 +137,15 @@ def unflatten_dict(xs):
 
   Args:
     xs: a flattened dictionary
+    sep: separator (same as used with `flatten_dict()`).
   Returns:
     The nested dictionary.
   """
   assert isinstance(xs, dict), 'input is not a dict'
   result = {}
   for path, value in xs.items():
+    if sep is not None:
+      path = path.split(sep)
     if value is empty_node:
       value = {}
     cursor = result
