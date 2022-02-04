@@ -966,7 +966,7 @@ def named_call(class_fn, force=True):
   prewrapped_fn = wrap_method_once(class_fn)
   @functools.wraps(prewrapped_fn)
   def wrapped_fn(self, *args, **kwargs):
-    if not force and not linen_module._use_named_call:
+    if (not force and not linen_module._use_named_call) or self._state.in_setup:
       return prewrapped_fn(self, *args, **kwargs)
     fn_name = class_fn.__name__
     method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
