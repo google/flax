@@ -669,8 +669,6 @@ class Module(metaclass=ModuleMeta):
       raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name,
                                                  val)
     if is_dataclass_attr:
-      if self._state.in_setup:
-        raise errors.SetAttributeInModuleSetupError()
       object.__setattr__(self, name, val)
     # Submodules are being defined and attached in setup()
     else:
@@ -700,6 +698,12 @@ class Module(metaclass=ModuleMeta):
     # type of `parent` passed to initialize the Module, we either defer
     # initialization, attach this Module as a submodule of a parent, or bind
     # this Module at the top-level to variables and rngs.
+
+    # Save original attributes, used to clone safely even if attributes are 
+    # modified within `setup`
+    object.__setattr__(self, '_original_attrs', {
+      field.name: self.__getattr__(field.name) for field in dataclasses.fields(self)
+      if field.name != 'parent' and field.init})
 
     object.__setattr__(self, '_state', _ModuleInternalState())
 
@@ -866,7 +870,7 @@ class Module(metaclass=ModuleMeta):
     Returns:
       A clone of the this Module with the updated attributes and parent.
     """
-    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self) if f.init}
+    attrs = self._original_attrs.copy()
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
