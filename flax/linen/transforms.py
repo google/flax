@@ -307,7 +307,7 @@ def module_class_lift_transform(
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
-def decorator_lift_transform(transform, class_fn, *trafo_args, 
+def decorator_lift_transform(transform, class_fn, *trafo_args,
                              multi_scope=True, **trafo_kwargs):
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state correctly.
@@ -753,7 +753,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
     has_aux: bool = False, reduce_axes=(),
     vjp_variables: lift.CollectionFilter = "params",
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Tuple[Any, Any]:
   """A lifted version of ``jax.vjp``.
 
@@ -827,7 +827,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
 def jvp(fn: Callable[..., Any], mdl: Module,
     primals, tangents, variable_tangents,
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
   """A lifted version of ``jax.jvp``.
 
@@ -962,10 +962,11 @@ def custom_vjp(fn: Callable[..., Any],
     forward_fn: A function with the same arguments as `fn` returning an tuple
       with the original output and the residuals that will be passsed to
       `backward_fn`.
-    backward_fn: arguments are passed as (\*nondiff_args, residuals, tangents)
-      The function should return a tuple containing the tangents for the
-      input arguments (except the module and nondiff args) and the variable
-      tangents for the collections specified by `grad_vars`.
+    backward_fn: arguments are passed as
+      ``(*nondiff_args, residuals, tangents)``.  The function should return a
+      tuple containing the tangents for the input arguments (except the module
+      and nondiff args) and the variable tangents for the collections specified
+      by `grad_vars`.
     grad_vars: The collections for which a vjp will be computed
       (default: "params").
     nondiff_argnums: arguments for which no vjp is computed.
