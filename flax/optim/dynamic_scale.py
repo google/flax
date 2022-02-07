@@ -16,7 +16,7 @@
 """
 
 import functools
-from typing import NamedTuple, Any, Callable, Union, Sequence
+from typing import NamedTuple, Any, Optional, Callable, Union, Sequence
 
 from .. import struct
 
@@ -86,7 +86,7 @@ class DynamicScale(struct.PyTreeNode):
   def value_and_grad(self, fun: Callable[..., Any],
                      argnums: Union[int, Sequence[int]] = 0,
                      has_aux: bool = False,
-                     axis_name: str = None,
+                     axis_name: Optional[str] = None,
                      ) -> Callable[..., DynamicScaleResult]:
     """Wrapper around `jax.value_and_grad`.
 
