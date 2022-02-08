@@ -216,7 +216,7 @@ Average Pooling
 However, ``torch.nn.AvgPool2d`` has a parameter ``count_include_pad``. When ``count_include_pad=False``,
 the zero-padding will not be considered for the average calculation. There does not exist a similar
 parameter for |nn.avg_pool()|_. However, we can easily implement a wrapper around the pooling
-operation. ``nn.pool`` is the core function behind |nn.avg_pool()|_ and |nn.max_pool()|_.
+operation. ``nn.pool()`` is the core function behind |nn.avg_pool()|_ and |nn.max_pool()|_.
 
 .. |nn.avg_pool()| replace:: ``nn.avg_pool()``
 .. _nn.avg_pool(): https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.avg_pool.html
