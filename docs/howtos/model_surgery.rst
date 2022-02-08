@@ -76,27 +76,27 @@ Next, get a flat dict for doing model surgery as follows:
 .. testcode::
 
   # Get flattened-key: value list.
-  flat_params = traverse_util.flatten_dict(params, sep='/')
+  flat_params = traverse_util.flatten_dict(params)
   print(jax.tree_map(jnp.shape, flat_params))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
 
-  {'Conv_0/bias': (32,),
-   'Conv_0/kernel': (3, 3, 1, 32),
-   'Conv_1/bias': (64,),
-   'Conv_1/kernel': (3, 3, 32, 64),
-   'Dense_0/bias': (256,),
-   'Dense_0/kernel': (3136, 256),
-   'Dense_1/bias': (10,),
-   'Dense_1/kernel': (256, 10)}
+  {('Conv_0', 'bias'): (32,),
+   ('Conv_0', 'kernel'): (3, 3, 1, 32),
+   ('Conv_1', 'bias'): (64,),
+   ('Conv_1', 'kernel'): (3, 3, 32, 64),
+   ('Dense_0', 'bias'): (256,),
+   ('Dense_0', 'kernel'): (3136, 256),
+   ('Dense_1', 'bias'): (10,),
+   ('Dense_1', 'kernel'): (256, 10)}
 
 After doing whatever you want, unflatten back:
 
 .. testcode::
 
   # Unflatten.
-  unflat_params = traverse_util.unflatten_dict(flat_params, sep='/')
+  unflat_params = traverse_util.unflatten_dict(flat_params)
   # Refreeze.
   unflat_params = freeze(unflat_params)
   print(jax.tree_map(jnp.shape, unflat_params))
@@ -160,22 +160,22 @@ parameters and can be flattened / modified exactly the same way
 
 .. testcode::
 
-  flat_mu = traverse_util.flatten_dict(opt_state[0].mu, sep='/')
-  flat_nu = traverse_util.flatten_dict(opt_state[0].nu, sep='/')
+  flat_mu = traverse_util.flatten_dict(opt_state[0].mu)
+  flat_nu = traverse_util.flatten_dict(opt_state[0].nu)
 
   print(jax.tree_map(jnp.shape, flat_mu))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
   
-  {'Conv_0/bias': (32,),
-   'Conv_0/kernel': (3, 3, 1, 32),
-   'Conv_1/bias': (64,),
-   'Conv_1/kernel': (3, 3, 32, 64),
-   'Dense_0/bias': (256,),
-   'Dense_0/kernel': (3136, 256),
-   'Dense_1/bias': (10,),
-   'Dense_1/kernel': (256, 10)}
+  {('Conv_0', 'bias'): (32,),
+   ('Conv_0', 'kernel'): (3, 3, 1, 32),
+   ('Conv_1', 'bias'): (64,),
+   ('Conv_1', 'kernel'): (3, 3, 32, 64),
+   ('Dense_0', 'bias'): (256,),
+   ('Dense_0', 'kernel'): (3136, 256),
+   ('Dense_1', 'bias'): (10,),
+   ('Dense_1', 'kernel'): (256, 10)}
 
 After modification, re-create optimizer state:
 
@@ -183,7 +183,7 @@ After modification, re-create optimizer state:
 
   opt_state = (
       opt_state[0]._replace(
-          mu=traverse_util.unflatten_dict(flat_mu, sep='/'),
-          nu=traverse_util.unflatten_dict(flat_nu, sep='/'),
+          mu=traverse_util.unflatten_dict(flat_mu),
+          nu=traverse_util.unflatten_dict(flat_nu),
       ),
   ) + opt_state[1:]

@@ -56,6 +56,7 @@ class VariablePlaceholder:
   """Used to mark Variables in a JAX-compatible way when lifting arguments."""
   collection: str = struct.field(pytree_node=False)
   name: str = struct.field(pytree_node=False)
+  id: int = struct.field(pytree_node=False)
 
 
 @struct.dataclass
@@ -63,6 +64,24 @@ class InstancePlaceholder:
   """Marks module instances in a JAX-compatible way when lifting arguments."""
   cls: type = struct.field(pytree_node=False)
   attrs: dict = struct.field(pytree_node=False)
+  id: int = struct.field(pytree_node=False)
+
+
+def _memoize_by_id(fn, refs):
+  """Memoization by module/variable id to handle aliasing in traversal."""
+  @functools.wraps(fn)
+  def wrapped_fn(x):
+    nonlocal refs
+    if isinstance(x, (VariablePlaceholder, InstancePlaceholder)):
+      x_id = x.id
+    else:
+      x_id = id(x)
+    if x_id not in refs:
+      refs[x_id] = fn(x)
+    else:
+      pass
+    return refs[x_id]
+  return wrapped_fn
 
 
 def get_module_scopes(module, args=None, kwargs=None):
@@ -91,36 +110,43 @@ def get_module_scopes(module, args=None, kwargs=None):
     VariablePlaceholders and Module instances replaced with InstancePlaceholders
     that are compatible with jax functions.
   """
-  module._try_setup(shallow=True)
-  outer_scopes = []
-  # gather scopes associated with Variables and Module instances passed as arguments
+  scopes = []
+  refs = {}
+  # Gather scopes associated with Variables and Module instances passed as
+  # positional and keyword arguments.
+  @functools.partial(_memoize_by_id, refs=refs)
   def get_arg_scope(x):
-    nonlocal outer_scopes
+    nonlocal scopes
     if isinstance(x, Variable) and isinstance(x.scope, Scope):
-      outer_scopes.append(x.scope)
-      return VariablePlaceholder(x.collection, x.name)
+      scopes.append(x.scope)
+      return VariablePlaceholder(x.collection, x.name, id(x))
     elif isinstance(x, Module) and isinstance(x.scope, Scope):
-      x._try_setup(shallow=True)
-      outer_scopes.append(x.scope)
+      x._try_setup(shallow=True)  # pylint: disable=protected-access
+      scopes.append(x.scope)
       attrs = {f.name: getattr(x, f.name)
           for f in dataclasses.fields(x) if f.name != 'parent' and f.init}
       attrs = jax.tree_map(get_arg_scope, attrs)
-      return InstancePlaceholder(x.__class__, attrs)
+      return InstancePlaceholder(x.__class__, attrs, id(x))
     return x
   new_args, new_kwargs = jax.tree_map(get_arg_scope, (args, kwargs))
-  # gather scopes in Variables and Submodules passed as Module attributes
-  def get_scope(x):
-    nonlocal outer_scopes
-    if isinstance(x, Module) and isinstance(x.scope, Scope):
-      module_scopes, _, _ = get_module_scopes(x)
-      outer_scopes.extend(module_scopes)
-    elif isinstance(x, Variable) and isinstance(x.scope, Scope):
-      outer_scopes.append(x.scope)
-    return x
-  attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
-  jax.tree_map(get_scope, attrs)
-  return outer_scopes + [module.scope,], new_args, new_kwargs
+
+  # Gather scopes in Variables and Submodules passed as Module attributes.
+  @functools.partial(_memoize_by_id, refs=refs)
+  def get_scopes(module):
+    nonlocal scopes
+    module._try_setup(shallow=True)  # pylint: disable=protected-access
+    def get_scopes_inner(x):
+      nonlocal scopes
+      if isinstance(x, Module) and isinstance(x.scope, Scope):
+        get_scopes(x)
+      elif isinstance(x, Variable) and isinstance(x.scope, Scope):
+        scopes.append(x.scope)
+    attrs = {f.name: getattr(module, f.name)
+             for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
+    jax.tree_map(get_scopes_inner, attrs)
+    scopes.append(module.scope)
+  get_scopes(module)
+  return scopes, new_args, new_kwargs
 
 
 def set_module_scopes(module, args, kwargs, scopes):
@@ -150,7 +176,10 @@ def set_module_scopes(module, args, kwargs, scopes):
     updated Variable and Module instance references.
   """
   idx = 0
-  # set scopes associated with Variables and Module instances passed as arguments
+  refs = {}
+  # Set scopes associated with Variables and Module instances passed as
+  # positional and keyword arguments.
+  @functools.partial(_memoize_by_id, refs=refs)
   def set_arg_scope(x):
     nonlocal idx
     if isinstance(x, VariablePlaceholder):
@@ -167,7 +196,9 @@ def set_module_scopes(module, args, kwargs, scopes):
   new_args, new_kwargs = jax.tree_map(set_arg_scope,
                                       (args, kwargs),
                                       is_leaf=is_placeholder)
+
   # set scopes in Variables and Submodules passed as Module attributes
+  @functools.partial(_memoize_by_id, refs=refs)
   def set_scopes(module):
     nonlocal idx
     def set_scopes_inner(x):
