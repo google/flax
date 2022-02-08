@@ -216,63 +216,7 @@ Average Pooling
 However, ``torch.nn.AvgPool2d`` has a parameter ``count_include_pad``. When ``count_include_pad=False``,
 the zero-padding will not be considered for the average calculation. There does not exist a similar
 parameter for |nn.avg_pool()|_. However, we can easily implement a wrapper around the pooling
-operation.
-
-
-.. testcode::
-
-  def pool(inputs, init, reduce_fn, window_shape, strides, padding):
-    """
-    Taken from: https://github.com/google/flax/blob/main/flax/linen/pooling.py
-
-    Helper function to define pooling functions.
-    Pooling functions are implemented using the ReduceWindow XLA op.
-    NOTE: Be aware that pooling is not generally differentiable.
-    That means providing a reduce_fn that is differentiable does not imply
-    that pool is differentiable.
-    Args:
-      inputs: input data with dimensions (batch, window dims..., features).
-      init: the initial value for the reduction
-      reduce_fn: a reduce function of the form `(T, T) -> T`.
-      window_shape: a shape tuple defining the window to reduce over.
-      strides: a sequence of `n` integers, representing the inter-window
-          strides.
-      padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-        of `n` `(low, high)` integer pairs that give the padding to apply before
-        and after each spatial dimension.
-    Returns:
-      The output of the reduction for each window slice.
-    """
-    strides = strides or (1,) * len(window_shape)
-    assert len(window_shape) == len(strides), (
-        f"len({window_shape}) == len({strides})")
-    strides = (1,) + strides + (1,)
-    dims = (1,) + window_shape + (1,)
-  
-    is_single_input = False
-    if inputs.ndim == len(dims) - 1:
-      # add singleton batch dimension because lax.reduce_window always
-      # needs a batch dimension.
-      inputs = inputs[None]
-      is_single_input = True
-  
-    assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
-    if not isinstance(padding, str):
-      padding = tuple(map(tuple, padding))
-      assert(len(padding) == len(window_shape)), (
-        f"padding {padding} must specify pads for same number of dims as "
-        f"window_shape {window_shape}")
-      assert(all([len(x) == 2 for x in padding])), (
-        f"each entry in padding {padding} must be length 2")
-      padding = ((0,0),) + padding + ((0,0),)
-    y = jax.lax.reduce_window(inputs, init, reduce_fn, dims, strides, padding)
-    if is_single_input:
-      y = jnp.squeeze(y, axis=0)
-    return y
- 
-
-The above function is taken from |nn.pooling|_ and is the core function behind |nn.avg_pool()|_ and |nn.max_pool()|_.
-We then simply wrap this function with our own ``avg_pool()`` function.
+operation. ``nn.pool`` is the core function behind |nn.avg_pool()|_ and |nn.max_pool()|_.
 
 .. |nn.avg_pool()| replace:: ``nn.avg_pool()``
 .. _nn.avg_pool(): https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.avg_pool.html
@@ -280,8 +224,6 @@ We then simply wrap this function with our own ``avg_pool()`` function.
 .. |nn.max_pool()| replace:: ``nn.max_pool()``
 .. _nn.max_pool(): https://flax.readthedocs.io/en/latest/_autosummary/flax.linen.max_pool.html
 
-.. |nn.pooling| replace:: ``nn.pooling``
-.. _nn.pooling: https://github.com/google/flax/blob/main/flax/linen/pooling.py
 
 .. testcode::
   
@@ -290,28 +232,11 @@ We then simply wrap this function with our own ``avg_pool()`` function.
     Pools the input by taking the average over a window.
     In comparison to nn.avg_pool(), this pooling operation does not
     consider the padded zero's for the average computation.
-    Args:
-      inputs: input data with dimensions (batch, window dims..., features).
-      window_shape: a shape tuple defining the window to reduce over.
-      strides: a sequence of `n` integers, representing the inter-window
-          strides (default: `(1, ..., 1)`).
-      padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
-        of `n` `(low, high)` integer pairs that give the padding to apply before
-        and after each spatial dimension (default: `'VALID'`).
-    Returns:
-      The average for each window slice.
     """
-    assert inputs.ndim == 4
     assert len(window_shape) == 2
   
-    y = pool(inputs, 0., jax.lax.add, window_shape, strides, padding)
-    ones = jnp.ones(shape=(1, inputs.shape[1], inputs.shape[2], 1)).astype(inputs.dtype)
-    counts = jax.lax.conv_general_dilated(ones,
-                                          jnp.expand_dims(jnp.ones(window_shape).astype(inputs.dtype), axis=(-2, -1)),
-                                          window_strides=(1, 1),
-                                          padding=((1, 1), (1, 1)),
-                                          dimension_numbers=nn.linear._conv_dimension_numbers(ones.shape),
-                                          feature_group_count=1)
+    y = nn.pool(inputs, 0., jax.lax.add, window_shape, strides, padding)
+    counts = nn.pool(jnp.ones_like(inputs), 0., jax.lax.add, window_shape, strides, padding)
     y = y / counts 
     return y
 
