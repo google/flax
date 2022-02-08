@@ -164,7 +164,7 @@ def mask_sequences(sequence_batch, lengths):
 class EncoderLSTM(nn.Module):
 
   @functools.partial(
-      nn.transforms.scan,
+      nn.scan,
       variable_broadcast='params',
       in_axes=1,
       out_axes=1,
@@ -211,7 +211,7 @@ class DecoderLSTM(nn.Module):
   teacher_force: bool
 
   @functools.partial(
-      nn.transforms.scan,
+      nn.scan,
       variable_broadcast='params',
       in_axes=1,
       out_axes=1,
