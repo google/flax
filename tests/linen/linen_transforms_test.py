@@ -1240,6 +1240,41 @@ class TransformTest(absltest.TestCase):
     vs = scanbody().init(k, x)
     y = scanbody().apply(vs, x)
 
+  def test_multi_method_class_transform(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.dense0 = nn.Dense(2)
+        self.dense1 = nn.Dense(2)
+      def method_0(self, x):
+        return self.dense0(x), x
+      def method_1(self, x, y):
+        return self.dense1(x) + y, None
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        ScanFoo = nn.scan(Foo,
+                          methods={
+                            'method_0': dict(
+                              variable_axes={'params': 0},
+                              split_rngs={'params': True},
+                              in_axes=nn.broadcast, out_axes=0,
+                              length=3),
+                            'method_1': dict(
+                              variable_axes={'params': 0},
+                              split_rngs={'params': True},
+                              in_axes=0,
+                              length=3)
+                          })
+        sf = ScanFoo()
+        y, ys = sf.method_0(x)
+        z, _ = sf.method_1(y, ys)
+        return z
+
+    k = random.PRNGKey(0)
+    x = random.uniform(random.PRNGKey(1), (2,2))
+    vs = Bar().init(k, x)
+    y = Bar().apply(vs, x)
+
   def test_compact_aliasing_collision(self):
     class Foo(nn.Module):
       m1: nn.Module

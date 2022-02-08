@@ -251,10 +251,9 @@ def module_class_lift_transform(
     class_trafo_args = {m: (trafo_args, trafo_kwargs) for m in methods}
   elif isinstance(methods, dict):
     # Pass different trafo args per each method.
-    assert trafo_args == () and trafo_kwargs == {}, (
-        f"""When passing different {transform.__name__} args per method,
-        all args must be passed via methods kwarg.""")
     class_trafo_args = {k: ((), v) for k, v in methods.items()}
+  else:
+    raise ValueError("transform methods argument must be None, tuple, list, or dict.")
 
   # Handle partially initialized module class constructors.
   if (isinstance(module_class, functools.partial) and
@@ -307,7 +306,7 @@ def module_class_lift_transform(
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
-def decorator_lift_transform(transform, class_fn, *trafo_args, 
+def decorator_lift_transform(transform, class_fn, *trafo_args,
                              multi_scope=True, **trafo_kwargs):
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state correctly.
@@ -385,8 +384,8 @@ def lift_direct_transform(transform, target: Callable[..., Any], mdl: Module,
 
 
 def vmap(target: Target,
-         variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis],
-         split_rngs: Mapping[lift.PRNGSequenceFilter, bool],
+         variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis] = {},
+         split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = {},
          in_axes=0, out_axes=0,
          axis_size: Optional[int] = None,
          axis_name: Optional[str] = None,
@@ -550,7 +549,7 @@ remat = checkpoint
 
 
 def remat_scan(target: Target,
-               lengths: Sequence[int],
+               lengths: Sequence[int] = (),
                policy: Optional[Callable[..., bool]] = None,
                variable_broadcast: lift.CollectionFilter = False,
                variable_carry: lift.CollectionFilter = False,
@@ -708,12 +707,13 @@ def scan(target: Target,
 
 def map_variables(
     target: Target,
-    mapped_collections: lift.CollectionFilter,
+    mapped_collections: lift.CollectionFilter = True,
     trans_in_fn: Callable[..., Any] = lift.id_fn,
     trans_out_fn: Callable[..., Any] = lift.id_fn,
     init: bool = False, mutable: bool = False,
     rngs: lift.PRNGSequenceFilter = True,
-    variables: lift.CollectionFilter = True) -> Target:
+    variables: lift.CollectionFilter = True,
+    methods=None) -> Target:
   """Map Variables inside a module.
 
   Example::
@@ -745,7 +745,8 @@ def map_variables(
       mapped_collections,
       trans_in_fn, trans_out_fn,
       init, mutable,
-      rngs, variables
+      rngs, variables,
+      methods=methods,
   )
 
 
