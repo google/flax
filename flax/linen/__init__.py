@@ -29,7 +29,7 @@ from .module import (Module, compact, nowrap, enable_named_call,
                      disable_named_call, override_named_call, Variable, init,
                      init_with_output, apply, merge_param)
 from .normalization import BatchNorm, GroupNorm, LayerNorm
-from .pooling import avg_pool, max_pool
+from .pooling import avg_pool, max_pool, pool
 from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell
 from .stochastic import Dropout
 from .transforms import jit, named_call, checkpoint, remat, remat_scan, scan, vmap, map_variables, vjp, jvp, custom_vjp
