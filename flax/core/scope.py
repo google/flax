@@ -364,6 +364,7 @@ class Scope:
   <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
+  reservations: Set[str]
 
   def __init__(self,
                variables: MutableVariableDict,
@@ -394,7 +395,7 @@ class Scope:
     self.trace_level = tracers.trace_level(tracers.current_trace())
 
     self.rng_counters = {key: 0 for key in self.rngs}
-    self.reservations: Set[str] = set()
+    self.reservations = set()
 
     self._invalid = False
 
