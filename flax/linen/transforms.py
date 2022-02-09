@@ -431,8 +431,8 @@ def vmap(target: Target,
       collection or an integer to map over an axis.
     split_rngs: Split PRNG sequences will be different for each index
       of the batch dimension. Unsplit PRNGs will be broadcasted.
-    in_axes: Specifies the mapping of the input arguments (see `jax.vmap).
-    out_axes: Specifies the mapping of the return value (see `jax.vmap).
+    in_axes: Specifies the mapping of the input arguments (see `jax.vmap`).
+    out_axes: Specifies the mapping of the return value (see `jax.vmap`).
     axis_size: Specifies the size of the batch axis. This only needs
       to be specified if it cannot be derived from the input arguments.
     axis_name: Specifies a name for the batch axis. Can be used together
@@ -754,7 +754,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
     has_aux: bool = False, reduce_axes=(),
     vjp_variables: lift.CollectionFilter = "params",
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Tuple[Any, Any]:
   """A lifted version of ``jax.vjp``.
 
@@ -828,7 +828,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
 def jvp(fn: Callable[..., Any], mdl: Module,
     primals, tangents, variable_tangents,
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
   """A lifted version of ``jax.jvp``.
 
@@ -960,13 +960,14 @@ def custom_vjp(fn: Callable[..., Any],
 
   Args:
     fn: The function to define a custom_vjp for.
-    forward_fn: A function with the same arguments as `fn` returning an tuple
+    forward_fn: A function with the same arguments as ``fn`` returning an tuple
       with the original output and the residuals that will be passsed to
-      `backward_fn`.
-    backward_fn: arguments are passed as (\*nondiff_args, residuals, tangents)
-      The function should return a tuple containing the tangents for the
-      input arguments (except the module and nondiff args) and the variable
-      tangents for the collections specified by `grad_vars`.
+      ``backward_fn``.
+    backward_fn: arguments are passed as
+      ``(*nondiff_args, residuals, tangents)`` The function should return a
+      tuple containing the tangents for the input arguments (except the module
+      and nondiff args) and the variable tangents for the collections specified
+      by `grad_vars`.
     grad_vars: The collections for which a vjp will be computed
       (default: "params").
     nondiff_argnums: arguments for which no vjp is computed.
