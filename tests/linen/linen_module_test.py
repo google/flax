@@ -724,6 +724,23 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaisesRegex(errors.ApplyModuleInvalidMethodError, msg):
       Foo().apply({}, method='allowed_apply_fn')
 
+def test_module_apply_bad_pytree(self):
+    # If user passes a {'params': {'params': ...}} to module.apply, they would
+    # get `ScopeParamNotFoundError: No parameter named "kernel" exists in ...`.
+    dense = nn.Dense(3)
+    key1, key2 = random.split(random.PRNGKey(0))
+    params = freeze({
+        'params': {
+            'bias': jnp.zeros((3,)),
+            'kernel': random.uniform(key1, (4, 3)),
+        },
+    })
+    x = random.uniform(key2, (4, 4))
+    dense.apply(params, x)
+    with self.assertRaisesRegex(ValueError, "Found nested params"):
+      dense.apply({'params': params}, x)
+    with self.assertRaisesRegex(ValueError, "variables dict is missing params"):
+      dense.apply(params['params'], x)
 
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)

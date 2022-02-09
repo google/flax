@@ -1163,6 +1163,17 @@ class Module:
     if method is None:
       method = self.__call__
     method = _get_unbound_fn(method)
+    # Try to detect if user accidentally passed {'params': {'params': ...} or 
+    # {'kernel': ...} as `variables`.
+    if 'params' in variables and isinstance(
+        variables['params'], (dict, FrozenDict)) and 'params' in variables['params']:
+      raise ValueError(
+          'Found nested params in variables dict. '
+          'Pass variables=`params` instead of `{\'params\':params}`.'
+      )
+    if 'kernel' in variables and 'params' not in variables:
+      raise ValueError('variables dict is missing \'params\' key.'
+                       'Pass variables=`{\'params\':params}` instead.')
     return apply(
         method, self,
         mutable=mutable, capture_intermediates=capture_intermediates
