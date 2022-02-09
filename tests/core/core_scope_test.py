@@ -111,6 +111,21 @@ class ScopeTest(absltest.TestCase):
     with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
       apply(f)(freeze({'params': {'test': np.ones((2,))}}))
 
+  def test_apply_variables_bad_pytree(self):
+    def f(scope):
+      scope.param('kernel', nn.initializers.ones, (4,))
+
+    params = freeze({
+        'params': {
+            'kernel': np.ones((4,)),
+        },
+    })
+    apply(f)(params)  # Valid.
+    msg = 'dictionary containing a \'params\' key at the root level'
+    with self.assertRaisesRegex(errors.ApplyScopeInvalidVariablesStructureError,
+                                msg):
+      apply(f)({'params': params})
+      
   def test_mutate_undefined_collection(self):
     def f(scope):
       scope.put_variable('state', 'test', 123)

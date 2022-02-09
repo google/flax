@@ -122,7 +122,7 @@ class InvalidRngError(FlaxError):
     super().__init__(msg)
 
 
-class ApplyScopeInvalidVariablesError(FlaxError):
+class ApplyScopeInvalidVariablesTypeError(FlaxError):
   """
   When calling :meth:`Module.apply() <flax.linen.Module.apply>`, the first
   argument should be a variable dict. For more explanation on variable dicts,
@@ -132,6 +132,18 @@ class ApplyScopeInvalidVariablesError(FlaxError):
     super().__init__('The first argument passed to an apply function should be '
                      'a dictionary of collections. Each collection should be a '
                      'dictionary with string keys.')
+
+
+class ApplyScopeInvalidVariablesStructureError(FlaxError):
+  """
+  This error is thrown when the dict passed as `variables` to apply() has an
+  extra 'params' layer, i.e. {'params': {'params': ...}}.
+  For more explanation on variable dicts, please see :mod:`flax.core.variables`.
+  """
+  def __init__(self, variables):
+    super().__init__(f'Expected the first argument passed to an apply function '
+                     'to be a dictionary containing a \'params\' key at the '
+                     'root level, but got "{variables}".')
 
 
 class ScopeParamNotFoundError(FlaxError):
@@ -176,7 +188,7 @@ class ScopeCollectionNotFound(FlaxError):
   def __init__(self, col_name, var_name, scope_path):
     super().__init__(
       f'Tried to access "{var_name}" from collection "{col_name}"" in '
-      f'"{scope_path}" but the collection is emtpy.')
+      f'"{scope_path}" but the collection is empty.')
 
 
 class ScopeParamShapeError(FlaxError):
