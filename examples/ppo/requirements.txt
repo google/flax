@@ -6,4 +6,4 @@ gym==0.18.3
 ml-collections==0.1.0
 numpy==1.21.4
 optax==0.1.0
-tensorflow==2.7.0
+tensorflow==2.7.1
