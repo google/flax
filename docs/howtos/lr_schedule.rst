@@ -1,138 +1,155 @@
 Learning Rate Scheduling
 =============================
 
-Note: See "Learning Rate Schedules" in :doc:`optax_update_guide` for
-implementing learning rate schedules using ``optax``.
-
-
 The learning rate is considered one of the most important hyperparameters for
 training deep neural networks, but choosing it can be quite hard.
-To simplify this, one can use a so-called *cyclic learning rate*, which
-virtually eliminates the need for experimentally finding the best value and
-schedule for the global learning rate. Instead of monotonically decreasing the
-learning rate, this method lets the learning rate cyclically vary between
-reasonable boundary values.
-Here we will show you how to implement a triangular learning rate scheduler,
-as described in the paper  `"Cyclical Learning Rates for Training Neural Networks" <https://arxiv.org/abs/1506.01186>`_.
+Rather than simply using a fixed learning rate, it is common to use a learning rate scheduler.
+In this example, we will use the *cosine scheduler*.
+Before the cosine scheduler comes into play, we start with a so-called *warmup* period in which the
+learning rate increases linearly for ``warmup_epochs`` epochs.
+For more information about the cosine scheduler, check out the paper
+`"SGDR: Stochastic Gradient Descent with Warm Restarts" <https://arxiv.org/abs/1608.03983>`_.
 
 We will show you how to...
 
 * define a learning rate schedule
 * train a simple model using that schedule
 
-The triangular schedule makes your learning rate vary as a triangle wave during training, so over the course of a period (``steps_per_cycle``
-training steps) the value will start at ``lr_min``, increase linearly to ``lr_max``, and then decrease again to ``lr_min``.
 
 .. testsetup::
 
   import jax
+  import optax
 
 .. testcode::
   
-  def create_triangular_schedule(lr_min, lr_max, steps_per_cycle):
-    top = (steps_per_cycle + 1) // 2
-    def learning_rate_fn(step):
-      cycle_step = step % steps_per_cycle
-      if cycle_step < top:
-        lr = lr_min + cycle_step/top * (lr_max - lr_min)
-      else:
-        lr = lr_max - ((cycle_step - top)/top) * (lr_max - lr_min)
-      return lr
-    return learning_rate_fn
+  def create_learning_rate_fn(config, base_learning_rate, steps_per_epoch):
+    """Create learning rate schedule."""
+    warmup_fn = optax.linear_schedule(
+        init_value=0., end_value=base_learning_rate,
+        transition_steps=config.warmup_epochs * steps_per_epoch)
+    cosine_epochs = max(config.num_epochs - config.warmup_epochs, 1)
+    cosine_fn = optax.cosine_decay_schedule(
+        init_value=base_learning_rate,
+        decay_steps=cosine_epochs * steps_per_epoch)
+    schedule_fn = optax.join_schedules(
+        schedules=[warmup_fn, cosine_fn],
+        boundaries=[config.warmup_epochs * steps_per_epoch])
+    return schedule_fn
 
-
-To use the schedule, one must create a learning rate function by passing the hyperparameters to the
-create_triangular_schedule function and then use that function to compute the learning rate for your updates.
-For example using this schedule on MNIST would require changing the train_step function
+To use the schedule, we must create a learning rate function by passing the hyperparameters to the
+create_learning_rate_fn function and then pass the function to your ``optax`` optimizer.
+For example using this schedule on MNIST would require changing the train_step function:
 
 .. codediff:: 
   :title_left: Default learning rate
-  :title_right: Triangular learning rate schedule
+  :title_right: Learning rate schedule
   
   @jax.jit
-  def train_step(optimizer, batch): #!
+  def train_step(state, batch):
     def loss_fn(params):
       logits = CNN().apply({'params': params}, batch['image'])
-      loss = cross_entropy_loss(logits, batch['label'])
+      one_hot = jax.nn.one_hot(batch['label'], 10)
+      loss = jnp.mean(optax.softmax_cross_entropy(logits, one_hot))
       return loss, logits
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (_, logits), grad = grad_fn(optimizer.target)
-
-
-    optimizer = optimizer.apply_gradient(grad) #!
+    (_, logits), grads = grad_fn(state.params)
+    new_state = state.apply_gradients(grads=grads)
     metrics = compute_metrics(logits, batch['label'])
-    return optimizer, metrics
+  
+  
+    return new_state, metrics
   ---
-  @jax.jit
-  def train_step(optimizer, batch, learning_rate_fn): #!
+  @functools.partial(jax.jit, static_argnums=2) #!
+  def train_step(state, batch, learning_rate_fn): #!
     def loss_fn(params):
       logits = CNN().apply({'params': params}, batch['image'])
-      loss = cross_entropy_loss(logits, batch['label'])
+      one_hot = jax.nn.one_hot(batch['label'], 10)
+      loss = jnp.mean(optax.softmax_cross_entropy(logits, one_hot))
       return loss, logits
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (_, logits), grad = grad_fn(optimizer.target)
-    step = optimizer.state.step #!
-    lr = learning_rate_fn(step) #!
-    optimizer = optimizer.apply_gradient(grad, {"learning_rate": lr}) #!
+    (_, logits), grads = grad_fn(state.params)
+    new_state = state.apply_gradients(grads=grads)
     metrics = compute_metrics(logits, batch['label'])
-    return optimizer, metrics
+    lr = learning_rate_fn(state.step) #!
+    metrics['learning_rate'] = lr #!
+    return new_state, metrics
 
 And the train_epoch function:
 
 .. codediff::
   :title_left: Default learning rate
-  :title_right: Triangular learning rate schedule
+  :title_right: Learning rate schedule
   
-  def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
-  """Train for a single epoch."""
-  train_ds_size = len(train_ds['image'])
-  steps_per_epoch = train_ds_size // batch_size
-
-
-
-  perms = jax.m random.permutation(rng, len(train_ds['image']))
-  perms = perms[:steps_per_epoch * batch_size]
-  perms = perms.reshape((steps_per_epoch, batch_size))
-  batch_metrics = []
-  for perm in perms:
-    batch = {k: v[perm, ...] for k, v in train_ds.items()}
-    optimizer, metrics = train_step(optimizer, batch) #!
-    batch_metrics.append(metrics)
-
-  # compute mean of metrics across each batch in epoch.
-  batch_metrics = jax.device_get(batch_metrics)
-  epoch_metrics = {
-      k: np.mean([metrics[k] for metrics in batch_metrics])
-      for k in batch_metrics[0]}
-
-  logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-               epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
-
-  return optimizer, epoch_metrics
-  ---
-  def train_epoch(optimizer, train_ds, batch_size, epoch, rng):
+  def train_epoch(state, train_ds, batch_size, epoch, rng):
     """Train for a single epoch."""
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
-    # 4 cycles per epoch #!
-    learning_rate_fn = create_triangular_schedule( #!
-      3e-3, 3e-2, steps_per_epoch // 4) #!
     perms = jax.random.permutation(rng, len(train_ds['image']))
     perms = perms[:steps_per_epoch * batch_size]
     perms = perms.reshape((steps_per_epoch, batch_size))
     batch_metrics = []
     for perm in perms:
       batch = {k: v[perm, ...] for k, v in train_ds.items()}
-      optimizer, metrics = train_step(optimizer, batch, learning_rate_fn) #!
+      state, metrics = train_step(state, batch)
       batch_metrics.append(metrics)
-
+  
     # compute mean of metrics across each batch in epoch.
     batch_metrics = jax.device_get(batch_metrics)
     epoch_metrics = {
         k: np.mean([metrics[k] for metrics in batch_metrics])
         for k in batch_metrics[0]}
-
+  
     logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
-                epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
+                 epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
+  
+    return state, epoch_metrics
+  ---
+  def train_epoch(state, train_ds, batch_size, epoch, learning_rate_fn, rng): #!
+    """Train for a single epoch."""
+    train_ds_size = len(train_ds['image'])
+    steps_per_epoch = train_ds_size // batch_size
+    perms = jax.random.permutation(rng, len(train_ds['image']))
+    perms = perms[:steps_per_epoch * batch_size]
+    perms = perms.reshape((steps_per_epoch, batch_size))
+    batch_metrics = []
+    for perm in perms:
+      batch = {k: v[perm, ...] for k, v in train_ds.items()}
+      state, metrics = train_step(state, batch, learning_rate_fn) #!
+      batch_metrics.append(metrics)
+  
+    # compute mean of metrics across each batch in epoch.
+    batch_metrics = jax.device_get(batch_metrics)
+    epoch_metrics = {
+        k: np.mean([metrics[k] for metrics in batch_metrics])
+        for k in batch_metrics[0]}
+  
+    logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
+                 epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
+  
+    return state, epoch_metrics
 
-    return optimizer, epoch_metrics
+
+And the create_train_state function:
+
+
+.. codediff::
+  :title_left: Default learning rate
+  :title_right: Learning rate schedule
+
+  def create_train_state(rng, config):
+    """Creates initial `TrainState`."""
+    cnn = CNN()
+    params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params']
+    tx = optax.sgd(config.learning_rate, config.momentum)
+    return train_state.TrainState.create(
+        apply_fn=cnn.apply, params=params, tx=tx)
+  ---
+  def create_train_state(rng, config, learning_rate_fn): #!
+    """Creates initial `TrainState`."""
+    cnn = CNN()
+    params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params']
+    tx = optax.sgd(learning_rate_fn, config.momentum) #!
+    return train_state.TrainState.create(
+        apply_fn=cnn.apply, params=params, tx=tx)
+
