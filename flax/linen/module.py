@@ -670,7 +670,7 @@ class Module(metaclass=ModuleMeta):
       raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name,
                                                  val)
     if is_dataclass_attr:
-      # These names are specified as dataclass fields.  They should not be
+      # These names are specified as dataclass fields. They should not be
       # initialized within the setup() method, but can be modified freely
       # outside it.
       if self._state.in_setup:
