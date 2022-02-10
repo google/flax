@@ -1459,15 +1459,15 @@ class ModuleTest(absltest.TestCase):
     T = TypeVar('T')
 
     class C(nn.Module, Generic[T]):
-        def f(self, t: T) -> T:
-            return t
+      def f(self, t: T) -> T:
+        return t
 
     class D(nn.Module):
-        def setup(self):
-            c = C[Any]()
+      def setup(self):
+        c = C[Any]()
 
-        def __call__(self) -> None:
-            pass
+      def __call__(self) -> None:
+        pass
 
     rngs = {}
     D().init(rngs)
