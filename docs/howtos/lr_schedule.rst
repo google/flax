@@ -19,7 +19,10 @@ We will show you how to...
 .. testsetup::
 
   import jax
+  import jax.numpy as jnp
+  from flax.training import train_state
   import optax
+  import functools
 
 .. testcode::
   
