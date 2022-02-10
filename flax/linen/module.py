@@ -662,8 +662,8 @@ class Module(metaclass=ModuleMeta):
       name: Attribute to set.
       val: Value of the attribute.
     """
-    fields = self.__dataclass_fields__
-    is_dataclass_attr = (name in fields and fields[name].init)  # pytype: disable=attribute-error
+    fields = self.__dataclass_fields__  # pytype: disable=attribute-error
+    is_dataclass_attr = name in fields and fields[name].init
 
     if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
