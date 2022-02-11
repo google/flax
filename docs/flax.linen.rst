@@ -111,6 +111,7 @@ Pooling
 
     max_pool
     avg_pool
+    pool
 
 
 Activation functions

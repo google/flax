@@ -3,7 +3,7 @@ Ensembling on multiple devices
 
 We show how to train an ensemble of CNNs on the MNIST dataset, where the size of
 the ensemble is equal to the number of available devices. In short, this change
-be described as: 
+be described as:
 
 * make a number of functions parallel using |jax.pmap()|_,
 * split the random seed to obtain different parameter initialization,
@@ -65,7 +65,7 @@ Parallel functions
 We start by creating a parallel version of ``create_train_state()``, which
 retrieves the initial parameters of the models. We do this using |jax.pmap()|_.
 The effect of "pmapping" a function is that it will compile the function with
-XLA (similar to |jax.jit()|_), but execute it in parallel on XLA devices (e.g., 
+XLA (similar to |jax.jit()|_), but execute it in parallel on XLA devices (e.g.,
 GPUs/TPUs).
 
 .. codediff::
@@ -184,7 +184,7 @@ for all devices where necessary, and de-duplicating the return values.
     steps_per_epoch = train_ds_size // batch_size
 
     perms = jax.random.permutation(rng, len(train_ds['image']))
-    perms = perms[:steps_per_epoch * batch_size] 
+    perms = perms[:steps_per_epoch * batch_size]
     perms = perms.reshape((steps_per_epoch, batch_size))
 
     epoch_loss = []
@@ -204,8 +204,8 @@ for all devices where necessary, and de-duplicating the return values.
 As can be seen, we do not have to make any changes to the logic around the
 ``state``. This is because, as we will see below in our training code,
 the train state is replicated already, so when we pass it to ``train_step()``,
-things will just work fine since ``train_step()`` is pmapped. However, 
-the train dataset is not yet replicated, so we do that here. Since replicating 
+things will just work fine since ``train_step()`` is pmapped. However,
+the train dataset is not yet replicated, so we do that here. Since replicating
 the entire train dataset is too memory intensive we do it at the batch level.
 
 We can now rewrite the actual training logic. This consists of two simple
@@ -233,7 +233,7 @@ directly.
 
     _, test_loss, test_accuracy = apply_model(  #!
         state, test_ds['image'], test_ds['label'])  #!
-    
+
     logging.info(
         'epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, '
         'test_loss: %.4f, test_accuracy: %.2f'
@@ -255,14 +255,14 @@ directly.
 
     _, test_loss, test_accuracy = jax_utils.unreplicate(  #!
         apply_model(state, test_ds['image'], test_ds['label']))  #!
-    
+
     logging.info(
         'epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, '
         'test_loss: %.4f, test_accuracy: %.2f'
         % (epoch, train_loss, train_accuracy * 100, test_loss,
            test_accuracy * 100))
 
-  
+
 .. |jax.jit()| replace:: ``jax.jit()``
 .. _jax.jit(): https://jax.readthedocs.io/en/latest/notebooks/thinking_in_jax.html#To-JIT-or-not-to-JIT
 .. |jax.pmap()| replace:: ``jax.pmap()``

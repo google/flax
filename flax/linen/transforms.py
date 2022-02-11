@@ -56,6 +56,7 @@ class VariablePlaceholder:
   """Used to mark Variables in a JAX-compatible way when lifting arguments."""
   collection: str = struct.field(pytree_node=False)
   name: str = struct.field(pytree_node=False)
+  id: int = struct.field(pytree_node=False)
 
 
 @struct.dataclass
@@ -63,6 +64,24 @@ class InstancePlaceholder:
   """Marks module instances in a JAX-compatible way when lifting arguments."""
   cls: type = struct.field(pytree_node=False)
   attrs: dict = struct.field(pytree_node=False)
+  id: int = struct.field(pytree_node=False)
+
+
+def _memoize_by_id(fn, refs):
+  """Memoization by module/variable id to handle aliasing in traversal."""
+  @functools.wraps(fn)
+  def wrapped_fn(x):
+    nonlocal refs
+    if isinstance(x, (VariablePlaceholder, InstancePlaceholder)):
+      x_id = x.id
+    else:
+      x_id = id(x)
+    if x_id not in refs:
+      refs[x_id] = fn(x)
+    else:
+      pass
+    return refs[x_id]
+  return wrapped_fn
 
 
 def get_module_scopes(module, args=None, kwargs=None):
@@ -91,36 +110,43 @@ def get_module_scopes(module, args=None, kwargs=None):
     VariablePlaceholders and Module instances replaced with InstancePlaceholders
     that are compatible with jax functions.
   """
-  module._try_setup(shallow=True)
-  outer_scopes = []
-  # gather scopes associated with Variables and Module instances passed as arguments
+  scopes = []
+  refs = {}
+  # Gather scopes associated with Variables and Module instances passed as
+  # positional and keyword arguments.
+  @functools.partial(_memoize_by_id, refs=refs)
   def get_arg_scope(x):
-    nonlocal outer_scopes
+    nonlocal scopes
     if isinstance(x, Variable) and isinstance(x.scope, Scope):
-      outer_scopes.append(x.scope)
-      return VariablePlaceholder(x.collection, x.name)
+      scopes.append(x.scope)
+      return VariablePlaceholder(x.collection, x.name, id(x))
     elif isinstance(x, Module) and isinstance(x.scope, Scope):
-      x._try_setup(shallow=True)
-      outer_scopes.append(x.scope)
+      x._try_setup(shallow=True)  # pylint: disable=protected-access
+      scopes.append(x.scope)
       attrs = {f.name: getattr(x, f.name)
           for f in dataclasses.fields(x) if f.name != 'parent' and f.init}
       attrs = jax.tree_map(get_arg_scope, attrs)
-      return InstancePlaceholder(x.__class__, attrs)
+      return InstancePlaceholder(x.__class__, attrs, id(x))
     return x
   new_args, new_kwargs = jax.tree_map(get_arg_scope, (args, kwargs))
-  # gather scopes in Variables and Submodules passed as Module attributes
-  def get_scope(x):
-    nonlocal outer_scopes
-    if isinstance(x, Module) and isinstance(x.scope, Scope):
-      module_scopes, _, _ = get_module_scopes(x)
-      outer_scopes.extend(module_scopes)
-    elif isinstance(x, Variable) and isinstance(x.scope, Scope):
-      outer_scopes.append(x.scope)
-    return x
-  attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
-  jax.tree_map(get_scope, attrs)
-  return outer_scopes + [module.scope,], new_args, new_kwargs
+
+  # Gather scopes in Variables and Submodules passed as Module attributes.
+  @functools.partial(_memoize_by_id, refs=refs)
+  def get_scopes(module):
+    nonlocal scopes
+    module._try_setup(shallow=True)  # pylint: disable=protected-access
+    def get_scopes_inner(x):
+      nonlocal scopes
+      if isinstance(x, Module) and isinstance(x.scope, Scope):
+        get_scopes(x)
+      elif isinstance(x, Variable) and isinstance(x.scope, Scope):
+        scopes.append(x.scope)
+    attrs = {f.name: getattr(module, f.name)
+             for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
+    jax.tree_map(get_scopes_inner, attrs)
+    scopes.append(module.scope)
+  get_scopes(module)
+  return scopes, new_args, new_kwargs
 
 
 def set_module_scopes(module, args, kwargs, scopes):
@@ -150,7 +176,10 @@ def set_module_scopes(module, args, kwargs, scopes):
     updated Variable and Module instance references.
   """
   idx = 0
-  # set scopes associated with Variables and Module instances passed as arguments
+  refs = {}
+  # Set scopes associated with Variables and Module instances passed as
+  # positional and keyword arguments.
+  @functools.partial(_memoize_by_id, refs=refs)
   def set_arg_scope(x):
     nonlocal idx
     if isinstance(x, VariablePlaceholder):
@@ -167,7 +196,9 @@ def set_module_scopes(module, args, kwargs, scopes):
   new_args, new_kwargs = jax.tree_map(set_arg_scope,
                                       (args, kwargs),
                                       is_leaf=is_placeholder)
+
   # set scopes in Variables and Submodules passed as Module attributes
+  @functools.partial(_memoize_by_id, refs=refs)
   def set_scopes(module):
     nonlocal idx
     def set_scopes_inner(x):
@@ -220,10 +251,9 @@ def module_class_lift_transform(
     class_trafo_args = {m: (trafo_args, trafo_kwargs) for m in methods}
   elif isinstance(methods, dict):
     # Pass different trafo args per each method.
-    assert trafo_args == () and trafo_kwargs == {}, (
-        f"""When passing different {transform.__name__} args per method,
-        all args must be passed via methods kwarg.""")
     class_trafo_args = {k: ((), v) for k, v in methods.items()}
+  else:
+    raise ValueError("transform methods argument must be None, tuple, list, or dict.")
 
   # Handle partially initialized module class constructors.
   if (isinstance(module_class, functools.partial) and
@@ -276,7 +306,7 @@ def module_class_lift_transform(
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
-def decorator_lift_transform(transform, class_fn, *trafo_args, 
+def decorator_lift_transform(transform, class_fn, *trafo_args,
                              multi_scope=True, **trafo_kwargs):
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state correctly.
@@ -354,8 +384,8 @@ def lift_direct_transform(transform, target: Callable[..., Any], mdl: Module,
 
 
 def vmap(target: Target,
-         variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis],
-         split_rngs: Mapping[lift.PRNGSequenceFilter, bool],
+         variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis] = {},
+         split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = {},
          in_axes=0, out_axes=0,
          axis_size: Optional[int] = None,
          axis_name: Optional[str] = None,
@@ -401,8 +431,8 @@ def vmap(target: Target,
       collection or an integer to map over an axis.
     split_rngs: Split PRNG sequences will be different for each index
       of the batch dimension. Unsplit PRNGs will be broadcasted.
-    in_axes: Specifies the mapping of the input arguments (see `jax.vmap).
-    out_axes: Specifies the mapping of the return value (see `jax.vmap).
+    in_axes: Specifies the mapping of the input arguments (see `jax.vmap`).
+    out_axes: Specifies the mapping of the return value (see `jax.vmap`).
     axis_size: Specifies the size of the batch axis. This only needs
       to be specified if it cannot be derived from the input arguments.
     axis_name: Specifies a name for the batch axis. Can be used together
@@ -519,7 +549,7 @@ remat = checkpoint
 
 
 def remat_scan(target: Target,
-               lengths: Sequence[int],
+               lengths: Sequence[int] = (),
                policy: Optional[Callable[..., bool]] = None,
                variable_broadcast: lift.CollectionFilter = False,
                variable_carry: lift.CollectionFilter = False,
@@ -677,12 +707,13 @@ def scan(target: Target,
 
 def map_variables(
     target: Target,
-    mapped_collections: lift.CollectionFilter,
+    mapped_collections: lift.CollectionFilter = True,
     trans_in_fn: Callable[..., Any] = lift.id_fn,
     trans_out_fn: Callable[..., Any] = lift.id_fn,
     init: bool = False, mutable: bool = False,
     rngs: lift.PRNGSequenceFilter = True,
-    variables: lift.CollectionFilter = True) -> Target:
+    variables: lift.CollectionFilter = True,
+    methods=None) -> Target:
   """Map Variables inside a module.
 
   Example::
@@ -714,7 +745,8 @@ def map_variables(
       mapped_collections,
       trans_in_fn, trans_out_fn,
       init, mutable,
-      rngs, variables
+      rngs, variables,
+      methods=methods,
   )
 
 
@@ -722,7 +754,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
     has_aux: bool = False, reduce_axes=(),
     vjp_variables: lift.CollectionFilter = "params",
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Tuple[Any, Any]:
   """A lifted version of ``jax.vjp``.
 
@@ -796,7 +828,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
 def jvp(fn: Callable[..., Any], mdl: Module,
     primals, tangents, variable_tangents,
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
   """A lifted version of ``jax.jvp``.
 
@@ -928,13 +960,14 @@ def custom_vjp(fn: Callable[..., Any],
 
   Args:
     fn: The function to define a custom_vjp for.
-    forward_fn: A function with the same arguments as `fn` returning an tuple
+    forward_fn: A function with the same arguments as ``fn`` returning an tuple
       with the original output and the residuals that will be passsed to
-      `backward_fn`.
-    backward_fn: arguments are passed as (\*nondiff_args, residuals, tangents)
-      The function should return a tuple containing the tangents for the
-      input arguments (except the module and nondiff args) and the variable
-      tangents for the collections specified by `grad_vars`.
+      ``backward_fn``.
+    backward_fn: arguments are passed as
+      ``(*nondiff_args, residuals, tangents)`` The function should return a
+      tuple containing the tangents for the input arguments (except the module
+      and nondiff args) and the variable tangents for the collections specified
+      by `grad_vars`.
     grad_vars: The collections for which a vjp will be computed
       (default: "params").
     nondiff_argnums: arguments for which no vjp is computed.
