@@ -310,7 +310,7 @@ class ModuleTest(absltest.TestCase):
           # NOTE that keys still must be strings. This is to make a possible
           # future transition to automatically derived parameter names when assigned
           # as a dict easier (like we currently have with submodules).
-          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853 
+          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853
           str(i): self.param(f'bias_{i}', initializers.ones, self.xshape)
           for i in range(4)}
       def __call__(self, x):
@@ -1394,14 +1394,14 @@ class ModuleTest(absltest.TestCase):
     class C(nn.Module):
       @nn.compact
       def __call__(self):
-        # Some module that has dropouts in it, in general, 
+        # Some module that has dropouts in it, in general,
         # it does more than just dropout!
         return self.make_rng('dropout')
 
     class A(nn.Module):
       @nn.compact
       def __call__(self):
-        # Some module that has dropouts in it, in general, 
+        # Some module that has dropouts in it, in general,
         # it does more than just dropout!
         return C()()
 
@@ -1453,6 +1453,24 @@ class ModuleTest(absltest.TestCase):
     y, vs = C().apply({}, mutable=['test_col'])
     np.testing.assert_array_equal(y, jnp.ones((2,)))
     np.testing.assert_array_equal(y, vs['test_col']['a'])
+
+  def test_generic_module(self):
+    # See https://github.com/google/flax/issues/1899
+    T = TypeVar('T')
+
+    class C(nn.Module, Generic[T]):
+      def f(self, t: T) -> T:
+        return t
+
+    class D(nn.Module):
+      def setup(self):
+        c = C[Any]()
+
+      def __call__(self) -> None:
+        pass
+
+    rngs = {}
+    D().init(rngs)
 
 
 if __name__ == '__main__':
