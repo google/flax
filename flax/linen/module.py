@@ -459,18 +459,50 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 # -----------------------------------------------------------------------------
 
 
-# This metaclass + decorator is used by static analysis tools recognize that
-# Module behaves as a dataclass (attributes are constructor args).
 if typing.TYPE_CHECKING:
-  @__dataclass_transform__()
-  class ModuleMeta(type):
-    pass
+  # The decorator __dataclass_transform__ is used by static analysis tools to
+  # recognize that Module subclasses behave as dataclasses (attributes are
+  # constructor parameters).  The dataclasses.dataclass decorator is necessary
+  # to mark the base class as a dataclass.
+  if sys.version_info >= (3, 10):
+    @__dataclass_transform__()
+    @dataclasses.dataclass
+    class ModuleBase:
+      name: str = dataclasses.field(kw_only=True, default=None)
+      parent: Union["Module", "Scope", "_Sentinel",
+                    None] = dataclasses.field(kw_only=True, repr=False,
+                                              default=_unspecified_parent)
+
+      def __init__(*args: Any, **kwargs: Any):
+        # this stub makes sure pytype accepts constructor arguments.
+        pass
+
+      def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        # this stub allows pytype to accept Modules as Callables.
+        pass
+  else:
+    @__dataclass_transform__()
+    @dataclasses.dataclass
+    class ModuleBase:
+      name: str = dataclasses.field(default=None)
+      parent: Union["Module", "Scope", "_Sentinel",
+                    None] = dataclasses.field(repr=False,
+                                              default=_unspecified_parent)
+
+      def __init__(*args: Any, **kwargs: Any):
+        # this stub makes sure pytype accepts constructor arguments.
+        pass
+
+      def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        # this stub allows pytype to accept Modules as Callables.
+        pass
 else:
-  ModuleMeta = type
+  class ModuleBase:
+    pass
 
 
 @dataclasses.dataclass
-class Module(metaclass=ModuleMeta):
+class Module(ModuleBase):
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
@@ -507,15 +539,6 @@ class Module(metaclass=ModuleMeta):
     parent: Union["Module", "Scope", "_Sentinel",
                   None] = dataclasses.field(kw_only=True, repr=False,
                                             default=_unspecified_parent)
-
-  if typing.TYPE_CHECKING:
-    def __init__(*args, **kwargs):
-      # this stub makes sure pytype accepts constructor arguments.
-      pass
-
-    def __call__(self, *args, **kwargs) -> Any:
-      # this stub allows pytype to accept Modules as Callables.
-      pass
 
   @classmethod
   def __init_subclass__(cls, **kwargs: Any) -> None:
