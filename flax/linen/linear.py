@@ -202,20 +202,6 @@ def _conv_dimension_numbers(input_shape):
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
 
-def _get_conv_call(shared_weights: bool) -> Callable:
-  """Return the forward pass of a convolution with shared or unshared weights.
-
-  Args:
-    shared_weights: `True` to use shared weights in convolution
-      (regular convolution). `False` to use different weights at different
-      pixels, a.k.a. "locally connected layer", "unshared convolution", or
-      "local convolution".
-
-  Returns:
-    A `Module.__call__` method performing shared or unshared convolution.
-  """
-
-
 class _Conv(Module):
   """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
 
