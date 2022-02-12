@@ -14,6 +14,7 @@
 
 """Linear modules."""
 
+import abc
 from dataclasses import field
 
 from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
@@ -213,8 +214,69 @@ def _get_conv_call(shared_weights: bool) -> Callable:
   Returns:
     A `Module.__call__` method performing shared or unshared convolution.
   """
+
+
+class _Conv(Module):
+  """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
+
+  Attributes:
+    features: number of convolution filters.
+    kernel_size: shape of the convolutional kernel. For 1D convolution,
+      the kernel size can be passed as an integer. For all other cases, it must
+      be a sequence of integers.
+    strides: an integer or a sequence of `n` integers, representing the
+      inter-window strides (default: 1).
+    padding: either the string `'SAME'`, the string `'VALID'`, the string
+      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
+      high)` integer pairs that give the padding to apply before and after each
+      spatial dimension.
+    input_dilation: an integer or a sequence of `n` integers, giving the
+      dilation factor to apply in each spatial dimension of `inputs` (default: 1).
+      Convolution with input dilation `d` is equivalent to transposed
+      convolution with stride `d`.
+    kernel_dilation: an integer or a sequence of `n` integers, giving the
+      dilation factor to apply in each spatial dimension of the convolution
+      kernel (default: 1). Convolution with kernel dilation
+      is also known as 'atrous convolution'.
+    feature_group_count: integer, default 1. If specified divides the input
+      features into groups.
+    use_bias: whether to add a bias to the output (default: True).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    precision: numerical precision of the computation see `jax.lax.Precision`
+      for details.
+    kernel_init: initializer for the convolutional kernel.
+    bias_init: initializer for the bias.
+  """
+  features: int
+  kernel_size: Iterable[int]
+  strides: Union[None, int, Iterable[int]] = 1
+  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
+  input_dilation: Union[None, int, Iterable[int]] = 1
+  kernel_dilation: Union[None, int, Iterable[int]] = 1
+  feature_group_count: int = 1
+  use_bias: bool = True
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
+  precision: Any = None
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+
+  @property
+  @abc.abstractmethod
+  def shared_weights(self) -> bool:
+    """Defines whether weights are shared or not between different pixels.
+
+    Returns:
+      `True` to use shared weights in convolution (regular convolution).
+      `False` to use different weights at different pixels, a.k.a.
+      "locally connected layer", "unshared convolution", or "local convolution".
+
+    """
+    ...
+
   @compact
-  def __call__(self: Union['Conv', 'ConvLocal'], inputs: Array) -> Array:
+  def __call__(self, inputs: Array) -> Array:
     """Applies a (potentially unshared) convolution to the inputs.
 
     Args:
@@ -265,13 +327,19 @@ def _get_conv_call(shared_weights: bool) -> Callable:
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
     in_features = inputs.shape[-1]
 
-    if shared_weights:
+    if self.shared_weights:
       # One shared convolutional kernel for all pixels in the output.
       assert in_features % self.feature_group_count == 0
       kernel_shape = kernel_size + (
           in_features // self.feature_group_count, self.features)
 
     else:
+      if self.feature_group_count != 1:
+        raise NotImplementedError(
+            f'`lax.conv_general_dilated_local` does not support '
+            f'`feature_group_count != 1`, got `{self.feature_group_count}`.'
+        )
+
       # Need to know the spatial output shape of a standard convolution to
       # create the unshared convolution kernel.
       conv_output_shape = eval_shape(
@@ -293,7 +361,7 @@ def _get_conv_call(shared_weights: bool) -> Callable:
     kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
     kernel = jnp.asarray(kernel, self.dtype)
 
-    if shared_weights:
+    if self.shared_weights:
       y = lax.conv_general_dilated(
           inputs,
           kernel,
@@ -319,7 +387,7 @@ def _get_conv_call(shared_weights: bool) -> Callable:
       )
 
     if self.use_bias:
-      if shared_weights:
+      if self.shared_weights:
         # One bias weight per output channel, shared between pixels.
         bias_shape = (self.features,)
       else:
@@ -335,100 +403,21 @@ def _get_conv_call(shared_weights: bool) -> Callable:
       y = jnp.squeeze(y, axis=0)
     return y
 
-  return __call__
+
+class Conv(_Conv):
+  """Convolution Module wrapping `lax.conv_general_dilated`."""
+
+  @property
+  def shared_weights(self) -> bool:
+    return True
 
 
-class Conv(Module):
-  """Convolution Module wrapping `lax.conv_general_dilated`.
+class ConvLocal(_Conv):
+  """Local convolution Module wrapping `lax.conv_general_dilated_local`."""
 
-  Attributes:
-    features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer. For all other cases, it must
-      be a sequence of integers.
-    strides: an integer or a sequence of `n` integers, representing the
-      inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string
-      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-      high)` integer pairs that give the padding to apply before and after each
-      spatial dimension.
-    input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs` (default: 1).
-      Convolution with input dilation `d` is equivalent to transposed
-      convolution with stride `d`.
-    kernel_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of the convolution
-      kernel (default: 1). Convolution with kernel dilation
-      is also known as 'atrous convolution'.
-    feature_group_count: integer, default 1. If specified divides the input
-      features into groups.
-    use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
-      for details.
-    kernel_init: initializer for the convolutional kernel.
-    bias_init: initializer for the bias.
-  """
-  features: int
-  kernel_size: Iterable[int]
-  strides: Union[None, int, Iterable[int]] = 1
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
-  input_dilation: Union[None, int, Iterable[int]] = 1
-  kernel_dilation: Union[None, int, Iterable[int]] = 1
-  feature_group_count: int = 1
-  use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
-  precision: Any = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  __call__ = _get_conv_call(shared_weights=True)
-
-
-class ConvLocal(Module):
-  """Convolution Module wrapping `lax.conv_general_dilated_local`.
-
-  Attributes:
-    features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer. For all other cases, it must
-      be a sequence of integers.
-    strides: an integer or a sequence of `n` integers, representing the
-      inter-window strides (default: 1).
-    padding: either the string `'SAME'`, the string `'VALID'`, the string
-      `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-      high)` integer pairs that give the padding to apply before and after each
-      spatial dimension.
-    input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs` (default: 1).
-      Convolution with input dilation `d` is equivalent to transposed
-      convolution with stride `d`.
-    kernel_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of the convolution
-      kernel (default: 1). Convolution with kernel dilation
-      is also known as 'atrous convolution'.
-    use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
-    param_dtype: the dtype passed to parameter initializers (default: float32).
-    precision: numerical precision of the computation see `jax.lax.Precision`
-      for details.
-    kernel_init: initializer for the convolutional kernel.
-    bias_init: initializer for the bias.
-  """
-  features: int
-  kernel_size: Iterable[int]
-  strides: Union[None, int, Iterable[int]] = 1
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
-  input_dilation: Union[None, int, Iterable[int]] = 1
-  kernel_dilation: Union[None, int, Iterable[int]] = 1
-  use_bias: bool = True
-  dtype: Dtype = jnp.float32
-  param_dtype: Dtype = jnp.float32
-  precision: Any = None
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  __call__ = _get_conv_call(shared_weights=False)
+  @property
+  def shared_weights(self) -> bool:
+    return False
 
 
 class ConvTranspose(Module):
@@ -525,14 +514,14 @@ class ConvTranspose(Module):
       # Compute period along each spatial dimension - it's input size scaled
       # by the stride.
       scaled_x_dims = [
-        x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
+          x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
       ]
       # Compute difference between the current size of y and the final output
       # size, and complement this difference to 2 * period - that gives how
       # much we need to pad.
       size_diffs = [
-        -(y_dim - x_dim) % (2 * x_dim)
-        for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
+          -(y_dim - x_dim) % (2 * x_dim)
+          for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
       ]
       # Divide the padding equaly between left and right. The choice to put
       # "+1" on the left (and not on the right) represents a convention for
