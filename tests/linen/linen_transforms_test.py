@@ -295,8 +295,8 @@ class TransformTest(absltest.TestCase):
 
     x = jnp.ones((10, 10))
     rngs = random.PRNGKey(0)
-    init_vars = Test(None).init(rngs, x)
-    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    init_vars = Test().init(rngs, x)
+    _, new_vars = Test().apply(init_vars, x, mutable=['counter'])
     self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
                      jnp.array([2], jnp.int32))
     self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
@@ -334,8 +334,8 @@ class TransformTest(absltest.TestCase):
 
     x = jnp.ones((1, 1))
     rngs = random.PRNGKey(0)
-    init_vars = Test(None).init(rngs, x)
-    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    init_vars = Test().init(rngs, x)
+    _, new_vars = Test().apply(init_vars, x, mutable=['counter'])
     self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
                      jnp.array([2], jnp.int32))
     self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
@@ -371,8 +371,8 @@ class TransformTest(absltest.TestCase):
 
     x = jnp.ones((1, 1))
     rngs = random.PRNGKey(0)
-    init_vars = Test(None).init(rngs, x)
-    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    init_vars = Test().init(rngs, x)
+    _, new_vars = Test().apply(init_vars, x, mutable=['counter'])
     self.assertEqual(init_vars['counter']['outer1']['cntr']['foo'],
                      jnp.array([2], jnp.int32))
     self.assertEqual(new_vars['counter']['outer1']['cntr']['foo'],
@@ -415,8 +415,8 @@ class TransformTest(absltest.TestCase):
 
     x = jnp.ones((1, 1))
     rngs = random.PRNGKey(0)
-    init_vars = Test(None).init(rngs, x)
-    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    init_vars = Test().init(rngs, x)
+    _, new_vars = Test().apply(init_vars, x, mutable=['counter'])
     self.assertEqual(init_vars['counter']['outer1']['cntr']['foo'],
                      jnp.array([2], jnp.int32))
     self.assertEqual(new_vars['counter']['outer1']['cntr']['foo'],
@@ -460,8 +460,8 @@ class TransformTest(absltest.TestCase):
 
       x = jnp.ones((1, 1))
       rngs = random.PRNGKey(0)
-      init_vars = Test(None).init(rngs, x)
-      _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+      init_vars = Test().init(rngs, x)
+      _, new_vars = Test().apply(init_vars, x, mutable=['counter'])
       self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
                       jnp.array([2], jnp.int32))
       self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
@@ -494,8 +494,8 @@ class TransformTest(absltest.TestCase):
 
     x = jnp.ones((3, 1, 2))
     rngs = random.PRNGKey(0)
-    init_vars = Test(None).init(rngs, x)
-    y = Test(None).apply(init_vars, x)
+    init_vars = Test().init(rngs, x)
+    y = Test().apply(init_vars, x)
     self.assertEqual(
         init_vars['params']['outer']['Dense_0']['kernel'].shape,
         (3, 2, 5))

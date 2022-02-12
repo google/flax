@@ -565,17 +565,17 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(hasattr(test4, 'name'))
     self.assertTrue(hasattr(test4, 'parent'))
     self.assertEqual(
-        list(Test.__dataclass_fields__.keys()),
-        ['bar', 'parent', 'name'])
+        set(Test.__dataclass_fields__.keys()),
+        {'bar', 'parent', 'name'})
     self.assertEqual(
-        list(Test2.__dataclass_fields__.keys()),
-        ['bar', 'baz', 'parent', 'name'])
+        set(Test2.__dataclass_fields__.keys()),
+        {'bar', 'baz', 'parent', 'name'})
     self.assertEqual(
-        list(Test3.__dataclass_fields__.keys()),
-        ['bar', 'baz', 'parent', 'name'])
+        set(Test3.__dataclass_fields__.keys()),
+        {'bar', 'baz', 'parent', 'name'})
     self.assertEqual(
-        list(Test4.__dataclass_fields__.keys()),
-        ['bar', 'baz', 'parent', 'name'])
+        set(Test4.__dataclass_fields__.keys()),
+        {'bar', 'baz', 'parent', 'name'})
 
   def test_get_suffix_value_pairs(self):
     for x in [(), [], {}, None, 0, set()]:

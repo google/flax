@@ -19,6 +19,7 @@ import enum
 import functools
 import inspect
 import os
+import sys
 import threading
 import types
 import typing
@@ -468,6 +469,7 @@ else:
   ModuleMeta = type
 
 
+@dataclasses.dataclass
 class Module(metaclass=ModuleMeta):
   """Base class for all neural network modules. Layers and models should subclass this class.
 
@@ -500,6 +502,11 @@ class Module(metaclass=ModuleMeta):
   definitions are co-located with their usage, you can use the
   :meth:`compact` wrapper.
   """
+  if sys.version_info >= (3, 10):
+    name: str = dataclasses.field(kw_only=True, default=None)
+    parent: Union["Module", "Scope", "_Sentinel",
+                  None] = dataclasses.field(kw_only=True, repr=False,
+                                            default=_unspecified_parent)
 
   if typing.TYPE_CHECKING:
     def __init__(*args, **kwargs):
@@ -533,31 +540,36 @@ class Module(metaclass=ModuleMeta):
     """Handles final optional dataclass attributes: `parent` and `name`."""
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
-    parent_annotation = Union[Type["Module"], Type["Scope"],
-                              Type["_Sentinel"], None]
-    if ('parent' in annotations
-        and annotations['parent'] != parent_annotation):
-      raise errors.ReservedModuleAttributeError(annotations)
-    if 'name' in annotations and annotations['name'] not in ('str', str):
-      raise errors.ReservedModuleAttributeError(annotations)
-    # Add `parent` and `name` default fields at end.
-    # We temporarily modify base class __dataclass_fields__ to force desired
-    # argument behavior and ordering from dataclass class-transform.
-    parent_dataclass_fields = []
-    for clz in cls.__mro__[1:]:
-      pdf = dict(getattr(clz, '__dataclass_fields__', {}))
-      parent_dataclass_fields.append(pdf)
 
-      # Remove 'parent' and 'name' from parents because we always want parent
-      # and name to show up last in the dataclass args.
-      if 'parent' in pdf:
-        clz.__dataclass_fields__.pop('parent')  # pytype: disable=attribute-error
-      if 'name' in pdf:
-        clz.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
+    if sys.version_info < (3, 10):
+      # Reorder the annotations so that parent and name come last.
+      parent_annotation = Union["Module", "Scope", "_Sentinel", None]
+      if ('parent' in annotations
+          and annotations['parent'] != parent_annotation):
+        raise errors.ReservedModuleAttributeError(annotations)
+      if 'name' in annotations and annotations['name'] not in ('str', str):
+        raise errors.ReservedModuleAttributeError(annotations)
+      # Add `parent` and `name` default fields at end.
+      # We temporarily modify base class __dataclass_fields__ to force desired
+      # argument behavior and ordering from dataclass class-transform.
+      parent_dataclass_fields = []
+      for clz in cls.__mro__[1:]:
+        pdf = dict(getattr(clz, '__dataclass_fields__', {}))
+        parent_dataclass_fields.append(pdf)
 
-    annotations['parent'] = parent_annotation
-    cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
-    annotations['name'] = str
+        # Remove 'parent' and 'name' from parents because we always want parent
+        # and name to show up last in the dataclass args.
+        if 'parent' in pdf:
+          clz.__dataclass_fields__.pop('parent')  # pytype: disable=attribute-error
+        if 'name' in pdf:
+          clz.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
+
+      annotations['parent'] = parent_annotation
+      cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
+      annotations['name'] = str
+
+      cls.name = None  # default value of name is None.
+      cls.__annotations__ = annotations
 
     # any non-init field will only be set in setup
     # During __hash__ and __eq__ the field is not set yet
@@ -569,17 +581,16 @@ class Module(metaclass=ModuleMeta):
         field_meta.hash = False
         field_meta.repr = False
 
-    cls.name = None  # default value of name is None.
-    cls.__annotations__ = annotations
     # Now apply dataclass transform (which operates in-place).
     # Do generate a hash function only if not provided by the class.
     dataclasses.dataclass(
       cls, unsafe_hash="__hash__" not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
-    # Restore original base class __dataclass_fields__.
-    for clz, pdf in zip(cls.__mro__[1:], parent_dataclass_fields):
-      if dataclasses.is_dataclass(clz):
-        clz.__dataclass_fields__ = pdf
+    if sys.version_info < (3, 10):
+      # Restore original base class __dataclass_fields__.
+      for clz, pdf in zip(cls.__mro__[1:], parent_dataclass_fields):
+        if dataclasses.is_dataclass(clz):
+          clz.__dataclass_fields__ = pdf
 
   @classmethod
   def _verify_single_or_no_compact(cls):
