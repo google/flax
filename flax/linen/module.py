@@ -511,7 +511,7 @@ class Module(metaclass=ModuleMeta):
       pass
 
   @classmethod
-  def __init_subclass__(cls, **kwargs):
+  def __init_subclass__(cls, **kwargs: Any) -> None:
     """Automatically initializes all subclasses as custom dataclasses."""
     super().__init_subclass__(**kwargs)
     # All Flax Modules are dataclasses.  We force this convention since
