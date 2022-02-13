@@ -468,23 +468,17 @@ if typing.TYPE_CHECKING:
     @__dataclass_transform__()
     @dataclasses.dataclass
     class ModuleBase:
-      name: str = dataclasses.field(kw_only=True, default=None)
+      name: str = dataclasses.field(kw_only=True, default="")
       parent: Union["Module", "Scope", "_Sentinel",
                     None] = dataclasses.field(kw_only=True, repr=False,
                                               default=_unspecified_parent)
-
-      def __init__(*args: Any, **kwargs: Any):
-        # this stub makes sure pytype accepts constructor arguments.
-        pass
-
-      def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        # this stub allows pytype to accept Modules as Callables.
-        pass
+      # Since pytype doesn't run on Python 3.10, inserting __init__ and __call__
+      # isn't necessary, and causes problems in MyPy.
   else:
     @__dataclass_transform__()
     @dataclasses.dataclass
     class ModuleBase:
-      name: str = dataclasses.field(default=None)
+      name: str = dataclasses.field(default="")
       parent: Union["Module", "Scope", "_Sentinel",
                     None] = dataclasses.field(repr=False,
                                               default=_unspecified_parent)
