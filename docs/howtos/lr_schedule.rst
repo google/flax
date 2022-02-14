@@ -45,15 +45,10 @@ We will show you how to...
       x = nn.Dense(features=10)(x)
       return x
    
-  def get_datasets():
-    """Load MNIST train and test datasets into memory."""
-    ds_builder = tfds.builder('mnist')
-    ds_builder.download_and_prepare()
-    train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
-    test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
-    train_ds['image'] = jnp.float32(train_ds['image']) / 255.
-    test_ds['image'] = jnp.float32(test_ds['image']) / 255.
-    return train_ds, test_ds
+  def get_dummy_batch(batch_size):
+    image = np.random.rand(batch_size, 28, 28, 1)
+    label = np.random.randint(low=0, high=10, size=(batch_size,))
+    return {'image': image, 'label': label}
   
   def get_config():
     """Get the default hyperparameter configuration."""
@@ -64,6 +59,7 @@ We will show you how to...
     config.batch_size = 128
     config.num_epochs = 10
     config.warmup_epochs = 2
+    config.train_ds_size = 60000
     return config
 
   def compute_metrics(logits, labels):
@@ -217,16 +213,15 @@ And the ``create_train_state`` function:
 
   config = get_config()
   
-  train_ds, _ = get_datasets()
-  train_ds_size = len(train_ds['image'])
-  steps_per_epoch = train_ds_size // 1
+  train_ds_size = config.train_ds_size
+  steps_per_epoch = train_ds_size // config.batch_size
   learning_rate_fn = create_learning_rate_fn(config, config.learning_rate, steps_per_epoch)
   
   rng = jax.random.PRNGKey(0)
   state = create_train_state(rng, config, learning_rate_fn)
   rng, _ = jax.random.split(rng)
 
-  batch = {'image': train_ds['image'][:10], 'label': train_ds['label'][:10]}
+  batch = get_dummy_batch(config.batch_size)
   state, metrics = train_step(state, batch, learning_rate_fn)
 
   assert 'accuracy' in metrics and 'learning_rate' in metrics
