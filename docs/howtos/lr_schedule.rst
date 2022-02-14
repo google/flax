@@ -20,14 +20,66 @@ We will show you how to...
 
   import jax
   import jax.numpy as jnp
+  import flax.linen as nn
   from flax.training import train_state
   import optax
+  import numpy as np
+  import tensorflow_datasets as tfds
   import functools
+  import ml_collections
+   
+  class CNN(nn.Module):
+    """A simple CNN model."""
+   
+    @nn.compact
+    def __call__(self, x):
+      x = nn.Conv(features=32, kernel_size=(3, 3))(x)
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = nn.Conv(features=64, kernel_size=(3, 3))(x)
+      x = nn.relu(x)
+      x = nn.avg_pool(x, window_shape=(2, 2), strides=(2, 2))
+      x = x.reshape((x.shape[0], -1))  # flatten
+      x = nn.Dense(features=256)(x)
+      x = nn.relu(x)
+      x = nn.Dense(features=10)(x)
+      return x
+   
+  def get_datasets():
+    """Load MNIST train and test datasets into memory."""
+    ds_builder = tfds.builder('mnist')
+    ds_builder.download_and_prepare()
+    train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
+    test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
+    train_ds['image'] = jnp.float32(train_ds['image']) / 255.
+    test_ds['image'] = jnp.float32(test_ds['image']) / 255.
+    return train_ds, test_ds
+  
+  def get_config():
+    """Get the default hyperparameter configuration."""
+    config = ml_collections.ConfigDict()
+  
+    config.learning_rate = 0.001
+    config.momentum = 0.9
+    config.batch_size = 128
+    config.num_epochs = 10
+    config.warmup_epochs = 2
+    return config
+
+  def compute_metrics(logits, labels):
+    one_hot = jax.nn.one_hot(labels, 10)
+    loss = jnp.mean(optax.softmax_cross_entropy(logits, one_hot))
+    accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
+    metrics = {
+        'loss': loss,
+        'accuracy': accuracy,
+    }
+    return metrics
 
 .. testcode::
   
   def create_learning_rate_fn(config, base_learning_rate, steps_per_epoch):
-    """Create learning rate schedule."""
+    """Creates learning rate schedule."""
     warmup_fn = optax.linear_schedule(
         init_value=0., end_value=base_learning_rate,
         transition_steps=config.warmup_epochs * steps_per_epoch)
@@ -41,8 +93,11 @@ We will show you how to...
     return schedule_fn
 
 To use the schedule, we must create a learning rate function by passing the hyperparameters to the
-create_learning_rate_fn function and then pass the function to your ``optax`` optimizer.
-For example using this schedule on MNIST would require changing the train_step function:
+``create_learning_rate_fn`` function and then pass the function to your |Optax|_ optimizer.
+For example using this schedule on MNIST would require changing the ``train_step`` function:
+
+.. |Optax| replace:: ``Optax``
+.. _Optax: https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules
 
 .. codediff:: 
   :title_left: Default learning rate
@@ -78,14 +133,14 @@ For example using this schedule on MNIST would require changing the train_step f
     metrics['learning_rate'] = lr #!
     return new_state, metrics
 
-And the train_epoch function:
+And the ``train_epoch`` function:
 
 .. codediff::
   :title_left: Default learning rate
   :title_right: Learning rate schedule
   
   def train_epoch(state, train_ds, batch_size, epoch, rng):
-    """Train for a single epoch."""
+    """Trains for a single epoch."""
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
     perms = jax.random.permutation(rng, len(train_ds['image']))
@@ -109,7 +164,7 @@ And the train_epoch function:
     return state, epoch_metrics
   ---
   def train_epoch(state, train_ds, batch_size, epoch, learning_rate_fn, rng): #!
-    """Train for a single epoch."""
+    """Trains for a single epoch."""
     train_ds_size = len(train_ds['image'])
     steps_per_epoch = train_ds_size // batch_size
     perms = jax.random.permutation(rng, len(train_ds['image']))
@@ -133,7 +188,7 @@ And the train_epoch function:
     return state, epoch_metrics
 
 
-And the create_train_state function:
+And the ``create_train_state`` function:
 
 
 .. codediff::
@@ -155,4 +210,26 @@ And the create_train_state function:
     tx = optax.sgd(learning_rate_fn, config.momentum) #!
     return train_state.TrainState.create(
         apply_fn=cnn.apply, params=params, tx=tx)
+
+
+
+.. testcode::
+
+  config = get_config()
+  
+  train_ds, _ = get_datasets()
+  train_ds_size = len(train_ds['image'])
+  steps_per_epoch = train_ds_size // 1
+  learning_rate_fn = create_learning_rate_fn(config, config.learning_rate, steps_per_epoch)
+  
+  rng = jax.random.PRNGKey(0)
+  state = create_train_state(rng, config, learning_rate_fn)
+  rng, _ = jax.random.split(rng)
+
+  batch = {'image': train_ds['image'][:10], 'label': train_ds['label'][:10]}
+  state, metrics = train_step(state, batch, learning_rate_fn)
+
+  assert 'accuracy' in metrics and 'learning_rate' in metrics
+
+   
 
