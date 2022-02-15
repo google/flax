@@ -43,7 +43,7 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   """
   strides = strides or (1,) * len(window_shape)
   assert len(window_shape) == len(strides), (
-      f"len({window_shape}) == len({strides})")
+      f"len({window_shape}) must equal len({strides})")
   strides = (1,) + strides + (1,)
   dims = (1,) + window_shape + (1,)
 
@@ -57,12 +57,12 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
   if not isinstance(padding, str):
     padding = tuple(map(tuple, padding))
-    assert(len(padding) == len(window_shape)), (
-      f"padding {padding} must specify pads for same number of dims as "
-      f"window_shape {window_shape}")
-    assert(all([len(x) == 2 for x in padding])), (
-      f"each entry in padding {padding} must be length 2")
-    padding = ((0,0),) + padding + ((0,0),)
+    assert len(padding) == len(window_shape), (
+        f"padding {padding} must specify pads for same number of dims as "
+        f"window_shape {window_shape}")
+    assert all([len(x) == 2 for x in padding]), (
+        f"each entry in padding {padding} must be length 2")
+    padding = ((0, 0),) + padding + ((0, 0),)
   y = lax.reduce_window(inputs, init, reduce_fn, dims, strides, padding)
   if is_single_input:
     y = jnp.squeeze(y, axis=0)
