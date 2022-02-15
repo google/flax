@@ -27,6 +27,8 @@ We will show you how to...
   import tensorflow_datasets as tfds
   import functools
   import ml_collections
+  from absl import logging
+
    
   class CNN(nn.Module):
     """A simple CNN model."""
@@ -45,9 +47,9 @@ We will show you how to...
       x = nn.Dense(features=10)(x)
       return x
    
-  def get_dummy_batch(batch_size):
-    image = np.random.rand(batch_size, 28, 28, 1)
-    label = np.random.randint(low=0, high=10, size=(batch_size,))
+  def get_dummy_data(ds_size):
+    image = np.random.rand(ds_size, 28, 28, 1)
+    label = np.random.randint(low=0, high=10, size=(ds_size,))
     return {'image': image, 'label': label}
   
   def get_config():
@@ -59,7 +61,7 @@ We will show you how to...
     config.batch_size = 128
     config.num_epochs = 10
     config.warmup_epochs = 2
-    config.train_ds_size = 60000
+    config.train_ds_size = 128
     return config
 
   def compute_metrics(logits, labels):
@@ -71,6 +73,7 @@ We will show you how to...
         'accuracy': accuracy,
     }
     return metrics
+
 
 .. testcode::
   
@@ -208,8 +211,7 @@ And the ``create_train_state`` function:
         apply_fn=cnn.apply, params=params, tx=tx)
 
 
-
-.. testcode::
+.. testcleanup::
 
   config = get_config()
   
@@ -219,12 +221,12 @@ And the ``create_train_state`` function:
   
   rng = jax.random.PRNGKey(0)
   state = create_train_state(rng, config, learning_rate_fn)
+
+  train_ds = get_dummy_data(config.train_ds_size)
   rng, _ = jax.random.split(rng)
+  state, epoch_metrics = train_epoch(state, train_ds, config.batch_size, 0, learning_rate_fn, rng)
 
-  batch = get_dummy_batch(config.batch_size)
-  state, metrics = train_step(state, batch, learning_rate_fn)
-
-  assert 'accuracy' in metrics and 'learning_rate' in metrics
+  assert 'accuracy' in epoch_metrics and 'learning_rate' in epoch_metrics
 
    
 
