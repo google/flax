@@ -535,7 +535,7 @@ class Module(metaclass=ModuleMeta):
     if ('parent' in annotations
         and annotations['parent'] != parent_annotation):
       raise errors.ReservedModuleAttributeError(annotations)
-    if 'name' in annotations and annotations['name'] != str:
+    if 'name' in annotations and annotations['name'] not in ('str', str):
       raise errors.ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
