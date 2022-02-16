@@ -105,3 +105,24 @@ official Flax example, and start from there.
 [@bkkaggle]: https://github.com/bkkaggle
 [@vasudevgupta7]: https://github.com/vasudevgupta7
 [@n2cholas]: https://github.com/n2cholas
+
+## Anatomy of a Flax Example
+
+Most of our examples in this directory follow a structure that we found to work
+well with Flax projects, and we strive to make the examples easy to explore and
+easy to fork. In particular (taken from [#231])
+
+- README: contains links to paper, command line, [TensorBoard] metrics
+- Focus: an example is about a single model/dataset
+- Configs: we use `ml_collections.ConfigDict` stored under `configs/`
+- Tests: executable `main.py` loads `train.py` which has `train_test.py`
+- Data: is read from [TensorFlow Datasets]
+- Standalone: every directory is self-conained
+- Requirements: are pinned in `requirements.txt`
+- Boilerplate: is reduced by using [`clu`]
+- Interactive: the example can be explored with a [Colab]
+
+[#231]: https://github.com/google/flax/issues/231
+[TensorBoard]: https://tensorboard.dev/
+[`clu`]: https://pypi.org/project/clu/
+[Colab]: https://colab.research.google.com/
