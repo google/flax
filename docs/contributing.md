@@ -24,8 +24,10 @@ We do all of our development using git, so basic knowledge is assumed.
 
 Follow these steps to contribute code:
 
+### Create a Pull Request in your own branch
+
 1. Fork the Flax repository by clicking the 'Fork' button on the
-   [repository page](http://www.github.com/google/flax). This create a copy
+   [repository page](http://www.github.com/google/flax). This creates a copy
    of the Flax repository in your own account.
 
 2. Install Python >=3.6 and `svn` for running the tests (see below).
@@ -52,7 +54,7 @@ Follow these steps to contribute code:
    pip install -e .
    ```
 
-5. Add the Flax repo as an upstream remote, so you can use it to sync your
+5. Add the Google Flax repo (not your fork) as an upstream remote, so you can use it to sync your
    changes.
 
    ```bash
@@ -66,10 +68,10 @@ Follow these steps to contribute code:
    git checkout -b name-of-change
    ```
 
-   And implement your changes using your favorite editor (we recommend
+7. Implement your changes using your favorite editor (we recommend
    [Visual Studio Code](https://code.visualstudio.com/)).
 
-7. Make sure the tests pass by running the following command from the top of
+   Make sure the tests pass by running the following command from the top of
    the repository:
 
    ```bash
@@ -90,18 +92,32 @@ Follow these steps to contribute code:
    git rebase upstream/main
    ```
 
-   Finally push your commit on your development branch and create a remote 
+9. Finally push your commit on your development branch and create a remote 
    branch in your fork that you can use to create a Pull Request from:
 
    ```bash
    git push --set-upstream origin name-of-change
    ```
+   
+   After running the command, you should see a Github link in your terminal output that you can click on to create a Pull Request.
+   If you do not see this link in the terminal after doing a `git push`, go to the Github web UI; there should be a button there that lets you turn the commit into a Pull Request yourself.
 
-9. Make sure your PR passes the 
+10. Make sure your PR passes the 
    [PR checklist](https://github.com/google/flax/blob/main/.github/pull_request_template.md#checklist).
    If so, create a Pull Request from the Flax repository and send it for review.
    Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/)
    for more information on using pull requests.
+
+### Updating the Pull Request contents
+
+Every Pull Request should ideally be limited to just one commit, so if you have multiple commits please squash them.
+
+Assuming you now have only one commit in your Pull Request, and want to add changes requested during review:
+
+1. Make the changes locally in your editor.
+2. Run `git commit -a --amend`. This updates the commit contents and allows you to edit the commit message.
+3. At this point, `git push` alone will result in an error. Instead, use `git push --force`.
+4. Check that it's done: The changes to your commit should be immediately reflected in the Github web UI.
 
 ## Contributor License Agreement
 
