@@ -21,8 +21,13 @@ The model should run with other configurations and hardware, but explicitly test
 
 | Hardware |  Batch size  | Learning rate | Training time | Accuracy  | TensorBoard.dev |
 |:---:|:---:|:---:|:---:|:---:|:---:|
-| Nvidia V100 (16GB) | 64  |  0.05 | 5h 15m | 72.20% | [2020-03-22](https://tensorboard.dev/experiment/YkUAdwYaQ9OtYl2IVe3MvA/) |
+| Nvidia Titan V (12GB) | 64  |  0.05 | 5:58h | 68.6% | [2022-05-01](https://tensorboard.dev/experiment/F5ULHlyzQlieVJn5PG8mRQ/) |
 
+<<<<<<< HEAD
+
+
+=======
+>>>>>>> a6f9b02 (Updated with fresh tensorboard results for 20k step)
 ### Running 
 ```
 python train.py --batch_size=64 --model_dir=./ancient_greek \
