@@ -141,9 +141,9 @@ class ApplyScopeInvalidVariablesStructureError(FlaxError):
   For more explanation on variable dicts, please see :mod:`flax.core.variables`.
   """
   def __init__(self, variables):
-    super().__init__(f'Expected the first argument passed to an apply function '
+    super().__init__('Expected the first argument passed to an apply function '
                      'to be a dictionary containing a \'params\' key at the '
-                     'root level, but got "{variables}".')
+                     f'root level, but got "{variables}".')
 
 
 class ScopeParamNotFoundError(FlaxError):
