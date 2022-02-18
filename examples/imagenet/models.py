@@ -134,16 +134,6 @@ ResNet200 = partial(ResNet, stage_sizes=[3, 24, 36, 3],
 
 ResNet18Local = partial(ResNet, stage_sizes=[2, 2, 2, 2],
                         block_cls=ResNetBlock, conv=nn.ConvLocal)
-ResNet34Local = partial(ResNet, stage_sizes=[3, 4, 6, 3],
-                        block_cls=ResNetBlock, conv=nn.ConvLocal)
-ResNet50Local = partial(ResNet, stage_sizes=[3, 4, 6, 3],
-                        block_cls=ResNetBlock, conv=nn.ConvLocal)
-ResNet101Local = partial(ResNet, stage_sizes=[3, 4, 23, 3],
-                         block_cls=ResNetBlock, conv=nn.ConvLocal)
-ResNet152Local = partial(ResNet, stage_sizes=[3, 8, 36, 3],
-                         block_cls=ResNetBlock, conv=nn.ConvLocal)
-ResNet200Local = partial(ResNet, stage_sizes=[3, 24, 36, 3],
-                         block_cls=ResNetBlock, conv=nn.ConvLocal)
 
 
 # Used for testing only.
