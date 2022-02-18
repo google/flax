@@ -9,7 +9,7 @@ vNext
 - 
 - 
 - 
-- 
+- Added locally-connected (unshared CNN) layer `flax.linen.ConvLocal`.
 - Added Optax update guide and deprecated `flax.optim`.
 - Added `sep` argument to `flax.traverse_util.flatten_dict()`.
 -
