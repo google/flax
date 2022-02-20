@@ -15,39 +15,24 @@
 """Utilities for defining custom classes that can be used with jax transformations.
 """
 
+import dataclasses
 import typing
 from typing import TypeVar, Callable, Tuple, Union, Any
 
 from . import serialization
 
-import dataclasses
-
 import jax
+from typing_extensions import dataclass_transform
 
 
-
-# This decorator is interpreted by static analysis tools as a hint
-# that a decorator or metaclass causes dataclass-like behavior.
-# See https://github.com/microsoft/pyright/blob/main/specs/dataclass_transforms.md
-# for more information about the __dataclass_transform__ magic.
 _T = TypeVar("_T")
-def __dataclass_transform__(
-    *,
-    eq_default: bool = True,
-    order_default: bool = False,
-    kw_only_default: bool = False,
-    field_descriptors: Tuple[Union[type, Callable[..., Any]], ...] = (()),
-) -> Callable[[_T], _T]:
-  # If used within a stub file, the following implementation can be
-  # replaced with "...".
-  return lambda a: a
 
 
 def field(pytree_node=True, **kwargs):
   return dataclasses.field(metadata={'pytree_node': pytree_node}, **kwargs)
 
 
-@__dataclass_transform__(field_descriptors=(field,))
+@dataclass_transform(field_descriptors=(field,))
 def dataclass(clz: _T) -> _T:
   """Create a class which can be passed to functional transformations.
 
@@ -173,7 +158,7 @@ def dataclass(clz: _T) -> _T:
 TNode = TypeVar('TNode', bound='PyTreeNode')
 
 
-@__dataclass_transform__(field_descriptors=(field,))
+@dataclass_transform(field_descriptors=(field,))
 class PyTreeNode:
   """Base class for dataclasses that should act like a JAX pytree node.
 

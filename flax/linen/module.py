@@ -30,6 +30,7 @@ from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
 import jax
 from jax import tree_util
 from jax._src.numpy.lax_numpy import isin
+from typing_extensions import dataclass_transform
 import numpy as np
 
 import flax
@@ -42,7 +43,6 @@ from flax import core
 from flax.core import Scope
 from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
-from flax.struct import __dataclass_transform__
 
 # from .dotgetter import DotGetter
 traceback_util.register_exclusion(__file__)
@@ -458,17 +458,8 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 # -----------------------------------------------------------------------------
 
 
-# This metaclass + decorator is used by static analysis tools recognize that
-# Module behaves as a dataclass (attributes are constructor args).
-if typing.TYPE_CHECKING:
-  @__dataclass_transform__()
-  class ModuleMeta(type):
-    pass
-else:
-  ModuleMeta = type
-
-
-class Module(metaclass=ModuleMeta):
+@dataclass_transform()
+class Module:
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
