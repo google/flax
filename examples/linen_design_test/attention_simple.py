@@ -31,7 +31,7 @@ class Dense(Module):
   kernel_init: Callable = initializers.lecun_normal()
   bias_init: Callable = initializers.zeros
   dtype: Any = jnp.float32
-  precision: Any = None
+  precision: Optional[lax.Precision] = None
 
   @compact
   def __call__(self, inputs):

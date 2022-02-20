@@ -63,7 +63,7 @@ class Dense(nn.Module):
   use_bias: bool = True
   dtype: Any = jnp.float32
   param_dtype: DType = jnp.float32
-  precision: Any = None
+  precision: Optional[lax.Precision] = None
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, DType], Array] = zeros
   kernel_axes: Tuple[str, ...] = ()

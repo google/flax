@@ -212,7 +212,7 @@ class MultiHeadDotProductAttention(Module):
   broadcast_dropout: bool = True
   dropout_rate: float = 0.
   deterministic: Optional[bool] = None
-  precision: Any = None
+  precision: Optional[lax.Precision] = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   use_bias: bool = True
