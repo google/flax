@@ -43,7 +43,11 @@ def __dataclass_transform__(
   return lambda a: a
 
 
-@__dataclass_transform__()
+def field(pytree_node=True, **kwargs):
+  return dataclasses.field(metadata={'pytree_node': pytree_node}, **kwargs)
+
+
+@__dataclass_transform__(field_descriptors=(field,))
 def dataclass(clz: _T) -> _T:
   """Create a class which can be passed to functional transformations.
 
@@ -166,22 +170,11 @@ def dataclass(clz: _T) -> _T:
   return data_clz
 
 
-def field(pytree_node=True, **kwargs):
-  return dataclasses.field(metadata={'pytree_node': pytree_node}, **kwargs)
-
-
 TNode = TypeVar('TNode', bound='PyTreeNode')
 
 
-if typing.TYPE_CHECKING:
-  @__dataclass_transform__()
-  class PyTreeNodeMeta(type):
-    pass
-else:
-  PyTreeNodeMeta = type
-
-
-class PyTreeNode(metaclass=PyTreeNodeMeta):
+@__dataclass_transform__(field_descriptors=(field,))
+class PyTreeNode:
   """Base class for dataclasses that should act like a JAX pytree node.
 
   See ``flax.struct.dataclass`` for the ``jax.tree_util`` behavior.
