@@ -1,3 +1,6 @@
+.. image:: https://colab.research.google.com/assets/colab-badge.svg
+   :target: https://colab.research.google.com/gist/AdityaKane2001/cbd09c2fcb86163cb301076cb60ce200/state_params_howto.ipynb
+
 Managing Parameters and State
 =============================
 
