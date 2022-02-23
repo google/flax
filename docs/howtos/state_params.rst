@@ -1,5 +1,5 @@
 .. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://github.com/google/flax/blob/main/docs/howtos/state_params_howto.ipynb
+   :target: state_params_howto.ipynb
    
 Managing Parameters and State
 =============================
