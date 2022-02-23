@@ -70,11 +70,14 @@ Graph modeling
 The following code bases use Flax and provide training frameworks and a wealth
 of examples, in many cases with pre-trained weights:
 
-- [HuggingFace Transformers](https://github.com/huggingface/transformers) is a library for bulding, training, and deploying
-  state of the art models powered by the reference open source in machine learning.
+- [HuggingFace Transformers](https://github.com/huggingface/transformers) is a
+  very popular library for building, training, and deploying state of the art
+  machine learning models.
   These models can be applied on text, images, and audio. After organizing the
   [JAX/Flax community week](https://github.com/huggingface/transformers/blob/master/examples/research_projects/jax-projects/README.md),
-  they have now over 5,000 [Flax/JAX models](https://huggingface.co/models?library=jax&sort=downloads) in their repository.
+  they have now over 5,000
+  [Flax/JAX models](https://huggingface.co/models?library=jax&sort=downloads) in
+  their repository.
 
 - [Scenic](https://github.com/google-research/scenic) is a codebase/library
   for computer vision research and beyond. Scenic's main focus is around
