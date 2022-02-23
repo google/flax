@@ -30,7 +30,7 @@ from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
 import jax
 from jax import tree_util
 from jax._src.numpy.lax_numpy import isin
-from typing_extensions import dataclass_transform
+from typing_extensions import dataclass_transform  # pytype: disable=import-error
 import numpy as np
 
 import flax
