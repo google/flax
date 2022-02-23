@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
 
 """Normalization modules for Flax."""
 
-from jax import lax
-from flax.nn import initializers
-import jax.numpy as jnp
 from flax.core import Scope
+from flax.linen import initializers
+from jax import lax
+import jax.numpy as jnp
 
 
 def _absolute_dims(rank, dims):

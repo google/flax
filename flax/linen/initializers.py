@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,10 @@
 
 # pylint: disable=unused-import
 # re-export initializer functions from jax.nn
+from jax.nn.initializers import glorot_normal
+from jax.nn.initializers import glorot_uniform
+from jax.nn.initializers import he_normal
+from jax.nn.initializers import he_uniform
 from jax.nn.initializers import kaiming_normal
 from jax.nn.initializers import kaiming_uniform
 from jax.nn.initializers import lecun_normal

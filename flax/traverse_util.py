@@ -1,25 +1,10 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#      http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -60,12 +45,12 @@ import copy
 import dataclasses
 
 import jax
+import flax
 
 from . import struct
 
 
-# the empty node is a struct.dataclass to 
-# be compatible with JAX.
+# the empty node is a struct.dataclass to be compatible with JAX.
 @struct.dataclass
 class _EmptyNode:
   pass
@@ -73,7 +58,7 @@ class _EmptyNode:
 empty_node = _EmptyNode()
 
 
-def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None):
+def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
   """Flatten a nested dictionary.
 
   The nested keys are flattened to a tuple.
@@ -103,14 +88,23 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None):
       next nested dictionary and nested keys and
       returns True if the nested dictionary is a
       leaf (i.e., should not be flattened further).
+    sep: if specified, then the keys of the returned
+      dictionary will be `sep`-joined strings (if
+      `None`, then keys will be tuples).
   Returns:
     The flattened dictionary.
   """
-  assert isinstance(xs, dict), 'input is not a dict'
+  assert isinstance(xs, (flax.core.FrozenDict, dict)), 'expected (frozen)dict'
+
+  def _key(path):
+    if sep is None:
+      return path
+    return sep.join(path)
 
   def _flatten(xs, prefix):
-    if not isinstance(xs, dict) or (is_leaf and is_leaf(prefix, xs)):
-      return {prefix: xs}
+    if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
+        is_leaf and is_leaf(prefix, xs)):
+      return {_key(prefix): xs}
     result = {}
     is_empty = True
     for key, value in xs.items():
@@ -118,12 +112,12 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None):
       path = prefix + (key,)
       result.update(_flatten(value, path))
     if keep_empty_nodes and is_empty:
-      return {prefix: empty_node}
+      return {_key(prefix): empty_node}
     return result
   return _flatten(xs, ())
 
 
-def unflatten_dict(xs):
+def unflatten_dict(xs, sep=None):
   """Unflatten a dictionary.
 
   See `flatten_dict`
@@ -143,12 +137,15 @@ def unflatten_dict(xs):
 
   Args:
     xs: a flattened dictionary
+    sep: separator (same as used with `flatten_dict()`).
   Returns:
     The nested dictionary.
   """
   assert isinstance(xs, dict), 'input is not a dict'
   result = {}
   for path, value in xs.items():
+    if sep is not None:
+      path = path.split(sep)
     if value is empty_node:
       value = {}
     cursor = result
@@ -381,3 +378,66 @@ class TraverseTree(Traversal):
 
   def iterate(self, inputs):
     yield from jax.tree_leaves(inputs)
+
+
+def _get_params_dict(inputs):
+  if isinstance(inputs, (dict, flax.core.FrozenDict)):
+    return flax.core.unfreeze(inputs)
+  else:
+    raise ValueError(
+        'Can only traverse a flax Model instance or a nested dict, not '
+        f'{type(inputs)}')
+
+
+def _sorted_items(x):
+  """Returns items of a dict ordered by keys."""
+  return sorted(x.items(), key=lambda x: x[0])
+
+
+class ModelParamTraversal(Traversal):
+  """Select model parameters using a name filter.
+
+  This traversal operates on a nested dictionary of parameters and selects a
+  subset based on the `filter_fn` argument.
+
+  See :class:`flax.optim.MultiOptimizer` for an example of how to use
+  :class:`ModelParamTraversal` to update subsets of the parameter tree with a
+  specific optimizer.
+  """
+
+  def __init__(self, filter_fn):
+    """Constructor a new ModelParamTraversal.
+
+    Args:
+      filter_fn: a function that takes a parameter's full name and its value and
+        returns whether this parameter should be selected or not. The name of a
+        parameter is determined by the module hierarchy and the parameter name
+        (for example: '/module/sub_module/parameter_name').
+    """
+    self._filter_fn = filter_fn
+
+  def iterate(self, inputs):
+    params = _get_params_dict(inputs)
+    flat_dict = flatten_dict(params)
+    for key, value in _sorted_items(flat_dict):
+      path = '/' + '/'.join(key)
+      if self._filter_fn(path, value):
+        yield value
+
+  def update(self, fn, inputs):
+    params = _get_params_dict(inputs)
+    flat_dict = flatten_dict(params, keep_empty_nodes=True)
+    new_dict = {}
+    for key, value in _sorted_items(flat_dict):
+      # empty_node is not an actual leave. It's just a stub for empty nodes
+      # in the nested dict.
+      if value is not empty_node:
+        path = '/' + '/'.join(key)
+        if self._filter_fn(path, value):
+          value = fn(value)
+      new_dict[key] = value
+    new_params = unflatten_dict(new_dict)
+    if isinstance(inputs, flax.core.FrozenDict):
+      return flax.core.FrozenDict(new_params)
+    else:
+      return new_params

@@ -1,6 +1,8 @@
 #!/bin/bash
 
+export JAX_NUMPY_RANK_PROMOTION=raise
 export FLAX_PROFILE=1
+export FLAX_LAZY_RNG=1
 
 PYTEST_OPTS=
 for flag in "$@"; do
@@ -42,7 +44,7 @@ handle_errors () {
 sphinx-build -M doctest docs docs/_build
 
 # Run battery of core FLAX API tests.
-pytest -n 4 tests $PYTEST_OPTS
+pytest -n auto tests $PYTEST_OPTS
 
 # Per-example tests.
 #

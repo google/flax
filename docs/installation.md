@@ -4,7 +4,7 @@ You will need Python 3.6 or later.
 
 For GPU support, first install `jaxlib`; please follow the
 instructions in the [JAX
-readme](https://github.com/google/jax/blob/master/README.md).  If they
+readme](https://github.com/google/jax/blob/main/README.md).  If they
 are not already installed, you will need to install
 [CUDA](https://developer.nvidia.com/cuda-downloads) and
 [CuDNN](https://developer.nvidia.com/cudnn) runtimes.

@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +16,10 @@
 
 
 import collections
-
 from absl.testing import absltest
-
+import flax
+from flax.core import freeze
 from flax import traverse_util
-
 import jax
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -149,28 +148,43 @@ class TraversalTest(absltest.TestCase):
     xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
     flat_xs = traverse_util.flatten_dict(xs)
     self.assertEqual(flat_xs, {
+        ('foo',): 1,
+        ('bar', 'a'): 2,
+    })
+    flat_xs = traverse_util.flatten_dict(freeze(xs))
+    self.assertEqual(flat_xs, {
       ('foo',): 1,
       ('bar', 'a'): 2,
+    })
+    flat_xs = traverse_util.flatten_dict(xs, sep='/')
+    self.assertEqual(flat_xs, {
+      'foo': 1,
+      'bar/a': 2,
     })
 
   def test_unflatten_dict(self):
-    flat_xs = {
-      ('foo',): 1,
-      ('bar', 'a'): 2,
-    }
-    xs = traverse_util.unflatten_dict(flat_xs)
-    self.assertEqual(xs, {
+    expected_xs = {
       'foo': 1,
       'bar': {'a': 2}
+    }
+    xs = traverse_util.unflatten_dict({
+      ('foo',): 1,
+      ('bar', 'a'): 2,
     })
+    self.assertEqual(xs, expected_xs)
+    xs = traverse_util.unflatten_dict({
+      'foo': 1,
+      'bar/a': 2,
+    }, sep='/')
+    self.assertEqual(xs, expected_xs)
 
   def test_flatten_dict_keep_empty(self):
     xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
     flat_xs = traverse_util.flatten_dict(xs, keep_empty_nodes=True)
     self.assertEqual(flat_xs, {
-      ('foo',): 1,
-      ('bar', 'a'): 2,
-      ('bar', 'b'): traverse_util.empty_node,
+        ('foo',): 1,
+        ('bar', 'a'): 2,
+        ('bar', 'b'): traverse_util.empty_node,
     })
     xs_restore = traverse_util.unflatten_dict(flat_xs)
     self.assertEqual(xs, xs_restore)
@@ -181,11 +195,64 @@ class TraversalTest(absltest.TestCase):
         xs,
         is_leaf=lambda k, x: len(k) == 1 and len(x) == 2)
     self.assertEqual(flat_xs, {
-      ('foo', 'c'): 4,
-      ('bar',): {'a': 2, 'b': {}},
+        ('foo', 'c'): 4,
+        ('bar',): {
+            'a': 2,
+            'b': {}
+        },
     })
     xs_restore = traverse_util.unflatten_dict(flat_xs)
     self.assertEqual(xs, xs_restore)
+
+
+class ModelParamTraversalTest(absltest.TestCase):
+
+  def test_only_works_on_model_params(self):
+    traversal = traverse_util.ModelParamTraversal(lambda *_: True)
+    with self.assertRaises(ValueError):
+      list(traversal.iterate([]))
+
+  def test_param_selection(self):
+    params = {
+        'x': {
+            'kernel': 1,
+            'bias': 2,
+            'y': {
+                'kernel': 3,
+                'bias': 4,
+            },
+            'z': {},
+        },
+    }
+    expected_params = {
+        'x': {
+            'kernel': 2,
+            'bias': 2,
+            'y': {
+                'kernel': 6,
+                'bias': 4,
+            },
+            'z': {}
+        },
+    }
+    names = []
+    def filter_fn(name, _):
+      names.append(name)  # track names passed to filter_fn for testing
+      return 'kernel' in name
+    traversal = traverse_util.ModelParamTraversal(filter_fn)
+
+    values = list(traversal.iterate(params))
+    configs = [
+        (params, expected_params),
+        (flax.core.FrozenDict(params), flax.core.FrozenDict(expected_params)),
+    ]
+    for model, expected_model in configs:
+      self.assertEqual(values, [1, 3])
+      self.assertEqual(set(names), set([
+          '/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias']))
+      new_model = traversal.update(lambda x: x + x, model)
+      self.assertEqual(new_model, expected_model)
+
 
 if __name__ == '__main__':
   absltest.main()

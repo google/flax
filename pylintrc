@@ -325,7 +325,7 @@ redefining-builtins-modules=six,six.moves,past.builtins,future.builtins,functool
 
 # Logging modules to check that the string format arguments are in logging
 # function parameter format
-logging-modules=logging,absl.logging,tensorflow.google.logging
+logging-modules=logging,absl.logging
 
 
 [SIMILARITIES]

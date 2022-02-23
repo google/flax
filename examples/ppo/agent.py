@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,20 +14,22 @@
 
 """Agent utilities, incl. choosing the move and running in separate process."""
 
+import collections
 import functools
 import multiprocessing
-import collections
-import numpy as np
-import jax
+from typing import Any, Callable
+
 import flax
+import jax
+import numpy as np
 
 import env_utils
-import models
 
-@functools.partial(jax.jit, static_argnums=1)
+
+@functools.partial(jax.jit, static_argnums=0)
 def policy_action(
+  apply_fn: Callable[..., Any],
   params: flax.core.frozen_dict.FrozenDict,
-  module: models.ActorCritic,
   state: np.ndarray):
   """Forward pass of the network.
 
@@ -39,7 +41,7 @@ def policy_action(
   Returns:
     out: a tuple (log_probabilities, values)
   """
-  out = module.apply({'params': params}, state)
+  out = apply_fn({'params': params}, state)
   return out
 
 

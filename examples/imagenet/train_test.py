@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,10 +18,8 @@ import pathlib
 import tempfile
 
 from absl.testing import absltest
-
 import jax
 from jax import random
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -44,8 +42,8 @@ class TrainTest(absltest.TestCase):
   def test_create_model(self):
     """Tests creating model."""
     model = train.create_model(model_cls=models._ResNet1, half_precision=False)  # pylint: disable=protected-access
-    params, state = train.initialized(random.PRNGKey(0), 224, model)
-    variables = {'params': params, **state}
+    params, batch_stats = train.initialized(random.PRNGKey(0), 224, model)
+    variables = {'params': params, 'batch_stats': batch_stats}
     x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
     y = model.apply(variables, x, train=False)
     self.assertEqual(y.shape, (8, 1000))

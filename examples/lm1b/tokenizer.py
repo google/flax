@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,10 +22,9 @@ from typing import Any, Dict, Iterable, Tuple
 from absl import logging
 import dataclasses
 import jax
+from sentencepiece import SentencePieceTrainer
 import tensorflow as tf
 import tensorflow_text as tftxt
-
-from sentencepiece import SentencePieceTrainer
 
 Features = Dict[str, tf.Tensor]
 
@@ -97,7 +96,7 @@ def _train_sentencepiece(dataset: tf.data.Dataset,
       f'--model_prefix={model_fp.name}', f'--model_type={model_type}'
   ])
   SentencePieceTrainer.Train(argstr)
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     # Use an intermediate filename that is renamed to the target name to address
     # create and fill delays.
     copy_rename_path = abs_model_path + '.rntmp'

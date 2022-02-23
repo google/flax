@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,17 +16,14 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 import functools
-import warnings
 from typing import Any
-
+import warnings
 from . import stochastic
 
 from flax import jax_utils
 from flax import struct
-from flax.nn import initializers
-
 from flax.core import Scope
-
+from flax.linen import initializers
 import jax
 from jax import lax
 from jax import random
@@ -215,8 +212,8 @@ def multi_head_dot_product_attention(
     key_padding_mask: boolean specifying key-value tokens that are pad token.
     segmentation: segment indices for packed inputs_q data.
     key_segmentation: segment indices for packed inputs_kv data.
-    cache: an instance of `flax.nn.attention.Cache` used for efficient
-      autoregressive decoding.
+    cache: an instance of `flax.deprecated.nn.attention.Cache` used for
+      efficient autoregressive decoding.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate

@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,21 +16,12 @@
 """
 
 import os
-import sys
-import warnings
-import matplotlib as mpl
-# Necessary to prevent attempted Tk import:
-with warnings.catch_warnings():
-  warnings.simplefilter('ignore')
-  if 'google.colab' in sys.modules or 'ipykernel' in sys.modules:
-    pass
-  else:
-    mpl.use('Agg')
+
 # pylint: disable=g-import-not-at-top
 import numpy as np
 
-from tensorboard.plugins.hparams import api as hparams_api
 import tensorflow.compat.v2 as tf
+from tensorboard.plugins.hparams import api as hparams_api
 
 
 def _flatten_dict(input_dict, parent_key='', sep='.'):

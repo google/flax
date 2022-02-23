@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,24 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2021 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Utilities we could consider upstreaming to Jax.
 """
 
 import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
+import itertools
 import warnings
 
 import jax
@@ -43,23 +31,15 @@ import jax.numpy as jnp
 import numpy as np
 
 
-def _replicate(x, devices=None):
-  x = jax.numpy.asarray(x)
-  if devices is None:
-    # match the default device assignments used in pmap:
-    # for single-host, that's the XLA default device assignment
-    # for multi-host, it's the order of jax.local_devices()
-    if jax.host_count() == 1:
-      devices = [d for d in xb.get_backend().get_default_device_assignment(
-          jax.device_count()) if d.host_id == jax.host_id()]
-    else:
-      devices = jax.local_devices()
-  if hasattr(jax.api, "device_put_sharded"):  # jax >= 0.2.0
-    return jax.api.device_put_sharded(len(devices) * [x], devices)
+def _pmap_device_order():
+  # match the default device assignments used in pmap:
+  # for single-host, that's the XLA default device assignment
+  # for multi-host, it's the order of jax.local_devices()
+  if jax.process_count() == 1:
+    return [d for d in xb.get_backend().get_default_device_assignment(
+        jax.device_count()) if d.process_index == jax.process_index()]
   else:
-    aval = jax.ShapedArray((len(devices),) + x.shape, x.dtype)
-    buffers = [xla.device_put(x, device=d) for d in devices]
-    return jax.pxla.ShardedDeviceArray(aval, buffers)
+    return jax.local_devices()
 
 
 def replicate(tree, devices=None):
@@ -68,11 +48,12 @@ def replicate(tree, devices=None):
   Args:
     tree: a pytree containing the arrays that should be replicated.
     devices: the devices the data is replicated to
-      (default: `jax.local_devices()`).
+      (default: same order as expected by `jax.pmap()`).
   Returns:
     A new pytree containing the replicated arrays.
   """
-  return jax.tree_map(lambda x: _replicate(x, devices), tree)
+  devices = devices or _pmap_device_order()
+  return jax.device_put_replicated(tree, devices)
 
 
 def unreplicate(tree):
@@ -129,29 +110,40 @@ def _parse_spec(spec):
 
 
 def prefetch_to_device(iterator, size, devices=None):
-  """"Shard and prefetch batches on device.
+  """Shard and prefetch batches on device.
 
   This utility takes an iterator and returns a new iterator which fills an on
   device prefetch buffer. Eager prefetching can improve the performance of
   training loops significantly by overlapping compute and data transfer.
-  
-  This utility is mostly useful for GPUs, for TPUs it should not be necessary.
+
+  This utility is mostly useful for GPUs, for TPUs and CPUs it should not be
+  necessary -- the TPU & CPU memory allocators (normally) don't pick a memory
+  location that isn't free yet so they don't block. Instead those allocators OOM.
 
   Args:
     iterator: an iterator that yields a pytree of ndarrays where the first
       dimension is sharded across devices.
+
     size: the size of the prefetch buffer.
+
+      If you're training on GPUs, 2 is generally the best choice because this
+      guarantees that you can overlap a training step on GPU with a data
+      prefetch step on CPU.
+
     devices: the list of devices to which the arrays should be prefetched.
+
+      Defaults to the order of devices expected by `jax.pmap`.
+
   Yields:
     The original items from the iterator where each ndarray is now a sharded to
     the specified devices.
   """
   queue = collections.deque()
-  if devices is None:
-    devices = jax.local_devices()
+  devices = devices or _pmap_device_order()
+
   def _prefetch(xs):
-    if hasattr(jax.api, "device_put_sharded"):  # jax>=0.2.0
-      return jax.api.device_put_sharded(list(xs), devices)
+    if hasattr(jax, "device_put_sharded"):  # jax>=0.2.0
+      return jax.device_put_sharded(list(xs), devices)
     else:
       aval = jax.xla.abstractify(xs)
       assert xs.shape[0] == len(devices), (
@@ -160,25 +152,18 @@ def prefetch_to_device(iterator, size, devices=None):
       buffers = [xla.device_put(x, devices[i])
                  for i, x in enumerate(xs)]
       return jax.pxla.ShardedDeviceArray(aval, buffers)
-  try:
-    while len(queue) < size:
-      queue.append(jax.tree_map(_prefetch, next(iterator)))
-  except StopIteration:
-    pass
 
-  while True:
-    try:
-      xs = queue.popleft()
-    except IndexError:
-      return
-    try:
-      queue.append(jax.tree_map(_prefetch, next(iterator)))
-    except StopIteration:
-      pass
-    yield xs
+  def enqueue(n):  # Enqueues *up to* `n` elements from the iterator.
+    for data in itertools.islice(iterator, n):
+      queue.append(jax.tree_map(_prefetch, data))
+
+  enqueue(size)  # Fill up the buffer.
+  while queue:
+    yield queue.popleft()
+    enqueue(1)
 
 
-def _scan_nd(body_fn, init, xs, n=1):
+def _scan_nd(body_fn, init, xs, n=1, unroll=(1,)):
   """Utility for performing an n-dimensional `lax.scan`.
 
   The n-d scan is simply recursive call of 1-d scan.
@@ -191,11 +176,11 @@ def _scan_nd(body_fn, init, xs, n=1):
     A tuple of the final carry and the values returned by the body.
   """
   if n == 1:
-    return lax.scan(body_fn, init, xs)
+    return lax.scan(body_fn, init, xs, unroll=unroll[0])
   else:
     def scan_body(c, x):
-      return _scan_nd(body_fn, c, x, n=n-1)
-    return lax.scan(scan_body, init, xs)
+      return _scan_nd(body_fn, c, x, n=n-1, unroll=unroll[1:])
+    return lax.scan(scan_body, init, xs, unroll=unroll[0])
 
 
 def _invert_perm(perm):
@@ -205,21 +190,37 @@ def _invert_perm(perm):
   return tuple(perm_inv)
 
 
-def scan_in_dim(body_fn, init, xs, axis=(0,), keepdims=False):
+def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
   """utility for doing a scan along arbitrary dimensions.
 
-  see `lax.scan` for details on how the scan operation works.
+  See `lax.scan` for details on how the scan operation works.
+
+  Note on `unroll`: This argument gets left padded with ones to match the size
+  of `axis`. Doing so allows unrolls to performed from the innermost loop first.
+  For example, `scan_in_dim(..., axis=(1, 2, 3), unroll=5)` is equivalent to
+  `scan_in_dim(..., axis=(1, 2, 3), unroll=(1, 1, 5))`.
+
   Args:
     body_fn: the body of the loop of type (c, x) -> (c, y).
     init: initial value for the carry.
     xs: a pytree of tensors to scan over.
     axis: the axis to scan over.
     keepdims: keep the dimensions that are scanned over.
+    unroll: an optional positive integer, or tuple of positive integers
+      showing how many iterations of the loop to be unroll into a single
+      iteration for each axis.
   Returns:
     A tuple of the final carry and the values returned by the body.
   """
   if not isinstance(axis, Iterable):
     axis = (axis,)
+
+  if not isinstance(unroll, Iterable):
+    unroll = (unroll,)
+
+  # Pad unroll with ones so we start unrolling from the innermost loop
+  len_diff = len(axis) - len(unroll)
+  unroll = (1,) * len_diff + unroll
 
   def transpose_in(x):
     perm = axis + tuple(np.delete(np.arange(x.ndim), axis))
@@ -239,6 +240,6 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), keepdims=False):
     return c, ys
 
   xs = jax.tree_map(transpose_in, xs)
-  c, ys = _scan_nd(body_wrapper, init, xs, n=len(axis))
+  c, ys = _scan_nd(body_wrapper, init, xs, n=len(axis), unroll=unroll)
   ys = jax.tree_map(transpose_out, ys)
   return c, ys

@@ -2,6 +2,8 @@
 flax.optim package
 ===================
 
+.. automodule:: flax.optim
+
 .. currentmodule:: flax.optim
 
 Optimizer Base Classes
@@ -19,10 +21,6 @@ MultiOptimizer
 .. autoclass:: MultiOptimizer
     :members: update_hyper_params
 
-.. autoclass:: ModelParamTraversal
-    :members: __init__
-
-
 Available optimizers
 ------------------------
 
@@ -30,8 +28,10 @@ Available optimizers
   :toctree: _autosummary
 
     Adam
-    AdaFactor
+    AdaBelief
+    Adafactor
     Adagrad
+    Adadelta
     DynamicScale
     GradientDescent
     LAMB

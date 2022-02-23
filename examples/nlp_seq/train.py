@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,25 +17,23 @@
 This script trains a Transformer on the Universal dependency dataset.
 """
 
-import tensorflow as tf
-
 import functools
 import os
 import time
+
 from absl import app
 from absl import flags
 from absl import logging
-from jax import random
-import jax
-import jax.numpy as jnp
-import numpy as np
-import tensorflow as tf
-
 from flax import jax_utils
 from flax import linen as nn
-from flax import optim
 from flax.metrics import tensorboard
+from flax import optim
 from flax.training import common_utils
+import jax
+import jax.numpy as jnp
+from jax import random
+import numpy as np
+import tensorflow as tf
 
 import input_pipeline
 import models
@@ -252,7 +250,7 @@ def main(argv):
     raise ValueError('Batch size must be divisible by the number of devices')
   device_batch_size = batch_size // jax.device_count()
 
-  if jax.host_id() == 0:
+  if jax.process_index() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
         os.path.join(FLAGS.model_dir, FLAGS.experiment + '_train'))
     eval_summary_writer = tensorboard.SummaryWriter(
@@ -339,7 +337,7 @@ def main(argv):
       summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
       summary['learning_rate'] = lr
       logging.info('train in step: %d, loss: %.4f', step, summary['loss'])
-      if jax.host_id() == 0:
+      if jax.process_index() == 0:
         tock = time.time()
         steps_per_sec = eval_freq / (tock - tick)
         tick = tock
@@ -380,7 +378,7 @@ def main(argv):
         # TODO: save model.
       eval_summary['best_dev_score'] = best_dev_score
       logging.info('best development model score %.4f', best_dev_score)
-      if jax.host_id() == 0:
+      if jax.process_index() == 0:
         for key, val in eval_summary.items():
           eval_summary_writer.scalar(key, val, step)
         eval_summary_writer.flush()

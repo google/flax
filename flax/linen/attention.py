@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,10 +34,93 @@ Dtype = Any
 Array = Any
 
 
+def dot_product_attention_weights(query: Array,
+                                  key: Array,
+                                  bias: Optional[Array] = None,
+                                  mask: Optional[Array] = None,
+                                  broadcast_dropout: bool = True,
+                                  dropout_rng: Optional[PRNGKey] = None,
+                                  dropout_rate: float = 0.,
+                                  deterministic: bool = False,
+                                  dtype: Dtype = jnp.float32,
+                                  precision: Optional[lax.Precision] = None):
+  """Computes dot-product attention weights given query and key.
+
+  Used by :func:`dot_product_attention`, which is what you'll most likely use.
+  But if you want access to the attention weights for introspection, then
+  you can directly call this function and call einsum yourself.
+
+  Args:
+    query: queries for calculating attention with shape of
+      `[batch..., q_length, num_heads, qk_depth_per_head]`.
+    key: keys for calculating attention with shape of
+      `[batch..., kv_length, num_heads, qk_depth_per_head]`.
+    bias: bias for the attention weights. This should be broadcastable to the
+      shape `[batch..., num_heads, q_length, kv_length]`.
+      This can be used for incorporating causal masks, padding masks,
+      proximity bias, etc.
+    mask: mask for the attention weights. This should be broadcastable to the
+      shape `[batch..., num_heads, q_length, kv_length]`.
+      This can be used for incorporating causal masks.
+      Attention weights are masked out if their corresponding mask value
+      is `False`.
+    broadcast_dropout: bool: use a broadcasted dropout along batch dims.
+    dropout_rng: JAX PRNGKey: to be used for dropout
+    dropout_rate: dropout rate
+    deterministic: bool, deterministic or not (to apply dropout)
+    dtype: the dtype of the computation (default: float32)
+    precision: numerical precision of the computation see `jax.lax.Precision`
+      for details.
+
+  Returns:
+    Output of shape `[batch..., num_heads, q_length, kv_length]`.
+  """
+  assert query.ndim == key.ndim, 'q, k must have same rank.'
+  assert query.shape[:-3] == key.shape[:-3], (
+      'q, k batch dims must match.')
+  assert query.shape[-2] == key.shape[-2], (
+      'q, k num_heads must match.')
+  assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
+
+  # calculate attention matrix
+  depth = query.shape[-1]
+  query = query / jnp.sqrt(depth).astype(dtype)
+  # attn weight shape is (batch..., num_heads, q_length, kv_length)
+  attn_weights = jnp.einsum('...qhd,...khd->...hqk', query, key,
+                            precision=precision)
+
+  # apply attention bias: masking, dropout, proximity bias, etc.
+  if bias is not None:
+    attn_weights = attn_weights + bias
+  # apply attention mask
+  if mask is not None:
+    big_neg = jnp.finfo(dtype).min
+    attn_weights = jnp.where(mask, attn_weights, big_neg)
+
+  # normalize the attention weights
+  attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
+
+  # apply attention dropout
+  if not deterministic and dropout_rate > 0.:
+    keep_prob = 1.0 - dropout_rate
+    if broadcast_dropout:
+      # dropout is broadcast across the batch + head dimensions
+      dropout_shape = tuple([1] * (key.ndim - 2)) + attn_weights.shape[-2:]
+      keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
+    else:
+      keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
+    multiplier = (keep.astype(attn_weights.dtype) /
+                  jnp.asarray(keep_prob, dtype=dtype))
+    attn_weights = attn_weights * multiplier
+
+  return attn_weights
+
+
 def dot_product_attention(query: Array,
                           key: Array,
                           value: Array,
                           bias: Optional[Array] = None,
+                          mask: Optional[Array] = None,
                           broadcast_dropout: bool = True,
                           dropout_rng: Optional[PRNGKey] = None,
                           dropout_rate: float = 0.,
@@ -63,6 +146,11 @@ def dot_product_attention(query: Array,
       shape `[batch..., num_heads, q_length, kv_length]`.
       This can be used for incorporating causal masks, padding masks,
       proximity bias, etc.
+    mask: mask for the attention weights. This should be broadcastable to the
+      shape `[batch..., num_heads, q_length, kv_length]`.
+      This can be used for incorporating causal masks.
+      Attention weights are masked out if their corresponding mask value
+      is `False`.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
@@ -72,7 +160,7 @@ def dot_product_attention(query: Array,
       for details.
 
   Returns:
-    Output of shape `[batch..., length, num_heads, v_depth_per_head]`.
+    Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
   """
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert query.shape[:-3] == key.shape[:-3] == value.shape[:-3], (
@@ -80,34 +168,11 @@ def dot_product_attention(query: Array,
   assert query.shape[-2] == key.shape[-2] == value.shape[-2], (
       'q, k, v num_heads must match.')
   assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
-  assert query.shape[-1] == key.shape[-1], 'q, k depths must match.'
 
-  # calculate attention matrix
-  depth = query.shape[-1]
-  query = query / jnp.sqrt(depth).astype(dtype)
-  # attn weight shape is (batch..., num_heads, q_length, kv_length)
-  attn_weights = jnp.einsum('...qhd,...khd->...hqk', query, key,
-                            precision=precision)
-
-  # apply attention bias: masking, dropout, proximity bias, etc.
-  if bias is not None:
-    attn_weights = attn_weights + bias
-
-  # normalize the attention weights
-  attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
-
-  # apply attention dropout
-  if not deterministic and dropout_rate > 0.:
-    keep_prob = 1.0 - dropout_rate
-    if broadcast_dropout:
-      # dropout is broadcast across the batch + head dimensions
-      dropout_shape = tuple([1] * (key.ndim - 2)) + attn_weights.shape[-2:]
-      keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
-    else:
-      keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
-    multiplier = (keep.astype(attn_weights.dtype) /
-                  jnp.asarray(keep_prob, dtype=dtype))
-    attn_weights = attn_weights * multiplier
+  # compute attention weights
+  attn_weights = dot_product_attention_weights(
+    query, key, bias, mask, broadcast_dropout, dropout_rng, dropout_rate,
+    deterministic, dtype, precision)
 
   # return weighted sum over values for each query position
   return jnp.einsum('...hqk,...khd->...qhd', attn_weights, value,
@@ -121,6 +186,7 @@ class MultiHeadDotProductAttention(Module):
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
       dtype: the dtype of the computation (default: float32)
+      param_dtype: the dtype passed to parameter initializers (default: float32).
       qkv_features: dimension of the key, query, and value.
       out_features: dimension of the last projection
       broadcast_dropout: bool: use a broadcasted dropout along batch dims.
@@ -140,6 +206,7 @@ class MultiHeadDotProductAttention(Module):
   """
   num_heads: int
   dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None
   broadcast_dropout: bool = True
@@ -170,6 +237,8 @@ class MultiHeadDotProductAttention(Module):
         `[batch_sizes..., length, features]`.
       mask: attention mask of shape
         `[batch_sizes..., num_heads, query_length, key/value_length]`.
+        Attention weights are masked out if their corresponding mask value
+        is `False`.
       deterministic: if false, the attention weight is masked randomly
         using dropout, whereas if true, the attention weights
         are deterministic.
@@ -187,6 +256,8 @@ class MultiHeadDotProductAttention(Module):
 
     dense = partial(DenseGeneral,
                     axis=-1,
+                    dtype=self.dtype,
+                    param_dtype=self.param_dtype,
                     features=(self.num_heads, head_dim),
                     kernel_init=self.kernel_init,
                     bias_init=self.bias_init,
@@ -194,9 +265,9 @@ class MultiHeadDotProductAttention(Module):
                     precision=self.precision)
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
-    query, key, value = (dense(dtype=self.dtype, name='query')(inputs_q),
-                         dense(dtype=self.dtype, name='key')(inputs_kv),
-                         dense(dtype=self.dtype, name='value')(inputs_kv))
+    query, key, value = (dense(name='query')(inputs_q),
+                         dense(name='key')(inputs_kv),
+                         dense(name='value')(inputs_kv))
 
     # During fast autoregressive decoding, we feed one position at a time,
     # and cache the keys and values step by step.
@@ -235,16 +306,6 @@ class MultiHeadDotProductAttention(Module):
             jnp.broadcast_to(jnp.arange(max_length) <= cur_index,
                              tuple(batch_dims) + (1, 1, max_length)))
 
-    # Convert the boolean attention mask to an attention bias.
-    if mask is not None:
-      # attention mask in the form of attention bias
-      attention_bias = lax.select(
-          mask > 0,
-          jnp.full(mask.shape, 0.).astype(self.dtype),
-          jnp.full(mask.shape, -1e10).astype(self.dtype))
-    else:
-      attention_bias = None
-
     dropout_rng = None
     if not deterministic and self.dropout_rate > 0.:
       dropout_rng = self.make_rng('dropout')
@@ -254,14 +315,13 @@ class MultiHeadDotProductAttention(Module):
         query,
         key,
         value,
-        bias=attention_bias,
+        mask=mask,
         dropout_rng=dropout_rng,
         dropout_rate=self.dropout_rate,
         broadcast_dropout=self.broadcast_dropout,
         deterministic=deterministic,
         dtype=self.dtype,
         precision=self.precision)  # pytype: disable=wrong-keyword-args
-
     # back to the original inputs dimensions
     out = DenseGeneral(features=features,
                        axis=(-2, -1),
@@ -269,6 +329,7 @@ class MultiHeadDotProductAttention(Module):
                        bias_init=self.bias_init,
                        use_bias=self.use_bias,
                        dtype=self.dtype,
+                       param_dtype=self.param_dtype,
                        precision=self.precision,
                        name='out')(x)
     return out

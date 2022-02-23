@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@
 """
 
 import jax
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -189,13 +188,13 @@ def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
   """
   if train:
     train_examples = dataset_builder.info.splits['train'].num_examples
-    split_size = train_examples // jax.host_count()
-    start = jax.host_id() * split_size
+    split_size = train_examples // jax.process_count()
+    start = jax.process_index() * split_size
     split = 'train[{}:{}]'.format(start, start + split_size)
   else:
     validate_examples = dataset_builder.info.splits['validation'].num_examples
-    split_size = validate_examples // jax.host_count()
-    start = jax.host_id() * split_size
+    split_size = validate_examples // jax.process_count()
+    start = jax.process_index() * split_size
     split = 'validation[{}:{}]'.format(start, start + split_size)
 
   def decode_example(example):

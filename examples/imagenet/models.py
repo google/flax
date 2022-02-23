@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -114,7 +114,6 @@ class ResNet(nn.Module):
     x = jnp.mean(x, axis=(1, 2))
     x = nn.Dense(self.num_classes, dtype=self.dtype)(x)
     x = jnp.asarray(x, self.dtype)
-    x = nn.log_softmax(x)
     return x
 
 

@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,26 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2020 The Flax Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """"""  # Use an empty top-level docstring so Sphinx won't output the one below.
 """Flax error classes.
 
 === When to create a Flax error class?
 
 If an error message requires more explanation than a one-liner, it is useful to
-add it as a separate error class. This may lead to some duplication with 
+add it as a separate error class. This may lead to some duplication with
 existing documentation or docstrings, but it will provide users with more help
 when they are debugging a problem. We can also point to existing documentation
 from the error docstring directly.
@@ -41,10 +28,10 @@ from the error docstring directly.
 * If the error occurs when doing something, name the error
   <Verb><Object><TypeOfError>Error
 
-  For instance, if you want to raise an error when applying a module with an 
+  For instance, if you want to raise an error when applying a module with an
   invalid method, the error can be: ApplyModuleInvalidMethodError.
 
- <TypeOfError> is optional, for instance if there is only one error when 
+ <TypeOfError> is optional, for instance if there is only one error when
   modifying a variable, the error can simply be: ModifyVariableError.
 
 * If there is no concrete action involved the only a description of the error is
@@ -77,8 +64,8 @@ class FlaxError(Exception):
 
 class InvalidRngError(FlaxError):
   """
-  All rngs used in a Module should be passed to 
-  :meth:`Module.init() <flax.linen.Module.init>` and 
+  All rngs used in a Module should be passed to
+  :meth:`Module.init() <flax.linen.Module.init>` and
   :meth:`Module.apply() <flax.linen.Module.apply>` appropriately. We explain
   both separately using the following example::
 
@@ -97,17 +84,17 @@ class InvalidRngError(FlaxError):
         ...
 
   **PRNGs for Module.init()**
-  
+
   In this example, two rngs are used:
 
   * ``params`` is used for initializing the parameters of the model. This rng
     is used to initialize the ``some_params`` parameter, and for initializing
     the weights of the ``Dense`` Module used in ``Bar``.
-  
+
   * ``dropout`` is used for the dropout rng that is used in ``Bar``.
 
   So, ``Foo`` is initialized as follows::
-    
+
     init_rngs = {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
     variables = Foo().init(init_rngs, init_inputs)
 
@@ -117,8 +104,8 @@ class InvalidRngError(FlaxError):
 
 
   **PRNGs for Module.apply()**
-  
-  When applying ``Foo``, only the rng for ``dropout`` is needed, because 
+
+  When applying ``Foo``, only the rng for ``dropout`` is needed, because
   ``params`` is only used for initializing the Module parameters::
 
     Foo().apply(variables, inputs, rngs={'dropout': random.PRNGKey(2)})
@@ -135,7 +122,7 @@ class InvalidRngError(FlaxError):
     super().__init__(msg)
 
 
-class ApplyScopeInvalidVariablesError(FlaxError):
+class ApplyScopeInvalidVariablesTypeError(FlaxError):
   """
   When calling :meth:`Module.apply() <flax.linen.Module.apply>`, the first
   argument should be a variable dict. For more explanation on variable dicts,
@@ -147,6 +134,18 @@ class ApplyScopeInvalidVariablesError(FlaxError):
                      'dictionary with string keys.')
 
 
+class ApplyScopeInvalidVariablesStructureError(FlaxError):
+  """
+  This error is thrown when the dict passed as `variables` to apply() has an
+  extra 'params' layer, i.e. {'params': {'params': ...}}.
+  For more explanation on variable dicts, please see :mod:`flax.core.variables`.
+  """
+  def __init__(self, variables):
+    super().__init__('Expected the first argument passed to an apply function '
+                     'to be a dictionary containing a \'params\' key at the '
+                     f'root level, but got "{variables}".')
+
+
 class ScopeParamNotFoundError(FlaxError):
   """
   This error is thrown when trying to access a parameter that does not exist.
@@ -154,38 +153,57 @@ class ScopeParamNotFoundError(FlaxError):
   does not match the apply name 'embed'::
 
     class Embed(nn.Module):
-    num_embeddings: int
-    features: int
-      
-    @nn.compact
-    def __call__(self, inputs, embed_name='embedding'):
-      inputs = inputs.astype('int32')
-      embedding = self.param(embed_name,
-                            lecun_normal(),
-                            (self.num_embeddings, self.features))    
-      return embedding[inputs]
+      num_embeddings: int
+      features: int
+
+      @nn.compact
+      def __call__(self, inputs, embed_name='embedding'):
+        inputs = inputs.astype('int32')
+        embedding = self.param(embed_name,
+                               lecun_normal(),
+                               (self.num_embeddings, self.features))
+        return embedding[inputs]
 
     variables = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
-    _ = NoBiasDense().apply(variables, jnp.ones((5, 5, 1)), 'embed')
+    _ = Embed().apply(variables, jnp.ones((5, 5, 1)), 'embed')
   """
   def __init__(self, param_name, scope_path):
     super().__init__(f'No parameter named "{param_name}" exists in '
                      f'"{scope_path}".')
 
 
+class ScopeCollectionNotFound(FlaxError):
+  """
+  This error is thrown when trying to access a variable from an empty
+  collection.
+
+  There are two common causes:
+  1. | The collection was not passed to ``apply`` correctly.
+     | For example, you might have used ``module.apply(params, ...)`` instead
+     | of ``module.apply({'params': params}, ...)``.
+  2. | The collection is empty because the variables need to be initialized.
+     | In this case, you should have made the collection mutable during
+     | apply (e.g.: ``module.apply(variables, ..., mutable=['state'])``.
+  """
+  def __init__(self, col_name, var_name, scope_path):
+    super().__init__(
+      f'Tried to access "{var_name}" from collection "{col_name}"" in '
+      f'"{scope_path}" but the collection is empty.')
+
+
 class ScopeParamShapeError(FlaxError):
   """
   This error is thrown when the shape of an existing parameter is different from
-  the shape of the return value of the ``init_fn``. This can happen when the 
+  the shape of the return value of the ``init_fn``. This can happen when the
   shape provided during :meth:`Module.apply() <flax.linen.Module.apply>` is
-  different from the one used when intializing the module.
-  
-  For instance, the following code throws this error because the apply shape 
+  different from the one used when initializing the module.
+
+  For instance, the following code throws this error because the apply shape
   (``(5, 5, 1)``) is different from the init shape (``(5, 5``). As a result, the
-  shape of the kernel during ``init`` is ``(1, 8)``, and the shape during 
+  shape of the kernel during ``init`` is ``(1, 8)``, and the shape during
   ``apply`` is ``(5, 8)``, which results in this error.::
 
-      class NoBiasDense(nn.Module):
+    class NoBiasDense(nn.Module):
       features: int = 8
 
       @nn.compact
@@ -242,7 +260,7 @@ class InvalidScopeError(FlaxError):
 class ModifyScopeVariableError(FlaxError):
   """
   You cannot update a variable if the collection it belongs to is immutable.
-  When you are applying a Module, you should specify which variable 
+  When you are applying a Module, you should specify which variable
   collections are mutable::
 
     class MyModule(nn.Module):
@@ -252,7 +270,7 @@ class ModifyScopeVariableError(FlaxError):
         var = self.variable('batch_stats', 'mean', ...)
         var.value = ...
         ...
-    
+
     v = MyModule.init(...)
     ...
     logits = MyModule.apply(v, batch)  # This throws an error.
@@ -261,6 +279,19 @@ class ModifyScopeVariableError(FlaxError):
   def __init__(self, col, variable_name, scope_path):
     super().__init__(f'Cannot update variable "{variable_name}" in '
                      f'"{scope_path}" because collection "{col}" is immutable.')
+
+
+class JaxTransformError(FlaxError):
+  """
+  JAX transforms and Flax modules cannot be mixed.
+
+  JAX's functional transformations expect pure function.
+  When you want to use JAX transformations **inside** Flax models,
+  you should make use of the Flax transformation wrappers
+  (e.g.: ``flax.linen.vmap``, ``flax.linen.scan``, etc.).
+  """
+  def __init__(self):
+    super().__init__('Jax transforms and Flax models cannot be mixed.')
 
 
 #################################################
@@ -306,7 +337,7 @@ class NameInUseError(FlaxError):
       def __call__(self, x):
         bar = self.param('bar', nn.initializers.zeros, (1, ))
         embed = nn.Embed(num_embeddings=2, features=5, name='bar')  # <-- ERROR!
-  
+
   Variables should also have unique names, even if they have their own
   collection::
 
@@ -326,9 +357,9 @@ class AssignSubModuleError(FlaxError):
   """
   You are only allowed to create submodules in two places:
 
-  1.  If your Module is noncompact: inside 
+  1.  If your Module is noncompact: inside
       :meth:`Module.setup() <flax.linen.Module.setup>`.
-  2.  If your Module is compact: inside the method wrapped in 
+  2.  If your Module is compact: inside the method wrapped in
       :meth:`nn.compact() <flax.linen.compact>`.
 
   For instance, the following code throws this error, because ``nn.Conv`` is
@@ -357,7 +388,7 @@ class AssignSubModuleError(FlaxError):
     Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
 
   In this case, ``self.conv(kernel_size=4)`` is called from ``__call__``, which
-  is disallowed beause it's neither within ``setup`` nor a method wrapped in
+  is disallowed because it's neither within ``setup`` nor a method wrapped in
   x``nn.compact``.
   """
   def __init__(self, cls):
@@ -391,7 +422,7 @@ class SetAttributeInModuleSetupError(FlaxError):
         return nn.Dense(self.features)(x)
 
     variables = SomeModule(features=3).init(random.PRNGKey(0), jnp.ones((1, )))
-  
+
   TODO(marcvanzee): Link to a design note explaining why it's necessary for
   modules to stay frozen (otherwise we can't safely clone them, which we use for
   lifted transformations).
@@ -406,7 +437,7 @@ class SetAttributeFrozenModuleError(FlaxError):
   :meth:`Module.setup() <flax.linen.Module.setup>`. Outside of that method, the
   Module instance is frozen (i.e., immutable). This behavior is similar to
   frozen Python dataclasses.
-  
+
   For instance, this error is raised in the following case::
 
     class SomeModule(nn.Module):
@@ -426,7 +457,7 @@ class SetAttributeFrozenModuleError(FlaxError):
         def setup(self):
           self.dense = nn.Dense(features=10)
           self.dense.features = 20  # <--- This is not allowed
-        
+
         def __call__(self, x):
           return self.dense(x)
   """
@@ -440,8 +471,8 @@ class MultipleMethodsCompactError(FlaxError):
   """
   The ``@compact`` decorator may only be added to at most one method in a Flax
   module. In order to resolve this, you can:
-  
-  * remove ``@compact`` and define submodules and variables using 
+
+  * remove ``@compact`` and define submodules and variables using
     :meth:`Module.setup() <flax.linen.Module.setup>`.
   * Use two separate modules that both have a unique ``@compact`` method.
 
@@ -456,7 +487,7 @@ class ReservedModuleAttributeError(FlaxError):
   """
   This error is thrown when creating a Module that is using reserved attributes.
   The following attributes are reserved:
-  
+
   * ``parent``: The parent Module of this Module.
   * ``name``: The name of this Module.
   """
@@ -483,7 +514,7 @@ class ApplyModuleInvalidMethodError(FlaxError):
 class CallCompactUnboundModuleError(FlaxError):
   """
   This error occurs when you are trying to call a Module directly, rather than
-  through :meth:`Module.apply() <flax.linen.Module.apply>`. For instance, the 
+  through :meth:`Module.apply() <flax.linen.Module.apply>`. For instance, the
   error will be raised when trying to run this code::
 
     from flax import linen as nn
@@ -492,8 +523,8 @@ class CallCompactUnboundModuleError(FlaxError):
     test_dense = nn.Dense(10)
     test_dense(jnp.ones((5,5)))
 
-  Instead, you should pass the variables (parameters and other state) via 
-  :meth:`Module.apply() <flax.linen.Module.apply>` (or use 
+  Instead, you should pass the variables (parameters and other state) via
+  :meth:`Module.apply() <flax.linen.Module.apply>` (or use
   :meth:`Module.init() <flax.linen.Module.init>` to get initial variables)::
 
     from jax import random
@@ -510,8 +541,28 @@ class InvalidCheckpointError(FlaxError):
   A checkpoint cannot be stored in a directory that already has
   a checkpoint at the current or a later step.
 
-  You can pass `overwrite=True` to disable this behavior and
+  You can pass ``overwrite=True`` to disable this behavior and
   overwrite existing checkpoints in the target directory.
   """
   def __init__(self, path, step):
     super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')
+
+
+#################################################
+# transforms.py errors                          #
+#################################################
+
+class TransformedMethodReturnValueError(FlaxError):
+  """
+  Transformed Module methods cannot return other Modules or Variables.
+
+  This commonly occurs when ``@nn.named_call`` is automatically applied to
+  helper constructor methods when profiling is enabled (``FLAX_PROFILE=true``
+  environment variable or via ``nn.enable_named_call()``), and can be mitigated
+  by using the ``@nn.nowrap`` decorator to prevent automatic wrapping.
+  """
+  def __init__(self, name):
+    super().__init__(
+      f'Transformed module method {name} cannot return Modules or Variables. '
+      f'For helper constructor methods use the @nn.nowrap decorator to prevent '
+      f'decoration by the automatic named_call transform.')

@@ -1,16 +1,17 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#      http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """Configuration file for the Sphinx documentation builder."""
 
 
@@ -30,11 +31,9 @@
 
 import os
 import sys
-import sphinx
 sys.path.insert(0, os.path.abspath('..'))
 # Include local extension.
-sys.path.append(os.path.abspath("./_ext"))
-
+sys.path.append(os.path.abspath('./_ext'))
 
 # -- Project information -----------------------------------------------------
 
@@ -59,6 +58,7 @@ extensions = [
     'nbsphinx',
     'recommonmark',
     'codediff',
+    'sphinx_markdown_tables'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -86,6 +86,10 @@ autodoc_typehints = 'description'
 html_theme = 'sphinx_rtd_theme'
 html_style = 'css/flax_theme.css'
 
+# The name of an image file (relative to this directory) to place at the top
+# of the sidebar.
+html_logo = './flax.png'
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
@@ -103,8 +107,14 @@ nbsphinx_prolog = r"""
 
     .. nbinfo::
 
-        :raw-html:`<a href="https://colab.research.google.com/github/google/flax/blob/master/{{ docname }}"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>`
-        :raw-html:`<a href="https://github.com/google/flax/blob/master/{{ docname }}"><img alt="Open On GitHub" src="https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub" style="vertical-align:text-bottom"></a>`
+        :raw-html:`<a href="https://colab.research.google.com/github/google/flax/blob/main/{{ docname }}"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>`
+        :raw-html:`<a href="https://github.com/google/flax/blob/main/{{ docname }}"><img alt="Open On GitHub" src="https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub" style="vertical-align:text-bottom"></a>`
 
 
 """
+
+# -- Extension configuration -------------------------------------------------
+
+# Tell sphinx-autodoc-typehints to generate stub parameter annotations including
+# types, even if the parameters aren't explicitly documented.
+always_document_param_types = True

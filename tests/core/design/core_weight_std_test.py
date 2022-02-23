@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,12 +34,12 @@ def weight_std(fn, kernel_name='kernel', eps=1e-8):
     params[kernel_name] = std_kernel
     return variables
 
-  # transform handles a few of nasty edge cases here...
+  # map_variables handles a few of nasty edge cases here...
   # the transformed kind will be immutable inside fn
   # this way we avoid lost mutations to param
-  # transform also avoids accidental reuse of rngs
+  # map_variables also avoids accidental reuse of rngs
   # and it makes sure that other state is updated correctly (not twice during init!)
-  return lift.transform_module(fn, trans_in_fn=std)
+  return lift.map_variables(fn, "params", std, init=True)
 
 def mlp(scope: Scope, x: Array,
         sizes: Sequence[int] = (8, 1)):

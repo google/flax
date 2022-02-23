@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
 from flax.testing import Benchmark
 import jax
-
 import tensorflow_datasets as tfds
 
 # Local imports.
@@ -42,6 +41,10 @@ class ImagenetBenchmarkFakeData(Benchmark):
     flax_root_dir = pathlib.Path(__file__).parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
+    # Warm-up first so that we are not measuring just compilation.
+    with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
+      train.train_and_evaluate(config, workdir)
+    
     start_time = time.time()
     with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
       train.train_and_evaluate(config, workdir)

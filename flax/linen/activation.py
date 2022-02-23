@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,3 +40,35 @@ from jax.nn import hard_swish
 
 from jax.numpy import tanh
 # pylint: enable=unused-import
+
+from typing import Any
+
+from flax.linen.module import Module, compact
+import jax.numpy as jnp
+
+
+Array = Any
+
+
+class PReLU(Module):
+  """Parametric Rectified Linear Unit (PReLU) activation function.
+
+  Attributes:
+    negative_slope_init: the value to initialize the negative slope.
+  """
+  negative_slope_init: float = 0.01
+  @compact
+  def __call__(self, inputs: Array) -> Array:
+    """Applies an activation to the inputs.
+
+    Args:
+      inputs: the nd-array to apply the activation function to.
+
+    Returns:
+      The transformed input.
+    """
+    negative_slope = self.param(
+      'negative_slope',
+      lambda k: jnp.asarray(self.negative_slope_init, jnp.float32)
+    )
+    return jnp.where(inputs >= 0, inputs, jnp.asarray(negative_slope, inputs.dtype) * inputs)
