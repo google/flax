@@ -70,7 +70,16 @@ Graph modeling
 The following code bases use Flax and provide training frameworks and a wealth
 of examples, in many cases with pre-trained weights:
 
-- https://github.com/google-research/scenic: *Scenic* is a codebase/library
+- [HuggingFace Transformers](https://github.com/huggingface/transformers) is a
+  very popular library for building, training, and deploying state of the art
+  machine learning models.
+  These models can be applied on text, images, and audio. After organizing the
+  [JAX/Flax community week](https://github.com/huggingface/transformers/blob/master/examples/research_projects/jax-projects/README.md),
+  they have now over 5,000
+  [Flax/JAX models](https://huggingface.co/models?library=jax&sort=downloads) in
+  their repository.
+
+- [Scenic](https://github.com/google-research/scenic) is a codebase/library
   for computer vision research and beyond. Scenic's main focus is around
   attention-based models. Scenic has been successfully used to develop
   classification, segmentation, and detection models for multiple modalities
