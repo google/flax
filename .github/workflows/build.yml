@@ -27,11 +27,6 @@ jobs:
       run: |
         sudo apt-get -y install pandoc
     - uses: actions/checkout@v2
-      with:
-        # Number of commits to fetch. By default, this action fetch a shallow
-        # repository, but we need a fetch depth in order to check the commit
-        # count below.
-        fetch-depth: 10
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v1
       with:
@@ -44,9 +39,11 @@ jobs:
         set -x 
         # $GITHUB_REF is in format `refs/heads/<branch_name>`. We fetch it under
         # the name `commit-count` so we can refer to it below.
-        git fetch origin $GITHUB_REF:commit-count
-        git fetch origin master
-        diff=$(git rev-list --count origin/master...commit-count)
+        # Do an unshallow fetch so we retrieve all commits (this is necessary
+        # because ations/checkout@v2 fetches a shallow copy).
+        git fetch origin --unshallow $GITHUB_REF:commit-count
+        git fetch origin main
+        diff=$(git rev-list --count origin/main...commit-count)
         # $GITHUB_REF adds an additional commit to the commit tree, so $diff is
         # one too high when executing this as a Github Action.
         if (( $diff > 6)); then
