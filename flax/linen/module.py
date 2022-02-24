@@ -286,7 +286,7 @@ def nowrap(fun: _CallableT) -> _CallableT:
     @compact
     def __call__(self, x):
       # now safe to use constructor helper even if using named_call
-      dense = self._dense(self.num_features)
+      dense = self._make_dense(self.num_features)
       return dense(x)
 
   Args:
