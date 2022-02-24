@@ -56,7 +56,7 @@ class EncoderLSTM(nn.Module):
 
   @staticmethod
   def initialize_carry(batch_size, hidden_size):
-    # use dummy key since default state init fn is just zeros.
+    # Use a dummy key since the default state init fn is just zeros.
     return nn.LSTMCell.initialize_carry(
         jax.random.PRNGKey(0), (batch_size,), hidden_size)
 

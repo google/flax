@@ -14,17 +14,17 @@
 
 """Input pipeline for seq2seq addition example."""
 
-import numpy as np
 import random
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 
-class CharacterTable(object):
-  """Encode/decodes between strings and integer representations."""
+class CharacterTable:
+  """Encodes/decodes between strings and integer representations."""
 
-  def __init__(self, chars, max_len_query_digit = 3):
+  def __init__(self, chars, max_len_query_digit=3):
     self._chars = sorted(set(chars))
     self._char_indices = dict(
         (ch, idx + 2) for idx, ch in enumerate(self._chars))
@@ -66,12 +66,12 @@ class CharacterTable(object):
     return (1, self.max_output_len, self.vocab_size)
 
   def encode(self, inputs):
-    """Encode from string to list of integers."""
+    """Encodes from string to list of integers."""
     return np.array(
         [self._char_indices[char] for char in inputs] + [self.eos_id])
 
   def decode(self, inputs):
-    """Decode from list of integers to string."""
+    """Decodes from list of integers to string."""
     chars = []
     for elem in inputs.tolist():
       if elem == self.eos_id:
@@ -80,7 +80,7 @@ class CharacterTable(object):
     return ''.join(chars)
 
   def encode_onehot(self, batch_inputs, max_len=None):
-    """One-hot encode a string input."""
+    """One-hot encodes a string input."""
 
     if max_len is None:
       max_len = self.max_input_len
@@ -96,12 +96,12 @@ class CharacterTable(object):
     return np.array([encode_str(inp) for inp in batch_inputs])
 
   def decode_onehot(self, batch_inputs):
-    """Decode a batch of one-hot encoding to strings."""
+    """Decodes a batch of one-hot encoding to strings."""
     decode_inputs = lambda inputs: self.decode(inputs.argmax(axis=-1))
     return np.array(list(map(decode_inputs, batch_inputs)))
 
   def generate_examples(self, num_examples):
-    """Returns @num_examples examples."""
+    """Yields `num_examples` examples."""
     for _ in range(num_examples):
       max_digit = pow(10, self._max_len_query_digit) - 1
       # TODO(marcvanzee): Use jax.random here.
@@ -121,7 +121,7 @@ class CharacterTable(object):
 
 
 def mask_sequences(sequence_batch, lengths):
-  """Set positions beyond the length of each sequence to 0."""
+  """Sets positions beyond the length of each sequence to 0."""
   return sequence_batch * (
       lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1])[np.newaxis])
 
