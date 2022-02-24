@@ -25,10 +25,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-PRNGKey = Any
-Shape = Tuple[int]
-Dtype = Any
-Array = Any
 
 class EncoderLSTM(nn.Module):
   eos_id: int
@@ -62,7 +58,7 @@ class EncoderLSTM(nn.Module):
 
 
 class Encoder(nn.Module):
-  """LSTM encoder, returning state after EOS is input."""
+  """LSTM encoder, returning state after finding the EOS token in the input."""
   hidden_size: int
   eos_id: int
 
@@ -136,7 +132,7 @@ class Seq2seq(nn.Module):
 
   @nn.compact
   def __call__(self, encoder_inputs, decoder_inputs):
-    """Run the seq2seq model.
+    """Runs the seq2seq model.
 
     Args:
       encoder_inputs: padded batch of input sequences to encode, shaped
