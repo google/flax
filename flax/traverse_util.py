@@ -43,6 +43,7 @@ returns a copy of the data including the provided updates.
 import abc
 import copy
 import dataclasses
+import warnings
 
 import jax
 import flax
@@ -160,6 +161,15 @@ def unflatten_dict(xs, sep=None):
 class Traversal(abc.ABC):
   """Base class for all traversals."""
 
+  def __new__(cls, *args, **kwargs):
+    # Must override __new__ instead of __init__ since this is an ABC
+    warnings.warn(
+        '`flax.traverse_util.Traversal` will be deprecated. If you are using '
+        'it for `flax.optim`, use `optax` instead. Refer to the update guide '
+        'https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html '
+        'for detailed instructions.', DeprecationWarning)
+    return object.__new__(cls, *args, **kwargs)
+
   @abc.abstractmethod
   def update(self, fn, inputs):
     """Update the focused items.
@@ -239,7 +249,10 @@ class TraverseId(Traversal):
   def iterate(self, inputs):
     yield inputs
 
-t_identity = TraverseId()
+
+with warnings.catch_warnings():
+  warnings.simplefilter('ignore', DeprecationWarning)
+  t_identity = TraverseId()
 
 
 class TraverseMerge(Traversal):
