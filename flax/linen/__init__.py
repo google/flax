@@ -113,6 +113,7 @@ from .transforms import (
   scan as scan,
   vjp as vjp,
   vmap as vmap,
+  xmap as xmap,
   while_loop as while_loop,
   cond as cond,
   switch as switch,

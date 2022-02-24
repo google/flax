@@ -499,6 +499,25 @@ def vmap(target: Target,
       axis_size=axis_size, axis_name=axis_name)
 
 
+def xmap(target: Target,
+         variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis] = {},
+         split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = {},
+         in_axes={},
+         out_axes={},
+         axis_sizes: Any = None,
+         axis_resources: Any = {},
+         donate_argnums: Any = (),
+         backend: Optional[str] = None,
+         methods=None) -> Target:
+  """A lifted version of ``jax.experimental.maps.xmap``."""
+  return lift_transform(
+      lift.xmap, target, variable_axes, split_rngs,
+      methods=methods,
+      in_axes=in_axes, out_axes=out_axes,
+      axis_sizes=axis_sizes, axis_resources=axis_resources,
+      donate_argnums=donate_argnums, backend=backend)
+
+
 def jit(target: Target,
         variables: lift.CollectionFilter = True,
         rngs: lift.PRNGSequenceFilter = True,

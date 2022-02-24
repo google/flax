@@ -1547,6 +1547,20 @@ class TransformTest(absltest.TestCase):
         jax.random.PRNGKey(0),
         x=jnp.ones(3))
 
+  def test_xmap(self):
+    key1, key2 = random.split(random.PRNGKey(0))
+    x = random.uniform(key1, (4, 5, 2))
+    res = nn.xmap(nn.Dense,
+                  in_axes={0: 'a', 1: 'b'},
+                  out_axes={0: 'a', 1: 'b'},
+                  variable_axes={'params': {0: 'a', 1: 'b'}},
+                  split_rngs={'params': ('a', 'b')},
+                  # axis_sizes={'a':5, 'b':5},
+                  )(2).init(key2, x)
+    shapes = jax.tree_map(jnp.shape, res)
+    self.assertEqual(shapes['params']['bias'], (4, 5, 2))
+    self.assertEqual(shapes['params']['kernel'], (4, 5, 2, 2))
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -17,8 +17,8 @@
 import collections
 import dataclasses
 import functools
-from typing import (Any, Callable, Generic, Iterable, List, Mapping, Optional,
-                    Sequence, Tuple, TypeVar, Union)
+from typing import (Any, Callable, Dict, Generic, Iterable, List, Mapping, 
+                    Optional, Sequence, Tuple, TypeVar, Union)
 import warnings
 
 from . import axes_scan
@@ -27,10 +27,17 @@ from .frozen_dict import freeze
 from .frozen_dict import unfreeze
 import jax
 from jax import random
+import numpy as np
 from .scope import (CollectionFilter, DenyList, PRNGSequenceFilter,  # pylint: disable=g-multiple-import
                     Scope, group_collections, in_filter,
                     intersect_filters, is_filter_empty, subtract_filters,
                     union_filters)
+
+Array = Any
+ResourceSet = jax.experimental.maps.ResourceSet
+AxisName = jax.core.AxisName
+EllipsisType = type(...)
+AxesSpec = Union[Mapping[int, str], Sequence[Union[str, EllipsisType]]]
 
 traceback_util.register_exclusion(__file__)
 
@@ -79,6 +86,11 @@ def _dup_scopes(orig_scopes, scopes, paths):
 
 def _transpose(xs):
   return tuple(zip(*xs))
+
+
+def _unzip2(xs):
+  ys = tuple(zip(*xs))
+  return ys if ys else ((), ())
 
 
 def pack(fn: Callable[..., Any],
@@ -621,6 +633,129 @@ def vmap(fn: Callable[..., Any],
   return pack(
       inner, variable_in_groups, variable_out_groups, rng_groups,
       name='vmap')
+
+
+def _is_axes_leaf(entry):
+  if isinstance(entry, dict) and jax.tree_util.all_leaves(entry.values()):
+    return True
+  # NOTE: `None`s are not considered leaves by `all_leaves`
+  if (isinstance(entry, (tuple, list)) and
+      jax.tree_util.all_leaves(v for v in entry if v is not None)):
+    return True
+  return False
+
+
+def normalize_axes_spec(axes):
+  """Convert to dict representation for an axes spec."""
+  if isinstance(axes, (tuple, list)):
+    axes = {idx: val
+            for idx, val in enumerate(axes)
+            if val not in (Ellipsis, None)}
+  return axes
+
+
+def xmap(
+    fn: Callable[..., Any],
+    variable_axes: Mapping[CollectionFilter, AxesSpec],
+    split_rngs: Mapping[PRNGSequenceFilter, Sequence[str]],
+    in_axes: Any,  # pytree of axis specs
+    out_axes: Any,  # pytree of axis specs
+    axis_sizes: Optional[Mapping[str, int]] = None,
+    axis_resources: Dict[AxisName, ResourceSet] = {},
+    donate_argnums: Union[int, Sequence[int]] = (),
+    backend: Optional[str] = None
+    ) -> Callable[..., Any]:
+  """A lifted version of `jax.experimental.maps.xmap`."""
+
+  # normalize arguments
+  if donate_argnums:
+    raise ValueError('donate_argnums not yet supported.')
+  variable_axes = {k: normalize_axes_spec(spec)
+                   for k, spec in variable_axes.items()}
+  variable_in_groups, variable_in_axes = _unzip2(variable_axes.items())
+  variable_out_groups, variable_out_axes = _unzip2(variable_axes.items())
+  variable_in_axes = {} if variable_in_axes == () else variable_in_axes
+  variable_out_axes = {} if variable_out_axes == () else variable_out_axes
+  axis_sizes = {} if axis_sizes is None else axis_sizes
+  rng_groupnames, rng_splits = _unzip2(split_rngs.items())
+  rng_axes = tuple(normalize_axes_spec(rng_split) for rng_split in rng_splits)
+  # handle empty rng rules.
+  rng_axes = (Ellipsis,) if rng_axes == () else rng_axes
+
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
+    def find_axis_size(axis_spec, x):
+      axis_dict = normalize_axes_spec(axis_spec)
+      # axis spec may be leaf of a tree prefix, consider only the
+      # first entry of x viewed as a subtree.
+      leaves = jax.tree_leaves(x)
+      if leaves:
+        axis_sizes = {}
+        for axis_idx, axis_name in axis_dict.items():
+          axis_sizes[axis_name] = set([leaves[0].shape[axis_idx]])
+        return axis_sizes
+      return {}
+    inferred_sizes = jax.tree_map(find_axis_size,
+                                  (variable_in_axes, in_axes),
+                                  (variable_groups, args),
+                                  is_leaf=_is_axes_leaf)
+    def reduce_fn(axis_size_set, axis_size):
+      for k in axis_size:
+        axis_size_set[k] = axis_size_set[k] | axis_size[k]
+      return axis_size_set
+    inferred_sizes = functools.reduce(
+        reduce_fn,
+        jax.tree_leaves(inferred_sizes, is_leaf=_is_axes_leaf),
+        collections.defaultdict(set))
+
+    d_axis_size = {}
+    for k in inferred_sizes:
+      if axis_sizes.get(k, None) is None and len(inferred_sizes[k]) == 1:
+        d_axis_size[k], = tuple(inferred_sizes[k])
+      elif len(inferred_sizes[k]) > 1:
+        raise ValueError(
+            f'Inconsistent {k} axis sizes: {inferred_sizes[k]}')
+      elif axis_sizes.get(k, None) is None:
+        raise ValueError(f'axis_size for {k} should be specified manually.')
+      else:
+        d_axis_size[k] = axis_sizes[k]
+
+    # based on per-collection specified axes to split, split and reshape rngs
+    def rng_reshape(k, newshape, order='C'):
+      if isinstance(k, random.PRNGKeyArray):
+        return k.reshape(newshape=newshape, order=order)
+      else:
+        return k.reshape((*newshape, -1), order=order)
+
+    def split_fn(splits, rng):
+      """Split RNGs along multiple potential named axes."""
+      split_shape = tuple(d_axis_size[ax] for ax in splits)
+      if split_shape:
+        return rng_reshape(random.split(rng, np.prod(split_shape)),
+                           split_shape, order='C')
+      else:
+        return rng
+    rng_groups = tuple(
+        tree_map_rngs(functools.partial(split_fn, split), rng_group)
+        for rng_group, split in zip(rng_groups, rng_splits))
+
+    @functools.partial(jax.experimental.maps.xmap,
+                       in_axes=(variable_in_axes, rng_axes, in_axes),
+                       out_axes=(out_axes, variable_out_axes),
+                       axis_sizes=axis_sizes,
+                       axis_resources=axis_resources,
+                       donate_argnums=donate_argnums,
+                       backend=backend)
+    @functools.wraps(fn)
+    def mapped(variable_groups, rng_groups, args):
+      scope = scope_fn(variable_groups, rng_groups)
+      y = fn(scope, *args)
+      return y, repack_fn(scope)
+
+    return mapped(variable_groups, rng_groups, args)
+
+  return pack(
+      inner, variable_in_groups, variable_out_groups, rng_groupnames,
+      name='xmap')
 
 
 ScanAxis = int
@@ -1343,8 +1478,3 @@ def remat_scan(
       return carry, ()
     fn = lambda scope, c: scan_fn(inner_loop, length=lengths[0])(scope, c)[0]
   return fn
-
-
-def _unzip2(xs):
-  ys = tuple(zip(*xs))
-  return ys if ys else ((), ())
