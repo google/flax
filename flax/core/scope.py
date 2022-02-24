@@ -769,7 +769,7 @@ def bind(variables: VariableDict,
   across the JAX software ecosystem.
   """
   if not _is_valid_variables(variables):
-    raise errors.ApplyScopeInvalidVariablesError()
+    raise errors.ApplyScopeInvalidVariablesTypeError()
   if rngs is not None and not _is_valid_rngs(rngs):
     raise errors.InvalidRngError(
       'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
@@ -794,6 +794,12 @@ def apply(fn: Callable[..., Any],
               *args,
               rngs: Optional[RNGSequences] = None,
               **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
+    # Try to detect if user accidentally passed {'params': {'params': ...}.
+    if 'params' in variables and isinstance(
+        variables['params'], 
+        (dict, FrozenDict)) and 'params' in variables['params']:
+      raise errors.ApplyScopeInvalidVariablesStructureError(variables)
+
     with bind(variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:

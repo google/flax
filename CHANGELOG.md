@@ -4,17 +4,17 @@ Changelog
 vNext
 ------
 (Add your change to a random empty line to avoid merge conflicts)
-- 
-- 
-- 
-- 
-- 
-- Added locally-connected (unshared CNN) layer `flax.linen.ConvLocal`.
+-
+-
+-
+-
+-
+- Improved seq2seq example: Factored our model and input pipeline code.
 - Added Optax update guide and deprecated `flax.optim`.
 - Added `sep` argument to `flax.traverse_util.flatten_dict()`.
 -
 -
--
+- Added locally-connected (unshared CNN) layer `flax.linen.ConvLocal`.
 -
 
 0.4.0

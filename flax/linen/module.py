@@ -286,7 +286,7 @@ def nowrap(fun: _CallableT) -> _CallableT:
     @compact
     def __call__(self, x):
       # now safe to use constructor helper even if using named_call
-      dense = self._dense(self.num_features)
+      dense = self._make_dense(self.num_features)
       return dense(x)
 
   Args:
@@ -535,7 +535,7 @@ class Module(metaclass=ModuleMeta):
     if ('parent' in annotations
         and annotations['parent'] != parent_annotation):
       raise errors.ReservedModuleAttributeError(annotations)
-    if 'name' in annotations and annotations['name'] != str:
+    if 'name' in annotations and annotations['name'] not in ('str', str):
       raise errors.ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
@@ -662,19 +662,31 @@ class Module(metaclass=ModuleMeta):
       name: Attribute to set.
       val: Value of the attribute.
     """
-    is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
+    fields = self.__dataclass_fields__  # pytype: disable=attribute-error
+    is_dataclass_attr = name in fields and fields[name].init
 
     if not self._state.in_setup and self._state.is_initialized:
       # Raises a TypeError just like frozen python dataclasses.
       raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name,
                                                  val)
     if is_dataclass_attr:
+      # These names are specified as dataclass fields. They should not be
+      # initialized within the setup() method, but can be modified freely
+      # outside it.
       if self._state.in_setup:
         raise errors.SetAttributeInModuleSetupError()
       object.__setattr__(self, name, val)
+      return
+
+    if name.startswith('__') and name.endswith('__'):
+      # "Magic" values are usually none of Flax's business.  One example is
+      # __orig_class__, which is written by CPython's _BaseGenericAlias to
+      # implement generic class instantiation with specified generic types.
+      object.__setattr__(self, name, val)
+      return
+
     # Submodules are being defined and attached in setup()
-    else:
-      self._register_submodules(name, val)
+    self._register_submodules(name, val)
 
   def __getattr__(self, name: str) -> Any:
     """Call setup() before getting any setup-defined attributes."""

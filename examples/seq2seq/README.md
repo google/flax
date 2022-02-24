@@ -12,15 +12,15 @@ https://colab.research.google.com/github/google/flax/blob/main/examples/seq2seq/
 From Colab run that also generated [tfhub.dev]
 
 ```
-INFO:absl:[1900] accuracy=0.992188, loss=0.009365
-INFO:absl:DECODE: 48+57 = 105 (CORRECT)
-INFO:absl:DECODE: 13+59 = 72 (CORRECT)
-INFO:absl:DECODE: 83+948 = 1031 (CORRECT)
-INFO:absl:DECODE: 91+280 = 371 (CORRECT)
-INFO:absl:DECODE: 65+270 = 335 (CORRECT)
+INFO:absl:[1800] accuracy=1.0, loss=0.0020284138154238462
+INFO:absl:DECODE: 14+381 = 395 (CORRECT)
+INFO:absl:DECODE: 68+91 = 159 (CORRECT)
+INFO:absl:DECODE: 0+807 = 707 (INCORRECT) correct=807
+INFO:absl:DECODE: 95+532 = 627 (CORRECT)
+INFO:absl:DECODE: 6+600 = 606 (CORRECT)
 ```
 
-[tfhub.dev]: https://tensorboard.dev/experiment/h81jpOlgS5iBJv4MVdznRQ/#scalars&_smoothingWeight=0
+[tfhub.dev]: https://tensorboard.dev/experiment/TwvKVBqzTaKWgEbyebillw/#scalars&_smoothingWeight=0
 
 ### How to run
 
