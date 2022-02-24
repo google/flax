@@ -72,7 +72,7 @@ def get_model(ctable, *, teacher_force: bool = False):
 
 
 def get_initial_params(model, rng, ctable):
-  """Get the initial parameters of a seq2seq model."""
+  """Returns the initial parameters of a seq2seq model."""
   rng1, rng2 = jax.random.split(rng)
   variables = model.init(
       {'params': rng1, 'lstm': rng2},
@@ -83,6 +83,7 @@ def get_initial_params(model, rng, ctable):
 
 
 def get_train_state(rng, ctable):
+  """Returns a train state."""
   model = get_model(ctable)
   params = get_initial_params(model, rng, ctable)
   tx = optax.adam(FLAGS.learning_rate)
@@ -118,7 +119,7 @@ def compute_metrics(logits, labels, eos_id):
 
 @jax.jit
 def train_step(state, batch, lstm_rng, eos_id):
-  """Train one step."""
+  """Trains one step."""
   labels = batch['answer'][:, 1:]
   lstm_key = jax.random.fold_in(lstm_rng, state.step)
 
@@ -140,7 +141,7 @@ def train_step(state, batch, lstm_rng, eos_id):
 
 
 def log_decode(question, inferred, golden):
-  """Log the given question, inferred query, and correct query."""
+  """Logs the given question, inferred query, and correct query."""
   suffix = '(CORRECT)' if inferred == golden else (f'(INCORRECT) '
                                                    f'correct={golden}')
   logging.info('DECODE: %s = %s %s', question, inferred, suffix)
@@ -148,7 +149,7 @@ def log_decode(question, inferred, golden):
 
 @functools.partial(jax.jit, static_argnums=3)
 def decode(params, inputs, decode_rng, ctable):
-  """Decode inputs."""
+  """Decodes inputs."""
   init_decoder_input = jax.nn.one_hot(
       ctable.encode('=')[0:1], ctable.vocab_size, dtype=jnp.float32)
   init_decoder_inputs = jnp.tile(init_decoder_input,
@@ -162,7 +163,7 @@ def decode(params, inputs, decode_rng, ctable):
 
 
 def decode_batch(state, batch, decode_rng, ctable):
-  """Decode and log results for a batch."""
+  """Decodes and log results for a batch."""
   inputs, outputs = batch['query'], batch['answer'][:, 1:]
   decode_rng = jax.random.fold_in(decode_rng, state.step)
   inferred = decode(state.params, inputs, decode_rng, ctable)
@@ -175,7 +176,7 @@ def decode_batch(state, batch, decode_rng, ctable):
 
 
 def train_and_evaluate(workdir):
-  """Train for a fixed number of steps and decode during training."""
+  """Trains for a fixed number of steps and decode during training."""
 
   # TODO(marcvanzee): Integrate ctable with train_state.
   ctable = CTable('0123456789+= ', FLAGS.max_len_query_digit)
