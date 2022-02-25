@@ -665,27 +665,27 @@ class Module(metaclass=ModuleMeta):
     fields = self.__dataclass_fields__  # pytype: disable=attribute-error
     is_dataclass_attr = name in fields and fields[name].init
 
-    if not self._state.in_setup and self._state.is_initialized:
-      # Raises a TypeError just like frozen python dataclasses.
-      raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name,
-                                                 val)
+    if not self._state.in_setup:
+      if not self._state.is_initialized:
+        # Setting attributes before end of Module.__post_init__()
+        object.__setattr__(self, name, val)
+        return
+      else:
+        # We're past all initialization and setup logic:
+        # Raises a TypeError just like frozen python dataclasses.
+        raise errors.SetAttributeFrozenModuleError(
+            self.__class__.__name__, name, val)
+
+    # We're inside the setup() method:
     if is_dataclass_attr:
       # These names are specified as dataclass fields. They should not be
       # initialized within the setup() method, but can be modified freely
-      # outside it.
-      if self._state.in_setup:
-        raise errors.SetAttributeInModuleSetupError()
-      object.__setattr__(self, name, val)
+      # before it.
+      raise errors.SetAttributeInModuleSetupError()
       return
 
-    if name.startswith('__') and name.endswith('__'):
-      # "Magic" values are usually none of Flax's business.  One example is
-      # __orig_class__, which is written by CPython's _BaseGenericAlias to
-      # implement generic class instantiation with specified generic types.
-      object.__setattr__(self, name, val)
-      return
-
-    # Submodules are being defined and attached in setup()
+    # Values (that may be variables or submodules) are being defined and
+    # attached in setup(), we run some extra logic in that case.
     self._register_submodules(name, val)
 
   def __getattr__(self, name: str) -> Any:

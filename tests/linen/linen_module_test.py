@@ -1472,6 +1472,24 @@ class ModuleTest(absltest.TestCase):
     rngs = {}
     D().init(rngs)
 
+  def test_modifying_attribs_in_post_init(self):
+    class Foo(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.hate = 100 - self.love
+        super().__post_init__()
+    foo = Foo()
+    self.assertEqual(foo.love, 99)
+    self.assertEqual(foo.hate, 1)
+
+    class Bar(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.love = 101
+        super().__post_init__()
+    bar = Bar()
+    self.assertEqual(bar.love, 101)
+
 
 if __name__ == '__main__':
   absltest.main()
