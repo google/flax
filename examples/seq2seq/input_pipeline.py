@@ -79,6 +79,11 @@ class CharacterTable:
       chars.append(self._indices_char[elem])
     return ''.join(chars)
 
+  def one_hot(self, tokens):
+    vecs = np.zeros((tokens.size, self.vocab_size), dtype=np.float32)
+    vecs[np.arange(tokens.size), tokens] = 1
+    return vecs
+
   def encode_onehot(self, batch_inputs, max_len=None):
     """One-hot encodes a string input."""
 
@@ -91,7 +96,7 @@ class CharacterTable:
       if unpadded_len > max_len:
         raise ValueError(f'Sequence too long ({len(tokens)}>{max_len}): \'{s}\'')
       tokens = np.pad(tokens, [(0, max_len-len(tokens))], mode='constant')
-      return jax.nn.one_hot(tokens, self.vocab_size, dtype=jnp.float32)
+      return self.one_hot(tokens)
 
     return np.array([encode_str(inp) for inp in batch_inputs])
 

@@ -150,8 +150,7 @@ def log_decode(question, inferred, golden):
 @functools.partial(jax.jit, static_argnums=3)
 def decode(params, inputs, decode_rng, ctable):
   """Decodes inputs."""
-  init_decoder_input = jax.nn.one_hot(
-      ctable.encode('=')[0:1], ctable.vocab_size, dtype=jnp.float32)
+  init_decoder_input = ctable.one_hot(ctable.encode('=')[0:1])
   init_decoder_inputs = jnp.tile(init_decoder_input,
                                  (inputs.shape[0], ctable.max_output_len, 1))
   model = get_model(ctable, teacher_force=False)
