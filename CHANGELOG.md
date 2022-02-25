@@ -14,7 +14,7 @@ vNext
 - Added `sep` argument to `flax.traverse_util.flatten_dict()`.
 -
 -
--
+- Added locally-connected (unshared CNN) layer `flax.linen.ConvLocal`.
 -
 
 0.4.0

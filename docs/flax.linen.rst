@@ -88,6 +88,7 @@ Linear modules
     DenseGeneral
     Conv
     ConvTranspose
+    ConvLocal
     Embed
 
 

@@ -14,6 +14,7 @@
 
 """Linear modules."""
 
+import abc
 from dataclasses import field
 
 from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
@@ -22,6 +23,8 @@ from flax.linen.module import Module, compact
 from flax.linen.initializers import lecun_normal, variance_scaling, zeros
 
 from jax import lax
+from jax import eval_shape
+from jax import ShapedArray
 import jax.numpy as jnp
 import numpy as np
 
@@ -199,8 +202,8 @@ def _conv_dimension_numbers(input_shape):
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
 
-class Conv(Module):
-  """Convolution Module wrapping lax.conv_general_dilated.
+class _Conv(Module):
+  """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
 
   Attributes:
     features: number of convolution filters.
@@ -245,10 +248,23 @@ class Conv(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
+  @property
+  @abc.abstractmethod
+  def shared_weights(self) -> bool:
+    """Defines whether weights are shared or not between different pixels.
+
+    Returns:
+      `True` to use shared weights in convolution (regular convolution).
+      `False` to use different weights at different pixels, a.k.a.
+      "locally connected layer", "unshared convolution", or "local convolution".
+
+    """
+    ...
+
   @compact
   def __call__(self, inputs: Array) -> Array:
-    """Applies a convolution to the inputs.
- 
+    """Applies a (potentially unshared) convolution to the inputs.
+
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
         This is the channels-last convention, i.e. NHWC for a 2d convolution
@@ -286,13 +302,6 @@ class Conv(Module):
     input_dilation = maybe_broadcast(self.input_dilation)
     kernel_dilation = maybe_broadcast(self.kernel_dilation)
 
-    in_features = inputs.shape[-1]
-    assert in_features % self.feature_group_count == 0
-    kernel_shape = kernel_size + (
-        in_features // self.feature_group_count, self.features)
-    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
-    kernel = jnp.asarray(kernel, self.dtype)
-
     if self.padding == 'CIRCULAR':
       kernel_size_dilated = [(k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)]
       pads = [(0, 0)] + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] + [(0, 0)]
@@ -302,24 +311,99 @@ class Conv(Module):
       padding_lax = self.padding
 
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
-    y = lax.conv_general_dilated(
-        inputs,
-        kernel,
-        strides,
-        padding_lax,
-        lhs_dilation=input_dilation,
-        rhs_dilation=kernel_dilation,
-        dimension_numbers=dimension_numbers,
-        feature_group_count=self.feature_group_count,
-        precision=self.precision)
+    in_features = inputs.shape[-1]
+
+    if self.shared_weights:
+      # One shared convolutional kernel for all pixels in the output.
+      assert in_features % self.feature_group_count == 0
+      kernel_shape = kernel_size + (
+          in_features // self.feature_group_count, self.features)
+
+    else:
+      if self.feature_group_count != 1:
+        raise NotImplementedError(
+            f'`lax.conv_general_dilated_local` does not support '
+            f'`feature_group_count != 1`, got `{self.feature_group_count}`.'
+        )
+
+      # Need to know the spatial output shape of a standard convolution to
+      # create the unshared convolution kernel.
+      conv_output_shape = eval_shape(
+          lambda lhs, rhs: lax.conv_general_dilated(
+              lhs=lhs,
+              rhs=rhs,
+              window_strides=strides,
+              padding=padding_lax,
+              dimension_numbers=dimension_numbers
+          ),
+          inputs,
+          ShapedArray(kernel_size + (in_features, self.features), inputs.dtype)
+      ).shape
+
+      # One (unshared) convolutional kernel per each pixel in the output.
+      kernel_shape = conv_output_shape[1:-1] + (
+          np.prod(kernel_size) * in_features, self.features)
+
+    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
+    kernel = jnp.asarray(kernel, self.dtype)
+
+    if self.shared_weights:
+      y = lax.conv_general_dilated(
+          inputs,
+          kernel,
+          strides,
+          padding_lax,
+          lhs_dilation=input_dilation,
+          rhs_dilation=kernel_dilation,
+          dimension_numbers=dimension_numbers,
+          feature_group_count=self.feature_group_count,
+          precision=self.precision
+      )
+    else:
+      y = lax.conv_general_dilated_local(
+          lhs=inputs,
+          rhs=kernel,
+          window_strides=strides,
+          padding=padding_lax,
+          filter_shape=kernel_size,
+          lhs_dilation=input_dilation,
+          rhs_dilation=kernel_dilation,
+          dimension_numbers=dimension_numbers,
+          precision=self.precision
+      )
+
+    if self.use_bias:
+      if self.shared_weights:
+        # One bias weight per output channel, shared between pixels.
+        bias_shape = (self.features,)
+      else:
+        # One bias weight per output entry, unshared betwen pixels.
+        bias_shape = y.shape[1:]
+
+      bias = self.param('bias', self.bias_init, bias_shape, self.param_dtype)
+      bias = jnp.asarray(bias, self.dtype)
+      bias = bias.reshape((1,) * (y.ndim - bias.ndim) + bias.shape)
+      y += bias
 
     if is_single_input:
       y = jnp.squeeze(y, axis=0)
-    if self.use_bias:
-      bias = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
-      bias = jnp.asarray(bias, self.dtype)
-      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
+
+
+class Conv(_Conv):
+  """Convolution Module wrapping `lax.conv_general_dilated`."""
+
+  @property
+  def shared_weights(self) -> bool:
+    return True
+
+
+class ConvLocal(_Conv):
+  """Local convolution Module wrapping `lax.conv_general_dilated_local`."""
+
+  @property
+  def shared_weights(self) -> bool:
+    return False
 
 
 class ConvTranspose(Module):
@@ -416,14 +500,14 @@ class ConvTranspose(Module):
       # Compute period along each spatial dimension - it's input size scaled
       # by the stride.
       scaled_x_dims = [
-        x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
+          x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
       ]
       # Compute difference between the current size of y and the final output
       # size, and complement this difference to 2 * period - that gives how
       # much we need to pad.
       size_diffs = [
-        -(y_dim - x_dim) % (2 * x_dim)
-        for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
+          -(y_dim - x_dim) % (2 * x_dim)
+          for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
       ]
       # Divide the padding equaly between left and right. The choice to put
       # "+1" on the left (and not on the right) represents a convention for
