@@ -530,8 +530,8 @@ class Module(metaclass=ModuleMeta):
     """Handles final optional dataclass attributes: `parent` and `name`."""
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
-    parent_annotation = Union[Type["Module"], Type["Scope"],
-                              Type["_Sentinel"], None]
+    parent_annotation = Union[Type[Module], Type[Scope],
+                              Type[_Sentinel], None]
     if ('parent' in annotations
         and annotations['parent'] != parent_annotation):
       raise errors.ReservedModuleAttributeError(annotations)
