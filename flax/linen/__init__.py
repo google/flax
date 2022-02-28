@@ -32,7 +32,9 @@ from .normalization import BatchNorm, GroupNorm, LayerNorm
 from .pooling import avg_pool, max_pool, pool
 from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell
 from .stochastic import Dropout
-from .transforms import jit, named_call, checkpoint, remat, remat_scan, scan, vmap, map_variables, vjp, jvp, custom_vjp
+from .transforms import (jit, named_call, checkpoint, remat, remat_scan, 
+                         scan, vmap, map_variables, vjp, jvp, custom_vjp,
+                         while_loop)
 from .initializers import zeros, ones
 
 # pylint: enable=g-multiple-import

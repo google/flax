@@ -75,6 +75,7 @@ Transformations
     jvp
     vjp
     custom_vjp
+    while_loop
 
 
 Linear modules
