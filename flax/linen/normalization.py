@@ -22,6 +22,7 @@ import jax.numpy as jnp
 
 from flax.linen.module import Module, compact, merge_param
 
+import numpy as np
 
 PRNGKey = Any
 Array = Any
@@ -348,7 +349,7 @@ class GroupNorm(Module):
       num_groups = channels // self.group_size
     else:
       num_groups = self.num_groups
-      assert isinstance(num_groups, int)
+      assert isinstance(num_groups, int) or isinstance(num_groups, np.integer)
 
     if num_groups <= 0 or channels % num_groups != 0:
       raise ValueError('Number of groups ({}) does not divide the number'
