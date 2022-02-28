@@ -25,7 +25,8 @@ THe RNNCell modules are designed to fit in with the scan function in JAX::
 
 import abc
 from functools import partial
-from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
+from typing import (Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple,
+                    Type, Union)
 
 from flax.linen.module import Module, compact
 from flax.linen.activation import sigmoid, tanh
@@ -60,7 +61,7 @@ class RNNCellBase(Module):
     Returns:
       An initialized carry for the given RNN cell.
     """
-    pass
+    raise NotImplementedError
 
 
 class LSTMCell(RNNCellBase):
@@ -162,7 +163,7 @@ class DenseParams(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Any = None
+  precision: Optional[lax.Precision] = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
@@ -236,7 +237,9 @@ class OptimizedLSTMCell(RNNCellBase):
     hidden_features = h.shape[-1]
     inputs = jnp.asarray(inputs, self.dtype)
 
-    def _concat_dense(inputs, params, use_bias=True):
+    def _concat_dense(inputs: Array,
+                      params: Mapping[str, Tuple[Array, Array]],
+                      use_bias: bool = True) -> Array:
       """
       Concatenates the individual kernels and biases, given in params, into a
       single kernel and single bias for efficiency before applying them using
@@ -433,9 +436,9 @@ class ConvLSTM(RNNCellBase):
   """
 
   features: int
-  kernel_size: Iterable[int]
-  strides: Optional[Iterable[int]] = None
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
+  kernel_size: Sequence[int]
+  strides: Optional[Sequence[int]] = None
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
