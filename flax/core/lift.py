@@ -770,7 +770,7 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
       local_rng_groups = []
       for rng_group, rng_split in zip(rng_groups, rng_splits):
         if rng_split:
-          rng_group = tree_map_rngs(lambda rng: random.fold_in(rng, -i), rng_group)
+          rng_group = tree_map_rngs(lambda rng: random.fold_in(rng, i), rng_group)
         local_rng_groups.append(rng_group)
       return local_rng_groups
 
