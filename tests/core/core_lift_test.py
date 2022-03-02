@@ -129,11 +129,12 @@ class LiftTest(absltest.TestCase):
         scope.put_variable('state', 'rng_loop', scope.get_variable('state', 'rng_loop').at[i].set(l_rng))
         inc = scope.get_variable('params', 'inc')
         scope.put_variable('state', 'acc', i + inc)
-        return c
-      return lift.while_loop(cond_fn, body_fn, scope, (), carry_variables='state', split_rngs={'params': False, 'loop': True})
+        return c + 2
+      return lift.while_loop(cond_fn, body_fn, scope, 0, carry_variables='state', split_rngs={'params': False, 'loop': True})
     x = 2
-    _, vars = apply(f, mutable=True)({}, x, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    c, vars = apply(f, mutable=True)({}, x, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
     self.assertEqual(vars['state']['acc'], x)
+    self.assertEqual(c, 2 * x)
     np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
 

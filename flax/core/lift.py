@@ -791,7 +791,7 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
       carry_variables, = repack_fn(scope)
       return (i + 1, carry_variables, carry)
 
-    c = (0, carry_variables, broadcast_variables)
+    c = (0, carry_variables, init)
     _, carry_variables, carry = jax.lax.while_loop(cond_wrapper, body_wrapper, c)
     return carry, (carry_variables,)
 
