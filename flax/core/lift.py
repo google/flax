@@ -250,7 +250,12 @@ def map_variables(
         target, _ = repack(scopes)
         target = tuple(map_out_fn(x) for x in target)
     target = tuple(map_in_fn(unfreeze(x)) for x in target)
-    scopes = scope_fn((target, variables), rng_groups, mutable_filter=is_target_out)
+    mfilter = True
+    if not is_target_out:
+      # mapped collections should not be mutable
+      # unless the mapping supports it (by init=True or mutable=True)
+      mfilter = subtract_filters(mfilter, mapped_collections)
+    scopes = scope_fn((target, variables), rng_groups, mutable_filter=mfilter)
     y = fn(scopes, *args, **kwargs)
     out_target, out_vars = repack(scopes)
     if is_target_out:
