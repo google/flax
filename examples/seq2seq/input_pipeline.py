@@ -26,7 +26,7 @@ Array = Any    # pylint: disable=invalid-name
 class CharacterTable:
   """Encodes/decodes between strings and integer representations."""
 
-  def __init__(self, chars: str, max_len_query_digit: int = 3):
+  def __init__(self, chars: str, max_len_query_digit: int = 3) -> None:
     self._chars = sorted(set(chars))
     self._char_indices = dict(
         (ch, idx + 2) for idx, ch in enumerate(self._chars))
@@ -72,12 +72,12 @@ class CharacterTable:
   def decoder_input_shape(self) -> Tuple[int, int, int]:
     return (1, self.max_output_len, self.vocab_size)
 
-  def encode(self, inputs: Array) -> Array:
+  def encode(self, inputs: str) -> np.ndarray:
     """Encodes from string to list of integers."""
     return np.array(
         [self._char_indices[char] for char in inputs] + [self.eos_id])
 
-  def decode(self, inputs: Array) -> Array:
+  def decode(self, inputs: Array) -> str:
     """Decodes from list of integers to string."""
     chars = []
     for elem in inputs.tolist():
@@ -86,12 +86,13 @@ class CharacterTable:
       chars.append(self._indices_char[elem])
     return ''.join(chars)
 
-  def one_hot(self, tokens: Array) -> Array:
+  def one_hot(self, tokens: np.ndarray) -> np.ndarray:
     vecs = np.zeros((tokens.size, self.vocab_size), dtype=np.float32)
     vecs[np.arange(tokens.size), tokens] = 1
     return vecs
 
-  def encode_onehot(self, batch_inputs: Array, max_len: Optional[int] = None):
+  def encode_onehot(
+      self, batch_inputs: Array, max_len: Optional[int] = None) -> np.ndarray:
     """One-hot encodes a string input."""
 
     if max_len is None:
@@ -108,13 +109,13 @@ class CharacterTable:
 
     return np.array([encode_str(inp) for inp in batch_inputs])
 
-  def decode_onehot(self, batch_inputs: Array):
+  def decode_onehot(self, batch_inputs: Array) -> np.ndarray:
     """Decodes a batch of one-hot encoding to strings."""
     decode_inputs = lambda inputs: self.decode(inputs.argmax(axis=-1))
     return np.array(list(map(decode_inputs, batch_inputs)))
 
   def generate_examples(
-      self, num_examples: int) -> Generator[None, Tuple[str, str], None]:
+      self, num_examples: int) -> Generator[Tuple[str, str], None, None]:
     """Yields `num_examples` examples."""
     for _ in range(num_examples):
       max_digit = pow(10, self._max_len_query_digit) - 1
@@ -125,7 +126,7 @@ class CharacterTable:
       outputs = '=' + str(key[0] + key[1])
       yield (inputs, outputs)
 
-  def get_batch(self, batch_size: int) -> Dict[str, Array]:
+  def get_batch(self, batch_size: int) -> Dict[str, np.ndarray]:
     """Returns a batch of example of size @batch_size."""
     inputs, outputs = zip(*self.generate_examples(batch_size))
     return {

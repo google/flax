@@ -136,7 +136,7 @@ class Decoder(nn.Module):
 
     Returns:
       Pair (logits, predictions), which are two arrays of respectively decoded
-        logits and predictions (in one hot-encoding format).
+      logits and predictions (in one hot-encoding format).
     """
     lstm = DecoderLSTM(teacher_force=self.teacher_force,
                        vocab_size=self.vocab_size)
@@ -180,8 +180,8 @@ class Seq2seq(nn.Module):
 
     Returns:
       Pair (logits, predictions), which are two arrays of length `batch_size`
-        containing respectively decoded logits and predictions (in one hot
-        encoding format).
+      containing respectively decoded logits and predictions (in one hot
+      encoding format).
     """
     # Encode inputs.
     init_decoder_state = Encoder(
