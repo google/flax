@@ -73,6 +73,8 @@ class Encoder(nn.Module):
     batch_size = inputs.shape[0]
     lstm = EncoderLSTM(name='encoder_lstm', eos_id=self.eos_id)
     init_lstm_state = lstm.initialize_carry(batch_size, self.hidden_size)
+    # We use the `is_eos` array to determine whether the encoder should carry
+    # over the last lstm state, or apply the LSTM cell on the previous state.
     init_is_eos = jnp.zeros(batch_size, dtype=bool)
     init_carry = (init_lstm_state, init_is_eos)
     (final_state, _), _ = lstm(init_carry, inputs)
@@ -99,12 +101,16 @@ class DecoderLSTM(nn.Module):
   def __call__(self, carry: Tuple[PRNGKey, Array, Array], x: Array) -> Array:
     """Applies the DecoderLSTM model."""
     rng, lstm_state, last_prediction = carry
+    # TODO(marcvanzee): Can we split this inside the scan call?
     carry_rng, categorical_rng = jax.random.split(rng, 2)
     if not self.teacher_force:
       x = last_prediction
     lstm_state, y = nn.LSTMCell()(lstm_state, x)
     logits = nn.Dense(features=self.vocab_size)(y)
+    # Sample the predicted token using a categorical distribution over the
+    # logits.
     predicted_token = jax.random.categorical(categorical_rng, logits)
+    # Convert to one-hot encoding.
     prediction = jax.nn.one_hot(
         predicted_token, self.vocab_size, dtype=jnp.float32)
 
