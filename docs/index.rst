@@ -43,6 +43,7 @@ For a quick introduction and short example snippets, see our `README
    howtos/model_surgery
    howtos/optax_update_guide
    howtos/convert_pytorch_to_flax
+   howtos/linen_upgrade_guide
 
 
 .. toctree::
