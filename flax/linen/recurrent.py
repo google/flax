@@ -31,7 +31,7 @@ from typing import (Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple,
 from flax.linen.module import Module, compact
 from flax.linen.activation import sigmoid, tanh
 from flax.linen.initializers import orthogonal, zeros
-from flax.linen.linear import Conv, Dense, default_kernel_init
+from flax.linen.linear import Conv, Dense, default_kernel_init, PrecisionLike
 
 from jax import numpy as jnp
 from jax import lax
@@ -163,7 +163,7 @@ class DenseParams(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Optional[lax.Precision] = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
