@@ -154,7 +154,7 @@ def log_decode(question: str, inferred: str, golden: str):
 
 @functools.partial(jax.jit, static_argnums=3)
 def decode(params: Dict[str, Any], inputs: Array, decode_rng: PRNGKey,
-           ctable: CTable):
+           ctable: CTable) -> Array:
   """Decodes inputs."""
   init_decoder_input = ctable.one_hot(ctable.encode('=')[0:1])
   init_decoder_inputs = jnp.tile(init_decoder_input,
@@ -181,7 +181,7 @@ def decode_batch(state: train_state.TrainState, batch: Dict[str, Array],
     log_decode(question, inferred, golden)
 
 
-def train_and_evaluate(workdir: str):
+def train_and_evaluate(workdir: str) -> train_state.TrainState:
   """Trains for a fixed number of steps and decode during training."""
 
   # TODO(marcvanzee): Integrate ctable with train_state.
