@@ -34,7 +34,8 @@ PRNGKey = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Array = Any
-
+PrecisionLike = Union[None, str, lax.Precision, Tuple[str, str],
+                      Tuple[lax.Precision, lax.Precision]]
 
 default_kernel_init = lecun_normal()
 
@@ -75,7 +76,7 @@ class DenseGeneral(Module):
   param_dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  precision: Optional[lax.Precision] = None
+  precision: PrecisionLike = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -163,7 +164,7 @@ class Dense(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Optional[lax.Precision] = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
@@ -245,7 +246,7 @@ class _Conv(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Optional[lax.Precision] = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
@@ -445,7 +446,7 @@ class ConvTranspose(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Optional[lax.Precision] = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 

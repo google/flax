@@ -21,6 +21,7 @@ from flax.linen.initializers import lecun_normal
 from flax.linen.initializers import ones
 from flax.linen.initializers import variance_scaling
 from flax.linen.initializers import zeros
+from flax.linen.linear import PrecisionLike
 from flax.linen.partitioning import param_with_axes
 from flax.linen.partitioning import with_sharding_constraint
 from jax import lax
@@ -63,7 +64,7 @@ class Dense(nn.Module):
   use_bias: bool = True
   dtype: Any = jnp.float32
   param_dtype: DType = jnp.float32
-  precision: Optional[lax.Precision] = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, DType], Array] = zeros
   kernel_axes: Tuple[str, ...] = ()
