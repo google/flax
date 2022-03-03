@@ -96,25 +96,24 @@ class DecoderLSTM(nn.Module):
       variable_broadcast='params',
       in_axes=1,
       out_axes=1,
-      split_rngs={'params': False})
+      split_rngs={'params': False, 'lstm': True})
   @nn.compact
-  def __call__(self, carry: Tuple[PRNGKey, Array, Array], x: Array) -> Array:
+  def __call__(self, carry: Tuple[Array, Array], x: Array) -> Array:
     """Applies the DecoderLSTM model."""
-    rng, lstm_state, last_prediction = carry
-    # TODO(marcvanzee): Can we split this inside the scan call?
-    carry_rng, categorical_rng = jax.random.split(rng, 2)
+    lstm_state, last_prediction = carry
     if not self.teacher_force:
       x = last_prediction
     lstm_state, y = nn.LSTMCell()(lstm_state, x)
     logits = nn.Dense(features=self.vocab_size)(y)
     # Sample the predicted token using a categorical distribution over the
     # logits.
+    categorical_rng = self.make_rng('lstm')
     predicted_token = jax.random.categorical(categorical_rng, logits)
     # Convert to one-hot encoding.
     prediction = jax.nn.one_hot(
         predicted_token, self.vocab_size, dtype=jnp.float32)
 
-    return (carry_rng, lstm_state, prediction), (logits, prediction)
+    return (lstm_state, prediction), (logits, prediction)
 
 
 class Decoder(nn.Module):
@@ -146,7 +145,7 @@ class Decoder(nn.Module):
     """
     lstm = DecoderLSTM(teacher_force=self.teacher_force,
                        vocab_size=self.vocab_size)
-    init_carry = (self.make_rng('lstm'), self.init_state, inputs[:, 0])
+    init_carry = (self.init_state, inputs[:, 0])
     _, (logits, predictions) = lstm(init_carry, inputs)
     return logits, predictions
 
