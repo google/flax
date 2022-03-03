@@ -28,8 +28,8 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as np
-from typing import (Any, Tuple, Iterable, Callable, Generic, TypeVar,
-                    Mapping, NamedTuple)
+from typing import (Any, Tuple, Callable, Generic, Mapping, NamedTuple,
+                    Sequence, TypeVar)
 
 from flax import linen as nn
 from flax import errors
@@ -484,7 +484,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_numpy_array_shape_class_args(self):
     class MLP(nn.Module):
-      widths: Iterable
+      widths: Sequence
       @nn.compact
       def __call__(self, x):
         for width in self.widths[:-1]:
@@ -638,7 +638,7 @@ class ModuleTest(absltest.TestCase):
   def test_module_trace(self):
     class MLP(nn.Module):
       act: Callable = nn.relu
-      sizes: Iterable[int] = (3, 2)
+      sizes: Sequence[int] = (3, 2)
 
       @nn.compact
       def __call__(self, x):
@@ -1471,6 +1471,24 @@ class ModuleTest(absltest.TestCase):
 
     rngs = {}
     D().init(rngs)
+
+  def test_modifying_attribs_in_post_init(self):
+    class Foo(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.hate = 100 - self.love
+        super().__post_init__()
+    foo = Foo()
+    self.assertEqual(foo.love, 99)
+    self.assertEqual(foo.hate, 1)
+
+    class Bar(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.love = 101
+        super().__post_init__()
+    bar = Bar()
+    self.assertEqual(bar.love, 101)
 
 
 if __name__ == '__main__':

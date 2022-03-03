@@ -271,9 +271,8 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
       pool_size = 32
       pool = thread.ThreadPoolExecutor(pool_size)
       results = pool.map(read_chunk, range(int(num_bufs) + 1))
-      results = list(results)
       pool.shutdown(wait=False)
-      logging.debug('results: %s', results)
+      logging.debug(f'results: {list(results)}')
     else:
       checkpoint_contents = fp.read()
 

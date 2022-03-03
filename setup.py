@@ -26,7 +26,7 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.2.28",
+    "jax>=0.3",
     "matplotlib",  # only needed for tensorboard export
     "msgpack",
     "optax",
