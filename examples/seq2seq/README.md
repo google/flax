@@ -25,3 +25,6 @@ INFO:absl:DECODE: 6+600 = 606 (CORRECT)
 ### How to run
 
 `python train.py`
+
+The total runtime for 1200 steps on CPU (3.5GHz Intel Core i7, 16GB memory) is
+about 4 minutes.
