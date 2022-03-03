@@ -13,6 +13,7 @@ vNext
 - Added Optax update guide and deprecated `flax.optim`.
 - Added `sep` argument to `flax.traverse_util.flatten_dict()`.
 -
+- Re-engineer RNN modules to simplify initialization.
 -
 - Added locally-connected (unshared CNN) layer `flax.linen.ConvLocal`.
 -
@@ -48,7 +49,7 @@ Breaking changes:
  - You can no longer pass an int as the `kernel_size` for a `flax.linen.Conv.
    Instead a type error is raised stating that
    a tuple/list should be provided. Stride and dilation arguments do support broadcasting a single int value now because this is not
-   ambigious when the kernel rank is known. 
+   ambigious when the kernel rank is known.
  - `flax.linen.enable_named_call` and `flax.linen.disable_named_call` now work anywhere instead of only affecting Modules constructed after the enable/disable call. Additionally, there is now `flax.linen.override_named_call` that provided a context manager to locally disable/enable named_call.
  - NamedTuples are no longer converted to tuples on assignment to a `linen.Module`.
 
@@ -64,7 +65,7 @@ Bugfixes:
  - Fix the serialization of named tuples. Tuple fields are no longer stored in the state dict and the named tuple class is no longer recreated ([bug](https://github.com/google/flax/issues/1429)).
  - Mixed precision training with float16 now works correctly with the attention layers.
  - auto-generated linen Module `__hash__`, `__eq__`, `__repr__` no longer fail by default on non-init attributes.
- 
+
 
 
 0.3.4
@@ -72,7 +73,7 @@ Bugfixes:
 
 Possibly breaking changes:
  - When calling `init` the 'intermediates' collection is no longer mutable.
-   Therefore, intermediates will no longer be returned from initialization by default. 
+   Therefore, intermediates will no longer be returned from initialization by default.
  - Don't update batch statistics during initialization.
  - When not using any non-determinism (e.g., dropout), it is not longer necessary to specify the `deterministic` argument in `MultiHeadDotProductAttention`.
 
@@ -105,9 +106,9 @@ Possible breaking changes:
    latest checkpoint already saved.
  - MultiOptimizer now rejects the case where multiple sub optimizers update the
    same parameter.
-  
+
 Other changes:
- - Added custom error classes to many Linen errors. See: 
+ - Added custom error classes to many Linen errors. See:
    https://flax.readthedocs.io/en/latest/flax.errors.html
  - Adds `Module.bind` for binding variables and RNGs to an interactive Module.
  - Adds `nn.apply` and `nn.init` for transforming arbitrary functions that take a `linen.Module` as their first argument.
@@ -127,7 +128,7 @@ NOTE: You must now explicitly import `flax.nn` if you want to use the old
 0.3.1
 ------
 
-Many improvements to Linen, and the old `flax.nn` is officially reprecated! 
+Many improvements to Linen, and the old `flax.nn` is officially reprecated!
 
 Notably, there's a clean API for extracting intermediates from modules
 defined using `@nn.compact`, a more ergonomic API for using Batch Norm and Dropout in modules
@@ -141,7 +142,7 @@ Possible breaking changes:
    is enforced by raising a TypeError in `__setattr__` after `setup`.
  - Pytrees of dicts and lists are transformed into FrozenDict and tuples during
    attribute assignment.
-   This avoids undetected submodules and inner state. 
+   This avoids undetected submodules and inner state.
  - Bug Fix `flax.core.apply` and `Module.apply`. Now it returns a tuple
    containing the output and a frozen empty
    collection when `mutable` is specified as an empty list.

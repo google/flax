@@ -51,8 +51,10 @@ class ModelTest(parameterized.TestCase):
     rng = jax.random.PRNGKey(0)
     inputs = np.random.RandomState(0).normal(
         size=[batch_size, seq_len, embedding_size])
-    initial_state = models.SimpleLSTM.initialize_carry((batch_size,), hidden_size)
-    (_, output), _ = model.init_with_output(rng, initial_state, inputs)
+    carry, variables = model.init_with_output(
+        rng, 1, hidden_size, inputs[:, 0],
+        method=models.SimpleLSTM.initialize_carry)
+    _, output = model.apply(variables, carry, inputs)
     self.assertEqual((batch_size, seq_len, hidden_size), output.shape)
 
   def test_bilstm_returns_correct_output_shape(self):
