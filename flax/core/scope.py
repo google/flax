@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,16 @@ import contextlib
 import functools
 import hashlib
 import dataclasses
-from typing import Any, Callable, Container, Dict, Generic, Iterable, Mapping, Optional, Sequence, Set, Tuple, TypeVar, Union
+
+import typing
+from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
+                    Sequence, Set, Tuple, TypeVar, Union)
 
 from . import tracers
 from flax import errors
 from flax import traceback_util
+from flax import struct
+from flax import config
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
@@ -42,7 +47,7 @@ Array = Any
 RNGSequences = Dict[str, PRNGKey]
 
 
-Filter = Union[bool, str, Container[str], 'DenyList']
+Filter = Union[bool, str, typing.Collection[str], 'DenyList']
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
@@ -71,9 +76,48 @@ VariableDict = Mapping[str, Collection]
 FrozenVariableDict = FrozenDict[str, Collection]
 MutableVariableDict = Dict[str, MutableCollection]
 
+PRNGFoldable = Union[int, str]
 
-def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
-  """Folds a string into a jax.random.PRNGKey using its SHA-1 hash.
+
+class LazyRng(struct.PyTreeNode):
+  """Wrapper around JAX PRNGKey that lazily maintains a tuple of static data to be folded into the rng."""
+  rng: PRNGKey
+  suffix: Tuple[PRNGFoldable, ...] = struct.field(pytree_node=False)
+
+  def as_jax_rng(self) -> PRNGKey:
+    return _fold_in_static(self.rng, self.suffix)
+
+  @staticmethod
+  def create(rng: Union['LazyRng', PRNGKey],
+             *suffix: PRNGFoldable) -> 'LazyRng':
+    if not config.flax_lazy_rng:
+      if isinstance(rng, LazyRng):
+        assert rng.suffix == ()
+        rng = rng.rng
+      return LazyRng(_legacy_rng_fold_in(rng, suffix), ())
+    if isinstance(rng, LazyRng):
+      return LazyRng(rng.rng, rng.suffix + suffix)
+    else:
+      return LazyRng(rng, suffix)
+
+
+def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
+  for x in data:
+    if isinstance(x, str):
+      m = hashlib.sha1()
+      m.update(x.encode('utf-8'))
+      d = m.digest()
+      hash_int = int.from_bytes(d[:4], byteorder='big')
+      rng = random.fold_in(rng, jnp.uint32(hash_int))
+    elif isinstance(x, int):
+      rng = random.fold_in(rng, x)
+    else:
+      raise ValueError(f'Expected int or string, got: {x}')
+  return rng
+
+
+def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNGKey:
+  """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
   keys in parallel that are independent of each other.
@@ -85,8 +129,16 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
   Returns:
    The newly generated PRNG key.
   """
+  if len(data) == 0:
+    return rng
   m = hashlib.sha1()
-  m.update(data.encode('utf-8'))
+  for x in data:
+    if isinstance(x, str):
+      m.update(x.encode('utf-8'))
+    elif isinstance(x, int):
+      m.update(x.to_bytes((x.bit_length() + 7) // 8, byteorder='big'))
+    else:
+      raise ValueError(f'Expected int or string, got: {x}')
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
   return random.fold_in(rng, jnp.uint32(hash_int))
@@ -95,7 +147,7 @@ def _fold_in_str(rng: PRNGKey, data: str) -> PRNGKey:
 def is_filter_empty(filter_like: Filter) -> bool:
   if isinstance(filter_like, str):
     return False
-  if isinstance(filter_like, Container):
+  if isinstance(filter_like, typing.Collection):
     return len(filter_like) == 0
   if isinstance(filter_like, bool):
     return not filter_like
@@ -123,7 +175,7 @@ def in_filter(filter_like: Filter, col: str) -> bool:
   """
   if isinstance(filter_like, str):
     return col == filter_like
-  if isinstance(filter_like, Container):
+  if isinstance(filter_like, typing.Collection):
     return col in filter_like
   if isinstance(filter_like, bool):
     return filter_like
@@ -146,7 +198,7 @@ def filter_to_set(x: Filter) -> Set[str]:
     return set()
   if isinstance(x, str):
     return set([x])
-  if isinstance(x, Iterable):
+  if isinstance(x, typing.Collection):
     return set(x)
   raise errors.InvalidFilterError(x)
 
@@ -244,6 +296,7 @@ def group_collections(
     A sequence S with `len(S) == len(col_filters)`. Each `S[i]` is the result of
     applying filter `col_filters[i]` to the remaining keys in `xs`.
     """
+  cols: Iterable[str]
   cols = xs.keys()
   groups = []
   for col_filter in col_filters:
@@ -311,10 +364,11 @@ class Scope:
   <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
+  reservations: Set[str]
 
   def __init__(self,
                variables: MutableVariableDict,
-               rngs: Optional[Dict[str, PRNGKey]] = None,
+               rngs: Optional[Dict[str, Union[PRNGKey, LazyRng]]] = None,
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
                parent: Optional['Scope'] = None,
@@ -329,11 +383,12 @@ class Scope:
       parent: The parent scope.
       path: The path in the variable tree from the root scope to this scope.
     """
+    rngs = {k: LazyRng.create(v) for k, v in rngs.items()} if rngs else {}
     self._variables = variables
     self.parent = parent
     self.name = name
     self.path = tuple(path)
-    self.rngs = rngs if rngs else {}
+    self.rngs = rngs
     self.mutable = mutable
 
     self._root = parent.root if parent else None
@@ -354,7 +409,7 @@ class Scope:
     if self is other:
       return True
     return self.root._variables is other.root._variables and self.path == other.path and self.rng_counters is other.rng_counters
-  
+
   def __hash__(self) -> int:
     # see __eq__
     return hash((id(self.root._variables), self.path, id(self.rng_counters)))
@@ -411,7 +466,7 @@ class Scope:
       rewind_rngs: if true, reset the RNG counter of this scope.
 
     Returns:
-      A rewound version of this scope, which means reservations and children are
+      A rewound version of this scope, which means reservations are
       emptied, and the rng counter is optionally rewound.
     """
     self._check_valid()
@@ -471,7 +526,7 @@ class Scope:
       name = self.default_name(prefix)
     if not reuse or name not in self.reservations:
       self.reserve(name)
-    rngs = {key: _fold_in_str(rng, name) for key, rng in self.rngs.items()}
+    rngs = {key: LazyRng.create(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
       rng_counters = self.rng_counters.get(rng_key)
@@ -571,9 +626,9 @@ class Scope:
     self._check_valid()
     self._validate_trace_level()
     self.rng_counters[name] += 1
-    return random.fold_in(self.rngs[name], self.rng_counters[name])
+    return LazyRng.create(self.rngs[name], self.rng_counters[name]).as_jax_rng()
 
-  def get_variable(self, col: str, name: str, default: T = None) -> T:
+  def get_variable(self, col: str, name: str, default: Any = None) -> Any:
     """Retrieves the value of a Variable.
 
     Args:
@@ -657,7 +712,7 @@ class Scope:
     """
     self.reserve(name)
     if self.has_variable('params', name):
-      abs_rng = jax.ShapeDtypeStruct((2,), jnp.uint32)
+      abs_rng = jax.ShapeDtypeStruct(_default_key_shape(), jnp.uint32)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
@@ -716,7 +771,7 @@ def bind(variables: VariableDict,
   across the JAX software ecosystem.
   """
   if not _is_valid_variables(variables):
-    raise errors.ApplyScopeInvalidVariablesError()
+    raise errors.ApplyScopeInvalidVariablesTypeError()
   if rngs is not None and not _is_valid_rngs(rngs):
     raise errors.InvalidRngError(
       'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
@@ -741,6 +796,12 @@ def apply(fn: Callable[..., Any],
               *args,
               rngs: Optional[RNGSequences] = None,
               **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
+    # Try to detect if user accidentally passed {'params': {'params': ...}.
+    if 'params' in variables and isinstance(
+        variables['params'], 
+        (dict, FrozenDict)) and 'params' in variables['params']:
+      raise errors.ApplyScopeInvalidVariablesStructureError(variables)
+
     with bind(variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:
@@ -803,18 +864,29 @@ def _is_valid_variables(variables: VariableDict) -> bool:
   return True
 
 
+# TODO(frostig,levskaya): remove after next jax release, when
+# random.default_prng_impl is defined
+def _default_key_shape():
+  if hasattr(random, 'default_prng_impl'):
+    return random.default_prng_impl().key_shape
+  elif jax_config.jax_default_prng_impl == 'threefry2x32':
+    return (2,)
+  else:
+    return (4,)
+
+
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
   # New-style JAX KeyArrays have a base type.
-  if (hasattr(jax_config, 'jax_enable_custom_prng') and
-      jax_config.jax_enable_custom_prng):
+  if jax_config.jax_enable_custom_prng:
     if not isinstance(rng, jax.random.KeyArray):
       return False
-  # Old-style JAX PRNGKeys are plain uint32[2] arrays.
+  # Old-style JAX PRNGKeys are plain uint32 arrays.
   else:
     if not isinstance(rng, (np.ndarray, jnp.ndarray)):
       return False
-    if rng.shape != (2,) or rng.dtype != jnp.uint32:
+    if (rng.shape != _default_key_shape() or
+        rng.dtype != jnp.uint32):
       return False
   return True
 

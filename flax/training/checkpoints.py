@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -271,9 +271,8 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
       pool_size = 32
       pool = thread.ThreadPoolExecutor(pool_size)
       results = pool.map(read_chunk, range(int(num_bufs) + 1))
-      results = list(results)
       pool.shutdown(wait=False)
-      logging.debug('results: %s', results)
+      logging.debug(f'results: {list(results)}')
     else:
       checkpoint_contents = fp.read()
 

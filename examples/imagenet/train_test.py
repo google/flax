@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,10 +18,10 @@ import pathlib
 import tempfile
 
 from absl.testing import absltest
+from absl.testing import parameterized
 
 import jax
 from jax import random
-
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
@@ -34,7 +34,7 @@ from configs import default as default_lib
 jax.config.update('jax_disable_most_optimizations', True)
 
 
-class TrainTest(absltest.TestCase):
+class TrainTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
@@ -50,7 +50,22 @@ class TrainTest(absltest.TestCase):
     y = model.apply(variables, x, train=False)
     self.assertEqual(y.shape, (8, 1000))
 
-  def test_train_and_evaluate(self):
+  def test_create_model_local(self):
+    """Tests creating an unshared convolution model.
+
+    Uses smaller inputs than `test_create_model` to due to higher compute.
+    """
+    model = train.create_model(model_cls=models._ResNet1Local, half_precision=False)  # pylint: disable=protected-access
+    params, batch_stats = train.initialized(random.PRNGKey(0), 64, model)
+    variables = {'params': params, 'batch_stats': batch_stats}
+    x = random.normal(random.PRNGKey(1), (1, 64, 64, 3))
+    y = model.apply(variables, x, train=False)
+    self.assertEqual(y.shape, (1, 1000))
+
+  @parameterized.product(
+      model=('_ResNet1', '_ResNet1Local')
+  )
+  def test_train_and_evaluate(self, model):
     """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.
     workdir = tempfile.mkdtemp()
@@ -61,7 +76,7 @@ class TrainTest(absltest.TestCase):
 
     # Define training configuration
     config = default_lib.get_config()
-    config.model = '_ResNet1'
+    config.model = model
     config.batch_size = 1
     config.num_epochs = 1
     config.num_train_steps = 1

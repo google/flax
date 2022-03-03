@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ import os
 
 def bool_env(varname: str, default: bool) -> bool:
   """Read an environment variable and interpret it as a boolean.
-  
+
   True values are (case insensitive): 'y', 'yes', 't', 'true', 'on', and '1';
   false values are 'n', 'no', 'f', 'false', 'off', and '0'.
   Args:
@@ -58,3 +58,6 @@ flax_filter_frames = bool_env('FLAX_FILTER_FRAMES', True)
 
 # Whether to automatically wrap Module methods with named_call for profiles.
 flax_profile = bool_env('FLAX_PROFILE', False)
+
+# Whether to use the lazy rng implementation
+flax_lazy_rng = bool_env('FLAX_LAZY_RNG', True)

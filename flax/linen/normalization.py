@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,36 +25,45 @@ from flax.linen.module import Module, compact, merge_param
 
 PRNGKey = Any
 Array = Any
-Shape = Tuple[int]
+Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 
 Axes = Union[int, Iterable[int]]
 
 
-def _canonicalize_axes(rank: int, axes: Axes) -> Iterable[int]:
+def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
   """Returns a tuple of deduplicated, sorted, and positive axes."""
   if not isinstance(axes, Iterable):
     axes = (axes,)
   return tuple(set([rank + axis if axis < 0 else axis for axis in axes]))
+
+def _abs_sq(x):
+  """Computes the elementwise square of the absolute value |x|^2."""
+  if jnp.iscomplexobj(x):
+    return lax.square(lax.real(x)) + lax.square(lax.imag(x))
+  else:
+    return lax.square(x)
 
 
 def _compute_stats(x: Array, axes: Axes,
                    axis_name: Optional[str] = None,
                    axis_index_groups: Any = None):
   """Computes mean and variance statistics.
-  
+
   This implementation takes care of a few important details:
   - Computes in float32 precision for half precision inputs
   -  mean and variance is computable in a single XLA fusion,
-    by using Var = E[x^2] - E[x]^2 instead of Var = E[(x - E[x])^2]).
+    by using Var = E[|x|^2] - |E[x]|^2 instead of Var = E[|x - E[x]|^2]).
   - Clips negative variances to zero which can happen due to
     roundoff errors. This avoids downstream NaNs.
   - Supports averaging across a parallel axis and subgroups of a parallel axis
     with a single `lax.pmean` call to avoid latency.
   """
-  x = jnp.asarray(x, jnp.float32)
+  # promote x to at least float32, this avoids half precision computation
+  # but preserves double or complex floating points
+  x = jnp.asarray(x, jnp.promote_types(jnp.float32, jnp.result_type(x)))
   mean = jnp.mean(x, axes)
-  mean2 = jnp.mean(lax.square(x), axes)
+  mean2 = jnp.mean(_abs_sq(x), axes)
   if axis_name is not None:
     concatenated_mean = jnp.concatenate([mean, mean2])
     mean, mean2 = jnp.split(
@@ -62,20 +71,21 @@ def _compute_stats(x: Array, axes: Axes,
             concatenated_mean,
             axis_name=axis_name,
             axis_index_groups=axis_index_groups), 2)
-  # mean2 - lax.square(mean) is not guaranteed to be non-negative due
+  # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
   # to floating point round-off errors.
-  var = jnp.maximum(0., mean2 - lax.square(mean))
+  var = jnp.maximum(0., mean2 - _abs_sq(mean))
   return mean, var
 
 
 def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
                reduction_axes: Axes, feature_axes: Axes,
-               dtype: Dtype, epsilon: float,
+               dtype: Dtype, param_dtype: Dtype,
+               epsilon: float,
                use_bias: bool, use_scale: bool,
                bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
                scale_init: Callable[[PRNGKey, Shape, Dtype], Array]):
   """"Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
-  
+
   A seperate bias and scale is learned for each feature as specified by feature_axes.
   """
   reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
@@ -93,11 +103,13 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
   if use_scale:
-    scale = mdl.param('scale', scale_init, reduced_feature_shape).reshape(feature_shape)
+    scale = mdl.param('scale', scale_init, reduced_feature_shape,
+                      param_dtype).reshape(feature_shape)
     mul *= scale
   y *= mul
   if use_bias:
-    bias = mdl.param('bias', bias_init, reduced_feature_shape).reshape(feature_shape)
+    bias = mdl.param('bias', bias_init, reduced_feature_shape,
+                     param_dtype).reshape(feature_shape)
     y += bias
   return jnp.asarray(y, dtype)
 
@@ -140,6 +152,7 @@ class BatchNorm(Module):
       the batch statistics.
     epsilon: a small float added to variance to avoid dividing by zero.
     dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  if True, bias (beta) is added.
     use_scale: if True, multiply by scale (gamma).
       When the next layer is linear (also e.g. nn.relu), this can be disabled
@@ -159,6 +172,7 @@ class BatchNorm(Module):
   momentum: float = 0.99
   epsilon: float = 1e-5
   dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
@@ -216,7 +230,7 @@ class BatchNorm(Module):
 
     return _normalize(
         self, x, mean, var, reduction_axes, feature_axes,
-        self.dtype, self.epsilon,
+        self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)
 
@@ -233,6 +247,7 @@ class LayerNorm(Module):
   Attributes:
     epsilon: A small float added to variance to avoid dividing by zero.
     dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  If True, bias (beta) is added.
     use_scale: If True, multiply by scale (gamma). When the next layer is linear
       (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -242,6 +257,7 @@ class LayerNorm(Module):
   """
   epsilon: float = 1e-6
   dtype: Any = jnp.float32
+  param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
@@ -265,7 +281,7 @@ class LayerNorm(Module):
 
     return _normalize(
         self, x, mean, var, reduction_axes, feature_axes,
-        self.dtype, self.epsilon,
+        self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)
 
@@ -286,6 +302,7 @@ class GroupNorm(Module):
       group_size: the number of channels in a group.
       epsilon: A small float added to variance to avoid dividing by zero.
       dtype: the dtype of the computation (default: float32).
+      param_dtype: the dtype passed to parameter initializers (default: float32).
       use_bias:  If True, bias (beta) is added.
       use_scale: If True, multiply by scale (gamma). When the next layer is linear
         (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -297,6 +314,7 @@ class GroupNorm(Module):
   group_size: Optional[int] = None
   epsilon: float = 1e-6
   dtype: Any = jnp.float32
+  param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
@@ -321,7 +339,6 @@ class GroupNorm(Module):
         (self.num_groups is not None and self.group_size is not None)):
       raise ValueError('Either `num_groups` or `group_size` should be '
                        'specified, but not both of them.')
-    num_groups = self.num_groups
 
     channels = x.shape[-1]
     if self.group_size is not None:
@@ -329,6 +346,9 @@ class GroupNorm(Module):
         raise ValueError('Number of channels ({}) is not multiple of the '
                          'group size ({}).'.format(channels, self.group_size))
       num_groups = channels // self.group_size
+    else:
+      num_groups = self.num_groups
+      assert isinstance(num_groups, int)
 
     if num_groups <= 0 or channels % num_groups != 0:
       raise ValueError('Number of groups ({}) does not divide the number'
@@ -348,6 +368,6 @@ class GroupNorm(Module):
 
     return _normalize(
         self, x, mean, var, reduction_axes[:-1], feature_axes,
-        self.dtype, self.epsilon,
+        self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)

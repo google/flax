@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,13 +14,13 @@
 
 """Provides op for tokenizing a dataset."""
 
+import dataclasses
 import os
 import tempfile
 import time
 from typing import Any, Dict, Iterable, Tuple
 
 from absl import logging
-import dataclasses
 import jax
 import tensorflow as tf
 import tensorflow_text as tftxt

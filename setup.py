@@ -1,4 +1,4 @@
-# Copyright 2020 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,15 +20,14 @@ from setuptools import setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 try:
-  README = open(os.path.join(here, "README.md"), encoding='utf-8').read()
+  README = open(os.path.join(here, "README.md"), encoding="utf-8").read()
 except IOError:
   README = ""
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.2.21",
+    "jax>=0.3",
     "matplotlib",  # only needed for tensorboard export
-    "dataclasses;python_version<'3.7'", # will only install on py3.6
     "msgpack",
     "optax",
 ]
@@ -47,15 +46,15 @@ tests_require = [
     "pytype==2021.5.25",  # pytype 2021.6.17 complains on recurrent.py, need to investigate!
     "sentencepiece",  # WMT example.
     "svn",
-    "tensorflow-cpu>=2.4.0",
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
-    "tensorflow==2.4.1",  # TODO(marcvanzee): Remove once #1326 is fixed.
+    "tensorflow",
+    "torch",
 ]
 
 __version__ = None
 
-with open('flax/version.py') as f:
+with open("flax/version.py") as f:
   exec(f.read(), globals())
 
 setup(
@@ -63,7 +62,7 @@ setup(
     version=__version__,
     description="Flax: A neural network library for JAX designed for flexibility",
     long_description="\n\n".join([README]),
-    long_description_content_type='text/markdown',
+    long_description_content_type="text/markdown",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

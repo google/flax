@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.nn."""
+"""Tests for flax.deprecated.nn."""
 
 from absl.testing import absltest
 
@@ -105,6 +105,27 @@ class NormalizationTest(absltest.TestCase):
     np.testing.assert_allclose(
         ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=False), rtol=1e-4)
 
+  def test_batch_norm_complex(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (4, 3, 2), dtype=jnp.complex64)
+    model_cls = nn.BatchNorm(momentum=0.9, use_running_average=False, dtype=jnp.complex64)
+    y, initial_params = model_cls.init_with_output(key2, x)
+
+    mean = y.mean((0, 1))
+    var = y.var((0, 1))
+    np.testing.assert_allclose(mean, np.array([0., 0.]), atol=1e-4)
+    np.testing.assert_allclose(var, np.array([1., 1.]), rtol=1e-4)
+    self.assertEqual(mean.dtype, jnp.complex64)
+
+    y, vars_out = model_cls.apply(initial_params, x, mutable=['batch_stats'])
+
+    ema = vars_out['batch_stats']
+    np.testing.assert_allclose(
+        ema['mean'], 0.1 * x.mean((0, 1), keepdims=False), atol=1e-4)
+    np.testing.assert_allclose(
+        ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=False), rtol=1e-4)
+
   def test_layer_norm(self):
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
@@ -163,6 +184,7 @@ class NormalizationTest(absltest.TestCase):
     x = random.normal(random.PRNGKey(1), (2, 4))
     (y1, y2), variables = model.init_with_output(key, x)
     np.testing.assert_allclose(y1, y2, rtol=1e-4)
+
 
 class StochasticTest(absltest.TestCase):
 
@@ -276,7 +298,7 @@ class RecurrentTest(absltest.TestCase):
         'hh': {'bias': (6*4,), 'kernel': (3, 3, 6, 6*4)},
         'ih': {'bias': (6*4,), 'kernel': (3, 3, 3, 6*4)},
     })
-    
+
   def test_optimized_lstm_cell_matches_regular(self):
 
     # Create regular LSTMCell.
@@ -287,8 +309,8 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
     lstm = nn.LSTMCell()
-    (_, y), lstm_params = lstm.init_with_output(key2, (c0, h0), x)    
-    
+    (_, y), lstm_params = lstm.init_with_output(key2, (c0, h0), x)
+
     # Create OptimizedLSTMCell.
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
@@ -297,10 +319,10 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
     lstm_opt = nn.OptimizedLSTMCell()
-    (_, y_opt), lstm_opt_params = lstm_opt.init_with_output(key2, (c0, h0), x)    
-    
+    (_, y_opt), lstm_opt_params = lstm_opt.init_with_output(key2, (c0, h0), x)
+
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)
-    jtu.check_eq(lstm_params, lstm_opt_params)      
+    jtu.check_eq(lstm_params, lstm_opt_params)
 
 
 if __name__ == '__main__':

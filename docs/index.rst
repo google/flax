@@ -41,6 +41,9 @@ For a quick introduction and short example snippets, see our `README
    howtos/lr_schedule
    howtos/extracting_intermediates
    howtos/model_surgery
+   howtos/optax_update_guide
+   howtos/convert_pytorch_to_flax
+
 
 .. toctree::
    :maxdepth: 1
@@ -63,7 +66,6 @@ For a quick introduction and short example snippets, see our `README
    :caption: API reference
 
    flax.linen
-   flax.optim
    flax.serialization
    flax.core.frozen_dict
    flax.struct
@@ -73,9 +75,3 @@ For a quick introduction and short example snippets, see our `README
    flax.training
    flax.config
    flax.errors
-
-.. toctree::
-   :maxdepth: 1
-   :caption: (deprecated)
-
-   flax.nn (deprecated) <flax.nn>

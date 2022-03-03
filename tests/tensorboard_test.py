@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from tensorboard.backend.event_processing import event_file_loader
 from tensorboard.util import tensor_util
 import tensorflow.compat.v2 as tf
 
-from flax.metrics.tensorboard import SummaryWriter
+from flax.metrics.tensorboard import SummaryWriter, _flatten_dict
 
 def _process_event(event):
   for value in event.summary.value:
@@ -261,6 +261,59 @@ class TensorboardTest(absltest.TestCase):
         np.allclose(actual_histogram[0], (0.0, 499.5, 500.0), atol=1e-01))
     self.assertTrue(
         np.allclose(actual_histogram[1], (499.5, 999.0, 500.0), atol=1e-01))
+
+  def test_flatten_dict(self):
+    # Valid types according to https://github.com/tensorflow/tensorboard/blob/1204566da5437af55109f7a4af18f9f8b7c4f864/tensorboard/plugins/hparams/summary_v2.py
+    input_hparams={
+      # Example Invalid Types
+      "None": None, "List": [1, 2, 3], "Tuple": (1, 2, 3), "Complex": complex("1+1j"), "np.complex_": np.complex_("1+1j"),
+      # Valid Python Types
+      "Bool": True, "Int": 1, "Float": 1.0, "Str": "test",
+      # Valid Numpy Types
+      "np.bool_": np.bool_(1), "np.integer": np.int_(1),  "np.floating": np.float_(1.0), "np.character": np.str_("test"),
+      # Nested dict to flatten
+      "Nested_Dict": {
+        "None": None,
+        "List": [1, 2, 3],
+        "Tuple": (1, 2, 3),
+        "Complex": complex("1+1j"), 
+        "np.complex_": np.complex_("1+1j"),
+        "Bool": True,
+        "Int": 1,
+        "Float": 1.0,
+        "Str": "test",
+        "np.bool_": np.bool_(1),
+        "np.integer": np.int_(1),
+        "np.floating": np.float_(1.0),
+        "np.character": np.str_("test")
+      }
+    }
+    
+    result_hparams = _flatten_dict(input_hparams)
+
+    expected_hparams={
+      "None": "None", "List": "[1, 2, 3]", "Tuple": "(1, 2, 3)", "Complex": "(1+1j)", "np.complex_": "(1+1j)",
+      # Valid Python Types
+      "Bool": True, "Int": 1, "Float": 1.0, "Str": "test",
+      # Valid Numpy Types
+      "np.bool_": np.bool_(1), "np.integer": np.int_(1),  "np.floating": np.float_(1.0), "np.character": np.str_("test"),
+      # Nested Dict
+      "Nested_Dict.None": "None",
+      "Nested_Dict.List": "[1, 2, 3]",
+      "Nested_Dict.Tuple": "(1, 2, 3)",
+      "Nested_Dict.Complex": "(1+1j)",
+      "Nested_Dict.np.complex_": "(1+1j)",
+      "Nested_Dict.Bool": True,
+      "Nested_Dict.Int": 1,
+      "Nested_Dict.Float": 1.0,
+      "Nested_Dict.Str": "test",
+      "Nested_Dict.np.bool_": np.bool_(1),
+      "Nested_Dict.np.integer": np.int_(1),
+      "Nested_Dict.np.floating": np.float_(1.0),
+      "Nested_Dict.np.character": np.str_("test")
+    }
+
+    self.assertDictEqual(result_hparams, expected_hparams)
 
 if __name__ == '__main__':
   absltest.main()

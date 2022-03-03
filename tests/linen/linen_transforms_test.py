@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -606,7 +606,8 @@ class TransformTest(absltest.TestCase):
   def test_nested_setup_calls_count(self):
     D = 3
     N = 4
-    cntr = 0
+    setup_cntr = 0
+    call_cntr = 0
     class Repeat(nn.Module):
       mdl_def: Any
       def setup(self):
@@ -618,11 +619,13 @@ class TransformTest(absltest.TestCase):
         return x
     class Counter(nn.Module):
       def setup(self):
-        nonlocal cntr
-        cntr += 1
+        nonlocal setup_cntr
+        setup_cntr += 1
         self.dense = nn.Dense(2, use_bias=False)
       @nn.remat
       def __call__(self, x):
+        nonlocal call_cntr
+        call_cntr += 1
         return self.dense(x)
 
     def nested_repeat(mdl):
@@ -630,7 +633,10 @@ class TransformTest(absltest.TestCase):
         mdl = partial(Repeat, mdl)
       return mdl()
     _ = nested_repeat(Counter).init(random.PRNGKey(0), jnp.ones((2,)))
-    self.assertEqual(cntr, 64)
+    # setup_cntr == 128 due to 1 call in Counter.setup by _validate_setup
+    # and 1 further "real" call.
+    self.assertEqual(setup_cntr, 128)
+    self.assertEqual(call_cntr, 64)
 
   def test_multimethod_setup_calls(self):
     cntr=0
@@ -657,7 +663,9 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((2,))
     (y1, y2), _ = B().init_with_output(key, x)
     np.testing.assert_array_equal(y1, y2)
-    self.assertEqual(cntr, 2)
+    # cntr == 3 due to 1 call by _validate_setup
+    # and two further "real" calls.
+    self.assertEqual(cntr, 3)
 
   def test_toplevel_submodule_adoption_transform(self):
     class A(nn.Module):
@@ -1123,6 +1131,234 @@ class TransformTest(absltest.TestCase):
                                     jnp.array([1.], jnp.float32))
       np.testing.assert_array_equal(vs_new['muts']['b']['outer_c']['v'],
                                     jnp.array([1.], jnp.float32))
+
+  def test_custom_vjp(self):
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def f(mdl, x):
+          return mdl(x)
+
+        def fwd(mdl, x):
+          return nn.vjp(f, mdl, x)
+
+        def bwd(vjp_fn, y_t):
+          input_t, params_t = vjp_fn(y_t)
+          params_t = jax.tree_map(jnp.sign, params_t)
+          return input_t, params_t
+
+        sign_grad = nn.custom_vjp(
+            f, forward_fn=fwd, backward_fn=bwd)
+        return sign_grad(nn.Dense(1), x).reshape(())
+    x = jnp.ones((2,))
+    variables = Foo().init(random.PRNGKey(0), x)
+    grad = jax.grad(Foo().apply)(variables, x)
+    for grad_leaf in jax.tree_leaves(grad):
+      self.assertTrue(jnp.all(jnp.abs(grad_leaf) == 1.))
+
+  def test_transform_with_setup_and_methods_on_submodules(self):
+    # This is the archetypal example motivating the introduction of
+    # SetupState as a triple-enum to handle multiple setup() calls
+    # across transform boundaries and scope reuse.
+    class Foo(nn.Module):
+      def setup(self):
+        self.inner = nn.Dense(2)
+      def helper(self, x, m):
+        return m(x)
+      def __call__(self, x):
+        return self.helper(x, self.inner)
+    k = random.PRNGKey(0)
+    x = jnp.ones((2,))
+    with nn.module.override_named_call(True):
+      vs_foo = Foo().init(k, x)
+
+    class Bar(nn.Module):
+      def setup(self):
+        self.inner = nn.Dense(2)
+      @nn.jit
+      def helper(self, x, m):
+        return m(x)
+      @nn.jit
+      def __call__(self, x):
+        return self.helper(x, self.inner)
+    vs_bar = Bar().init(k, x)
+    self.assertTrue(tree_equals(
+      jax.tree_map(jnp.shape, vs_foo),
+      jax.tree_map(jnp.shape, vs_bar)))
+
+  def test_transform_methods_on_submodules_still_reserve_names(self):
+    class Foo(nn.Module):
+      @nn.jit
+      def helper(self, x, m):
+        conflicting_a = nn.Dense(2, name="a")
+        return m(x)
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        a = nn.Dense(2, name="a")
+        return self.helper(x, a)
+    k = random.PRNGKey(0)
+    x = jnp.ones((2,))
+    with self.assertRaises(errors.NameInUseError):
+      vs = Foo().init(k, x)
+
+  def test_transform_setup_still_reserve_names(self):
+    class Identity(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+    class Test(nn.Module):
+      def setup(self):
+        self.sub = Identity()
+        self.sub = Identity()
+      @nn.jit
+      def __call__(self, x):
+        return x
+
+    k = random.PRNGKey(0)
+    x = jnp.array([1.])
+
+    msg = 'Duplicate use of scope name: "sub"'
+    with self.assertRaisesWithLiteralMatch(ValueError, msg):
+      y = Test().init(k, x)
+
+  def test_scan_of_setup_parameter(self):
+    class Body(nn.Module):
+      def setup(self):
+        self.dense = nn.Dense(1)
+        self.p = self.param('p', lambda k: jnp.ones((1,)))
+      def __call__(self, x):
+        return self.dense(x) + self.p, None
+    scanbody = nn.scan(
+      Body,
+      variable_axes={'params': 0},
+      split_rngs={'params': True},
+      length=2)
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,))
+    vs = scanbody().init(k, x)
+    y = scanbody().apply(vs, x)
+
+  def test_multi_method_class_transform(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.dense0 = nn.Dense(2)
+        self.dense1 = nn.Dense(2)
+      def method_0(self, x):
+        return self.dense0(x), x
+      def method_1(self, x, y):
+        return self.dense1(x) + y, None
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        ScanFoo = nn.scan(Foo,
+                          methods={
+                            'method_0': dict(
+                              variable_axes={'params': 0},
+                              split_rngs={'params': True},
+                              in_axes=nn.broadcast, out_axes=0,
+                              length=3),
+                            'method_1': dict(
+                              variable_axes={'params': 0},
+                              split_rngs={'params': True},
+                              in_axes=0,
+                              length=3)
+                          })
+        sf = ScanFoo()
+        y, ys = sf.method_0(x)
+        z, _ = sf.method_1(y, ys)
+        return z
+
+    k = random.PRNGKey(0)
+    x = random.uniform(random.PRNGKey(1), (2,2))
+    vs = Bar().init(k, x)
+    y = Bar().apply(vs, x)
+
+  def test_compact_aliasing_collision(self):
+    class Foo(nn.Module):
+      m1: nn.Module
+      m2: nn.Module
+      @nn.compact
+      def __call__(self, x):
+        x = self.m2(self.m1(x))
+        return x
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        dense = nn.Dense(2)
+        x = nn.jit(Foo)(dense, dense)(x)
+        return x
+    k = random.PRNGKey(0)
+    x = jnp.zeros((2, 2))
+    _ = Bar().init(k, x)
+
+  def test_compact_aliasing_collision_arg_and_attrib(self):
+    class Foo(nn.Module):
+      m1: nn.Module
+      @nn.compact
+      def __call__(self, x, m2):
+        x = m2(self.m1(x))
+        return x
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        dense = nn.Dense(2)
+        x = nn.jit(Foo)(dense)(x, dense)
+        return x
+    k = random.PRNGKey(0)
+    x = jnp.zeros((2, 2))
+    _ = Bar().init(k, x)
+
+  def test_named_call_on_setup_helpers(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(2)
+        self.setup_helper()
+      def setup_helper(self):
+        self.b = nn.Dense(2)
+      def __call__(self, x):
+        return self.b(self.a(x))
+    k = random.PRNGKey(0)
+    x = jnp.ones((2,2))
+    with nn.override_named_call(True):
+      vs = Foo().init(k, x)
+      y0 = Foo().apply(vs, x)
+    with nn.override_named_call(False):
+      vs = Foo().init(k, x)
+      y1 = Foo().apply(vs, x)
+    np.testing.assert_array_equal(y0, y1)
+
+  def test_while_loop(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        self.param('inc', lambda _: 1)
+        self.put_variable('state', 'acc', 0)
+        self.put_variable('state', 'rng_params', jnp.zeros((2, 2), jnp.uint32))
+        self.put_variable('state', 'rng_loop', jnp.zeros((2, 2), jnp.uint32))
+
+        def cond_fn(mdl, c):
+          acc = mdl.get_variable('state', 'acc')
+          return acc < x
+        def body_fn(mdl, c):
+          i = mdl.get_variable('state', 'acc')
+          p_rng = mdl.make_rng('params')
+          l_rng = mdl.make_rng('loop')
+          mdl.put_variable('state', 'rng_params', mdl.get_variable('state', 'rng_params').at[i].set(p_rng))
+          mdl.put_variable('state', 'rng_loop', mdl.get_variable('state', 'rng_loop').at[i].set(l_rng))
+          inc = mdl.get_variable('params', 'inc')
+          mdl.put_variable('state', 'acc', i + inc)
+          return c
+        return nn.while_loop(
+            cond_fn, body_fn, self, (),
+            carry_variables='state', split_rngs={'params': False, 'loop': True})
+    x = 2
+    mdl = Foo()
+    _, vars = mdl.apply({}, x, mutable=True, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    self.assertEqual(vars['state']['acc'], x)
+    np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
+    np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
 
 
 if __name__ == '__main__':

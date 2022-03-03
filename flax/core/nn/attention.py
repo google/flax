@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,14 +16,14 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 import functools
-from typing import Any
+from typing import Any, Callable, Union
 import warnings
 from . import stochastic
 
 from flax import jax_utils
 from flax import struct
 from flax.core import Scope
-from flax.deprecated.nn import initializers
+from flax.linen import initializers
 import jax
 from jax import lax
 from jax import random
@@ -154,11 +154,11 @@ def _invert_perm(perm):
   return tuple(perm_inv)
 
 
-@struct.dataclass
-class CacheEntry:
+class CacheEntry(struct.PyTreeNode):
   key: np.ndarray
   value: np.ndarray
   i: np.ndarray
+
 
 def multi_head_dot_product_attention(
     scope: Scope,
@@ -212,8 +212,8 @@ def multi_head_dot_product_attention(
     key_padding_mask: boolean specifying key-value tokens that are pad token.
     segmentation: segment indices for packed inputs_q data.
     key_segmentation: segment indices for packed inputs_kv data.
-    cache: an instance of `flax.nn.attention.Cache` used for efficient
-      autoregressive decoding.
+    cache: an instance of `flax.deprecated.nn.attention.Cache` used for
+      efficient autoregressive decoding.
     broadcast_dropout: bool: use a broadcasted dropout along batch dims.
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
@@ -263,6 +263,7 @@ def multi_head_dot_product_attention(
   value = scope.child(dense, 'value')(inputs_kv)
 
   if cache:
+    cache_entry: Union[Callable[[Any], CacheEntry], CacheEntry]
     if not scope.has_variable('cache', 'entry'):
       ndim, tail_shape = (key.ndim, key.shape[-2:])
       def init_fn(shape, dtype=jnp.float32):

@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,9 @@ from pprint import pprint
 from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
 from flax.core import Scope
 from flax.core.frozen_dict import freeze, unfreeze
-from flax.deprecated.nn import initializers
+from flax.linen import initializers
 from flax.linen import Module, compact, vmap
+from flax.linen.linear import PrecisionLike
 import jax
 from jax import lax, numpy as jnp, random
 import numpy as np
@@ -31,7 +32,7 @@ class Dense(Module):
   kernel_init: Callable = initializers.lecun_normal()
   bias_init: Callable = initializers.zeros
   dtype: Any = jnp.float32
-  precision: Any = None
+  precision: PrecisionLike = None
 
   @compact
   def __call__(self, inputs):

@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 """Flax Modules."""
 from contextlib import contextmanager
 import dataclasses
+import enum
 import functools
 import inspect
 import os
@@ -24,7 +25,7 @@ import typing
 import weakref
 
 from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
-                    Set, Type, Union, TypeVar, Generic, Dict)
+                    Set, Type, Union, TypeVar, Generic, Dict, overload)
 
 import jax
 from jax import tree_util
@@ -56,6 +57,12 @@ K = TypeVar('K')
 _CallableT = TypeVar('_CallableT', bound=Callable)
 
 
+# Used for abstractly testing module behavior.
+TestScope = type('TestScope',
+                  (Scope,),
+                  {'make_rng': lambda self, name: jax.random.PRNGKey(0)})
+
+
 # pylint: disable=protected-access,attribute-defined-outside-init
 
 def _indent(x: str, num_spaces: int):
@@ -67,7 +74,7 @@ def _indent(x: str, num_spaces: int):
 
 
 def _attr_repr(value: Any):
-  if isinstance(value, Callable) and getattr(value, '__name__', None):
+  if callable(value) and getattr(value, '__name__', None):
     value_rep = value.__name__
   else:
     value_rep = repr(value)
@@ -134,7 +141,7 @@ _use_named_call = config.flax_profile
 
 def enable_named_call():
   """Enables named call wrapping for labelling profile traces.
-  
+
   When named call wrapping is enabled all JAX ops executed in a Module
   will be wrapped with ``jax.named_call``. The ``Module`` class name will
   show up around the operations belonging to that Module in the
@@ -148,7 +155,7 @@ def enable_named_call():
 
 def disable_named_call():
   """Disables named call wrapping.
-  
+
   See ``enable_named_call``
   """
   global _use_named_call
@@ -158,7 +165,7 @@ def disable_named_call():
 @contextmanager
 def override_named_call(enable: bool = True):
   """Returns a context manager that enables/disables named call wrapping.
-  
+
   See ``enable_named_call``
   """
   global _use_named_call
@@ -251,7 +258,7 @@ def compact(fun: _CallableT) -> _CallableT:
   Returns:
     The given function `fun` marked as compact.
   """
-  fun.compact = True
+  fun.compact = True  # type: ignore[attr-defined]
   return fun
 
 
@@ -279,7 +286,7 @@ def nowrap(fun: _CallableT) -> _CallableT:
     @compact
     def __call__(self, x):
       # now safe to use constructor helper even if using named_call
-      dense = self._dense(self.num_features)
+      dense = self._make_dense(self.num_features)
       return dense(x)
 
   Args:
@@ -287,11 +294,12 @@ def nowrap(fun: _CallableT) -> _CallableT:
   Returns:
     The given function `fun` marked as nowrap.
   """
-  fun.nowrap = True
+  fun.nowrap = True  # type: ignore[attr-defined]
   return fun
 
 
-def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]:
+def _get_local_method_names(cls: Any,
+                            exclude: Iterable[str] = ()) -> Tuple[str, ...]:
   """Gets method names of a class, excluding class and static methods.
 
   Args:
@@ -333,7 +341,7 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
       return self._call_wrapped_method(fun, args, kwargs)
     else:
       return fun(*args, **kwargs)
-  wrapped_module_method.method_handler_wrapped = True
+  wrapped_module_method.method_handler_wrapped = True  # type: ignore[attr-defined]
   return wrapped_module_method
 
 
@@ -375,6 +383,13 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
 
   return method_or_fn
 
+class SetupState(enum.IntEnum):
+  # setup() has not been called.
+  NEW = 0
+  # setup() has been called outside a transform boundary.
+  TRANSFORMED = 1
+  # setup() has been called.
+  DONE = 2
 
 @dataclasses.dataclass
 class _ModuleInternalState:
@@ -386,12 +401,13 @@ class _ModuleInternalState:
   """
   in_compact_method: bool = False
   in_setup: bool = False
-  setup_called: bool = False
+  setup_called: SetupState = SetupState.NEW
   is_initialized: bool = False
-  autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
-  children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
+  autoname_cursor: Dict[str, int] = dataclasses.field(default_factory=dict)
+  children: Dict[str, Union[str, 'Module']] = dataclasses.field(
+    default_factory=dict)
 
-  def reset(self):
+  def reset(self) -> None:
     """Resets transient state.
 
     This function is called after each module method, so only attributes that
@@ -401,17 +417,18 @@ class _ModuleInternalState:
     self.in_setup = False
     self.autoname_cursor = dict()
 
-  def export(self):
+  def export(self) -> '_ModuleInternalState':
     """Exports transform-preserved state across transform boundary."""
+    setup_state = SetupState.TRANSFORMED if self.setup_called else SetupState.NEW
     cloned = _ModuleInternalState(
       in_compact_method=self.in_compact_method,
       in_setup=self.in_setup,
-      setup_called=False,  # setup_called is object local, not shared.
+      setup_called=setup_state,
       is_initialized=self.is_initialized,
       autoname_cursor=dict(self.autoname_cursor))
     return cloned
 
-  def reimport(self, other):
+  def reimport(self, other: '_ModuleInternalState') -> None:
     """Re-imports transform-preserved state from across transform boundary."""
     self.in_compact_method = other.in_compact_method
     self.in_setup = other.in_setup
@@ -426,7 +443,8 @@ _UNDEFINED_COPY_PICKLE_METHODS = (
     '__reduce__', '__reduce_ex__', '__copy__', '__deepcopy__')
 
 
-_caches = weakref.WeakKeyDictionary()
+_caches: 'weakref.WeakKeyDictionary[Scope, Dict[int, Module]]' = (
+    weakref.WeakKeyDictionary())
 
 
 tuple_reduce = lambda xs, x: xs + (x,)
@@ -493,7 +511,7 @@ class Module(metaclass=ModuleMeta):
       pass
 
   @classmethod
-  def __init_subclass__(cls, **kwargs):
+  def __init_subclass__(cls, **kwargs: Any) -> None:
     """Automatically initializes all subclasses as custom dataclasses."""
     super().__init_subclass__(**kwargs)
     # All Flax Modules are dataclasses.  We force this convention since
@@ -515,12 +533,12 @@ class Module(metaclass=ModuleMeta):
     """Handles final optional dataclass attributes: `parent` and `name`."""
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
-    parent_annotation = Union[Type["Module"], Type["Scope"],
-                              Type["_Sentinel"], None]
+    parent_annotation = Union[Type[Module], Type[Scope],
+                              Type[_Sentinel], None]
     if ('parent' in annotations
         and annotations['parent'] != parent_annotation):
       raise errors.ReservedModuleAttributeError(annotations)
-    if 'name' in annotations and annotations['name'] != str:
+    if 'name' in annotations and annotations['name'] not in ('str', str):
       raise errors.ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
@@ -647,19 +665,31 @@ class Module(metaclass=ModuleMeta):
       name: Attribute to set.
       val: Value of the attribute.
     """
-    is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
+    fields = self.__dataclass_fields__  # pytype: disable=attribute-error
+    is_dataclass_attr = name in fields and fields[name].init
 
-    if not self._state.in_setup and self._state.is_initialized:
-      # Raises a TypeError just like frozen python dataclasses.
-      raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name,
-                                                 val)
+    if not self._state.in_setup:
+      if not self._state.is_initialized:
+        # Setting attributes before end of Module.__post_init__()
+        object.__setattr__(self, name, val)
+        return
+      else:
+        # We're past all initialization and setup logic:
+        # Raises a TypeError just like frozen python dataclasses.
+        raise errors.SetAttributeFrozenModuleError(
+            self.__class__.__name__, name, val)
+
+    # We're inside the setup() method:
     if is_dataclass_attr:
-      if self._state.in_setup:
-        raise errors.SetAttributeInModuleSetupError()
-      object.__setattr__(self, name, val)
-    # Submodules are being defined and attached in setup()
-    else:
-      self._register_submodules(name, val)
+      # These names are specified as dataclass fields. They should not be
+      # initialized within the setup() method, but can be modified freely
+      # before it.
+      raise errors.SetAttributeInModuleSetupError()
+      return
+
+    # Values (that may be variables or submodules) are being defined and
+    # attached in setup(), we run some extra logic in that case.
+    self._register_submodules(name, val)
 
   def __getattr__(self, name: str) -> Any:
     """Call setup() before getting any setup-defined attributes."""
@@ -673,12 +703,12 @@ class Module(metaclass=ModuleMeta):
       raise AttributeError(
           f'"{self.__class__.__name__}" object has no attribute "{name}"')
 
-  def __dir__(self) -> List[str]:
+  def __dir__(self) -> Iterable[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
     return object.__dir__(self)  # pytype: disable=attribute-error
 
-  def __post_init__(self):
+  def __post_init__(self) -> None:
     # DO NOT REMOVE - Marker for internal logging.
     # In dataclasses, __init__ is overridden to process dataclass arguments,
     # and __post_init__ is called immediately afterwards. Here, depending on the
@@ -716,7 +746,11 @@ class Module(metaclass=ModuleMeta):
         parent_class = self.parent.__class__.__name__
         raise errors.NameInUseError('submodule', self.name, parent_class)
       self.parent._state.children[self.name] = self
-      object.__setattr__(self, 'scope', self.parent.scope.push(self.name))
+      # Allow scope aliasing under transforms for submodules defined in setup.
+      reuse_scopes = (self.parent._state.in_setup and
+                      self.parent._state.setup_called == SetupState.TRANSFORMED)
+      object.__setattr__(
+          self, 'scope', self.parent.scope.push(self.name, reuse=reuse_scopes))
 
     # Top-level invocation with a functional Scope.
     elif isinstance(self.parent, Scope):
@@ -726,10 +760,10 @@ class Module(metaclass=ModuleMeta):
 
     self._state.is_initialized = True
 
-  def __repr__(self):
+  def __repr__(self) -> str:
     return _module_repr(self)
 
-  def setup(self):
+  def setup(self) -> None:
     """Initializes a Module lazily (similar to a lazy ``__init__``).
 
     ``setup`` is called once lazily on a module instance when a module
@@ -791,9 +825,11 @@ class Module(metaclass=ModuleMeta):
     for x in queue:
       x.__post_init__()
 
-  def _try_setup(self, shallow=False):
+  def _try_setup(self, shallow: bool = False) -> None:
     """Tries to setup module if scope is available and setup has not been called yet."""
-    if self.scope and not self._state.setup_called and not self._state.in_setup:
+    if (self.scope
+        and not self._state.in_setup
+        and self._state.setup_called != SetupState.DONE):
       try:
         self._state.in_setup = True
         # a shallow setup will only register attribute submodules but it does not call the user's setup
@@ -803,9 +839,21 @@ class Module(metaclass=ModuleMeta):
             self._register_submodules(field.name, getattr(self, field.name))
         if not shallow:
           self.setup()
+        # We run static checks abstractly once for setup before any transforms
+        # to detect name collisions and other python errors.
+        elif self._state.setup_called == SetupState.NEW:
+          self._validate_setup()
       finally:
         self._state.in_setup = False
-        self._state.setup_called = True
+        self._state.setup_called = SetupState.DONE
+
+  def _validate_setup(self) -> None:
+    """Abstractly evaluates setup only to run static checks."""
+    def run_setup_only(x):
+      wrapped_id = wrap_method_once(lambda m, x: x)
+      with TestScope({}, rngs={}, mutable=True).temporary() as root:
+        return wrapped_id(self.clone(parent=root), x)
+    _ = jax.eval_shape(run_setup_only, 0)
 
   def _name_taken(self, name: str, module: 'Module' = None) -> bool:
     if name in _all_names_on_object(self):
@@ -999,7 +1047,7 @@ class Module(metaclass=ModuleMeta):
         about variables.
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
       mutable: Can be bool, str, or list. Specifies which collections should be
-        treated as mutable: 
+        treated as mutable:
           ``bool``: all/no collections are mutable.
           ``str``: The name of a single mutable collection.
           ``list``: A list of names of mutable collections.
@@ -1014,7 +1062,7 @@ class Module(metaclass=ModuleMeta):
             variables: VariableDict,
             *args,
             rngs: Optional[RNGSequences] = None,
-            method: Callable[..., Any] = None,
+            method: Optional[Callable[..., Any]] = None,
             mutable: CollectionFilter = False,
             capture_intermediates: Union[bool, Callable[['Module', str],
                                                         bool]] = False,
@@ -1176,6 +1224,16 @@ class Module(metaclass=ModuleMeta):
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.put_variable(col, name, value)
 
+  @overload
+  def sow(self, col: str, name: str, value: Any) -> bool:
+      ...
+
+  @overload
+  def sow(self, col: str, name: str, value: T,
+          reduce_fn: Callable[[K, T], K] = tuple_reduce,
+          init_fn: Callable[[], K] = tuple_init) -> bool:
+      ...
+
   def sow(self, col: str, name: str, value: T,
           reduce_fn: Callable[[K, T], K] = tuple_reduce,
           init_fn: Callable[[], K] = tuple_init) -> bool:
@@ -1286,9 +1344,9 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
     raise ValueError(f'Parameter "{name}" was passed to the constructor and at call time.'
                      ' Should be passed just once.')
   if a is None:
+    assert b is not None
     return b
-  else:
-    return a
+  return a
 
 @traceback_util.api_boundary
 def apply(fn: Callable[..., Any], module: Module,

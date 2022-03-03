@@ -2,6 +2,7 @@
 
 export JAX_NUMPY_RANK_PROMOTION=raise
 export FLAX_PROFILE=1
+export FLAX_LAZY_RNG=1
 
 PYTEST_OPTS=
 for flag in "$@"; do
@@ -11,7 +12,6 @@ case $flag in
   ;;
   --help)
   echo "Usage:"
-  echo "  --all: Also run tests for deprecated examples."
   echo "  --with-cov: Also generate pytest coverage."
   exit
   ;;

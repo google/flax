@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as np
-from typing import (Any, Tuple, Iterable, Callable, Generic, TypeVar,
-                    Mapping, NamedTuple)
+from typing import (Any, Tuple, Callable, Generic, Mapping, NamedTuple,
+                    Sequence, TypeVar)
 
 from flax import linen as nn
 from flax import errors
@@ -310,7 +310,7 @@ class ModuleTest(absltest.TestCase):
           # NOTE that keys still must be strings. This is to make a possible
           # future transition to automatically derived parameter names when assigned
           # as a dict easier (like we currently have with submodules).
-          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853 
+          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853
           str(i): self.param(f'bias_{i}', initializers.ones, self.xshape)
           for i in range(4)}
       def __call__(self, x):
@@ -484,7 +484,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_numpy_array_shape_class_args(self):
     class MLP(nn.Module):
-      widths: Iterable
+      widths: Sequence
       @nn.compact
       def __call__(self, x):
         for width in self.widths[:-1]:
@@ -638,7 +638,7 @@ class ModuleTest(absltest.TestCase):
   def test_module_trace(self):
     class MLP(nn.Module):
       act: Callable = nn.relu
-      sizes: Iterable[int] = (3, 2)
+      sizes: Sequence[int] = (3, 2)
 
       @nn.compact
       def __call__(self, x):
@@ -658,6 +658,7 @@ class ModuleTest(absltest.TestCase):
         features = 3
         use_bias = True
         dtype = float32
+        param_dtype = float32
         precision = None
         kernel_init = init
         bias_init = zeros
@@ -667,6 +668,7 @@ class ModuleTest(absltest.TestCase):
         features = 2
         use_bias = True
         dtype = float32
+        param_dtype = float32
         precision = None
         kernel_init = init
         bias_init = zeros
@@ -1392,14 +1394,14 @@ class ModuleTest(absltest.TestCase):
     class C(nn.Module):
       @nn.compact
       def __call__(self):
-        # Some module that has dropouts in it, in general, 
+        # Some module that has dropouts in it, in general,
         # it does more than just dropout!
         return self.make_rng('dropout')
 
     class A(nn.Module):
       @nn.compact
       def __call__(self):
-        # Some module that has dropouts in it, in general, 
+        # Some module that has dropouts in it, in general,
         # it does more than just dropout!
         return C()()
 
@@ -1451,6 +1453,42 @@ class ModuleTest(absltest.TestCase):
     y, vs = C().apply({}, mutable=['test_col'])
     np.testing.assert_array_equal(y, jnp.ones((2,)))
     np.testing.assert_array_equal(y, vs['test_col']['a'])
+
+  def test_generic_module(self):
+    # See https://github.com/google/flax/issues/1899
+    T = TypeVar('T')
+
+    class C(nn.Module, Generic[T]):
+      def f(self, t: T) -> T:
+        return t
+
+    class D(nn.Module):
+      def setup(self):
+        c = C[Any]()
+
+      def __call__(self) -> None:
+        pass
+
+    rngs = {}
+    D().init(rngs)
+
+  def test_modifying_attribs_in_post_init(self):
+    class Foo(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.hate = 100 - self.love
+        super().__post_init__()
+    foo = Foo()
+    self.assertEqual(foo.love, 99)
+    self.assertEqual(foo.hate, 1)
+
+    class Bar(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.love = 101
+        super().__post_init__()
+    bar = Bar()
+    self.assertEqual(bar.love, 101)
 
 
 if __name__ == '__main__':

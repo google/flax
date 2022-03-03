@@ -97,19 +97,61 @@ gsutil cp -r ~/tensorflow_datasets gs://$GCS_TFDS_BUCKET/datasets
 
 #### Google Cloud TPU
 
-Setup the TPU VM and install the Flax dependencies on it as described
-[here](https://cloud.google.com/tpu/docs/jax-pods) for creating pod slices, or
-[here](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm) for a single
-v3-8 TPU.
+See below for commands to set up a single VM with 8 TPUs attached
+(`--accelerator-type v3-8`), or for an entire TPU slice spanning multiple
+VMs (e.g. `--accelerator-type v3-32`). For more details about how to set up and
+use TPUs, refer to Cloud docs for
+[single VM setup](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm)
+and [pod slice setup](https://cloud.google.com/tpu/docs/jax-quickstart-tpu-vm).
 
-If running on the single v3-8 TPU (i.e. 8 accelerators connected to a single
-host), simply connect to the machine with
-`gcloud alpha compute tpus tpu-vm ssh $VM_NAME --zone $ZONE` and then start the
-training with below command:
+First create a single TPUv3-8 VM and connect to it:
 
-```shell
+```
+ZONE=us-central1-a
+TPU_TYPE=v3-8
+VM_NAME=imagenet
+
+gcloud alpha compute tpus tpu-vm create $VM_NAME \
+    --zone $ZONE \
+    --accelerator-type $TPU_TYPE \
+    --version v2-alpha
+
+gcloud alpha compute tpus tpu-vm ssh $VM_NAME --zone $ZONE -- \
+    -L 6006:localhost:6006
+```
+
+When connected install JAX:
+
+```
+pip install "jax[tpu]>=0.2.21" \
+    -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+```
+
+Then install Flax + the example dependencies:
+
+```
+git clone --depth=1 --branch=main https://github.com/google/flax
+cd flax
+pip install -e .
+cd examples/imagenet
+pip install -r requirements.txt
+```
+
+And finally start the training:
+
+```
 export TFDS_DATA_DIR=gs://$GCS_TFDS_BUCKET/datasets
-python3 main.py --workdir=./imagenet_tpu --config=configs/tpu.py
+python3 main.py --workdir=$HOME/logs/imagenet_tpu --config=configs/tpu.py \
+    --jax_backend_target="grpc://192.168.0.2:8470"
+```
+
+Note that you might want to set `TFDS_DATA_DIR` as explained above. You probably
+also want to start the long-running command above in a `tmux` session and start
+some monitoring in a separate pane (note that we forwarded port 6006 locally
+above):
+
+```
+tensorboard --logdir=$HOME/logs
 ```
 
 When running on pod slices, after creating the TPU VM, there are different ways
@@ -119,7 +161,11 @@ to all hosts in parallel with the command below. If anything fails it's
 usually a good idea to connect to a single host and execute the commands
 interactively.
 
-For convenience, the TPU creation commands are inlined below.
+For convenience, the TPU creation commands are inlined below. Please note that
+we define `GCS_TFDS_BUCKET` to where your data stands in your cloud bucket.
+Also `YOUR_BUCKET` is the work directory you are experimenting in. You should
+choose ZONE based on where your TPU and work directory is. [Here](https://cloud.google.com/tpu/docs/types-zones)
+has some usefule information on which zones you can have different types of TPUs.
 
 ```shell
 VM_NAME=imagenet
@@ -142,6 +188,13 @@ pip install -r requirements.txt &&
 export TFDS_DATA_DIR=gs://$GCS_TFDS_BUCKET/datasets &&
 python3 main.py --workdir=$WORKDIR --config=configs/tpu.py $FLAGS
 "
+```
+
+Please don't forget to disconnect and delete your vm after you are done:
+
+```
+gcloud alpha compute tpus tpu-vm delete $VM_NAME \
+  --zone $ZONE
 ```
 
 #### Google Cloud GPU

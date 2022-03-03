@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,13 +25,11 @@ Reusing decoder only model from examples/wmt.
 
 from typing import Callable, Any, Optional
 
+from flax import linen as nn
+from flax import struct
 from jax import lax
 import jax.numpy as jnp
 import numpy as np
-
-from flax import linen as nn
-from flax import struct
-
 
 @struct.dataclass
 class TransformerConfig:

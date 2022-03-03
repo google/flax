@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,10 @@ class OptimizerDef:
 
   def __init__(self, hyper_params):
     self.hyper_params = hyper_params
+    warnings.warn(
+        'Use `optax` instead of `flax.optim`. Refer to the update guide '
+        'https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html '
+        'for detailed instructions.', DeprecationWarning)
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
     """Apply a gradient for a single parameter.

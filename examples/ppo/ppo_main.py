@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,17 +15,15 @@
 # See issue #620.
 # pytype: disable=wrong-keyword-args
 
-import os
 from absl import app
 from absl import flags
-import jax
-import jax.random
-import tensorflow as tf
 from ml_collections import config_flags
+import tensorflow as tf
 
-import ppo_lib
-import models
 import env_utils
+import models
+import ppo_lib
+
 
 FLAGS = flags.FLAGS
 

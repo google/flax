@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,12 +25,13 @@ THe RNNCell modules are designed to fit in with the scan function in JAX::
 
 import abc
 from functools import partial
-from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
+from typing import (Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple,
+                    Type, Union)
 
 from flax.linen.module import Module, compact
 from flax.linen.activation import sigmoid, tanh
 from flax.linen.initializers import orthogonal, zeros
-from flax.linen.linear import Conv, Dense, default_kernel_init
+from flax.linen.linear import Conv, Dense, default_kernel_init, PrecisionLike
 
 from jax import numpy as jnp
 from jax import lax
@@ -50,7 +51,7 @@ class RNNCellBase(Module):
   @staticmethod
   @abc.abstractmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -60,12 +61,14 @@ class RNNCellBase(Module):
     Returns:
       An initialized carry for the given RNN cell.
     """
-    pass
+    raise NotImplementedError
 
 
 class LSTMCell(RNNCellBase):
   r"""LSTM cell.
-    the mathematical definition of the cell is as follows
+
+  The mathematical definition of the cell is as follows
+
   .. math::
       \begin{array}{ll}
       i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
@@ -75,6 +78,7 @@ class LSTMCell(RNNCellBase):
       c' = f * c + i * g \\
       h' = o * \tanh(c') \\
       \end{array}
+
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
@@ -87,12 +91,16 @@ class LSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry, inputs):
@@ -114,11 +122,15 @@ class LSTMCell(RNNCellBase):
                       features=hidden_features,
                       use_bias=True,
                       kernel_init=self.recurrent_kernel_init,
-                      bias_init=self.bias_init)
+                      bias_init=self.bias_init,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype)
     dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
-                      kernel_init=self.kernel_init)
+                      kernel_init=self.kernel_init,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype)
     i = self.gate_fn(dense_i(name='ii')(inputs) + dense_h(name='hi')(h))
     f = self.gate_fn(dense_i(name='if')(inputs) + dense_h(name='hf')(h))
     g = self.activation_fn(dense_i(name='ig')(inputs) + dense_h(name='hg')(h))
@@ -129,7 +141,7 @@ class LSTMCell(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -145,12 +157,13 @@ class LSTMCell(RNNCellBase):
 
 
 class DenseParams(Module):
-  """Dummy module for creating parameters matching `flax.nn.Dense`."""
+  """Dummy module for creating parameters matching `flax.deprecated.nn.Dense`."""
 
   features: int
   use_bias: bool = True
   dtype: Dtype = jnp.float32
-  precision: Any = None
+  param_dtype: Dtype = jnp.float32
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
@@ -169,8 +182,11 @@ class OptimizedLSTMCell(RNNCellBase):
   The parameters are compatible with `LSTMCell`. Note that this cell is often
   faster than `LSTMCell` as long as the hidden size is roughly <= 2048 units.
 
-  The mathematical definition of the cell is the same as `LSTMCell` and as follows
+  The mathematical definition of the cell is the same as `LSTMCell` and as
+  follows
+
   .. math::
+
       \begin{array}{ll}
       i = \sigma(W_{ii} x + W_{hi} h + b_{hi}) \\
       f = \sigma(W_{if} x + W_{hf} h + b_{hf}) \\
@@ -179,6 +195,7 @@ class OptimizedLSTMCell(RNNCellBase):
       c' = f * c + i * g \\
       h' = o * \tanh(c') \\
       \end{array}
+
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
@@ -191,12 +208,16 @@ class OptimizedLSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable = sigmoid
   activation_fn: Callable = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry: Tuple[Array, Array],
@@ -214,19 +235,22 @@ class OptimizedLSTMCell(RNNCellBase):
     """
     c, h = carry
     hidden_features = h.shape[-1]
+    inputs = jnp.asarray(inputs, self.dtype)
 
-    def _concat_dense(inputs, params, use_bias=True):
+    def _concat_dense(inputs: Array,
+                      params: Mapping[str, Tuple[Array, Array]],
+                      use_bias: bool = True) -> Array:
       """
-      Concatenates the individual kernels and biases, given in params, into a 
-      single kernel and single bias for efficiency before applying them using 
+      Concatenates the individual kernels and biases, given in params, into a
+      single kernel and single bias for efficiency before applying them using
       dot_general.
       """
       kernels, biases = zip(*params.values())
-      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), jnp.float32)
+      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), self.dtype)
 
       y = jnp.dot(inputs, kernel)
       if use_bias:
-        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), jnp.float32)
+        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), self.dtype)
         y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
 
       # Split the result back into individual (i, f, g, o) outputs.
@@ -240,10 +264,12 @@ class OptimizedLSTMCell(RNNCellBase):
     for component in ['i', 'f', 'g', 'o']:
       dense_params_i[component] = DenseParams(
           features=hidden_features, use_bias=False,
+          param_dtype=self.param_dtype,
           kernel_init=self.kernel_init, bias_init=self.bias_init,
           name=f'i{component}')(inputs)
       dense_params_h[component] = DenseParams(
           features=hidden_features, use_bias=True,
+          param_dtype=self.param_dtype,
           kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
           name=f'h{component}')(h)
     dense_h = _concat_dense(h, dense_params_h, use_bias=True)
@@ -260,7 +286,7 @@ class OptimizedLSTMCell(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -279,14 +305,17 @@ class OptimizedLSTMCell(RNNCellBase):
 class GRUCell(RNNCellBase):
   r"""GRU cell.
 
-  the mathematical definition of the cell is as follows
+  The mathematical definition of the cell is as follows
+
   .. math::
+
       \begin{array}{ll}
       r = \sigma(W_{ir} x + W_{hr} h + b_{hr}) \\
       z = \sigma(W_{iz} x + W_{hz} h + b_{hz}) \\
       n = \tanh(W_{in} x + b_{in} + r * (W_{hn} h + b_{hn})) \\
-      h' = (1 - z) * n + z * h
+      h' = (1 - z) * n + z * h \\
       \end{array}
+
   where x is the input and h, is the output of the previous time step.
 
   Attributes:
@@ -298,6 +327,8 @@ class GRUCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
@@ -306,6 +337,8 @@ class GRUCell(RNNCellBase):
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       orthogonal())
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry, inputs):
@@ -326,11 +359,15 @@ class GRUCell(RNNCellBase):
     dense_h = partial(Dense,
                       features=hidden_features,
                       use_bias=False,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype,
                       kernel_init=self.recurrent_kernel_init,
                       bias_init=self.bias_init)
     dense_i = partial(Dense,
                       features=hidden_features,
                       use_bias=True,
+                      dtype=self.dtype,
+                      param_dtype=self.param_dtype,
                       kernel_init=self.kernel_init,
                       bias_init=self.bias_init)
     r = self.gate_fn(dense_i(name='ir')(inputs) + dense_h(name='hr')(h))
@@ -343,7 +380,7 @@ class GRUCell(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.
@@ -395,14 +432,16 @@ class ConvLSTM(RNNCellBase):
       and after each spatial dimension.
     bias: whether to add a bias to the output (default: True).
     dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
   """
 
   features: int
-  kernel_size: Iterable[int]
-  strides: Optional[Iterable[int]] = None
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
+  kernel_size: Sequence[int]
+  strides: Optional[Sequence[int]] = None
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   use_bias: bool = True
   dtype: Dtype = jnp.float32
+  param_dtype: Dtype = jnp.float32
 
   @compact
   def __call__(self, carry, inputs):
@@ -423,6 +462,7 @@ class ConvLSTM(RNNCellBase):
                               padding=self.padding,
                               use_bias=self.use_bias,
                               dtype=self.dtype,
+                              param_dtype=self.param_dtype,
                               name='ih')
 
     hidden_to_hidden = partial(Conv,
@@ -432,6 +472,7 @@ class ConvLSTM(RNNCellBase):
                                padding=self.padding,
                                use_bias=self.use_bias,
                                dtype=self.dtype,
+                               param_dtype=self.param_dtype,
                                name='hh')
 
     gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)
@@ -444,7 +485,7 @@ class ConvLSTM(RNNCellBase):
 
   @staticmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
-    """initialize the RNN cell carry.
+    """Initialize the RNN cell carry.
 
     Args:
       rng: random number generator passed to the init_fn.

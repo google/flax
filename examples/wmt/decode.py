@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,11 +15,13 @@
 """Fast decoding routines for inference from a trained model."""
 
 import typing
+
 import flax
 import jax
 from jax import lax
 import jax.numpy as jnp
 import numpy as np
+
 
 # Constants
 # We assume the default End-of-Sentence token id is 2 (SentencePiece).

@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,8 @@ from flax import traceback_util
 import jax
 from jax import random
 
-from typing import Any, Callable, Sequence, Union, Iterable, Optional, Mapping, TypeVar, Generic, Tuple
+from typing import (Any, Callable, Generic, Iterable, List, Mapping, Optional,
+                    Sequence, Tuple, TypeVar, Union)
 
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
@@ -125,8 +126,8 @@ def pack(fn: Callable[..., Any],
       inner_rng_counters.append(rng_counters)
     rng_groups_xs_t = _transpose(rng_groups_xs)
 
-    inner_scopes = []
-    def scope_fn(variable_groups_xs_t, rng_groups_xs_t):
+    inner_scopes: List[Scope] = []
+    def scope_fn(variable_groups_xs_t, rng_groups_xs_t, mutable_filter: CollectionFilter = True):
       nonlocal inner_scopes
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
@@ -150,7 +151,7 @@ def pack(fn: Callable[..., Any],
           rngs.update(rng_group)
         # make sure variable dicts are cloned and can't be manipulated by ref sharing.
         variables = jax.tree_map(lambda x: x, variables)
-        scope_mutable = intersect_filters(scope.mutable, mutable)
+        scope_mutable = intersect_filters(intersect_filters(scope.mutable, mutable), mutable_filter)
         new_path = scope.path
         if name:
           if new_path:
@@ -205,6 +206,9 @@ def pack(fn: Callable[..., Any],
     for scope, out_variable_groups, rng_counters in zip(scopes, out_variable_groups_xs, inner_rng_counters):
       for out_variable_group in out_variable_groups:
         for col_name, collection in out_variable_group.items():
+          if not scope.is_mutable_collection(col_name):
+            # Some lifted transforms like scan return redundant variables.
+            continue
           for var_name, value in collection.items():
             scope.put_variable(col_name, var_name, value)
     return y
@@ -246,9 +250,12 @@ def map_variables(
         target, _ = repack(scopes)
         target = tuple(map_out_fn(x) for x in target)
     target = tuple(map_in_fn(unfreeze(x)) for x in target)
+    mfilter = True
     if not is_target_out:
-      target = tuple(map(freeze, target))
-    scopes = scope_fn((target, variables), rng_groups)
+      # mapped collections should not be mutable
+      # unless the mapping supports it (by init=True or mutable=True)
+      mfilter = subtract_filters(mfilter, mapped_collections)
+    scopes = scope_fn((target, variables), rng_groups, mutable_filter=mfilter)
     y = fn(scopes, *args, **kwargs)
     out_target, out_vars = repack(scopes)
     if is_target_out:
@@ -303,7 +310,7 @@ def vjp(fn: Callable[..., Any], scope: Scope, *primals,
     has_aux: bool = False, reduce_axes=(),
     vjp_variables: CollectionFilter = "params",
     variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True, 
+    rngs: PRNGSequenceFilter = True,
     ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
   """A lifted version of ``jax.vjp``.
 
@@ -390,7 +397,7 @@ def vjp(fn: Callable[..., Any], scope: Scope, *primals,
 def jvp(fn: Callable[..., Any], scope: Scope,
     primals, tangents, variable_tangents,
     variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True, 
+    rngs: PRNGSequenceFilter = True,
     ) -> Tuple[Any, Any]:
   """A lifted version of ``jax.jvp``.
 
@@ -449,7 +456,7 @@ def jvp(fn: Callable[..., Any], scope: Scope,
   # filter out empty tangent collections because JAX will error on non-equal tree structure
   # for example: {"params": {}} != {}
   treedef = jax.tree_structure(scope)
-  
+
   variable_tangents =  tuple({k: v for k, v in vt.items() if v} for vt in treedef.flatten_up_to(variable_tangents))
   target = tuple(variable_tangents[0].keys())
   return pack(
@@ -702,12 +709,6 @@ def scan(fn: Callable[..., Any],
     scan_vars = variable_groups[2:]
     broadcast_vars, (carry_vars, c), (ys, scan_vars) = scanned(
         broadcast_vars, (carry_vars, init), scan_vars, rng_groups, args)
-    # remove immutable broadcast vars otherwise they will be updated
-    # with their own value which will cause an error
-    for out_group in broadcast_vars:
-      for name, col in tuple(out_group.items()):
-        if isinstance(col, FrozenDict):
-          del out_group[name]
     out_vars = (broadcast_vars, carry_vars,) + scan_vars
     return (c, ys), out_vars
 
@@ -719,70 +720,183 @@ def scan(fn: Callable[..., Any],
       name='scan')
 
 
-def custom_vjp(fn: Callable[..., Any], backward_fn: Callable[..., Any],
-               grad_kind: CollectionFilter = 'params',
-               nondiff_argnums=()):
-  """"Lifted version of `jax.custom_vjp`.
+C = TypeVar("C")
+def while_loop(cond_fn: Callable[[Scope, C], bool],
+               body_fn: Callable[[Scope, C], C],
+               scope: Scope, init: C,
+               carry_variables: CollectionFilter = False,
+               broadcast_variables: CollectionFilter = True,
+               split_rngs: Mapping[PRNGSequenceFilter, bool] = {}) -> C:
+  """Lifted version of jax.lax.while_loop.
 
-  `backward_fn` defines a custom vjp (backward gradient) for `fn`.
+  The lifted scope is passed to `cond_fn` and `body_fn`.
+  Broadcasted variables are immutable. The carry variable are
+  mutable but cannot change shape and dtype.
+  This also means you cannot initialize variables inside
+  the body. Consider calling `body_fn` once manually before
+  calling `while_loop` if variable initialization is required.
 
   Example::
 
-    def fwd(scope, x, features):
-      y = nn.dense(scope, x, features)
-      return y, x
+    def f(scope, x):
+      def cond_fn(scope, c):
+        return scope.get_variable('state', 'acc') < 10
+      def body_fn(scope, c):
+        acc = scope.variable('state', 'acc')
+        acc += 1
+        y = scope.child(nn.dense)(c, c.shape[-1])
+        return y
 
-    def bwd(features, scope_fn, params, res, g):
-      x = res
-      fn = lambda params, x: nn.dense(scope_fn(params), x, features)
-      _, pullback = jax.vjp(fn, params, x)
-      g_param, g_x = pullback(g)
-      g_param = jax.tree_map(jnp.sign, g_param)
-      return g_param, g_x
-
-    dense_sign_grad = lift.custom_vjp(fwd, backward_fn=bwd, nondiff_argnums=(2,))
+      c = x
+      c = body_fn(scope, c)
+      return lift.while_loop(cond_fn, body_fn, scope, (), carry_variables='state')
 
   Args:
-    fn: should return a tuple of output and auxiliary data for the backward pass.
-    backward_fn: arguments are passed as (*nondiff_args, scope_fn, grad_variables, aux, g_y)
-      where scope_fn takes grad_variables to create the scope,
-      aux is the auxiliary data returned by `fn`,
-      and g_y is the tangent of y.
+    body_fn: The body of the while loop.
+    cond_fn: Should return True as long as the loop should continue.
+    scope: The scope(s) which should be lifted into the loop.
+    init: The initial state passed to the loop
+    carry_variables: collections that are carried through the loop
+      and are therefore mutable (default: none).
+    broadcast_variables: collections that are closed over and are
+      therefore read-only (default: all collections)
+    split_rngs: Split PRNG sequences will be different for each loop iterations.
+      If split is False the PRNGs will be the same across iterations.
+  Returns:
+    The final state after executing the while loop. 
   """
-  # TODO(jheek) is this transform general/flexible enough?
+  rng_groups, rng_splits = _unzip2(split_rngs.items())
+
+  def inner(scope_fn, repack_fn,
+            variable_groups, rng_groups, carry_init):
+    carry_variables, broadcast_variables = variable_groups
+
+    def make_loop_rngs(i):
+      local_rng_groups = []
+      for rng_group, rng_split in zip(rng_groups, rng_splits):
+        if rng_split:
+          rng_group = tree_map_rngs(lambda rng: random.fold_in(rng, i), rng_group)
+        local_rng_groups.append(rng_group)
+      return local_rng_groups
+
+    def cond_wrapper(c):
+      i, carry_variables, carry = c
+      scope = scope_fn((carry_variables, broadcast_variables), make_loop_rngs(-i), mutable_filter=False)
+      return cond_fn(scope, carry)
+
+    def body_wrapper(c):
+      i, carry_variables, carry = c
+      scope = scope_fn((carry_variables, broadcast_variables), make_loop_rngs(i))
+      carry = body_fn(scope, carry)
+      carry_variables, = repack_fn(scope)
+      return (i + 1, carry_variables, carry)
+
+    c = (0, carry_variables, init)
+    _, carry_variables, carry = jax.lax.while_loop(cond_wrapper, body_wrapper, c)
+    return carry, (carry_variables,)
+
+  return pack(
+      inner,
+      (carry_variables, broadcast_variables),
+      (carry_variables,),
+      rng_groups,
+      name='while_loop')(scope, init)
+
+
+def custom_vjp(fn: Callable[..., Any], 
+               forward_fn: Callable[..., Any],
+               backward_fn: Callable[..., Any],
+               grad_vars: CollectionFilter = 'params',
+               nondiff_argnums=()):
+  """Lifted version of `jax.custom_vjp`.
+
+  `forward_fn` and `backward_fn` together define a custom vjp for `fn`.
+  The original `fn` will run in case a vjp (backward gradient) is not computed.
+
+  The `forward_fn` receives the same arguments as `fn` but is expected to return
+  a tuple containing the output of `fn(scope, *args)` and the residuals that are
+  passed to `backward_fn`.
+
+  The `backward_fn` receives the nondiff arguments, residuals, and the output tangents.
+  It should return a tuple containing the input and variable tangents.
+
+  Note that the vjp function returned by `lift.vjp` can be passed as residual and
+  used in the `backward_fn`. The scope is unavailable during the backward pass.
+  If the scope is required in `backward_fn`, a snapshot of the variables can be
+  taken and returned as a residual in the `forward_fn`.
+
+  Example::
+
+    f = nn.dense
+
+    def fwd(scope, x, features):
+      y, vjp_fn = lift.vjp(partial(f, features=features), scope, x)
+      return y, vjp_fn
+
+    def bwd(features, vjp_fn, y_t):
+      input_t, params_t = vjp_fn(y_t)
+      params_t = jax.tree_map(jnp.sign, params_t)
+      return input_t, params_t
+
+    dense_sign_grad = lift.custom_vjp(
+        f, forward_fn=fwd, backward_fn=bwd, nondiff_argnums=(2,))
+
+  Args:
+    fn: The function to define a custom_vjp for. The first argument
+      should be a ``Module`` instance.
+    forward_fn: A function with the same arguments as `fn` returning an tuple
+      with the original output and the residuals that will be passsed to
+      `backward_fn`.
+    backward_fn: arguments are passed as (*nondiff_args, residuals, tangents)
+      The function should return a tuple containing the tangents for the
+      input arguments (except the scope and nondiff args) and the variable
+      tangents for the collections specified by `grad_vars`.
+    grad_vars: The collections for which a vjp will be computed
+      (default: "params").
+    nondiff_argnums: arguments for which no vjp is computed.
+  Returns:
+    A function with the same signature as `fn` with the custom vjp.
+  """
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     grad_variables, other_variables = variable_groups
-
-    def simple_scope_fn(grad_variables):
-      grad_variables = tuple(freeze(x) for x in grad_variables)
-      return scope_fn((grad_variables, other_variables), rng_groups)
+    scopes_treedef = None
 
     def f(grad_variables, *args):
       scope = scope_fn((grad_variables, other_variables), rng_groups)
-      y, _ = fn(scope, *args)
+      y = fn(scope, *args)
       vars_out = repack_fn(scope)
       return y, vars_out
     f = jax.custom_vjp(f, nondiff_argnums=nondiff_argnums)
 
     def f_fwd(grad_variables, *args):
-      scope = simple_scope_fn(grad_variables)
-      y, res = fn(scope, *args)
-      vars_out = repack_fn(scope)
-      return (y, vars_out), (res, grad_variables)
+      nonlocal scopes_treedef
+      scopes = scope_fn((grad_variables, other_variables), rng_groups)
+      scopes_treedef = jax.tree_structure(scopes)
+      y, res = forward_fn(scopes, *args)
+      vars_out = repack_fn(scopes)
+      return (y, vars_out), res
 
     def f_bwd(*args):
+      # the backward function does not pass a lifted scope
+      # to the user. Currently, there is no way to have
+      # side effects flow out of backward pass.
+      # Even without mutation variables would be ill-defined.
+      # For example, would we take a snapshot of the variables
+      # before or after calling `forward_fn`?
       nondiff_args = args[:-2]
       res, g = args[-2:]
       g_y, _ = g
-      user_res, grad_variables = res
-      return backward_fn(*nondiff_args, simple_scope_fn, grad_variables, user_res, g_y)
+      input_t, var_t = backward_fn(*nondiff_args, res, g_y)
+      assert scopes_treedef is not None, 'backward called before forward?!'
+      var_t = tuple(scopes_treedef.flatten_up_to(var_t))
+      return var_t, input_t
 
     f.defvjp(f_fwd, f_bwd)
 
     return f(grad_variables, *args)
 
-  variable_in_groups = (grad_kind, True,)
-  variable_out_groups = (grad_kind, True,)
+  variable_in_groups = (grad_vars, True)
+  variable_out_groups = (grad_vars, True)
   rng_groups = (True,)
   return pack(
       inner, variable_in_groups, variable_out_groups, rng_groups,

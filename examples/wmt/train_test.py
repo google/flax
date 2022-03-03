@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,11 +17,12 @@ import tempfile
 
 from absl import logging
 from absl.testing import absltest
-import train
-from configs import default
 import jax
 import tensorflow as tf
 import tensorflow_datasets as tfds
+
+from configs import default
+import train
 
 
 jax.config.update('jax_disable_most_optimizations', True)

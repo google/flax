@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,6 +56,7 @@ class VariablePlaceholder:
   """Used to mark Variables in a JAX-compatible way when lifting arguments."""
   collection: str = struct.field(pytree_node=False)
   name: str = struct.field(pytree_node=False)
+  id: int = struct.field(pytree_node=False)
 
 
 @struct.dataclass
@@ -63,6 +64,24 @@ class InstancePlaceholder:
   """Marks module instances in a JAX-compatible way when lifting arguments."""
   cls: type = struct.field(pytree_node=False)
   attrs: dict = struct.field(pytree_node=False)
+  id: int = struct.field(pytree_node=False)
+
+
+def _memoize_by_id(fn, refs):
+  """Memoization by module/variable id to handle aliasing in traversal."""
+  @functools.wraps(fn)
+  def wrapped_fn(x):
+    nonlocal refs
+    if isinstance(x, (VariablePlaceholder, InstancePlaceholder)):
+      x_id = x.id
+    else:
+      x_id = id(x)
+    if x_id not in refs:
+      refs[x_id] = fn(x)
+    else:
+      pass
+    return refs[x_id]
+  return wrapped_fn
 
 
 def get_module_scopes(module, args=None, kwargs=None):
@@ -91,36 +110,43 @@ def get_module_scopes(module, args=None, kwargs=None):
     VariablePlaceholders and Module instances replaced with InstancePlaceholders
     that are compatible with jax functions.
   """
-  module._try_setup(shallow=True)
-  outer_scopes = []
-  # gather scopes associated with Variables and Module instances passed as arguments
+  scopes = []
+  refs = {}
+  # Gather scopes associated with Variables and Module instances passed as
+  # positional and keyword arguments.
+  @functools.partial(_memoize_by_id, refs=refs)
   def get_arg_scope(x):
-    nonlocal outer_scopes
+    nonlocal scopes
     if isinstance(x, Variable) and isinstance(x.scope, Scope):
-      outer_scopes.append(x.scope)
-      return VariablePlaceholder(x.collection, x.name)
+      scopes.append(x.scope)
+      return VariablePlaceholder(x.collection, x.name, id(x))
     elif isinstance(x, Module) and isinstance(x.scope, Scope):
-      x._try_setup(shallow=True)
-      outer_scopes.append(x.scope)
+      x._try_setup(shallow=True)  # pylint: disable=protected-access
+      scopes.append(x.scope)
       attrs = {f.name: getattr(x, f.name)
           for f in dataclasses.fields(x) if f.name != 'parent' and f.init}
       attrs = jax.tree_map(get_arg_scope, attrs)
-      return InstancePlaceholder(x.__class__, attrs)
+      return InstancePlaceholder(x.__class__, attrs, id(x))
     return x
   new_args, new_kwargs = jax.tree_map(get_arg_scope, (args, kwargs))
-  # gather scopes in Variables and Submodules passed as Module attributes
-  def get_scope(x):
-    nonlocal outer_scopes
-    if isinstance(x, Module) and isinstance(x.scope, Scope):
-      module_scopes, _, _ = get_module_scopes(x)
-      outer_scopes.extend(module_scopes)
-    elif isinstance(x, Variable) and isinstance(x.scope, Scope):
-      outer_scopes.append(x.scope)
-    return x
-  attrs = {f.name: getattr(module, f.name)
-           for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
-  jax.tree_map(get_scope, attrs)
-  return outer_scopes + [module.scope,], new_args, new_kwargs
+
+  # Gather scopes in Variables and Submodules passed as Module attributes.
+  @functools.partial(_memoize_by_id, refs=refs)
+  def get_scopes(module):
+    nonlocal scopes
+    module._try_setup(shallow=True)  # pylint: disable=protected-access
+    def get_scopes_inner(x):
+      nonlocal scopes
+      if isinstance(x, Module) and isinstance(x.scope, Scope):
+        get_scopes(x)
+      elif isinstance(x, Variable) and isinstance(x.scope, Scope):
+        scopes.append(x.scope)
+    attrs = {f.name: getattr(module, f.name)
+             for f in dataclasses.fields(module) if f.name != 'parent' and f.init}
+    jax.tree_map(get_scopes_inner, attrs)
+    scopes.append(module.scope)
+  get_scopes(module)
+  return scopes, new_args, new_kwargs
 
 
 def set_module_scopes(module, args, kwargs, scopes):
@@ -150,7 +176,10 @@ def set_module_scopes(module, args, kwargs, scopes):
     updated Variable and Module instance references.
   """
   idx = 0
-  # set scopes associated with Variables and Module instances passed as arguments
+  refs = {}
+  # Set scopes associated with Variables and Module instances passed as
+  # positional and keyword arguments.
+  @functools.partial(_memoize_by_id, refs=refs)
   def set_arg_scope(x):
     nonlocal idx
     if isinstance(x, VariablePlaceholder):
@@ -167,7 +196,9 @@ def set_module_scopes(module, args, kwargs, scopes):
   new_args, new_kwargs = jax.tree_map(set_arg_scope,
                                       (args, kwargs),
                                       is_leaf=is_placeholder)
+
   # set scopes in Variables and Submodules passed as Module attributes
+  @functools.partial(_memoize_by_id, refs=refs)
   def set_scopes(module):
     nonlocal idx
     def set_scopes_inner(x):
@@ -220,10 +251,9 @@ def module_class_lift_transform(
     class_trafo_args = {m: (trafo_args, trafo_kwargs) for m in methods}
   elif isinstance(methods, dict):
     # Pass different trafo args per each method.
-    assert trafo_args == () and trafo_kwargs == {}, (
-        f"""When passing different {transform.__name__} args per method,
-        all args must be passed via methods kwarg.""")
     class_trafo_args = {k: ((), v) for k, v in methods.items()}
+  else:
+    raise ValueError("transform methods argument must be None, tuple, list, or dict.")
 
   # Handle partially initialized module class constructors.
   if (isinstance(module_class, functools.partial) and
@@ -276,15 +306,19 @@ def module_class_lift_transform(
 
 # Function lifting as decorator on methods __inside__ class definition.
 # -----------------------------------------------------------------------------
-def decorator_lift_transform(transform, class_fn, *trafo_args, 
+def decorator_lift_transform(transform, class_fn, *trafo_args,
                              multi_scope=True, **trafo_kwargs):
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state correctly.
-  prewrapped_fn = wrap_method_once(class_fn)
-  @functools.wraps(prewrapped_fn)
+  if isinstance(class_fn, tuple):
+    class_fns = class_fn
+  else:
+    class_fns = (class_fn,)
+  prewrapped_fns = [wrap_method_once(class_fn) for class_fn in class_fns]
+  @functools.wraps(prewrapped_fns[0])
   def wrapped_fn(self, *args, **kwargs):
     # make a scope-function to transform
-    def core_fn(scopes, *args, **kwargs):
+    def core_fn(prewrapped_fn, class_fn, scopes, *args, **kwargs):
       if not multi_scope:
         scopes = [scopes]
       cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
@@ -293,8 +327,10 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
       _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
       return res
+    core_fns = [functools.partial(core_fn, prewrapped_fn, class_fn)
+                for prewrapped_fn, class_fn in zip(prewrapped_fns, class_fns)]
     # here we apply the given lifting transform to the scope-ingesting fn
-    trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
+    trafo_fn = transform(*core_fns, *trafo_args, **trafo_kwargs)
     module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
     if not multi_scope:
       if len(module_scopes) != 1:
@@ -338,24 +374,26 @@ def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs)
         ' in class definition.')
 
 
-def lift_direct_transform(transform, target: Callable[..., Any], mdl: Module,
+def lift_direct_transform(transform: Callable[..., Any],
+                          targets: Tuple[Callable[..., Any], ...],
+                          mdl: Module,
                           *args, multi_scope=True, **kwargs):
-  if _is_module_class(target):
-    raise ValueError(
-        f'The {transform.__name__} transform can only be applied on a Module method.'
-        ' That is function that takes a Module instance as its first arg.')
-  elif callable(target):
-    aug_transform = lambda fn: functools.partial(transform, fn)
-    return decorator_lift_transform(
-        aug_transform, target, multi_scope=multi_scope)(mdl, *args, **kwargs)
-  else:
-    raise ValueError(
+  for target in targets:
+    if _is_module_class(target):
+      raise ValueError(
+          f'The {transform.__name__} transform can only be applied on a Module method.'
+          ' That is function that takes a Module instance as its first arg.')
+    elif not callable(target):
+      raise ValueError(
         'transform target must be callable')
+  aug_transform = lambda *fns: functools.partial(transform, *fns)
+  return decorator_lift_transform(
+      aug_transform, targets, multi_scope=multi_scope)(mdl, *args, **kwargs)
 
 
 def vmap(target: Target,
-         variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis],
-         split_rngs: Mapping[lift.PRNGSequenceFilter, bool],
+         variable_axes: Mapping[lift.CollectionFilter, lift.InOutAxis] = {},
+         split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = {},
          in_axes=0, out_axes=0,
          axis_size: Optional[int] = None,
          axis_name: Optional[str] = None,
@@ -401,8 +439,8 @@ def vmap(target: Target,
       collection or an integer to map over an axis.
     split_rngs: Split PRNG sequences will be different for each index
       of the batch dimension. Unsplit PRNGs will be broadcasted.
-    in_axes: Specifies the mapping of the input arguments (see `jax.vmap).
-    out_axes: Specifies the mapping of the return value (see `jax.vmap).
+    in_axes: Specifies the mapping of the input arguments (see `jax.vmap`).
+    out_axes: Specifies the mapping of the return value (see `jax.vmap`).
     axis_size: Specifies the size of the batch axis. This only needs
       to be specified if it cannot be derived from the input arguments.
     axis_name: Specifies a name for the batch axis. Can be used together
@@ -519,7 +557,7 @@ remat = checkpoint
 
 
 def remat_scan(target: Target,
-               lengths: Sequence[int],
+               lengths: Sequence[int] = (),
                policy: Optional[Callable[..., bool]] = None,
                variable_broadcast: lift.CollectionFilter = False,
                variable_carry: lift.CollectionFilter = False,
@@ -591,14 +629,16 @@ def scan(target: Target,
 
   ``scan`` distinguishes between 3 different types of values inside the loop:
 
-  1. **scan**: a value that is iterated over in a loop. All scan values must
-    have the same size in the axis they are scanned over. Scanned outputs
-    will be stacked along the scan axis.
-  2. **carry**: A carried value is updated at each loop iteration. It must
-    have the same shape and dtype throughout the loop.
-  3. **broadcast**: a value that is closed over by the loop. When a variable
-    is broadcasted they are typically initialized inside the loop body but
-    independent of the loop variables.
+  #. **scan**: a value that is iterated over in a loop. All scan values must
+     have the same size in the axis they are scanned over. Scanned outputs
+     will be stacked along the scan axis.
+
+  #. **carry**: A carried value is updated at each loop iteration. It must
+     have the same shape and dtype throughout the loop.
+
+  #. **broadcast**: a value that is closed over by the loop. When a variable
+     is broadcasted they are typically initialized inside the loop body but
+     independent of the loop variables.
 
   The loop body should have the signature
   ``(scope, body, carry, *xs) -> (carry, ys)``, where ``xs`` and ``ys``
@@ -631,7 +671,6 @@ def scan(target: Target,
     out_carry, out_val = model.apply(variables, init_carry, xs)
 
     assert out_val.shape == (batch_size, seq_len, out_feat)
-
 
   Args:
     target: a ``Module`` or a function taking a ``Module``
@@ -676,12 +715,13 @@ def scan(target: Target,
 
 def map_variables(
     target: Target,
-    mapped_collections: lift.CollectionFilter,
+    mapped_collections: lift.CollectionFilter = True,
     trans_in_fn: Callable[..., Any] = lift.id_fn,
     trans_out_fn: Callable[..., Any] = lift.id_fn,
     init: bool = False, mutable: bool = False,
     rngs: lift.PRNGSequenceFilter = True,
-    variables: lift.CollectionFilter = True) -> Target:
+    variables: lift.CollectionFilter = True,
+    methods=None) -> Target:
   """Map Variables inside a module.
 
   Example::
@@ -713,7 +753,8 @@ def map_variables(
       mapped_collections,
       trans_in_fn, trans_out_fn,
       init, mutable,
-      rngs, variables
+      rngs, variables,
+      methods=methods,
   )
 
 
@@ -721,7 +762,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
     has_aux: bool = False, reduce_axes=(),
     vjp_variables: lift.CollectionFilter = "params",
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Tuple[Any, Any]:
   """A lifted version of ``jax.vjp``.
 
@@ -731,7 +772,6 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
   specified by `vjp_variables`. However, the backward funtion only expects
   a cotangent for the return value of `fn`. If variables require a co-tangent
   as well they can be returned from `fn` using `Module.variables`.
-
 
   Example::
 
@@ -748,7 +788,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
         params_grad, x_grad = bwd(jnp.ones(y.shape))
         return y, params_grad, x_grad
 
-   Args:
+  Args:
     fn: Function to be differentiated. Its arguments should be arrays, scalars,
       or standard Python containers of arrays or scalars. It should return an
       array, scalar, or standard Python container of arrays or scalars. It will
@@ -785,7 +825,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
     returned by ``fn``.
   """
   return lift_direct_transform(
-      lift.vjp, fn, mdl, *primals,
+      lift.vjp, (fn,), mdl, *primals,
       multi_scope=False,
       has_aux=has_aux, reduce_axes=reduce_axes,
       vjp_variables=vjp_variables,
@@ -796,7 +836,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
 def jvp(fn: Callable[..., Any], mdl: Module,
     primals, tangents, variable_tangents,
     variables: lift.CollectionFilter = True,
-    rngs: lift.PRNGSequenceFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True,
     ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
   """A lifted version of ``jax.jvp``.
 
@@ -804,7 +844,7 @@ def jvp(fn: Callable[..., Any], mdl: Module,
 
   Note that no tangents are returned for variables. When variable tangents
   are required their value should be returned explicitly by `fn`
-  using `Module.variables`.
+  using `Module.variables`::
 
     class LearnScale(nn.Module):
       @nn.compact
@@ -835,11 +875,11 @@ def jvp(fn: Callable[..., Any], mdl: Module,
           variable_tangents={'params': vars_t})
       return out_t
 
-   Args:
+  Args:
     primals: The primal values at which the Jacobian of ``fun`` should be
-        evaluated. Should be either a tuple or a list of arguments,
-        and its length should be equal to the number of positional parameters of
-        ``fun``.
+      evaluated. Should be either a tuple or a list of arguments,
+      and its length should be equal to the number of positional parameters of
+      ``fun``.
     tangents: The tangent vector for which the Jacobian-vector product should be
       evaluated. Should be either a tuple or a list of tangents, with the same
       tree structure and array shapes as ``primals``.
@@ -859,11 +899,154 @@ def jvp(fn: Callable[..., Any], mdl: Module,
     ``primals_out``.
   """
   return lift_direct_transform(
-      lift.jvp, fn, mdl, primals, tangents, variable_tangents,
+      lift.jvp, (fn,), mdl, primals, tangents, variable_tangents,
       multi_scope=False,
       variables=variables,
       rngs=rngs)
 
+ModuleT = TypeVar("ModuleT", bound=Module)
+C = TypeVar("C")
+def while_loop(cond_fn: Callable[[ModuleT, C], bool],
+               body_fn: Callable[[ModuleT, C], C],
+               mdl: ModuleT,
+               init: C,
+               carry_variables: lift.CollectionFilter = False,
+               broadcast_variables: lift.CollectionFilter = True,
+               split_rngs: lift.PRNGSequenceFilter = {}) -> C:
+  """Lifted version of jax.lax.while_loop.
+
+  The lifted scope is passed to `cond_fn` and `body_fn`.
+  Broadcasted variables are immutable. The carry variable are
+  mutable but cannot change shape and dtype.
+  This also means you cannot initialize variables inside
+  the body. Consider calling `body_fn` once manually before
+  calling `while_loop` if variable initialization is required.
+
+  Example::
+
+    class WhileLoopExample(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def cond_fn(mdl, c):
+          return mdl.variables['state']['acc] < 10
+        def body_fn(mdl, c):
+          acc = mdl.variable('state', 'acc')
+          acc += 1
+          y = nn.Dense(c.shape[-1])(c)
+          return y
+        c = x
+        c = body_fn(scope, c)
+        return nn.while_loop(cond_fn, body_fn, mdl, (), carry_variables='state')
+
+  Args:
+    body_fn: The body of the while loop.
+    cond_fn: Should return True as long as the loop should continue.
+    mdl: The Module which should be lifted into the loop.
+    init: The initial state passed to the loop
+    carry_variables: collections that are carried through the loop
+      and are therefore mutable (default: none).
+    broadcast_variables: collections that are closed over and are
+      therefore read-only (default: all collections)
+    split_rngs: Split PRNG sequences will be different for each loop iterations.
+      If split is False the PRNGs will be the same across iterations.
+  Returns:
+    The final state after executing the while loop. 
+  """
+  return lift_direct_transform(
+      lift.while_loop, (cond_fn, body_fn), mdl,
+      init,
+      carry_variables, broadcast_variables,
+      split_rngs)
+
+
+
+# a version of lift.custom_vjp with a single scope function
+# this avoids having to lift multiple functions in
+# lift_transform.
+def _custom_vjp_single_scope_fn(
+    fn: Callable[..., Any],
+    backward_fn: Callable[..., Any],
+    grad_vars: lift.CollectionFilter = 'params',
+    nondiff_argnums=()):
+  nodiff_fn = functools.partial(fn, needs_residual=False)
+  forward_fn = functools.partial(fn, needs_residual=True)
+  return lift.custom_vjp(
+    nodiff_fn, forward_fn, backward_fn,
+    grad_vars, nondiff_argnums)
+
+
+def custom_vjp(fn: Callable[..., Any],
+    forward_fn: Callable[..., Any],
+    backward_fn: Callable[..., Any],
+    grad_vars: lift.CollectionFilter = 'params',
+    nondiff_argnums=()):
+  """Lifted version of `jax.custom_vjp`.
+
+  `forward_fn` and `backward_fn` together define a custom vjp for `fn`.
+  The original `fn` will run in case a vjp (backward gradient) is not computed.
+
+  The `forward_fn` receives the same arguments as `fn` but is expected to return
+  a tuple containing the output of `fn(mdl, *args)` and the residuals that are
+  passed to `backward_fn`.
+
+  The `backward_fn` receives the nondiff arguments, residuals, and the output
+  tangents. It should return a tuple containing the input and variable tangents.
+
+  Note that the vjp function returned by `nn.vjp` can be passed as residual and
+  used in the `backward_fn`. The scope is unavailable during the backward pass.
+  If the module is required in `backward_fn`, a snapshot of the variables can
+  be taken and returned as a residual in the `forward_fn`.
+
+  Example::
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def f(mdl, x):
+          return mdl(x)
+
+        def fwd(mdl, x):
+          return nn.vjp(f, mdl, x)
+
+        def bwd(vjp_fn, y_t):
+          input_t, params_t = vjp_fn(y_t)
+          params_t = jax.tree_map(jnp.sign, params_t)
+          return input_t, params_t
+
+        sign_grad = nn.custom_vjp(
+            f, forward_fn=fwd, backward_fn=bwd)
+        return sign_grad(nn.Dense(1), x).reshape(())
+
+    x = jnp.ones((2,))
+    variables = Foo().init(random.PRNGKey(0), x)
+    grad = jax.grad(Foo().apply)(variables, x)
+
+  Args:
+    fn: The function to define a custom_vjp for.
+    forward_fn: A function with the same arguments as ``fn`` returning an tuple
+      with the original output and the residuals that will be passsed to
+      ``backward_fn``.
+    backward_fn: arguments are passed as
+      ``(*nondiff_args, residuals, tangents)`` The function should return a
+      tuple containing the tangents for the input arguments (except the module
+      and nondiff args) and the variable tangents for the collections specified
+      by `grad_vars`.
+    grad_vars: The collections for which a vjp will be computed
+      (default: "params").
+    nondiff_argnums: arguments for which no vjp is computed.
+  Returns:
+    A function with the same signature as `fn` with the custom vjp.
+  """
+  def shared_forward_fn(*args, needs_residual, **kwargs):
+    if needs_residual:
+      return forward_fn(*args, **kwargs)
+    else:
+      return fn(*args, ** kwargs)
+  return decorator_lift_transform(
+      _custom_vjp_single_scope_fn, shared_forward_fn,
+      backward_fn=backward_fn, grad_vars=grad_vars,
+      nondiff_argnums=nondiff_argnums,
+      multi_scope=False)
 
 
 # Special case of decorator_lift_transform to handle named calls for profiling.
@@ -879,7 +1062,7 @@ def named_call(class_fn, force=True):
   prewrapped_fn = wrap_method_once(class_fn)
   @functools.wraps(prewrapped_fn)
   def wrapped_fn(self, *args, **kwargs):
-    if not force and not linen_module._use_named_call:
+    if (not force and not linen_module._use_named_call) or self._state.in_setup:
       return prewrapped_fn(self, *args, **kwargs)
     fn_name = class_fn.__name__
     method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''

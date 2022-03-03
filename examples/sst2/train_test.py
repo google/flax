@@ -1,4 +1,4 @@
-# Copyright 2021 The Flax Authors.
+# Copyright 2022 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,11 +15,13 @@
 """Tests for sst2.train."""
 from absl.testing import absltest
 from absl.testing import parameterized
-from configs import default as default_config
 import jax
 import jax.test_util
 import numpy as np
+
+from configs import default as default_config
 import train
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
