@@ -585,7 +585,7 @@ class Scope:
     return in_filter(self.mutable, col)
 
   def is_collection_empty(self, col: str) -> bool:
-    """Returns true if the collection is emtpy."""
+    """Returns true if the collection is empty."""
     if col in self.root._variables:
       return len(self.root._variables[col]) == 0
     return True
