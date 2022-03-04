@@ -64,9 +64,6 @@ def _canonicalize_dtypes(
            if computation_dtype is None else computation_dtype)
 
   assert jnp.issubdtype(input_dtype, jnp.inexact)
-  if jnp.issubdtype(input_dtype, jnp.complexfloating):
-    assert jnp.issubdtype(returned_param_dtype, jnp.complexfloating)
-    assert jnp.issubdtype(dtype, jnp.complexfloating)
   return returned_param_dtype, dtype
 
 
@@ -80,9 +77,6 @@ def _canonicalize_numeric_dtypes(
            if computation_dtype is None else computation_dtype)
 
   assert jnp.issubdtype(input_dtype, jnp.number)
-  if jnp.issubdtype(input_dtype, jnp.complexfloating):
-    assert jnp.issubdtype(returned_param_dtype, jnp.complexfloating)
-    assert jnp.issubdtype(dtype, jnp.complexfloating)
   return returned_param_dtype, dtype
 
 
