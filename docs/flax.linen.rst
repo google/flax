@@ -137,6 +137,16 @@ Activation functions
     PReLU
 
 
+Combinators
+------------------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :template: flax_module
+
+    Sequential
+
+
 Attention primitives
 ------------------------
 
@@ -162,9 +172,9 @@ Stochastic
 .. autosummary::
   :toctree: _autosummary
   :template: flax_module
-  
+
     Dropout
-    
+
 
 RNN primitives
 ------------------------
