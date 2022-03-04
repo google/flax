@@ -43,10 +43,12 @@ from jax.numpy import tanh
 
 from typing import Any
 
+from flax.linen.linear import _canonicalize_dtypes
 from flax.linen.module import Module, compact
 import jax.numpy as jnp
 
 
+FloatingDType = Type[jnp.floating]
 Array = Any
 
 
@@ -54,9 +56,15 @@ class PReLU(Module):
   """Parametric Rectified Linear Unit (PReLU) activation function.
 
   Attributes:
-    negative_slope_init: the value to initialize the negative slope.
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    negative_slope_init: the value to initialize the negative slope
+      (default 0.01).
   """
+  dtype: Optional[FloatingDType] = jnp.float32
+  param_dtype: Optional[FloatingDType] = jnp.float32
   negative_slope_init: float = 0.01
+
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies an activation to the inputs.
@@ -67,11 +75,13 @@ class PReLU(Module):
     Returns:
       The transformed input.
     """
-    dtype = inputs.dtype
-    assert jnp.issubdtype(dtype, jnp.floating)
+    assert jnp.issubdtype(inputs.dtype, jnp.floating)
+    inputs = jnp.asarray(inputs, dtype)
+    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, param_dtype,
+                                              self.dtype)
     negative_slope = self.param(
       'negative_slope',
-      lambda k: jnp.asarray(self.negative_slope_init, dtype)
+      lambda k: jnp.asarray(self.negative_slope_init, param_dtype)
     )
-    assert negative_slope.shape == ()
+    negative_slope = jnp.asarray(negative_slope, dtype)
     return jnp.where(inputs >= 0, inputs, negative_slope * inputs)
