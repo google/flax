@@ -39,18 +39,17 @@ def _flatten_dict(input_dict, parent_key='', sep='.'):
   for k, v in input_dict.items():
     new_key = parent_key + sep + k if parent_key else k
 
-    # Take special care of things hparams cannot handle.
-    if v is None:
-      v = 'None'
-    elif isinstance(v, list):
-      v = str(v)
-    elif isinstance(v, tuple):
-      v = str(v)
-    elif isinstance(v, dict):
+    # Valid types according to https://github.com/tensorflow/tensorboard/blob/1204566da5437af55109f7a4af18f9f8b7c4f864/tensorboard/plugins/hparams/summary_v2.py
+    valid_types = (bool, int, float, str, np.bool_, np.integer, np.floating, np.character)
+
+    if isinstance(v, dict):
       # Recursively flatten the dict.
       items.extend(_flatten_dict(v, new_key, sep=sep).items())
-    else:
-      items.append((new_key, v))
+      continue
+    elif not isinstance(v, valid_types):
+      # Cast any incompatible values as strings such that they can be handled by hparams
+      v = str(v)
+    items.append((new_key, v))
   return dict(items)
 
 

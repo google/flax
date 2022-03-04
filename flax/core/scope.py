@@ -296,6 +296,7 @@ def group_collections(
     A sequence S with `len(S) == len(col_filters)`. Each `S[i]` is the result of
     applying filter `col_filters[i]` to the remaining keys in `xs`.
     """
+  cols: Iterable[str]
   cols = xs.keys()
   groups = []
   for col_filter in col_filters:
@@ -363,6 +364,7 @@ class Scope:
   <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
+  reservations: Set[str]
 
   def __init__(self,
                variables: MutableVariableDict,
@@ -626,7 +628,7 @@ class Scope:
     self.rng_counters[name] += 1
     return LazyRng.create(self.rngs[name], self.rng_counters[name]).as_jax_rng()
 
-  def get_variable(self, col: str, name: str, default: T = None) -> T:
+  def get_variable(self, col: str, name: str, default: Any = None) -> Any:
     """Retrieves the value of a Variable.
 
     Args:

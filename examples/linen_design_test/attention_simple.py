@@ -19,6 +19,7 @@ from flax.core import Scope
 from flax.core.frozen_dict import freeze, unfreeze
 from flax.linen import initializers
 from flax.linen import Module, compact, vmap
+from flax.linen.linear import PrecisionLike
 import jax
 from jax import lax, numpy as jnp, random
 import numpy as np
@@ -31,7 +32,7 @@ class Dense(Module):
   kernel_init: Callable = initializers.lecun_normal()
   bias_init: Callable = initializers.zeros
   dtype: Any = jnp.float32
-  precision: Any = None
+  precision: PrecisionLike = None
 
   @compact
   def __call__(self, inputs):

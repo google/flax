@@ -12,7 +12,6 @@ case $flag in
   ;;
   --help)
   echo "Usage:"
-  echo "  --all: Also run tests for deprecated examples."
   echo "  --with-cov: Also generate pytest coverage."
   exit
   ;;
