@@ -33,10 +33,10 @@ class Sequential(Module):
   Example usage::
 
     class Foo(nn.Module):
-        feature_sizes: Sequence[int]
+      feature_sizes: Sequence[int]
 
-        @nn.compact
-        def __call__(self, x):
+      @nn.compact
+      def __call__(self, x):
         return nn.Sequential([nn.Dense(layer_size, name=f'layers_{idx}')
                               for idx, layer_size
                               in enumerate(self.feature_sizes)])(x)
