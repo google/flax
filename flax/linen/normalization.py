@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from flax.linen.module import Module, compact, merge_param
-from flax.linen.linear import _canonicalize_dtypes
+from flax.linen.linear import canonicalize_inexact_dtypes
 
 
 PRNGKey = Any
@@ -93,7 +93,8 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
   A seperate bias and scale is learned for each feature as specified by feature_axes.
   """
   input_dtype = jnp.result_type(x, mean, var)
-  param_dtype, dtype = _canonicalize_dtypes(input_dtype, param_dtype, dtype)
+  param_dtype, dtype = canonicalize_inexact_dtypes(input_dtype, param_dtype,
+                                                   dtype)
   reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
   feature_axes = _canonicalize_axes(x.ndim, feature_axes)
   stats_shape = list(x.shape)
@@ -212,8 +213,8 @@ class BatchNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    param_dtype, dtype = _canonicalize_dtypes(x.dtype, self.param_dtype,
-                                              self.dtype)
+    param_dtype, dtype = canonicalize_inexact_dtypes(x.dtype, self.param_dtype,
+                                                     self.dtype)
     x = jnp.asarray(x, dtype)
 
     use_running_average = merge_param(
@@ -289,8 +290,8 @@ class LayerNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    param_dtype, dtype = _canonicalize_dtypes(x.dtype, self.param_dtype,
-                                              self.dtype)
+    param_dtype, dtype = canonicalize_inexact_dtypes(x.dtype, self.param_dtype,
+                                                     self.dtype)
     x = jnp.asarray(x, dtype)
     reduction_axes = (-1,)
     feature_axes = (-1,)
@@ -351,8 +352,8 @@ class GroupNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    param_dtype, dtype = _canonicalize_dtypes(x.dtype, self.param_dtype,
-                                              self.dtype)
+    param_dtype, dtype = canonicalize_inexact_dtypes(x.dtype, self.param_dtype,
+                                                     self.dtype)
     x = jnp.asarray(x, dtype)
     reduction_axes = tuple(range(1, x.ndim - 1)) + (-1,)
     feature_axes = (-1,)

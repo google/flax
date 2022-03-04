@@ -26,7 +26,7 @@ from typing_extensions import Protocol
 
 from flax.linen.initializers import zeros
 from flax.linen.linear import DenseGeneral
-from flax.linen.linear import _canonicalize_dtypes
+from flax.linen.linear import canonicalize_inexact_dtypes
 from flax.linen.linear import default_kernel_init
 from flax.linen.module import Module, compact, merge_param
 
@@ -265,10 +265,10 @@ class MultiHeadDotProductAttention(Module):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    param_dtype, dtype = _canonicalize_dtypes(jnp.result_type(inputs_q,
-                                                              inputs_kv),
-                                              self.param_dtype,
-                                              self.dtype)
+    param_dtype, dtype = canonicalize_inexact_dtypes(jnp.result_type(inputs_q,
+                                                                     inputs_kv),
+                                                     self.param_dtype,
+                                                     self.dtype)
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (

@@ -24,7 +24,8 @@ from .attention import (MultiHeadDotProductAttention, SelfAttention,
                         dot_product_attention, dot_product_attention_weights,
                         make_attention_mask, make_causal_mask, combine_masks)
 from ..core import broadcast, DenyList, FrozenDict
-from .linear import Conv, ConvLocal, ConvTranspose, Dense, DenseGeneral, Embed
+from .linear import (Conv, ConvLocal, ConvTranspose, Dense, DenseGeneral, Embed
+                     canonicalize_inexact_dtypes, canonicalize_numeric_dtypes)
 from .module import (Module, compact, nowrap, enable_named_call,
                      disable_named_call, override_named_call, Variable, init,
                      init_with_output, apply, merge_param)

@@ -54,7 +54,7 @@ def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
     return (x,)
 
 
-def _canonicalize_dtypes(
+def canonicalize_inexact_dtypes(
     input_dtype: InexactDType,
     param_dtype: Optional[InexactDType],
     computation_dtype: Optional[InexactDType]) -> Tuple[InexactDType,
@@ -67,7 +67,7 @@ def _canonicalize_dtypes(
   return returned_param_dtype, dtype
 
 
-def _canonicalize_numeric_dtypes(
+def canonicalize_numeric_dtypes(
     input_dtype: NumericDType,
     param_dtype: Optional[NumericDType],
     computation_dtype: Optional[NumericDType]) -> Tuple[NumericDType,
@@ -116,8 +116,9 @@ class DenseGeneral(Module):
     Returns:
       The transformed input.
     """
-    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
-                                              self.dtype)
+    param_dtype, dtype = canonicalize_inexact_dtypes(inputs.dtype,
+                                                     self.param_dtype,
+                                                     self.dtype)
     inputs = jnp.asarray(inputs, dtype)
     features = _canonicalize_tuple(self.features)
     axis = _canonicalize_tuple(self.axis)
@@ -207,8 +208,9 @@ class Dense(Module):
     Returns:
       The transformed input.
     """
-    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, self.param_dtype,
-                                              self.dtype)
+    param_dtype, dtype = canonicalize_inexact_dtypes(inputs.dtype,
+                                                     self.param_dtype,
+                                                     self.dtype)
     inputs = jnp.asarray(inputs, dtype)
     kernel = self.param('kernel',
                         self.kernel_init,
@@ -309,7 +311,7 @@ class _Conv(Module):
     Returns:
       The convolved data.
     """
-    param_dtype, dtype = _canonicalize_numeric_dtypes(inputs.dtype,
+    param_dtype, dtype = canonicalize_numeric_dtypes(inputs.dtype,
                                                       self.param_dtype,
                                                       self.dtype)
     inputs = jnp.asarray(inputs, dtype)
@@ -499,7 +501,7 @@ class ConvTranspose(Module):
     Returns:
       The convolved data.
     """
-    param_dtype, dtype = _canonicalize_numeric_dtypes(inputs.dtype,
+    param_dtype, dtype = canonicalize_numeric_dtypes(inputs.dtype,
                                                       self.param_dtype,
                                                       self.dtype)
     inputs = jnp.asarray(inputs, dtype)

@@ -43,7 +43,7 @@ from jax.numpy import tanh
 
 from typing import Any
 
-from flax.linen.linear import _canonicalize_dtypes
+from flax.linen.linear import canonicalize_inexact_dtypes
 from flax.linen.module import Module, compact
 import jax.numpy as jnp
 
@@ -77,8 +77,8 @@ class PReLU(Module):
     """
     assert jnp.issubdtype(inputs.dtype, jnp.floating)
     inputs = jnp.asarray(inputs, dtype)
-    param_dtype, dtype = _canonicalize_dtypes(inputs.dtype, param_dtype,
-                                              self.dtype)
+    param_dtype, dtype = canonicalize_inexact_dtypes(inputs.dtype, param_dtype,
+                                                     self.dtype)
     negative_slope = self.param(
       'negative_slope',
       lambda k: jnp.asarray(self.negative_slope_init, param_dtype)
