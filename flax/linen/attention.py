@@ -198,7 +198,31 @@ def dot_product_attention(query: Array,
                     precision=precision)
 
 
-class _BaseMultiHeadDotProductAttention(Module):
+class MultiHeadDotProductAttention(Module):
+  """Multi-head dot-product attention.
+
+    Attributes:
+      num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
+        should be divisible by the number of heads.
+      dtype: the dtype of the computation (default: float32)
+      param_dtype: the dtype passed to parameter initializers (default: float32).
+      qkv_features: dimension of the key, query, and value.
+      out_features: dimension of the last projection
+      broadcast_dropout: bool: use a broadcasted dropout along batch dims.
+      dropout_rate: dropout rate
+      deterministic: if false, the attention weight is masked randomly
+        using dropout, whereas if true, the attention weights
+        are deterministic.
+      precision: numerical precision of the computation see `jax.lax.Precision`
+        for details.
+      kernel_init: initializer for the kernel of the Dense layers.
+      bias_init: initializer for the bias of the Dense layers.
+      use_bias: bool: whether pointwise QKVO dense transforms use bias.
+      attention_fn: dot_product_attention or compatible function. Accepts
+        query, key, value, and returns output of shape
+        `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
+      decode: whether to prepare and use an autoregressive cache.
+  """
   num_heads: int
   dtype: Optional[InexactDType] = None
   param_dtype: Optional[InexactDType] = None
@@ -214,11 +238,12 @@ class _BaseMultiHeadDotProductAttention(Module):
   attention_fn: AttentionFunction = dot_product_attention
   decode: bool = False
 
-  def _apply(self,
-             inputs_q: Array,
-             inputs_kv: Array,
-             mask: Optional[Array] = None,
-             deterministic: Optional[bool] = None):
+  @compact
+  def __call__(self,
+               inputs_q: Array,
+               inputs_kv: Array,
+               mask: Optional[Array] = None,
+               deterministic: Optional[bool] = None):
     """Applies multi-head dot product attention on the input data.
 
     Projects the inputs into multi-headed query, key, and value vectors,
@@ -336,46 +361,13 @@ class _BaseMultiHeadDotProductAttention(Module):
     return out
 
 
-class MultiHeadDotProductAttention(_BaseMultiHeadDotProductAttention):
-  """Multi-head dot-product attention.
-
-    Attributes:
-      num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
-        should be divisible by the number of heads.
-      dtype: the dtype of the computation (default: float32)
-      param_dtype: the dtype passed to parameter initializers (default: float32).
-      qkv_features: dimension of the key, query, and value.
-      out_features: dimension of the last projection
-      broadcast_dropout: bool: use a broadcasted dropout along batch dims.
-      dropout_rate: dropout rate
-      deterministic: if false, the attention weight is masked randomly
-        using dropout, whereas if true, the attention weights
-        are deterministic.
-      precision: numerical precision of the computation see `jax.lax.Precision`
-        for details.
-      kernel_init: initializer for the kernel of the Dense layers.
-      bias_init: initializer for the bias of the Dense layers.
-      use_bias: bool: whether pointwise QKVO dense transforms use bias.
-      attention_fn: dot_product_attention or compatible function. Accepts
-        query, key, value, and returns output of shape
-        `[bs, dim1, dim2, ..., dimN,, num_heads, value_channels]``
-      decode: whether to prepare and use an autoregressive cache.
-  """
-  @compact
-  def __call__(self,
-               inputs_q: Array,
-               inputs_kv: Array,
-               mask: Optional[Array] = None,
-               deterministic: Optional[bool] = None):
-    return self._apply(inputs_q, inputs_kv, mask, deterministic=deterministic)
-
-
-class SelfAttention(_BaseMultiHeadDotProductAttention):
+class SelfAttention(MultiHeadDotProductAttention):
   """Self-attention special case of multi-head dot-product attention."""
+
   @compact
   def __call__(self, inputs_q: Array, mask: Optional[Array] = None,
                deterministic: Optional[bool] = None):
-    return self._apply(inputs_q, inputs_q, mask, deterministic=deterministic)
+    return super().__call__(inputs_q, inputs_q, mask, deterministic=deterministic)
 
 
 # mask-making utility functions
