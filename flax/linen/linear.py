@@ -219,14 +219,14 @@ class Dense(Module):
     kernel = self.param('kernel',
                         self.kernel_init,
                         (inputs.shape[-1], self.features),
-                        self.param_dtype)
+                        param_dtype)
     kernel = jnp.asarray(kernel, dtype)
     y = lax.dot_general(inputs, kernel,
                         (((inputs.ndim - 1,), (0,)), ((), ())),
                         precision=self.precision)
     if self.use_bias:
       bias = self.param('bias', self.bias_init, (self.features,),
-                        self.param_dtype)
+                        param_dtype)
       bias = jnp.asarray(bias, dtype)
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
