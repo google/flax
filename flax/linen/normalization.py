@@ -162,8 +162,8 @@ class BatchNorm(Module):
     momentum: decay rate for the exponential moving average of
       the batch statistics.
     epsilon: a small float added to variance to avoid dividing by zero.
-    dtype: the dtype of the computation (default: None).
-    param_dtype: the dtype passed to parameter initializers (default: None).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  if True, bias (beta) is added.
     use_scale: if True, multiply by scale (gamma).
       When the next layer is linear (also e.g. nn.relu), this can be disabled
@@ -182,8 +182,8 @@ class BatchNorm(Module):
   axis: int = -1
   momentum: float = 0.99
   epsilon: float = 1e-5
-  dtype: Optional[InexactDType] = None
-  param_dtype: Optional[InexactDType] = None
+  dtype: Optional[InexactDType] = jnp.float32
+  param_dtype: Optional[InexactDType] = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Initializer = initializers.zeros
@@ -262,8 +262,8 @@ class LayerNorm(Module):
 
   Attributes:
     epsilon: A small float added to variance to avoid dividing by zero.
-    dtype: the dtype of the computation (default: None).
-    param_dtype: the dtype passed to parameter initializers (default: None).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  If True, bias (beta) is added.
     use_scale: If True, multiply by scale (gamma). When the next layer is linear
       (also e.g. nn.relu), this can be disabled since the scaling will be done
@@ -272,8 +272,8 @@ class LayerNorm(Module):
     scale_init: Initializer for scale, by default, one.
   """
   epsilon: float = 1e-6
-  dtype: Optional[InexactDType] = None
-  param_dtype: Optional[InexactDType] = None
+  dtype: Optional[InexactDType] = jnp.float32
+  param_dtype: Optional[InexactDType] = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Initializer = initializers.zeros
@@ -319,21 +319,21 @@ class GroupNorm(Module):
         proposed by the original group normalization paper.
       group_size: the number of channels in a group.
       epsilon: A small float added to variance to avoid dividing by zero.
-      dtype: the dtype of the computation (default: None).
+      dtype: the dtype of the computation (default: float32).
       param_dtype: the dtype passed to parameter initializers (default:
-        None).
+        float32).
       use_bias:  If True, bias (beta) is added.
-      use_scale: If True, multiply by scale (gamma). When the next layer is linear
-        (also e.g. nn.relu), this can be disabled since the scaling will be done
-        by the next layer.
+      use_scale: If True, multiply by scale (gamma). When the next layer is
+        linear (also e.g. nn.relu), this can be disabled since the scaling will
+        be done by the next layer.
       bias_init: Initializer for bias, by default, zero.
       scale_init: Initializer for scale, by default, one.
   """
   num_groups: Optional[int] = 32
   group_size: Optional[int] = None
   epsilon: float = 1e-6
-  dtype: Optional[InexactDType] = None
-  param_dtype: Optional[InexactDType] = None
+  dtype: Optional[InexactDType] = jnp.float32
+  param_dtype: Optional[InexactDType] = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
   bias_init: Initializer = initializers.zeros

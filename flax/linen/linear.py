@@ -89,8 +89,8 @@ class DenseGeneral(Module):
       (-2, -1) will apply the transformation to the last two axes.
     batch_dims: tuple with batch axes.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: None).
-    param_dtype: the dtype passed to parameter initializers (default: None).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
     precision: numerical precision of the computation see `jax.lax.Precision`
@@ -100,8 +100,8 @@ class DenseGeneral(Module):
   axis: Union[int, Sequence[int]] = -1
   batch_dims: Sequence[int] = ()
   use_bias: bool = True
-  dtype: Optional[InexactDType] = None
-  param_dtype: Optional[InexactDType] = None
+  dtype: Optional[InexactDType] = jnp.float32
+  param_dtype: Optional[InexactDType] = jnp.float32
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = zeros
   precision: Optional[lax.Precision] = None
@@ -182,8 +182,8 @@ class Dense(Module):
   Attributes:
     features: the number of output features.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: None).
-    param_dtype: the dtype passed to parameter initializers (default: None).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
     kernel_init: initializer function for the weight matrix.
@@ -191,8 +191,8 @@ class Dense(Module):
   """
   features: int
   use_bias: bool = True
-  dtype: Optional[InexactDType] = None
-  param_dtype: Optional[InexactDType] = None
+  dtype: Optional[InexactDType] = jnp.float32
+  param_dtype: Optional[InexactDType] = jnp.float32
   precision: Optional[lax.Precision] = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = zeros
@@ -261,8 +261,8 @@ class _Conv(Module):
     feature_group_count: integer, default 1. If specified divides the input
       features into groups.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: None).
-    param_dtype: the dtype passed to parameter initializers (default: None).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
     kernel_init: initializer for the convolutional kernel.
@@ -276,8 +276,8 @@ class _Conv(Module):
   kernel_dilation: Union[None, int, Sequence[int]] = 1
   feature_group_count: int = 1
   use_bias: bool = True
-  dtype: Optional[NumericDType] = None
-  param_dtype: Optional[NumericDType] = None
+  dtype: Optional[NumericDType] = jnp.float32
+  param_dtype: Optional[NumericDType] = jnp.float32
   precision: Optional[lax.Precision] = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = zeros
@@ -465,8 +465,8 @@ class ConvTranspose(Module):
       kernel. Convolution with kernel dilation is also known as 'atrous
       convolution'.
     use_bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: None).
-    param_dtype: the dtype passed to parameter initializers (default: None).
+    dtype: the dtype of the computation (default: float32).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
     kernel_init: initializer for the convolutional kernel.
@@ -478,8 +478,8 @@ class ConvTranspose(Module):
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
-  dtype: Optional[NumericDType] = None
-  param_dtype: Optional[NumericDType] = None
+  dtype: Optional[NumericDType] = jnp.float32
+  param_dtype: Optional[NumericDType] = jnp.float32
   precision: Optional[lax.Precision] = None
   kernel_init: Initializer = default_kernel_init
   bias_init: Initializer = zeros
@@ -587,13 +587,13 @@ class Embed(Module):
   Attributes:
     num_embeddings: number of embeddings.
     features: number of feature dimensions for each embedding.
-    dtype: the dtype of the embedding vectors (default: None).
+    dtype: the dtype of the embedding vectors (default: float32).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     embedding_init: embedding initializer.
   """
   num_embeddings: int
   features: int
-  dtype: Optional[GenericDType] = None
+  dtype: Optional[GenericDType] = jnp.float32
   param_dtype: GenericDType = jnp.float32
   embedding_init: Initializer = default_embed_init
 
