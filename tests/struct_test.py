@@ -15,6 +15,7 @@
 """Tests for flax.struct."""
 
 from typing import Any
+import unittest
 
 from absl.testing import absltest
 
@@ -23,6 +24,7 @@ import dataclasses
 from flax import struct
 
 import jax
+from jax._src.tree_util import prefix_errors
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -55,6 +57,14 @@ class StructTest(absltest.TestCase):
     self.assertEqual(leaves, [1, 2])
     new_p = jax.tree_map(lambda x: x + x, p)
     self.assertEqual(new_p, Point(x=2, y=4, meta={'abc': True}))
+
+  def test_keypath_error(self):
+    if tuple(map(int, jax.version.__version__.split('.'))) < (0, 3, 1):
+      raise unittest.SkipTest("test only works with jax>=0.3.1")
+    # TODO(mattjj): avoid using internal prefix_errors by testing vmap error msg
+    e, = prefix_errors(Point(1., [2.],  meta={}), Point(1., 2., meta={}))
+    with self.assertRaisesRegex(ValueError, r'in_axes\.y'):
+      raise e('in_axes')
 
 
 if __name__ == '__main__':
