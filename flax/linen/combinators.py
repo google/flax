@@ -14,9 +14,10 @@
 
 """Combinators of modules, such as a Sequential."""
 
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from flax.linen.module import Module
+
 
 class Sequential(Module):
   """Applies a linear chain of Modules.
@@ -41,7 +42,7 @@ class Sequential(Module):
                               for idx, layer_size
                               in enumerate(self.feature_sizes)])(x)
   """
-  layers: Sequence[Callable]
+  layers: Sequence[Callable[..., Any]]
 
   def __call__(self, *args, **kwargs):
     if not self.layers:

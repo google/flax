@@ -14,20 +14,21 @@
 
 """Attention core modules for Flax."""
 
-from functools import partial
-from typing import (Any, Callable, Tuple, Optional)
+import functools
+from typing import (Any, Callable, Optional, Tuple)
+
+from flax.linen.initializers import zeros
+from flax.linen.linear import default_kernel_init
+from flax.linen.linear import DenseGeneral
+from flax.linen.linear import PrecisionLike
+from flax.linen.module import compact
+from flax.linen.module import merge_param
+from flax.linen.module import Module
 
 import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
-import numpy as np
-
-from flax.linen.linear import default_kernel_init
-from flax.linen.linear import DenseGeneral
-from flax.linen.linear import PrecisionLike
-from flax.linen.module import Module, compact, merge_param
-from flax.linen.initializers import zeros
 
 PRNGKey = Any
 Shape = Tuple[int]
@@ -253,7 +254,7 @@ class MultiHeadDotProductAttention(Module):
         'Memory dimension must be divisible by number of heads.')
     head_dim = qkv_features // self.num_heads
 
-    dense = partial(DenseGeneral,
+    dense = functools.partial(DenseGeneral,
                     axis=-1,
                     dtype=self.dtype,
                     param_dtype=self.param_dtype,
