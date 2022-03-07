@@ -15,26 +15,18 @@
 """Attention core modules for Flax."""
 
 from functools import partial
-from typing import Any, Callable, Tuple, Type, Optional
+from typing import Callable, Optional
 
 import jax
-from jax import lax
-from jax import random
 import jax.numpy as jnp
-import numpy as np
+from jax import lax, random
 from typing_extensions import Protocol
 
-from flax.linen.initializers import zeros
-from flax.linen.linear import DenseGeneral
-from flax.linen.linear import canonicalize_inexact_dtypes
-from flax.linen.linear import default_kernel_init
-from flax.linen.module import Module, compact, merge_param
-
-PRNGKey = Any
-Shape = Tuple[int, ...]
-InexactDType = Type[jnp.inexact]
-Array = Any
-Initializer = Callable[[PRNGKey, Shape, InexactDType], Array]
+from .dtypes import (Array, InexactDType, Initializer, PRNGKey,
+                     canonicalize_inexact_dtypes)
+from .initializers import zeros
+from .linear import DenseGeneral, default_kernel_init
+from .module import Module, compact, merge_param
 
 
 class AttentionFunction(Protocol):

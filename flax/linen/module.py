@@ -13,7 +13,6 @@
 # limitations under the License.
 
 """Flax Modules."""
-from contextlib import contextmanager
 import dataclasses
 import enum
 import functools
@@ -23,33 +22,30 @@ import threading
 import types
 import typing
 import weakref
-
-from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
-                    Set, Type, Union, TypeVar, Generic, Dict, overload)
+from contextlib import contextmanager
+from typing import (Any, Callable, Dict, Generic, Iterable, List, Optional,
+                    Sequence, Set, Tuple, Type, TypeVar, Union, overload)
 
 import jax
+import numpy as np
 from jax import tree_util
 from jax._src.numpy.lax_numpy import isin
-import numpy as np
 
 import flax
-from flax import config
-from flax import errors
-from flax import traceback_util
-from flax import traverse_util
-from flax import serialization
-from flax import core
+from flax import (config, core, errors, serialization, traceback_util,
+                  traverse_util)
 from flax.core import Scope
-from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
 from flax.core.frozen_dict import FrozenDict, freeze
+from flax.core.scope import (CollectionFilter, DenyList, FrozenVariableDict,
+                             Variable, VariableDict, union_filters)
 from flax.struct import __dataclass_transform__
+
+from .dtypes import Array, PRNGKey
 
 # from .dotgetter import DotGetter
 traceback_util.register_exclusion(__file__)
 
-PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
-Array = Any    # pylint: disable=invalid-name
 
 
 T = TypeVar('T')
@@ -603,7 +599,8 @@ class Module(metaclass=ModuleMeta):
       wrapped_method = wrap_method_once(method)
       if key != 'setup':
         # We import named_call at runtime to avoid a circular import issue.
-        from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
+        from flax.linen.transforms import \
+            named_call  # pylint: disable=g-import-not-at-top
         wrapped_method = named_call(wrapped_method, force=False)
       setattr(cls, key, wrapped_method)
     return cls

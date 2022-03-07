@@ -16,28 +16,15 @@
 
 import abc
 from dataclasses import field
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
-from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
-                    Type, Union)
-
-from flax.linen.module import Module, compact
-from flax.linen.initializers import lecun_normal, variance_scaling, zeros
-
-from jax import lax
-from jax import eval_shape
-from jax import ShapedArray
 import jax.numpy as jnp
 import numpy as np
+from jax import ShapedArray, eval_shape, lax
 
-
-PRNGKey = Any
-Shape = Tuple[int, ...]
-InexactDType = Type[jnp.inexact]
-NumericDType = Type[jnp.number]
-GenericDType = Type[np.generic]
-Array = Any
-Initializer = Callable[[PRNGKey, Shape, InexactDType], Array]
-
+from .dtypes import Array, GenericDType, InexactDType, Initializer, NumericDType
+from .initializers import lecun_normal, variance_scaling, zeros
+from .module import Module, compact
 
 default_kernel_init = lecun_normal()
 
@@ -52,32 +39,6 @@ def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
     return tuple(x)
   else:
     return (x,)
-
-
-def canonicalize_inexact_dtypes(
-    input_dtype: InexactDType,
-    param_dtype: Optional[InexactDType],
-    computation_dtype: Optional[InexactDType]) -> Tuple[InexactDType,
-                                                        InexactDType]:
-  returned_param_dtype = input_dtype if param_dtype is None else param_dtype
-  dtype = (jnp.result_type(input_dtype, returned_param_dtype)
-           if computation_dtype is None else computation_dtype)
-
-  assert jnp.issubdtype(input_dtype, jnp.inexact)
-  return returned_param_dtype, dtype
-
-
-def canonicalize_numeric_dtypes(
-    input_dtype: NumericDType,
-    param_dtype: Optional[NumericDType],
-    computation_dtype: Optional[NumericDType]) -> Tuple[NumericDType,
-                                                        NumericDType]:
-  returned_param_dtype = input_dtype if param_dtype is None else param_dtype
-  dtype = (jnp.result_type(input_dtype, returned_param_dtype)
-           if computation_dtype is None else computation_dtype)
-
-  assert jnp.issubdtype(input_dtype, jnp.number)
-  return returned_param_dtype, dtype
 
 
 class DenseGeneral(Module):

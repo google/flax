@@ -25,24 +25,20 @@ THe RNNCell modules are designed to fit in with the scan function in JAX::
 
 import abc
 from functools import partial
-from typing import (Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple,
-                    Type, Union)
-
-from flax.linen.module import Module, compact
-from flax.linen.activation import sigmoid, tanh
-from flax.linen.initializers import orthogonal, zeros
-from flax.linen.linear import Conv, Dense, default_kernel_init
-
-from jax import numpy as jnp
-from jax import lax
-from jax import random
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
+from jax import lax
+from jax import numpy as jnp
+from jax import random
 
-PRNGKey = Any
-Shape = Tuple[int, ...]
+from .activation import sigmoid, tanh
+from .dtypes import Array, PRNGKey, Shape
+from .initializers import orthogonal, zeros
+from .linear import Conv, Dense, default_kernel_init
+from .module import Module, compact
+
 Dtype = Any
-Array = Any
 
 
 class RNNCellBase(Module):

@@ -15,41 +15,18 @@
 """Activation functions.
 """
 
+import jax.numpy as jnp
 # pylint: disable=unused-import
-# re-export activation functions from jax.nn
-from jax.nn import celu
-from jax.nn import elu
-from jax.nn import gelu
-from jax.nn import glu
-from jax.nn import leaky_relu
-from jax.nn import log_sigmoid
-from jax.nn import log_softmax
-from jax.nn import normalize
-from jax.nn import relu
-from jax.nn import sigmoid
-from jax.nn import soft_sign
-from jax.nn import softmax
-from jax.nn import softplus
-from jax.nn import swish
-from jax.nn import silu
-from jax.nn import selu
-from jax.nn import hard_tanh
-from jax.nn import relu6
-from jax.nn import hard_sigmoid
-from jax.nn import hard_swish
-
+# re-export activation functions from jax.nn and jax.numpy
+from jax.nn import (celu, elu, gelu, glu, hard_sigmoid, hard_swish, hard_tanh,
+                    leaky_relu, log_sigmoid, log_softmax, normalize, relu,
+                    relu6, selu, sigmoid, silu, soft_sign, softmax, softplus,
+                    swish)
 from jax.numpy import tanh
 # pylint: enable=unused-import
 
-from typing import Any
-
-from flax.linen.linear import canonicalize_inexact_dtypes
-from flax.linen.module import Module, compact
-import jax.numpy as jnp
-
-
-FloatingDType = Type[jnp.floating]
-Array = Any
+from .dtypes import Array, FloatingDType, canonicalize_inexact_dtypes
+from .module import Module, compact
 
 
 class PReLU(Module):

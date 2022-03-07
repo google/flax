@@ -14,22 +14,15 @@
 
 """Normalization modules for Flax."""
 
-from typing import Any, Callable, Optional, Tuple, Type, Iterable, Union
+from typing import Any, Iterable, Optional, Tuple, Union
 
+import jax.numpy as jnp
 from jax import lax
 from jax.nn import initializers
-import jax.numpy as jnp
-import numpy as np
 
-from flax.linen.module import Module, compact, merge_param
-from flax.linen.linear import canonicalize_inexact_dtypes
-
-
-PRNGKey = Any
-Array = Any
-Shape = Tuple[int, ...]
-InexactDType = Type[jnp.inexact]
-Initializer = Callable[[PRNGKey, Shape, InexactDType], Array]
+from .dtypes import (Array, InexactDType, Initializer,
+                     canonicalize_inexact_dtypes)
+from .module import Module, compact, merge_param
 
 Axes = Union[int, Tuple[int, ...]]
 
