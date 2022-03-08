@@ -34,7 +34,7 @@ jobs:
     # We allow at most 5 commits in a branch to ensure our CI doesn't break.
     - name: Check commit count in PR
       if: always()
-      shell: bash 
+      shell: bash
       run: |
         set -x 
         # $GITHUB_REF is in format `refs/heads/<branch_name>`. We fetch it under
