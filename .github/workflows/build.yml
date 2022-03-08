@@ -35,7 +35,6 @@ jobs:
     - name: Check commit count in PR
       if: always()
       shell: bash
-      
       run: |
         set -x 
         # $GITHUB_REF is in format `refs/heads/<branch_name>`. We fetch it under
