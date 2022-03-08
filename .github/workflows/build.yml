@@ -36,7 +36,7 @@ jobs:
       if: always()
       shell: bash
       run: |
-        set -x 
+        set -x
         # $GITHUB_REF is in format `refs/heads/<branch_name>`. We fetch it under
         # the name `commit-count` so we can refer to it below.
         # Do an unshallow fetch so we retrieve all commits (this is necessary
