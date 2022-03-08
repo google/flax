@@ -928,15 +928,22 @@ def while_loop(cond_fn: Callable[[ModuleT, C], bool],
       @nn.compact
       def __call__(self, x):
         def cond_fn(mdl, c):
-          return mdl.variables['state']['acc] < 10
+          return mdl.variables['state']['acc'] < 10
         def body_fn(mdl, c):
-          acc = mdl.variable('state', 'acc')
-          acc += 1
+          acc = mdl.variable('state', 'acc', lambda: jnp.array(0))
+          acc.value += 1
           y = nn.Dense(c.shape[-1])(c)
           return y
         c = x
-        c = body_fn(scope, c)
-        return nn.while_loop(cond_fn, body_fn, mdl, (), carry_variables='state')
+        if self.is_mutable_collection('params'):
+          return body_fn(self, c)
+        else:
+          return nn.while_loop(cond_fn, body_fn, self, c, carry_variables='state')
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+    intial_vars = WhileLoopExample().init(k, x)
+    result, state = WhileLoopExample().apply(intial_vars, x, mutable=['state'])
 
   Args:
     body_fn: The body of the while loop.
