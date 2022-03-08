@@ -1360,6 +1360,14 @@ class TransformTest(absltest.TestCase):
     np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
 
+  def test_lift_instance_error(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.checkpoint(nn.Dense(2))(x)
+    with self.assertRaises(errors.TransformTargetError):
+      Foo().init(random.PRNGKey(0), jnp.zeros((2, 3)))
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -566,3 +566,34 @@ class TransformedMethodReturnValueError(FlaxError):
       f'Transformed module method {name} cannot return Modules or Variables. '
       f'For helper constructor methods use the @nn.nowrap decorator to prevent '
       f'decoration by the automatic named_call transform.')
+
+
+class TransformTargetError(FlaxError):
+  """
+  Linen transformations must be applied to Modules classes or functions taking a Module instance as the first argument.
+
+  This error occurs when passing an invalid target to a linen transform
+  (nn.vmap, nn.scan, etc.). This occurs for example when trying to
+  transform a Module instance::
+
+    nn.vmap(nn.Dense(features))(x)  # raises TransformTargetError
+
+  You can transform the `nn.Dense` class directly instead::
+
+    nn.vmap(nn.Dense)(features)(x)
+
+  Or you can create a function that takes the module instance as the first argument::
+
+    class BatchDense(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.vmap(
+            lambda mdl, x: mdl(x), 
+            variable_axes={'params': 0}, split_rngs={'params': True})(nn.Dense(3), x)
+
+  """
+  def __init__(self, target):
+    super().__init__(
+      f'Linen transformations must be applied to Modules classes or'
+      f' functions taking a Module instance as the first argument.'
+      f' The provided target is not a Module class or callable: {target}')
