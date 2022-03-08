@@ -594,6 +594,6 @@ class TransformTargetError(FlaxError):
   """
   def __init__(self, target):
     super().__init__(
-      f'Linen transformations must be applied to Modules classes or'
-      f' functions taking a Module instance as the first argument.'
+      'Linen transformations must be applied to Modules classes or'
+      ' functions taking a Module instance as the first argument.'
       f' The provided target is not a Module class or callable: {target}')
