@@ -1004,6 +1004,12 @@ class Module(metaclass=ModuleMeta):
       raise ValueError("Can't check mutability on unbound modules")
     return self.scope.is_mutable_collection(col)
 
+  def has_rng(self, name: str) -> bool:
+    """Returns true if a PRNGSequence with name `name` exists."""
+    if self.scope is None:
+      raise ValueError("Can't query for RNGs on unbound modules")
+    return self.scope.has_rng(name)
+
   def make_rng(self, name: str) -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
 
