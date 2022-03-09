@@ -1490,6 +1490,16 @@ class ModuleTest(absltest.TestCase):
     bar = Bar()
     self.assertEqual(bar.love, 101)
 
+  def test_has_rng(self):
+    class Foo(nn.Module):
+      def __call__(self):
+        return self.has_rng('bar')
+    foo = Foo()
+    with self.assertRaisesRegex(ValueError, "RNGs.*unbound module"):
+      foo()
+    k = random.PRNGKey(0)
+    self.assertTrue(foo.apply({}, rngs={'bar': k}))
+    self.assertFalse(foo.apply({}, rngs={'baz': k}))
 
 if __name__ == '__main__':
   absltest.main()
