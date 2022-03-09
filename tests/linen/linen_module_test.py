@@ -1517,5 +1517,23 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(foo.apply({}, rngs={'bar': k}))
     self.assertFalse(foo.apply({}, rngs={'baz': k}))
 
+  def test_getattribute_triggers_setup(self):
+    class B(nn.Module):
+      def setup(self):
+        self.p1 = self.param('p1', lambda k: jnp.ones((2,)))
+      def fn1(self, x):
+        return self.p1 + x
+    class A(nn.Module):
+      b: nn.Module
+      def __call__(self, x):
+        return self.b.fn1(x)
+    a = A(b=B())
+    k = random.PRNGKey(0)
+    x = jnp.zeros((2,))
+    vs = nn.init(lambda a,x: a(x), a)(k, x)
+    y = nn.apply(lambda a,x: a.b.fn1(x), a)(vs, x)
+    np.testing.assert_array_equal(y, jnp.ones((2,)))
+
+
 if __name__ == '__main__':
   absltest.main()
