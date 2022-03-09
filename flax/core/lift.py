@@ -127,7 +127,7 @@ def pack(fn: Callable[..., Any],
     rng_groups_xs_t = _transpose(rng_groups_xs)
 
     inner_scopes: List[Scope] = []
-    def scope_fn(variable_groups_xs_t, rng_groups_xs_t):
+    def scope_fn(variable_groups_xs_t, rng_groups_xs_t, mutable_filter: CollectionFilter = True):
       nonlocal inner_scopes
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
@@ -151,7 +151,7 @@ def pack(fn: Callable[..., Any],
           rngs.update(rng_group)
         # make sure variable dicts are cloned and can't be manipulated by ref sharing.
         variables = jax.tree_map(lambda x: x, variables)
-        scope_mutable = intersect_filters(scope.mutable, mutable)
+        scope_mutable = intersect_filters(intersect_filters(scope.mutable, mutable), mutable_filter)
         new_path = scope.path
         if name:
           if new_path:
@@ -206,6 +206,9 @@ def pack(fn: Callable[..., Any],
     for scope, out_variable_groups, rng_counters in zip(scopes, out_variable_groups_xs, inner_rng_counters):
       for out_variable_group in out_variable_groups:
         for col_name, collection in out_variable_group.items():
+          if not scope.is_mutable_collection(col_name):
+            # Some lifted transforms like scan return redundant variables.
+            continue
           for var_name, value in collection.items():
             scope.put_variable(col_name, var_name, value)
     return y
@@ -247,9 +250,12 @@ def map_variables(
         target, _ = repack(scopes)
         target = tuple(map_out_fn(x) for x in target)
     target = tuple(map_in_fn(unfreeze(x)) for x in target)
+    mfilter = True
     if not is_target_out:
-      target = tuple(map(freeze, target))
-    scopes = scope_fn((target, variables), rng_groups)
+      # mapped collections should not be mutable
+      # unless the mapping supports it (by init=True or mutable=True)
+      mfilter = subtract_filters(mfilter, mapped_collections)
+    scopes = scope_fn((target, variables), rng_groups, mutable_filter=mfilter)
     y = fn(scopes, *args, **kwargs)
     out_target, out_vars = repack(scopes)
     if is_target_out:
@@ -703,12 +709,6 @@ def scan(fn: Callable[..., Any],
     scan_vars = variable_groups[2:]
     broadcast_vars, (carry_vars, c), (ys, scan_vars) = scanned(
         broadcast_vars, (carry_vars, init), scan_vars, rng_groups, args)
-    # remove immutable broadcast vars otherwise they will be updated
-    # with their own value which will cause an error
-    for out_group in broadcast_vars:
-      for name, col in tuple(out_group.items()):
-        if isinstance(col, FrozenDict):
-          del out_group[name]
     out_vars = (broadcast_vars, carry_vars,) + scan_vars
     return (c, ys), out_vars
 
@@ -720,7 +720,90 @@ def scan(fn: Callable[..., Any],
       name='scan')
 
 
-def custom_vjp(fn: Callable[..., Any],
+C = TypeVar("C")
+def while_loop(cond_fn: Callable[[Scope, C], bool],
+               body_fn: Callable[[Scope, C], C],
+               scope: Scope, init: C,
+               carry_variables: CollectionFilter = False,
+               broadcast_variables: CollectionFilter = True,
+               split_rngs: Mapping[PRNGSequenceFilter, bool] = {}) -> C:
+  """Lifted version of jax.lax.while_loop.
+
+  The lifted scope is passed to `cond_fn` and `body_fn`.
+  Broadcasted variables are immutable. The carry variable are
+  mutable but cannot change shape and dtype.
+  This also means you cannot initialize variables inside
+  the body. Consider calling `body_fn` once manually before
+  calling `while_loop` if variable initialization is required.
+
+  Example::
+
+    def f(scope, x):
+      def cond_fn(scope, c):
+        return scope.get_variable('state', 'acc') < 10
+      def body_fn(scope, c):
+        acc = scope.variable('state', 'acc')
+        acc += 1
+        y = scope.child(nn.dense)(c, c.shape[-1])
+        return y
+
+      c = x
+      c = body_fn(scope, c)
+      return lift.while_loop(cond_fn, body_fn, scope, (), carry_variables='state')
+
+  Args:
+    body_fn: The body of the while loop.
+    cond_fn: Should return True as long as the loop should continue.
+    scope: The scope(s) which should be lifted into the loop.
+    init: The initial state passed to the loop
+    carry_variables: collections that are carried through the loop
+      and are therefore mutable (default: none).
+    broadcast_variables: collections that are closed over and are
+      therefore read-only (default: all collections)
+    split_rngs: Split PRNG sequences will be different for each loop iterations.
+      If split is False the PRNGs will be the same across iterations.
+  Returns:
+    The final state after executing the while loop. 
+  """
+  rng_groups, rng_splits = _unzip2(split_rngs.items())
+
+  def inner(scope_fn, repack_fn,
+            variable_groups, rng_groups, carry_init):
+    carry_variables, broadcast_variables = variable_groups
+
+    def make_loop_rngs(i):
+      local_rng_groups = []
+      for rng_group, rng_split in zip(rng_groups, rng_splits):
+        if rng_split:
+          rng_group = tree_map_rngs(lambda rng: random.fold_in(rng, i), rng_group)
+        local_rng_groups.append(rng_group)
+      return local_rng_groups
+
+    def cond_wrapper(c):
+      i, carry_variables, carry = c
+      scope = scope_fn((carry_variables, broadcast_variables), make_loop_rngs(-i), mutable_filter=False)
+      return cond_fn(scope, carry)
+
+    def body_wrapper(c):
+      i, carry_variables, carry = c
+      scope = scope_fn((carry_variables, broadcast_variables), make_loop_rngs(i))
+      carry = body_fn(scope, carry)
+      carry_variables, = repack_fn(scope)
+      return (i + 1, carry_variables, carry)
+
+    c = (0, carry_variables, init)
+    _, carry_variables, carry = jax.lax.while_loop(cond_wrapper, body_wrapper, c)
+    return carry, (carry_variables,)
+
+  return pack(
+      inner,
+      (carry_variables, broadcast_variables),
+      (carry_variables,),
+      rng_groups,
+      name='while_loop')(scope, init)
+
+
+def custom_vjp(fn: Callable[..., Any], 
                forward_fn: Callable[..., Any],
                backward_fn: Callable[..., Any],
                grad_vars: CollectionFilter = 'params',

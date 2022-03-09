@@ -310,11 +310,15 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
                              multi_scope=True, **trafo_kwargs):
   # Due to the ordering of method decorators, we must wrap the class_fn
   # with the module state management wrapper first to maintain Module state correctly.
-  prewrapped_fn = wrap_method_once(class_fn)
-  @functools.wraps(prewrapped_fn)
+  if isinstance(class_fn, tuple):
+    class_fns = class_fn
+  else:
+    class_fns = (class_fn,)
+  prewrapped_fns = [wrap_method_once(class_fn) for class_fn in class_fns]
+  @functools.wraps(prewrapped_fns[0])
   def wrapped_fn(self, *args, **kwargs):
     # make a scope-function to transform
-    def core_fn(scopes, *args, **kwargs):
+    def core_fn(prewrapped_fn, class_fn, scopes, *args, **kwargs):
       if not multi_scope:
         scopes = [scopes]
       cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
@@ -323,8 +327,10 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
       _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
       return res
+    core_fns = [functools.partial(core_fn, prewrapped_fn, class_fn)
+                for prewrapped_fn, class_fn in zip(prewrapped_fns, class_fns)]
     # here we apply the given lifting transform to the scope-ingesting fn
-    trafo_fn = transform(core_fn, *trafo_args, **trafo_kwargs)
+    trafo_fn = transform(*core_fns, *trafo_args, **trafo_kwargs)
     module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
     if not multi_scope:
       if len(module_scopes) != 1:
@@ -368,19 +374,21 @@ def lift_transform(transform, target, *trafo_args, methods=None, **trafo_kwargs)
         ' in class definition.')
 
 
-def lift_direct_transform(transform, target: Callable[..., Any], mdl: Module,
+def lift_direct_transform(transform: Callable[..., Any],
+                          targets: Tuple[Callable[..., Any], ...],
+                          mdl: Module,
                           *args, multi_scope=True, **kwargs):
-  if _is_module_class(target):
-    raise ValueError(
-        f'The {transform.__name__} transform can only be applied on a Module method.'
-        ' That is function that takes a Module instance as its first arg.')
-  elif callable(target):
-    aug_transform = lambda fn: functools.partial(transform, fn)
-    return decorator_lift_transform(
-        aug_transform, target, multi_scope=multi_scope)(mdl, *args, **kwargs)
-  else:
-    raise ValueError(
+  for target in targets:
+    if _is_module_class(target):
+      raise ValueError(
+          f'The {transform.__name__} transform can only be applied on a Module method.'
+          ' That is function that takes a Module instance as its first arg.')
+    elif not callable(target):
+      raise ValueError(
         'transform target must be callable')
+  aug_transform = lambda *fns: functools.partial(transform, *fns)
+  return decorator_lift_transform(
+      aug_transform, targets, multi_scope=multi_scope)(mdl, *args, **kwargs)
 
 
 def vmap(target: Target,
@@ -817,7 +825,7 @@ def vjp(fn: Callable[..., Any], mdl: Module, *primals,
     returned by ``fn``.
   """
   return lift_direct_transform(
-      lift.vjp, fn, mdl, *primals,
+      lift.vjp, (fn,), mdl, *primals,
       multi_scope=False,
       has_aux=has_aux, reduce_axes=reduce_axes,
       vjp_variables=vjp_variables,
@@ -891,10 +899,72 @@ def jvp(fn: Callable[..., Any], mdl: Module,
     ``primals_out``.
   """
   return lift_direct_transform(
-      lift.jvp, fn, mdl, primals, tangents, variable_tangents,
+      lift.jvp, (fn,), mdl, primals, tangents, variable_tangents,
       multi_scope=False,
       variables=variables,
       rngs=rngs)
+
+ModuleT = TypeVar("ModuleT", bound=Module)
+C = TypeVar("C")
+def while_loop(cond_fn: Callable[[ModuleT, C], bool],
+               body_fn: Callable[[ModuleT, C], C],
+               mdl: ModuleT,
+               init: C,
+               carry_variables: lift.CollectionFilter = False,
+               broadcast_variables: lift.CollectionFilter = True,
+               split_rngs: lift.PRNGSequenceFilter = {}) -> C:
+  """Lifted version of jax.lax.while_loop.
+
+  The lifted scope is passed to `cond_fn` and `body_fn`.
+  Broadcasted variables are immutable. The carry variable are
+  mutable but cannot change shape and dtype.
+  This also means you cannot initialize variables inside
+  the body. Consider calling `body_fn` once manually before
+  calling `while_loop` if variable initialization is required.
+
+  Example::
+
+    class WhileLoopExample(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        def cond_fn(mdl, c):
+          return mdl.variables['state']['acc'] < 10
+        def body_fn(mdl, c):
+          acc = mdl.variable('state', 'acc', lambda: jnp.array(0))
+          acc.value += 1
+          y = nn.Dense(c.shape[-1])(c)
+          return y
+        c = x
+        if self.is_mutable_collection('params'):
+          return body_fn(self, c)
+        else:
+          return nn.while_loop(cond_fn, body_fn, self, c, carry_variables='state')
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+    intial_vars = WhileLoopExample().init(k, x)
+    result, state = WhileLoopExample().apply(intial_vars, x, mutable=['state'])
+
+  Args:
+    body_fn: The body of the while loop.
+    cond_fn: Should return True as long as the loop should continue.
+    mdl: The Module which should be lifted into the loop.
+    init: The initial state passed to the loop
+    carry_variables: collections that are carried through the loop
+      and are therefore mutable (default: none).
+    broadcast_variables: collections that are closed over and are
+      therefore read-only (default: all collections)
+    split_rngs: Split PRNG sequences will be different for each loop iterations.
+      If split is False the PRNGs will be the same across iterations.
+  Returns:
+    The final state after executing the while loop. 
+  """
+  return lift_direct_transform(
+      lift.while_loop, (cond_fn, body_fn), mdl,
+      init,
+      carry_variables, broadcast_variables,
+      split_rngs)
+
 
 
 # a version of lift.custom_vjp with a single scope function

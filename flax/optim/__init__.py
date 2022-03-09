@@ -31,7 +31,6 @@ from .adafactor import Adafactor
 from .adagrad import Adagrad
 from .adam import Adam
 from .base import OptimizerState, OptimizerDef, Optimizer, MultiOptimizer, ModelParamTraversal
-from .dynamic_scale import DynamicScale
 from .lamb import LAMB
 from .lars import LARS
 from .momentum import Momentum
@@ -50,7 +49,6 @@ __all__ = [
     "Optimizer",
     "MultiOptimizer",
     "ModelParamTraversal",
-    "DynamicScale",
     "LAMB",
     "LARS",
     "Momentum",

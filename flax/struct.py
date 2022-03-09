@@ -127,6 +127,11 @@ def dataclass(clz: _T) -> _T:
                                      iterate_clz,
                                      clz_from_iterable)
 
+  if tuple(map(int, jax.version.__version__.split('.'))) >= (0, 3, 1):
+    def keypaths(_):
+      return [jax.tree_util.AttributeKeyPathEntry(name) for name in data_fields]
+    jax.tree_util.register_keypaths(data_clz, keypaths)
+
   def to_state_dict(x):
     state_dict = {name: serialization.to_state_dict(getattr(x, name))
                   for name in data_fields}

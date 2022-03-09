@@ -17,22 +17,26 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from .activation import (celu, elu, gelu, glu, leaky_relu, log_sigmoid,
-                         log_softmax, relu, sigmoid, soft_sign, softmax,
-                         softplus, swish, silu, tanh, PReLU)
+from .activation import (PReLU, celu, elu, gelu, glu, leaky_relu, log_sigmoid,
+                         log_softmax, relu, sigmoid, silu, soft_sign, softmax,
+                         softplus, swish, tanh)
 from .attention import (MultiHeadDotProductAttention, SelfAttention,
-                        dot_product_attention, dot_product_attention_weights,
-                        make_attention_mask, make_causal_mask, combine_masks)
-from ..core import broadcast, DenyList, FrozenDict
+                        combine_masks, dot_product_attention,
+                        dot_product_attention_weights, make_attention_mask,
+                        make_causal_mask)
+from .combinators import Sequential
+from ..core import DenyList, FrozenDict, broadcast
+from .initializers import ones, zeros
 from .linear import Conv, ConvLocal, ConvTranspose, Dense, DenseGeneral, Embed
-from .module import (Module, compact, nowrap, enable_named_call,
-                     disable_named_call, override_named_call, Variable, init,
-                     init_with_output, apply, merge_param)
+from .module import (Module, Variable, apply, compact,
+                     disable_named_call, enable_named_call, init,
+                     init_with_output, merge_param, nowrap, override_named_call)
 from .normalization import BatchNorm, GroupNorm, LayerNorm
 from .pooling import avg_pool, max_pool, pool
-from .recurrent import GRUCell, LSTMCell, ConvLSTM, OptimizedLSTMCell
+from .recurrent import ConvLSTM, GRUCell, LSTMCell, OptimizedLSTMCell
 from .stochastic import Dropout
-from .transforms import jit, named_call, checkpoint, remat, remat_scan, scan, vmap, map_variables, vjp, jvp, custom_vjp
-from .initializers import zeros, ones
+from .transforms import (checkpoint, custom_vjp, jit, jvp, map_variables,
+                         named_call, remat, remat_scan, scan, vjp, vmap,
+                         while_loop)
 
 # pylint: enable=g-multiple-import

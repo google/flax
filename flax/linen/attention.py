@@ -14,19 +14,21 @@
 
 """Attention core modules for Flax."""
 
-from functools import partial
-from typing import (Any, Callable, Tuple, Optional)
+import functools
+from typing import (Any, Callable, Optional, Tuple)
+
+from flax.linen.initializers import zeros
+from flax.linen.linear import default_kernel_init
+from flax.linen.linear import DenseGeneral
+from flax.linen.linear import PrecisionLike
+from flax.linen.module import compact
+from flax.linen.module import merge_param
+from flax.linen.module import Module
 
 import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
-import numpy as np
-
-from flax.linen.linear import default_kernel_init
-from flax.linen.linear import DenseGeneral
-from flax.linen.module import Module, compact, merge_param
-from flax.linen.initializers import zeros
 
 PRNGKey = Any
 Shape = Tuple[int]
@@ -43,7 +45,7 @@ def dot_product_attention_weights(query: Array,
                                   dropout_rate: float = 0.,
                                   deterministic: bool = False,
                                   dtype: Dtype = jnp.float32,
-                                  precision: Optional[lax.Precision] = None):
+                                  precision: PrecisionLike = None):
   """Computes dot-product attention weights given query and key.
 
   Used by :func:`dot_product_attention`, which is what you'll most likely use.
@@ -126,7 +128,7 @@ def dot_product_attention(query: Array,
                           dropout_rate: float = 0.,
                           deterministic: bool = False,
                           dtype: Dtype = jnp.float32,
-                          precision: Optional[lax.Precision] = None):
+                          precision: PrecisionLike = None):
   """Computes dot-product attention given query, key, and value.
 
   This is the core function for applying attention based on
@@ -212,7 +214,7 @@ class MultiHeadDotProductAttention(Module):
   broadcast_dropout: bool = True
   dropout_rate: float = 0.
   deterministic: Optional[bool] = None
-  precision: Optional[lax.Precision] = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   use_bias: bool = True
@@ -252,7 +254,7 @@ class MultiHeadDotProductAttention(Module):
         'Memory dimension must be divisible by number of heads.')
     head_dim = qkv_features // self.num_heads
 
-    dense = partial(DenseGeneral,
+    dense = functools.partial(DenseGeneral,
                     axis=-1,
                     dtype=self.dtype,
                     param_dtype=self.param_dtype,
