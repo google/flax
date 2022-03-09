@@ -178,7 +178,7 @@ def logical_to_mesh_axes(array_dim_names: Sequence[str],
 
 def _global_mesh_defined() -> bool:
   """Checks if global xmap/pjit mesh resource environment is defined."""
-  maps_env = jax.experimental.maps.thread_resources.env
+  maps_env = maps.thread_resources.env
   return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
@@ -344,7 +344,7 @@ def _core_variable_with_axes(
     scope,
     col: str,
     name: str,
-    init_fn: Callable,
+    init_fn: Callable[..., Any],
     *init_args,
     axes: Tuple[str, ...] = ()):
   """Variant of flax core variable scope call with sharding constraints."""
@@ -460,7 +460,7 @@ def _is_mutable(axis_col: str) -> bool:
   Returns:
     Whether it is currently mutable.
   """
-  last = nn.module._context.module_stack[-1]
+  last = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
   if last:
     return last.is_mutable_collection(axis_col)
   else:
