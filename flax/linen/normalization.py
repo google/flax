@@ -14,28 +14,28 @@
 
 """Normalization modules for Flax."""
 
-from typing import (Any, Callable, Optional, Tuple, Iterable, Union)
+from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
 
+from flax.linen.module import Module, compact, merge_param  # pylint: disable=g-multiple-import
 from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
 
-from flax.linen.module import Module, compact, merge_param
-
 
 PRNGKey = Any
 Array = Any
-Shape = Tuple[int]
+Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 
 Axes = Union[int, Iterable[int]]
 
 
-def _canonicalize_axes(rank: int, axes: Axes) -> Iterable[int]:
+def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
   """Returns a tuple of deduplicated, sorted, and positive axes."""
   if not isinstance(axes, Iterable):
     axes = (axes,)
   return tuple(set([rank + axis if axis < 0 else axis for axis in axes]))
+
 
 def _abs_sq(x):
   """Computes the elementwise square of the absolute value |x|^2."""
@@ -58,6 +58,15 @@ def _compute_stats(x: Array, axes: Axes,
     roundoff errors. This avoids downstream NaNs.
   - Supports averaging across a parallel axis and subgroups of a parallel axis
     with a single `lax.pmean` call to avoid latency.
+
+  Arguments:
+    x: Input array.
+    axes: The axes in ``x`` to compute mean and variance statistics for.
+    axis_name: Optional name for the pmapped axis to compute mean over.
+    axis_index_groups: Optional axis indices.
+
+  Returns:
+    A pair ``(mean, var)``.
   """
   # promote x to at least float32, this avoids half precision computation
   # but preserves double or complex floating points
@@ -86,7 +95,25 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
                scale_init: Callable[[PRNGKey, Shape, Dtype], Array]):
   """"Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
-  A seperate bias and scale is learned for each feature as specified by feature_axes.
+  Arguments:
+    mdl: Module to apply the normalization in (normalization params will reside
+      in this module).
+    x: The input.
+    mean: Mean to use for normalization.
+    var: Variance to use for normalization.
+    reduction_axes: The axes in ``x`` to reduce.
+    feature_axes: Axes containing features. A separate bias and scale is learned
+      for each specified feature.
+    dtype: Dtype of the returned result.
+    param_dtype: Dtype of the parameters.
+    epsilon: Normalization epsilon.
+    use_bias: If true, add a bias term to the output.
+    use_scale: If true, scale the output.
+    bias_init: Initialization function for the bias term.
+    scale_init: Initialization function for the scaling function.
+
+  Returns:
+    The normalized input.
   """
   reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
   feature_axes = _canonicalize_axes(x.ndim, feature_axes)
@@ -225,7 +252,8 @@ class BatchNorm(Module):
           axis_index_groups=self.axis_index_groups)
 
       if not initializing:
-        ra_mean.value = self.momentum * ra_mean.value + (1 - self.momentum) * mean
+        ra_mean.value = self.momentum * ra_mean.value + (1 -
+                                                         self.momentum) * mean
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
     return _normalize(
@@ -237,6 +265,7 @@ class BatchNorm(Module):
 
 class LayerNorm(Module):
   """Layer normalization (https://arxiv.org/abs/1607.06450).
+
   Operates on the last axis of the input data.
 
   It normalizes the activations of the layer for each given example in a
@@ -276,7 +305,7 @@ class LayerNorm(Module):
     reduction_axes = (-1,)
     feature_axes = (-1,)
 
-    # TODO suport axis_name for model parallelism?
+    # TODO(jheek) suport axis_name for model parallelism?
     mean, var = _compute_stats(x, reduction_axes, None, None)
 
     return _normalize(
@@ -302,11 +331,12 @@ class GroupNorm(Module):
       group_size: the number of channels in a group.
       epsilon: A small float added to variance to avoid dividing by zero.
       dtype: the dtype of the computation (default: float32).
-      param_dtype: the dtype passed to parameter initializers (default: float32).
+      param_dtype: the dtype passed to parameter initializers (default:
+        float32).
       use_bias:  If True, bias (beta) is added.
-      use_scale: If True, multiply by scale (gamma). When the next layer is linear
-        (also e.g. nn.relu), this can be disabled since the scaling will be done
-        by the next layer.
+      use_scale: If True, multiply by scale (gamma). When the next layer is
+        linear (also e.g. nn.relu), this can be disabled since the scaling will
+        be done by the next layer.
       bias_init: Initializer for bias, by default, zero.
       scale_init: Initializer for scale, by default, one.
   """
@@ -339,7 +369,6 @@ class GroupNorm(Module):
         (self.num_groups is not None and self.group_size is not None)):
       raise ValueError('Either `num_groups` or `group_size` should be '
                        'specified, but not both of them.')
-    num_groups = self.num_groups
 
     channels = x.shape[-1]
     if self.group_size is not None:
@@ -347,6 +376,9 @@ class GroupNorm(Module):
         raise ValueError('Number of channels ({}) is not multiple of the '
                          'group size ({}).'.format(channels, self.group_size))
       num_groups = channels // self.group_size
+    else:
+      num_groups = self.num_groups
+      assert isinstance(num_groups, int)
 
     if num_groups <= 0 or channels % num_groups != 0:
       raise ValueError('Number of groups ({}) does not divide the number'
@@ -356,11 +388,13 @@ class GroupNorm(Module):
     group_shape = x.shape[:-1] + (num_groups, group_size)
 
     def broadcast_stat(stat):
-      stat = jnp.broadcast_to(stat[..., None], (x.shape[0], num_groups, group_size))
+      stat = jnp.broadcast_to(stat[..., None],
+                              (x.shape[0], num_groups, group_size))
       return stat.reshape((x.shape[0], num_groups * group_size))
 
-    # TODO suport axis_name for model parallelism?
-    mean, var = _compute_stats(x.reshape(group_shape), reduction_axes, None, None)
+    # TODO(jheek): suport axis_name for model parallelism?
+    mean, var = _compute_stats(
+        x.reshape(group_shape), reduction_axes, None, None)
     mean = broadcast_stat(mean)
     var = broadcast_stat(var)
 

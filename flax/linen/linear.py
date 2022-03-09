@@ -14,33 +14,39 @@
 
 """Linear modules."""
 
-from dataclasses import field
+import abc
+import dataclasses
+from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
+                    Union)
 
-from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
-
-from flax.linen.module import Module, compact
-from flax.linen.initializers import lecun_normal, variance_scaling, zeros
-
+from flax.linen.initializers import lecun_normal
+from flax.linen.initializers import variance_scaling
+from flax.linen.initializers import zeros
+from flax.linen.module import compact
+from flax.linen.module import Module
+from jax import eval_shape
 from jax import lax
+from jax import ShapedArray
 import jax.numpy as jnp
 import numpy as np
 
 
 PRNGKey = Any
-Shape = Iterable[int]
+Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Array = Any
-
+PrecisionLike = Union[None, str, lax.Precision, Tuple[str, str],
+                      Tuple[lax.Precision, lax.Precision]]
 
 default_kernel_init = lecun_normal()
 
 
-def _normalize_axes(axes, ndim):
+def _normalize_axes(axes: Tuple[int, ...], ndim: int) -> Tuple[int, ...]:
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
   return tuple(sorted([ax if ax >= 0 else ndim + ax for ax in axes]))
 
 
-def _canonicalize_tuple(x):
+def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
   if isinstance(x, Iterable):
     return tuple(x)
   else:
@@ -63,15 +69,15 @@ class DenseGeneral(Module):
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
   """
-  features: Union[int, Iterable[int]]
-  axis: Union[int, Iterable[int]] = -1
-  batch_dims: Iterable[int] = ()
+  features: Union[int, Sequence[int]]
+  axis: Union[int, Sequence[int]] = -1
+  batch_dims: Sequence[int] = ()
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  precision: Any = None
+  precision: PrecisionLike = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -159,7 +165,7 @@ class Dense(Module):
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Any = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
@@ -199,8 +205,8 @@ def _conv_dimension_numbers(input_shape):
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
 
-class Conv(Module):
-  """Convolution Module wrapping lax.conv_general_dilated.
+class _Conv(Module):
+  """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
 
   Attributes:
     features: number of convolution filters.
@@ -214,9 +220,9 @@ class Conv(Module):
       high)` integer pairs that give the padding to apply before and after each
       spatial dimension.
     input_dilation: an integer or a sequence of `n` integers, giving the
-      dilation factor to apply in each spatial dimension of `inputs` (default: 1).
-      Convolution with input dilation `d` is equivalent to transposed
-      convolution with stride `d`.
+      dilation factor to apply in each spatial dimension of `inputs`
+      (default: 1). Convolution with input dilation `d` is equivalent to
+      transposed convolution with stride `d`.
     kernel_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel (default: 1). Convolution with kernel dilation
@@ -232,23 +238,36 @@ class Conv(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Iterable[int]
-  strides: Union[None, int, Iterable[int]] = 1
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
-  input_dilation: Union[None, int, Iterable[int]] = 1
-  kernel_dilation: Union[None, int, Iterable[int]] = 1
+  kernel_size: Sequence[int]
+  strides: Union[None, int, Sequence[int]] = 1
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  input_dilation: Union[None, int, Sequence[int]] = 1
+  kernel_dilation: Union[None, int, Sequence[int]] = 1
   feature_group_count: int = 1
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Any = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
+  @property
+  @abc.abstractmethod
+  def shared_weights(self) -> bool:
+    """Defines whether weights are shared or not between different pixels.
+
+    Returns:
+      `True` to use shared weights in convolution (regular convolution).
+      `False` to use different weights at different pixels, a.k.a.
+      "locally connected layer", "unshared convolution", or "local convolution".
+
+    """
+    ...
+
   @compact
   def __call__(self, inputs: Array) -> Array:
-    """Applies a convolution to the inputs.
- 
+    """Applies a (potentially unshared) convolution to the inputs.
+
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
         This is the channels-last convention, i.e. NHWC for a 2d convolution
@@ -268,58 +287,134 @@ class Conv(Module):
     else:
       kernel_size = tuple(self.kernel_size)
 
-    def maybe_broadcast(x):
+    def maybe_broadcast(x: Optional[Union[int, Sequence[int]]]) -> (
+        Tuple[int, ...]):
       if x is None:
         # backward compatibility with using None as sentinel for
         # broadcast 1
         x = 1
       if isinstance(x, int):
         return (x,) * len(kernel_size)
-      return x
+      return tuple(x)
 
     is_single_input = False
     if inputs.ndim == len(kernel_size) + 1:
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
-    strides = maybe_broadcast(self.strides)  # self.strides or (1,) * (inputs.ndim - 2)
+    # self.strides or (1,) * (inputs.ndim - 2)
+    strides = maybe_broadcast(self.strides)
     input_dilation = maybe_broadcast(self.input_dilation)
     kernel_dilation = maybe_broadcast(self.kernel_dilation)
 
-    in_features = inputs.shape[-1]
-    assert in_features % self.feature_group_count == 0
-    kernel_shape = kernel_size + (
-        in_features // self.feature_group_count, self.features)
-    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
-    kernel = jnp.asarray(kernel, self.dtype)
-
+    padding_lax: Union[str, Sequence[Tuple[int, int]]]
     if self.padding == 'CIRCULAR':
-      kernel_size_dilated = [(k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)]
-      pads = [(0, 0)] + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] + [(0, 0)]
+      kernel_size_dilated = [
+          (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
+      ]
+      zero_pad: List[Tuple[int, int]] = [(0, 0)]
+      pads = (zero_pad + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] +
+              [(0, 0)])
       inputs = jnp.pad(inputs, pads, mode='wrap')
       padding_lax = 'VALID'
     else:
       padding_lax = self.padding
 
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
-    y = lax.conv_general_dilated(
-        inputs,
-        kernel,
-        strides,
-        padding_lax,
-        lhs_dilation=input_dilation,
-        rhs_dilation=kernel_dilation,
-        dimension_numbers=dimension_numbers,
-        feature_group_count=self.feature_group_count,
-        precision=self.precision)
+    in_features = inputs.shape[-1]
+
+    if self.shared_weights:
+      # One shared convolutional kernel for all pixels in the output.
+      assert in_features % self.feature_group_count == 0
+      kernel_shape = kernel_size + (
+          in_features // self.feature_group_count, self.features)
+
+    else:
+      if self.feature_group_count != 1:
+        raise NotImplementedError(
+            f'`lax.conv_general_dilated_local` does not support '
+            f'`feature_group_count != 1`, got `{self.feature_group_count}`.'
+        )
+
+      # Need to know the spatial output shape of a standard convolution to
+      # create the unshared convolution kernel.
+      conv_output_shape = eval_shape(
+          lambda lhs, rhs: lax.conv_general_dilated(  # pylint: disable=g-long-lambda
+              lhs=lhs,
+              rhs=rhs,
+              window_strides=strides,
+              padding=padding_lax,
+              dimension_numbers=dimension_numbers
+          ),
+          inputs,
+          ShapedArray(kernel_size + (in_features, self.features), inputs.dtype)
+      ).shape
+
+      # One (unshared) convolutional kernel per each pixel in the output.
+      kernel_shape = conv_output_shape[1:-1] + (np.prod(kernel_size) *
+                                                in_features, self.features)
+
+    kernel = self.param('kernel', self.kernel_init, kernel_shape,
+                        self.param_dtype)
+    kernel = jnp.asarray(kernel, self.dtype)
+
+    if self.shared_weights:
+      y = lax.conv_general_dilated(
+          inputs,
+          kernel,
+          strides,
+          padding_lax,
+          lhs_dilation=input_dilation,
+          rhs_dilation=kernel_dilation,
+          dimension_numbers=dimension_numbers,
+          feature_group_count=self.feature_group_count,
+          precision=self.precision
+      )
+    else:
+      y = lax.conv_general_dilated_local(
+          lhs=inputs,
+          rhs=kernel,
+          window_strides=strides,
+          padding=padding_lax,
+          filter_shape=kernel_size,
+          lhs_dilation=input_dilation,
+          rhs_dilation=kernel_dilation,
+          dimension_numbers=dimension_numbers,
+          precision=self.precision
+      )
+
+    if self.use_bias:
+      if self.shared_weights:
+        # One bias weight per output channel, shared between pixels.
+        bias_shape = (self.features,)
+      else:
+        # One bias weight per output entry, unshared betwen pixels.
+        bias_shape = y.shape[1:]
+
+      bias = self.param('bias', self.bias_init, bias_shape, self.param_dtype)
+      bias = jnp.asarray(bias, self.dtype)
+      bias = bias.reshape((1,) * (y.ndim - bias.ndim) + bias.shape)
+      y += bias
 
     if is_single_input:
       y = jnp.squeeze(y, axis=0)
-    if self.use_bias:
-      bias = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
-      bias = jnp.asarray(bias, self.dtype)
-      y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
+
+
+class Conv(_Conv):
+  """Convolution Module wrapping `lax.conv_general_dilated`."""
+
+  @property
+  def shared_weights(self) -> bool:
+    return True
+
+
+class ConvLocal(_Conv):
+  """Local convolution Module wrapping `lax.conv_general_dilated_local`."""
+
+  @property
+  def shared_weights(self) -> bool:
+    return False
 
 
 class ConvTranspose(Module):
@@ -348,21 +443,22 @@ class ConvTranspose(Module):
     bias_init: initializer for the bias.
   """
   features: int
-  kernel_size: Union[int, Iterable[int]]
-  strides: Optional[Iterable[int]] = None
-  padding: Union[str, Iterable[Tuple[int, int]]] = 'SAME'
-  kernel_dilation: Optional[Iterable[int]] = None
+  kernel_size: Union[int, Tuple[int, ...]]
+  strides: Optional[Tuple[int, ...]] = None
+  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
   dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
-  precision: Any = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
-    """Applies a transposed convolution to the inputs. Behaviour mirrors of
-    `jax.lax.conv_transpose`.
+    """Applies a transposed convolution to the inputs.
+
+    Behaviour mirrors of `jax.lax.conv_transpose`.
 
     Args:
       inputs: input data with dimensions (batch, spatial_dims..., features).
@@ -376,6 +472,7 @@ class ConvTranspose(Module):
     """
     inputs = jnp.asarray(inputs, self.dtype)
 
+    kernel_size: Tuple[int, ...]
     if isinstance(self.kernel_size, int):
       kernel_size = (self.kernel_size,)
     else:
@@ -386,26 +483,30 @@ class ConvTranspose(Module):
       is_single_input = True
       inputs = jnp.expand_dims(inputs, axis=0)
 
+    strides: Tuple[int, ...]
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = inputs.shape[-1]
     kernel_shape = kernel_size + (in_features, self.features)
-    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
+    kernel = self.param('kernel', self.kernel_init, kernel_shape,
+                        self.param_dtype)
     kernel = jnp.asarray(kernel, self.dtype)
 
+    padding_lax: Union[str, Sequence[Tuple[int, int]]]
     if self.padding == 'CIRCULAR':
       padding_lax = 'VALID'
     else:
       padding_lax = self.padding
 
-    y = lax.conv_transpose(inputs,
-                           kernel,
-                           strides,
-                           padding_lax,
-                           rhs_dilation=self.kernel_dilation,
-                           precision=self.precision)
+    y = lax.conv_transpose(
+        inputs,
+        kernel,
+        strides,
+        padding_lax,
+        rhs_dilation=self.kernel_dilation,
+        precision=self.precision)
 
-    if self.padding == "CIRCULAR":
+    if self.padding == 'CIRCULAR':
       # For circular padding, we need to identify the size of the final output
       # ("period") along each spatial dimension, pad each dimension to an
       # integer number of periods, and wrap the array periodically around each
@@ -416,30 +517,34 @@ class ConvTranspose(Module):
       # Compute period along each spatial dimension - it's input size scaled
       # by the stride.
       scaled_x_dims = [
-        x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
+          x_dim * stride for x_dim, stride in zip(inputs.shape[1:-1], strides)
       ]
       # Compute difference between the current size of y and the final output
       # size, and complement this difference to 2 * period - that gives how
       # much we need to pad.
       size_diffs = [
-        -(y_dim - x_dim) % (2 * x_dim)
-        for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
+          -(y_dim - x_dim) % (2 * x_dim)
+          for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
       ]
       # Divide the padding equaly between left and right. The choice to put
       # "+1" on the left (and not on the right) represents a convention for
       # aligning even-sized kernels.
-      total_pad = [((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs]
+      total_pad = [
+          ((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs
+      ]
       y = np.pad(y, [(0, 0)] + total_pad + [(0, 0)])
       # Wrap the result periodically around each spatial dimension,
       # one by one.
       for i in range(1, y.ndim - 1):
-        y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) + y.shape[i + 1:])
+        y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) +
+                      y.shape[i + 1:])
         y = y.sum(axis=i)
 
     if is_single_input:
       y = jnp.squeeze(y, axis=0)
     if self.use_bias:
-      bias = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
+      bias = self.param('bias', self.bias_init, (self.features,),
+                        self.param_dtype)
       bias = jnp.asarray(bias, self.dtype)
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y
@@ -466,7 +571,7 @@ class Embed(Module):
   param_dtype: Dtype = jnp.float32
   embedding_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_embed_init
 
-  embedding: Array = field(init=False)
+  embedding: Array = dataclasses.field(init=False)
 
   def setup(self):
     self.embedding = self.param('embedding',
@@ -474,7 +579,7 @@ class Embed(Module):
                                 (self.num_embeddings, self.features),
                                 self.param_dtype)
 
-  def __call__(self, inputs):
+  def __call__(self, inputs: Array) -> Array:
     """Embeds the inputs along the last dimension.
 
     Args:
@@ -486,11 +591,12 @@ class Embed(Module):
     """
     if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
-    # Use take because fancy indexing numpy arrays with JAX indices does not work correctly.
+    # Use take because fancy indexing numpy arrays with JAX indices does not
+    # work correctly.
     embedding = jnp.asarray(self.embedding, self.dtype)
     return jnp.take(embedding, inputs, axis=0)
 
-  def attend(self, query):
+  def attend(self, query: Array) -> Array:
     """Attend over the embedding using a query array.
 
     Args:

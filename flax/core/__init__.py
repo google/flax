@@ -16,4 +16,4 @@ from .axes_scan import broadcast
 from .frozen_dict import FrozenDict, freeze, unfreeze
 from .tracers import current_trace, trace_level, check_trace_level
 from .scope import Scope, Array, DenyList, apply, init, bind
-from .lift import scan, vmap, jit
+from .lift import scan, vmap, jit, remat, remat_scan, while_loop, custom_vjp, vjp, jvp

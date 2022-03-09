@@ -1329,6 +1329,37 @@ class TransformTest(absltest.TestCase):
       y1 = Foo().apply(vs, x)
     np.testing.assert_array_equal(y0, y1)
 
+  def test_while_loop(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        self.param('inc', lambda _: 1)
+        self.put_variable('state', 'acc', 0)
+        self.put_variable('state', 'rng_params', jnp.zeros((2, 2), jnp.uint32))
+        self.put_variable('state', 'rng_loop', jnp.zeros((2, 2), jnp.uint32))
+
+        def cond_fn(mdl, c):
+          acc = mdl.get_variable('state', 'acc')
+          return acc < x
+        def body_fn(mdl, c):
+          i = mdl.get_variable('state', 'acc')
+          p_rng = mdl.make_rng('params')
+          l_rng = mdl.make_rng('loop')
+          mdl.put_variable('state', 'rng_params', mdl.get_variable('state', 'rng_params').at[i].set(p_rng))
+          mdl.put_variable('state', 'rng_loop', mdl.get_variable('state', 'rng_loop').at[i].set(l_rng))
+          inc = mdl.get_variable('params', 'inc')
+          mdl.put_variable('state', 'acc', i + inc)
+          return c
+        return nn.while_loop(
+            cond_fn, body_fn, self, (),
+            carry_variables='state', split_rngs={'params': False, 'loop': True})
+    x = 2
+    mdl = Foo()
+    _, vars = mdl.apply({}, x, mutable=True, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    self.assertEqual(vars['state']['acc'], x)
+    np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
+    np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
+
 
 if __name__ == '__main__':
   absltest.main()

@@ -9,12 +9,12 @@ vNext
 -
 -
 -
--
+- Improved seq2seq example: Factored our model and input pipeline code.
 - Added Optax update guide and deprecated `flax.optim`.
 - Added `sep` argument to `flax.traverse_util.flatten_dict()`.
 - Implemented Sequential module, in `flax.linen.combinators`.
 -
--
+- Added locally-connected (unshared CNN) layer `flax.linen.ConvLocal`.
 -
 
 0.4.0

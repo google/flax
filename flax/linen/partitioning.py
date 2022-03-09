@@ -33,7 +33,8 @@ import contextlib
 import functools
 import re
 import threading
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import (Any, Callable, List, Mapping, Optional, Sequence, Tuple,
+                    Union)
 import flax
 from flax import linen as nn
 from flax.core.frozen_dict import freeze
@@ -159,6 +160,7 @@ def logical_to_mesh_axes(array_dim_names: Sequence[str],
   if not isinstance(rules, (tuple, list)):
     raise ValueError('Unknown axis rule specification type.')
   # We assign mesh axes using a priority based ruleset over logical axis names.
+  result: List[Union[str, UnassignedAxis, None]]
   result = [_unassigned_axis] * len(array_dim_names)
   for rule_model_name, rule_mesh_name in rules:
     if rule_model_name in array_dim_names:
@@ -176,7 +178,7 @@ def logical_to_mesh_axes(array_dim_names: Sequence[str],
 
 def _global_mesh_defined() -> bool:
   """Checks if global xmap/pjit mesh resource environment is defined."""
-  maps_env = jax.experimental.maps.thread_resources.env
+  maps_env = maps.thread_resources.env
   return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
@@ -275,6 +277,7 @@ def param_with_axes(
   # get current module if not explicitly provided
   if module is None:
     module = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
+    assert module is not None
   # define/fetch parameter on that module
   module_param = module.param(name, init_fn, *init_args)
   # TODO(levskaya): handle trees of logical partitionspecs correctly.
@@ -341,7 +344,7 @@ def _core_variable_with_axes(
     scope,
     col: str,
     name: str,
-    init_fn: Callable,
+    init_fn: Callable[..., Any],
     *init_args,
     axes: Tuple[str, ...] = ()):
   """Variant of flax core variable scope call with sharding constraints."""
@@ -389,6 +392,7 @@ def variable_with_axes(
   # get current module if not explicitly provided
   if module is None:
     module = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
+    assert module is not None
   # TODO(levskaya): handle trees of logical partitionspecs correctly.
   if not isinstance(axes, tuple):
     raise TypeError(f'Expected `axes` to be a tuple, got {axes}')
@@ -456,7 +460,7 @@ def _is_mutable(axis_col: str) -> bool:
   Returns:
     Whether it is currently mutable.
   """
-  last = nn.module._context.module_stack[-1]
+  last = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
   if last:
     return last.is_mutable_collection(axis_col)
   else:

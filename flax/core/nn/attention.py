@@ -16,7 +16,7 @@
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 import functools
-from typing import Any
+from typing import Any, Callable, Union
 import warnings
 from . import stochastic
 
@@ -154,11 +154,11 @@ def _invert_perm(perm):
   return tuple(perm_inv)
 
 
-@struct.dataclass
-class CacheEntry:
+class CacheEntry(struct.PyTreeNode):
   key: np.ndarray
   value: np.ndarray
   i: np.ndarray
+
 
 def multi_head_dot_product_attention(
     scope: Scope,
@@ -263,6 +263,7 @@ def multi_head_dot_product_attention(
   value = scope.child(dense, 'value')(inputs_kv)
 
   if cache:
+    cache_entry: Union[Callable[[Any], CacheEntry], CacheEntry]
     if not scope.has_variable('cache', 'entry'):
       ndim, tail_shape = (key.ndim, key.shape[-2:])
       def init_fn(shape, dtype=jnp.float32):

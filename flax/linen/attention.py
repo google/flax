@@ -14,19 +14,21 @@
 
 """Attention core modules for Flax."""
 
-from functools import partial
-from typing import (Any, Callable, Tuple, Optional)
+import functools
+from typing import (Any, Callable, Optional, Tuple)
+
+from flax.linen.initializers import zeros
+from flax.linen.linear import default_kernel_init
+from flax.linen.linear import DenseGeneral
+from flax.linen.linear import PrecisionLike
+from flax.linen.module import compact
+from flax.linen.module import merge_param
+from flax.linen.module import Module
 
 import jax
 from jax import lax
 from jax import random
 import jax.numpy as jnp
-import numpy as np
-
-from flax.linen.linear import default_kernel_init
-from flax.linen.linear import DenseGeneral
-from flax.linen.module import Module, compact, merge_param
-from flax.linen.initializers import zeros
 
 PRNGKey = Any
 Shape = Tuple[int]
@@ -43,7 +45,7 @@ def dot_product_attention_weights(query: Array,
                                   dropout_rate: float = 0.,
                                   deterministic: bool = False,
                                   dtype: Dtype = jnp.float32,
-                                  precision: Optional[lax.Precision] = None):
+                                  precision: PrecisionLike = None):
   """Computes dot-product attention weights given query and key.
 
   Used by :func:`dot_product_attention`, which is what you'll most likely use.
@@ -126,7 +128,7 @@ def dot_product_attention(query: Array,
                           dropout_rate: float = 0.,
                           deterministic: bool = False,
                           dtype: Dtype = jnp.float32,
-                          precision: Optional[lax.Precision] = None):
+                          precision: PrecisionLike = None):
   """Computes dot-product attention given query, key, and value.
 
   This is the core function for applying attention based on
@@ -212,7 +214,7 @@ class MultiHeadDotProductAttention(Module):
   broadcast_dropout: bool = True
   dropout_rate: float = 0.
   deterministic: Optional[bool] = None
-  precision: Any = None
+  precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   use_bias: bool = True
@@ -246,15 +248,13 @@ class MultiHeadDotProductAttention(Module):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    if self.dropout_rate > 0.:  # Require `deterministic` only if using dropout.
-      deterministic = merge_param('deterministic', self.deterministic, deterministic)
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (
         'Memory dimension must be divisible by number of heads.')
     head_dim = qkv_features // self.num_heads
 
-    dense = partial(DenseGeneral,
+    dense = functools.partial(DenseGeneral,
                     axis=-1,
                     dtype=self.dtype,
                     param_dtype=self.param_dtype,
@@ -307,8 +307,13 @@ class MultiHeadDotProductAttention(Module):
                              tuple(batch_dims) + (1, 1, max_length)))
 
     dropout_rng = None
-    if not deterministic and self.dropout_rate > 0.:
-      dropout_rng = self.make_rng('dropout')
+    if self.dropout_rate > 0.:  # Require `deterministic` only if using dropout.
+      m_deterministic = merge_param('deterministic', self.deterministic,
+                                    deterministic)
+      if not m_deterministic:
+        dropout_rng = self.make_rng('dropout')
+    else:
+      m_deterministic = True
 
     # apply attention
     x = self.attention_fn(
@@ -319,7 +324,7 @@ class MultiHeadDotProductAttention(Module):
         dropout_rng=dropout_rng,
         dropout_rate=self.dropout_rate,
         broadcast_dropout=self.broadcast_dropout,
-        deterministic=deterministic,
+        deterministic=m_deterministic,
         dtype=self.dtype,
         precision=self.precision)  # pytype: disable=wrong-keyword-args
     # back to the original inputs dimensions
@@ -378,7 +383,7 @@ def make_attention_mask(query_input: Array,
 
 def make_causal_mask(x: Array,
                      extra_batch_dims: int = 0,
-                     dtype: Dtype = jnp.float32):
+                     dtype: Dtype = jnp.float32) -> Array:
   """Make a causal mask for self-attention.
 
   In case of 1d inputs (i.e., `[batch..., len]`, the self-attention weights
@@ -399,7 +404,8 @@ def make_causal_mask(x: Array,
                              extra_batch_dims=extra_batch_dims, dtype=dtype)
 
 
-def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32):
+def combine_masks(*masks: Optional[Array],
+                  dtype: Dtype = jnp.float32) -> Array:
   """Combine attention masks.
 
   Args:
@@ -409,12 +415,12 @@ def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32):
   Returns:
     Combined mask, reduced by logical and, returns None if no masks given.
   """
-  masks = [m for m in masks if m is not None]
-  if not masks:
+  masks_list = [m for m in masks if m is not None]
+  if not masks_list:
     return None
-  assert all(map(lambda x: x.ndim == masks[0].ndim, masks)), (
-      f'masks must have same rank: {tuple(map(lambda x: x.ndim, masks))}')
-  mask, *other_masks = masks
+  assert all(map(lambda x: x.ndim == masks_list[0].ndim, masks_list)), (
+      f'masks must have same rank: {tuple(map(lambda x: x.ndim, masks_list))}')
+  mask, *other_masks = masks_list
   for other_mask in other_masks:
     mask = jnp.logical_and(mask, other_mask)
   return mask.astype(dtype)

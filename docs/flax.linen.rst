@@ -75,6 +75,7 @@ Transformations
     jvp
     vjp
     custom_vjp
+    while_loop
 
 
 Linear modules
@@ -88,6 +89,7 @@ Linear modules
     DenseGeneral
     Conv
     ConvTranspose
+    ConvLocal
     Embed
 
 
@@ -111,6 +113,7 @@ Pooling
 
     max_pool
     avg_pool
+    pool
 
 
 Activation functions

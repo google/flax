@@ -17,34 +17,35 @@
 
 # pylint: disable=unused-import
 # re-export activation functions from jax.nn
+from typing import Any
+
+from flax.linen.module import compact
+from flax.linen.module import Module
+
 from jax.nn import celu
 from jax.nn import elu
 from jax.nn import gelu
 from jax.nn import glu
+from jax.nn import hard_sigmoid
+from jax.nn import hard_swish
+from jax.nn import hard_tanh
 from jax.nn import leaky_relu
 from jax.nn import log_sigmoid
 from jax.nn import log_softmax
 from jax.nn import normalize
 from jax.nn import relu
+from jax.nn import relu6
+from jax.nn import selu
 from jax.nn import sigmoid
+from jax.nn import silu
 from jax.nn import soft_sign
 from jax.nn import softmax
 from jax.nn import softplus
 from jax.nn import swish
-from jax.nn import silu
-from jax.nn import selu
-from jax.nn import hard_tanh
-from jax.nn import relu6
-from jax.nn import hard_sigmoid
-from jax.nn import hard_swish
-
-from jax.numpy import tanh
-# pylint: enable=unused-import
-
-from typing import Any
-
-from flax.linen.module import Module, compact
 import jax.numpy as jnp
+from jax.numpy import tanh
+
+# pylint: enable=unused-import
 
 
 Array = Any
@@ -57,6 +58,7 @@ class PReLU(Module):
     negative_slope_init: the value to initialize the negative slope.
   """
   negative_slope_init: float = 0.01
+
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies an activation to the inputs.
@@ -68,7 +70,7 @@ class PReLU(Module):
       The transformed input.
     """
     negative_slope = self.param(
-      'negative_slope',
-      lambda k: jnp.asarray(self.negative_slope_init, jnp.float32)
-    )
-    return jnp.where(inputs >= 0, inputs, jnp.asarray(negative_slope, inputs.dtype) * inputs)
+        'negative_slope',
+        lambda k: jnp.asarray(self.negative_slope_init, jnp.float32))
+    return jnp.where(inputs >= 0, inputs,
+                     jnp.asarray(negative_slope, inputs.dtype) * inputs)

@@ -26,6 +26,7 @@ def is_leaf(x):
 # TODO(jheek): remove pytype hack, probably the MutableMapping
 #              inheritance should be dropped.
 
+
 # We subclass MutableMapping for automatic dict-like utility fns.
 # We subclass dict so that freeze, unfreeze work transparently:
 # i.e freeze(DotGetter(d)) == freeze(d)
@@ -35,6 +36,10 @@ class DotGetter(MutableMapping, dict):  # pytype: disable=mro-error
   __slots__ = ('_data',)
 
   def __init__(self, data):
+    # Because DotGetter has an MRO error, calling `super().__init__()` is
+    # ambiguous. Therefore we call it on the `dict` superclass
+    # (`MutableMapping` is an ABC).
+    super(dict, self).__init__()  # pylint: disable=bad-super-call
     object.__setattr__(self, '_data', data)
 
   def __getattr__(self, key):
