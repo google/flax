@@ -14,29 +14,26 @@
 
 """Recurrent neural network modules.
 
-THe RNNCell modules are designed to fit in with the scan function in JAX::
-
-  _, initial_params = LSTMCell.init(rng_1, time_series[0])
-  model = nn.Model(LSTMCell, initial_params)
-  carry = LSTMCell.initialize_carry(rng_2, (batch_size,), memory_size)
-  carry, y = jax.lax.scan(model, carry, time_series)
-
+THe RNNCell modules can be scanned using lifted transforms. For more information
+see: https://flax.readthedocs.io/en/latest/design_notes/lift.html.
 """
 
 import abc
-from functools import partial
-from typing import (Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple,
-                    Type, Union)
+from functools import partial   # pylint: disable=g-importing-member
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 
-from flax.linen.module import Module, compact
-from flax.linen.activation import sigmoid, tanh
-from flax.linen.initializers import orthogonal, zeros
-from flax.linen.linear import Conv, Dense, default_kernel_init, PrecisionLike
-
+from flax.linen.activation import sigmoid
+from flax.linen.activation import tanh
+from flax.linen.initializers import orthogonal
+from flax.linen.initializers import zeros
+from flax.linen.linear import Conv
+from flax.linen.linear import default_kernel_init
+from flax.linen.linear import Dense
+from flax.linen.linear import PrecisionLike
+from flax.linen.module import compact
+from flax.linen.module import Module
 from jax import numpy as jnp
-from jax import lax
 from jax import random
-
 import numpy as np
 
 PRNGKey = Any
@@ -171,8 +168,10 @@ class DenseParams(Module):
   def __call__(self, inputs: Array) -> Tuple[Array, Array]:
     k = self.param(
         'kernel', self.kernel_init, (inputs.shape[-1], self.features))
-    b = (self.param('bias', self.bias_init, (self.features,))
-        if self.use_bias else jnp.zeros((self.features,)))
+    if self.use_bias:
+      b = self.param('bias', self.bias_init, (self.features,))
+    else:
+      b = jnp.zeros((self.features,))
     return k, b
 
 
@@ -199,7 +198,7 @@ class OptimizedLSTMCell(RNNCellBase):
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
-  Args:
+  Attributes:
     gate_fn: activation function used for gates (default: sigmoid).
     activation_fn: activation function used for output and memory update
       (default: tanh).
@@ -211,8 +210,8 @@ class OptimizedLSTMCell(RNNCellBase):
     dtype: the dtype of the computation (default: float32).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
-  gate_fn: Callable = sigmoid
-  activation_fn: Callable = tanh
+  gate_fn: Callable[..., Any] = sigmoid
+  activation_fn: Callable[..., Any] = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
@@ -240,11 +239,9 @@ class OptimizedLSTMCell(RNNCellBase):
     def _concat_dense(inputs: Array,
                       params: Mapping[str, Tuple[Array, Array]],
                       use_bias: bool = True) -> Array:
-      """
-      Concatenates the individual kernels and biases, given in params, into a
-      single kernel and single bias for efficiency before applying them using
-      dot_general.
-      """
+      # Concatenates the individual kernels and biases, given in params, into a
+      # single kernel and single bias for efficiency before applying them using
+      # dot_general.
       kernels, biases = zip(*params.values())
       kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), self.dtype)
 

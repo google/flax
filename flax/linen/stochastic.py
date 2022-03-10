@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Stochastic modules.
-"""
+"""Stochastic modules."""
 
 from typing import Optional, Sequence
 
+from flax.linen.module import compact
+from flax.linen.module import merge_param
+from flax.linen.module import Module
 from jax import lax
 from jax import random
 import jax.numpy as jnp
-
-from flax.linen.module import Module, compact, merge_param
 
 
 class Dropout(Module):
