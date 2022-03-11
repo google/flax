@@ -24,9 +24,11 @@ from absl import app
 from absl import flags
 from absl import logging
 from clu import metric_writers
+from flax import jax_utils
 from flax import linen as nn
 from flax.training import train_state
 import jax
+from jax import lax
 import jax.numpy as jnp
 import optax
 
@@ -118,20 +120,21 @@ def compute_metrics(logits: Array, labels: Array,
       'loss': loss,
       'accuracy': accuracy,
   }
+  metrics = lax.pmean(metrics, axis_name='batch')
   return metrics
 
 
 @jax.jit
-def train_step(state: train_state.TrainState, batch: Array, lstm_rng: PRNGKey,
+def train_step(state: train_state.TrainState, batch_query: Array, batch_answer: Array, lstm_rng: PRNGKey,
                eos_id: int) -> Tuple[train_state.TrainState, Dict[str, float]]:
   """Trains one step."""
-  labels = batch['answer'][:, 1:]
+  labels = batch_answer[:, 1:]
   lstm_key = jax.random.fold_in(lstm_rng, state.step)
 
   def loss_fn(params):
     logits, _ = state.apply_fn({'params': params},
-                               batch['query'],
-                               batch['answer'],
+                               batch_query,
+                               batch_answer,
                                rngs={'lstm': lstm_key})
     loss = cross_entropy_loss(
         logits, labels, get_sequence_lengths(labels, eos_id))
@@ -188,15 +191,39 @@ def train_and_evaluate(workdir: str) -> train_state.TrainState:
   ctable = CTable('0123456789+= ', FLAGS.max_len_query_digit)
   rng = jax.random.PRNGKey(0)
   state = get_train_state(rng, ctable)
+  num_devices = jax.device_count()
+
+  state = jax_utils.replicate(state)
+  repl_rng = jax.random.split(rng, num=num_devices)
+  p_train_step = jax.pmap(train_step, axis_name='batch', donate_argnums=(0,), static_broadcasted_argnums=(4,))
 
   writer = metric_writers.create_default_writer(workdir)
   for step in range(FLAGS.num_train_steps):
     batch = ctable.get_batch(FLAGS.batch_size)
-    state, metrics = train_step(state, batch, rng, ctable.eos_id)
+
+    # Shard across devices.
+    batch_query, batch_answer = batch['query'], batch['answer']
+    batch_size_per_device, ragged = divmod(batch_query.shape[0], num_devices)
+    if ragged:
+      msg = "batch size must be divisible by device count, got {} and {}."
+      raise ValueError(msg.format(FLAGS.batch_size, num_devices))
+    shape_prefix = (num_devices, batch_size_per_device)
+    batch_query = batch_query.reshape(shape_prefix + batch_query.shape[1:])
+    batch_answer = batch_answer.reshape(shape_prefix + batch_answer.shape[1:])
+
+    state, per_device_metrics = p_train_step(state,
+                                             batch_query,
+                                             batch_answer,
+                                             repl_rng,
+                                             ctable.eos_id)
+    metrics = jax.tree_map(lambda x: x[0], per_device_metrics)
+    metrics = jax.device_get(metrics)
+
     if step and step % FLAGS.decode_frequency == 0:
       writer.write_scalars(step, metrics)
       batch = ctable.get_batch(5)
-      decode_batch(state, batch, rng, ctable)
+      unrepl_state = jax_utils.unreplicate(state)
+      decode_batch(unrepl_state, batch, rng, ctable)
 
   return state
 
