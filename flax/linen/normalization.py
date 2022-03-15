@@ -368,7 +368,9 @@ class GroupNorm(Module):
     if ((self.num_groups is None and self.group_size is None) or
         (self.num_groups is not None and self.group_size is not None)):
       raise ValueError('Either `num_groups` or `group_size` should be '
-                       'specified, but not both of them.')
+                       'specified. If `group_size` is to be specified, '
+                       'pass `num_groups=None` as argument to override '
+                       'the default `num_groups` value of 32.')
 
     channels = x.shape[-1]
     if self.group_size is not None:
