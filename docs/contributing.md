@@ -119,6 +119,33 @@ Assuming you now have only one commit in your Pull Request, and want to add chan
 3. At this point, `git push` alone will result in an error. Instead, use `git push --force`.
 4. Check that it's done: The changes to your commit should be immediately reflected in the Github web UI.
 
+## Troubleshooting
+
+### Too many commits in a PR
+
+If your PR has too many commits associated with it, then our build process will
+fail with an error message. This is because of two reasons:
+
+* We prefer to keep our commit history clean.
+
+* Our source sync process will fail if our commit tree is too large.
+
+If you encounter this error message, you should squash your commits. In order to
+rebase your branch to main and creating a new commit containing all your
+changes, please run the following command:
+
+```bash
+git rebase main && git reset --soft main && git commit
+```
+
+This will apply all your changes to the main branch. Note that if you had to
+resolve any conflicts while working on your change (for instance, you did a
+`pull upstream main` which led to conflict), then you will have to resolve these
+conflicts agin.
+
+Once you successfully rebased your branch, you should push your changes. Since
+you are changing the commit history, you should use `git push --force`.
+
 ## Contributor License Agreement
 
 Contributions to this project must be accompanied by a Contributor License

@@ -31,6 +31,27 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
+    # We allow at most 5 commits in a branch to ensure our CI doesn't break.
+    - name: Check commit count in PR
+      if: always()
+      shell: bash
+      run: |
+        set -x 
+        # $GITHUB_REF is in format `refs/heads/<branch_name>`. We fetch it under
+        # the name `commit-count` so we can refer to it below.
+        # Do an unshallow fetch so we retrieve all commits (this is necessary
+        # because ations/checkout@v2 fetches a shallow copy).
+        git fetch origin --unshallow $GITHUB_REF:commit-count
+        git fetch origin main
+        diff=$(git rev-list --count origin/main...commit-count)
+        # $GITHUB_REF adds an additional commit to the commit tree, so $diff is
+        # one too high when executing this as a Github Action.
+        if (( $diff > 6)); then
+          echo "ERROR! More than 5 commits in PR -- please squash your commits."
+          url=https://flax.readthedocs.io/en/latest/contributing.html#too-many-commits-in-a-pr
+          echo "See $url for help on how to resolve this."
+          exit 1
+        fi
     - name: Install dependencies
       run: |
         pip install .
