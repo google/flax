@@ -23,14 +23,16 @@ import jax
 
 class FrozenKeysView(collections.abc.KeysView):
   """A wrapper for a more useful repr of the keys in a frozen dict."""
+
   def __repr__(self):
-    return f"frozen_dict_keys({list(self)})"
+    return f'frozen_dict_keys({list(self)})'
 
 
 class FrozenValuesView(collections.abc.ValuesView):
   """A wrapper for a more useful repr of the values in a frozen dict."""
+
   def __repr__(self):
-    return f"frozen_dict_values({list(self)})"
+    return f'frozen_dict_values({list(self)})'
 
 
 K = TypeVar('K')
@@ -40,7 +42,7 @@ V = TypeVar('V')
 def _indent(x, num_spaces):
   indent_str = ' ' * num_spaces
   lines = x.split('\n')
-  assert lines[-1] == ''
+  assert not lines[-1]
   # skip the final line because it's empty and should not be indented.
   return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
 
@@ -50,7 +52,7 @@ class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
   __slots__ = ('_dict', '_hash')
 
-  def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):
+  def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):  # pylint: disable=invalid-name
     # make sure the dict is as
     xs = dict(*args, **kwargs)
     if __unsafe_skip_copy__:
@@ -178,6 +180,11 @@ def freeze(xs: Mapping[Any, Any]) -> FrozenDict[Any, Any]:
   """Freeze a nested dict.
 
   Makes a nested `dict` immutable by transforming it into `FrozenDict`.
+
+  Args:
+    xs: Dictionary to freeze (a regualr Python dict).
+  Returns:
+    The frozen dictionary.
   """
   return FrozenDict(xs)
 
@@ -187,13 +194,18 @@ def unfreeze(x: FrozenDict[Any, Any]) -> Dict[Any, Any]:
 
   Makes a mutable copy of a `FrozenDict` mutable by transforming
   it into (nested) dict.
+
+  Args:
+    x: Frozen dictionary to unfreeze.
+  Returns:
+    The unfrozen dictionary (a regular Python dict).
   """
   if isinstance(x, FrozenDict):
     # deep copy internal state of a FrozenDict
     # the dict branch would also work here but
     # it is much less performant because jax.tree_map
     # uses an optimized C implementation.
-    return jax.tree_map(lambda y: y, x._dict)
+    return jax.tree_map(lambda y: y, x._dict)  # pylint: disable=protected-access
   elif isinstance(x, dict):
     ys = {}
     for key, value in x.items():

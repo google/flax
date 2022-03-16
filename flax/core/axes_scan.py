@@ -12,21 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Wrapper around jax.lax.scan with in_axes/out_axes API."""
 import functools
+from typing import Any, Callable, Optional
 
 import jax
-import jax.numpy as jnp
 from jax import lax
-
-from jax.interpreters import partial_eval as pe
 from jax import linear_util as lu
-
-from typing import Union, Optional, Callable, Any
-
+from jax.interpreters import partial_eval as pe
+import jax.numpy as jnp
 import numpy as np
 
 
 ScanAxis = Optional[int]
+
 
 class _Broadcast:
   pass
@@ -60,9 +59,9 @@ def scan(
     fn: the body function of the scan loop of the form
       `(broadcast_in, carry, *args) -> (broadcast_out, carry, scan_out)`.
       the broadcast argument allows for loop independent inputs/outputs to
-      be computed inside `fn`. `fn` will be called once to compute `broadcast_out`
-      The actual loop will receive `broadcast_out` as the new `broadcast_in`.
-      This is useful for initializing values inside the loop.
+      be computed inside `fn`. `fn` will be called once to compute
+      `broadcast_out`. The actual loop will receive `broadcast_out` as the new
+      `broadcast_in`. This is useful for initializing values inside the loop.
     in_axes: specifies the axis along which arguments are scanned.
       Use `broadcast` to use the same value across iterations.
     out_axes: specifies the axis along which outputs are concatenated.
@@ -71,7 +70,7 @@ def scan(
     length: number of iterations. Only needs to be specified if there
       is no scan axis from which it can be derived.
     reverse: scan in reverse order from end to start.
-   Returns:
+  Returns:
      the function that performs the scan of the form:
      (broadcast_in, carry_in, *args) -> (broadcast_out, carry_out, scan_out).
   """
@@ -130,21 +129,24 @@ def scan(
     input_avals = (carry_avals, scan_avals)
 
     in_avals, in_tree = jax.tree_flatten(input_avals)
-    f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(broadcast_body), in_tree)
+    f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
+        lu.wrap_init(broadcast_body), in_tree)
     in_pvals = list(map(pe.PartialVal.unknown, in_avals))
     _, out_pvals, _ = pe.trace_to_jaxpr(f_flat, in_pvals)
 
     out_flat = []
     for pv, const in out_pvals:
       if pv is not None:
-        raise ValueError('broadcasted variable has a data dependency on the scan body.')
+        raise ValueError(
+            'broadcasted variable has a data dependency on the scan body.')
       out_flat.append(const)
     broadcast_in, constants_out = jax.tree_unflatten(out_tree(), out_flat)
 
     c, ys = lax.scan(body_fn, init, xs, length=length, reverse=reverse)
     ys = jax.tree_multimap(transpose_from_front, out_axes, ys)
-    ys = jax.tree_multimap(lambda ax, const, y: (const if ax is broadcast else y),
-                           out_axes, constants_out, ys)
+    ys = jax.tree_multimap(
+        lambda ax, const, y: (const if ax is broadcast else y), out_axes,
+        constants_out, ys)
     return broadcast_in, c, ys
 
   return scan_fn

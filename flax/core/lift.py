@@ -15,26 +15,22 @@
 """Jax transform lifting."""
 
 import collections
-from dataclasses import dataclass
+import dataclasses
 import functools
-import warnings
-
-
-from flax import traceback_util
-import jax
-from jax import random
-
 from typing import (Any, Callable, Generic, Iterable, List, Mapping, Optional,
                     Sequence, Tuple, TypeVar, Union)
-
-from .frozen_dict import freeze
-from .frozen_dict import FrozenDict
-from .frozen_dict import unfreeze
-
-from .scope import (RNGSequences, Scope, DenyList, CollectionFilter, PRNGSequenceFilter,
-    is_filter_empty, in_filter, union_filters, intersect_filters, subtract_filters, group_collections)
+import warnings
 
 from . import axes_scan
+from flax import traceback_util
+from .frozen_dict import freeze
+from .frozen_dict import unfreeze
+import jax
+from jax import random
+from .scope import (CollectionFilter, DenyList, PRNGSequenceFilter,  # pylint: disable=g-multiple-import
+                    Scope, group_collections, in_filter,
+                    intersect_filters, is_filter_empty, subtract_filters,
+                    union_filters)
 
 traceback_util.register_exclusion(__file__)
 
@@ -43,10 +39,12 @@ T = TypeVar('T')
 
 def tree_map_rngs(fn, tree):
   """Needed for mapping JAX random.* functions over KeyArray leaves."""
-  return jax.tree_map(fn, tree, is_leaf=lambda x: isinstance(x, random.KeyArray))
+  return jax.tree_map(
+      fn, tree, is_leaf=lambda x: isinstance(x, random.KeyArray))
 
 
 def _dedup_scopes(scopes):
+  """Deduplicated scopes."""
   paths = []
   # must preseve insertion order for duplication to work correctly
   minimal_set = collections.OrderedDict((s, ()) for s in scopes)
@@ -68,6 +66,7 @@ def _dedup_scopes(scopes):
 
 
 def _dup_scopes(orig_scopes, scopes, paths):
+  """Duplicated scopes."""
   mapping = dict(zip(orig_scopes, scopes))
   scopes = []
   for root, path in paths:
@@ -77,8 +76,10 @@ def _dup_scopes(orig_scopes, scopes, paths):
     scopes.append(scope)
   return scopes
 
+
 def _transpose(xs):
   return tuple(zip(*xs))
+
 
 def pack(fn: Callable[..., Any],
          in_variable_filters: Sequence[CollectionFilter],
@@ -89,6 +90,18 @@ def pack(fn: Callable[..., Any],
   """Pack variables and rngs for functional transformations.
 
   The pack function is the building block for all other lifted transformations.
+
+  Args:
+    fn: The function to pack. `fn` has the signature
+      `(scope_fn, repack_fn, variable_groups, rng_groups, *args) ->
+      (output, packed_variables)`.
+    in_variable_filters: Input variable filters.
+    out_variable_filters: Output variable filters.
+    rng_filters: RNG filters.
+    name: The name of the packed scope.
+    enable_kwargs: Whether to enable kwargs or not.
+  Returns:
+    A callable which expects a scope as the first argument.
   """
   @functools.wraps(fn)
   def wrapper(scope_tree: Scope, *args, **kwargs):
@@ -127,7 +140,10 @@ def pack(fn: Callable[..., Any],
     rng_groups_xs_t = _transpose(rng_groups_xs)
 
     inner_scopes: List[Scope] = []
-    def scope_fn(variable_groups_xs_t, rng_groups_xs_t, mutable_filter: CollectionFilter = True):
+
+    def scope_fn(variable_groups_xs_t,
+                 rng_groups_xs_t,
+                 mutable_filter: CollectionFilter = True):
       nonlocal inner_scopes
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
@@ -136,22 +152,26 @@ def pack(fn: Callable[..., Any],
       for out_filter in out_variable_filters:
         mutable = union_filters(mutable, out_filter)
       # could be () in the edge case where no rngs or variable_groups are lifted
-      # in this case fallback to ((),) * len(scopes) to make sure the zip has something
-      # to iterate over for each scope.
-      variable_groups_xs = _transpose(variable_groups_xs_t) or ((),) * len(scopes)
+      # in this case fallback to ((),) * len(scopes) to make sure the zip has
+      # something to iterate over for each scope.
+      variable_groups_xs = _transpose(variable_groups_xs_t) or (
+          (),) * len(scopes)
       rng_groups_xs = _transpose(rng_groups_xs_t) or ((),) * len(scopes)
       assert len(variable_groups_xs) == len(scopes)
       assert len(rng_groups_xs) == len(scopes)
-      for variable_groups, rng_groups, scope, rng_counters in zip(variable_groups_xs, rng_groups_xs, scopes, inner_rng_counters):
+      for variable_groups, rng_groups, scope, rng_counters in zip(
+          variable_groups_xs, rng_groups_xs, scopes, inner_rng_counters):
         variables = {}
         rngs = {}
         for variable_group in variable_groups:
           variables.update(variable_group)
         for rng_group in rng_groups:
           rngs.update(rng_group)
-        # make sure variable dicts are cloned and can't be manipulated by ref sharing.
+        # make sure variable dicts are cloned and can't be manipulated by ref
+        # sharing.
         variables = jax.tree_map(lambda x: x, variables)
-        scope_mutable = intersect_filters(intersect_filters(scope.mutable, mutable), mutable_filter)
+        scope_mutable = intersect_filters(
+            intersect_filters(scope.mutable, mutable), mutable_filter)
         new_path = scope.path
         if name:
           if new_path:
@@ -203,7 +223,9 @@ def pack(fn: Callable[..., Any],
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
     out_variable_groups_xs = _transpose(out_variable_groups_xs_t)
-    for scope, out_variable_groups, rng_counters in zip(scopes, out_variable_groups_xs, inner_rng_counters):
+    for scope, out_variable_groups, rng_counters in zip(scopes,
+                                                        out_variable_groups_xs,
+                                                        inner_rng_counters):
       for out_variable_group in out_variable_groups:
         for col_name, collection in out_variable_group.items():
           if not scope.is_mutable_collection(col_name):
@@ -218,13 +240,14 @@ def pack(fn: Callable[..., Any],
 id_fn = lambda x: x
 
 
-def map_variables(
-    fn: Callable[..., Any],
-    mapped_collections: CollectionFilter,
-    map_in_fn: Callable[..., Any] = id_fn,
-    map_out_fn: Callable[..., Any] = id_fn,
-    init: bool = False, mutable: bool = False,
-    rngs: PRNGSequenceFilter = True, variables: CollectionFilter = True):
+def map_variables(fn: Callable[..., Any],
+                  mapped_collections: CollectionFilter,
+                  map_in_fn: Callable[..., Any] = id_fn,
+                  map_out_fn: Callable[..., Any] = id_fn,
+                  init: bool = False,
+                  mutable: bool = False,
+                  rngs: PRNGSequenceFilter = True,
+                  variables: CollectionFilter = True) -> Callable[..., Any]:
   """Map Variables inside a scope.
 
   Args:
@@ -237,6 +260,9 @@ def map_variables(
     rngs: PRNGSequences added to the transformed scope (default: all).
     variables: Additional Variable collections added to the transformed scope.
       Besides those specified by `target` (default: all).
+
+  Returns:
+    A callable expecting a scope as the first argument.
   """
   is_target_out = mutable or init
 
@@ -244,7 +270,8 @@ def map_variables(
     target, variables = variable_groups
     if init:
       scopes = scope_fn((target, variables), rng_groups)
-      has_mutable_cols = any(not is_filter_empty(scope.mutable) for scope in jax.tree_leaves(scopes))
+      has_mutable_cols = any(not is_filter_empty(scope.mutable)
+                             for scope in jax.tree_leaves(scopes))
       if has_mutable_cols:
         fn(scopes, *args, **kwargs)
         target, _ = repack(scopes)
@@ -263,8 +290,15 @@ def map_variables(
     return y, (out_target, out_vars)
 
   in_vars = (mapped_collections, variables)
-  out_vars = in_vars if is_target_out else (False, subtract_filters(variables, mapped_collections))
-  return pack(wrapper, in_vars, out_vars, (rngs,), enable_kwargs=True, name='map_variables')
+  out_vars = in_vars if is_target_out else (False,
+                                            subtract_filters(
+                                                variables, mapped_collections))
+  return pack(
+      wrapper,
+      in_vars,
+      out_vars, (rngs,),
+      enable_kwargs=True,
+      name='map_variables')
 
 
 def swap_collection(fn: Callable[..., Any], col_a: str, col_b: str):
@@ -278,12 +312,13 @@ def swap_collection(fn: Callable[..., Any], col_a: str, col_b: str):
   return map_variables(fn, (col_a, col_b), swap, swap, mutable=True)
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class In(Generic[T]):
   """Specifies a variable collection should only be lifted as input."""
   axis: Any  # pytype does not support generic variable annotation
 
-@dataclass(frozen=True)
+
+@dataclasses.dataclass(frozen=True)
 class Out(Generic[T]):
   """Specifies a variable collection should only be lifted as output."""
   axis: Any  # pytype does not support generic variable annotation
@@ -306,12 +341,16 @@ def _bwd_wrapper(treedef, bwd_fn, tangent):
   return inputs_grad, vars_grad
 
 
-def vjp(fn: Callable[..., Any], scope: Scope, *primals,
-    has_aux: bool = False, reduce_axes=(),
-    vjp_variables: CollectionFilter = "params",
+def vjp(
+    fn: Callable[..., Any],
+    scope: Scope,
+    *primals,
+    has_aux: bool = False,
+    reduce_axes=(),
+    vjp_variables: CollectionFilter = 'params',
     variables: CollectionFilter = True,
     rngs: PRNGSequenceFilter = True,
-    ) -> Union[Tuple[Any, Callable], Tuple[Any, Callable, Any]]:
+) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
   """A lifted version of ``jax.vjp``.
 
   See ``jax.vjp`` for the unlifted vector-Jacobiam product (backward gradient).
@@ -331,13 +370,13 @@ def vjp(fn: Callable[..., Any], scope: Scope, *primals,
       params_grad, x_grad = bwd(jnp.ones(y.shape))
       return y, params_grad, x_grad
 
-   Args:
+  Args:
     fn: Function to be differentiated. Its arguments should be arrays, scalars,
       or standard Python containers of arrays or scalars. It should return an
       array, scalar, or standard Python container of arrays or scalars. It will
       receive the scope and primals as arguments.
     scope: The scope of which the variables will be differentiated.
-    primals: A sequence of primal values at which the Jacobian of ``fn``
+    *primals: A sequence of primal values at which the Jacobian of ``fn``
       should be evaluated. The length of ``primals`` should be equal to the
       number of positional parameters to ``fn``. Each primal value should be a
       tuple of arrays, scalar, or standard Python containers thereof.
@@ -391,11 +430,16 @@ def vjp(fn: Callable[..., Any], scope: Scope, *primals,
       return (y, bwd), out_vars
   return pack(
       inner, (vjp_variables, variables), (variables,), (rngs,),
-      name='vjp', enable_kwargs=False)(scope, *primals)
+      name='vjp',
+      enable_kwargs=False)(scope, *primals)
 
 
-def jvp(fn: Callable[..., Any], scope: Scope,
-    primals, tangents, variable_tangents,
+def jvp(
+    fn: Callable[..., Any],
+    scope: Scope,
+    primals,
+    tangents,
+    variable_tangents,
     variables: CollectionFilter = True,
     rngs: PRNGSequenceFilter = True,
     ) -> Tuple[Any, Any]:
@@ -420,11 +464,13 @@ def jvp(fn: Callable[..., Any], scope: Scope,
           variable_tangents={'params': vars_t})
       return out_t
 
-   Args:
+  Args:
+    fn: The function to be transformed.
+    scope: The scope(s) which should be lifted into the transform.
     primals: The primal values at which the Jacobian of ``fun`` should be
-        evaluated. Should be either a tuple or a list of arguments,
-        and its length should be equal to the number of positional parameters of
-        ``fun``.
+      evaluated. Should be either a tuple or a list of arguments,
+      and its length should be equal to the number of positional parameters of
+      ``fun``.
     tangents: The tangent vector for which the Jacobian-vector product should be
       evaluated. Should be either a tuple or a list of tangents, with the same
       tree structure and array shapes as ``primals``.
@@ -451,18 +497,22 @@ def jvp(fn: Callable[..., Any], scope: Scope,
       scope = scope_fn(variable_groups, rng_groups)
       y = fn(scope, *args)
       return y, repack_fn(scope)
-    (y, out_vars), out_tangents = jax.jvp(wrapper, (jvp_vars, args), (variable_tangents, tangents))
+
+    (y, out_vars), out_tangents = jax.jvp(wrapper, (jvp_vars, args),
+                                          (variable_tangents, tangents))
     return (y, out_tangents[0]), out_vars
-  # filter out empty tangent collections because JAX will error on non-equal tree structure
-  # for example: {"params": {}} != {}
+  # filter out empty tangent collections because JAX will error on non-equal
+  # tree structure for example: {"params": {}} != {}.
   treedef = jax.tree_structure(scope)
 
-  variable_tangents =  tuple({k: v for k, v in vt.items() if v} for vt in treedef.flatten_up_to(variable_tangents))
+  variable_tangents = tuple({k: v  # pylint: disable=g-complex-comprehension
+                             for k, v in vt.items()
+                             if v}
+                            for vt in treedef.flatten_up_to(variable_tangents))
   target = tuple(variable_tangents[0].keys())
   return pack(
       inner, (target, variables), (variables,), (rngs,),
       name='jvp', enable_kwargs=False)(scope, *primals)
-
 
 
 def vmap(fn: Callable[..., Any],
@@ -518,6 +568,9 @@ def vmap(fn: Callable[..., Any],
     axis_name: Specifies a name for the batch axis. Can be used together
       with parallel reduction primitives (e.g. `jax.lax.pmean`,
       `jax.lax.ppermute`, etc.)
+
+  Returns:
+    A vectorized version of the input scope function.
   """
   variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
@@ -534,7 +587,8 @@ def vmap(fn: Callable[..., Any],
       return ()
 
     # split rngs
-    axis_sizes = jax.tree_multimap(find_axis_size, (variable_in_axes, in_axes), (variable_groups, args))
+    axis_sizes = jax.tree_multimap(find_axis_size, (variable_in_axes, in_axes),
+                                   (variable_groups, args))
     axis_sizes = set(jax.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
       d_axis_size, = axis_sizes
@@ -623,18 +677,19 @@ def scan(fn: Callable[..., Any],
     fn: the function to be transformed.
     variable_axes: the variable collections that are scanned over.
     variable_broadcast: Specifies the broadcasted variable collections.
-      A broadcasted variable should not depend on any computation that cannot be lifted out of the loop.
-      This is typically used to define shared parameters inside the fn.
-    variable_carry: Specifies the variable collections that are carried through the loop.
-      Mutations to these variables are carried to the next iteration and will be preserved
-      when the scan finishes.
+      A broadcasted variable should not depend on any computation that cannot b
+      lifted out of the loop. This is typically used to define shared parameters
+      inside the fn.
+    variable_carry: Specifies the variable collections that are carried through
+      the loop. Mutations to these variables are carried to the next iteration
+      and will be preserved when the scan finishes.
     split_rngs: Split PRNG sequences will be different for each loop iterations.
       If split is False the PRNGs will be the same across iterations.
-    in_axes: Specifies the axis to scan over for the arguments. Should be a prefix
-      tree of the arguments. Use `flax.core.broadcast` to feed an entire input
-      to each iteration of the scan body.
-    out_axes: Specifies the axis to scan over for the return value. Should be a prefix
-      tree of the return value.
+    in_axes: Specifies the axis to scan over for the arguments. Should be a
+      prefix tree of the arguments. Use `flax.core.broadcast` to feed an entire
+      input to each iteration of the scan body.
+    out_axes: Specifies the axis to scan over for the return value. Should be a
+      prefix tree of the return value.
     length: Specifies the number of loop iterations. This only needs
       to be specified if it cannot be derivied from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
@@ -642,8 +697,9 @@ def scan(fn: Callable[..., Any],
       intended for inline SPMD annotations.
 
   Returns:
-    The scan function with the signature ``(scope, carry, *xxs) -> (carry, yys)``,
-    where ``xxs`` and ``yys`` are the scan values that go in and out of the loop.
+    The scan function with the signature
+    ``(scope, carry, *xxs) -> (carry, yys)``, where ``xxs`` and ``yys`` are the
+    scan values that go in and out of the loop.
   """
   variable_in_axes, variable_out_axes = _split_in_out_axes(variable_axes)
   variable_in_groups, variable_in_axes = _unzip2(variable_in_axes.items())
@@ -720,7 +776,9 @@ def scan(fn: Callable[..., Any],
       name='scan')
 
 
-C = TypeVar("C")
+C = TypeVar('C')
+
+
 def while_loop(cond_fn: Callable[[Scope, C], bool],
                body_fn: Callable[[Scope, C], C],
                scope: Scope, init: C,
@@ -749,11 +807,12 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
 
       c = x
       c = body_fn(scope, c)
-      return lift.while_loop(cond_fn, body_fn, scope, (), carry_variables='state')
+      return lift.while_loop(cond_fn, body_fn, scope, (),
+                             carry_variables='state')
 
   Args:
-    body_fn: The body of the while loop.
     cond_fn: Should return True as long as the loop should continue.
+    body_fn: The body of the while loop.
     scope: The scope(s) which should be lifted into the loop.
     init: The initial state passed to the loop
     carry_variables: collections that are carried through the loop
@@ -763,36 +822,42 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
     split_rngs: Split PRNG sequences will be different for each loop iterations.
       If split is False the PRNGs will be the same across iterations.
   Returns:
-    The final state after executing the while loop. 
+    The final state after executing the while loop.
   """
   rng_groups, rng_splits = _unzip2(split_rngs.items())
 
   def inner(scope_fn, repack_fn,
             variable_groups, rng_groups, carry_init):
+    del carry_init  # unused.
     carry_variables, broadcast_variables = variable_groups
 
     def make_loop_rngs(i):
       local_rng_groups = []
       for rng_group, rng_split in zip(rng_groups, rng_splits):
         if rng_split:
-          rng_group = tree_map_rngs(lambda rng: random.fold_in(rng, i), rng_group)
+          rng_group = tree_map_rngs(lambda rng: random.fold_in(rng, i),
+                                    rng_group)
         local_rng_groups.append(rng_group)
       return local_rng_groups
 
     def cond_wrapper(c):
       i, carry_variables, carry = c
-      scope = scope_fn((carry_variables, broadcast_variables), make_loop_rngs(-i), mutable_filter=False)
+      scope = scope_fn((carry_variables, broadcast_variables),
+                       make_loop_rngs(-i),
+                       mutable_filter=False)
       return cond_fn(scope, carry)
 
     def body_wrapper(c):
       i, carry_variables, carry = c
-      scope = scope_fn((carry_variables, broadcast_variables), make_loop_rngs(i))
+      scope = scope_fn((carry_variables, broadcast_variables),
+                       make_loop_rngs(i))
       carry = body_fn(scope, carry)
       carry_variables, = repack_fn(scope)
       return (i + 1, carry_variables, carry)
 
     c = (0, carry_variables, init)
-    _, carry_variables, carry = jax.lax.while_loop(cond_wrapper, body_wrapper, c)
+    _, carry_variables, carry = jax.lax.while_loop(cond_wrapper, body_wrapper,
+                                                   c)
     return carry, (carry_variables,)
 
   return pack(
@@ -803,7 +868,7 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
       name='while_loop')(scope, init)
 
 
-def custom_vjp(fn: Callable[..., Any], 
+def custom_vjp(fn: Callable[..., Any],
                forward_fn: Callable[..., Any],
                backward_fn: Callable[..., Any],
                grad_vars: CollectionFilter = 'params',
@@ -817,13 +882,13 @@ def custom_vjp(fn: Callable[..., Any],
   a tuple containing the output of `fn(scope, *args)` and the residuals that are
   passed to `backward_fn`.
 
-  The `backward_fn` receives the nondiff arguments, residuals, and the output tangents.
-  It should return a tuple containing the input and variable tangents.
+  The `backward_fn` receives the nondiff arguments, residuals, and the output
+  tangents. It should return a tuple containing the input and variable tangents.
 
-  Note that the vjp function returned by `lift.vjp` can be passed as residual and
-  used in the `backward_fn`. The scope is unavailable during the backward pass.
-  If the scope is required in `backward_fn`, a snapshot of the variables can be
-  taken and returned as a residual in the `forward_fn`.
+  Note that the vjp function returned by `lift.vjp` can be passed as residual
+  and used in the `backward_fn`. The scope is unavailable during the backward
+  pass. If the scope is required in `backward_fn`, a snapshot of the variables
+  can be taken and returned as a residual in the `forward_fn`.
 
   Example::
 
@@ -877,14 +942,13 @@ def custom_vjp(fn: Callable[..., Any],
       return (y, vars_out), res
 
     def f_bwd(*args):
-      # the backward function does not pass a lifted scope
-      # to the user. Currently, there is no way to have
-      # side effects flow out of backward pass.
-      # Even without mutation variables would be ill-defined.
-      # For example, would we take a snapshot of the variables
-      # before or after calling `forward_fn`?
+      # the backward function does not pass a lifted scope to the user.
+      # Currently, there is no way to have side effects flow out of backward
+      # pass. Even without mutation variables would be ill-defined. For example,
+      # would we take a snapshot of the variables before or after calling
+      # `forward_fn`?
       nondiff_args = args[:-2]
-      res, g = args[-2:]
+      res, g = args[-2:]  # pylint: disable=unbalanced-tuple-unpacking
       g_y, _ = g
       input_t, var_t = backward_fn(*nondiff_args, res, g_y)
       assert scopes_treedef is not None, 'backward called before forward?!'
@@ -950,7 +1014,11 @@ def checkpoint(fn: Callable[..., Any],
       return y, repack_fn(scope)
 
     return rematted(variable_groups, rng_groups, *args, **kwargs)
-  return pack(inner, (variables,), (variables,), (rngs,), name='remat', enable_kwargs=True)
+
+  return pack(
+      inner, (variables,), (variables,), (rngs,),
+      name='remat',
+      enable_kwargs=True)
 
 
 remat = checkpoint
@@ -961,8 +1029,10 @@ def _hashable_filter(x):
   if isinstance(x, Iterable):
     return tuple(x)  # convert un-hashable list & sets to tuple
   if isinstance(x, DenyList):
-    return DenyList(_hashable_filter(x.deny))  # convert inner filter recursively
+    return DenyList(_hashable_filter(
+        x.deny))  # convert inner filter recursively
   return x
+
 
 def jit(fn: Callable[..., Any],
         variables: CollectionFilter = True,
@@ -991,12 +1061,6 @@ def jit(fn: Callable[..., Any],
       indicated by ``static_argnums`` then an error is raised. Arguments that
       are not arrays or containers thereof must be marked as static.
       Defaults to ().
-    device: This is an experimental feature and the API is likely to change.
-      Optional, the Device the jitted function will run on. (Available devices
-      can be retrieved via :py:func:`jax.devices`.) The default is inherited from
-      XLA's DeviceAssignment logic and is usually to use ``jax.devices()[0]``.
-    backend: a string representing the XLA backend: ``'cpu'``, ``'gpu'``, or
-      ``'tpu'``.
     donate_argnums: Specify which arguments are "donated" to the computation.
       It is safe to donate arguments if you no longer need them once the
       computation has finished. In some cases XLA can make use of donated
@@ -1004,6 +1068,13 @@ def jit(fn: Callable[..., Any],
       for example recycling one of your input buffers to store a result. You
       should not reuse buffers that you donate to a computation, JAX will raise
       an error if you try to.
+    device: This is an experimental feature and the API is likely to change.
+      Optional, the Device the jitted function will run on. (Available devices
+      can be retrieved via :py:func:`jax.devices`.) The default is inherited
+      from XLA's DeviceAssignment logic and is usually to use
+      ``jax.devices()[0]``.
+    backend: a string representing the XLA backend: ``'cpu'``, ``'gpu'``, or
+      ``'tpu'``.
 
   Returns:
     A wrapped version of ``fn``, set up for just-in-time compilation.
@@ -1012,8 +1083,8 @@ def jit(fn: Callable[..., Any],
     static_argnums = (static_argnums,)
   if not isinstance(donate_argnums, Iterable):
     donate_argnums = (donate_argnums,)
-  # offset argnums by two because first argument in the original function is the scope
-  # while jitted has 3 functions before the user arguments.
+  # offset argnums by two because first argument in the original function is the
+  # scope while jitted has 3 functions before the user arguments.
   static_argnums = (0,) + tuple(i + 2 for i in static_argnums if i > 0)
   donate_argnums = tuple(i + 2 for i in donate_argnums if i > 0)
 
@@ -1050,13 +1121,15 @@ def jit(fn: Callable[..., Any],
   return pack(inner, (variables,), (variables,), (rngs,), name='jit')
 
 
-def remat_scan(body_fn: Callable[..., Any],
-               lengths: Sequence[int],
-               policy: Optional[Callable[..., bool]] = None,
-               variable_broadcast: CollectionFilter = False,
-               variable_carry: CollectionFilter = False,
-               variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {True: 0},
-               split_rngs: Mapping[PRNGSequenceFilter, bool] = {True: True}) -> Callable[..., Any]:
+def remat_scan(
+    body_fn: Callable[..., Any],
+    lengths: Sequence[int],
+    policy: Optional[Callable[..., bool]] = None,
+    variable_broadcast: CollectionFilter = False,
+    variable_carry: CollectionFilter = False,
+    variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {True: 0},
+    split_rngs: Mapping[PRNGSequenceFilter, bool] = {True: True}
+) -> Callable[..., Any]:
   """Combines `lift.remat` and `lift.scan` for memory efficiency and constant time compilation.
 
   ``remat_scan`` allows for constant compile times and sublinear
@@ -1072,17 +1145,20 @@ def remat_scan(body_fn: Callable[..., Any],
 
   Args:
     body_fn: Scope function to be repeated using a (nested scan)
-    lengths: number of loop iterations at the given level. The total
-      number of iterations `n = prod(lengths)`. each loop is rematerialized.
-      This way the memory consumption is proportional to `n^(1 / d)` where `d = len(lengths)`.
-      Minimal memory consumptions requires tuning the lengths such that the same amount of memory
-      is consumed at each level of the nested loop.
-    variable_broadcast: Specifies the broadcasted variable collections.
-      A broadcasted variable should not depend on any computation that cannot be lifted out of the loop.
-      This is typically used to define shared parameters inside the fn.
-    variable_carry: Specifies the variable collections that are carried through the loop.
-      Mutations to these variables are carried to the next iteration and will be preserved
-      when the scan finishes.
+    lengths: number of loop iterations at the given level. The total number of
+      iterations `n = prod(lengths)`. each loop is rematerialized. This way the
+      memory consumption is proportional to `n^(1 / d)` where `d =
+      len(lengths)`. Minimal memory consumptions requires tuning the lengths
+      such that the same amount of memory is consumed at each level of the
+      nested loop.
+    policy: Experimental checkpoint policy, see ``jax.checkpoint``.
+    variable_broadcast: Specifies the broadcasted variable collections. A
+      broadcasted variable should not depend on any computation that cannot be
+      lifted out of the loop. This is typically used to define shared parameters
+      inside the fn.
+    variable_carry: Specifies the variable collections that are carried through
+      the loop. Mutations to these variables are carried to the next iteration
+      and will be preserved when the scan finishes.
     variable_axes: the variable collections that are scanned over.
     split_rngs: Split PRNG sequences will be different for each loop iterations.
       If split is False the PRNGs will be the same across iterations.
