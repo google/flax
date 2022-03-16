@@ -187,7 +187,7 @@ class ScopeCollectionNotFound(FlaxError):
   """
   def __init__(self, col_name, var_name, scope_path):
     super().__init__(
-      f'Tried to access "{var_name}" from collection "{col_name}"" in '
+      f'Tried to access "{var_name}" from collection "{col_name}" in '
       f'"{scope_path}" but the collection is empty.')
 
 
