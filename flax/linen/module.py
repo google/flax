@@ -762,13 +762,15 @@ class Module(metaclass=ModuleMeta):
         cursor = self.parent._state.autoname_cursor.get(prefix, 0)
         self.name = f'{prefix}_{cursor}'
         self.parent._state.autoname_cursor[prefix] = cursor + 1
-      if self.parent._name_taken(self.name, self):
-        parent_class = self.parent.__class__.__name__
-        raise errors.NameInUseError('submodule', self.name, parent_class)
-      self.parent._state.children[self.name] = self
       # Allow scope aliasing under transforms for submodules defined in setup.
       reuse_scopes = (self.parent._state.in_setup and
                       self.parent._state.setup_called == SetupState.TRANSFORMED)
+      # Perform name-collision check.
+      if self.parent._name_taken(self.name, self, reuse_scopes=reuse_scopes):
+        parent_class = self.parent.__class__.__name__
+        raise errors.NameInUseError('submodule', self.name, parent_class)
+      # Finalize attachment to parent and scope initialization.
+      self.parent._state.children[self.name] = self
       object.__setattr__(
           self, 'scope', self.parent.scope.push(self.name, reuse=reuse_scopes))
 
@@ -877,7 +879,10 @@ class Module(metaclass=ModuleMeta):
         return wrapped_id(self.clone(parent=root), x)
     _ = jax.eval_shape(run_setup_only, 0)
 
-  def _name_taken(self, name: str, module: 'Module' = None) -> bool:
+  def _name_taken(self,
+                  name: str,
+                  module: 'Module' = None,
+                  reuse_scopes : bool = False) -> bool:
     if name in _all_names_on_object(self):
       val = getattr(self, name, None)
       if module is not None and val is module:
@@ -885,6 +890,9 @@ class Module(metaclass=ModuleMeta):
         # field assignment happened before naming
         return False
       return True
+    # Check for the existence of name in the scope object.
+    if reuse_scopes:
+      return False
     return name in self.scope.reservations
 
   @property
