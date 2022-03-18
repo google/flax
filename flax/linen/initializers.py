@@ -16,6 +16,7 @@
 
 # pylint: disable=unused-import
 # re-export initializer functions from jax.nn
+from jax.nn.initializers import constant
 from jax.nn.initializers import delta_orthogonal
 from jax.nn.initializers import glorot_normal
 from jax.nn.initializers import glorot_uniform
