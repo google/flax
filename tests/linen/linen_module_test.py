@@ -159,6 +159,22 @@ class ModuleTest(absltest.TestCase):
       {'lyrs1_a': {'kernel': (10, 3)},
       'lyrs1_b': {'kernel': (3, 3)}})
 
+  def test_setup_dict_nonstring_keys(self):
+    class Foo(nn.Module):
+      def setup(self):
+          self.a = {(1, 2): nn.Dense(2)} # here the dict using tuple as key
+
+      @nn.compact
+      def __call__(self, x):
+          return self.a[(1, 2)](x)
+
+    foo = Foo()
+    x = jnp.ones(shape=(1, 3))
+    params = foo.init(random.PRNGKey(0), x)['params']
+    param_shape = jax.tree_map(jnp.shape, params)
+    self.assertEqual(param_shape,
+      {'a_(1, 2)': {'kernel': (3, 2), 'bias': (2,)}})
+
   def test_setup_cloning(self):
     class MLP(nn.Module):
       def setup(self):
