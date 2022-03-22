@@ -15,6 +15,7 @@
 """Tests for flax.deprecated.nn.linear."""
 
 import functools
+from multiprocessing.sharedctypes import Value
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -842,6 +843,19 @@ class LinearTest(parameterized.TestCase):
         }})
     self.assertEqual(y.shape, (8, 6))
 
+  def test_canonicalize_padding(self):
+    def test_pad(pad, rank, expected=None):
+      if expected is None:
+        with self.assertRaises(ValueError):
+          nn.linear.canonicalize_padding(pad, rank)
+      else:
+        self.assertEqual(nn.linear.canonicalize_padding(pad, rank), expected)
+    test_pad("SAME", 2, "SAME")
+    test_pad(2, 3, [(2, 2), (2, 2), (2, 2)])
+    test_pad((2, 2), 3)
+    test_pad((2, 2), 1)
+    test_pad([1, (2, 3)], 2, [(1, 1), (2, 3)])
+    test_pad([None, (1, 2)], 2)
 
 if __name__ == '__main__':
   absltest.main()
