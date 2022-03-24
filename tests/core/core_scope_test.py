@@ -121,11 +121,11 @@ class ScopeTest(absltest.TestCase):
         },
     })
     apply(f)(params)  # Valid.
-    msg = 'dictionary containing a \'params\' key at the root level'
+    msg = 'but got a dict with an extra params layer'
     with self.assertRaisesRegex(errors.ApplyScopeInvalidVariablesStructureError,
                                 msg):
       apply(f)({'params': params})
-      
+
   def test_mutate_undefined_collection(self):
     def f(scope):
       scope.put_variable('state', 'test', 123)
@@ -138,7 +138,7 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       nn.dense(scope.push('dense'), np.ones((1, 2)), 2)
 
-    msg = r'No parameter named "kernel" exists in "/dense".'
+    msg = r'Could not find parameter named "kernel" in scope "/dense".'
     with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({'params': {'abc': 1}})
 
