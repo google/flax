@@ -311,8 +311,9 @@ class _Conv(Module):
     inputs = jnp.asarray(inputs, self.dtype)
 
     if isinstance(self.kernel_size, int):
-      raise TypeError('The kernel size must be specified as a'
-                      ' tuple/list of integers (eg.: [3, 3]).')
+      raise TypeError('Expected Conv kernel_size to be a'
+                      ' tuple/list of integers (eg.: [3, 3]) but got'
+                      f' {self.kernel_size}.')
     else:
       kernel_size = tuple(self.kernel_size)
 

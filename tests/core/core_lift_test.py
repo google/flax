@@ -47,7 +47,7 @@ class LiftTest(absltest.TestCase):
                         split_rngs={'params': True})
       dense(scope.push('dense'), np.ones((3, 2)), 2)
 
-    msg = r'No parameter named "kernel" exists in "/vmap\(dense\)".'
+    msg = r'Could not find parameter named "kernel" in scope "/vmap\(dense\)".'
     with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({'params': {'dense': {'abc': np.ones((3, 3))}}})
 
