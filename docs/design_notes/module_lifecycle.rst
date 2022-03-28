@@ -12,7 +12,7 @@ The Module lifecycle
 
 This design note is intended for users who are already familiar with linen Modules but want to understand more about the design principles behind the abstraction. This note should give you a good understanding of the assumptions and guarantees the Module API is built upon. If you have no practical experience with Modules yet, check out the `MNIST Tutorial <https://flax.readthedocs.io/en/latest/notebooks/annotated_mnist.html>`_.
 
-linen Modules offer a pythonic abstracton on top of Flax core. The ``Module`` abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
+linen Modules offer a Pythonic abstracton on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
 
 
 Overview
@@ -21,7 +21,7 @@ Overview
 Definition
 =============
 
-Let's start with a high-level overview of the Module lifecycle. We start by defining a simple Module:
+Let's start with a high-level overview of the Module lifecycle. First, define a simple Module:
 
 
 .. testcode::
@@ -65,47 +65,46 @@ Now we want to construct and use the ``MLP`` Module:
 
 First, we construct an instance of ``MLP`` and pass the construction attributes. Note that construction here is different from what you might expect if you are not used to Functional Programming patterns. The ``MLP`` constructor does not actually create variables or any internal state whatsoever. It's best to think of it as a specification or template of the Module that contains functionality but no data.
 
-Let's first take a closer look at initialization. Surprisingly, there actually is no special initialization path in Flax. Calling ``init`` is just a special case of ``apply`` and we could also code it as:
+Let's take a closer look at initialization. Surprisingly, there actually is no seperate initialization path in Flax. Calling ``init`` is just a special case of ``apply``, which you can also write as:
 
 
-.. testcode:
+.. testcode::
 
   # equivalent to: variables = mlp.init(random.PRNGKey(0), x)
   _, variables = mlp.apply({}, x, rngs={"params": random.PRNGKey(0)}, mutable=True)
 
 
-Thus, ``init`` is nothing more than a special case of ``apply`` where:
+Thus, ``init`` is nothing more than a wrapper around ``apply`` where:
 
 #. We call a Module without any initial variables (an empty dict).
-#. A PRNG generator named “params” is always passed for randomly initializing parameters (using the parameter initialization function).
+#. A PRNG generator named ``"params"`` is always passed for randomly initializing parameters (using the parameter initialization function).
 #. All variable collections are set to mutable (``mutable=True``). When a collection is mutable, existing variables can be updated and new variables can be created. Thus, inside ``init`` variables can be initialized in any variable collection and they are all added to the returned variable dictionary.
 
 Lifecycle
 =============
 
 
-Now that we understand ``init`` is just a special case of ``apply``, let's analyze what ``.apply(...)`` does in more detail. In fact, most of the complexity of Modules resides in the ``apply`` method. The "Module lifecycle" consists of constructing and ``apply``-ing a Module. We can summarize the Module lifecycle as follows:
+Now that you have learned about ``init`` being a special case of ``apply``, let's look at ``.apply(...)`` in more detail. In fact, most of the complexity of Modules resides in the ``apply`` method. The "Module lifecycle" consists of constructing and ``apply``-ing a Module. We can summarize the Module lifecycle as follows:
 
 
-#. We construct `mlp = MLP(hidden_size=5, out_size=3)`, such that `mlp.hidden_size=5` and `mlp_out_size=3`.
+#. We construct ``mlp = MLP(hidden_size=5, out_size=3)``, such that ``mlp.hidden_size=5`` and ``mlp.out_size=3``.
 
-#. Then, call ``mlp.apply`` which performs the following:
+#. Then, call ``mlp.apply``, whichg:
 
-   #. Makes a clone of ``mlp``, let's call it `mlp_copy`.
+   #. Makes a clone of ``mlp``, let's call it ``mlp_copy``.
 
-   #. Calls `mlp_copy.setup()`.
+   #. Calls ``mlp_copy.setup()``.
 
    #. Returns the output of ``mlp_copy.__call__()`` and optionally the variable collections that were specified as mutable using the keyword argument ``mutable=``.
 
-
-You might be surprised that the lifecycle includes cloning the Module instance. You might be surprised that the lifecycle includes cloning the Module instance. In short, this is done to ensure that `apply` can be treated as a pure function (i.e., if you pass the same arguments in, it will return the same outputs). This will be explained in more detail later in the  :ref:`Top-level Modules` section.
+Notice that the lifecycle includes cloning the Module instance. This is done to ensure that ``apply`` can be treated as a pure function (i.e., if you pass the same arguments in, it will return the same outputs). You will learn about this in more detail later in the  :ref:`Top-level Modules` section.
 
 Variables
 ==========
 
-The word “variable” is ubiquitous in programming and math. However, it's important to have a good understanding of what variables are in the context of JAX and Flax. Inside Flax Modules, `variables <https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.core.variables>`_ act like you expect from Python. They are initialized once, read, and perhaps even updated every so often. However, JAX has no concept of variables. Instead, values are stored in arrays similar to NumPy arrays  -- with one important difference: they are immutable.
+The word “variable” is ubiquitous in programming and math. However, it's important to have a good understanding of what variables are in the context of JAX and Flax. Inside Flax Modules, `variables <https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.core.variables>`_ act like you expect from Python. They are initialized once, read, and perhaps even updated every so often. However, JAX has no concept of variables. Instead, values are stored in arrays similar to NumPy arrays - with one important difference: they are immutable.
 
-The ``init`` and ``apply`` methods return the variables as a nested dictionary with string keys and JAX arrays at the leaves. They are immutable and therefore really just a snapshot of state the variables are in. When ``apply`` is called again, the variable dict is passed as an argument. Such that the variables are in the same state as when the previous ``init`` / ``apply`` call finished.
+The ``init`` and ``apply`` methods return the variables as a nested dictionary with string keys and JAX arrays at the leaves. At the top level each key corresponds to a variable collection. Inside each collection the nested dict structure corresponds with the ``Module`` hierarchy. The variable dict is immutable and therefore really just a snapshot of state the variables are in. When ``apply`` is called again, the variable dict is passed as an argument. Such that the variables are in the same state as when the previous ``init`` / ``apply`` call finished.
 
 
 .. note::
@@ -131,7 +130,7 @@ Linen provides an alternative API for defining modules more compactly. This is e
       return nn.Dense(self.out_size)(h)
 
 
-A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module is doing. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a clear picture of what the Module is doing. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/design_notes/setup_or_nncompact.html>`_ for a practical guide on decding between setup and compact.
+A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module does. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a concise overview. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/design_notes/setup_or_nncompact.html>`_ for a practical guide on decding between setup and compact.
 
 Another benefit of defining submodules and/or variables inline is that you can add arguments to your method when constructing variables. The most common example of this is using shape information to determine the shape of a parameter like this:
 
@@ -222,24 +221,28 @@ In the above example the construction order is fixed. After construction the sub
 Top-level Modules
 *****************
 
-When a Module instance is created at the "top-level", it will be in an "unbound" state - that is, it has no variables attached. "Top-level" means it is not constructed as a sub-Module inside another Module class. Apart from calling ``init`` and ``apply``, there is not much you can do with an unbound Module. Note also that ``setup`` is not called on unbound Modules, so you can really only access the construction arguments. Refer to the :ref:`Future work` section to learn how this might change in the future.
+When a Module instance is created at the "top-level", it will be in an "unbound" state - that is, it has no variables attached. "Top-level" means it is not constructed as a sub-Module inside another Module class. Apart from calling ``init`` and ``apply``, there is not much you can do with an unbound Module. Note also that ``setup`` is not called on unbound Modules, so you can only access the construction arguments. Refer to the :ref:`Future work` section to learn how this might change in the future.
 
-Why are top-level modules always unbound?
+Why are top-level Modules always unbound?
 ===============================================
 
-When we call ``apply``, a copy of the top-level Module is created which will actually hold the variables and PRNG sequences. This stateful, "bound", clone only exists while we are executing the apply method. The reason for this is that if you create a stateful object and destroy it before the apply function returns, the ``apply`` function itself behaves like a pure function (pure means if you put the same arguments in, it will return the same outputs).
+When we call ``apply``, a copy of the top-level Module is created which will actually hold the variables and PRNG sequences. This stateful, "bound", clone only exists while we are executing the apply method. The reason for this is that if you create a stateful object and destroy it before the apply function returns, the ``apply`` function itself behaves like a pure function. A pure function has two constraints:
+
+#. If you put the same arguments in, it will return the same outputs
+#. It does not change anything outside the function. This means you cannot manipulate stateful objects that are accessible outside the pure function.
+
 
 Pure functions have many advantages but when using JAX they are often essential. For example, most code requires compilation using ``jax.jit`` to be fast and once you created a Module you probably want to optimize its parameters using ``jax.grad``. However, these APIs expect a pure function and don't work on stateful bound ``Module`` instances directly. Moreover, pure functions allow for flexible interoperability with other libraries. For example, We recommend `Optax <https://github.com/deepmind/optax>`_ for optimizing parameters. The optimizers in Optax expect and return a PyTree of JAX arrays to optimize, just like the ``apply`` function of a Linen Module.
 
 Cloning
 ===============================================
 
-To make this approach work reliably we need well-defined cloning behavior. Rather than relying on a complex nested cloning procedure like Python's ``deepcopy``, Flax enforces that a ``Module`` is exactly defined by its construction arguments. Therefore cloning a Module reduces to calling the constructor with its original construction arguments. Because ``Module`` acts as an immutable dataclass, the construction arguments are mapped 1:1 to instance attributes.
+To make this approach work reliably we need well-defined cloning behavior. Rather than relying on a complex nested cloning procedure like Python's ``deepcopy``, Flax enforces that a ``Module`` is exactly defined by its construction arguments. Therefore cloning a Module reduces to calling the constructor with its original construction arguments. Because ``Module`` acts as an immutable dataclass, the construction arguments are mapped directly to instance attributes. Non-construction attributes that are computed in ``setup`` or ``__post_init__`` should also depend only on the construciton arguments to ensure a well-defined clone.
 
 Bind
 ===============================================
 
-Sometimes it's useful to have a bound, top-level Module without having to wrap the code in a function. For example: to interact with a Module inside a Jupyter notebook. The `bind <https://flax.readthedocs.io/en/latest/flax.linen.html?highlight=bind#flax.linen.Module.bind>`_ method returns a bound clone with an unlimited lifetime. The downside of this is that you cannot combine it with JAX transformations or integrate it into a vanilla JAX codebase that expects stateless code.
+Sometimes it's useful to have a bound, top-level Module without having to wrap the code in a function. For example: to interact with a Module inside a Jupyter notebook. The `bind <https://flax.readthedocs.io/en/latest/flax.linen.html?highlight=bind#flax.linen.Module.bind>`_ method returns a bound clone with an unlimited lifetime. The downside of this is that you cannot combine it with JAX transformations or integrate it into a vanilla JAX codebase that expects stateless code. For example, `Optax <https://github.com/deepmind/optax>`_ can optimze a Pytree of parameters but it cannot directly optimize a bound ``Module`` instance created with ``.bind`` (because that's not a Pytree). Thus, you cannot combine the ``bind`` API with a functional optimizer API like Optax.
 
 
 Setup
@@ -311,7 +314,7 @@ For the most part functionalization is something that is handled automatically f
 
 Here ``inner`` takes a function that closes over a Module instance. In this example, that works fine because we are not transforming the inner method with a lifted transformation. Most methods are not transformed but it is good to know how to make Module methods transformable.
 
-The main obstacle for transformability are types that JAX does not recognize. By default JAX will recognize containers (lists, dictionaries, and tuples) of JAX/NumPy arrays and python scalars (bool, int, float, etc.). The containers are called `pytrees <https://jax.readthedocs.io/en/latest/jax-101/05.1-pytrees.html>`_ and the pytree API is extensible with custom types. With the flax.struct package you can also define pytree compatible dataclasses.
+The main obstacle for transformability are types that JAX does not recognize. JAX only understands `Pytree <https://jax.readthedocs.io/en/latest/jax-101/05.1-pytrees.html>`_ arguments. That's arbitrarily nested Python containers (dict, list, tuple) of (Jax) numpy ndarrays and Python numbers/bools. Flax allows to define dataclasses which are Pytree compatible using the `flax.struct <https://flax.readthedocs.io/en/latest/flax.struct.html>`_ API.
 
 Function closure is the most common way to accidentally hide a JAX array or Linen Module from a transformation. There is however an easy workaround if you want to pass closures that are also compatible with JAX and Linen transformations:
 
