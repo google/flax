@@ -906,7 +906,9 @@ class Module:
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
-  def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
+  def variable(self, col: str, name: str,
+               init_fn: Optional[Callable[..., Any]] = None,
+               *init_args) -> Variable:
     """Declares and returns a variable in this Module.
 
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
@@ -928,7 +930,8 @@ class Module:
       name: The variable name.
       init_fn: The function that will be called to compute the initial value
         of this variable. This function will only be called the first time
-        this variable is used in this module.
+        this variable is used in this module. If None, the variable must
+        already be initialized otherwise an error is raised.
       *init_args: The arguments to pass to init_fn.
 
     Returns:
