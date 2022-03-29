@@ -80,12 +80,6 @@ Reasons to prefer using ``setup``:
 3. Allows defining more than one "forward pass" method
    (see :class:`MultipleMethodsCompactError <flax.errors.MultipleMethodsCompactError>`)
 
-**NOTE**: You can also define a module using both ``setup`` and
-``nn.compact``. You'd put submodules and variables shared across
-methods in ``setup``. Then, one method alone can be annotated
-with ``nn.compact`` and add additional
-submodules and variables that are not available in any other methods.
-
 
 
 
