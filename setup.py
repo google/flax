@@ -30,6 +30,7 @@ install_requires = [
     "matplotlib",  # only needed for tensorboard export
     "msgpack",
     "optax",
+    "typing_extensions>=4.1.1",
 ]
 
 tests_require = [
