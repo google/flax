@@ -46,7 +46,6 @@ class RNNCellBase(Module):
   """RNN cell base class."""
 
   @staticmethod
-  @abc.abstractmethod
   def initialize_carry(rng, batch_dims, size, init_fn=zeros):
     """Initialize the RNN cell carry.
 

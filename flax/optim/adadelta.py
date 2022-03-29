@@ -14,6 +14,7 @@
 
 """Adadelta Optimizer."""
 
+from typing import Optional
 from .. import struct
 from .base import OptimizerDef
 import jax.numpy as jnp
@@ -43,7 +44,7 @@ class Adadelta(OptimizerDef):
   """
 
   def __init__(self,
-               learning_rate: float = None,
+               learning_rate: Optional[float] = None,
                rho: float = 0.9,
                eps: float = 1e-6,
                weight_decay: float = 0.0):

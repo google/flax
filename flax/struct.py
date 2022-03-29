@@ -22,7 +22,7 @@ from typing import TypeVar, Callable, Tuple, Union, Any
 from . import serialization
 
 import jax
-from typing_extensions import dataclass_transform  # pytype: disable=import-error
+from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 
 
 _T = TypeVar("_T")

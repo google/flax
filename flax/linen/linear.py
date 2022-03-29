@@ -205,7 +205,7 @@ def _conv_dimension_numbers(input_shape):
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
 
-PaddingLike = Union[str, int, Sequence[Union[int, Tuple[int, int]]]] 
+PaddingLike = Union[str, int, Sequence[Union[int, Tuple[int, int]]]]
 LaxPadding = Union[str, Sequence[Tuple[int, int]]]
 
 
@@ -281,7 +281,6 @@ class _Conv(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @property
-  @abc.abstractmethod
   def shared_weights(self) -> bool:
     """Defines whether weights are shared or not between different pixels.
 

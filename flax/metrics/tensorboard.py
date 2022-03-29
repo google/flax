@@ -20,7 +20,7 @@ import os
 # pylint: disable=g-import-not-at-top
 import numpy as np
 
-import tensorflow.compat.v2 as tf
+import tensorflow.compat.v2 as tf  # pytype: disable=import-error
 from tensorboard.plugins.hparams import api as hparams_api
 
 

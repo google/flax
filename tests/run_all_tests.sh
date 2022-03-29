@@ -51,35 +51,19 @@ pytest -n auto tests $PYTEST_OPTS
 # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
 # /foo/bar and /baz/bleep aren't set up as packages.
 for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-    # Skip tests on deprecated example -- we get this error.
-    #   ValueError: Failed to construct dataset lm1b: BuilderConfig subwords32k not found. Available: []
-    #
-    # TODO: Remove after github.com/google/flax/issues/567 is resolved
-    if [[ "$egd" == "examples/lm1b_deprecated" ]]; then
-        continue
-    fi
     pytest $egd
 done
 
-# validate types
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "Pytype is currently not working on MacOS, see https://github.com/google/pytype/issues/661"
-else
-    pytype flax/
+# Validate types in library code.
+pytype --config pytype.cfg flax/
 
-    for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-        # Skip pytype on deprecated example
-        # TODO: Remove after github.com/google/flax/issues/567 is resolved
-        if [[ "$egd" == "examples/lm1b_deprecated" ]]; then
-            continue
-        fi
-
-        # use cd to make sure pytpe cache lives in example dir and doesn't name clash
-        # use *.py to avoid importing configs as a top-level import which leads tot import errors
-        # because config files use relative imports (e.g. from config import ...).
-        (cd $egd ; pytype "*.py")
-    done
-fi
+# Validate types in examples.
+for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+    # use cd to make sure pytpe cache lives in example dir and doesn't name clash
+    # use *.py to avoid importing configs as a top-level import which leads to import errors
+    # because config files use relative imports (e.g. from config import ...).
+    (cd $egd ; pytype --config ../../pytype.cfg "*.py")
+done
 
 # Return error code 0 if no real failures happened.
 echo "finished all tests."

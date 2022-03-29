@@ -22,7 +22,7 @@ import threading
 import typing
 from typing import (Any, Callable, Dict, Iterable, List, Optional,
                     Set, Tuple, Type, TypeVar, Union, overload)
-from typing_extensions import dataclass_transform # pytype: disable=import-error
+from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 import weakref
 
 from flax import config
