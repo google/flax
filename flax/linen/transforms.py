@@ -1057,6 +1057,63 @@ def while_loop(
       split_rngs)
 
 
+def _cond_wrapper(t_fn, f_fn, scope, pred, *ops, variables, rngs):
+  return lift.cond(pred, t_fn, f_fn, scope, *ops, variables=variables, rngs=rngs)
+
+
+def cond(
+    pred: Any, 
+    true_fun: Callable[..., C], false_fun: Callable[..., C],
+    mdl: Module, *operands,
+    variables: lift.CollectionFilter = True, 
+    rngs: lift.PRNGSequenceFilter = True) -> C:
+  """Lifted version of ``jax.lax.cond``.
+
+  The returned values from ``true_fun`` and ``false_fun``
+  must have the same Pytree structure, shapes, and dtypes.
+  The variables created or updated inside the
+  branches must also have the same structure.
+  Note that this constraint is violated when
+  creating variables or submodules in only one branch.
+  Because initializing variables in just one branch
+  causes the paramater structure to be different.
+
+  Example::
+
+    class CondExample(nn.Module):
+      @nn.compact
+      def __call__(self, x, pred):
+        self.variable('state', 'true_count', lambda: 0)
+        self.variable('state', 'false_count', lambda: 0)
+        def true_fn(mdl, x):
+          mdl.variable('state', 'true_count').value += 1
+          return nn.Dense(2, name='dense')(x)
+        def false_fn(mdl, x):
+          mdl.variable('state', 'false_count').value += 1
+          return -nn.Dense(2, name='dense')(x)
+        return nn.cond(pred, true_fn, false_fn, self, x)
+  
+  
+  Args:
+    pred: determines if true_fun or false_fun is evaluated.
+    true_fun: The function evalauted when ``pred`` is `True`.
+      The signature is (Scope, *operands) -> T.
+    false_fun: The function evalauted when ``pred`` is `False`.
+      The signature is (Scope, *operands) -> T.
+    scope: A Scope or Pytree of scopes to pass 
+    *operands: The arguments passed to ``true_fun`` and ``false_fun``
+    variables: The variable collections passed to the conditional
+      branches (default: all)
+    rngs: The PRNG sequences passed to the conditionals (default: all)
+  Returns:
+    The result of the evaluated branch (``true_fun`` or ``false_fun``).
+  """
+  return lift_direct_transform(
+      _cond_wrapper, (true_fun, false_fun), mdl,
+      pred, *operands,
+      variables=variables, rngs=rngs)
+
+
 # a version of lift.custom_vjp with a single scope function
 # this avoids having to lift multiple functions in
 # lift_transform.

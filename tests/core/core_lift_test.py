@@ -137,6 +137,29 @@ class LiftTest(absltest.TestCase):
     self.assertEqual(c, 2 * x)
     np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
+  
+  def test_cond(self):
+    def f(scope, x, pred):
+      scope.variable('state', 'true_count', lambda: 0)
+      scope.variable('state', 'false_count', lambda: 0)
+      def true_fn(scope, x):
+        scope.variable('state', 'true_count').value += 1
+        return scope.child(nn.dense)(x, 2)
+
+      def false_fn(scope, x):
+        scope.variable('state', 'false_count').value += 1
+        return -scope.child(nn.dense)(x, 2)
+      
+      return lift.cond(pred, true_fn, false_fn, scope, x)
+    
+    x = jnp.ones((1, 3))
+    y1, vars = init(f)(random.PRNGKey(0), x, True)
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
+    y2, vars = apply(f, mutable="state")(vars, x, False)
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    np.testing.assert_allclose(y1, -y2)
+
+
 
 if __name__ == '__main__':
   absltest.main()

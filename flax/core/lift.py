@@ -827,8 +827,7 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
   rng_groups, rng_splits = _unzip2(split_rngs.items())
 
   def inner(scope_fn, repack_fn,
-            variable_groups, rng_groups, carry_init):
-    del carry_init  # unused.
+            variable_groups, rng_groups):
     carry_variables, broadcast_variables = variable_groups
 
     def make_loop_rngs(i):
@@ -865,7 +864,72 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
       (carry_variables, broadcast_variables),
       (carry_variables,),
       rng_groups,
-      name='while_loop')(scope, init)
+      name='while_loop')(scope)
+
+
+def cond(pred: Any, 
+         true_fun: Callable[..., C], false_fun: Callable[..., C],
+         scope: Scope, *operands,
+         variables: CollectionFilter = True, 
+         rngs: PRNGSequenceFilter = True) -> C:
+  """Lifted version of ``jax.lax.cond``.
+
+  The returned values from ``true_fun`` and ``false_fun``
+  must have the same Pytree structure, shapes, and dtypes.
+  The variables created or updated inside the
+  branches must also have the same structure.
+  Note that this constraint is violated when
+  creating variables or submodules in only one branch.
+  Because initializing variables in just one branch
+  causes the paramater structure to be different.
+
+  Example::
+
+    def cond_example(scope, x, pred):
+      scope.variable('state', 'true_count', lambda: 0)
+      scope.variable('state', 'false_count', lambda: 0)
+      def true_fn(scope, x):
+        scope.variable('state', 'true_count').value += 1
+        return scope.child(nn.dense)(x, 2)
+      def false_fn(scope, x):
+        scope.variable('state', 'false_count').value += 1
+        return -scope.child(nn.dense)(x, 2)
+      return lift.cond(pred, true_fn, false_fn, scope, x)
+
+
+  Args:
+    pred: determines if true_fun or false_fun is evaluated.
+    true_fun: The function evalauted when ``pred`` is `True`.
+      The signature is (Scope, *operands) -> T.
+    false_fun: The function evalauted when ``pred`` is `False`.
+      The signature is (Scope, *operands) -> T.
+    scope: A Scope or Pytree of scopes to pass 
+    *operands: The arguments passed to ``true_fun`` and ``false_fun``
+    variables: The variable collections passed to the conditional
+      branches (default: all)
+    rngs: The PRNG sequences passed to the conditionals (default: all)
+  Returns:
+    The result of the evaluated branch (``true_fun`` or ``false_fun``).
+  """
+  branches = [true_fun, false_fun]
+  def inner(scope_fn, repack_fn,
+            variable_groups, rng_groups):
+    def branch_wrapper(branch_fn, *operands):
+      scope = scope_fn(variable_groups, rng_groups)
+      y = branch_fn(scope, *operands)
+      return y, repack_fn(scope)
+    pure_branches = [
+        functools.partial(branch_wrapper, branch_fn)
+        for branch_fn in branches]
+    return jax.lax.cond(
+        pred, pure_branches[0], pure_branches[1], *operands)
+
+  return pack(
+      inner,
+      (variables,),
+      (variables,),
+      (rngs,),
+      name='cond')(scope)
 
 
 def custom_vjp(fn: Callable[..., Any],

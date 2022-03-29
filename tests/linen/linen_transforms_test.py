@@ -1402,6 +1402,30 @@ class TransformTest(absltest.TestCase):
     np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
 
+  def test_cond(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, pred):
+        self.variable('state', 'true_count', lambda: 0)
+        self.variable('state', 'false_count', lambda: 0)
+        def true_fn(mdl, x):
+          mdl.variable('state', 'true_count').value += 1
+          return nn.Dense(2, name='dense')(x)
+
+        def false_fn(mdl, x):
+          mdl.variable('state', 'false_count').value += 1
+          return -nn.Dense(2, name='dense')(x)
+        
+        return nn.cond(pred, true_fn, false_fn, self, x)
+    
+    x = jnp.ones((1, 3))
+    foo = Foo()
+    y1, vars = foo.init_with_output(random.PRNGKey(0), x, True)
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
+    y2, vars = foo.apply(vars, x, False, mutable="state")
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    np.testing.assert_allclose(y1, -y2)
+
   def test_lift_instance_error(self):
     class Foo(nn.Module):
       @nn.compact
