@@ -8,7 +8,7 @@ vNext
 -
 -
 -
--
+- Added lifted conditional `nn.cond`
 -
 -
 -

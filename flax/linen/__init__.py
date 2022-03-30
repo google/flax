@@ -37,6 +37,6 @@ from .recurrent import ConvLSTM, GRUCell, LSTMCell, OptimizedLSTMCell
 from .stochastic import Dropout
 from .transforms import (checkpoint, custom_vjp, jit, jvp, map_variables,
                          named_call, remat, remat_scan, scan, vjp, vmap,
-                         while_loop)
+                         while_loop, cond)
 
 # pylint: enable=g-multiple-import

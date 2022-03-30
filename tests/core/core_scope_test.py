@@ -199,6 +199,16 @@ class ScopeTest(absltest.TestCase):
     root = Scope({'state': {}})
     with self.assertRaises(errors.ScopeCollectionNotFound):
       root.variable('state', 'test', jnp.zeros, ())
+  
+  def test_variable_no_init(self):
+    root = Scope({}, mutable='state')
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.variable('state', 'test')
+    root = Scope({'state': {'abc': 1}}, mutable='state')
+    abc = root.variable('state', 'abc')
+    self.assertEqual(abc.value, 1)
+    with self.assertRaises(errors.ScopeVariableNotFoundError):
+      root.variable('state', 'test')
 
 
 if __name__ == '__main__':

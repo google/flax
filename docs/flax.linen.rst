@@ -76,6 +76,7 @@ Transformations
     vjp
     custom_vjp
     while_loop
+    cond
 
 
 Linear modules
