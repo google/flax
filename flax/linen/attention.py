@@ -345,7 +345,26 @@ class SelfAttention(MultiHeadDotProductAttention):
 
   @compact
   def __call__(self, inputs_q: Array, mask: Optional[Array] = None,
-               deterministic: Optional[bool] = None):
+               deterministic: Optional[bool] = None):   
+    """Applies multi-head dot product self-attention on the input data.
+
+    Projects the inputs into multi-headed query, key, and value vectors,
+    applies dot-product attention and project the results to an output vector.
+
+    Args:
+      inputs_q: input queries of shape
+        `[batch_sizes..., length, features]`.
+      mask: attention mask of shape
+        `[batch_sizes..., num_heads, query_length, key/value_length]`.
+        Attention weights are masked out if their corresponding mask value
+        is `False`.
+      deterministic: if false, the attention weight is masked randomly
+        using dropout, whereas if true, the attention weights
+        are deterministic.
+
+    Returns:
+      output of shape `[batch_sizes..., length, features]`.
+    """
     return super().__call__(inputs_q, inputs_q, mask, deterministic=deterministic)
 
 

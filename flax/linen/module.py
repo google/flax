@@ -22,6 +22,7 @@ import threading
 import typing
 from typing import (Any, Callable, Dict, Iterable, List, Optional,
                     Set, Tuple, Type, TypeVar, Union, overload)
+from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 import weakref
 
 from flax import config
@@ -34,7 +35,6 @@ from flax.core import Scope
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (CollectionFilter, DenyList, FrozenVariableDict,  # pylint: disable=g-multiple-import
                              Variable, VariableDict, union_filters)
-from flax.struct import __dataclass_transform__
 import jax
 
 
@@ -470,17 +470,8 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 # -----------------------------------------------------------------------------
 
 
-# This metaclass + decorator is used by static analysis tools recognize that
-# Module behaves as a dataclass (attributes are constructor args).
-if typing.TYPE_CHECKING:
-  @__dataclass_transform__()
-  class ModuleMeta(type):
-    pass
-else:
-  ModuleMeta = type
-
-
-class Module(metaclass=ModuleMeta):
+@dataclass_transform()
+class Module:
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
@@ -762,13 +753,15 @@ class Module(metaclass=ModuleMeta):
         cursor = self.parent._state.autoname_cursor.get(prefix, 0)
         self.name = f'{prefix}_{cursor}'
         self.parent._state.autoname_cursor[prefix] = cursor + 1
-      if self.parent._name_taken(self.name, self):
-        parent_class = self.parent.__class__.__name__
-        raise errors.NameInUseError('submodule', self.name, parent_class)
-      self.parent._state.children[self.name] = self
       # Allow scope aliasing under transforms for submodules defined in setup.
       reuse_scopes = (self.parent._state.in_setup and
                       self.parent._state.setup_called == SetupState.TRANSFORMED)
+      # Perform name-collision check.
+      if self.parent._name_taken(self.name, self, reuse_scopes=reuse_scopes):
+        parent_class = self.parent.__class__.__name__
+        raise errors.NameInUseError('submodule', self.name, parent_class)
+      # Finalize attachment to parent and scope initialization.
+      self.parent._state.children[self.name] = self
       object.__setattr__(
           self, 'scope', self.parent.scope.push(self.name, reuse=reuse_scopes))
 
@@ -877,7 +870,10 @@ class Module(metaclass=ModuleMeta):
         return wrapped_id(self.clone(parent=root), x)
     _ = jax.eval_shape(run_setup_only, 0)
 
-  def _name_taken(self, name: str, module: 'Module' = None) -> bool:
+  def _name_taken(self,
+                  name: str,
+                  module: 'Module' = None,
+                  reuse_scopes : bool = False) -> bool:
     if name in _all_names_on_object(self):
       val = getattr(self, name, None)
       if module is not None and val is module:
@@ -885,6 +881,9 @@ class Module(metaclass=ModuleMeta):
         # field assignment happened before naming
         return False
       return True
+    # Check for the existence of name in the scope object.
+    if reuse_scopes:
+      return False
     return name in self.scope.reservations
 
   @property
@@ -907,7 +906,9 @@ class Module(metaclass=ModuleMeta):
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
-  def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
+  def variable(self, col: str, name: str,
+               init_fn: Optional[Callable[..., Any]] = None,
+               *init_args) -> Variable:
     """Declares and returns a variable in this Module.
 
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
@@ -929,7 +930,8 @@ class Module(metaclass=ModuleMeta):
       name: The variable name.
       init_fn: The function that will be called to compute the initial value
         of this variable. This function will only be called the first time
-        this variable is used in this module.
+        this variable is used in this module. If None, the variable must
+        already be initialized otherwise an error is raised.
       *init_args: The arguments to pass to init_fn.
 
     Returns:

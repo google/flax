@@ -68,7 +68,13 @@ class Adam(OptimizerDef):
         moving average of the gradient magnitude) (default: 0.999).
       eps: A small scalar added to the gradient magnitude estimate to improve
         numerical stability (default: 1e-8).
-      weight_decay: The learning rate decay (default: 0.0).
+      weight_decay: The weight decay. Note that for adaptive gradient algorithms
+        such as Adam this is different from using L2 regularization. The weight
+        decay is scaled by the learning rate schedule (which is consistent with
+        other frameworks such as PyTorch, but different from the "decoupled
+        weight decay" in https://arxiv.org/abs/1711.05101 where the weight decay
+        is multiplied with the "schedule multiplier", but not with the base
+        learning rate).
     """
     hyper_params = _AdamHyperParams(learning_rate, beta1, beta2, eps,
                                     weight_decay)

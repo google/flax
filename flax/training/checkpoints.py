@@ -28,7 +28,7 @@ from absl import logging
 from flax import core
 from flax import errors
 from flax import serialization
-from tensorflow.io import gfile
+from tensorflow.io import gfile  # pytype: disable=import-error
 
 
 # Single-group reg-exps for int or float numerical substrings.

@@ -104,6 +104,7 @@ from .transforms import (
   scan as scan,
   vjp as vjp,
   vmap as vmap,
-  while_loop as while_loop
+  while_loop as while_loop,
+  cond as cond
 )
 # pylint: enable=g-multiple-import

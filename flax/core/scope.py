@@ -672,7 +672,8 @@ class Scope:
     variables = self._mutable_collection(col)
     variables[name] = value
 
-  def variable(self, col: str, name: str, init_fn: Callable[..., T],
+  def variable(self, col: str, name: str,
+               init_fn: Optional[Callable[..., T]] = None,
                *init_args) -> Variable[T]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
@@ -680,7 +681,8 @@ class Scope:
       col: the collection of the variable.
       name: the name of the variable.
       init_fn: a function taking a PRNGKey plus any other number of positional
-        arguments.
+        arguments. If None, the variable must already be initialized otherwise
+        an error is raised.
       *init_args: the arguments to evaluate init_fn on lazily.
 
     Returns:
@@ -688,7 +690,7 @@ class Scope:
     """
     self.reserve(name)
     if not self.has_variable(col, name):
-      if not self.is_mutable_collection(col):
+      if not self.is_mutable_collection(col) or init_fn is None:
         if self.is_collection_empty(col):
           raise errors.ScopeCollectionNotFound(col, name, self.path_text)
         raise errors.ScopeVariableNotFoundError(name, col, self.path_text)

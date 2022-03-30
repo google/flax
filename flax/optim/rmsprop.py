@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 import jax.numpy as jnp
 import numpy as np
 from .. import struct
@@ -38,7 +39,7 @@ class _RMSPropParamState:
 
 class RMSProp(OptimizerDef):
   """RMSProp optimizer"""
-  def __init__(self, learning_rate: float = None, beta2=0.9, eps=1e-8,
+  def __init__(self, learning_rate: Optional[float] = None, beta2=0.9, eps=1e-8,
                centered=False):
     """Constructor for the RMSProp optimizer
 
@@ -73,7 +74,7 @@ class RMSProp(OptimizerDef):
     else:
       new_mg = state.mg
       maybe_centered_v = new_v
-    new_param = param - hyper_params.learning_rate * grad / ( 
+    new_param = param - hyper_params.learning_rate * grad / (
         jnp.sqrt(maybe_centered_v) + hyper_params.eps)
     new_state = _RMSPropParamState(new_v, new_mg)
 

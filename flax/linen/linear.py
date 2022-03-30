@@ -205,6 +205,33 @@ def _conv_dimension_numbers(input_shape):
   return lax.ConvDimensionNumbers(lhs_spec, rhs_spec, out_spec)
 
 
+PaddingLike = Union[str, int, Sequence[Union[int, Tuple[int, int]]]]
+LaxPadding = Union[str, Sequence[Tuple[int, int]]]
+
+
+def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
+  """"Canonicalizes conv padding to a jax.lax supported format."""
+  if isinstance(padding, str):
+    return padding
+  if isinstance(padding, int):
+    return [(padding, padding)] * rank
+  if isinstance(padding, Sequence) and len(padding) == rank:
+    new_pad = []
+    for p in padding:
+      if isinstance(p, int):
+        new_pad.append((p, p))
+      elif isinstance(p, tuple) and len(p) == 2:
+        new_pad.append(p)
+      else:
+        break
+    if len(new_pad) == rank:
+      return new_pad
+  raise ValueError(
+    f'Invalid padding format: {padding}, should be str, int,'
+    f' or a sequence of len {rank} where each element is an'
+    f' int or pair of ints.')
+
+
 class _Conv(Module):
   """Convolution Module wrapping `lax.conv_general_dilated[_local]`.
 
@@ -218,7 +245,9 @@ class _Conv(Module):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension.
+      spatial dimension. A single int is interpeted as applying the same padding
+      in all dims and passign a single int in a sequence causes the same padding
+      to be used on both sides.
     input_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of `inputs`
       (default: 1). Convolution with input dilation `d` is equivalent to
@@ -240,7 +269,7 @@ class _Conv(Module):
   features: int
   kernel_size: Sequence[int]
   strides: Union[None, int, Sequence[int]] = 1
-  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  padding: PaddingLike = 'SAME'
   input_dilation: Union[None, int, Sequence[int]] = 1
   kernel_dilation: Union[None, int, Sequence[int]] = 1
   feature_group_count: int = 1
@@ -252,7 +281,6 @@ class _Conv(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @property
-  @abc.abstractmethod
   def shared_weights(self) -> bool:
     """Defines whether weights are shared or not between different pixels.
 
@@ -282,8 +310,9 @@ class _Conv(Module):
     inputs = jnp.asarray(inputs, self.dtype)
 
     if isinstance(self.kernel_size, int):
-      raise TypeError('The kernel size must be specified as a'
-                      ' tuple/list of integers (eg.: [3, 3]).')
+      raise TypeError('Expected Conv kernel_size to be a'
+                      ' tuple/list of integers (eg.: [3, 3]) but got'
+                      f' {self.kernel_size}.')
     else:
       kernel_size = tuple(self.kernel_size)
 
@@ -307,8 +336,8 @@ class _Conv(Module):
     input_dilation = maybe_broadcast(self.input_dilation)
     kernel_dilation = maybe_broadcast(self.kernel_dilation)
 
-    padding_lax: Union[str, Sequence[Tuple[int, int]]]
-    if self.padding == 'CIRCULAR':
+    padding_lax = canonicalize_padding(self.padding, len(kernel_size))
+    if padding_lax == 'CIRCULAR':
       kernel_size_dilated = [
           (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
@@ -317,8 +346,6 @@ class _Conv(Module):
               [(0, 0)])
       inputs = jnp.pad(inputs, pads, mode='wrap')
       padding_lax = 'VALID'
-    else:
-      padding_lax = self.padding
 
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
     in_features = inputs.shape[-1]
@@ -429,7 +456,9 @@ class ConvTranspose(Module):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension.
+      spatial dimension. A single int is interpeted as applying the same padding
+      in all dims and passign a single int in a sequence causes the same padding
+      to be used on both sides.
     kernel_dilation: `None`, or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel. Convolution with kernel dilation is also known as 'atrous
@@ -445,7 +474,7 @@ class ConvTranspose(Module):
   features: int
   kernel_size: Union[int, Tuple[int, ...]]
   strides: Optional[Tuple[int, ...]] = None
-  padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
+  padding: PaddingLike = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
   dtype: Dtype = jnp.float32
@@ -492,11 +521,9 @@ class ConvTranspose(Module):
                         self.param_dtype)
     kernel = jnp.asarray(kernel, self.dtype)
 
-    padding_lax: Union[str, Sequence[Tuple[int, int]]]
-    if self.padding == 'CIRCULAR':
+    padding_lax = canonicalize_padding(self.padding, len(kernel_size))
+    if padding_lax == 'CIRCULAR':
       padding_lax = 'VALID'
-    else:
-      padding_lax = self.padding
 
     y = lax.conv_transpose(
         inputs,

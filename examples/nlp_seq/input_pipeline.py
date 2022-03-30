@@ -18,7 +18,7 @@ import codecs
 import collections
 import enum
 
-import tensorflow.compat.v2 as tf
+import tensorflow.compat.v2 as tf  # pytype: disable=import-error
 
 
 # Values for padding, unknown words and a root.

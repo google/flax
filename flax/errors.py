@@ -141,9 +141,10 @@ class ApplyScopeInvalidVariablesStructureError(FlaxError):
   For more explanation on variable dicts, please see :mod:`flax.core.variables`.
   """
   def __init__(self, variables):
-    super().__init__('Expected the first argument passed to an apply function '
-                     'to be a dictionary containing a \'params\' key at the '
-                     f'root level, but got "{variables}".')
+    super().__init__('Expect the `variables` (first argument) passed to apply() '
+                     'to be a dict with the structure {"params": ...}, but got a dict '
+                     'with an extra params layer, i.e.  {"params": {"params": ... } }. '
+                     f'You should instead pass in your dict\'s ["params"].')
 
 
 class ScopeParamNotFoundError(FlaxError):
@@ -160,16 +161,18 @@ class ScopeParamNotFoundError(FlaxError):
       def __call__(self, inputs, embed_name='embedding'):
         inputs = inputs.astype('int32')
         embedding = self.param(embed_name,
-                               lecun_normal(),
+                               jax.nn.initializers.lecun_normal(),
                                (self.num_embeddings, self.features))
         return embedding[inputs]
 
-    variables = Embed(4, 8).init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
-    _ = Embed().apply(variables, jnp.ones((5, 5, 1)), 'embed')
+    model = Embed(4, 8)
+    variables = model.init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
+    _ = model.apply(variables, jnp.ones((5, 5, 1)), 'embed')
   """
   def __init__(self, param_name, scope_path):
-    super().__init__(f'No parameter named "{param_name}" exists in '
-                     f'"{scope_path}".')
+    super().__init__(
+        f'Could not find parameter named "{param_name}" in scope '
+        f'"{scope_path}".')
 
 
 class ScopeCollectionNotFound(FlaxError):
@@ -187,7 +190,7 @@ class ScopeCollectionNotFound(FlaxError):
   """
   def __init__(self, col_name, var_name, scope_path):
     super().__init__(
-      f'Tried to access "{var_name}" from collection "{col_name}"" in '
+      f'Tried to access "{var_name}" from collection "{col_name}" in '
       f'"{scope_path}" but the collection is empty.')
 
 

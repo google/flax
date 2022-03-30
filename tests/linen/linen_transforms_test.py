@@ -30,11 +30,16 @@ from flax.core import freeze
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
-
+# pylint: disable=attribute-defined-outside-init,unused-variable
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(
       jax.tree_multimap(operator.eq, x, y))
+
+
+def tree_allclose(x, y):
+  return jax.tree_util.tree_all(
+      jax.tree_multimap(lambda x,y: np.all(np.isclose(x,y)), x, y))
 
 
 id_fn = lambda x: x
@@ -977,7 +982,7 @@ class TransformTest(absltest.TestCase):
         return self._helper(x)
       @nn.nowrap
       def _helper(self, x):
-        if len(nn.module._context.module_stack) > 2:
+        if len(nn.module._context.module_stack) > 2:  # pylint: disable=protected-access
           raise ValueError('Module stack too deep.')
         return x
 
@@ -1035,7 +1040,6 @@ class TransformTest(absltest.TestCase):
     y, variables = bw.init_with_output(random.PRNGKey(0), x)
     y_2 = bw.apply(variables, x)
     np.testing.assert_allclose(y, y_2)
-
 
 
   def test_remat_scan(self):
@@ -1223,6 +1227,44 @@ class TransformTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
       y = Test().init(k, x)
 
+  def test_transform_with_setup_and_methods_on_submodule_pytrees(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.inners = [nn.Dense(2), nn.Dense(2)]
+      def helper(self, x, ms):
+        return ms[0](x) + ms[1](x)
+      def __call__(self, x):
+        return self.helper(x, self.inners)
+    k = random.PRNGKey(0)
+    x = jnp.ones((2,))
+
+    with nn.module.override_named_call(False):
+      vs_0 = Foo().init(k, x)
+    with nn.module.override_named_call(True):
+      vs_1 = Foo().init(k, x)
+
+    self.assertTrue(tree_allclose(vs_0, vs_1))
+
+  def test_transform_setup_still_reserve_names_pytrees(self):
+    class Identity(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+    class Test(nn.Module):
+      def setup(self):
+        self.subs = [Identity(), Identity()]
+        self.subs = [Identity(), Identity()]
+      @nn.jit
+      def __call__(self, x):
+        return x
+
+    k = random.PRNGKey(0)
+    x = jnp.array([1.])
+
+    msg = r'Could not create submodule "subs_0".*'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
+      y = Test().init(k, x)
+
   def test_scan_of_setup_parameter(self):
     class Body(nn.Module):
       def setup(self):
@@ -1359,6 +1401,30 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(vars['state']['acc'], x)
     np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
+
+  def test_cond(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, pred):
+        self.variable('state', 'true_count', lambda: 0)
+        self.variable('state', 'false_count', lambda: 0)
+        def true_fn(mdl, x):
+          mdl.variable('state', 'true_count').value += 1
+          return nn.Dense(2, name='dense')(x)
+
+        def false_fn(mdl, x):
+          mdl.variable('state', 'false_count').value += 1
+          return -nn.Dense(2, name='dense')(x)
+        
+        return nn.cond(pred, true_fn, false_fn, self, x)
+    
+    x = jnp.ones((1, 3))
+    foo = Foo()
+    y1, vars = foo.init_with_output(random.PRNGKey(0), x, True)
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
+    y2, vars = foo.apply(vars, x, False, mutable="state")
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    np.testing.assert_allclose(y1, -y2)
 
   def test_lift_instance_error(self):
     class Foo(nn.Module):
