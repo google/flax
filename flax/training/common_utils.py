@@ -42,7 +42,7 @@ def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
 
 def stack_forest(forest):
   stack_args = lambda *args: np.stack(args)
-  return jax.tree_multimap(stack_args, *forest)
+  return jax.tree_map(stack_args, *forest)
 
 
 def get_metrics(device_metrics):
