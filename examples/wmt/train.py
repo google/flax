@@ -224,9 +224,9 @@ def train_step(state,
     # params should be restored (= skip this step).
     select_fn = functools.partial(jnp.where, is_fin)
     new_state = new_state.replace(
-        opt_state=jax.tree_multimap(
+        opt_state=jax.tree_map(
             select_fn, new_state.opt_state, state.opt_state),
-        params=jax.tree_multimap(
+        params=jax.tree_map(
             select_fn, new_state.params, state.params)
         )
     metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]

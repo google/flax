@@ -45,4 +45,4 @@ for i in range(50):
   loss, grad = jax.value_and_grad(loss_fn)(params)
   print(i, "loss = ", loss, "Yhat = ", predict(params))
   lr = 0.03
-  params = jax.tree_multimap(lambda x, d: x - lr * d, params, grad)
+  params = jax.tree_map(lambda x, d: x - lr * d, params, grad)
