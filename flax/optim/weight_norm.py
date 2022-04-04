@@ -97,7 +97,7 @@ class WeightNorm(OptimizerDef):
     state = self.wrapped_optimizer.init_state(wn_params)
     direction_state = state.param_states['direction']
     scale_state = state.param_states['scale']
-    param_states = jax.tree_multimap(
+    param_states = jax.tree_map(
         lambda _, *args: _WeightNormParamState(*args),
         params, direction_state, scale_state, directions, scales)
     return state.replace(param_states=param_states)
@@ -120,14 +120,14 @@ class WeightNorm(OptimizerDef):
         return direction * mult
       else:
         return direction
-    merge_params = lambda d, s: jax.tree_multimap(merge_param, d, s)
+    merge_params = lambda d, s: jax.tree_map(merge_param, d, s)
     _, vjp_fn = jax.vjp(merge_params, direction, scale)
     dir_grad, scale_grad = vjp_fn(grads)
     def add_decay(direction, dir_grad):
       if direction.size > direction.shape[-1]:
         return dir_grad + decay * direction
       return dir_grad
-    dir_grad = jax.tree_multimap(add_decay, direction, dir_grad)
+    dir_grad = jax.tree_map(add_decay, direction, dir_grad)
 
     wn_params = {'direction': direction, 'scale': scale}
     wn_state = {'direction': dir_state, 'scale': scale_state}
@@ -141,7 +141,7 @@ class WeightNorm(OptimizerDef):
 
     direction_state = new_state.param_states['direction']
     scale_state = new_state.param_states['scale']
-    param_states = jax.tree_multimap(
+    param_states = jax.tree_map(
         lambda _, *args: _WeightNormParamState(*args),
         params, direction_state, scale_state, direction, scale)
     return new_params, new_state.replace(param_states=param_states)

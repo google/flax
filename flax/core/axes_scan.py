@@ -102,20 +102,20 @@ def scan(
     return jax.tree_map(trans, xs)
 
   def scan_fn(broadcast_in, init, *args):
-    xs = jax.tree_multimap(transpose_to_front, in_axes, args)
+    xs = jax.tree_map(transpose_to_front, in_axes, args)
 
     def body_fn(c, xs, init_mode=False):
       # inject constants
-      xs = jax.tree_multimap(lambda ax, arg, x: (arg if ax is broadcast else x),
+      xs = jax.tree_map(lambda ax, arg, x: (arg if ax is broadcast else x),
                              in_axes, args, xs)
       broadcast_out, c, ys = fn(broadcast_in, c, *xs)
 
       if init_mode:
-        ys = jax.tree_multimap(lambda ax, y: (y if ax is broadcast else ()),
+        ys = jax.tree_map(lambda ax, y: (y if ax is broadcast else ()),
                                out_axes, ys)
         return broadcast_out, ys
       else:
-        ys = jax.tree_multimap(lambda ax, y: (() if ax is broadcast else y),
+        ys = jax.tree_map(lambda ax, y: (() if ax is broadcast else y),
                                out_axes, ys)
         return c, ys
     broadcast_body = functools.partial(body_fn, init_mode=True)
@@ -143,8 +143,8 @@ def scan(
     broadcast_in, constants_out = jax.tree_unflatten(out_tree(), out_flat)
 
     c, ys = lax.scan(body_fn, init, xs, length=length, reverse=reverse)
-    ys = jax.tree_multimap(transpose_from_front, out_axes, ys)
-    ys = jax.tree_multimap(
+    ys = jax.tree_map(transpose_from_front, out_axes, ys)
+    ys = jax.tree_map(
         lambda ax, const, y: (const if ax is broadcast else y), out_axes,
         constants_out, ys)
     return broadcast_in, c, ys

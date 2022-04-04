@@ -587,7 +587,7 @@ def vmap(fn: Callable[..., Any],
       return ()
 
     # split rngs
-    axis_sizes = jax.tree_multimap(find_axis_size, (variable_in_axes, in_axes),
+    axis_sizes = jax.tree_map(find_axis_size, (variable_in_axes, in_axes),
                                    (variable_groups, args))
     axis_sizes = set(jax.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
@@ -720,7 +720,7 @@ def scan(fn: Callable[..., Any],
           return leaves[0].shape[axis]
       return ()
     # split rngs
-    lengths = jax.tree_multimap(find_length, in_axes, args)
+    lengths = jax.tree_map(find_length, in_axes, args)
     lengths = set(jax.tree_leaves(lengths))
     if length is None and len(lengths) == 1:
       d_length, = lengths
