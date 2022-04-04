@@ -1434,6 +1434,24 @@ class TransformTest(absltest.TestCase):
     with self.assertRaises(errors.TransformTargetError):
       Foo().init(random.PRNGKey(0), jnp.zeros((2, 3)))
 
+  def test_scan_compact_count(self):
+    class Foo(nn.Module):
+      num_layers: int = 5
+
+      @nn.compact
+      def __call__(self, x):
+        def body_fn(mdl, x):
+          return nn.Dense(features=x.shape[-1])(x), ()
+        x, _ = nn.scan(body_fn, length=self.num_layers, variable_axes={"params": 0}, split_rngs={"params": True})(self, x)
+        return x
+
+    m = Foo()
+    x = jnp.ones((3,))
+    v = m.init(jax.random.PRNGKey(0), x)
+    self.assertEqual(v['params']['Dense_0']['kernel'].shape, (5, 3, 3))
+    m.apply(v, x)
+
+
 
 if __name__ == '__main__':
   absltest.main()
