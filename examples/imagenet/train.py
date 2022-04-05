@@ -145,11 +145,11 @@ def train_step(state, batch, learning_rate_fn):
     # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
     # params should be restored (= skip this step).
     new_state = new_state.replace(
-        opt_state=jax.tree_multimap(
+        opt_state=jax.tree_map(
             functools.partial(jnp.where, is_fin),
             new_state.opt_state,
             state.opt_state),
-        params=jax.tree_multimap(
+        params=jax.tree_map(
             functools.partial(jnp.where, is_fin),
             new_state.params,
             state.params))

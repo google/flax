@@ -44,7 +44,7 @@ jax.config.parse_flags_with_absl()
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(
-      jax.tree_multimap(operator.eq, x, y))
+      jax.tree_map(operator.eq, x, y))
 
 
 class DummyModule(nn.Module):
@@ -1074,7 +1074,7 @@ class ModuleTest(absltest.TestCase):
       },
     })
     self.assertTrue(jax.tree_util.tree_all(
-        jax.tree_multimap(
+        jax.tree_map(
             lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
             cntrs, ref_cntrs)
           ))
