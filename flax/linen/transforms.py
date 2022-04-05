@@ -290,6 +290,7 @@ def module_class_lift_transform(
     # we need to create a scope-function from our class for the given method
     @functools.wraps(fn)
     def wrapped_fn(self, *args, **kwargs):
+      state = self._state.export()
       # make a scope-function to transform
       def core_fn(scopes, *args, **kwargs):
         # make a clone of self using its arguments
@@ -301,7 +302,7 @@ def module_class_lift_transform(
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
         cloned, args, kwargs = set_module_scopes(cloned, args, kwargs, scopes)
-        object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
+        object.__setattr__(cloned, '_state', state.export())  # pylint: disable=protected-access
         res = fn(cloned, *args, **kwargs)
         self._state.reimport(cloned._state)  # pylint: disable=protected-access
         _test_transformed_return_values(res, fn_name)
@@ -343,12 +344,13 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
   prewrapped_fns = [wrap_method_once(class_fn) for class_fn in class_fns]
   @functools.wraps(prewrapped_fns[0])
   def wrapped_fn(self, *args, **kwargs):
+    state = self._state.export()
     # make a scope-function to transform
     def core_fn(prewrapped_fn, class_fn, scopes, *args, **kwargs):
       if not multi_scope:
         scopes = [scopes]
       cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-      object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
+      object.__setattr__(cloned, '_state', state.export())  # pylint: disable=protected-access
       res = prewrapped_fn(cloned, *args, **kwargs)
       self._state.reimport(cloned._state)  # pylint: disable=protected-access
       _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
