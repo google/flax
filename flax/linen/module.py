@@ -714,17 +714,6 @@ class Module:
       raise AttributeError(
           f'"{self.__class__.__name__}" object has no attribute "{name}"')
 
-  def __getattribute__(self, name):
-    """Call setup() before accessing any submodule attributes."""
-    # NB: all code here is very "hot" and will be run very frequently.
-    if name in object.__getattribute__(self, '__dataclass_fields__'):
-      if (name != 'parent' and
-          object.__getattribute__(self, '__dataclass_fields__')[name].init and
-          isinstance(object.__getattribute__(self, name), Module)):
-        object.__getattribute__(self, '_try_setup')()
-    # always run original python __getattribute__
-    return object.__getattribute__(self, name)
-
   def __dir__(self) -> Iterable[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
