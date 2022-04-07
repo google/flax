@@ -239,14 +239,15 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
     if not gfile.exists(ckpt_dir):
-      logging.info('Found no checkpoint at %s', ckpt_dir)
+      logging.info('Found no checkpoint directory at %s', ckpt_dir)
       return target
     if not gfile.isdir(ckpt_dir):
       ckpt_path = ckpt_dir
     else:
       ckpt_path = latest_checkpoint(ckpt_dir, prefix)
       if not ckpt_path:
-        logging.info('Found no checkpoint files in %s', ckpt_dir)
+        logging.info('Found no checkpoint files in %s with prefix %s',
+                     ckpt_dir, prefix)
         return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
