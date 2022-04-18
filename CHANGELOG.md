@@ -9,7 +9,7 @@ vNext
 -
 -
 - Added lifted conditional `nn.cond`
--
+- Handle rate==1.0 edgecase in Dropout.
 -
 -
 -

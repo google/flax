@@ -232,6 +232,27 @@ class StochasticTest(absltest.TestCase):
       delta = 3 * np.sqrt(rate * keep_rate) / np.sqrt(all_counts)
       self.assertTrue(keep_rate - delta < frac < keep_rate + delta)
 
+  def test_dropout_rate_limits(self):
+    rng = random.PRNGKey(0)
+    key1, key2, key3 = random.split(rng, 3)
+    inputs = jnp.ones((20, 20))
+    d0 = nn.Dropout(rate=0.0)
+    y1 = d0.apply({}, inputs,
+                  deterministic=False,
+                  rngs={'dropout': key1})
+    np.testing.assert_array_equal(y1, inputs)
+    d1 = nn.Dropout(rate=1.0)
+    y2 = d1.apply({}, inputs,
+                  deterministic=False,
+                  rngs={'dropout': key2})
+    np.testing.assert_array_equal(y2, np.zeros_like(inputs))
+    # ensure gradient of rate==1.0 case is non-NaN
+    fn = lambda x, k: d1.apply({}, x,
+                               rngs={'dropout': k},
+                               deterministic=False)
+    res = jax.grad(lambda x, k: jnp.sum(fn(x, k)))(inputs, key3)
+    self.assertFalse(np.isnan(res).any())
+
 
 # TODO(flax-dev): add integration tests for RNN cells
 class RecurrentTest(absltest.TestCase):
