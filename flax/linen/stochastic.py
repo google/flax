@@ -55,6 +55,9 @@ class Dropout(Module):
         'deterministic', self.deterministic, deterministic)
     if self.rate == 0.:
       return inputs
+    # Prevent gradient NaNs in 1.0 edge-case.
+    if self.rate == 1.0:
+      return jnp.zeros_like(inputs)
     keep_prob = 1. - self.rate
     if deterministic:
       return inputs
