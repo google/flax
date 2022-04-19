@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.deprecated.nn.linear."""
+"""Tests for flax.linen.linear."""
 
 import functools
 from multiprocessing.sharedctypes import Value
@@ -45,6 +45,7 @@ class LinearTest(parameterized.TestCase):
     )
     y, _ = dense_module.init_with_output(rng, x)
     self.assertEqual(y.shape, (1, 4))
+    self.assertEqual(y.dtype, jnp.float32)
     np.testing.assert_allclose(y, np.full((1, 4), 4.))
 
   def test_dense_extra_batch_dims(self):
@@ -161,6 +162,27 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = dg_module.init_with_output(rng, x)
     target = np.einsum(einsum_expr, x, initial_params['params']['kernel']) + 1.
     np.testing.assert_allclose(y, target, atol=1e-6)
+  
+  def test_complex_params_dense(self):
+    dense = nn.Dense(
+      features=2,
+      param_dtype=jnp.complex64)
+    x = jnp.ones((1, 2), jnp.float32)
+    variables = dense.init(random.PRNGKey(0), x)
+    self.assertEqual(variables['params']['kernel'].dtype, jnp.complex64)
+    self.assertEqual(variables['params']['bias'].dtype, jnp.complex64)
+    y = dense.apply(variables, x)
+    self.assertEqual(y.dtype, jnp.complex64)
+
+  def test_complex_input_dense(self):
+    dense = nn.Dense(
+      features=2)
+    x = jnp.ones((1, 2), jnp.complex64)
+    variables = dense.init(random.PRNGKey(0), x)
+    self.assertEqual(variables['params']['kernel'].dtype, jnp.float32)
+    self.assertEqual(variables['params']['bias'].dtype, jnp.float32)
+    y = dense.apply(variables, x)
+    self.assertEqual(y.dtype, jnp.complex64)
 
   def test_conv(self):
     rng = dict(params=random.PRNGKey(0))

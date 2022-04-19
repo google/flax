@@ -15,6 +15,7 @@
 """Normalization modules for Flax."""
 
 from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
+from flax.linen.dtypes import canonicalize_dtype
 
 from flax.linen.module import Module, compact, merge_param  # pylint: disable=g-multiple-import
 from jax import lax
@@ -46,6 +47,7 @@ def _abs_sq(x):
 
 
 def _compute_stats(x: Array, axes: Axes,
+                   dtype: Optional[Dtype],
                    axis_name: Optional[str] = None,
                    axis_index_groups: Any = None):
   """Computes mean and variance statistics.
@@ -62,15 +64,21 @@ def _compute_stats(x: Array, axes: Axes,
   Arguments:
     x: Input array.
     axes: The axes in ``x`` to compute mean and variance statistics for.
+    dtype: Optional dtype specifying the minimal precision. Statistics
+      are always at least float32 for stability.
     axis_name: Optional name for the pmapped axis to compute mean over.
     axis_index_groups: Optional axis indices.
 
   Returns:
     A pair ``(mean, var)``.
   """
+  if dtype is None:
+    dtype = jnp.result_type(x)
   # promote x to at least float32, this avoids half precision computation
   # but preserves double or complex floating points
-  x = jnp.asarray(x, jnp.promote_types(jnp.float32, jnp.result_type(x)))
+  dtype = jnp.promote_types(dtype, jnp.float32)
+  x = jnp.asarray(x, dtype)
+  
   mean = jnp.mean(x, axes)
   mean2 = jnp.mean(_abs_sq(x), axes)
   if axis_name is not None:
@@ -104,7 +112,7 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
     reduction_axes: The axes in ``x`` to reduce.
     feature_axes: Axes containing features. A separate bias and scale is learned
       for each specified feature.
-    dtype: Dtype of the returned result.
+    dtype: the dtype of the result (default: infer from input and params).
     param_dtype: Dtype of the parameters.
     epsilon: Normalization epsilon.
     use_bias: If true, add a bias term to the output.
@@ -129,15 +137,19 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
     reduced_feature_shape.append(x.shape[ax])
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
+  args = [x]
   if use_scale:
     scale = mdl.param('scale', scale_init, reduced_feature_shape,
                       param_dtype).reshape(feature_shape)
     mul *= scale
+    args.append(scale)
   y *= mul
   if use_bias:
     bias = mdl.param('bias', bias_init, reduced_feature_shape,
                      param_dtype).reshape(feature_shape)
     y += bias
+    args.append(bias)
+  dtype = canonicalize_dtype(*args, dtype=dtype)
   return jnp.asarray(y, dtype)
 
 
@@ -178,7 +190,7 @@ class BatchNorm(Module):
     momentum: decay rate for the exponential moving average of
       the batch statistics.
     epsilon: a small float added to variance to avoid dividing by zero.
-    dtype: the dtype of the computation (default: float32).
+    dtype: the dtype of the result (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  if True, bias (beta) is added.
     use_scale: if True, multiply by scale (gamma).
@@ -198,7 +210,7 @@ class BatchNorm(Module):
   axis: int = -1
   momentum: float = 0.99
   epsilon: float = 1e-5
-  dtype: Dtype = jnp.float32
+  dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
@@ -248,6 +260,7 @@ class BatchNorm(Module):
     else:
       mean, var = _compute_stats(
           x, reduction_axes,
+          dtype=self.dtype,
           axis_name=self.axis_name if not initializing else None,
           axis_index_groups=self.axis_index_groups)
 
@@ -275,7 +288,7 @@ class LayerNorm(Module):
 
   Attributes:
     epsilon: A small float added to variance to avoid dividing by zero.
-    dtype: the dtype of the computation (default: float32).
+    dtype: the dtype of the result (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     use_bias:  If True, bias (beta) is added.
     use_scale: If True, multiply by scale (gamma). When the next layer is linear
@@ -285,7 +298,7 @@ class LayerNorm(Module):
     scale_init: Initializer for scale, by default, one.
   """
   epsilon: float = 1e-6
-  dtype: Any = jnp.float32
+  dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
@@ -306,7 +319,7 @@ class LayerNorm(Module):
     feature_axes = (-1,)
 
     # TODO(jheek) suport axis_name for model parallelism?
-    mean, var = _compute_stats(x, reduction_axes, None, None)
+    mean, var = _compute_stats(x, reduction_axes, self.dtype, None, None)
 
     return _normalize(
         self, x, mean, var, reduction_axes, feature_axes,
@@ -330,9 +343,8 @@ class GroupNorm(Module):
         proposed by the original group normalization paper.
       group_size: the number of channels in a group.
       epsilon: A small float added to variance to avoid dividing by zero.
-      dtype: the dtype of the computation (default: float32).
-      param_dtype: the dtype passed to parameter initializers (default:
-        float32).
+      dtype: the dtype of the result (default: infer from input and params).
+      param_dtype: the dtype passed to parameter initializers (default: float32).
       use_bias:  If True, bias (beta) is added.
       use_scale: If True, multiply by scale (gamma). When the next layer is
         linear (also e.g. nn.relu), this can be disabled since the scaling will
@@ -343,7 +355,7 @@ class GroupNorm(Module):
   num_groups: Optional[int] = 32
   group_size: Optional[int] = None
   epsilon: float = 1e-6
-  dtype: Any = jnp.float32
+  dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
@@ -396,7 +408,7 @@ class GroupNorm(Module):
 
     # TODO(jheek): suport axis_name for model parallelism?
     mean, var = _compute_stats(
-        x.reshape(group_shape), reduction_axes, None, None)
+        x.reshape(group_shape), reduction_axes, self.dtype, None, None)
     mean = broadcast_stat(mean)
     var = broadcast_stat(var)
 

@@ -16,6 +16,7 @@
 
 import functools
 from typing import (Any, Callable, Optional, Tuple)
+from flax.linen.dtypes import canonicalize_dtype, promote_dtype
 
 from flax.linen.initializers import zeros
 from flax.linen.linear import default_kernel_init
@@ -44,7 +45,7 @@ def dot_product_attention_weights(query: Array,
                                   dropout_rng: Optional[PRNGKey] = None,
                                   dropout_rate: float = 0.,
                                   deterministic: bool = False,
-                                  dtype: Dtype = jnp.float32,
+                                  dtype: Optional[Dtype] = None,
                                   precision: PrecisionLike = None):
   """Computes dot-product attention weights given query and key.
 
@@ -70,13 +71,16 @@ def dot_product_attention_weights(query: Array,
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
     deterministic: bool, deterministic or not (to apply dropout)
-    dtype: the dtype of the computation (default: float32)
+    dtype: the dtype of the computation (default: infer from inputs)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
 
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
   """
+  query, key = promote_dtype(query, key, dtype=dtype)
+  dtype = query.dtype
+  
   assert query.ndim == key.ndim, 'q, k must have same rank.'
   assert query.shape[:-3] == key.shape[:-3], (
       'q, k batch dims must match.')
@@ -111,7 +115,7 @@ def dot_product_attention_weights(query: Array,
       keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
     else:
       keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
-    multiplier = (keep.astype(attn_weights.dtype) /
+    multiplier = (keep.astype(dtype) /
                   jnp.asarray(keep_prob, dtype=dtype))
     attn_weights = attn_weights * multiplier
 
@@ -127,7 +131,7 @@ def dot_product_attention(query: Array,
                           dropout_rng: Optional[PRNGKey] = None,
                           dropout_rate: float = 0.,
                           deterministic: bool = False,
-                          dtype: Dtype = jnp.float32,
+                          dtype: Optional[Dtype] = None,
                           precision: PrecisionLike = None):
   """Computes dot-product attention given query, key, and value.
 
@@ -157,13 +161,15 @@ def dot_product_attention(query: Array,
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
     deterministic: bool, deterministic or not (to apply dropout)
-    dtype: the dtype of the computation (default: float32)
+    dtype: the dtype of the computation (default: infer from inputs)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
   """
+  query, key, value = promote_dtype(query, key, value, dtype=dtype)
+  dtype = query.dtype
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert query.shape[:-3] == key.shape[:-3] == value.shape[:-3], (
       'q, k, v batch dims must match.')
@@ -187,7 +193,7 @@ class MultiHeadDotProductAttention(Module):
     Attributes:
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
-      dtype: the dtype of the computation (default: float32)
+      dtype: the dtype of the computation (default: infer from inputs and params)
       param_dtype: the dtype passed to parameter initializers (default: float32).
       qkv_features: dimension of the key, query, and value.
       out_features: dimension of the last projection
@@ -207,7 +213,7 @@ class MultiHeadDotProductAttention(Module):
       decode: whether to prepare and use an autoregressive cache.
   """
   num_heads: int
-  dtype: Dtype = jnp.float32
+  dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None

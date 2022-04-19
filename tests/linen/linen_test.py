@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.deprecated.nn."""
+"""Tests for flax.linen."""
 
 from absl.testing import absltest
 

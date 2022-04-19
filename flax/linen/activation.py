@@ -17,7 +17,7 @@
 
 # pylint: disable=unused-import
 # re-export activation functions from jax.nn
-from typing import Any
+from typing import Any, Optional
 
 from flax.linen.module import compact
 from flax.linen.module import Module
@@ -49,14 +49,18 @@ from jax.numpy import tanh
 
 
 Array = Any
+Dtype = Any
 
 
 class PReLU(Module):
   """Parametric Rectified Linear Unit (PReLU) activation function.
 
   Attributes:
-    negative_slope_init: the value to initialize the negative slope.
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    negative_slope_init: the value to initialize the negative slope
+      (default 0.01).
   """
+  param_dtype: Dtype = jnp.float32
   negative_slope_init: float = 0.01
 
   @compact
@@ -71,6 +75,6 @@ class PReLU(Module):
     """
     negative_slope = self.param(
         'negative_slope',
-        lambda k: jnp.asarray(self.negative_slope_init, jnp.float32))
+        lambda k: jnp.asarray(self.negative_slope_init, self.param_dtype))
     return jnp.where(inputs >= 0, inputs,
                      jnp.asarray(negative_slope, inputs.dtype) * inputs)

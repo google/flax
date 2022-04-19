@@ -24,6 +24,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 
 from flax.linen.activation import sigmoid
 from flax.linen.activation import tanh
+from flax.linen.dtypes import promote_dtype
 from flax.linen.initializers import orthogonal
 from flax.linen.initializers import zeros
 from flax.linen.linear import Conv
@@ -87,7 +88,7 @@ class LSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
-    dtype: the dtype of the computation (default: float32).
+    dtype: the dtype of the computation (default: None).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
@@ -95,7 +96,7 @@ class LSTMCell(RNNCellBase):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  dtype: Dtype = jnp.float32
+  dtype: Dtype = None
   param_dtype: Dtype = jnp.float32
 
   @compact
@@ -153,11 +154,10 @@ class LSTMCell(RNNCellBase):
 
 
 class DenseParams(Module):
-  """Dummy module for creating parameters matching `flax.deprecated.nn.Dense`."""
+  """Dummy module for creating parameters matching `flax.linen.Dense`."""
 
   features: int
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
@@ -166,11 +166,12 @@ class DenseParams(Module):
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Array]:
     k = self.param(
-        'kernel', self.kernel_init, (inputs.shape[-1], self.features))
+        'kernel', self.kernel_init, (inputs.shape[-1], self.features),
+        self.param_dtype)
     if self.use_bias:
-      b = self.param('bias', self.bias_init, (self.features,))
+      b = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
     else:
-      b = jnp.zeros((self.features,))
+      b = None
     return k, b
 
 
@@ -206,7 +207,7 @@ class OptimizedLSTMCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros).
-    dtype: the dtype of the computation (default: float32).
+    dtype: the dtype of the computation (default: None).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
@@ -214,7 +215,7 @@ class OptimizedLSTMCell(RNNCellBase):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  dtype: Dtype = jnp.float32
+  dtype: Dtype = None
   param_dtype: Dtype = jnp.float32
 
   @compact
@@ -233,7 +234,6 @@ class OptimizedLSTMCell(RNNCellBase):
     """
     c, h = carry
     hidden_features = h.shape[-1]
-    inputs = jnp.asarray(inputs, self.dtype)
 
     def _concat_dense(inputs: Array,
                       params: Mapping[str, Tuple[Array, Array]],
@@ -242,15 +242,18 @@ class OptimizedLSTMCell(RNNCellBase):
       # single kernel and single bias for efficiency before applying them using
       # dot_general.
       kernels, biases = zip(*params.values())
-      kernel = jnp.asarray(jnp.concatenate(kernels, axis=-1), self.dtype)
-
+      kernel = jnp.concatenate(kernels, axis=-1)
+      if use_bias:
+        bias = jnp.concatenate(biases, axis=-1)
+      else:
+        bias = None
+      inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
       y = jnp.dot(inputs, kernel)
       if use_bias:
-        bias = jnp.asarray(jnp.concatenate(biases, axis=-1), self.dtype)
         y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
 
       # Split the result back into individual (i, f, g, o) outputs.
-      split_indices = np.cumsum([b.shape[0] for b in biases[:-1]])
+      split_indices = np.cumsum([kernel.shape[-1] for kernel in kernels[:-1]])
       ys = jnp.split(y, split_indices, axis=-1)
       return dict(zip(params.keys(), ys))
 
@@ -323,7 +326,7 @@ class GRUCell(RNNCellBase):
     recurrent_kernel_init: initializer function for the kernels that transform
       the hidden state (default: orthogonal).
     bias_init: initializer for the bias parameters (default: zeros)
-    dtype: the dtype of the computation (default: float32).
+    dtype: the dtype of the computation (default: None).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
@@ -333,7 +336,7 @@ class GRUCell(RNNCellBase):
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       orthogonal())
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
-  dtype: Dtype = jnp.float32
+  dtype: Dtype = None
   param_dtype: Dtype = jnp.float32
 
   @compact
@@ -427,7 +430,7 @@ class ConvLSTM(RNNCellBase):
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
     bias: whether to add a bias to the output (default: True).
-    dtype: the dtype of the computation (default: float32).
+    dtype: the dtype of the computation (default: None).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
 
@@ -436,7 +439,7 @@ class ConvLSTM(RNNCellBase):
   strides: Optional[Sequence[int]] = None
   padding: Union[str, Sequence[Tuple[int, int]]] = 'SAME'
   use_bias: bool = True
-  dtype: Dtype = jnp.float32
+  dtype: Dtype = None
   param_dtype: Dtype = jnp.float32
 
   @compact

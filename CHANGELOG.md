@@ -14,7 +14,8 @@ vNext
 -
 -
 -
--
+- Implemented [default dtype FLIP](https://github.com/google/flax/blob/main/docs/flip/1777-default-dtype.md).
+  This means the default dtype is now infered from inputs and params rather than being hard-coded to float32.
 -
 -
 
