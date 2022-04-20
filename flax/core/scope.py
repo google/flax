@@ -728,7 +728,8 @@ class Scope:
     """
     self.reserve(name)
     if self.has_variable('params', name):
-      abs_rng = jax.ShapeDtypeStruct(_default_key_shape(), jnp.uint32)
+      abs_rng = jax.ShapeDtypeStruct(random.default_prng_impl().key_shape,
+                                     jnp.uint32)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
@@ -888,17 +889,6 @@ def _is_valid_variables(variables: VariableDict) -> bool:
   return True
 
 
-# TODO(frostig,levskaya): remove after next jax release, when
-# random.default_prng_impl is defined
-def _default_key_shape():
-  if hasattr(random, 'default_prng_impl'):
-    return random.default_prng_impl().key_shape
-  elif jax_config.jax_default_prng_impl == 'threefry2x32':
-    return (2,)
-  else:
-    return (4,)
-
-
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
   # New-style JAX KeyArrays have a base type.
@@ -909,7 +899,7 @@ def _is_valid_rng(rng: Array):
   else:
     if not isinstance(rng, (np.ndarray, jnp.ndarray)):
       return False
-    if (rng.shape != _default_key_shape() or
+    if (rng.shape != random.default_prng_impl().key_shape or
         rng.dtype != jnp.uint32):
       return False
   return True
