@@ -57,7 +57,9 @@ def bool_env(varname: str, default: bool) -> bool:
 flax_filter_frames = bool_env('FLAX_FILTER_FRAMES', True)
 
 # Whether to automatically wrap Module methods with named_call for profiles.
-flax_profile = bool_env('FLAX_PROFILE', False)
+# We profile by default if JAX's dynamic name-stack based named_call is used.
+flax_profile = (bool_env('FLAX_PROFILE', False) or
+                bool_env('JAX_EXPERIMENTAL_NAME_STACK', False))
 
 # Whether to use the lazy rng implementation
 flax_lazy_rng = bool_env('FLAX_LAZY_RNG', True)
