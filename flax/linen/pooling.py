@@ -34,7 +34,7 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     reduce_fn: a reduce function of the form `(T, T) -> T`.
     window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
-        strides.
+        strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
