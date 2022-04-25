@@ -25,8 +25,8 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
 
   Pooling functions are implemented using the ReduceWindow XLA op.
   NOTE: Be aware that pooling is not generally differentiable.
-  That means providing a reduce_fn that is differentiable does not imply
-  that pool is differentiable.
+  That means providing a reduce_fn that is differentiable does not imply that
+  pool is differentiable.
 
   Args:
     inputs: input data with dimensions (batch, window dims..., features).
@@ -34,7 +34,7 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     reduce_fn: a reduce function of the form `(T, T) -> T`.
     window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
-        strides.
+      strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
@@ -76,7 +76,7 @@ def avg_pool(inputs, window_shape, strides=None, padding="VALID"):
     inputs: input data with dimensions (batch, window dims..., features).
     window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
-        strides (default: `(1, ..., 1)`).
+      strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension (default: `'VALID'`).
@@ -95,7 +95,7 @@ def max_pool(inputs, window_shape, strides=None, padding="VALID"):
     inputs: input data with dimensions (batch, window dims..., features).
     window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
-        strides (default: `(1, ..., 1)`).
+      strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension (default: `'VALID'`).
@@ -113,7 +113,7 @@ def min_pool(inputs, window_shape, strides=None, padding="VALID"):
     inputs: Input data with dimensions (batch, window dims..., features).
     window_shape: A shape tuple defining the window to reduce over.
     strides: A sequence of `n` integers, representing the inter-window strides
-        (default: `(1, ..., 1)`).
+      (default: `(1, ..., 1)`).
     padding: Either the string `'SAME'`, the string `'VALID'`, or a sequence of
       `n` `(low, high)` integer pairs that give the padding to apply before and
       after each spatial dimension (default: `'VALID'`).
