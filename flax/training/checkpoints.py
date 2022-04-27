@@ -28,8 +28,7 @@ from absl import logging
 from flax import core
 from flax import errors
 from flax import serialization
-from tensorflow.io import gfile  # pytype: disable=import-error
-
+from flax import io
 
 # Single-group reg-exps for int or float numerical substrings.
 # captures sign:
@@ -122,9 +121,9 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   ckpt_dir = safe_normpath(ckpt_dir)
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
-  gfile.makedirs(os.path.dirname(ckpt_path))
+  io.makedirs(os.path.dirname(ckpt_path))
   base_path = os.path.join(ckpt_dir, prefix)
-  checkpoint_files = gfile.glob(base_path + '*')
+  checkpoint_files = io.glob(base_path + '*')
 
   if ckpt_path in checkpoint_files:
     if not overwrite:
@@ -141,11 +140,11 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     if not overwrite:
       raise errors.InvalidCheckpointError(ckpt_path, step)
 
-  with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
+  with io.GFile(ckpt_tmp_path, 'wb') as fp:
     fp.write(serialization.to_bytes(target))
 
   # Rename once serialization and writing finished.
-  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
+  io.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
   logging.info('Saved checkpoint at %s', ckpt_path)
 
   # Remove newer checkpoints
@@ -155,7 +154,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     checkpoint_files = checkpoint_files[:ind]
     for path in newer_ckpts:
       logging.info('Removing checkpoint at %s', path)
-      gfile.remove(path)
+      io.remove(path)
 
   # Remove old checkpoint files.
   last_kept = -float('inf')
@@ -172,7 +171,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
           last_kept = step_number
           continue
       logging.info('Removing checkpoint at %s', path)
-      gfile.remove(path)
+      io.remove(path)
 
   return ckpt_path
 
@@ -190,7 +189,7 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   glob_path = os.path.join(ckpt_dir, f'{prefix}*')
-  checkpoint_files = natural_sort(gfile.glob(glob_path))
+  checkpoint_files = natural_sort(io.glob(glob_path))
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
   if checkpoint_files:
@@ -235,13 +234,13 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
   ckpt_dir = safe_normpath(ckpt_dir)
   if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
-    if not gfile.exists(ckpt_path):
+    if not io.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
-    if not gfile.exists(ckpt_dir):
+    if not io.exists(ckpt_dir):
       logging.info('Found no checkpoint directory at %s', ckpt_dir)
       return target
-    if not gfile.isdir(ckpt_dir):
+    if not io.isdir(ckpt_dir):
       ckpt_path = ckpt_dir
     else:
       ckpt_path = latest_checkpoint(ckpt_dir, prefix)
@@ -251,8 +250,8 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
         return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
-  with gfile.GFile(ckpt_path, 'rb') as fp:
-    if parallel and fp.seekable():
+  with io.GFile(ckpt_path, 'rb') as fp:
+    if parallel and fp.seekable() and hasattr(fp, 'size'):
       buf_size = 128 << 20  # 128M buffer.
       num_bufs = fp.size() / buf_size
       logging.debug('num_bufs: %d', num_bufs)
@@ -262,7 +261,7 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
         # NOTE: We have to re-open the file to read each chunk, otherwise the
         # parallelism has no effect. But we could reuse the file pointers
         # within each thread.
-        with gfile.GFile(ckpt_path, 'rb') as f:
+        with io.GFile(ckpt_path, 'rb') as f:
           f.seek(i * buf_size)
           buf = f.read(buf_size)
           if buf:

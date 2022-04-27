@@ -600,3 +600,19 @@ class TransformTargetError(FlaxError):
       'Linen transformations must be applied to Modules classes or'
       ' functions taking a Module instance as the first argument.'
       f' The provided target is not a Module class or callable: {target}')
+
+
+#################################################
+# io.py errors                                  #
+#################################################
+
+class AlreadyExistsError(FlaxError):
+  """
+  Attempting to overwrite a file via copy.
+
+  You can pass ``overwrite=True`` to disable this behavior and
+  overwrite existing files in.
+  """
+  def __init__(self, path):
+    super().__init__(f'Trying overwrite an existing file: "{path}".')
+
