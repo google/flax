@@ -31,7 +31,7 @@ class EarlyStopping(struct.PyTreeNode):
       optimizer, train_metrics = train_epoch(
           optimizer, train_ds, config.batch_size, epoch, input_rng)
       _, early_stop = early_stop.update(train_metrics['loss'])
-      if early_stop.should_stop: #!
+      if early_stop.should_stop:
         print('Met early stopping criteria, breaking...')
         break
   
@@ -59,8 +59,9 @@ class EarlyStopping(struct.PyTreeNode):
     """Update the state based on metric.
     
     Returns:
-      Whether there was an improvement greater than min_delta from
-          the previous best_metric and the updated EarlyStop object.
+      A pair (has_improved, early_stop), where `has_improved` is True when there
+        was an improvement greater than `min_delta` from the previous
+        `best_metric` and `early_stop` is the updated `EarlyStop` object.
     """
 
     if math.isinf(self.best_metric) or self.best_metric - metric > self.min_delta:
