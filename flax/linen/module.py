@@ -517,6 +517,15 @@ class Module:
   @classmethod
   def __init_subclass__(cls, **kwargs: Any) -> None:
     """Automatically initializes all subclasses as custom dataclasses."""
+    # Register Module subclasses as pytrees, so that we can raise an informative
+    # error if user tries to pass a Module through a jitted transformation.
+    def tree_flatten(self):
+      raise errors.JitPytreeError()
+
+    def tree_unflatten(cls, aux_data, children):
+      raise errors.JitPytreeError()
+
+    jax.tree_util.register_pytree_node(cls, tree_flatten, tree_unflatten)
     super().__init_subclass__(**kwargs)
     # All Flax Modules are dataclasses.  We force this convention since
     # it encourages the stateless behavior needed to clone module instances for
@@ -531,16 +540,6 @@ class Module:
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state
     cls.scope = None
-
-    # Register Module subclasses as pytrees, so that we can raise an informative 
-    # error if user tries to pass a Module through a jitted transformation.
-    def tree_flatten(self):
-      raise errors.JitPytreeError()
-
-    def tree_unflatten(cls, aux_data, children):
-      raise errors.JitPytreeError()
-
-    jax.tree_util.register_pytree_node(cls, tree_flatten, tree_unflatten)
 
   @classmethod
   def _customized_dataclass_transform(cls):
