@@ -251,7 +251,29 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
         return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
-  with gfile.GFile(ckpt_path, 'rb') as fp:
+  return restore_checkpoint_from_file(ckpt_path, target, parallel)
+
+
+def restore_checkpoint_from_file(
+    checkpoint_path: str,
+    target: Optional[PyTree],
+    parallel: bool = True) -> PyTree:
+  """Restores a checkpoint given its absolute path.
+
+  Args:
+    checkpoint_path: Absolute path to the checkpoint.
+    target: matching object to rebuild via deserialized state-dict. If None,
+      the deserialized state-dict is returned as-is.
+    parallel: bool: whether to load seekable checkpoints in parallel, for speed.
+
+  Returns:
+    Restored `target` updated from checkpoint file, or if no step specified and
+    no checkpoint files present, returns the passed-in `target` unchanged.
+    If a file path is specified and is not found, the passed-in `target` will be
+    returned. This is to match the behavior of the case where a directory path
+    is specified but the directory has not yet been created.
+  """
+  with gfile.GFile(checkpoint_path, 'rb') as fp:
     if parallel and fp.seekable():
       buf_size = 128 << 20  # 128M buffer.
       num_bufs = fp.size() / buf_size
@@ -262,7 +284,7 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
         # NOTE: We have to re-open the file to read each chunk, otherwise the
         # parallelism has no effect. But we could reuse the file pointers
         # within each thread.
-        with gfile.GFile(ckpt_path, 'rb') as f:
+        with gfile.GFile(checkpoint_path, 'rb') as f:
           f.seek(i * buf_size)
           buf = f.read(buf_size)
           if buf:
