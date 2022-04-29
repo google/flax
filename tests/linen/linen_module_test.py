@@ -1454,6 +1454,70 @@ class ModuleTest(absltest.TestCase):
     np.testing.assert_array_equal(y, jnp.ones((2,)))
     np.testing.assert_array_equal(y, vs['test_col']['a'])
 
+  def test_generic_module(self):
+    # See https://github.com/google/flax/issues/1899
+    T = TypeVar('T')
+
+    class C(nn.Module, Generic[T]):
+      def f(self, t: T) -> T:
+        return t
+
+    class D(nn.Module):
+      def setup(self):
+        c = C[Any]()
+
+      def __call__(self) -> None:
+        pass
+
+    rngs = {}
+    D().init(rngs)
+
+  def test_modifying_attribs_in_post_init(self):
+    class Foo(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.hate = 100 - self.love
+        super().__post_init__()
+    foo = Foo()
+    self.assertEqual(foo.love, 99)
+    self.assertEqual(foo.hate, 1)
+
+    class Bar(nn.Module):
+      love: int = 99
+      def __post_init__(self):
+        self.love = 101
+        super().__post_init__()
+    bar = Bar()
+    self.assertEqual(bar.love, 101)
+
+  def test_has_rng(self):
+    class Foo(nn.Module):
+      def __call__(self):
+        return self.has_rng('bar')
+    foo = Foo()
+    with self.assertRaisesRegex(ValueError, "RNGs.*unbound module"):
+      foo()
+    k = random.PRNGKey(0)
+    self.assertTrue(foo.apply({}, rngs={'bar': k}))
+    self.assertFalse(foo.apply({}, rngs={'baz': k}))
+
+  def test_jit_pytree_error(self):
+    class Foo(nn.Module):
+      @compact
+      def __call__(self, x):
+        return x
+
+    x = jnp.ones((3, 2))
+    foo = Foo()
+    variables = foo.init(random.PRNGKey(0), x)
+
+    @jax.jit
+    def step(model, params, x):
+      unused_logits = model.apply(params, x)
+      return params
+
+    with self.assertRaisesRegex(errors.JitPytreeError, 'use static_argnames'):
+      _ = step(foo, variables, x)
 
 if __name__ == '__main__':
   absltest.main()

@@ -284,6 +284,55 @@ class JaxTransformError(FlaxError):
 # module.py errors                              #
 #################################################
 
+class JitPytreeError(FlaxError):
+  """Suggests fix for when user tries to pass a Linen Module through jit.
+
+  A Linen Module is not a pytree, and therefore cannot be flattened or
+  unflattened as needed when entering and exiting JAX transformations.
+
+  If you pass in your Module as an arg to a jitted function, you may get an
+  error like the following:
+  "TypeError: Argument 'Foo()' of type <class '__main__.Foo'> is not a valid
+  JAX type".
+
+  To correctly pass a Module through a jitted JAX transformation, please use
+  ``static_argnames`` or ``static_argnums``.
+  You can do this via `functools.partial`.
+
+  Example::
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(3)(x)
+
+    x = jnp.ones((7, 5))
+    foo = Foo()
+    params = foo.init(random.PRNGKey(0), x)
+
+    # This will cause a "not a valid JAX type" error when `step()` is called.
+    @jax.jit
+    def step(model, params, x):
+      logits = model.apply(params, x)
+      ...
+      return params
+
+    # Correct way: Use static_argnames or static_argnums.
+    @functools.partial(jax.jit, static_argnames=['model'])
+    def step(model, params, x):
+      logits = model.apply(params, x)
+      ...
+      return params
+
+    params = step(foo, params, x)
+  """
+
+  def __init__(self):
+    super().__init__(
+        'A Flax Linen Module cannot be passed naively through a jitted '
+        'transformation since it is not a pytree. To pass it as an arg, use '
+        'static_argnames or static_argnums. See example in error docstring.'
+    )
 
 class NameInUseError(FlaxError):
   """

@@ -525,6 +525,16 @@ class Module(metaclass=ModuleMeta):
     cls._state = _uninitialized_module_internal_state
     cls.scope = None
 
+    # Register Module subclasses as pytrees, so that we can raise an informative 
+    # error if user tries to pass a Module through a jitted transformation.
+    def tree_flatten(self):
+      raise errors.JitPytreeError()
+
+    def tree_unflatten(cls, aux_data, children):
+      raise errors.JitPytreeError()
+
+    jax.tree_util.register_pytree_node(cls, tree_flatten, tree_unflatten)
+
   @classmethod
   def _customized_dataclass_transform(cls):
     """Handles final optional dataclass attributes: `parent` and `name`."""
