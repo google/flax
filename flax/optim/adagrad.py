@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Optional
 import jax.numpy as jnp
 import numpy as np
 from .. import struct
@@ -35,9 +36,9 @@ class _AdagradParamState:
 
 class Adagrad(OptimizerDef):
   """Adagrad optimizer"""
-  def __init__(self, learning_rate: float = None, eps=1e-8):
+  def __init__(self, learning_rate: Optional[float] = None, eps=1e-8):
     """Constructor for the Adagrad optimizer.
-        
+
     Args:
       learning_rate: the step size used to update the parameters.
     """

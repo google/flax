@@ -26,10 +26,11 @@ except IOError:
 
 install_requires = [
     "numpy>=1.12",
-    "jax>=0.2.28",
+    "jax>=0.3",
     "matplotlib",  # only needed for tensorboard export
     "msgpack",
     "optax",
+    "typing_extensions>=4.1.1",
 ]
 
 tests_require = [
@@ -43,12 +44,13 @@ tests_require = [
     "pytest",
     "pytest-cov",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
-    "pytype==2021.5.25",  # pytype 2021.6.17 complains on recurrent.py, need to investigate!
+    "pytype",
     "sentencepiece",  # WMT example.
     "svn",
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
     "tensorflow",
+    "torch",
 ]
 
 __version__ = None

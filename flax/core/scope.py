@@ -15,19 +15,18 @@
 """Flax functional core: Scopes."""
 
 import contextlib
+import dataclasses
 import functools
 import hashlib
-import dataclasses
-
 import typing
 from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
                     Sequence, Set, Tuple, TypeVar, Union)
 
 from . import tracers
-from flax import errors
-from flax import traceback_util
-from flax import struct
 from flax import config
+from flax import errors
+from flax import struct
+from flax import traceback_util
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
@@ -48,6 +47,10 @@ RNGSequences = Dict[str, PRNGKey]
 
 
 Filter = Union[bool, str, typing.Collection[str], 'DenyList']
+
+# When conditioning on filters we require explicit boolean comparisons.
+# pylint: disable=g-bool-id-comparison
+
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
@@ -92,7 +95,7 @@ class LazyRng(struct.PyTreeNode):
              *suffix: PRNGFoldable) -> 'LazyRng':
     if not config.flax_lazy_rng:
       if isinstance(rng, LazyRng):
-        assert rng.suffix == ()
+        assert not rng.suffix
         rng = rng.rng
       return LazyRng(_legacy_rng_fold_in(rng, suffix), ())
     if isinstance(rng, LazyRng):
@@ -102,6 +105,7 @@ class LazyRng(struct.PyTreeNode):
 
 
 def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
+  """Legacy RNG folding."""
   for x in data:
     if isinstance(x, str):
       m = hashlib.sha1()
@@ -116,7 +120,8 @@ def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
   return rng
 
 
-def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNGKey:
+def _fold_in_static(rng: PRNGKey,
+                    data: typing.Collection[PRNGFoldable]) -> PRNGKey:
   """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
@@ -129,7 +134,7 @@ def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNG
   Returns:
    The newly generated PRNG key.
   """
-  if len(data) == 0:
+  if not data:
     return rng
   m = hashlib.sha1()
   for x in data:
@@ -145,16 +150,26 @@ def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNG
 
 
 def is_filter_empty(filter_like: Filter) -> bool:
+  """Returns True if `filter_like` is an empty filter.
+
+  Args:
+    filter_like: The filter to test.
+
+  Returns:
+    A filter is empty when it is an empty collection, it is a bool with value
+    False, ir it is a DenyList that matches everything. A string filter is never
+    empty.
+  """
   if isinstance(filter_like, str):
     return False
   if isinstance(filter_like, typing.Collection):
-    return len(filter_like) == 0
+    return not filter_like
   if isinstance(filter_like, bool):
     return not filter_like
   if isinstance(filter_like, DenyList):
-    # if any arbitrary collection is in the denylist it matches.
-    # everything so the filter is empty. This is checked with a stub.
-    return in_filter(filter_like.deny, "__flax_internal_stub__")
+    # if any arbitrary collection is in the denylist it matches everything so
+    # the filter is empty. This is checked with a stub.
+    return in_filter(filter_like.deny, '__flax_internal_stub__')
   raise errors.InvalidFilterError(filter_like)
 
 
@@ -295,7 +310,8 @@ def group_collections(
   Returns:
     A sequence S with `len(S) == len(col_filters)`. Each `S[i]` is the result of
     applying filter `col_filters[i]` to the remaining keys in `xs`.
-    """
+  """
+  cols: Iterable[str]
   cols = xs.keys()
   groups = []
   for col_filter in col_filters:
@@ -363,6 +379,7 @@ class Scope:
   <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
+  reservations: Set[str]
 
   def __init__(self,
                variables: MutableVariableDict,
@@ -397,11 +414,10 @@ class Scope:
 
     self._invalid = False
 
-
   def __eq__(self, other: Any) -> bool:
-    # If the root variable dict and path equal than two scopes behave identically
-    # effectively a scope is nothing more than a cursor into a variable dict and an
-    # rng counter dict
+    # If the root variable dict and path are the same, then two scopes behave
+    # identically. Effectively, a scope is nothing more than a cursor into a
+    # variable dict and an rng counter dict.
     if not isinstance(other, Scope):
       return False
     if self is other:
@@ -482,7 +498,7 @@ class Scope:
     """
     if not isinstance(name, str):
       raise TypeError('The type of scope "{name}" should be string but '
-                     f'it is {type(name)}')
+                      f'it is {type(name)}')
     if name in self.reservations:
       raise ValueError(f'Duplicate use of scope name: "{name}"')
     self.reservations.add(name)
@@ -568,7 +584,7 @@ class Scope:
     scope = self.push(name)
     if named_call:
       # We import named_call at runtime to avoid a circular import issue.
-      from . import lift  # type: ignore
+      from . import lift  # pylint: disable=g-import-not-at-top
       fn = lift.named_call(fn, name)
 
     @functools.wraps(fn)
@@ -583,9 +599,9 @@ class Scope:
     return in_filter(self.mutable, col)
 
   def is_collection_empty(self, col: str) -> bool:
-    """Returns true if the collection is emtpy."""
-    if col in self.root._variables:
-      return len(self.root._variables[col]) == 0
+    """Returns true if the collection is empty."""
+    if col in self.root._variables:  # pylint: disable=protected-access
+      return not self.root._variables[col]  # pylint: disable=protected-access
     return True
 
   def _mutable_collection(self, col: str) -> MutableCollection:
@@ -593,7 +609,7 @@ class Scope:
     assert self.is_mutable_collection(col), f'Collection {col} is not mutable'
     if col not in self._variables:
       if self.parent:
-        parent_col = self.parent._mutable_collection(col)
+        parent_col = self.parent._mutable_collection(col)  # pylint: disable=protected-access
         if self.name not in parent_col:
           parent_col[self.name] = {}
         self._variables[col] = parent_col[self.name]
@@ -605,7 +621,7 @@ class Scope:
     """Returns a collection of variables of collection `col`."""
     if col not in self._variables:
       if self.parent:
-        parent_col = self.parent._collection(col)
+        parent_col = self.parent._collection(col)  # pylint: disable=protected-access
         if self.name not in parent_col:
           return FrozenDict()
         self._variables[col] = parent_col[self.name]
@@ -626,7 +642,7 @@ class Scope:
     self.rng_counters[name] += 1
     return LazyRng.create(self.rngs[name], self.rng_counters[name]).as_jax_rng()
 
-  def get_variable(self, col: str, name: str, default: T = None) -> T:
+  def get_variable(self, col: str, name: str, default: Any = None) -> Any:
     """Retrieves the value of a Variable.
 
     Args:
@@ -670,7 +686,8 @@ class Scope:
     variables = self._mutable_collection(col)
     variables[name] = value
 
-  def variable(self, col: str, name: str, init_fn: Callable[..., T],
+  def variable(self, col: str, name: str,  # pylint: disable=keyword-arg-before-vararg
+               init_fn: Optional[Callable[..., T]] = None,
                *init_args) -> Variable[T]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
@@ -678,7 +695,8 @@ class Scope:
       col: the collection of the variable.
       name: the name of the variable.
       init_fn: a function taking a PRNGKey plus any other number of positional
-        arguments.
+        arguments. If None, the variable must already be initialized otherwise
+        an error is raised.
       *init_args: the arguments to evaluate init_fn on lazily.
 
     Returns:
@@ -686,7 +704,7 @@ class Scope:
     """
     self.reserve(name)
     if not self.has_variable(col, name):
-      if not self.is_mutable_collection(col):
+      if not self.is_mutable_collection(col) or init_fn is None:
         if self.is_collection_empty(col):
           raise errors.ScopeCollectionNotFound(col, name, self.path_text)
         raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
@@ -710,7 +728,8 @@ class Scope:
     """
     self.reserve(name)
     if self.has_variable('params', name):
-      abs_rng = jax.ShapeDtypeStruct(_default_key_shape(), jnp.uint32)
+      abs_rng = jax.ShapeDtypeStruct(random.default_prng_impl().key_shape,
+                                     jnp.uint32)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
@@ -726,7 +745,7 @@ class Scope:
         # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
           raise errors.ScopeParamShapeError(name, self.path_text,
-              jnp.shape(val), jnp.shape(abs_val))
+                                            jnp.shape(val), jnp.shape(abs_val))
     else:
       if not self.is_mutable_collection('params'):
         if self.is_collection_empty('params'):
@@ -738,7 +757,7 @@ class Scope:
     return value
 
   def _populate_collections(self):
-    collections = self.root._variables.keys()
+    collections = self.root._variables.keys()  # pylint: disable=protected-access
     for col in collections:
       self._collection(col)
 
@@ -756,23 +775,31 @@ def _unfreeze_variables(variables, mutable):
 def bind(variables: VariableDict,
          rngs: Optional[RNGSequences] = None,
          mutable: CollectionFilter = False):
-  """Bind variables and rngs to a new ``Scope``.
+  """Binds variables and rngs to a new ``Scope``.
 
-  bind provides a ``Scope`` instance without transforming a function
-  with ``apply``. This is particalary useful for debugging and
-  interactive use cases like notebooks where a function would limit
-  the ability split up code into different cells.
+  bind provides a ``Scope`` instance without transforming a function with
+  ``apply``. This is particalary useful for debugging and interactive use cases
+  like notebooks where a function would limit the ability split up code into
+  different cells.
 
-  a ``Scope`` instance is a stateful object. Note that idiomatic JAX is functional
-  and therefore a ``Scope` does not mix well well with vanilla JAX APIs. Therefore,
-  we recommend using ``apply`` when code should be reusable and compatible
-  across the JAX software ecosystem.
+  a ``Scope`` instance is a stateful object. Note that idiomatic JAX is
+  functional and therefore a ``Scope` does not mix well well with vanilla JAX
+  APIs. Therefore, we recommend using ``apply`` when code should be reusable and
+  compatible across the JAX software ecosystem.
+
+  Args:
+    variables: Variable dictionary to bind.
+    rngs: RNGs to bind.
+    mutable: Which variable colections to treat as mutable.
+
+  Returns:
+    A new scope with the variables and rngs bound to it.
   """
   if not _is_valid_variables(variables):
-    raise errors.ApplyScopeInvalidVariablesError()
+    raise errors.ApplyScopeInvalidVariablesTypeError()
   if rngs is not None and not _is_valid_rngs(rngs):
     raise errors.InvalidRngError(
-      'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
+        'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
   new_variables = _unfreeze_variables(variables, mutable)
   return Scope(new_variables, rngs=rngs, mutable=mutable)
 
@@ -794,6 +821,12 @@ def apply(fn: Callable[..., Any],
               *args,
               rngs: Optional[RNGSequences] = None,
               **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
+    # Try to detect if user accidentally passed {'params': {'params': ...}.
+    if 'params' in variables and isinstance(
+        variables['params'],
+        (dict, FrozenDict)) and 'params' in variables['params']:
+      raise errors.ApplyScopeInvalidVariablesStructureError(variables)
+
     with bind(variables, rngs=rngs, mutable=mutable).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:
@@ -856,17 +889,6 @@ def _is_valid_variables(variables: VariableDict) -> bool:
   return True
 
 
-# TODO(frostig,levskaya): remove after next jax release, when
-# random.default_prng_impl is defined
-def _default_key_shape():
-  if hasattr(random, 'default_prng_impl'):
-    return random.default_prng_impl().key_shape
-  elif jax_config.jax_default_prng_impl == 'threefry2x32':
-    return (2,)
-  else:
-    return (4,)
-
-
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
   # New-style JAX KeyArrays have a base type.
@@ -877,7 +899,7 @@ def _is_valid_rng(rng: Array):
   else:
     if not isinstance(rng, (np.ndarray, jnp.ndarray)):
       return False
-    if (rng.shape != _default_key_shape() or
+    if (rng.shape != random.default_prng_impl().key_shape or
         rng.dtype != jnp.uint32):
       return False
   return True

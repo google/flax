@@ -41,7 +41,10 @@ For a quick introduction and short example snippets, see our `README
    howtos/lr_schedule
    howtos/extracting_intermediates
    howtos/model_surgery
+   howtos/convert_pytorch_to_flax
    howtos/optax_update_guide
+   howtos/linen_upgrade_guide
+
 
 .. toctree::
    :maxdepth: 1

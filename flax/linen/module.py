@@ -12,39 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Flax Modules."""
-from contextlib import contextmanager
+"""Flax Module."""
+import contextlib
 import dataclasses
 import enum
 import functools
 import inspect
-import os
 import threading
-import types
 import typing
+from typing import (Any, Callable, Dict, Iterable, List, Optional,
+                    Set, Tuple, Type, TypeVar, Union, overload)
+from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 import weakref
 
-from typing import (Any, Callable, Sequence, Iterable, List, Optional, Tuple,
-                    Set, Type, Union, TypeVar, Generic, Dict)
-
-import jax
-from jax import tree_util
-from jax._src.numpy.lax_numpy import isin
-import numpy as np
-
-import flax
 from flax import config
+from flax import core
 from flax import errors
+from flax import serialization
 from flax import traceback_util
 from flax import traverse_util
-from flax import serialization
-from flax import core
 from flax.core import Scope
-from flax.core.scope import CollectionFilter, DenyList, Variable, VariableDict, FrozenVariableDict, union_filters
-from flax.core.frozen_dict import FrozenDict, freeze
-from flax.struct import __dataclass_transform__
+from flax.core.frozen_dict import FrozenDict
+from flax.core.scope import (CollectionFilter, DenyList, FrozenVariableDict,  # pylint: disable=g-multiple-import
+                             Variable, VariableDict, union_filters)
+import jax
 
-# from .dotgetter import DotGetter
+
 traceback_util.register_exclusion(__file__)
 
 PRNGKey = Any  # pylint: disable=invalid-name
@@ -59,22 +52,23 @@ _CallableT = TypeVar('_CallableT', bound=Callable)
 
 # Used for abstractly testing module behavior.
 TestScope = type('TestScope',
-                  (Scope,),
-                  {'make_rng': lambda self, name: jax.random.PRNGKey(0)})
+                 (Scope,),
+                 {'make_rng': lambda self, name: jax.random.PRNGKey(0)})
 
 
 # pylint: disable=protected-access,attribute-defined-outside-init
+
 
 def _indent(x: str, num_spaces: int):
   indent_str = ' ' * num_spaces
   lines = x.split('\n')
   # skip last line because it is always empty and should not be indented.
-  assert lines[-1] == ''
+  assert not lines[-1]
   return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
 
 
 def _attr_repr(value: Any):
-  if isinstance(value, Callable) and getattr(value, '__name__', None):
+  if callable(value) and getattr(value, '__name__', None):
     value_rep = value.__name__
   else:
     value_rep = repr(value)
@@ -82,7 +76,7 @@ def _attr_repr(value: Any):
 
 
 def _module_repr(module: 'Module', num_spaces: int = 4):
-  """Returns a pretty printed representation of the module"""
+  """Returns a pretty printed representation of the module."""
   cls = type(module)
   cls_name = cls.__name__
   rep = ''
@@ -111,9 +105,13 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 # Track parent relationship across Modules.
 # -----------------------------------------------------------------------------
 class _DynamicContext:
-  # TODO: switch to using contextvars once minimum python version is 3.7
+  """Dynamic context."""
+  # TODO(marcvanzee): switch to using contextvars once minimum python version is
+  # 3.7
+
   def __init__(self):
     self._thread_data = threading.local()
+
   @property
   def module_stack(self):
     if not hasattr(self._thread_data, 'module_stack'):
@@ -130,6 +128,7 @@ class _DynamicContext:
 # The global context
 _context = _DynamicContext()
 
+
 class _Sentinel:
   pass
 _unspecified_parent = _Sentinel()
@@ -138,6 +137,7 @@ _unspecified_parent = _Sentinel()
 # Enable automatic named_call wrapping for labelling profile traces.
 # -----------------------------------------------------------------------------
 _use_named_call = config.flax_profile
+
 
 def enable_named_call():
   """Enables named call wrapping for labelling profile traces.
@@ -153,6 +153,7 @@ def enable_named_call():
   global _use_named_call
   _use_named_call = True
 
+
 def disable_named_call():
   """Disables named call wrapping.
 
@@ -162,12 +163,16 @@ def disable_named_call():
   _use_named_call = False
 
 
-@contextmanager
+@contextlib.contextmanager
 def override_named_call(enable: bool = True):
+  # pylint: disable=g-doc-return-or-yield
   """Returns a context manager that enables/disables named call wrapping.
 
-  See ``enable_named_call``
+  Args:
+    enable: If true, enables named call wrapping for labelling profile traces.
+      (see ``enabled_named_call``).
   """
+  # pylint: enable=g-doc-return-or-yield
   global _use_named_call
   use_named_call_prev = _use_named_call
   _use_named_call = enable
@@ -180,25 +185,27 @@ def override_named_call(enable: bool = True):
 # Utilities for pytrees of Modules defined inside setup()
 # -----------------------------------------------------------------------------
 
+
 def _sorted_items(x):
   """Returns items of a dict ordered by keys."""
   return sorted(x.items(), key=lambda x: x[0])
 
 
 def _get_suffix_value_pairs(
-    tree_or_leaf: Any) -> List[Tuple[str, Type["Module"]]]:
+    tree_or_leaf: Any) -> List[Tuple[str, Type['Module']]]:
   """Helper for naming pytrees of submodules."""
   dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
-  if not isinstance(dict_or_leaf, dict) or dict_or_leaf == {}:
+  if not isinstance(dict_or_leaf, dict) or not dict_or_leaf:
     return [('', tree_or_leaf)]
   else:
     flat_dict = traverse_util.flatten_dict(dict_or_leaf)
     return [('_' + '_'.join(k), v) for k, v in _sorted_items(flat_dict)]
 
+
 def _map_over_modules_in_tree(fn, tree_or_leaf):
   """Helper for mapping function over submodules."""
   dict_or_leaf = serialization.to_state_dict(tree_or_leaf)
-  if not isinstance(dict_or_leaf, dict) or dict_or_leaf == {}:
+  if not isinstance(dict_or_leaf, dict) or not dict_or_leaf:
     return fn('', tree_or_leaf)
   else:
     flat_dict = traverse_util.flatten_dict(dict_or_leaf, keep_empty_nodes=True)
@@ -206,6 +213,7 @@ def _map_over_modules_in_tree(fn, tree_or_leaf):
                         for k, v in _sorted_items(flat_dict)}
     return serialization.from_state_dict(
         tree_or_leaf, traverse_util.unflatten_dict(mapped_flat_dict))
+
 
 def _all_names_on_object(obj: Any) -> Set[str]:
   """Gets all names of attributes on `obj` and its classes throughout MRO.
@@ -222,6 +230,7 @@ def _all_names_on_object(obj: Any) -> Set[str]:
 
 
 def _freeze_attr(val: Any) -> Any:
+  """Recursively wrap the given attribute `var` in ``FrozenDict``."""
   if isinstance(val, (dict, FrozenDict)):
     return FrozenDict({k: _freeze_attr(v) for k, v in val.items()})
   elif isinstance(val, tuple):
@@ -258,7 +267,7 @@ def compact(fun: _CallableT) -> _CallableT:
   Returns:
     The given function `fun` marked as compact.
   """
-  fun.compact = True
+  fun.compact = True  # type: ignore[attr-defined]
   return fun
 
 
@@ -286,7 +295,7 @@ def nowrap(fun: _CallableT) -> _CallableT:
     @compact
     def __call__(self, x):
       # now safe to use constructor helper even if using named_call
-      dense = self._dense(self.num_features)
+      dense = self._make_dense(self.num_features)
       return dense(x)
 
   Args:
@@ -294,16 +303,17 @@ def nowrap(fun: _CallableT) -> _CallableT:
   Returns:
     The given function `fun` marked as nowrap.
   """
-  fun.nowrap = True
+  fun.nowrap = True  # type: ignore[attr-defined]
   return fun
 
 
-def _get_local_method_names(cls: Any, exclude: Iterable[str] = ()) -> Tuple[str]:
+def _get_local_method_names(cls: Any,
+                            exclude: Iterable[str] = ()) -> Tuple[str, ...]:
   """Gets method names of a class, excluding class and static methods.
 
   Args:
     cls: The class to get method names for.
-    excludes: Names to exclude from output.
+    exclude: Names to exclude from output.
   Returns:
     A list of method names.
   """
@@ -340,11 +350,12 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
       return self._call_wrapped_method(fun, args, kwargs)
     else:
       return fun(*args, **kwargs)
-  wrapped_module_method.method_handler_wrapped = True
+  wrapped_module_method.method_handler_wrapped = True  # type: ignore[attr-defined]
   return wrapped_module_method
 
 
 def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
+  """Wraps a hash function with some check for Flax Modules."""
   @functools.wraps(hash_fn)
   def wrapped(self):
     if self.scope is not None:
@@ -382,6 +393,7 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
 
   return method_or_fn
 
+
 class SetupState(enum.IntEnum):
   # setup() has not been called.
   NEW = 0
@@ -389,6 +401,7 @@ class SetupState(enum.IntEnum):
   TRANSFORMED = 1
   # setup() has been called.
   DONE = 2
+
 
 @dataclasses.dataclass
 class _ModuleInternalState:
@@ -402,10 +415,11 @@ class _ModuleInternalState:
   in_setup: bool = False
   setup_called: SetupState = SetupState.NEW
   is_initialized: bool = False
-  autoname_cursor: Optional[dict] = dataclasses.field(default_factory=dict)
-  children: Dict[str, Union[str, 'Module']] = dataclasses.field(default_factory=dict)
+  autoname_cursor: Dict[str, int] = dataclasses.field(default_factory=dict)
+  children: Dict[str, Union[str, 'Module']] = dataclasses.field(
+      default_factory=dict)
 
-  def reset(self):
+  def reset(self) -> None:
     """Resets transient state.
 
     This function is called after each module method, so only attributes that
@@ -415,18 +429,18 @@ class _ModuleInternalState:
     self.in_setup = False
     self.autoname_cursor = dict()
 
-  def export(self):
+  def export(self) -> '_ModuleInternalState':
     """Exports transform-preserved state across transform boundary."""
     setup_state = SetupState.TRANSFORMED if self.setup_called else SetupState.NEW
     cloned = _ModuleInternalState(
-      in_compact_method=self.in_compact_method,
-      in_setup=self.in_setup,
-      setup_called=setup_state,
-      is_initialized=self.is_initialized,
-      autoname_cursor=dict(self.autoname_cursor))
+        in_compact_method=self.in_compact_method,
+        in_setup=self.in_setup,
+        setup_called=setup_state,
+        is_initialized=self.is_initialized,
+        autoname_cursor=dict(self.autoname_cursor))
     return cloned
 
-  def reimport(self, other):
+  def reimport(self, other: '_ModuleInternalState') -> None:
     """Re-imports transform-preserved state from across transform boundary."""
     self.in_compact_method = other.in_compact_method
     self.in_setup = other.in_setup
@@ -441,7 +455,8 @@ _UNDEFINED_COPY_PICKLE_METHODS = (
     '__reduce__', '__reduce_ex__', '__copy__', '__deepcopy__')
 
 
-_caches = weakref.WeakKeyDictionary()
+_caches: 'weakref.WeakKeyDictionary[Scope, Dict[int, Module]]' = (
+    weakref.WeakKeyDictionary())
 
 
 tuple_reduce = lambda xs, x: xs + (x,)
@@ -455,17 +470,8 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 # -----------------------------------------------------------------------------
 
 
-# This metaclass + decorator is used by static analysis tools recognize that
-# Module behaves as a dataclass (attributes are constructor args).
-if typing.TYPE_CHECKING:
-  @__dataclass_transform__()
-  class ModuleMeta(type):
-    pass
-else:
-  ModuleMeta = type
-
-
-class Module(metaclass=ModuleMeta):
+@dataclass_transform()
+class Module:
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
@@ -499,7 +505,8 @@ class Module(metaclass=ModuleMeta):
   """
 
   if typing.TYPE_CHECKING:
-    def __init__(*args, **kwargs):
+
+    def __init__(self, *args, **kwargs):
       # this stub makes sure pytype accepts constructor arguments.
       pass
 
@@ -508,7 +515,7 @@ class Module(metaclass=ModuleMeta):
       pass
 
   @classmethod
-  def __init_subclass__(cls, **kwargs):
+  def __init_subclass__(cls, **kwargs: Any) -> None:
     """Automatically initializes all subclasses as custom dataclasses."""
     super().__init_subclass__(**kwargs)
     # All Flax Modules are dataclasses.  We force this convention since
@@ -540,12 +547,12 @@ class Module(metaclass=ModuleMeta):
     """Handles final optional dataclass attributes: `parent` and `name`."""
     # Use cls.__dict__ to get annotations of cls itself (no parent class).
     annotations = dict(cls.__dict__.get('__annotations__', {}))
-    parent_annotation = Union[Type["Module"], Type["Scope"],
-                              Type["_Sentinel"], None]
+    parent_annotation = Union[Type[Module], Type[Scope],
+                              Type[_Sentinel], None]
     if ('parent' in annotations
         and annotations['parent'] != parent_annotation):
       raise errors.ReservedModuleAttributeError(annotations)
-    if 'name' in annotations and annotations['name'] != str:
+    if 'name' in annotations and annotations['name'] not in ('str', str):
       raise errors.ReservedModuleAttributeError(annotations)
     # Add `parent` and `name` default fields at end.
     # We temporarily modify base class __dataclass_fields__ to force desired
@@ -569,7 +576,7 @@ class Module(metaclass=ModuleMeta):
     # any non-init field will only be set in setup
     # During __hash__ and __eq__ the field is not set yet
     # so it should not be used in compare, hash or repr.
-    for field in annotations.keys():
+    for field in annotations:
       field_meta = getattr(cls, field, None)
       if isinstance(field_meta, dataclasses.Field) and not field_meta.init:
         field_meta.compare = False
@@ -581,7 +588,7 @@ class Module(metaclass=ModuleMeta):
     # Now apply dataclass transform (which operates in-place).
     # Do generate a hash function only if not provided by the class.
     dataclasses.dataclass(
-      cls, unsafe_hash="__hash__" not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
+        cls, unsafe_hash='__hash__' not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
     # Restore original base class __dataclass_fields__.
     for clz, pdf in zip(cls.__mro__[1:], parent_dataclass_fields):
@@ -622,6 +629,14 @@ class Module(metaclass=ModuleMeta):
     correctly before calling the method and cleaning up afterwards.
     This includes storing intermediates, setup of the compact scope,
     and making sure setup is called before any other method.
+
+    Args:
+      fun: The wrapped method.
+      args: Named arguments passed to ``fun``.
+      kwargs: Keyword arguments passed to ``fun``.
+
+    Returns:
+      The results of calling ``fun``.
     """
     is_compact_method = hasattr(fun, 'compact')
     fun_name = getattr(fun, '__name__', 'unnamed_function')
@@ -672,19 +687,30 @@ class Module(metaclass=ModuleMeta):
       name: Attribute to set.
       val: Value of the attribute.
     """
-    is_dataclass_attr = name in self.__dataclass_fields__ and self.__dataclass_fields__[name].init  # pytype: disable=attribute-error
+    fields = self.__dataclass_fields__  # pytype: disable=attribute-error
+    is_dataclass_attr = name in fields and fields[name].init
 
-    if not self._state.in_setup and self._state.is_initialized:
-      # Raises a TypeError just like frozen python dataclasses.
-      raise errors.SetAttributeFrozenModuleError(self.__class__.__name__, name,
-                                                 val)
+    if not self._state.in_setup:
+      if not self._state.is_initialized:
+        # Setting attributes before end of Module.__post_init__()
+        object.__setattr__(self, name, val)
+        return
+      else:
+        # We're past all initialization and setup logic:
+        # Raises a TypeError just like frozen python dataclasses.
+        raise errors.SetAttributeFrozenModuleError(
+            self.__class__.__name__, name, val)
+
+    # We're inside the setup() method:
     if is_dataclass_attr:
-      if self._state.in_setup:
-        raise errors.SetAttributeInModuleSetupError()
-      object.__setattr__(self, name, val)
-    # Submodules are being defined and attached in setup()
-    else:
-      self._register_submodules(name, val)
+      # These names are specified as dataclass fields. They should not be
+      # initialized within the setup() method, but can be modified freely
+      # before it.
+      raise errors.SetAttributeInModuleSetupError()
+
+    # Values (that may be variables or submodules) are being defined and
+    # attached in setup(), we run some extra logic in that case.
+    self._register_submodules(name, val)
 
   def __getattr__(self, name: str) -> Any:
     """Call setup() before getting any setup-defined attributes."""
@@ -698,12 +724,12 @@ class Module(metaclass=ModuleMeta):
       raise AttributeError(
           f'"{self.__class__.__name__}" object has no attribute "{name}"')
 
-  def __dir__(self) -> List[str]:
+  def __dir__(self) -> Iterable[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
     return object.__dir__(self)  # pytype: disable=attribute-error
 
-  def __post_init__(self):
+  def __post_init__(self) -> None:
     # DO NOT REMOVE - Marker for internal logging.
     # In dataclasses, __init__ is overridden to process dataclass arguments,
     # and __post_init__ is called immediately afterwards. Here, depending on the
@@ -733,17 +759,19 @@ class Module(metaclass=ModuleMeta):
         raise errors.AssignSubModuleError(self.__class__.__name__)
       # Autonaming of submodules.
       if self.name is None:  # pytype: disable=attribute-error
-        prefix = f"{self.__class__.__name__}"
+        prefix = f'{self.__class__.__name__}'
         cursor = self.parent._state.autoname_cursor.get(prefix, 0)
-        self.name = f"{prefix}_{cursor}"
+        self.name = f'{prefix}_{cursor}'
         self.parent._state.autoname_cursor[prefix] = cursor + 1
-      if self.parent._name_taken(self.name, self):
-        parent_class = self.parent.__class__.__name__
-        raise errors.NameInUseError('submodule', self.name, parent_class)
-      self.parent._state.children[self.name] = self
       # Allow scope aliasing under transforms for submodules defined in setup.
       reuse_scopes = (self.parent._state.in_setup and
                       self.parent._state.setup_called == SetupState.TRANSFORMED)
+      # Perform name-collision check.
+      if self.parent._name_taken(self.name, self, reuse_scopes=reuse_scopes):
+        parent_class = self.parent.__class__.__name__
+        raise errors.NameInUseError('submodule', self.name, parent_class)
+      # Finalize attachment to parent and scope initialization.
+      self.parent._state.children[self.name] = self
       object.__setattr__(
           self, 'scope', self.parent.scope.push(self.name, reuse=reuse_scopes))
 
@@ -751,14 +779,14 @@ class Module(metaclass=ModuleMeta):
     elif isinstance(self.parent, Scope):
       object.__setattr__(self, 'scope', self.parent)
     else:
-      raise ValueError("parent must be None, Module or Scope")
+      raise ValueError('parent must be None, Module or Scope')
 
     self._state.is_initialized = True
 
-  def __repr__(self):
+  def __repr__(self) -> str:
     return _module_repr(self)
 
-  def setup(self):
+  def setup(self) -> None:
     """Initializes a Module lazily (similar to a lazy ``__init__``).
 
     ``setup`` is called once lazily on a module instance when a module
@@ -794,6 +822,7 @@ class Module(metaclass=ModuleMeta):
     pass
 
   def _register_submodules(self, name, val):
+    """Registers a submodule."""
     assert self.scope, 'Trying to register submodules on unbound scope.'
     root = self.scope.root
     cache = _caches.get(root, {})
@@ -820,15 +849,16 @@ class Module(metaclass=ModuleMeta):
     for x in queue:
       x.__post_init__()
 
-  def _try_setup(self, shallow=False):
+  def _try_setup(self, shallow: bool = False) -> None:
     """Tries to setup module if scope is available and setup has not been called yet."""
     if (self.scope
         and not self._state.in_setup
         and self._state.setup_called != SetupState.DONE):
       try:
         self._state.in_setup = True
-        # a shallow setup will only register attribute submodules but it does not call the user's setup
-        # this avoids running before a transformation.
+        # A shallow setup will only register attribute submodules but it does
+        # not call the user's setup. This avoids running before a
+        # transformation.
         for field in dataclasses.fields(self):
           if field.name != 'parent' and field.init:
             self._register_submodules(field.name, getattr(self, field.name))
@@ -842,7 +872,7 @@ class Module(metaclass=ModuleMeta):
         self._state.in_setup = False
         self._state.setup_called = SetupState.DONE
 
-  def _validate_setup(self):
+  def _validate_setup(self) -> None:
     """Abstractly evaluates setup only to run static checks."""
     def run_setup_only(x):
       wrapped_id = wrap_method_once(lambda m, x: x)
@@ -850,7 +880,10 @@ class Module(metaclass=ModuleMeta):
         return wrapped_id(self.clone(parent=root), x)
     _ = jax.eval_shape(run_setup_only, 0)
 
-  def _name_taken(self, name: str, module: 'Module' = None) -> bool:
+  def _name_taken(self,
+                  name: str,
+                  module: 'Module' = None,
+                  reuse_scopes : bool = False) -> bool:
     if name in _all_names_on_object(self):
       val = getattr(self, name, None)
       if module is not None and val is module:
@@ -858,6 +891,9 @@ class Module(metaclass=ModuleMeta):
         # field assignment happened before naming
         return False
       return True
+    # Check for the existence of name in the scope object.
+    if reuse_scopes:
+      return False
     return name in self.scope.reservations
 
   @property
@@ -880,7 +916,9 @@ class Module(metaclass=ModuleMeta):
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
-  def variable(self, col: str, name: str, init_fn, *init_args) -> Variable:
+  def variable(self, col: str, name: str,
+               init_fn: Optional[Callable[..., Any]] = None,
+               *init_args) -> Variable:
     """Declares and returns a variable in this Module.
 
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
@@ -902,7 +940,8 @@ class Module(metaclass=ModuleMeta):
       name: The variable name.
       init_fn: The function that will be called to compute the initial value
         of this variable. This function will only be called the first time
-        this variable is used in this module.
+        this variable is used in this module. If None, the variable must
+        already be initialized otherwise an error is raised.
       *init_args: The arguments to pass to init_fn.
 
     Returns:
@@ -977,6 +1016,12 @@ class Module(metaclass=ModuleMeta):
       raise ValueError("Can't check mutability on unbound modules")
     return self.scope.is_mutable_collection(col)
 
+  def has_rng(self, name: str) -> bool:
+    """Returns true if a PRNGSequence with name `name` exists."""
+    if self.scope is None:
+      raise ValueError("Can't query for RNGs on unbound modules")
+    return self.scope.has_rng(name)
+
   def make_rng(self, name: str) -> PRNGKey:
     """Returns a new RNG key from a given RNG sequence for this Module.
 
@@ -1040,6 +1085,7 @@ class Module(metaclass=ModuleMeta):
       variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
         about variables.
+      *args: Named arguments (not used).
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
       mutable: Can be bool, str, or list. Specifies which collections should be
         treated as mutable:
@@ -1049,6 +1095,7 @@ class Module(metaclass=ModuleMeta):
     Returns:
       A copy of this instance with bound variables and RNGs.
     """
+    del args
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope)
 
@@ -1091,6 +1138,7 @@ class Module(metaclass=ModuleMeta):
       variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
         about variables.
+      *args: Named arguments passed to the specified apply method.
       rngs: a dict of PRNGKeys to initialize the PRNG sequences.
         The "params" PRNG sequence is used to initialize parameters.
       method: A function to call apply on. This is generally a function in the
@@ -1106,6 +1154,7 @@ class Module(metaclass=ModuleMeta):
         be passed to change the filter behavior. The filter function takes
         the Module instance and method name and returns a bool indicating
         whether the output of that method invocation should be stored.
+      **kwargs: Keyword arguments passed to the specified apply method.
     Returns:
       If ``mutable`` is False, returns output. If any collections are
       mutable, returns ``(output, vars)``, where ``vars`` are is a dict
@@ -1124,12 +1173,13 @@ class Module(metaclass=ModuleMeta):
                        rngs: Union[PRNGKey, RNGSequences],
                        *args,
                        method: Optional[Callable[..., Any]] = None,
-                       mutable: CollectionFilter = DenyList("intermediates"),
+                       mutable: CollectionFilter = DenyList('intermediates'),
                        **kwargs) -> Tuple[Any, FrozenVariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
 
     Args:
       rngs: The rngs for the variable collections.
+      *args: Named arguments passed to the init function.
       method: An optional method. If provided, applies this method. If not
         provided, applies the ``__call__`` method.
       mutable: Can be bool, str, or list. Specifies which collections should be
@@ -1137,6 +1187,7 @@ class Module(metaclass=ModuleMeta):
         ``str``: The name of a single mutable collection. ``list``: A
         list of names of mutable collections. By default all collections
         except "intermediates" are mutable.
+      **kwargs: Keyword arguments passed to the init function.
     Returns:
       `(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
@@ -1155,7 +1206,7 @@ class Module(metaclass=ModuleMeta):
            rngs: Union[PRNGKey, RNGSequences],
            *args,
            method: Optional[Callable[..., Any]] = None,
-           mutable: CollectionFilter = DenyList("intermediates"),
+           mutable: CollectionFilter = DenyList('intermediates'),
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
@@ -1168,6 +1219,7 @@ class Module(metaclass=ModuleMeta):
 
     Args:
       rngs: The rngs for the variable collections.
+      *args: Named arguments passed to the init function.
       method: An optional method. If provided, applies this method. If not
         provided, applies the ``__call__`` method.
       mutable: Can be bool, str, or list. Specifies which collections should be
@@ -1175,6 +1227,7 @@ class Module(metaclass=ModuleMeta):
         ``str``: The name of a single mutable collection. ``list``: A
         list of names of mutable collections. By default all collections
         except "intermediates" are mutable.
+      **kwargs: Keyword arguments passed to the init function.
     Returns:
       The initialized variable dict.
     """
@@ -1214,10 +1267,23 @@ class Module(metaclass=ModuleMeta):
       col: the variable collection.
       name: the name of the variable.
       value: the new value of the variable.
+
+    Returns:
+
     """
     if self.scope is None:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.put_variable(col, name, value)
+
+  @overload
+  def sow(self, col: str, name: str, value: Any) -> bool:
+    ...
+
+  @overload
+  def sow(self, col: str, name: str, value: T,
+          reduce_fn: Callable[[K, T], K] = tuple_reduce,
+          init_fn: Callable[[], K] = tuple_init) -> bool:
+    ...
 
   def sow(self, col: str, name: str, value: T,
           reduce_fn: Callable[[K, T], K] = tuple_reduce,
@@ -1298,7 +1364,6 @@ class Module(metaclass=ModuleMeta):
     return True
 
 
-
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.
 
@@ -1329,9 +1394,10 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
     raise ValueError(f'Parameter "{name}" was passed to the constructor and at call time.'
                      ' Should be passed just once.')
   if a is None:
+    assert b is not None
     return b
-  else:
-    return a
+  return a
+
 
 @traceback_util.api_boundary
 def apply(fn: Callable[..., Any], module: Module,
@@ -1385,7 +1451,7 @@ def apply(fn: Callable[..., Any], module: Module,
     finally:
       _context.capture_stack.pop()
 
-  if capture_intermediates is True:
+  if capture_intermediates is True:  # pylint: disable=g-bool-id-comparison
     capture_intermediates = capture_call_intermediates
   if capture_intermediates:
     mutable = union_filters(mutable, 'intermediates')
@@ -1394,7 +1460,7 @@ def apply(fn: Callable[..., Any], module: Module,
 
 @traceback_util.api_boundary
 def init_with_output(fn: Callable[..., Any], module: Module,
-                     mutable: CollectionFilter = DenyList("intermediates"),
+                     mutable: CollectionFilter = DenyList('intermediates'),
                      ) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
   """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
@@ -1439,7 +1505,7 @@ def init_with_output(fn: Callable[..., Any], module: Module,
 
 @traceback_util.api_boundary
 def init(fn: Callable[..., Any], module: Module,
-         mutable: CollectionFilter = DenyList("intermediates"),
+         mutable: CollectionFilter = DenyList('intermediates'),
          ) -> Callable[..., FrozenVariableDict]:
   """Creates an init function to call ``fn`` with a bound module.
 

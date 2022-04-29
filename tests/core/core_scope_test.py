@@ -111,6 +111,21 @@ class ScopeTest(absltest.TestCase):
     with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
       apply(f)(freeze({'params': {'test': np.ones((2,))}}))
 
+  def test_apply_variables_bad_pytree(self):
+    def f(scope):
+      scope.param('kernel', nn.initializers.ones, (4,))
+
+    params = freeze({
+        'params': {
+            'kernel': np.ones((4,)),
+        },
+    })
+    apply(f)(params)  # Valid.
+    msg = 'but got a dict with an extra params layer'
+    with self.assertRaisesRegex(errors.ApplyScopeInvalidVariablesStructureError,
+                                msg):
+      apply(f)({'params': params})
+
   def test_mutate_undefined_collection(self):
     def f(scope):
       scope.put_variable('state', 'test', 123)
@@ -123,7 +138,7 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       nn.dense(scope.push('dense'), np.ones((1, 2)), 2)
 
-    msg = r'No parameter named "kernel" exists in "/dense".'
+    msg = r'Could not find parameter named "kernel" in scope "/dense".'
     with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({'params': {'abc': 1}})
 
@@ -184,6 +199,16 @@ class ScopeTest(absltest.TestCase):
     root = Scope({'state': {}})
     with self.assertRaises(errors.ScopeCollectionNotFound):
       root.variable('state', 'test', jnp.zeros, ())
+  
+  def test_variable_no_init(self):
+    root = Scope({}, mutable='state')
+    with self.assertRaises(errors.ScopeCollectionNotFound):
+      root.variable('state', 'test')
+    root = Scope({'state': {'abc': 1}}, mutable='state')
+    abc = root.variable('state', 'abc')
+    self.assertEqual(abc.value, 1)
+    with self.assertRaises(errors.ScopeVariableNotFoundError):
+      root.variable('state', 'test')
 
 
 if __name__ == '__main__':

@@ -28,8 +28,8 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as np
-from typing import (Any, Tuple, Iterable, Callable, Generic, TypeVar,
-                    Mapping, NamedTuple)
+from typing import (Any, Tuple, Callable, Generic, Mapping, NamedTuple,
+                    Sequence, TypeVar)
 
 from flax import linen as nn
 from flax import errors
@@ -44,7 +44,7 @@ jax.config.parse_flags_with_absl()
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(
-      jax.tree_multimap(operator.eq, x, y))
+      jax.tree_map(operator.eq, x, y))
 
 
 class DummyModule(nn.Module):
@@ -158,6 +158,22 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(param_shape,
       {'lyrs1_a': {'kernel': (10, 3)},
       'lyrs1_b': {'kernel': (3, 3)}})
+
+  def test_setup_dict_nonstring_keys(self):
+    class Foo(nn.Module):
+      def setup(self):
+          self.a = {(1, 2): nn.Dense(2)} # here the dict using tuple as key
+
+      @nn.compact
+      def __call__(self, x):
+          return self.a[(1, 2)](x)
+
+    foo = Foo()
+    x = jnp.ones(shape=(1, 3))
+    params = foo.init(random.PRNGKey(0), x)['params']
+    param_shape = jax.tree_map(jnp.shape, params)
+    self.assertEqual(param_shape,
+      {'a_(1, 2)': {'kernel': (3, 2), 'bias': (2,)}})
 
   def test_setup_cloning(self):
     class MLP(nn.Module):
@@ -310,7 +326,7 @@ class ModuleTest(absltest.TestCase):
           # NOTE that keys still must be strings. This is to make a possible
           # future transition to automatically derived parameter names when assigned
           # as a dict easier (like we currently have with submodules).
-          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853 
+          # See a bit of discussion here: https://github.com/google/flax/issues/705#issuecomment-738761853
           str(i): self.param(f'bias_{i}', initializers.ones, self.xshape)
           for i in range(4)}
       def __call__(self, x):
@@ -484,7 +500,7 @@ class ModuleTest(absltest.TestCase):
 
   def test_numpy_array_shape_class_args(self):
     class MLP(nn.Module):
-      widths: Iterable
+      widths: Sequence
       @nn.compact
       def __call__(self, x):
         for width in self.widths[:-1]:
@@ -638,7 +654,7 @@ class ModuleTest(absltest.TestCase):
   def test_module_trace(self):
     class MLP(nn.Module):
       act: Callable = nn.relu
-      sizes: Iterable[int] = (3, 2)
+      sizes: Sequence[int] = (3, 2)
 
       @nn.compact
       def __call__(self, x):
@@ -1058,7 +1074,7 @@ class ModuleTest(absltest.TestCase):
       },
     })
     self.assertTrue(jax.tree_util.tree_all(
-        jax.tree_multimap(
+        jax.tree_map(
             lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
             cntrs, ref_cntrs)
           ))
@@ -1394,14 +1410,14 @@ class ModuleTest(absltest.TestCase):
     class C(nn.Module):
       @nn.compact
       def __call__(self):
-        # Some module that has dropouts in it, in general, 
+        # Some module that has dropouts in it, in general,
         # it does more than just dropout!
         return self.make_rng('dropout')
 
     class A(nn.Module):
       @nn.compact
       def __call__(self):
-        # Some module that has dropouts in it, in general, 
+        # Some module that has dropouts in it, in general,
         # it does more than just dropout!
         return C()()
 
@@ -1518,6 +1534,7 @@ class ModuleTest(absltest.TestCase):
 
     with self.assertRaisesRegex(errors.JitPytreeError, 'use static_argnames'):
       _ = step(foo, variables, x)
+
 
 if __name__ == '__main__':
   absltest.main()

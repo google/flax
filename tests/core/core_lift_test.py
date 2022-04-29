@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import operator
 from flax import errors
 from flax.core import Scope, init, apply, lift, nn, FrozenDict, unfreeze
 
@@ -46,7 +47,7 @@ class LiftTest(absltest.TestCase):
                         split_rngs={'params': True})
       dense(scope.push('dense'), np.ones((3, 2)), 2)
 
-    msg = r'No parameter named "kernel" exists in "/vmap\(dense\)".'
+    msg = r'Could not find parameter named "kernel" in scope "/vmap\(dense\)".'
     with self.assertRaisesRegex(errors.ScopeParamNotFoundError, msg):
       apply(f)({'params': {'dense': {'abc': np.ones((3, 3))}}})
 
@@ -109,6 +110,56 @@ class LiftTest(absltest.TestCase):
     _, params = init(f)(random.PRNGKey(0), x)
     y_t = apply(f)(params, x)
     np.testing.assert_allclose(y_t, jnp.ones_like(x))
+  
+  def test_while_loop(self):
+    def f(scope, x):
+      scope.param('inc', lambda _: 1)
+      scope.put_variable('state', 'acc', 0)
+      scope.put_variable('state', 'rng_params', jnp.zeros((2, 2), jnp.uint32))
+      scope.put_variable('state', 'rng_loop', jnp.zeros((2, 2), jnp.uint32))
+
+      def cond_fn(scope, c):
+        acc = scope.get_variable('state', 'acc')
+        return acc < x
+      def body_fn(scope, c):
+        i = scope.get_variable('state', 'acc')
+        p_rng = scope.make_rng('params')
+        l_rng = scope.make_rng('loop')
+        scope.put_variable('state', 'rng_params', scope.get_variable('state', 'rng_params').at[i].set(p_rng))
+        scope.put_variable('state', 'rng_loop', scope.get_variable('state', 'rng_loop').at[i].set(l_rng))
+        inc = scope.get_variable('params', 'inc')
+        scope.put_variable('state', 'acc', i + inc)
+        return c + 2
+      return lift.while_loop(cond_fn, body_fn, scope, 0, carry_variables='state', split_rngs={'params': False, 'loop': True})
+    x = 2
+    c, vars = apply(f, mutable=True)({}, x, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    self.assertEqual(vars['state']['acc'], x)
+    self.assertEqual(c, 2 * x)
+    np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
+    np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
+  
+  def test_cond(self):
+    def f(scope, x, pred):
+      scope.variable('state', 'true_count', lambda: 0)
+      scope.variable('state', 'false_count', lambda: 0)
+      def true_fn(scope, x):
+        scope.variable('state', 'true_count').value += 1
+        return scope.child(nn.dense)(x, 2)
+
+      def false_fn(scope, x):
+        scope.variable('state', 'false_count').value += 1
+        return -scope.child(nn.dense)(x, 2)
+      
+      return lift.cond(pred, true_fn, false_fn, scope, x)
+    
+    x = jnp.ones((1, 3))
+    y1, vars = init(f)(random.PRNGKey(0), x, True)
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
+    y2, vars = apply(f, mutable="state")(vars, x, False)
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    np.testing.assert_allclose(y1, -y2)
+
+
 
 if __name__ == '__main__':
   absltest.main()

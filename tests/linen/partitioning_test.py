@@ -15,8 +15,9 @@
 """Tests for flax.linen.partitioning."""
 
 from absl.testing import absltest
+from absl.testing import parameterized
 from flax import linen as nn
-from flax.core import unfreeze
+from flax.core import freeze, unfreeze
 from flax.linen import partitioning
 import jax
 from jax import random
@@ -34,7 +35,7 @@ AXIS_RULES_1 = (('foo', 'data'), ('bar', 'model'), ('baz', None))
 AXIS_RULES_2 = (('foo', 'model'), ('bar', None), ('baz', 'data'))
 
 
-class PartitioningTest(absltest.TestCase):
+class PartitioningTest(parameterized.TestCase):
 
   def test_axis_rules(self):
     self.assertEqual(partitioning._axis_rules.rules, ())
@@ -69,17 +70,6 @@ class PartitioningTest(absltest.TestCase):
       with self.assertRaises(ValueError):
         partitioning.logical_to_mesh_axes(('foo', 'foo', 'baz'))
 
-  def test_logical_to_mesh_axes_overrides(self):
-    p_rules = (
-        ('baz', 'data'),
-        ('bar', None),
-        ('foo', 'model'),
-        ('foo', 'data'))
-    with partitioning.axis_rules(p_rules):
-      self.assertEqual(
-          partitioning.logical_to_mesh_axes(('baz', 'bar', 'foo')),
-          ('data', None, 'model'))
-
   def test_logical_to_mesh_axes_priorities(self):
     p_rules = (
         ('foo', 'model'),
@@ -95,8 +85,41 @@ class PartitioningTest(absltest.TestCase):
       self.assertEqual(
           partitioning.logical_to_mesh_axes(('baz', 'bar', 'foo')),
           ('data', None, 'model'))
-      with self.assertRaises(ValueError):
-        partitioning.logical_to_mesh_axes(('baz', 'bar', 'foo', 'unassigned'))
+      self.assertEqual(
+          partitioning.logical_to_mesh_axes(
+              ('baz', 'bar', 'foo', 'unassigned')),
+          ('data', None, 'model', None))
+
+  @parameterized.parameters(
+      dict(rules=(('a', ('model', 'data')), ('b', 'data')),
+           axes=('a', 'b'),
+           expected=(('model', 'data'), None)),
+      dict(rules=(('a', ('model', 'replica')), ('b', 'data')),
+           axes=('a', 'b'),
+           expected=(('model', 'replica'), 'data')),
+      dict(rules=(('a', ('model', 'replica')), ('b', ('data', 'model'))),
+           axes=('a', 'b'),
+           expected=(('model', 'replica'), None)),
+      dict(rules=(('a', ('model', 'replica')), ('b', 'model')),
+           axes=('a', 'b', 'c'),
+           expected=(('model', 'replica'), None, None)),
+      dict(rules=(),
+           axes=('a', 'b', 'c'),
+           expected=(None, None, None)),
+      dict(rules=(('a', None), ('a', 'model')),
+           axes=('a', 'b'),
+           expected=(None, None)),
+      dict(rules=(('baz', 'data'),
+                  ('bar', None),
+                  ('foo', 'model'),
+                  ('foo', 'data')),
+           axes=('baz', 'bar', 'foo'),
+           expected=('data', None, 'model')),
+  )
+  def test_logical_to_mesh_axes_cases(self, rules, axes, expected):
+    with partitioning.axis_rules(rules):
+      result = partitioning.logical_to_mesh_axes(axes)
+    self.assertEqual(result, expected)
 
   @mock.patch('flax.linen.partitioning._with_sharding_constraint')
   def test_with_sharding_constraint(self, wsc_fn):
@@ -111,14 +134,15 @@ class PartitioningTest(absltest.TestCase):
       _ = partitioning.with_sharding_constraint(arr, axes)
       wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', 'model'))
 
-  def test_param_with_axes_no_axes(self):
+  @parameterized.parameters(dict(axes_spec=None), dict(axes_spec=()))
+  def test_param_with_axes_no_axes(self, axes_spec):
     class ParamTest(nn.Module):
 
       @nn.compact
       def __call__(self, x):
         foo = partitioning.param_with_axes(
             'foo', lambda k, s, d: jnp.zeros(s, d),
-            (2, 2), x.dtype, axes=())
+            (2, 2), x.dtype, axes=axes_spec)
         return x + foo
 
     k = random.PRNGKey(0)
@@ -151,13 +175,47 @@ class PartitioningTest(absltest.TestCase):
     self.assertEqual(logical_axis_names,
                      {'foo': pjit.PartitionSpec('foo', 'bar')})
 
-  def test_variable_with_axes_no_axes(self):
+  def test_param_pytree_with_axes(self):
+    def init_fn(k, s, d):
+      del k
+      return {'a': jnp.zeros(s, d), 'b': (jnp.zeros(s, d), jnp.zeros(s, d))}
+    axes = {'a': ('foo', 'bar'), 'b': (('foo', 'bar'), ('bar', 'foo'))}
+    class ParamTest(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        foo = partitioning.param_with_axes(
+            'foo', init_fn, (2, 2), x.dtype, axes=axes)
+        return x + foo['a']
+
+    p_rules = (
+        ('foo', 'model'),
+        ('bar', 'data'),
+        ('baz', None))
+    k = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+    with partitioning.axis_rules(p_rules):
+      variables = ParamTest().init(k, x)
+    self.assertIn('params', variables)
+    self.assertIn('params_axes', variables)
+    self.assertEqual(variables['params_axes']['foo_axes'],
+                     partitioning.AxisMetadata(names=axes))
+    logical_axis_names = partitioning.get_axis_names(variables['params_axes'])
+    expected = freeze(
+        {'foo':
+             {'a': pjit.PartitionSpec('foo', 'bar'),
+              'b': (pjit.PartitionSpec('foo', 'bar'),
+                    pjit.PartitionSpec('bar', 'foo'))}})
+    self.assertEqual(logical_axis_names, expected)
+
+  @parameterized.parameters(dict(axes_spec=None), dict(axes_spec=()))
+  def test_variable_with_axes_no_axes(self, axes_spec):
     class VarTest(nn.Module):
 
       @nn.compact
       def __call__(self, x):
         foo = partitioning.variable_with_axes(
-            'test', 'foo', jnp.zeros, (2, 2), x.dtype, axes=())
+            'test', 'foo', jnp.zeros, (2, 2), x.dtype, axes=axes_spec)
         return x + foo.value
 
     k = random.PRNGKey(0)

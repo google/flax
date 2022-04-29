@@ -25,8 +25,8 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
 
   Pooling functions are implemented using the ReduceWindow XLA op.
   NOTE: Be aware that pooling is not generally differentiable.
-  That means providing a reduce_fn that is differentiable does not imply
-  that pool is differentiable.
+  That means providing a reduce_fn that is differentiable does not imply that
+  pool is differentiable.
 
   Args:
     inputs: input data with dimensions (batch, window dims..., features).
@@ -34,7 +34,7 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
     reduce_fn: a reduce function of the form `(T, T) -> T`.
     window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
-        strides.
+      strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension.
@@ -43,7 +43,7 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   """
   strides = strides or (1,) * len(window_shape)
   assert len(window_shape) == len(strides), (
-      f"len({window_shape}) == len({strides})")
+      f"len({window_shape}) must equal len({strides})")
   strides = (1,) + strides + (1,)
   dims = (1,) + window_shape + (1,)
 
@@ -57,12 +57,12 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
   if not isinstance(padding, str):
     padding = tuple(map(tuple, padding))
-    assert(len(padding) == len(window_shape)), (
-      f"padding {padding} must specify pads for same number of dims as "
-      f"window_shape {window_shape}")
-    assert(all([len(x) == 2 for x in padding])), (
-      f"each entry in padding {padding} must be length 2")
-    padding = ((0,0),) + padding + ((0,0),)
+    assert len(padding) == len(window_shape), (
+        f"padding {padding} must specify pads for same number of dims as "
+        f"window_shape {window_shape}")
+    assert all([len(x) == 2 for x in padding]), (
+        f"each entry in padding {padding} must be length 2")
+    padding = ((0, 0),) + padding + ((0, 0),)
   y = lax.reduce_window(inputs, init, reduce_fn, dims, strides, padding)
   if is_single_input:
     y = jnp.squeeze(y, axis=0)
@@ -76,7 +76,7 @@ def avg_pool(inputs, window_shape, strides=None, padding="VALID"):
     inputs: input data with dimensions (batch, window dims..., features).
     window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
-        strides (default: `(1, ..., 1)`).
+      strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension (default: `'VALID'`).
@@ -95,7 +95,7 @@ def max_pool(inputs, window_shape, strides=None, padding="VALID"):
     inputs: input data with dimensions (batch, window dims..., features).
     window_shape: a shape tuple defining the window to reduce over.
     strides: a sequence of `n` integers, representing the inter-window
-        strides (default: `(1, ..., 1)`).
+      strides (default: `(1, ..., 1)`).
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension (default: `'VALID'`).
@@ -113,7 +113,7 @@ def min_pool(inputs, window_shape, strides=None, padding="VALID"):
     inputs: Input data with dimensions (batch, window dims..., features).
     window_shape: A shape tuple defining the window to reduce over.
     strides: A sequence of `n` integers, representing the inter-window strides
-        (default: `(1, ..., 1)`).
+      (default: `(1, ..., 1)`).
     padding: Either the string `'SAME'`, the string `'VALID'`, or a sequence of
       `n` `(low, high)` integer pairs that give the padding to apply before and
       after each spatial dimension (default: `'VALID'`).

@@ -33,7 +33,8 @@ import contextlib
 import functools
 import re
 import threading
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import (Any, Callable, List, Mapping, Optional, Sequence, Tuple,
+                    Union)
 import flax
 from flax import linen as nn
 from flax.core.frozen_dict import freeze
@@ -49,7 +50,7 @@ from jax.experimental import pjit
 
 
 # Real types and dummy aliases for documentation
-LogicalRules = Sequence[Tuple[str, str]]
+LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str], None]]]
 Array = Any  # pylint: disable=invalid-name
 ArrayPytree = Any  # pylint: disable=invalid-name
 LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name
@@ -102,7 +103,7 @@ def axis_rules(rules: LogicalRules):
     _axis_rules.rules = old_rules
 
 
-class UnassignedAxis:
+class _UnassignedAxis:
   """Sentinel class for unassigned logical axis name."""
 
   def __repr__(self):
@@ -111,10 +112,19 @@ class UnassignedAxis:
   def __bool__(self):
     return False
 
-_unassigned_axis = UnassignedAxis()
+_unassigned_axis = _UnassignedAxis()
 
 
-def logical_to_mesh_axes(array_dim_names: Sequence[str],
+def _mesh_assignment_free(new_assignment, existing_assignments):
+  """Determines if a given mesh axis has already been assigned."""
+  new = set(jax.tree_leaves(new_assignment))
+  existing = set(jax.tree_leaves(existing_assignments))
+  if existing.intersection(new):
+    return False
+  return True
+
+
+def logical_to_mesh_axes(array_dim_names: Optional[Sequence[Optional[str]]],
                          rules: Optional[LogicalRules] = None,
                          ) -> pjit.PartitionSpec:
   """Compute layout for an array.
@@ -142,41 +152,42 @@ def logical_to_mesh_axes(array_dim_names: Sequence[str],
     PartitionSpec('X', None, 'Y', None)
 
   Args:
-    array_dim_names: Tuple of array dimension names.
+    array_dim_names: Tuple of array dimension names or None.
     rules: Optional logical to mesh rules override.  Defaults to using the
       rules defined in the dynamic context set from the `axis_rules` function.
 
   Returns:
     PartitionSpec for the parameter.
   """
+  if array_dim_names is None:
+    return None
   if rules is None:
     rules = _axis_rules.rules
   axis_name_counts = collections.Counter(array_dim_names)
-  dups = tuple(k for k, v in axis_name_counts.items() if v > 1)
+  dups = tuple(k for k, v in axis_name_counts.items()
+               if v > 1 and k is not None)
   if dups:
     raise ValueError(
         f'Unsupported: Dimensions {dups} occur more than once in array names.')
   if not isinstance(rules, (tuple, list)):
     raise ValueError('Unknown axis rule specification type.')
   # We assign mesh axes using a priority based ruleset over logical axis names.
+  result: List[Union[_UnassignedAxis, None, str, Tuple[str]]]
   result = [_unassigned_axis] * len(array_dim_names)
-  for rule_model_name, rule_mesh_name in rules:
+  for rule_model_name, rule_mesh_names in rules:
     if rule_model_name in array_dim_names:
       pos = array_dim_names.index(rule_model_name)
-      if rule_mesh_name is None or rule_mesh_name in result:
-        if result[pos] == _unassigned_axis:
-          result[pos] = None
-      else:
-        result[pos] = result[pos] or rule_mesh_name
-  if _unassigned_axis in result:
-    raise ValueError(f'Unassigned axis in {array_dim_names}, the mapped '
-                     f'axes are {result}')
+      if (_mesh_assignment_free(rule_mesh_names, result) and
+          result[pos] == _unassigned_axis):
+        result[pos] = rule_mesh_names
+  # We default to None - ie unsharded along the dimension.
+  result = [None if x is _unassigned_axis else x for x in result]
   return pjit.PartitionSpec(*result)
 
 
 def _global_mesh_defined() -> bool:
   """Checks if global xmap/pjit mesh resource environment is defined."""
-  maps_env = jax.experimental.maps.thread_resources.env
+  maps_env = maps.thread_resources.env
   return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
@@ -190,6 +201,11 @@ def _with_sharding_constraint(
     return pjit.with_sharding_constraint(x, axis_resources)
 
 
+def _is_logical_spec(x):
+  return x is None or (
+      isinstance(x, tuple) and all(isinstance(e, str) or e is None for e in x))
+
+
 def with_sharding_constraint(
     x: ArrayPytree,
     logical_axis_resources: LogicalPartitionSpecPytree):
@@ -197,11 +213,9 @@ def with_sharding_constraint(
   # If no axis binding is set, this is a no-op.
   if not _axis_rules.rules or logical_axis_resources is None:
     return x
-  # TODO(levskaya): handle trees of logical partitionspecs correctly.
-  if x.ndim != len(logical_axis_resources):
-    raise ValueError("logical axis constraint doesn't match rank of input.")
+  # Translate logical names to mesh assignments.
   axis_resources = jax.tree_map(logical_to_mesh_axes, logical_axis_resources,
-                                is_leaf=lambda x: isinstance(x, tuple))
+                                is_leaf=_is_logical_spec)
   return _with_sharding_constraint(x, axis_resources)
 
 
@@ -212,7 +226,7 @@ def with_sharding_constraint(
 @flax.struct.dataclass
 class AxisMetadata:
   """Contains a tuple of axis names, which is passed through FLAX."""
-  names: Tuple[str, ...] = flax.struct.field(pytree_node=False)
+  names: LogicalPartitionSpecPytree = flax.struct.field(pytree_node=False)
 
 
 def _param_with_axes_sow_reduce_fn(x, y):
@@ -249,7 +263,7 @@ def param_with_axes(
     name: str,
     init_fn,
     *init_args,
-    axes: Tuple[str, ...] = (),
+    axes: Optional[Tuple[str, ...]] = None,
     module: Optional[nn.Module] = None):
   """Declares and returns a parameter with logical axes in the current Module.
 
@@ -275,17 +289,10 @@ def param_with_axes(
   # get current module if not explicitly provided
   if module is None:
     module = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
+    assert module is not None
   # define/fetch parameter on that module
   module_param = module.param(name, init_fn, *init_args)
-  # TODO(levskaya): handle trees of logical partitionspecs correctly.
-  if not isinstance(axes, tuple):
-    raise TypeError(f'Expected `axes` to be a tuple, got {axes}')
-  if not all(isinstance(axis_name, str) for axis_name in axes):
-    raise TypeError(f'Expected all axis names to be strings, got {axes}')
-  if axes:
-    if module_param.ndim != len(axes):
-      raise ValueError(f'Specified logical axes {axes} do not match rank '
-                       f'{module_param.ndim} of parameter {name}.')
+  if axes is not None:
     # apply logical axis constraint immediately
     module_param = with_sharding_constraint(module_param,
                                             pjit.PartitionSpec(*axes))
@@ -307,7 +314,7 @@ class PartitionedVariable(flax.core.scope.Variable):
   """
 
   def __init__(self, scope, collection: str, name: str,
-               axes: Tuple[str, ...] = ()):
+               axes: Optional[Tuple[str, ...]] = None):
     """Initializes a partitioned variable.
 
     Args:
@@ -325,14 +332,14 @@ class PartitionedVariable(flax.core.scope.Variable):
   def value(self):
     """Returns the value of this Variable."""
     value = self.scope.get_variable(self.collection, self.name)
-    if self.axes:
+    if self.axes is not None:
       value = with_sharding_constraint(value, self.axes)
     return value
 
   @value.setter
   def value(self, value):
     """Updates the value of this Variable."""
-    if self.axes:
+    if self.axes is not None:
       value = with_sharding_constraint(value, self.axes)
     self.scope.put_variable(self.collection, self.name, value)
 
@@ -341,7 +348,7 @@ def _core_variable_with_axes(
     scope,
     col: str,
     name: str,
-    init_fn: Callable,
+    init_fn: Callable[..., Any],
     *init_args,
     axes: Tuple[str, ...] = ()):
   """Variant of flax core variable scope call with sharding constraints."""
@@ -389,24 +396,14 @@ def variable_with_axes(
   # get current module if not explicitly provided
   if module is None:
     module = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
-  # TODO(levskaya): handle trees of logical partitionspecs correctly.
-  if not isinstance(axes, tuple):
-    raise TypeError(f'Expected `axes` to be a tuple, got {axes}')
-  if not all(isinstance(axis_name, str) for axis_name in axes):
-    raise TypeError(f'Expected all axis names to be strings, got {axes}')
-
+    assert module is not None
   module_var = _core_variable_with_axes(
       module.scope, collection, name, init_fn, *init_args, axes=axes)
-
   if axes:
-    if module_var.value.ndim != len(axes):
-      raise ValueError(f'Specified logical axes {axes} do not match rank '
-                       f'{module_var.value.ndim} of parameter {name}.')
     # record logical axis constraint for global axis metadata
     module.sow(
         f'{collection}_axes', f'{name}_axes', AxisMetadata(axes),
         reduce_fn=_param_with_axes_sow_reduce_fn)
-
   return module_var
 
 
@@ -422,9 +419,13 @@ def get_axis_names(axes_metadata):
     suffix on variable names removed to match original variable collection for
     annotations.
   """
+  def leaf_rewrite(x):
+    return None if x is None else pjit.PartitionSpec(*x)
+  def rewrite(tree):
+    return jax.tree_map(leaf_rewrite, tree, is_leaf=_is_logical_spec)
   axes_metadata = unfreeze(axes_metadata)  # pytype: disable=wrong-arg-types
   flat_dict = {
-      re.sub(r'_axes$', '', '/'.join(k)): pjit.PartitionSpec(*v.names)
+      re.sub(r'_axes$', '', '/'.join(k)): rewrite(v.names)
       for k, v in flatten_dict(axes_metadata).items()
   }
   return freeze(unflatten_dict(
@@ -456,7 +457,7 @@ def _is_mutable(axis_col: str) -> bool:
   Returns:
     Whether it is currently mutable.
   """
-  last = nn.module._context.module_stack[-1]
+  last = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
   if last:
     return last.is_mutable_collection(axis_col)
   else:
@@ -471,10 +472,16 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
   if hasattr(axis_pos, 'axis'):
     axis_pos = axis_pos.axis
 
-  def insert_fn(x):
-    names = list(x.names)
+  def insert_fn_leaf(names):
+    if names is None:
+      return names
+    names = list(names)
     names.insert(axis_pos, axis_name)
-    return x.replace(names=tuple(names))
+    return tuple(names)
+
+  def insert_fn(x):
+    new_names = jax.tree_map(insert_fn_leaf, x.names, is_leaf=_is_logical_spec)
+    return x.replace(names=new_names)
 
   return nn.transforms.map_variables(
       fn,

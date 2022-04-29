@@ -15,6 +15,7 @@
 """Tests for flax.deprecated.nn.linear."""
 
 import functools
+from multiprocessing.sharedctypes import Value
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -175,6 +176,20 @@ class LinearTest(parameterized.TestCase):
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
     np.testing.assert_allclose(y, np.full((1, 6, 4), 10.))
 
+  def test_conv_local(self):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((1, 8, 2))
+    conv_module = nn.ConvLocal(
+        features=4,
+        kernel_size=(3,),
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+    self.assertEqual(initial_params['params']['kernel'].shape, (6, 3 * 2, 4))
+    np.testing.assert_allclose(y, np.full((1, 6, 4), 7.))
+
   def test_single_input_conv(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((8, 3))
@@ -188,6 +203,20 @@ class LinearTest(parameterized.TestCase):
     y, initial_params = conv_module.init_with_output(rng, x)
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
     np.testing.assert_allclose(y, np.full((6, 4), 10.))
+
+  def test_single_input_conv_local(self):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((8, 2))
+    conv_module = nn.ConvLocal(
+        features=4,
+        kernel_size=(3,),
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+    self.assertEqual(initial_params['params']['kernel'].shape, (6, 3 * 2, 4))
+    np.testing.assert_allclose(y, np.full((6, 4), 7.))
 
   def test_group_conv(self):
     rng = dict(params=random.PRNGKey(0))
@@ -210,9 +239,11 @@ class LinearTest(parameterized.TestCase):
       kernel_size=(1, 2, 3, 9),
       n_input_features=(1, 3),
       input_size=(1, 8, 16),
+      module=(nn.Conv, nn.ConvLocal)
   )
   def test_circular_conv_1d_constant(
-          self, n_batch, n_features, kernel_size, n_input_features, input_size
+      self, n_batch, n_features, kernel_size, n_input_features, input_size,
+      module
   ):
     """
     Test 1D convolution with circular padding: filter with all elements equal
@@ -223,7 +254,7 @@ class LinearTest(parameterized.TestCase):
     """
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((n_batch, input_size, n_input_features))
-    conv_module = nn.Conv(
+    conv_module = module(
         features=n_features,
         kernel_size=(kernel_size,),
         padding='CIRCULAR',
@@ -232,13 +263,31 @@ class LinearTest(parameterized.TestCase):
     )
     y, initial_params = conv_module.init_with_output(rng, x)
 
+    kernel_shape = self._get_kernel_shape(x.shape, (kernel_size,), module,
+                                          n_features)
+
     self.assertEqual(
         initial_params['params']['kernel'].shape,
-        (kernel_size, n_input_features, n_features),
+        kernel_shape,
     )
-    correct_ans = np.full((n_batch, input_size, n_features),
-                          kernel_size * n_input_features)
+    correct_ans = np.full(
+        (n_batch, input_size, n_features), kernel_size * n_input_features
+    )
     np.testing.assert_allclose(y, correct_ans)
+
+  def _get_kernel_shape(self,
+                        input_shape,
+                        kernel_size,
+                        module,
+                        n_features):
+    if module == nn.Conv:
+      kernel_shape = kernel_size + (input_shape[-1], n_features)
+    elif module == nn.ConvLocal:
+      kernel_shape = input_shape[1:-1] + (
+          input_shape[-1] * np.prod(kernel_size), n_features)
+    else:
+      raise ValueError(module)
+    return kernel_shape
 
   @parameterized.product(
       n_batch=(1, 3),
@@ -247,6 +296,7 @@ class LinearTest(parameterized.TestCase):
       n_input_features=(1, 5),
       input_x_size=(14,),
       input_y_size=(5, 10),
+      module=(nn.Conv, nn.ConvLocal)
   )
   def test_circular_conv_2d_constant(
       self,
@@ -256,6 +306,7 @@ class LinearTest(parameterized.TestCase):
       n_input_features,
       input_x_size,
       input_y_size,
+      module
   ):
     """
     Test 2D convolution with circular padding: square filter with all elements
@@ -266,18 +317,22 @@ class LinearTest(parameterized.TestCase):
     """
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((n_batch, input_x_size, input_y_size, n_input_features))
-    conv_module = nn.Conv(
+    kernel_size = (kernel_lin_size, kernel_lin_size)
+    conv_module = module(
         features=n_features,
-        kernel_size=(kernel_lin_size, kernel_lin_size),
+        kernel_size=kernel_size,
         padding='CIRCULAR',
         kernel_init=initializers.ones,
         bias_init=initializers.zeros,
     )
     y, initial_params = conv_module.init_with_output(rng, x)
 
+    kernel_shape = self._get_kernel_shape(x.shape, kernel_size, module,
+                                            n_features)
+
     self.assertEqual(
         initial_params['params']['kernel'].shape,
-        (kernel_lin_size, kernel_lin_size, n_input_features, n_features),
+        kernel_shape,
     )
     correct_ans = np.full(
         (n_batch, input_x_size, input_y_size, n_features),
@@ -309,6 +364,31 @@ class LinearTest(parameterized.TestCase):
     correct_ans = np.expand_dims(correct_ans, (0, 2))
     np.testing.assert_allclose(y, correct_ans)
 
+  def test_circular_conv_local_1d_custom(self):
+    """
+    Test 1d local convolution with circular padding and a stride
+    """
+    rng = dict(params=random.PRNGKey(0))
+    x = np.arange(1, 6)
+    x = np.expand_dims(x, (0, 2))
+    kernel = np.array(((-1, 2, 3), (4, 5, 6)))
+    kernel = np.expand_dims(kernel, (2,))
+    conv_module = nn.ConvLocal(
+        features=1,
+        kernel_size=(3,),
+        strides=(3,),
+        padding='CIRCULAR',
+        kernel_init=lambda *_: kernel,
+        bias_init=initializers.zeros,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+
+    self.assertEqual(initial_params['params']['kernel'].shape, (2, 3, 1))
+    # Compare with manually computed convolution
+    correct_ans = np.array((-1 * 5 + 2 * 1 + 3 * 2, 4 * 3 + 5 * 4 + 6 * 5))
+    correct_ans = np.expand_dims(correct_ans, (0, 2))
+    np.testing.assert_allclose(y, correct_ans)
+
   def test_circular_conv_1d_dilation(self):
     """Test 1d convolution with circular padding and kernel dilation."""
     rng = dict(params=random.PRNGKey(0))
@@ -330,6 +410,42 @@ class LinearTest(parameterized.TestCase):
     # Compare with manually computed convolution
     correct_ans = np.array((3 + 2 * 1 + 4, 4 + 2 * 2 + 5, 5 + 2 * 3 + 1,
                             1 + 2 * 4 + 2, 2 + 2 * 5 + 3))
+    correct_ans = np.expand_dims(correct_ans, (0, 2))
+    np.testing.assert_allclose(y, correct_ans)
+
+  def test_circular_conv_local_1d_dilation(self):
+    """
+    Test 1d local convolution with circular padding and kernel dilation
+    """
+    rng = dict(params=random.PRNGKey(0))
+    x = np.arange(1, 6)
+    x = np.expand_dims(x, (0, 2))
+    kernel = np.array((
+        (1, 2, 1),
+        (3, 4, 5),
+        (-1, 1, 2),
+        (2, 3, 4),
+        (-1, -2, -3)
+    ))
+    kernel = np.expand_dims(kernel, (2,))
+
+    conv_module = nn.ConvLocal(
+        features=1,
+        kernel_size=(3,),
+        padding='CIRCULAR',
+        kernel_init=lambda *_: kernel,
+        bias_init=initializers.zeros,
+        kernel_dilation=(3,)
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+
+    self.assertEqual(initial_params['params']['kernel'].shape, (5, 3, 1))
+    # Compare with manually computed convolution
+    correct_ans = np.array((1 * 3 + 2 * 1 + 1 * 4,
+                            3 * 4 + 4 * 2 + 5 * 5,
+                            -1 * 5 + 1 * 3 + 2 * 1,
+                            2 * 1 + 3 * 4 + 4 * 2,
+                            -1 * 2 + -2 * 5 + -3 * 3))
     correct_ans = np.expand_dims(correct_ans, (0, 2))
     np.testing.assert_allclose(y, correct_ans)
 
@@ -357,6 +473,74 @@ class LinearTest(parameterized.TestCase):
         (2 * 4 + 1 + 5 + 7 + 6, 2 * 5 + 2 + 6 + 8 + 4, 2 * 6 + 3 + 4 + 9 + 5),
         (2 * 7 + 4 + 8 + 1 + 9, 2 * 8 + 5 + 9 + 2 + 7, 2 * 9 + 6 + 7 + 3 + 8),
     ))
+    correct_ans = np.expand_dims(correct_ans, (0, 3))
+    np.testing.assert_allclose(y, correct_ans)
+
+  def test_circular_conv_local_2d_custom(self):
+    """
+    Test 2d local convolution with circular padding on a 3x3 example
+    """
+    rng = dict(params=random.PRNGKey(0))
+    x = np.array(((1, 2, 3),
+                  (4, 5, 6),
+                  (7, 8, 9)))
+    x = np.expand_dims(x, (0, 3))
+    kernel = np.array((
+        (
+            ((0, 1, 0),
+             (1, 2, 1),
+             (0, 1, 0)),
+            ((0, 1, 0),
+             (1, 3, 1),
+             (0, 1, 0)),
+            ((0, 1, 0),
+             (1, 4, 1),
+             (0, 1, 0))
+        ),
+        (
+            ((0, 1, 0),
+             (1, 5, 1),
+             (0, 1, 0)),
+            ((0, 1, 0),
+             (1, 6, 1),
+             (0, 1, 0)),
+            ((0, 1, 0),
+             (1, 7, 1),
+             (0, 1, 0))
+        ),
+        (
+            ((0, 1, 0),
+             (1, 8, 1),
+             (0, 1, 0)),
+            ((0, 1, 0),
+             (1, 9, 1),
+             (0, 1, 0)),
+            ((0, 1, 0),
+             (1, 10, 1),
+             (0, 1, 0))
+        ),
+    ))
+    kernel = np.expand_dims(kernel, (3,))
+    kernel = np.reshape(kernel, (3, 3, 9, 1))
+
+    conv_module = nn.ConvLocal(
+        features=1,
+        kernel_size=(3, 3),
+        padding='CIRCULAR',
+        kernel_init=lambda *_: kernel,
+        bias_init=initializers.zeros,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+
+    self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 9, 1))
+    # Compare with manually computed convolution
+    correct_ans = np.array(
+        (
+            (2 * 1 + 7 + 2 + 4 + 3, 3 * 2 + 8 + 3 + 5 + 1, 4 * 3 + 9 + 1 + 6 + 2),
+            (5 * 4 + 1 + 5 + 7 + 6, 6 * 5 + 2 + 6 + 8 + 4, 7 * 6 + 3 + 4 + 9 + 5),
+            (8 * 7 + 4 + 8 + 1 + 9, 9 * 8 + 5 + 9 + 2 + 7, 10 * 9 + 6 + 7 + 3 + 8),
+        )
+    )
     correct_ans = np.expand_dims(correct_ans, (0, 3))
     np.testing.assert_allclose(y, correct_ans)
 
@@ -580,8 +764,11 @@ class LinearTest(parameterized.TestCase):
     correct_ans = np.expand_dims(correct_ans, (0, 3))
     np.testing.assert_allclose(y, correct_ans)
 
-  def test_int_kernel_size(self):
-    conv = nn.Conv(features=4, kernel_size=3)
+  @parameterized.product(
+      module=(nn.Conv, nn.ConvLocal)
+  )
+  def test_int_kernel_size(self, module):
+    conv = module(features=4, kernel_size=3)
     x = jnp.ones((8, 3))
     with self.assertRaises(TypeError):
       conv.init(random.PRNGKey(0), x)
@@ -656,6 +843,19 @@ class LinearTest(parameterized.TestCase):
         }})
     self.assertEqual(y.shape, (8, 6))
 
+  def test_canonicalize_padding(self):
+    def test_pad(pad, rank, expected=None):
+      if expected is None:
+        with self.assertRaises(ValueError):
+          nn.linear.canonicalize_padding(pad, rank)
+      else:
+        self.assertEqual(nn.linear.canonicalize_padding(pad, rank), expected)
+    test_pad("SAME", 2, "SAME")
+    test_pad(2, 3, [(2, 2), (2, 2), (2, 2)])
+    test_pad((2, 2), 3)
+    test_pad((2, 2), 1)
+    test_pad([1, (2, 3)], 2, [(1, 1), (2, 3)])
+    test_pad([None, (1, 2)], 2)
 
 if __name__ == '__main__':
   absltest.main()

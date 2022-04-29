@@ -117,11 +117,14 @@ def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
 
 
 def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
-  return {key: to_state_dict(value) for key, value in xs.items()}
+  str_keys = set(str(k) for k in xs.keys())
+  if len(str_keys) != len(xs):
+    raise ValueError(f'Dict keys do not have a unique string representation: {str_keys}')
+  return {str(key): to_state_dict(value) for key, value in xs.items()}
 
 
 def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
-  return {key: from_state_dict(value, states[key])
+  return {key: from_state_dict(value, states[str(key)])
           for key, value in xs.items()}
 
 

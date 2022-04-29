@@ -30,11 +30,16 @@ from flax.core import freeze
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
-
+# pylint: disable=attribute-defined-outside-init,unused-variable
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(
-      jax.tree_multimap(operator.eq, x, y))
+      jax.tree_map(operator.eq, x, y))
+
+
+def tree_allclose(x, y):
+  return jax.tree_util.tree_all(
+      jax.tree_map(lambda x,y: np.all(np.isclose(x,y)), x, y))
 
 
 id_fn = lambda x: x
@@ -767,7 +772,7 @@ class TransformTest(absltest.TestCase):
         },
       })
     self.assertTrue(jax.tree_util.tree_all(
-        jax.tree_multimap(
+        jax.tree_map(
             lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
             cntrs, ref_cntrs)
         ))
@@ -977,7 +982,7 @@ class TransformTest(absltest.TestCase):
         return self._helper(x)
       @nn.nowrap
       def _helper(self, x):
-        if len(nn.module._context.module_stack) > 2:
+        if len(nn.module._context.module_stack) > 2:  # pylint: disable=protected-access
           raise ValueError('Module stack too deep.')
         return x
 
@@ -1035,7 +1040,6 @@ class TransformTest(absltest.TestCase):
     y, variables = bw.init_with_output(random.PRNGKey(0), x)
     y_2 = bw.apply(variables, x)
     np.testing.assert_allclose(y, y_2)
-
 
 
   def test_remat_scan(self):
@@ -1223,6 +1227,44 @@ class TransformTest(absltest.TestCase):
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
       y = Test().init(k, x)
 
+  def test_transform_with_setup_and_methods_on_submodule_pytrees(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.inners = [nn.Dense(2), nn.Dense(2)]
+      def helper(self, x, ms):
+        return ms[0](x) + ms[1](x)
+      def __call__(self, x):
+        return self.helper(x, self.inners)
+    k = random.PRNGKey(0)
+    x = jnp.ones((2,))
+
+    with nn.module.override_named_call(False):
+      vs_0 = Foo().init(k, x)
+    with nn.module.override_named_call(True):
+      vs_1 = Foo().init(k, x)
+
+    self.assertTrue(tree_allclose(vs_0, vs_1))
+
+  def test_transform_setup_still_reserve_names_pytrees(self):
+    class Identity(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+    class Test(nn.Module):
+      def setup(self):
+        self.subs = [Identity(), Identity()]
+        self.subs = [Identity(), Identity()]
+      @nn.jit
+      def __call__(self, x):
+        return x
+
+    k = random.PRNGKey(0)
+    x = jnp.array([1.])
+
+    msg = r'Could not create submodule "subs_0".*'
+    with self.assertRaisesRegex(errors.NameInUseError, msg):
+      y = Test().init(k, x)
+
   def test_scan_of_setup_parameter(self):
     class Body(nn.Module):
       def setup(self):
@@ -1328,6 +1370,87 @@ class TransformTest(absltest.TestCase):
       vs = Foo().init(k, x)
       y1 = Foo().apply(vs, x)
     np.testing.assert_array_equal(y0, y1)
+
+  def test_while_loop(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        self.param('inc', lambda _: 1)
+        self.put_variable('state', 'acc', 0)
+        self.put_variable('state', 'rng_params', jnp.zeros((2, 2), jnp.uint32))
+        self.put_variable('state', 'rng_loop', jnp.zeros((2, 2), jnp.uint32))
+
+        def cond_fn(mdl, c):
+          acc = mdl.get_variable('state', 'acc')
+          return acc < x
+        def body_fn(mdl, c):
+          i = mdl.get_variable('state', 'acc')
+          p_rng = mdl.make_rng('params')
+          l_rng = mdl.make_rng('loop')
+          mdl.put_variable('state', 'rng_params', mdl.get_variable('state', 'rng_params').at[i].set(p_rng))
+          mdl.put_variable('state', 'rng_loop', mdl.get_variable('state', 'rng_loop').at[i].set(l_rng))
+          inc = mdl.get_variable('params', 'inc')
+          mdl.put_variable('state', 'acc', i + inc)
+          return c
+        return nn.while_loop(
+            cond_fn, body_fn, self, (),
+            carry_variables='state', split_rngs={'params': False, 'loop': True})
+    x = 2
+    mdl = Foo()
+    _, vars = mdl.apply({}, x, mutable=True, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    self.assertEqual(vars['state']['acc'], x)
+    np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
+    np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
+
+  def test_cond(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, pred):
+        self.variable('state', 'true_count', lambda: 0)
+        self.variable('state', 'false_count', lambda: 0)
+        def true_fn(mdl, x):
+          mdl.variable('state', 'true_count').value += 1
+          return nn.Dense(2, name='dense')(x)
+
+        def false_fn(mdl, x):
+          mdl.variable('state', 'false_count').value += 1
+          return -nn.Dense(2, name='dense')(x)
+        
+        return nn.cond(pred, true_fn, false_fn, self, x)
+    
+    x = jnp.ones((1, 3))
+    foo = Foo()
+    y1, vars = foo.init_with_output(random.PRNGKey(0), x, True)
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
+    y2, vars = foo.apply(vars, x, False, mutable="state")
+    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    np.testing.assert_allclose(y1, -y2)
+
+  def test_lift_instance_error(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.checkpoint(nn.Dense(2))(x)
+    with self.assertRaises(errors.TransformTargetError):
+      Foo().init(random.PRNGKey(0), jnp.zeros((2, 3)))
+
+  def test_scan_compact_count(self):
+    class Foo(nn.Module):
+      num_layers: int = 5
+
+      @nn.compact
+      def __call__(self, x):
+        def body_fn(mdl, x):
+          return nn.Dense(features=x.shape[-1])(x), ()
+        x, _ = nn.scan(body_fn, length=self.num_layers, variable_axes={"params": 0}, split_rngs={"params": True})(self, x)
+        return x
+
+    m = Foo()
+    x = jnp.ones((3,))
+    v = m.init(jax.random.PRNGKey(0), x)
+    self.assertEqual(v['params']['Dense_0']['kernel'].shape, (5, 3, 3))
+    m.apply(v, x)
+
 
 
 if __name__ == '__main__':

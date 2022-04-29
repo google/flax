@@ -87,10 +87,11 @@ class ResNet(nn.Module):
   num_filters: int = 64
   dtype: Any = jnp.float32
   act: Callable = nn.relu
+  conv: ModuleDef = nn.Conv
 
   @nn.compact
   def __call__(self, x, train: bool = True):
-    conv = partial(nn.Conv, use_bias=False, dtype=self.dtype)
+    conv = partial(self.conv, use_bias=False, dtype=self.dtype)
     norm = partial(nn.BatchNorm,
                    use_running_average=not train,
                    momentum=0.9,
@@ -131,5 +132,11 @@ ResNet200 = partial(ResNet, stage_sizes=[3, 24, 36, 3],
                     block_cls=BottleneckResNetBlock)
 
 
+ResNet18Local = partial(ResNet, stage_sizes=[2, 2, 2, 2],
+                        block_cls=ResNetBlock, conv=nn.ConvLocal)
+
+
 # Used for testing only.
 _ResNet1 = partial(ResNet, stage_sizes=[1], block_cls=ResNetBlock)
+_ResNet1Local = partial(ResNet, stage_sizes=[1], block_cls=ResNetBlock,
+                        conv=nn.ConvLocal)

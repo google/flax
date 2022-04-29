@@ -29,7 +29,7 @@ from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
-from flax import optim
+from flax.optim import dynamic_scale as dynamic_scale_lib
 from flax.training import checkpoints
 from flax.training import common_utils
 from flax.training import train_state
@@ -47,7 +47,7 @@ import models
 
 
 class TrainState(train_state.TrainState):
-  dynamic_scale: optim.DynamicScale
+  dynamic_scale: dynamic_scale_lib.DynamicScale
 
 
 def rsqrt_schedule(
@@ -224,9 +224,9 @@ def train_step(state,
     # params should be restored (= skip this step).
     select_fn = functools.partial(jnp.where, is_fin)
     new_state = new_state.replace(
-        opt_state=jax.tree_multimap(
+        opt_state=jax.tree_map(
             select_fn, new_state.opt_state, state.opt_state),
-        params=jax.tree_multimap(
+        params=jax.tree_map(
             select_fn, new_state.params, state.params)
         )
     metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]
@@ -493,7 +493,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
   dynamic_scale = None
   if dtype == jnp.float16:
-    dynamic_scale = optim.DynamicScale()
+    dynamic_scale = dynamic_scale_lib.DynamicScale()
   state = TrainState.create(
       apply_fn=m.apply,
       params=initial_variables["params"],

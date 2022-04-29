@@ -15,7 +15,7 @@
 """Flax Optimizer api."""
 
 import dataclasses
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional
 import warnings
 
 from .. import jax_utils
@@ -40,12 +40,16 @@ class OptimizerState:
 
 class OptimizerDef:
   """Base class for an optimizer defintion, which specifies the initialization and gradient application logic.
-  
+
   See docstring of :class:`Optimizer` for more details.
   """
 
   def __init__(self, hyper_params):
     self.hyper_params = hyper_params
+    warnings.warn(
+        'Use `optax` instead of `flax.optim`. Refer to the update guide '
+        'https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html '
+        'for detailed instructions.', DeprecationWarning)
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):
     """Apply a gradient for a single parameter.
@@ -118,7 +122,7 @@ class OptimizerDef:
       hp = hp.replace(**hyper_param_overrides)
     return hp
 
-  def create(self, target, focus: 'ModelParamTraversal' = None):
+  def create(self, target, focus: Optional['ModelParamTraversal'] = None):
     """Creates a new optimizer for the given target.
 
     See docstring of :class:`Optimizer` for more details.
@@ -129,7 +133,7 @@ class OptimizerDef:
         of variables dicts, e.g. `(v1, v2)` and  `('var1': v1, 'var2': v2)`
         are valid inputs as well.
       focus: a `flax.traverse_util.Traversal` that selects which subset of
-        the target is optimized. See docstring of :class:`MultiOptimizer` 
+        the target is optimized. See docstring of :class:`MultiOptimizer`
         for an example of how to define a `Traversal` object.
     Returns:
       An instance of `Optimizer`.
@@ -179,10 +183,10 @@ class _NoAux:
 class Optimizer(struct.PyTreeNode):
   """
   Flax optimizers are created using the :class:`OptimizerDef` class. That class
-  specifies the initialization and gradient application logic. Creating an 
-  optimizer using the :meth:`OptimizerDef.create` method will result in an 
+  specifies the initialization and gradient application logic. Creating an
+  optimizer using the :meth:`OptimizerDef.create` method will result in an
   instance of the :class:`Optimizer` class, which encapsulates the optimization
-  target and state. The optimizer is updated using the method 
+  target and state. The optimizer is updated using the method
   :meth:`apply_gradient`.
 
   Example of constructing an optimizer for a model::

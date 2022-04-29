@@ -75,6 +75,8 @@ Transformations
     jvp
     vjp
     custom_vjp
+    while_loop
+    cond
 
 
 Linear modules
@@ -88,6 +90,7 @@ Linear modules
     DenseGeneral
     Conv
     ConvTranspose
+    ConvLocal
     Embed
 
 
@@ -111,6 +114,7 @@ Pooling
 
     max_pool
     avg_pool
+    pool
 
 
 Activation functions
@@ -132,6 +136,16 @@ Activation functions
     softplus
     swish
     PReLU
+
+
+Combinators
+------------------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :template: flax_module
+
+    Sequential
 
 
 Attention primitives
@@ -159,9 +173,9 @@ Stochastic
 .. autosummary::
   :toctree: _autosummary
   :template: flax_module
-  
+
     Dropout
-    
+
 
 RNN primitives
 ------------------------

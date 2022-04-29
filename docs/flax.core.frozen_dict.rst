@@ -1,6 +1,6 @@
 
 flax.core.frozen_dict package
-===================
+=============================
 
 .. currentmodule:: flax.core.frozen_dict
 

@@ -119,9 +119,10 @@ class MeanAveragePrecision(
 
   def compute(self):
     # Matches the official OGB evaluation scheme for mean average precision.
-    labels = self.values['labels']
-    logits = self.values['logits']
-    mask = self.values['mask']
+    values = super().compute()
+    labels = values['labels']
+    logits = values['logits']
+    mask = values['mask']
 
     assert logits.shape == labels.shape == mask.shape
     assert len(logits.shape) == 2

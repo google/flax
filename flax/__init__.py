@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python 3
 
 """Flax API."""
 
-from . import core
-from . import linen
-from . import optim
+from . import core as core
+from . import linen as linen
+from . import optim as optim
 # DO NOT REMOVE - Marker for internal deprecated API.
 # DO NOT REMOVE - Marker for internal logging.
 from .version import __version__

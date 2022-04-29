@@ -12,16 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Stochastic modules.
-"""
+"""Stochastic modules."""
 
-from typing import Iterable, Optional
+from typing import Optional, Sequence
 
+from flax.linen.module import compact
+from flax.linen.module import merge_param
+from flax.linen.module import Module
 from jax import lax
 from jax import random
 import jax.numpy as jnp
-
-from flax.linen.module import Module, compact, merge_param
 
 
 class Dropout(Module):
@@ -35,7 +35,7 @@ class Dropout(Module):
         as is.
   """
   rate: float
-  broadcast_dims: Iterable[int] = ()
+  broadcast_dims: Sequence[int] = ()
   deterministic: Optional[bool] = None
 
   @compact
@@ -55,6 +55,9 @@ class Dropout(Module):
         'deterministic', self.deterministic, deterministic)
     if self.rate == 0.:
       return inputs
+    # Prevent gradient NaNs in 1.0 edge-case.
+    if self.rate == 1.0:
+      return jnp.zeros_like(inputs)
     keep_prob = 1. - self.rate
     if deterministic:
       return inputs

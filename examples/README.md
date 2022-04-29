@@ -70,7 +70,16 @@ Graph modeling
 The following code bases use Flax and provide training frameworks and a wealth
 of examples, in many cases with pre-trained weights:
 
-- https://github.com/google-research/scenic: *Scenic* is a codebase/library
+- [HuggingFace Transformers](https://github.com/huggingface/transformers) is a
+  very popular library for building, training, and deploying state of the art
+  machine learning models.
+  These models can be applied on text, images, and audio. After organizing the
+  [JAX/Flax community week](https://github.com/huggingface/transformers/blob/master/examples/research_projects/jax-projects/README.md),
+  they have now over 5,000
+  [Flax/JAX models](https://huggingface.co/models?library=jax&sort=downloads) in
+  their repository.
+
+- [Scenic](https://github.com/google-research/scenic) is a codebase/library
   for computer vision research and beyond. Scenic's main focus is around
   attention-based models. Scenic has been successfully used to develop
   classification, segmentation, and detection models for multiple modalities
@@ -105,3 +114,24 @@ official Flax example, and start from there.
 [@bkkaggle]: https://github.com/bkkaggle
 [@vasudevgupta7]: https://github.com/vasudevgupta7
 [@n2cholas]: https://github.com/n2cholas
+
+## Anatomy of a Flax Example
+
+Most of our examples in this directory follow a structure that we found to work
+well with Flax projects, and we strive to make the examples easy to explore and
+easy to fork. In particular (taken from [#231])
+
+- README: contains links to paper, command line, [TensorBoard] metrics
+- Focus: an example is about a single model/dataset
+- Configs: we use `ml_collections.ConfigDict` stored under `configs/`
+- Tests: executable `main.py` loads `train.py` which has `train_test.py`
+- Data: is read from [TensorFlow Datasets]
+- Standalone: every directory is self-conained
+- Requirements: are pinned in `requirements.txt`
+- Boilerplate: is reduced by using [`clu`]
+- Interactive: the example can be explored with a [Colab]
+
+[#231]: https://github.com/google/flax/issues/231
+[TensorBoard]: https://tensorboard.dev/
+[`clu`]: https://pypi.org/project/clu/
+[Colab]: https://colab.research.google.com/
