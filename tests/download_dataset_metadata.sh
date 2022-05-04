@@ -17,5 +17,5 @@ else
   mkdir ../../.tfds
   mv tensorflow_datasets/testing/metadata/ ../../.tfds/metadata/
   cd ..
-  rm datasets -rf
+  rm -rf datasets
 fi
