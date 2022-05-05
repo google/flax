@@ -168,7 +168,7 @@ class Traversal(abc.ABC):
         'it for `flax.optim`, use `optax` instead. Refer to the update guide '
         'https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html '
         'for detailed instructions.', DeprecationWarning)
-    return object.__new__(cls, *args, **kwargs)
+    return super(Traversal, cls).__new__(cls)
 
   @abc.abstractmethod
   def update(self, fn, inputs):
