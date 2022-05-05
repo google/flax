@@ -30,27 +30,19 @@ vNext
 -----
 
 New features:
-* Canonicalize conv padding by @jheek in https://github.com/google/flax/pull/2009
-* Update ScopeParamNotFoundError message. by @melissatan in https://github.com/google/flax/pull/2013
-* Set field on dataclass transform decorator by @NeilGirdhar in https://github.com/google/flax/pull/1927
-* Don't recommend mixing setup and compact in docs. by @levskaya in https://github.com/google/flax/pull/2018
-* Clarifies `optim.Adam(weight_decay)` parameter. by @copybara-service in https://github.com/google/flax/pull/2016
-* Update linear regression example in Jax intro and Flax intro. by @melissatan in https://github.com/google/flax/pull/2015
-* Lifted cond by @jheek in https://github.com/google/flax/pull/2020
-* Use tree_map instead of deprecated tree_multimap by @jheek in https://github.com/google/flax/pull/2024
-* Remove tree_multimap from docs, examples, and tests by @jheek in https://github.com/google/flax/pull/2026
-* Fix bug where the linen Module state is reused. by @jheek in https://github.com/google/flax/pull/2025
-* Add __getattribute__ with lazy setup trigger. by @levskaya in https://github.com/google/flax/pull/2028
-* Better error messages for loading checkpoints. by @copybara-service in https://github.com/google/flax/pull/2035
-* Add filterwarning for jax.tree_multimap by @marcvanzee in https://github.com/google/flax/pull/2038
-* Adds Flax logo to README by @marcvanzee in https://github.com/google/flax/pull/2036
-* Module lifecycle note by @jheek in https://github.com/google/flax/pull/1964
-* Fix linter errors in core/scope.py and core/tracers.py. by @copybara-service in https://github.com/google/flax/pull/2004
-* Handle edge-case of rate==1.0 in Dropout layer. by @levskaya in https://github.com/google/flax/pull/2055
-* Bug fixes and generalizations of nn.partitioning api. by @copybara-service in https://github.com/google/flax/pull/2062
-* Add support for JAX dynamic stack-based named_call. by @copybara-service in https://github.com/google/flax/pull/2063
-* Updates pooling docstrings by @marcvanzee in https://github.com/google/flax/pull/2064
-* Makes annotated_mnist use Optax's xent loss. by @andsteing in https://github.com/google/flax/pull/2071
+- Add lifted conditional `nn.cond`.
+- Improved error messages: parameters not found, loading checkpoints.
+- Replace `jax.tree_multimap` (deprecated) with `jax.tree_map`.
+- Add the "Module Lifecycle" design note.
+- Add support for JAX dynamic stack-based named_call
+
+Bug fixes:
+- Handle rate==1.0 edgecase in Dropout.
+- Fix bug where Linen Module state is reused.
+- Bug fixes and generalizations of nn.partitioning API.
+
+Breaking changes:
+- 
 
 
 0.4.1
