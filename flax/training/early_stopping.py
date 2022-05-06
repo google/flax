@@ -60,8 +60,8 @@ class EarlyStopping(struct.PyTreeNode):
     
     Returns:
       A pair (has_improved, early_stop), where `has_improved` is True when there
-        was an improvement greater than `min_delta` from the previous
-        `best_metric` and `early_stop` is the updated `EarlyStop` object.
+      was an improvement greater than `min_delta` from the previous
+      `best_metric` and `early_stop` is the updated `EarlyStop` object.
     """
 
     if math.isinf(self.best_metric) or self.best_metric - metric > self.min_delta:
