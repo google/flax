@@ -37,3 +37,11 @@ Train state
 
 .. autoclass:: TrainState
     :members: apply_gradients, create
+
+Early Stopping
+------------------------
+
+.. currentmodule:: flax.training.early_stopping
+
+.. autoclass:: EarlyStopping
+    :members: reset, update
