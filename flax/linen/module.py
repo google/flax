@@ -20,22 +20,24 @@ import functools
 import inspect
 import threading
 import typing
-from typing import (Any, Callable, Dict, Iterable, List, Optional,
-                    Set, Tuple, Type, TypeVar, Union, overload)
-from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 import weakref
+from typing import (Any, Callable, Dict, Generic, Iterable, List, Optional,
+                    Sequence, Set, Tuple, Type, TypeVar, Union, overload)
 
-from flax import config
-from flax import core
-from flax import errors
-from flax import serialization
-from flax import traceback_util
-from flax import traverse_util
+import jax
+import numpy as np
+from typing_extensions import \
+    dataclass_transform  # pytype: disable=not-supported-yet
+
+from flax import (config, core, errors, serialization, traceback_util,
+                  traverse_util)
 from flax.core import Scope
 from flax.core.frozen_dict import FrozenDict
-from flax.core.scope import (CollectionFilter, DenyList, FrozenVariableDict,  # pylint: disable=g-multiple-import
-                             Variable, VariableDict, union_filters)
-import jax
+from flax.core.scope import (  # pylint: disable=g-multiple-import
+    CollectionFilter, DenyList, FrozenVariableDict, Variable, VariableDict,
+    union_filters)
+from flax.linen import summary 
+
 
 
 traceback_util.register_exclusion(__file__)
@@ -1353,6 +1355,95 @@ class Module:
     self.scope.put_variable(col, name, xs)
     return True
 
+  def tabulate(
+    self, 
+    rngs: Union[PRNGKey, RNGSequences],
+    *args,
+    method: Optional[Callable[..., Any]] = None,
+    mutable: CollectionFilter = True,
+    depth: Optional[int] = None,
+    output_methods: Optional[Union[Sequence[str], Set[str]]] = None,
+    **kwargs) -> str:
+    """Creates a summary of the Module represented as a table.
+
+    This method has the same signature as `init`, but instead of returning
+    the variables, it returns the string summarizing the Module in a table.
+    `tabulate` uses `jax.eval_shape` to run the forward computation without
+    consuming any FLOPs or allocating memory. 
+    
+    Example::
+
+      import jax
+      import jax.numpy as jnp
+      import flax.linen as nn
+
+      class Foo(nn.Module):
+          @nn.compact
+          def __call__(self, x):
+              h = nn.Dense(4)(x)
+              return nn.Dense(2)(h)
+
+      x = jnp.ones((16, 9))
+
+      print(Foo().tabulate(jax.random.PRNGKey(0), x))
+    
+
+    This gives the following output::
+      
+                         Foo Summary                    
+      ┏━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
+      ┃ path    ┃ outputs       ┃ params               ┃
+      ┡━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
+      │ Inputs  │ float32[16,9] │                      │
+      ├─────────┼───────────────┼──────────────────────┤
+      │ Dense_0 │ float32[16,4] │ bias: float32[4]     │
+      │         │               │ kernel: float32[9,4] │
+      │         │               │                      │
+      │         │               │ 40 (160 B)           │
+      ├─────────┼───────────────┼──────────────────────┤
+      │ Dense_1 │ float32[16,2] │ bias: float32[2]     │
+      │         │               │ kernel: float32[4,2] │
+      │         │               │                      │
+      │         │               │ 10 (40 B)            │
+      ├─────────┼───────────────┼──────────────────────┤
+      │ Foo     │ float32[16,2] │                      │
+      ├─────────┼───────────────┼──────────────────────┤
+      │         │         Total │ 50 (200 B)           │
+      └─────────┴───────────────┴──────────────────────┘
+                                                        
+                Total Parameters: 50 (200 B)
+
+    **Note**: rows order in the table does not represent execution order, 
+    instead it aligns with the order of keys in `variables` which are sorted 
+    alphabetically.
+
+    Args:
+      rngs: The rngs for the variable collections.
+      *args: The arguments to the forward computation.
+      method: An optional method. If provided, applies this method. If not
+        provided, applies the ``__call__`` method.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable: ``bool``: all/no collections are mutable.
+        ``str``: The name of a single mutable collection. ``list``: A
+        list of names of mutable collections. By default all collections
+        except 'intermediates' are mutable.
+      depth: controls how many submodule deep the summary can go. By default its 
+        `None` which means no limit. If a submodule is not shown because of the 
+        depth limit, its parameter count and bytes will be added to the row of 
+        its first shown ancestor such that the sum of all rows always adds up to 
+        the total number of parameters of the Module.
+      output_methods: Method names in the `intermediates` collection that should be
+        included as outputs in the summary. The `'__call__'` method is always included.
+      **kwargs: keyword arguments to pass to the forward computation.
+
+    Returns:
+      A string summarizing the Module.
+    """
+
+    tabulate_fn = summary.tabulate(self, rngs, method=method, mutable=mutable, 
+                           depth=depth, output_methods=output_methods)
+    return tabulate_fn(*args, **kwargs)
+    
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.

@@ -8,42 +8,15 @@ vNext
 -
 -
 -
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
-
-0.4.2
------
-
-New features:
-- Add lifted conditional `nn.cond`.
-- Improved error messages: parameters not found, loading checkpoints.
-- Replace `jax.tree_multimap` (deprecated) with `jax.tree_map`.
-- Add the "Module Lifecycle" design note.
-- Add support for JAX dynamic stack-based named_call
-
-Bug fixes:
+- Added lifted conditional `nn.cond`
 - Handle rate==1.0 edgecase in Dropout.
-- Fix bug where Linen Module state is reused.
-- Bug fixes and generalizations of nn.partitioning API.
-
-Breaking changes:
-- 
-
+-
+-
+-
+-
+-
+-
+-
 
 0.4.1
 -----
