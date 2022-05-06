@@ -63,12 +63,14 @@ So, how would you decide which style to use? It can be a matter of taste, but he
 Reasons to prefer using ``nn.compact``:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1. Allows defining submodules, parameters and other variables next to where they are used: less    
+1. Allows defining submodules, parameters and other variables next to where they are used: less
    scrolling up/down to see how everything is defined.
 2. Reduces code duplication when there are conditionals or for loops that conditionally define
    submodules, parameters or variables.
 3. Code typically looks more like mathematical notation: ``y = self.param('W', ...) @ x + self.param('b', ...)``
    looks similar to :math:`y=Wx+b``)
+4. If you are using shape inference, i.e. using parameters whose shape/value depend on shapes of
+   the inputs (which are unknown at initialization), this is not possible using ``setup``.
 
 Reasons to prefer using ``setup``:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
