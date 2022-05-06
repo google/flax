@@ -20,6 +20,20 @@ from flax import struct
 
 class EarlyStopping(struct.PyTreeNode):
   """Early stopping to avoid overfitting during training.
+
+  The following example stops training early if the difference between losses
+  recorded in the current epoch and previous epoch is less than 1e-3
+  consecutively for 2 times::
+
+    early_stop = EarlyStopping(min_delta=1e-3, patience=2)
+    for epoch in range(1, num_epochs+1):
+      rng, input_rng = jax.random.split(rng)
+      optimizer, train_metrics = train_epoch(
+          optimizer, train_ds, config.batch_size, epoch, input_rng)
+      _, early_stop = early_stop.update(train_metrics['loss'])
+      if early_stop.should_stop:
+        print('Met early stopping criteria, breaking...')
+        break
   
   Attributes:
     min_delta: Minimum delta between updates to be considered an
@@ -45,8 +59,9 @@ class EarlyStopping(struct.PyTreeNode):
     """Update the state based on metric.
     
     Returns:
-      Whether there was an improvement greater than min_delta from
-          the previous best_metric and the updated EarlyStop object.
+      A pair (has_improved, early_stop), where `has_improved` is True when there
+      was an improvement greater than `min_delta` from the previous
+      `best_metric` and `early_stop` is the updated `EarlyStop` object.
     """
 
     if math.isinf(self.best_metric) or self.best_metric - metric > self.min_delta:
