@@ -20,3 +20,4 @@ Multi device utilities
 
 .. autofunction:: pmean
 
+.. autofunction:: pad_shard_unpad
