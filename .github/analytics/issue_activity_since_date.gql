@@ -1,0 +1,56 @@
+{
+  repository(owner: "_REPO_OWNER_", name: "_REPO_NAME_") {
+    issues(first: 100) {
+      totalCount
+      edges {
+        cursor
+        node {
+          number
+          title
+          createdAt
+          state
+          closedAt
+          updatedAt
+          url
+          labels(first: 100) {
+            edges {
+              node {
+                name
+              }
+            }
+          }
+          timelineItems(first: 100, itemTypes: [LABELED_EVENT, CONVERTED_TO_DISCUSSION_EVENT, ISSUE_COMMENT, CLOSED_EVENT]) {
+            totalCount
+            edges {
+              node {
+                __typename
+                ... on ConvertedToDiscussionEvent {
+                  createdAt
+                }
+                ... on IssueComment {
+                  author {
+                    login
+                  }
+                  createdAt
+                }
+                ... on ClosedEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on LabeledEvent {
+                  label {
+                    name
+                  }
+                  createdAt
+                }
+              }
+            }
+          } 
+        }
+      }
+    }
+  }
+}
+

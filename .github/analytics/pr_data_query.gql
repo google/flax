@@ -1,0 +1,32 @@
+query {
+  repository(owner:"_REPO_OWNER_", name:"_REPO_NAME_") {
+    pullRequests(first:100) {
+      totalCount
+      edges {
+        cursor
+        node{
+          number
+          state
+          title
+          createdAt
+          baseRefName
+          mergeable
+          author{
+            login
+          }
+          authorAssociation
+          mergedBy{
+            login
+          }
+          mergedAt
+          reviews(states:APPROVED){
+            totalCount
+          }
+          participants(first:100){
+            totalCount
+          }
+        }
+      }
+    }
+  }
+}
