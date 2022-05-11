@@ -281,7 +281,7 @@ class PartitioningTest(parameterized.TestCase):
 
       @nn.compact
       def __call__(self, x):
-        y, _ = partitioning.scan_with_axes(
+        scanned_sindot = partitioning.scan_with_axes(
             SinDot,
             in_axes=(),
             variable_axes={'params': 0, 'stats': 1},
@@ -289,7 +289,10 @@ class PartitioningTest(parameterized.TestCase):
             axis_name='layer',
             axes_collections=('params', 'stats'),
             length=self.num_layers)(self.depth,
-                                    name='scanned_layer')(x)
+                                    name='scanned_layer')
+        y, _ = scanned_sindot(x)
+        # test calling again to test metadata compatibility across calls
+        _, _ = scanned_sindot(x)
         return y
 
     p_rules = (('emb', 'data'), ('mlp', 'model'), ('batch', 'data'))
