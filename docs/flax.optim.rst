@@ -32,7 +32,6 @@ Available optimizers
     Adafactor
     Adagrad
     Adadelta
-    DynamicScale
     GradientDescent
     LAMB
     LARS
