@@ -30,7 +30,7 @@ from flax.core import freeze
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
-# pylint: disable=attribute-defined-outside-init,unused-variable
+# pylint: disable=attribute-defined-outside-init,unused-variable,g-wrong-blank-lines,g-bare-generic
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(
@@ -947,12 +947,12 @@ class TransformTest(absltest.TestCase):
       def __call__(self, x):
         f = self._helper()
         return f(x)
+      @nn.jit
       def _helper(self):
         return Foo()
-    with nn.override_named_call(True):
-      b = Bar()
-      with self.assertRaises(errors.TransformedMethodReturnValueError):
-        b.apply({}, jnp.ones(2))
+    b = Bar()
+    with self.assertRaises(errors.TransformedMethodReturnValueError):
+      b.apply({}, jnp.ones(2))
 
   def test_nowrap_named_call(self):
     with nn.override_named_call(True):
