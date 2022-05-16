@@ -75,7 +75,7 @@ of batches executed by different devices on different hosts, such a solution
 quickly becomes complicated and makes the main eval loop hard to read with a lot
 of cumbersome logic.
 
-The more straight forward solution to this problem is to use padding at the end
+The more straightforward solution to this problem is to use padding at the end
 of the dataset to make sure that the last batch has the same size as the
 preceding batches.
 
@@ -119,6 +119,42 @@ above evaluation loop.
         vs, batch['image'], min_device_batch=per_device_batch_size)
     total += len(batch['image'])
     correct += (batch['label'] == preds.argmax(axis=-1)).sum()
+
+
+Computing metrics in ``eval_step()``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of returning the predictions and computing the metrics in the main
+evaluation loop, we would often want to make the metric computation part of the
+evaluation step, especially when using libraries like |jax_metrics|_, or
+|clu.metrics|_.
+
+In that case we would want to pass the metrics as a ``static_argnums`` (i.e. do
+not shard/pad it), and treat the return value as ``static_return`` too (i.e. no
+un-sharding or un-padding):
+
+.. code-block:: python
+
+  def eval_step(metrics, variables, batch):
+    print('retrigger compilation', {k: v.shape for k, v in batch.items()})
+    preds = model.apply(variables, batch['image'])
+    correct = (batch['mask'] & (batch['label'] == preds.argmax(axis=-1))).sum()
+    total = batch['mask'].sum()
+    return dict(
+        correct=metrics['correct'] + jax.lax.psum(correct, axis_name='batch'),
+        total=metrics['total'] + jax.lax.psum(total, axis_name='batch'),
+    )
+
+  eval_step = jax.pmap(eval_step, axis_name='batch')
+  eval_step = flax.jax_utils.pad_shard_unpad(
+      eval_step, static_argnums=(0, 1), static_return=True)
+
+.. |jax_metrics| replace:: ``clu.metrics``
+.. _jax_metrics: https://github.com/cgarciae/jax_metrics
+
+
+.. |clu.metrics| replace:: ``clu.metrics``
+.. _clu.metrics: https://github.com/google/CommonLoopUtils/blob/main/clu/metrics.py
 
 
 Adding "infinite padding"

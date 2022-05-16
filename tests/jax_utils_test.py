@@ -49,6 +49,18 @@ class PadShardUnpadTest(chex.TestCase, tf.test.TestCase):
     chex.assert_type(y.dtype, x.dtype)
     np.testing.assert_allclose(np.float64(y), np.float64(x + 10*x))
 
+  @parameterized.product(dtype=DTYPES, bs=BATCH_SIZES)
+  def test_trees(self, dtype, bs):
+    # Just tests that basic calling works without exploring caveats.
+    @partial(jax_utils.pad_shard_unpad, static_argnums=())
+    def add(a, b):
+      return a['a'] + b[0]
+
+    x = np.arange(bs, dtype=dtype)
+    y = add(dict(a=x), (10*x, ))
+    chex.assert_type(y.dtype, x.dtype)
+    np.testing.assert_allclose(np.float64(y), np.float64(x + 10*x))
+
   @parameterized.parameters(DTYPES)
   def test_min_device_batch_avoids_recompile(self, dtype):
     @partial(jax_utils.pad_shard_unpad, static_argnums=())
