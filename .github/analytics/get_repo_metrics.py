@@ -71,7 +71,7 @@ def send_query(query, query_type, cursor=None):
     cursor_ind = query.find(cursor_insertion_key) + len(cursor_insertion_key)
     query = query[:cursor_ind] + f'after:"{cursor}", ' + query[cursor_ind:]
   # Build request payload
-  payload = {'query' : ''.join(query.split('\n'))}
+  payload = {'query' : query}
   response = requests.post(endpoint, json=payload, headers=headers)
   return json.loads(response.content)
 
