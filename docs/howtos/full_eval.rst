@@ -99,7 +99,7 @@ from the computation.
     n = len(images)
     padding = np.zeros([per_host_batch_size - n, *images.shape[1:]], images.dtype)
     padded_images = np.concatenate([images, padding])
-    preds = unshard(get_preds(vs_p, shard(padded_images)))[:n]
+    preds = unshard(get_preds(variables, shard(padded_images)))[:n]
     total += n
     correct += (batch['label'] == preds.argmax(axis=-1)).sum()
 
