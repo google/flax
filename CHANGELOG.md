@@ -15,7 +15,7 @@ vNext
 -
 -
 -
--
+- Added `flax.jax_utils.ad_shard_unpad()` by @lucasb-eyer
 -
 -
 -
