@@ -4,26 +4,59 @@ query {
       totalCount
       edges {
         cursor
-        node{
+        node {
           number
           state
           title
           createdAt
-          baseRefName
-          mergeable
           author{
             login
           }
-          authorAssociation
-          mergedBy{
-            login
-          }
           mergedAt
-          reviews(states:APPROVED){
-            totalCount
+          reviews(first: 100){
+            nodes {
+              createdAt
+            }
           }
-          participants(first:100){
-            totalCount
+          timelineItems(first: 100, itemTypes: [LABELED_EVENT, ASSIGNED_EVENT, MERGED_EVENT, READY_FOR_REVIEW_EVENT, CLOSED_EVENT]) {
+            edges {
+              node {
+                __typename
+                ... on ClosedEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on LabeledEvent {
+                  label {
+                    name
+                  }
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on MergedEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on ReadyForReviewEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+                ... on AssignedEvent {
+                  actor {
+                    login
+                  }
+                  createdAt
+                }
+              }
+            }
           }
         }
       }

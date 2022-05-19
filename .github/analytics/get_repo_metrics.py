@@ -182,6 +182,51 @@ def _get_issues_features(issues):
       'issue_closed': issue['state'] == 'CLOSED',
     }
 
+def _get_pr_features(prs):
+  for pr in prs:
+    pr = pr['node']
+
+    created_at = _to_datetime(pr['createdAt'])
+    ready_for_review_at = _to_datetime(pr['createdAt'])
+    time_labeled_or_assigned = None
+    time_merged_or_closed = None
+    time_review = None
+    
+    if pr["reviews"]["nodes"]:
+      review = pr["reviews"]["nodes"][0]
+      time_review = _to_datetime(review["createdAt"])
+
+    for event in pr['timelineItems']['edges']:
+      event = event['node']
+
+      if (
+        time_labeled_or_assigned is None
+        and event['__typename'] == 'LabeledEvent'
+        and 'cla:' not in event['label']['name']
+      ):
+        time_labeled_or_assigned = _to_datetime(event['createdAt'])
+
+      if (
+        time_labeled_or_assigned is None
+        and event['__typename'] == 'AssignedEvent'
+      ):
+        time_labeled_or_assigned = _to_datetime(event['createdAt'])
+
+      if event['__typename'] in {'ClosedEvent', 'MergedEvent'}:
+        time_merged_or_closed = _to_datetime(event['createdAt'])
+
+      if event['__typename'] == 'ReadyForReviewEvent':
+        ready_for_review_at = _to_datetime(event['createdAt'])
+
+    yield {
+      'created_at': created_at,
+      'ready_for_review_at': ready_for_review_at,
+      'time_labeled_or_assigned': time_labeled_or_assigned,
+      'time_merged_or_closed': time_merged_or_closed,
+      'time_review': time_review,
+      'pr_closed': pr['state'] != 'OPEN',
+    }
+
 def _start_of_month(date: datetime) -> datetime:
   return date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
@@ -226,12 +271,17 @@ def _rolling_window(
 
   return df
 
+def _process_prs(df: pd.DataFrame) -> pd.Series:
+  return pd.Series({
+    'pr_response_time': df['pr_response_time'].dt.days.mean(),
+    'pr_resolution_time': df['pr_resolution_time'].dt.days.mean(),
+  })
+
 def _process_issues(df: pd.DataFrame) -> pd.Series:
-  series: pd.Series = df[['issue_response_time', 'issue_resolution_time']].mean().dt.days
-  series = series.copy()
-  # series["num_open_issues"] = (~df["issue_closed"]).sum()
-  # series["num_closed_issues"] = df["issue_closed"].sum()
-  return series
+  return pd.Series({
+    'issue_response_time': df['issue_response_time'].dt.days.mean(),
+    'issue_resolution_time': df['issue_resolution_time'].dt.days.mean(),
+  })
 
 #-----------------------------------------------------------------------------
 # main
@@ -255,14 +305,20 @@ def main(
 
   df_issues = _rolling_window(df_issues, _process_issues)
 
-  # TODO: Analyze PR data
-  # prs = GithubGrabber(
-  #   '.github/analytics/pr_data_query.gql',
-  #   'pullRequests',
-  #   repo_owner=repo_owner,
-  #   repo_name=repo_name,
-  # )
-  # prs.get()
+  prs = GithubGrabber(
+    '.github/analytics/pr_data_query.gql',
+    'pullRequests',
+    repo_owner=repo_owner,
+    repo_name=repo_name,
+  )
+  prs.get()
+
+  df_prs = pd.DataFrame(list(_get_pr_features(prs.raw_data)))
+  time_response = df_prs[['time_labeled_or_assigned', 'time_review']].min(axis=1)
+  df_prs['pr_response_time'] = time_response - df_prs['ready_for_review_at']
+  df_prs['pr_resolution_time'] = df_prs['time_merged_or_closed'] - df_prs['ready_for_review_at']
+
+  df_prs = _rolling_window(df_prs, _process_prs)
 
   # plot for isssue_response_time
   plt.figure()
@@ -280,6 +336,26 @@ def main(
   plt.xlabel('Date')
   plt.ylabel('Issue Resolution Time (days)')
   plt.title('Issue Resolution Time')
+  plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
+  plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+  plt.ylim(0)
+
+  # plot for pr_response_time
+  plt.figure()
+  plt.plot(df_prs['period_end'], df_prs['pr_response_time'])
+  plt.xlabel('Date')
+  plt.ylabel('Pull Request Response Time (days)')
+  plt.title('Pull Request Response Time')
+  plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
+  plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+  plt.ylim(0)
+
+  # plot for pr_resolution_time
+  plt.figure()
+  plt.plot(df_prs['period_end'], df_prs['pr_resolution_time'])
+  plt.xlabel('Date')
+  plt.ylabel('Pull Request Resolution Time (days)')
+  plt.title('Pull Request Resolution Time')
   plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
   plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
   plt.ylim(0)
