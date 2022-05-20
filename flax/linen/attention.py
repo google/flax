@@ -16,6 +16,7 @@
 
 import functools
 from typing import (Any, Callable, Optional, Tuple)
+from flax.linen.dtypes import promote_dtype
 
 from flax.linen.initializers import zeros
 from flax.linen.linear import default_kernel_init
@@ -44,7 +45,7 @@ def dot_product_attention_weights(query: Array,
                                   dropout_rng: Optional[PRNGKey] = None,
                                   dropout_rate: float = 0.,
                                   deterministic: bool = False,
-                                  dtype: Dtype = jnp.float32,
+                                  dtype: Optional[Dtype] = None,
                                   precision: PrecisionLike = None):
   """Computes dot-product attention weights given query and key.
 
@@ -70,13 +71,16 @@ def dot_product_attention_weights(query: Array,
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
     deterministic: bool, deterministic or not (to apply dropout)
-    dtype: the dtype of the computation (default: float32)
+    dtype: the dtype of the computation (default: infer from inputs and params)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
 
   Returns:
     Output of shape `[batch..., num_heads, q_length, kv_length]`.
   """
+  query, key = promote_dtype(query, key, dtype=dtype)
+  dtype = query.dtype
+
   assert query.ndim == key.ndim, 'q, k must have same rank.'
   assert query.shape[:-3] == key.shape[:-3], (
       'q, k batch dims must match.')
@@ -111,7 +115,7 @@ def dot_product_attention_weights(query: Array,
       keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
     else:
       keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
-    multiplier = (keep.astype(attn_weights.dtype) /
+    multiplier = (keep.astype(dtype) /
                   jnp.asarray(keep_prob, dtype=dtype))
     attn_weights = attn_weights * multiplier
 
@@ -127,7 +131,7 @@ def dot_product_attention(query: Array,
                           dropout_rng: Optional[PRNGKey] = None,
                           dropout_rate: float = 0.,
                           deterministic: bool = False,
-                          dtype: Dtype = jnp.float32,
+                          dtype: Optional[Dtype] = None,
                           precision: PrecisionLike = None):
   """Computes dot-product attention given query, key, and value.
 
@@ -157,13 +161,15 @@ def dot_product_attention(query: Array,
     dropout_rng: JAX PRNGKey: to be used for dropout
     dropout_rate: dropout rate
     deterministic: bool, deterministic or not (to apply dropout)
-    dtype: the dtype of the computation (default: float32)
+    dtype: the dtype of the computation (default: infer from inputs)
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
 
   Returns:
     Output of shape `[batch..., q_length, num_heads, v_depth_per_head]`.
   """
+  query, key, value = promote_dtype(query, key, value, dtype=dtype)
+  dtype = query.dtype
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert query.shape[:-3] == key.shape[:-3] == value.shape[:-3], (
       'q, k, v batch dims must match.')
@@ -173,8 +179,8 @@ def dot_product_attention(query: Array,
 
   # compute attention weights
   attn_weights = dot_product_attention_weights(
-    query, key, bias, mask, broadcast_dropout, dropout_rng, dropout_rate,
-    deterministic, dtype, precision)
+      query, key, bias, mask, broadcast_dropout, dropout_rng, dropout_rate,
+      deterministic, dtype, precision)
 
   # return weighted sum over values for each query position
   return jnp.einsum('...hqk,...khd->...qhd', attn_weights, value,
@@ -187,8 +193,9 @@ class MultiHeadDotProductAttention(Module):
     Attributes:
       num_heads: number of attention heads. Features (i.e. inputs_q.shape[-1])
         should be divisible by the number of heads.
-      dtype: the dtype of the computation (default: float32)
-      param_dtype: the dtype passed to parameter initializers (default: float32).
+      dtype: the dtype of the computation
+        (default: infer from inputs and params)
+      param_dtype: the dtype passed to parameter initializers (default: float32)
       qkv_features: dimension of the key, query, and value.
       out_features: dimension of the last projection
       broadcast_dropout: bool: use a broadcasted dropout along batch dims.
@@ -207,7 +214,7 @@ class MultiHeadDotProductAttention(Module):
       decode: whether to prepare and use an autoregressive cache.
   """
   num_heads: int
-  dtype: Dtype = jnp.float32
+  dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   qkv_features: Optional[int] = None
   out_features: Optional[int] = None
@@ -255,14 +262,14 @@ class MultiHeadDotProductAttention(Module):
     head_dim = qkv_features // self.num_heads
 
     dense = functools.partial(DenseGeneral,
-                    axis=-1,
-                    dtype=self.dtype,
-                    param_dtype=self.param_dtype,
-                    features=(self.num_heads, head_dim),
-                    kernel_init=self.kernel_init,
-                    bias_init=self.bias_init,
-                    use_bias=self.use_bias,
-                    precision=self.precision)
+                              axis=-1,
+                              dtype=self.dtype,
+                              param_dtype=self.param_dtype,
+                              features=(self.num_heads, head_dim),
+                              kernel_init=self.kernel_init,
+                              bias_init=self.bias_init,
+                              use_bias=self.use_bias,
+                              precision=self.precision)
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
     query, key, value = (dense(name='query')(inputs_q),
@@ -345,7 +352,7 @@ class SelfAttention(MultiHeadDotProductAttention):
 
   @compact
   def __call__(self, inputs_q: Array, mask: Optional[Array] = None,
-               deterministic: Optional[bool] = None):   
+               deterministic: Optional[bool] = None):
     """Applies multi-head dot product self-attention on the input data.
 
     Projects the inputs into multi-headed query, key, and value vectors,
@@ -365,7 +372,8 @@ class SelfAttention(MultiHeadDotProductAttention):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    return super().__call__(inputs_q, inputs_q, mask, deterministic=deterministic)
+    return super().__call__(inputs_q, inputs_q, mask,
+                            deterministic=deterministic)
 
 
 # mask-making utility functions

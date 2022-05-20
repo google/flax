@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.deprecated.nn.attention."""
+"""Tests for flax.linen.attention."""
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -46,6 +46,21 @@ class AttentionTest(parameterized.TestCase):
     )
     y, _ = sa_module.init_with_output(rng, x)
     self.assertEqual(y.shape, x.shape)
+    self.assertEqual(y.dtype, jnp.float32)
+
+  def test_dtype_infer(self):
+    rng = random.PRNGKey(0)
+    x = jnp.ones((4, 6, 5), jnp.complex64)
+    sa_module = nn.SelfAttention(
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        deterministic=False,
+    )
+    y, _ = sa_module.init_with_output(rng, x)
+    self.assertEqual(y.shape, x.shape)
+    self.assertEqual(y.dtype, jnp.complex64)
 
   def test_multihead_encoder_decoder_attention(self):
     rng = random.PRNGKey(0)
