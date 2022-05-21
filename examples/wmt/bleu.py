@@ -47,7 +47,7 @@ import numpy as np
 import six
 
 
-class UnicodeRegex(object):
+class UnicodeRegex:
   """Ad-hoc hack to recognize all punctuation and symbols."""
 
   def __init__(self):
@@ -58,9 +58,9 @@ class UnicodeRegex(object):
 
   def property_chars(self, prefix):
     return "".join(
-        six.unichr(x)
+        chr(x)
         for x in range(sys.maxunicode)
-        if unicodedata.category(six.unichr(x)).startswith(prefix))
+        if unicodedata.category(chr(x)).startswith(prefix))
 
 
 uregex = UnicodeRegex()
@@ -144,8 +144,8 @@ def compute_bleu_matches(reference_corpus,
     ref_ngram_counts = _get_ngrams(references, max_order)
     translation_ngram_counts = _get_ngrams(translations, max_order)
 
-    overlap = dict((ngram, min(count, translation_ngram_counts[ngram]))
-                   for ngram, count in ref_ngram_counts.items())
+    overlap = {ngram: min(count, translation_ngram_counts[ngram])
+                   for ngram, count in ref_ngram_counts.items()}
 
     for ngram in overlap:
       matches_by_order[len(ngram) - 1] += overlap[ngram]

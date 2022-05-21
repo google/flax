@@ -114,7 +114,7 @@ class Benchmark(absltest.TestCase):
 
   def __init__(self, *args, **kwargs):
     """Wrap test methods in a try-except decorator to delay exceptions."""
-    super(Benchmark, self).__init__(*args, **kwargs)
+    super().__init__(*args, **kwargs)
     for func_name in dir(self):
       if func_name.startswith('assert'):
         func = getattr(self, func_name)
@@ -137,7 +137,7 @@ class Benchmark(absltest.TestCase):
 
   def setUp(self):
     """Setup ran before each test."""
-    super(Benchmark, self).setUp()
+    super().setUp()
     self._reported_name = None
     self._reported_wall_time = None
     self._reported_metrics = {}
@@ -146,7 +146,7 @@ class Benchmark(absltest.TestCase):
 
   def tearDown(self):
     """Tear down after each test."""
-    super(Benchmark, self).tearDown()
+    super().tearDown()
     self._report_benchmark_results()
     for message in self._outstanding_fails:
       raise self.failureException(message)
@@ -228,7 +228,7 @@ class Benchmark(absltest.TestCase):
 
     # Prefix the name with the class name.
     class_name = type(calling_class).__name__
-    name = '%s.%s' % (class_name, name)
+    name = '{}.{}'.format(class_name, name)
     return name
 
   def _update_reported_name(self):

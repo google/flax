@@ -172,7 +172,7 @@ def train_step(state,
   # like a normal, unpacked sequence example.
   train_keys = ["inputs", "inputs_position", "inputs_segmentation"]
   (inputs, inputs_positions, inputs_segmentation
-   ) = [batch.get(k, None) for k in train_keys]
+   ) = (batch.get(k, None) for k in train_keys)
 
   weights = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)
 

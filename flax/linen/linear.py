@@ -44,7 +44,7 @@ default_kernel_init = lecun_normal()
 
 def _normalize_axes(axes: Tuple[int, ...], ndim: int) -> Tuple[int, ...]:
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
-  return tuple(sorted([ax if ax >= 0 else ndim + ax for ax in axes]))
+  return tuple(sorted(ax if ax >= 0 else ndim + ax for ax in axes))
 
 
 def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
@@ -113,12 +113,12 @@ class DenseGeneral(Module):
                                 for _ in range(size_batch_dims)], axis=0)
       return jnp.reshape(kernel, shape)
 
-    batch_shape = tuple([inputs.shape[ax] for ax in batch_dims])
+    batch_shape = tuple(inputs.shape[ax] for ax in batch_dims)
     # batch and non-contracting dims of input with 1s for batch dims.
     expanded_batch_shape = tuple(
         inputs.shape[ax] if ax in batch_dims else 1
         for ax in range(inputs.ndim) if ax not in axis)
-    kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
+    kernel_shape = tuple(inputs.shape[ax] for ax in axis) + features
     kernel = self.param('kernel', kernel_init_wrap, batch_shape + kernel_shape,
                         self.param_dtype)
 

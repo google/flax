@@ -33,8 +33,7 @@ def get_tokenized_sequences(
   dataset = dataset.map(
       lambda example: tokenizer.tokenize(example[input_key]),
       num_parallel_calls=tf.data.experimental.AUTOTUNE)
-  for sentence in tfds.as_numpy(dataset):
-    yield sentence
+  yield from tfds.as_numpy(dataset)
 
 
 if __name__ == '__main__':

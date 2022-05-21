@@ -195,7 +195,7 @@ def train_step(optimizer, batch, learning_rate_fn, model, dropout_rng=None):
   """Perform a single training step."""
 
   train_keys = ['inputs', 'targets']
-  (inputs, targets) = [batch.get(k, None) for k in train_keys]
+  (inputs, targets) = (batch.get(k, None) for k in train_keys)
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
   dropout_rng, new_dropout_rng = random.split(dropout_rng)

@@ -69,7 +69,7 @@ def create_vocabs(filename, max_num_forms=100000):
   with tf.io.gfile.GFile(filename, 'rb') as f:
     for line in codecs.getreader('utf-8')(f):
       line = line.strip()
-      split = line.split(u'\t')
+      split = line.split('\t')
       if not line.startswith('#') and split[0]:
         form_counter[split[CoNLLAttributes.FORM.value]] += 1
         xpos_counter[split[CoNLLAttributes.XPOS.value]] += 1

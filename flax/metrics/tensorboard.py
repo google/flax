@@ -53,7 +53,7 @@ def _flatten_dict(input_dict, parent_key='', sep='.'):
   return dict(items)
 
 
-class SummaryWriter(object):
+class SummaryWriter:
   """Saves data in event and summary protos for tensorboard."""
 
   def __init__(self, log_dir):

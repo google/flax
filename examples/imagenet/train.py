@@ -114,9 +114,9 @@ def train_step(state, batch, learning_rate_fn):
     loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_leaves(params)
     weight_decay = 0.0001
-    weight_l2 = sum([jnp.sum(x ** 2)
+    weight_l2 = sum(jnp.sum(x ** 2)
                      for x in weight_penalty_params
-                     if x.ndim > 1])
+                     if x.ndim > 1)
     weight_penalty = weight_decay * 0.5 * weight_l2
     loss = loss + weight_penalty
     return loss, (new_model_state, logits)

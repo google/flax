@@ -21,7 +21,7 @@ from setuptools import setup
 here = os.path.abspath(os.path.dirname(__file__))
 try:
   README = open(os.path.join(here, "README.md"), encoding="utf-8").read()
-except IOError:
+except OSError:
   README = ""
 
 install_requires = [
