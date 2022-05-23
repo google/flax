@@ -264,6 +264,8 @@ class _Conv(Module):
     feature_group_count: integer, default 1. If specified divides the input
       features into groups.
     use_bias: whether to add a bias to the output (default: True).
+    mask: Optional mask for the weights during masked convolution. The mask must
+          be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
@@ -279,6 +281,7 @@ class _Conv(Module):
   kernel_dilation: Union[None, int, Sequence[int]] = 1
   feature_group_count: int = 1
   use_bias: bool = True
+  mask: Optional[Array] = None
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
@@ -386,8 +389,15 @@ class _Conv(Module):
       kernel_shape = conv_output_shape[1:-1] + (np.prod(kernel_size) *
                                                 in_features, self.features)
 
+    if self.mask is not None and self.mask.shape != kernel_shape:
+      raise ValueError('Mask needs to have the same shape as weights. '
+                       f'Shapes are: {self.mask.shape}, {kernel_shape}')
+
     kernel = self.param('kernel', self.kernel_init, kernel_shape,
                         self.param_dtype)
+
+    if self.mask is not None:
+      kernel *= self.mask
 
     if self.use_bias:
       if self.shared_weights:
@@ -472,6 +482,8 @@ class ConvTranspose(Module):
       kernel. Convolution with kernel dilation is also known as 'atrous
       convolution'.
     use_bias: whether to add a bias to the output (default: True).
+    mask: Optional mask for the weights during masked convolution. The mask must
+          be the same shape as the convolution weight matrix.
     dtype: the dtype of the computation (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     precision: numerical precision of the computation see `jax.lax.Precision`
@@ -485,6 +497,7 @@ class ConvTranspose(Module):
   padding: PaddingLike = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
+  mask: Optional[Array] = None
   dtype: Dtype = None
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
@@ -523,8 +536,16 @@ class ConvTranspose(Module):
 
     in_features = jnp.shape(inputs)[-1]
     kernel_shape = kernel_size + (in_features, self.features)
+
+    if self.mask is not None and self.mask.shape != kernel_shape:
+      raise ValueError('Mask needs to have the same shape as weights. '
+                       f'Shapes are: {self.mask.shape}, {kernel_shape}')
+
     kernel = self.param('kernel', self.kernel_init, kernel_shape,
                         self.param_dtype)
+
+    if self.mask is not None:
+      kernel *= self.mask
 
     padding_lax = canonicalize_padding(self.padding, len(kernel_size))
     if padding_lax == 'CIRCULAR':
