@@ -17,6 +17,7 @@ import dataclasses
 import io
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Union
 
+import flax
 from flax.core.scope import CollectionFilter, DenyList
 import jax
 import rich.console
