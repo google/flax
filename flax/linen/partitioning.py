@@ -30,6 +30,7 @@ logical axis metadata to the underlying Lifted transformations.
 
 import collections
 import contextlib
+import enum
 import functools
 import re
 import threading
@@ -48,14 +49,13 @@ import jax
 from jax.experimental import maps
 from jax.experimental import pjit
 
-
 # Real types and dummy aliases for documentation
 LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str], None]]]
 Array = Any  # pylint: disable=invalid-name
 ArrayPytree = Any  # pylint: disable=invalid-name
+LogicalPartitionSpec = Any  # pylint: disable=invalid-name
 LogicalPartitionSpecPytree = Any  # pylint: disable=invalid-name
 PartitionSpecPytree = Any  # pylint: disable=invalid-name
-
 
 # Dynamic Axis Mapping Context
 # ------------------------------------------------------------------------------
@@ -112,6 +112,7 @@ class _UnassignedAxis:
   def __bool__(self):
     return False
 
+
 _unassigned_axis = _UnassignedAxis()
 
 
@@ -124,9 +125,39 @@ def _mesh_assignment_free(new_assignment, existing_assignments):
   return True
 
 
-def logical_to_mesh_axes(array_dim_names: Optional[Sequence[Optional[str]]],
-                         rules: Optional[LogicalRules] = None,
-                         ) -> pjit.PartitionSpec:
+def _logical_to_mesh_axes(
+    array_dim_names: Optional[Sequence[Optional[str]]],
+    rules: Optional[LogicalRules] = None,
+) -> Optional[List[Union[_UnassignedAxis, None, str, Tuple[str]]]]:
+  """Same as logical_to_mesh_axes, but doesn't fill in _unassigned_axis."""
+  if array_dim_names is None:
+    return None
+  if rules is None:
+    rules = _axis_rules.rules
+  axis_name_counts = collections.Counter(array_dim_names)
+  dups = tuple(
+      k for k, v in axis_name_counts.items() if v > 1 and k is not None)
+  if dups:
+    raise ValueError(
+        f'Unsupported: Dimensions {dups} occur more than once in array names.')
+  if not isinstance(rules, (tuple, list)):
+    raise ValueError('Unknown axis rule specification type.')
+  # We assign mesh axes using a priority based ruleset over logical axis names.
+  result: List[Union[_UnassignedAxis, None, str, Tuple[str]]]
+  result = [_unassigned_axis] * len(array_dim_names)
+  for rule_model_name, rule_mesh_names in rules:
+    if rule_model_name in array_dim_names:
+      pos = array_dim_names.index(rule_model_name)
+      if (_mesh_assignment_free(rule_mesh_names, result) and
+          result[pos] == _unassigned_axis):
+        result[pos] = rule_mesh_names
+  return result
+
+
+def logical_to_mesh_axes(
+    array_dim_names: Optional[Sequence[Optional[str]]],
+    rules: Optional[LogicalRules] = None,
+) -> pjit.PartitionSpec:
   """Compute layout for an array.
 
   The rules are in order of precedence, and consist of pairs:
@@ -159,27 +190,9 @@ def logical_to_mesh_axes(array_dim_names: Optional[Sequence[Optional[str]]],
   Returns:
     PartitionSpec for the parameter.
   """
-  if array_dim_names is None:
+  result = _logical_to_mesh_axes(array_dim_names, rules)
+  if result is None:
     return None
-  if rules is None:
-    rules = _axis_rules.rules
-  axis_name_counts = collections.Counter(array_dim_names)
-  dups = tuple(k for k, v in axis_name_counts.items()
-               if v > 1 and k is not None)
-  if dups:
-    raise ValueError(
-        f'Unsupported: Dimensions {dups} occur more than once in array names.')
-  if not isinstance(rules, (tuple, list)):
-    raise ValueError('Unknown axis rule specification type.')
-  # We assign mesh axes using a priority based ruleset over logical axis names.
-  result: List[Union[_UnassignedAxis, None, str, Tuple[str]]]
-  result = [_unassigned_axis] * len(array_dim_names)
-  for rule_model_name, rule_mesh_names in rules:
-    if rule_model_name in array_dim_names:
-      pos = array_dim_names.index(rule_model_name)
-      if (_mesh_assignment_free(rule_mesh_names, result) and
-          result[pos] == _unassigned_axis):
-        result[pos] = rule_mesh_names
   # We default to None - ie unsharded along the dimension.
   result = [None if x is _unassigned_axis else x for x in result]
   return pjit.PartitionSpec(*result)
@@ -191,14 +204,39 @@ def _global_mesh_defined() -> bool:
   return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
-def _with_sharding_constraint(
-    x: ArrayPytree,
-    axis_resources: PartitionSpecPytree):
+class RulesFallback(enum.Enum):
+  """How a sharding constraint should behave when no matching rule is found."""
+  AXIS_IS_UNSHARDED = 'axis_is_unsharded'
+  RAISE_ERROR = 'raise_error'
+  NO_CONSTRAINT = 'no_constraint'
+
+
+def _with_sharding_constraint(x: Array, axis_resources: pjit.PartitionSpec):
   """Wrapper for pjit with_sharding_constraint, no-op on cpu or outside pjit."""
   if jax.devices()[0].platform == 'cpu' or not _global_mesh_defined():
     return x
   else:
     return pjit.with_sharding_constraint(x, axis_resources)
+
+
+def _with_sharding_constraint_one_fallback(
+    axis_resources: LogicalPartitionSpec,
+    x: Array,
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
+  """Either imposes a sharding constraint or applies fallback."""
+  mesh_axes = _logical_to_mesh_axes(axis_resources)
+  if mesh_axes is None:
+    return _with_sharding_constraint(x, None)
+
+  if fallback == RulesFallback.AXIS_IS_UNSHARDED:
+    mesh_axes = [None if x is _unassigned_axis else x for x in mesh_axes]
+  else:
+    if any(x is _unassigned_axis for x in mesh_axes):
+      if fallback == RulesFallback.RAISE_ERROR:
+        raise ValueError(f'Axis names {axis_resources} did not match a rule')
+      else:
+        return x
+  return _with_sharding_constraint(x, pjit.PartitionSpec(*mesh_axes))
 
 
 def _is_logical_spec(x):
@@ -208,15 +246,19 @@ def _is_logical_spec(x):
 
 def with_sharding_constraint(
     x: ArrayPytree,
-    logical_axis_resources: LogicalPartitionSpecPytree):
+    logical_axis_resources: LogicalPartitionSpecPytree,
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
   """Version of pjit's with_sharding_constraint that uses logical axis names."""
   # If no axis binding is set, this is a no-op.
   if not _axis_rules.rules or logical_axis_resources is None:
     return x
   # Translate logical names to mesh assignments.
-  axis_resources = jax.tree_map(logical_to_mesh_axes, logical_axis_resources,
-                                is_leaf=_is_logical_spec)
-  return _with_sharding_constraint(x, axis_resources)
+  return jax.tree_map(
+      functools.partial(
+          _with_sharding_constraint_one_fallback, fallback=fallback),
+      logical_axis_resources,
+      x,
+      is_leaf=_is_logical_spec)
 
 
 # Annotated parameters and Module axis metadata handling.

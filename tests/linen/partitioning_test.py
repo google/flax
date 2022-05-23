@@ -134,6 +134,28 @@ class PartitioningTest(parameterized.TestCase):
       _ = partitioning.with_sharding_constraint(arr, axes)
       wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', 'model'))
 
+  @mock.patch('flax.linen.partitioning._with_sharding_constraint')
+  def test_with_sharding_constraint_fallback(self, wsc_fn):
+    arr = jnp.ones((2, 2))
+    with partitioning.axis_rules(AXIS_RULES_1):
+      _ = partitioning.with_sharding_constraint(arr, ('foo', 'not_recognized'))
+      wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', None))
+      wsc_fn.reset_mock()
+      _ = partitioning.with_sharding_constraint(
+          arr, ('foo', 'not_recognized'),
+          fallback=partitioning.RulesFallback.AXIS_IS_UNSHARDED)
+      wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', None))
+      wsc_fn.reset_mock()
+      with self.assertRaises(ValueError):
+        _ = partitioning.with_sharding_constraint(
+            arr, ('foo', 'not_recognized'),
+            fallback=partitioning.RulesFallback.RAISE_ERROR)
+      wsc_fn.assert_not_called()
+      _ = partitioning.with_sharding_constraint(
+          arr, ('foo', 'not_recognized'),
+          fallback=partitioning.RulesFallback.NO_CONSTRAINT)
+      wsc_fn.assert_not_called()
+
   @parameterized.parameters(dict(axes_spec=None), dict(axes_spec=()))
   def test_param_with_axes_no_axes(self, axes_spec):
     class ParamTest(nn.Module):
