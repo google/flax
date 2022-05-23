@@ -11,7 +11,7 @@ vNext
 -
 -
 -
--
+- Add `tabulate` functionality to Modules with rich tabular output.
 -
 -
 -
@@ -55,10 +55,6 @@ Bug fixes:
 - Handle rate==1.0 edgecase in Dropout.
 - Fix bug where Linen Module state is reused.
 - Bug fixes and generalizations of nn.partitioning API.
-
-Breaking changes:
-- 
-
 
 0.4.1
 -----

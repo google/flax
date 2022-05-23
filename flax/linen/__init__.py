@@ -116,4 +116,5 @@ from .transforms import (
   while_loop as while_loop,
   cond as cond
 )
+from .summary import tabulate
 # pylint: enable=g-multiple-import

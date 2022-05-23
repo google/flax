@@ -12,7 +12,7 @@ Module
 ------------------------
 
 .. autoclass:: Module
-   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, sow, variables, Variable, __setattr__
+   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, sow, variables, Variable, __setattr__, tabulate
 
 Init/Apply
 ------------------------
@@ -55,6 +55,18 @@ Profiling
     enable_named_call
     disable_named_call
     override_named_call
+
+
+Inspection
+----------------------
+
+.. automodule:: flax.linen
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    tabulate
 
 
 Transformations
