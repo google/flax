@@ -20,23 +20,24 @@ import functools
 import inspect
 import threading
 import typing
-from typing import (Any, Callable, Dict, Iterable, List, Optional, Sequence,
-                    Set, Tuple, Type, TypeVar, Union, overload)
-from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 import weakref
+from typing import (Any, Callable, Dict, Iterable, List, Optional,
+                    Sequence, Set, Tuple, Type, TypeVar, Union, overload)
 
-from flax import config
-from flax import core
-from flax import errors
-from flax import serialization
-from flax import traceback_util
-from flax import traverse_util
+import jax
+import numpy as np
+from typing_extensions import \
+    dataclass_transform  # pytype: disable=not-supported-yet
+
+from flax import (config, core, errors, serialization, traceback_util,
+                  traverse_util)
 from flax.core import Scope
 from flax.core.frozen_dict import FrozenDict
-from flax.core.scope import (CollectionFilter, DenyList, FrozenVariableDict,  # pylint: disable=g-multiple-import
-                             Variable, VariableDict, union_filters)
+from flax.core.scope import (  # pylint: disable=g-multiple-import
+    CollectionFilter, DenyList, FrozenVariableDict, Variable, VariableDict,
+    union_filters)
 from flax.linen import summary 
-import jax
+
 
 
 traceback_util.register_exclusion(__file__)

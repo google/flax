@@ -4,6 +4,7 @@
 - Start Date: 2022-01-11
 - FLIP PR: [#1776](https://github.com/google/flax/pull/1776)
 - FLIP Issue: [#1777](https://github.com/google/flax/issues/1777)
+- Status: Implemented
 
 
 ## Summary

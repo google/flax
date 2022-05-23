@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.deprecated.nn."""
+"""Tests for flax.linen."""
 
 from absl.testing import absltest
 
@@ -289,7 +289,6 @@ class RecurrentTest(absltest.TestCase):
     self.assertEqual(carry0.shape, (2, 4))
     gru = nn.GRUCell()
     (carry, y), initial_params = gru.init_with_output(key2, carry0, x)
-    #gru = nn.Model(nn.GRUCell, initial_params)
     self.assertEqual(carry.shape, (2, 4))
     np.testing.assert_allclose(y, carry)
     param_shapes = jax.tree_map(np.shape, initial_params['params'])
@@ -301,6 +300,17 @@ class RecurrentTest(absltest.TestCase):
         'hz': {'kernel': (4, 4)},
         'hn': {'kernel': (4, 4), 'bias': (4,)},
     })
+
+  def test_complex_input_gru(self):
+    rng = random.PRNGKey(0)
+    key1, key2 = random.split(rng)
+    x = random.normal(key1, (2, 3), dtype=jnp.complex64)
+    carry0 = nn.GRUCell.initialize_carry(rng, (2,), 4)
+    self.assertEqual(carry0.shape, (2, 4))
+    gru = nn.GRUCell()
+    (carry, y), _ = gru.init_with_output(key2, carry0, x)
+    self.assertEqual(carry.dtype, jnp.complex64)
+    self.assertEqual(y.dtype, jnp.complex64)
 
   def test_convlstm(self):
     rng = random.PRNGKey(0)

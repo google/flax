@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for flax.deprecated.nn.linear."""
+"""Tests for flax.linen.linear."""
 
 import functools
 from multiprocessing.sharedctypes import Value
@@ -45,6 +45,7 @@ class LinearTest(parameterized.TestCase):
     )
     y, _ = dense_module.init_with_output(rng, x)
     self.assertEqual(y.shape, (1, 4))
+    self.assertEqual(y.dtype, jnp.float32)
     np.testing.assert_allclose(y, np.full((1, 4), 4.))
 
   def test_dense_extra_batch_dims(self):
@@ -162,11 +163,36 @@ class LinearTest(parameterized.TestCase):
     target = np.einsum(einsum_expr, x, initial_params['params']['kernel']) + 1.
     np.testing.assert_allclose(y, target, atol=1e-6)
 
-  def test_conv(self):
+  def test_complex_params_dense(self):
+    dense = nn.Dense(
+      features=2,
+      param_dtype=jnp.complex64)
+    x = jnp.ones((1, 2), jnp.float32)
+    variables = dense.init(random.PRNGKey(0), x)
+    self.assertEqual(variables['params']['kernel'].dtype, jnp.complex64)
+    self.assertEqual(variables['params']['bias'].dtype, jnp.complex64)
+    y = dense.apply(variables, x)
+    self.assertEqual(y.dtype, jnp.complex64)
+
+  def test_complex_input_dense(self):
+    dense = nn.Dense(
+      features=2)
+    x = jnp.ones((1, 2), jnp.complex64)
+    variables = dense.init(random.PRNGKey(0), x)
+    self.assertEqual(variables['params']['kernel'].dtype, jnp.float32)
+    self.assertEqual(variables['params']['bias'].dtype, jnp.float32)
+    y = dense.apply(variables, x)
+    self.assertEqual(y.dtype, jnp.complex64)
+
+
+  @parameterized.product(
+      use_bias=(True, False))
+  def test_conv(self, use_bias):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_module = nn.Conv(
         features=4,
+        use_bias=use_bias,
         kernel_size=(3,),
         padding='VALID',
         kernel_init=initializers.ones,
@@ -174,7 +200,9 @@ class LinearTest(parameterized.TestCase):
     )
     y, initial_params = conv_module.init_with_output(rng, x)
     self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
-    np.testing.assert_allclose(y, np.full((1, 6, 4), 10.))
+    expected = 10. if use_bias else 9.
+    np.testing.assert_allclose(y, np.full((1, 6, 4), expected))
+
 
   def test_conv_local(self):
     rng = dict(params=random.PRNGKey(0))
@@ -544,11 +572,15 @@ class LinearTest(parameterized.TestCase):
     correct_ans = np.expand_dims(correct_ans, (0, 3))
     np.testing.assert_allclose(y, correct_ans)
 
-  def test_conv_transpose(self):
+  @parameterized.product(
+      use_bias=(True, False),
+  )
+  def test_conv_transpose(self, use_bias):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
+        use_bias=use_bias,
         kernel_size=(3,),
         padding='VALID',
         kernel_init=initializers.ones,
@@ -566,6 +598,8 @@ class LinearTest(parameterized.TestCase):
                              [10., 10., 10., 10.],
                              [ 7.,  7.,  7.,  7.],
                              [ 4.,  4.,  4.,  4.]]])
+    if not use_bias:
+      correct_ans -= 1.
     np.testing.assert_allclose(y, correct_ans)
 
   def test_single_input_conv_transpose(self):

@@ -11,20 +11,35 @@ vNext
 -
 -
 -
+- Add `tabulate` functionality to Modules with rich tabular output.
 -
 -
 -
 -
+-
+-
+-
+-
+-
+-
+-
+-
+-
+
+0.5.0
+-----
 - Added `flax.jax_utils.ad_shard_unpad()` by @lucasb-eyer
--
--
--
--
--
--
--
--
--
+- Implemented [default dtype FLIP](https://github.com/google/flax/blob/main/docs/flip/1777-default-dtype.md).
+  This means the default dtype is now inferred from inputs and params rather than being hard-coded to float32.
+  This is especially useful for dealing with complex numbers because the standard Modules will no longer truncate
+  complex numbers to their real component by default. Instead the complex dtype is preserved by default.
+
+
+Bug fixes:
+- Fix support for JAX's experimental_name_stack.
+
+Breaking changes:
+- In rare cases the dtype of a layer can change due to  [default dtype FLIP](https://github.com/google/flax/blob/main/docs/flip/1777-default-dtype.md). See the "Backward compatibility" section of the proposal for more information.
 
 0.4.2
 -----
@@ -40,10 +55,6 @@ Bug fixes:
 - Handle rate==1.0 edgecase in Dropout.
 - Fix bug where Linen Module state is reused.
 - Bug fixes and generalizations of nn.partitioning API.
-
-Breaking changes:
-- 
-
 
 0.4.1
 -----
