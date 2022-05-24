@@ -180,7 +180,7 @@ def train_step(state,
       "inputs_segmentation", "targets_segmentation"
   ]
   (inputs, targets, inputs_positions, targets_positions, inputs_segmentation,
-   targets_segmentation) = [batch.get(k, None) for k in train_keys]
+   targets_segmentation) = (batch.get(k, None) for k in train_keys)
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
 

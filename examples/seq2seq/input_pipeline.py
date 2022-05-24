@@ -28,10 +28,10 @@ class CharacterTable:
 
   def __init__(self, chars: str, max_len_query_digit: int = 3) -> None:
     self._chars = sorted(set(chars))
-    self._char_indices = dict(
-        (ch, idx + 2) for idx, ch in enumerate(self._chars))
-    self._indices_char = dict(
-        (idx + 2, ch) for idx, ch in enumerate(self._chars))
+    self._char_indices = {
+        ch: idx + 2 for idx, ch in enumerate(self._chars)}
+    self._indices_char = {
+        idx + 2: ch for idx, ch in enumerate(self._chars)}
     self._indices_char[self.pad_id] = '_'
     # Maximum length of a single input digit.
     self._max_len_query_digit = max_len_query_digit
@@ -121,7 +121,7 @@ class CharacterTable:
       max_digit = pow(10, self._max_len_query_digit) - 1
       # TODO(marcvanzee): Use jax.random here.
       key = tuple(sorted((random.randint(0, 99), random.randint(0, max_digit))))
-      inputs = '{}+{}'.format(key[0], key[1])
+      inputs = f'{key[0]}+{key[1]}'
       # Preprend output by the decoder's start token.
       outputs = '=' + str(key[0] + key[1])
       yield (inputs, outputs)

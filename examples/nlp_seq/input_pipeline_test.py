@@ -29,7 +29,7 @@ tf.enable_v2_behavior()
 jax.config.parse_flags_with_absl()
 
 
-CONLL_DATA = u"""1\tThey\tthey\tPRON\tPRP\tCase=Nom|Number=Plur\t2\tnsubj
+CONLL_DATA = """1\tThey\tthey\tPRON\tPRP\tCase=Nom|Number=Plur\t2\tnsubj
 2\tbuy\tbuy\t VERB\tVBP\tNumber=Plur|PTense=Pres\t0\troot
 3\tbooks\tbook\tNOUN\tNNS\tNumber=Plur\t2\tobj
 4\t.\t.\tPUNCT\t.\t_\t2\tpunct
@@ -46,7 +46,7 @@ CONLL_DATA = u"""1\tThey\tthey\tPRON\tPRP\tCase=Nom|Number=Plur\t2\tnsubj
 class InputPipelineTest(absltest.TestCase):
 
   def setUp(self):
-    super(InputPipelineTest, self).setUp()
+    super().setUp()
     self.test_tmpdir = self.create_tempdir()
 
     # Write a sample corpus.

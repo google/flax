@@ -257,7 +257,7 @@ def _np_convert_in_place(d):
   return d
 
 
-_tuple_to_dict = lambda tpl: dict([(str(x), y) for x, y in enumerate(tpl)])
+_tuple_to_dict = lambda tpl: {str(x): y for x, y in enumerate(tpl)}
 _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
 
 

@@ -29,7 +29,7 @@ default_kernel_init = initializers.lecun_normal()
 
 def _normalize_axes(axes, ndim):
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
-  return tuple([ax if ax >= 0 else ndim + ax for ax in axes])
+  return tuple(ax if ax >= 0 else ndim + ax for ax in axes)
 
 
 def dense_general(
@@ -89,8 +89,8 @@ def dense_general(
                               for _ in range(size_batch_dims)], axis=0)
     return jnp.reshape(kernel, shape)
 
-  batch_shape = tuple([inputs.shape[ax] for ax in batch_dims])
-  kernel_shape = tuple([inputs.shape[ax] for ax in axis]) + features
+  batch_shape = tuple(inputs.shape[ax] for ax in batch_dims)
+  kernel_shape = tuple(inputs.shape[ax] for ax in axis) + features
   kernel = scope.param('kernel', kernel_init_wrap, batch_shape + kernel_shape)
   kernel = jnp.asarray(kernel, dtype)
 

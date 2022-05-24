@@ -42,7 +42,7 @@ def save_image(ndarray, fp, nrow=8, padding=2, pad_value=0.0, format=None):
   """
     if not (isinstance(ndarray, jnp.ndarray) or
         (isinstance(ndarray, list) and all(isinstance(t, jnp.ndarray) for t in ndarray))):
-        raise TypeError('array_like of tensors expected, got {}'.format(type(ndarray)))
+        raise TypeError(f'array_like of tensors expected, got {type(ndarray)}')
 
     ndarray = jnp.asarray(ndarray)
 

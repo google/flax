@@ -35,7 +35,7 @@ from gym.spaces.box import Box
 import numpy as np
 
 
-class AtariPreprocessing(object):
+class AtariPreprocessing:
   """A class implementing image preprocessing for Atari 2600 agents.
   Specifically, this provides the following subset from the JAIR paper
   (Bellemare et al., 2013) and Nature DQN paper (Mnih et al., 2015):
