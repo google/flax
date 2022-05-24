@@ -269,6 +269,35 @@ class PartitioningTest(parameterized.TestCase):
     self.assertEqual(logical_axis_names,
                      {'foo': pjit.PartitionSpec('foo', 'bar')})
 
+  @mock.patch('flax.linen.partitioning._with_sharding_constraint')
+  def test_variable_with_axes_fallback(self, wsc_fn):
+    class VarTest(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        foo = partitioning.variable_with_axes(
+            'test', 'foo', jnp.zeros, (2, 2), x.dtype, axes=('foo', 'bar'),
+            fallback=partitioning.RulesFallback.NO_CONSTRAINT)
+        return x + foo.value
+
+    p_rules = (
+        # No rule for 'foo':
+        ('bar', 'data'),
+        ('baz', None))
+    k = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+    with partitioning.axis_rules(p_rules):
+      variables = VarTest().init(k, x)
+
+    wsc_fn.assert_not_called()
+    self.assertIn('test', variables)
+    self.assertIn('test_axes', variables)
+    self.assertEqual(variables['test_axes']['foo_axes'],
+                     partitioning.AxisMetadata(names=('foo', 'bar')))
+    logical_axis_names = partitioning.get_axis_names(variables['test_axes'])
+    self.assertEqual(logical_axis_names,
+                     {'foo': pjit.PartitionSpec('foo', 'bar')})
+
   def test_scan_with_axes(self):
     # MLP Hparams
     B, L, E = 8, 4, 32  # pylint: disable=invalid-name

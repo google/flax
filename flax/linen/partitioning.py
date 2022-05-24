@@ -355,8 +355,12 @@ class PartitionedVariable(flax.core.scope.Variable):
   and assignment.
   """
 
-  def __init__(self, scope, collection: str, name: str,
-               axes: Optional[Tuple[str, ...]] = None):
+  def __init__(self,
+               scope,
+               collection: str,
+               name: str,
+               axes: Optional[Tuple[str, ...]] = None,
+               fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
     """Initializes a partitioned variable.
 
     Args:
@@ -364,25 +368,27 @@ class PartitionedVariable(flax.core.scope.Variable):
       collection: The collection of the variable (e.g., "params").
       name: The name of the variable (e.g., "dense").
       axes: logical axes name of variable.
+      fallback: Fallback behavior if no matching rule is found.
     """
     self.scope = scope
     self.collection = collection
     self.name = name
     self.axes = axes
+    self.fallback = fallback
 
   @property
   def value(self):
     """Returns the value of this Variable."""
     value = self.scope.get_variable(self.collection, self.name)
     if self.axes is not None:
-      value = with_sharding_constraint(value, self.axes)
+      value = with_sharding_constraint(value, self.axes, fallback=self.fallback)
     return value
 
   @value.setter
   def value(self, value):
     """Updates the value of this Variable."""
     if self.axes is not None:
-      value = with_sharding_constraint(value, self.axes)
+      value = with_sharding_constraint(value, self.axes, fallback=self.fallback)
     self.scope.put_variable(self.collection, self.name, value)
 
 
@@ -392,7 +398,8 @@ def _core_variable_with_axes(
     name: str,
     init_fn: Callable[..., Any],
     *init_args,
-    axes: Tuple[str, ...] = ()):
+    axes: Tuple[str, ...] = (),
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
   """Variant of flax core variable scope call with sharding constraints."""
   scope.reserve(name)
   if not scope.has_variable(col, name):
@@ -400,9 +407,9 @@ def _core_variable_with_axes(
       raise flax.errors.ScopeVariableNotFoundError(name, col, scope.path_text)
     init_value = init_fn(*init_args)
     if axes:
-      init_value = with_sharding_constraint(init_value, axes)
+      init_value = with_sharding_constraint(init_value, axes, fallback=fallback)
     scope.put_variable(col, name, init_value)
-  return PartitionedVariable(scope, col, name, axes)
+  return PartitionedVariable(scope, col, name, axes, fallback)
 
 
 def variable_with_axes(
@@ -411,7 +418,8 @@ def variable_with_axes(
     init_fn,
     *init_args,
     axes: Tuple[str, ...] = (),
-    module: Optional[nn.Module] = None):
+    module: Optional[nn.Module] = None,
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
   """Declares and returns a variable with logical axes in the current Module.
 
   See :mod:`flax.linen.module.variable` for original docstring.
@@ -426,6 +434,7 @@ def variable_with_axes(
     axes: A tuple of axis names, must match the rank of the variable array.
     module: Use an explicit module instead of deriving the most recent from
       dynamic module context.
+    fallback: How sharding should behave if there is no rule covering some axis.
 
   Returns:
     A flax `PartitionedVariable` object referencing the initialized variable
@@ -440,7 +449,13 @@ def variable_with_axes(
     module = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
     assert module is not None
   module_var = _core_variable_with_axes(
-      module.scope, collection, name, init_fn, *init_args, axes=axes)
+      module.scope,
+      collection,
+      name,
+      init_fn,
+      *init_args,
+      axes=axes,
+      fallback=fallback)
   if axes:
     # record logical axis constraint for global axis metadata
     module.sow(
