@@ -532,7 +532,7 @@ class Module:
     cls._wrap_module_methods()
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state
-    cls.scope = None
+    cls.scope: Optional[Scope] = None
 
   @classmethod
   def _customized_dataclass_transform(cls):
