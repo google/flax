@@ -594,6 +594,24 @@ class LinearTest(parameterized.TestCase):
     correct_ans = np.expand_dims(correct_ans, (0, 3))
     np.testing.assert_allclose(y, correct_ans)
 
+  def test_causal_conv1d(self):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((1, 8, 4))
+    conv_module = nn.Conv(
+        features=4,
+        kernel_size=(3,),
+        padding='CAUSAL',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, _ = conv_module.init_with_output(rng, x)
+    correct_ans = np.array([[[5., 5., 5., 5.], [9., 9., 9., 9.],
+                             [13., 13., 13., 13.], [13., 13., 13., 13.],
+                             [13., 13., 13., 13.], [13., 13., 13., 13.],
+                             [13., 13., 13., 13.], [13., 13., 13., 13.]]])
+    np.testing.assert_allclose(y, correct_ans)
+    np.testing.assert_array_equal(correct_ans.shape, y.shape)
+
   @parameterized.product(
       use_bias=(True, False),
   )

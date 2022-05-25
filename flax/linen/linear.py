@@ -252,7 +252,8 @@ class _Conv(Module):
       high)` integer pairs that give the padding to apply before and after each
       spatial dimension. A single int is interpeted as applying the same padding
       in all dims and passign a single int in a sequence causes the same padding
-      to be used on both sides.
+      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
+      left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of `inputs`
       (default: 1). Convolution with input dilation `d` is equivalent to
@@ -351,6 +352,14 @@ class _Conv(Module):
       pads = (zero_pad + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] +
               [(0, 0)])
       inputs = jnp.pad(inputs, pads, mode='wrap')
+      padding_lax = 'VALID'
+    elif padding_lax == 'CAUSAL':
+      if len(kernel_size) != 1:
+        raise ValueError(
+            'Causal padding is only implemented for 1D convolutions.')
+      left_pad = kernel_dilation[0] * (kernel_size[0] - 1)
+      pads = [(0, 0), (left_pad, 0), (0, 0)]
+      inputs = jnp.pad(inputs, pads)
       padding_lax = 'VALID'
 
     dimension_numbers = _conv_dimension_numbers(inputs.shape)
