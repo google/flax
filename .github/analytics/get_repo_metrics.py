@@ -313,7 +313,7 @@ def main(
   )
   issues.get()
 
-  df_issues = pd.DataFrame(list(_get_issues_features(issues.raw_data)))
+  df_issues = df_issues0 = pd.DataFrame(list(_get_issues_features(issues.raw_data)))
   df_issues['issue_response_time'] = df_issues['time_labeled_or_converted'] - df_issues['created_at']
   df_issues['issue_resolution_time'] = df_issues['time_issue_closed'] - df_issues['created_at']
 
@@ -327,12 +327,41 @@ def main(
   )
   prs.get()
 
-  df_prs = pd.DataFrame(list(_get_pr_features(prs.raw_data)))
+  df_prs = df_prs0 = pd.DataFrame(list(_get_pr_features(prs.raw_data)))
   time_response = df_prs[['time_labeled_or_assigned', 'time_review']].min(axis=1)
   df_prs['pr_response_time'] = time_response - df_prs['ready_for_review_at']
   df_prs['pr_resolution_time'] = df_prs['time_merged_or_closed'] - df_prs['ready_for_review_at']
 
   df_prs = _rolling_window(df_prs, _process_prs)
+
+  # get cummulative issues
+  df_issues0 = df_issues0.copy()
+  df_issues0['number_of_issues'] = 1
+  df_issues0['number_of_issues'] = df_issues0['number_of_issues'].cumsum()
+
+  # get cummulative prs
+  df_prs0 = df_prs0.copy()
+  df_prs0['number_of_prs'] = 1
+  df_prs0['number_of_prs'] = df_prs0['number_of_prs'].cumsum()
+
+  # plot cumulative issues
+  plt.figure()
+  plt.plot(df_issues0['created_at'], df_issues0['number_of_issues'])
+  plt.xlabel('Date')
+  plt.ylabel('Number of issues')
+  plt.title('Number of issues')
+  plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
+  plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+
+  # plot cumulative prs
+  plt.figure()
+  plt.plot(df_prs0['created_at'], df_prs0['number_of_prs'])
+  plt.xlabel('Date')
+  plt.ylabel('Number of PRs')
+  plt.title('Number of PRs')
+  plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
+  plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
+
 
   # plot for isssue_response_time
   plt.figure()
