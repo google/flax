@@ -633,6 +633,7 @@ def scan(fn: Callable[..., Any],
          in_axes=0, out_axes=0,
          length: Optional[int] = None,
          reverse: bool = False,
+         unroll: int = 1,
          data_transform: Optional[Callable[..., Any]] = None,
          ) -> Callable[..., Any]:
   """A lifted version of ``jax.lax.scan``.
@@ -693,6 +694,8 @@ def scan(fn: Callable[..., Any],
     length: Specifies the number of loop iterations. This only needs
       to be specified if it cannot be derivied from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
+    unroll: how many scan iterations to unroll within a single
+      iteration of a loop (default: 1).
     data_transform: optional function to transform raw variable and rng groups,
       intended for inline SPMD annotations.
 
@@ -739,7 +742,8 @@ def scan(fn: Callable[..., Any],
     @functools.partial(axes_scan.scan,
                        in_axes=(variable_in_axes, rng_axes, in_axes),
                        out_axes=(out_axes, variable_out_axes),
-                       length=length, reverse=reverse)
+                       length=length, reverse=reverse,
+                       unroll=unroll)
     def scanned(broadcast_vars, carry, scan_variable_groups, rng_groups, args):
       carry_vars, c = carry
       variable_groups = (broadcast_vars, carry_vars) + scan_variable_groups

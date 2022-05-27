@@ -671,6 +671,7 @@ def scan(target: Target,
          in_axes=0, out_axes=0,
          length: Optional[int] = None,
          reverse: bool = False,
+         unroll: int = 1,
          data_transform: Optional[Callable[..., Any]] = None,
          methods=None) -> Target:
   """A lifted version of ``jax.lax.scan``.
@@ -763,6 +764,8 @@ def scan(target: Target,
     length: Specifies the number of loop iterations. This only needs to be
       specified if it cannot be derivied from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
+    unroll: how many scan iterations to unroll within a single
+      iteration of a loop (default: 1).
     data_transform: optional function to transform raw functional-core variable
       and rng groups inside lifted scan body_fn, intended for inline SPMD
       annotations.
@@ -782,6 +785,7 @@ def scan(target: Target,
       in_axes=in_axes, out_axes=out_axes,
       length=length,
       reverse=reverse,
+      unroll=1,
       data_transform=data_transform,
       methods=methods)
 
