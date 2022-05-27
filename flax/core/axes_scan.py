@@ -38,7 +38,8 @@ def scan(
     in_axes: Any,
     out_axes: Any,
     length: Optional[int] = None,
-    reverse: bool = False):
+    reverse: bool = False,
+    unroll: int = 1):
   """A wrapper around `jax.lax.scan` with in_axes/out_axes api.
 
   Example::
@@ -70,6 +71,8 @@ def scan(
     length: number of iterations. Only needs to be specified if there
       is no scan axis from which it can be derived.
     reverse: scan in reverse order from end to start.
+    unroll: how many scan iterations to unroll within a single
+      iteration of a loop (default: 1).
   Returns:
      the function that performs the scan of the form:
      (broadcast_in, carry_in, *args) -> (broadcast_out, carry_out, scan_out).
@@ -142,7 +145,8 @@ def scan(
       out_flat.append(const)
     broadcast_in, constants_out = jax.tree_unflatten(out_tree(), out_flat)
 
-    c, ys = lax.scan(body_fn, init, xs, length=length, reverse=reverse)
+    c, ys = lax.scan(body_fn, init, xs, length=length,
+                     reverse=reverse, unroll=unroll)
     ys = jax.tree_map(transpose_from_front, out_axes, ys)
     ys = jax.tree_map(
         lambda ax, const, y: (const if ax is broadcast else y), out_axes,
