@@ -52,6 +52,7 @@ Follow these steps to contribute code:
    cd flax
    pip install ".[testing]"
    pip install -e .
+   pip install -r docs/requirements.txt
    ```
 
 5. Add the Google Flax repo (not your fork) as an upstream remote, so you can use it to sync your
