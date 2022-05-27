@@ -15,7 +15,7 @@
 import unittest
 from flax import errors
 from flax.core import Scope, scope, freeze, init, apply, nn
-from flax.core.scope import LazyRng
+from flax.core.scope import LazyRng, _fold_in_static
 
 import jax
 from jax import config as jax_config
@@ -209,6 +209,11 @@ class ScopeTest(absltest.TestCase):
     self.assertEqual(abc.value, 1)
     with self.assertRaises(errors.ScopeVariableNotFoundError):
       root.variable('state', 'test')
+
+  def test_fold_in_static_seperator(self):
+    x = LazyRng(random.PRNGKey(0), ("ab", "c"))
+    y = LazyRng(random.PRNGKey(0), ("a", "bc"))
+    self.assertFalse(np.all(x.as_jax_rng() == y.as_jax_rng()))
 
 
 if __name__ == '__main__':

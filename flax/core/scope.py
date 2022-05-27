@@ -138,6 +138,8 @@ def _fold_in_static(rng: PRNGKey,
     return rng
   m = hashlib.sha1()
   for x in data:
+    # encode seperate to avoid collision slike for example: ("ab", "c") and ("a", "bc")
+    m.update(b'\00')
     if isinstance(x, str):
       m.update(x.encode('utf-8'))
     elif isinstance(x, int):
