@@ -89,7 +89,7 @@ Now that you have learned about ``init`` being a special case of ``apply``, let'
 
 #. We construct ``mlp = MLP(hidden_size=5, out_size=3)``, such that ``mlp.hidden_size=5`` and ``mlp.out_size=3``.
 
-#. Then, call ``mlp.apply``, whichg:
+#. Then, call ``mlp.apply``, which:
 
    #. Makes a clone of ``mlp``, let's call it ``mlp_copy``.
 
@@ -248,7 +248,7 @@ Sometimes it's useful to have a bound, top-level Module without having to wrap t
 Setup
 **********
 
-The ``setup`` method is often used like the constructor hook (`__init__`) in normal Python classes. However, for more advanced use cases it's good to realize that it is not quite the same as a constructor.
+The ``setup`` method is often used like the constructor hook (``__init__``) in normal Python classes. However, for more advanced use cases it's good to realize that it is not quite the same as a constructor.
 
 ``setup`` is only called after a Module becomes bound. Normally, this is not an issue because most Modules are bound (almost) immediately (as part of ``init`` and ``apply``). Inside ``setup``, sub-modules become bound when they are assigned to an attribute. Inside an ``nn.compact`` decorated method, sub-modules are bound immediately when constructed. As explained in the previous section, top-level Modules are never bound and thus setup is not called when they are constructed. This means you cannot access attributes assigned in setup from an unbound, top-level module.
 
@@ -258,7 +258,7 @@ The ``setup`` method is often used like the constructor hook (`__init__`) in nor
 
     def setup(self):
       self.foo = nn.Dense(2)
-  
+
   mdl = TopLevelAccess()
   assert not hasattr(mdl, "foo")  # foo is not defined because setup is not called
 
@@ -306,7 +306,7 @@ For the most part functionalization is something that is handled automatically f
       # but applying a transformation doesn't:
       vmap_inner = nn.vmap(Foo.inner, in_axes=0, variable_axes={"params": 0}, split_rngs={"params": True})
       return vmap_inner(self, x, fn)
-    
+
     def inner(self, x, fn):
       for i in range(3):
         x = fn(x)
@@ -327,7 +327,7 @@ Function closure is the most common way to accidentally hide a JAX array or Line
 
     def __call__(self, *args, **kwargs):
       return self.fn(*(tuple(self.args) + args), **kwargs)
-  
+
   class Foo(nn.Module):
 
     @nn.compact
@@ -336,7 +336,7 @@ Function closure is the most common way to accidentally hide a JAX array or Line
       fn = lambda mdl, x: mdl(x) + 1
       vmap_inner = nn.vmap(Foo.inner, in_axes=0, variable_axes={"params": 0}, split_rngs={"params": True})
       return vmap_inner(self, x, Partial(fn, [dense]))
-    
+
     def inner(self, x, fn):
       for i in range(3):
         x = fn(x)
