@@ -152,7 +152,8 @@ def train_step(state, batch, learning_rate_fn):
         params=jax.tree_map(
             functools.partial(jnp.where, is_fin),
             new_state.params,
-            state.params))
+            state.params),
+        dynamic_scale=dynamic_scale)
     metrics['scale'] = dynamic_scale.scale
 
   return new_state, metrics
