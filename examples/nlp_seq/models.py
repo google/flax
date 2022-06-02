@@ -89,19 +89,19 @@ class AddPositionEmbs(nn.Module):
     Returns:
       output: `(bs, timesteps, in_dim)`
     """
-    cfg = self.config
+    config = self.config
     # inputs.shape is (batch_size, seq_len, emb_dim)
     assert inputs.ndim == 3, ('Number of dimensions should be 3,'
                               ' but it is: %d' % inputs.ndim)
     length = inputs.shape[1]
-    pos_emb_shape = (1, cfg.max_len, inputs.shape[-1])
-    if cfg.posemb_init is None:
+    pos_emb_shape = (1, config.max_len, inputs.shape[-1])
+    if config.posemb_init is None:
       # Use a fixed (non-learned) sinusoidal position embedding.
-      pos_embedding = sinusoidal_init(max_len=cfg.max_len)(
-          None, pos_emb_shape, None)
+      pos_embedding = sinusoidal_init(max_len=config.max_len)(None,
+                                                              pos_emb_shape,
+                                                              None)
     else:
-      pos_embedding = self.param('pos_embedding',
-                                 cfg.posemb_init,
+      pos_embedding = self.param('pos_embedding', config.posemb_init,
                                  pos_emb_shape)
     pe = pos_embedding[:, :length, :]
     return inputs + pe
@@ -120,20 +120,24 @@ class MlpBlock(nn.Module):
   @nn.compact
   def __call__(self, inputs, deterministic=True):
     """Applies Transformer MlpBlock module."""
-    cfg = self.config
+    config = self.config
     actual_out_dim = (inputs.shape[-1] if self.out_dim is None
                       else self.out_dim)
-    x = nn.Dense(cfg.mlp_dim,
-                 dtype=cfg.dtype,
-                 kernel_init=cfg.kernel_init,
-                 bias_init=cfg.bias_init)(inputs)
+    x = nn.Dense(
+        config.mlp_dim,
+        dtype=config.dtype,
+        kernel_init=config.kernel_init,
+        bias_init=config.bias_init)(
+            inputs)
     x = nn.elu(x)
-    x = nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=deterministic)
-    output = nn.Dense(actual_out_dim,
-                      dtype=cfg.dtype,
-                      kernel_init=cfg.kernel_init,
-                      bias_init=cfg.bias_init)(x)
-    output = nn.Dropout(rate=cfg.dropout_rate)(
+    x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=deterministic)
+    output = nn.Dense(
+        actual_out_dim,
+        dtype=config.dtype,
+        kernel_init=config.kernel_init,
+        bias_init=config.bias_init)(
+            x)
+    output = nn.Dropout(rate=config.dropout_rate)(
         output, deterministic=deterministic)
     return output
 
@@ -157,29 +161,29 @@ class Encoder1DBlock(nn.Module):
     Returns:
       output after transformer encoder block.
     """
-    cfg = self.config
+    config = self.config
 
     # Attention block.
     assert inputs.ndim == 3
-    x = nn.LayerNorm(dtype=cfg.dtype)(inputs)
+    x = nn.LayerNorm(dtype=config.dtype)(inputs)
     x = nn.SelfAttention(
-        num_heads=cfg.num_heads,
-        dtype=cfg.dtype,
-        qkv_features=cfg.qkv_dim,
-        kernel_init=cfg.kernel_init,
-        bias_init=cfg.bias_init,
+        num_heads=config.num_heads,
+        dtype=config.dtype,
+        qkv_features=config.qkv_dim,
+        kernel_init=config.kernel_init,
+        bias_init=config.bias_init,
         use_bias=False,
         broadcast_dropout=False,
-        dropout_rate=cfg.attention_dropout_rate,
-        deterministic=deterministic)(x)
+        dropout_rate=config.attention_dropout_rate,
+        deterministic=deterministic)(
+            x)
 
-    x = nn.Dropout(rate=cfg.dropout_rate)(
-        x, deterministic=deterministic)
+    x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=deterministic)
     x = x + inputs
 
     # MLP block.
-    y = nn.LayerNorm(dtype=cfg.dtype)(x)
-    y = MlpBlock(config=cfg)(y, deterministic=deterministic)
+    y = nn.LayerNorm(dtype=config.dtype)(x)
+    y = MlpBlock(config=config)(y, deterministic=deterministic)
     return x + y
 
 
@@ -203,19 +207,23 @@ class Transformer(nn.Module):
     padding_mask = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)[..., None]
     assert inputs.ndim == 2  # (batch, len)
 
-    cfg = self.config
+    config = self.config
 
     x = inputs.astype('int32')
-    x = nn.Embed(num_embeddings=cfg.vocab_size, features=cfg.emb_dim, name='embed')(x)
-    x = nn.Dropout(rate=cfg.dropout_rate)(x, deterministic=not train)
-    x = AddPositionEmbs(cfg)(x)
+    x = nn.Embed(
+        num_embeddings=config.vocab_size, features=config.emb_dim,
+        name='embed')(
+            x)
+    x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=not train)
+    x = AddPositionEmbs(config)(x)
 
-    for _ in range(cfg.num_layers):
-      x = Encoder1DBlock(cfg)(x, deterministic=not train)
+    for _ in range(config.num_layers):
+      x = Encoder1DBlock(config)(x, deterministic=not train)
 
-    x = nn.LayerNorm(dtype=cfg.dtype)(x)
+    x = nn.LayerNorm(dtype=config.dtype)(x)
     logits = nn.Dense(
-        cfg.output_vocab_size,
-        kernel_init=cfg.kernel_init,
-        bias_init=cfg.bias_init)(x)
+        config.output_vocab_size,
+        kernel_init=config.kernel_init,
+        bias_init=config.bias_init)(
+            x)
     return logits
