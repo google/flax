@@ -79,9 +79,9 @@ def tabulate(
     module: 'flax.linen.Module',
     rngs: Union[PRNGKey, RNGSequences],
     method: Optional[Callable[..., Any]] = None,
-    mutable: CollectionFilter = DenyList('intermediates'),
+    mutable: CollectionFilter = True,
     depth: Optional[int] = None,
-    output_methods: Optional[Union[Sequence[str], Set[str]]] = None,
+    exclude_methods: Sequence[str] = (),
 ) -> Callable[..., str]:
   """Returns a function that creates a summary of the Module represented as a table.
 
@@ -155,9 +155,10 @@ def tabulate(
       depth limit, its parameter count and bytes will be added to the row of its
       first shown ancestor such that the sum of all rows always adds up to the
       total number of parameters of the Module.
-    output_methods: Method names in the `intermediates` collection that should
-      be included as outputs in the summary. The `'__call__'` method is always
-      included.
+    exclude_methods: A sequence of strings that specifies which methods should
+      be ignored. In case a module calls a helper method from its main method,
+      use this argument to exclude the helper method from the summary to avoid
+      ambiguity.
 
   Returns:
     A function that accepts the same `*args` and `**kwargs` of the forward pass
@@ -166,13 +167,9 @@ def tabulate(
   """
 
   def _tabulate_fn(*args, **kwargs):
-    table_fn = _get_module_table(
-        module,
-        rngs,
-        method=method,
-        mutable=mutable,
-        depth=depth,
-        output_methods=output_methods)
+    table_fn = _get_module_table(module, rngs, method=method, 
+                                 mutable=mutable, depth=depth, 
+                                 exclude_methods=set(exclude_methods))
     table = table_fn(*args, **kwargs)
     return _render_table(table)
 
@@ -182,24 +179,30 @@ def tabulate(
 def _get_module_table(
     module: 'flax.linen.Module',
     rngs: Union[PRNGKey, RNGSequences],
-    method: Optional[Callable[..., Any]] = None,
-    mutable: CollectionFilter = True,
-    depth: Optional[int] = None,
-    output_methods: Optional[Union[Sequence[str], Set[str]]] = None,
+    method: Optional[Callable[..., Any]],
+    mutable: CollectionFilter,
+    depth: Optional[int],
+    exclude_methods: Set[str],
 ) -> Callable[..., Table]:
-  if output_methods is None:
-    output_methods = {'__call__'}
-  else:
-    output_methods = set(output_methods) | {'__call__'}
+
+  exclude_methods.add("setup")
 
   def _get_table_fn(*args, **kwargs):
+    output_methods: Set[str] = set()
+
+    def capture_intermediates(_module, method_name: str):
+      if method_name in exclude_methods:
+        return False
+      else:
+        output_methods.add(method_name)
+        return True
 
     shape_variables = jax.eval_shape(lambda: module.init(
         rngs,
         *args,
         method=method,
         mutable=mutable,
-        capture_intermediates=True,
+        capture_intermediates=capture_intermediates,
         **kwargs,
     ))
 
@@ -250,8 +253,9 @@ def _flatten_to_rows(
     output = None
   elif len(module_outputs) > 1:
     raise ValueError(
-        f"""Cannot infer output, module '{'/'.join(path)}' has multiple intermediates: {list(module_outputs.keys())}"""
-    )
+        f"Cannot infer output, module '{'/'.join(path)}' has multiple "
+        f"intermediates: {list(module_outputs.keys())}. Use the `exclude_methods` "
+        f"argument to make sure each module only reports one output.")
   else:
     output = list(module_outputs.values())[0][0]
 
@@ -412,7 +416,7 @@ def _get_rich_repr(obj):
 
 
 def _as_yaml_str(value) -> str:
-  if hasattr(value, '__len__') and len(value) == 0:
+  if (hasattr(value, '__len__') and len(value) == 0) or value is None:
     return ''
 
   file = io.StringIO()

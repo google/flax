@@ -1362,7 +1362,7 @@ class Module:
     method: Optional[Callable[..., Any]] = None,
     mutable: CollectionFilter = True,
     depth: Optional[int] = None,
-    output_methods: Optional[Union[Sequence[str], Set[str]]] = None,
+    exclude_methods: Sequence[str] = (),
     **kwargs) -> str:
     """Creates a summary of the Module represented as a table.
 
@@ -1432,16 +1432,19 @@ class Module:
         depth limit, its parameter count and bytes will be added to the row of 
         its first shown ancestor such that the sum of all rows always adds up to 
         the total number of parameters of the Module.
-      output_methods: Method names in the `intermediates` collection that should be
-        included as outputs in the summary. The `'__call__'` method is always included.
+      exclude_methods: A sequence of strings that specifies which methods should
+        be ignored. In case a module calls a helper method from its main method,
+        use this argument to exclude the helper method from the summary to avoid
+        ambiguity.
       **kwargs: keyword arguments to pass to the forward computation.
 
     Returns:
       A string summarizing the Module.
     """
 
-    tabulate_fn = summary.tabulate(self, rngs, method=method, mutable=mutable, 
-                           depth=depth, output_methods=output_methods)
+    tabulate_fn = summary.tabulate(self, rngs, method=method, 
+                                   mutable=mutable, depth=depth,
+                                   exclude_methods=exclude_methods)
     return tabulate_fn(*args, **kwargs)
     
 

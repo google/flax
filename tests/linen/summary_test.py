@@ -29,44 +29,73 @@ from flax.linen.summary import _get_module_table
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
-def _maybe_get_shape(x):
-  return x.shape if hasattr(x, "shape") else x
+def _get_shapes(pytree):
+  return jax.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, pytree)
 
+class ConvBlock(nn.Module):
+  features: int
+  kernel_size: List[int]
+  test_sow: bool
 
-def _get_tabulate_cnn(test_sow: bool = False) -> Type[nn.Module]:
-  @dataclasses.dataclass
-  class ConvBlock(nn.Module):
-    features: int
-    kernel_size: List[int]
-    training: bool
+  def setup(self) -> None:
+    self.conv = nn.Conv(self.features, self.kernel_size)
+    self.bn = nn.BatchNorm()
+    self.dropout = nn.Dropout(0.5)
 
-    @nn.compact
-    def __call__(self, x: Array) -> Array:
-      x = nn.Conv(self.features, self.kernel_size)(x)
+  def block_method(self, x: Array, training: bool) -> Array:
+    x = self.conv(x)
 
-      if test_sow:
-        self.sow('intermediates', 'INTERM', x)
+    if self.test_sow:
+      self.sow('intermediates', 'INTERM', x)
 
-      x = nn.BatchNorm(use_running_average=not self.training)(x)
-      x = nn.Dropout(0.5, deterministic=not self.training)(x)
-      x = nn.relu(x)
-      return x
+    x = self.bn(x, use_running_average=not training)
+    x = self.dropout(x, deterministic=not training)
+    x = nn.relu(x)
+    return x
+  
+  def __call__(self, x: Array, training: bool) -> Array:
+    x = self.conv(x)
 
-  class CNN(nn.Module):
-    @nn.compact
-    def __call__(self, x: Array, training: bool) -> Array:
-      x = ConvBlock(32, [3, 3], training=training)(x)
-      x = ConvBlock(64, [3, 3], training=training)(x)
-      x = x.mean(axis=(1, 2))
+    if self.test_sow:
+      self.sow('intermediates', 'INTERM', x)
 
-      if test_sow:
-        self.sow('intermediates', 'INTERM', x)
+    x = self.bn(x, use_running_average=not training)
+    x = self.dropout(x, deterministic=not training)
+    x = nn.relu(x)
+    return x
 
-      x = nn.Dense(10)(x)
+class CNN(nn.Module):
+  test_sow: bool
 
-      return x, dict(a=x, b=x+1.0)
+  def setup(self) -> None:
+    self.block1 = ConvBlock(32, [3, 3], test_sow=self.test_sow)
+    self.block2 = ConvBlock(64, [3, 3], test_sow=self.test_sow)
+    self.dense = nn.Dense(10)
+  
+  def cnn_method(self, x: Array, training: bool) -> Array:
+    x = self.block1.block_method(x, training=training)
+    x = self.block2.block_method(x, training=training)
+    x = x.mean(axis=(1, 2))
 
-  return CNN
+    if self.test_sow:
+      self.sow('intermediates', 'INTERM', x)
+
+    x = self.dense(x)
+
+    return x, dict(a=x, b=x+1.0)
+
+  def __call__(self, x: Array, training: bool) -> Array:
+    x = self.block1.block_method(x, training=training)
+    x = self.block2.block_method(x, training=training)
+    x = x.mean(axis=(1, 2))
+
+    if self.test_sow:
+      self.sow('intermediates', 'INTERM', x)
+
+    x = self.dense(x)
+
+    return x, dict(a=x, b=x+1.0)
+
 
 
 class ModuleTest(absltest.TestCase):
@@ -77,18 +106,18 @@ class ModuleTest(absltest.TestCase):
     matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
     """
 
-    CNN = _get_tabulate_cnn()
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
-    module = CNN()
+    module = CNN(test_sow=False)
 
     table = _get_module_table(
       module, 
       {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
+      method=None, mutable=True, depth=None,
+      exclude_methods=set(),
     )( 
-      x, 
-      training=True,
+      x, training=True
     )
 
     # 11 rows = 1 Inputs + 4 ConvBlock_0 + 4 ConvBlock_1 + 1 Dense_0 + 1 Module output
@@ -97,65 +126,38 @@ class ModuleTest(absltest.TestCase):
     # check paths
     self.assertEqual(table[0].path, ("Inputs",))
 
-    self.assertEqual(table[1].path, ("ConvBlock_0", "BatchNorm_0"))
-    self.assertEqual(table[2].path, ("ConvBlock_0", "Conv_0"))
-    self.assertEqual(table[3].path, ("ConvBlock_0", "Dropout_0"))
-    self.assertEqual(table[4].path, ("ConvBlock_0",))
+    self.assertEqual(table[1].path, ("block1", "bn"))
+    self.assertEqual(table[2].path, ("block1", "conv"))
+    self.assertEqual(table[3].path, ("block1", "dropout"))
+    self.assertEqual(table[4].path, ("block1",))
 
-    self.assertEqual(table[5].path, ("ConvBlock_1", "BatchNorm_0"))
-    self.assertEqual(table[6].path, ("ConvBlock_1", "Conv_0"))
-    self.assertEqual(table[7].path, ("ConvBlock_1", "Dropout_0"))
-    self.assertEqual(table[8].path, ("ConvBlock_1",))
+    self.assertEqual(table[5].path, ("block2", "bn"))
+    self.assertEqual(table[6].path, ("block2", "conv"))
+    self.assertEqual(table[7].path, ("block2", "dropout"))
+    self.assertEqual(table[8].path, ("block2",))
 
-    self.assertEqual(table[9].path, ("Dense_0",))
+    self.assertEqual(table[9].path, ("dense",))
     self.assertEqual(table[10].path, ())
 
     # check outputs shapes
     self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[0].outputs),
+      (table[0].outputs[0].shape, table[0].outputs[1]),
       (x.shape, dict(training=True)),
     )
 
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[1].outputs),
-      (batch_size, 28, 28, 32),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[2].outputs),
-      (batch_size, 28, 28, 32),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[3].outputs),
-      (batch_size, 28, 28, 32),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[4].outputs),
-      (batch_size, 28, 28, 32),
-    )
+    self.assertEqual(table[1].outputs.shape, (batch_size, 28, 28, 32))
+    self.assertEqual(table[2].outputs.shape, (batch_size, 28, 28, 32))
+    self.assertEqual(table[3].outputs.shape, (batch_size, 28, 28, 32))
+    self.assertEqual(table[4].outputs.shape, (batch_size, 28, 28, 32))
 
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[5].outputs),
-      (batch_size, 28, 28, 64),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[6].outputs),
-      (batch_size, 28, 28, 64),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[7].outputs),
-      (batch_size, 28, 28, 64),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[8].outputs),
-      (batch_size, 28, 28, 64),
-    )
+    self.assertEqual(table[5].outputs.shape, (batch_size, 28, 28, 64))
+    self.assertEqual(table[6].outputs.shape, (batch_size, 28, 28, 64))
+    self.assertEqual(table[7].outputs.shape, (batch_size, 28, 28, 64))
+    self.assertEqual(table[8].outputs.shape, (batch_size, 28, 28, 64))
 
+    self.assertEqual(table[9].outputs.shape, (batch_size, 10))
     self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[9].outputs),
-      (batch_size, 10),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[10].outputs),
+      _get_shapes(table[10].outputs),
       ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
     )
 
@@ -171,19 +173,18 @@ class ModuleTest(absltest.TestCase):
     This test creates a Table using `module_summary` set the `depth` argument to `1`,
     table should have less rows as a consequence.
     """
-    CNN = _get_tabulate_cnn()
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
-    module = CNN()
+    module = CNN(test_sow=False)
 
     table = _get_module_table(
       module, 
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)}, 
-      depth=1,
+      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
+      method=None, mutable=True, depth=1,
+      exclude_methods=set(),
     )(
-      x, 
-      training=True,
+      x, training=True
     )
 
     # 5 rows = 1 Inputs + 1 ConvBlock_0 + 1 ConvBlock_1 + 1 Dense_0 + 1 Module output
@@ -191,30 +192,21 @@ class ModuleTest(absltest.TestCase):
 
     # check paths
     self.assertEqual(table[0].path, ("Inputs",))
-    self.assertEqual(table[1].path, ("ConvBlock_0",))
-    self.assertEqual(table[2].path, ("ConvBlock_1",))
-    self.assertEqual(table[3].path, ("Dense_0",))
+    self.assertEqual(table[1].path, ("block1",))
+    self.assertEqual(table[2].path, ("block2",))
+    self.assertEqual(table[3].path, ("dense",))
     self.assertEqual(table[4].path, ())
 
     # check outputs shapes
     self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[0].outputs),
+      (table[0].outputs[0].shape, table[0].outputs[1]),
       (x.shape, dict(training=True)),
     )
+    self.assertEqual(table[1].outputs.shape, (batch_size, 28, 28, 32))
+    self.assertEqual(table[2].outputs.shape, (batch_size, 28, 28, 64))
+    self.assertEqual(table[3].outputs.shape, (batch_size, 10))
     self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[1].outputs),
-      (batch_size, 28, 28, 32),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[2].outputs),
-      (batch_size, 28, 28, 64),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[3].outputs),
-      (batch_size, 10),
-    )
-    self.assertEqual(
-      jax.tree_map(_maybe_get_shape, table[4].outputs),
+      _get_shapes(table[4].outputs),
       ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
     )
 
@@ -232,11 +224,10 @@ class ModuleTest(absltest.TestCase):
     This test creates a string representation of a Module using `Module.tabulate` 
     and checks that it matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
     """
-    CNN = _get_tabulate_cnn()
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
-    module = CNN()
+    module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
         {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)}, 
@@ -274,16 +265,31 @@ class ModuleTest(absltest.TestCase):
 
   def test_tabulate_with_sow(self):
 
-    CNN = _get_tabulate_cnn(test_sow=True)
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
-    module = CNN()
+    module = CNN(test_sow=True)
 
     module_repr = module.tabulate(
       {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)}, 
       x, 
       training=True,
+    )
+
+    self.assertNotIn("INTERM", module_repr)
+  
+  def test_tabulate_with_method(self):
+
+    batch_size = 32
+
+    x = jnp.ones((batch_size, 28, 28, 1))
+    module = CNN(test_sow=False)
+
+    module_repr = module.tabulate(
+      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)}, 
+      x, 
+      training=True,
+      method=CNN.cnn_method,
     )
 
     self.assertNotIn("INTERM", module_repr)
@@ -293,11 +299,10 @@ class ModuleTest(absltest.TestCase):
     This test creates a string representation of a Module using `Module.tabulate` 
     and checks that it matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
     """
-    CNN = _get_tabulate_cnn()
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
-    module = CNN()
+    module = CNN(test_sow=False)
 
     module_repr = nn.tabulate(
       module,
