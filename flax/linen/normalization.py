@@ -78,7 +78,7 @@ def _compute_stats(x: Array, axes: Axes,
   # but preserves double or complex floating points
   dtype = jnp.promote_types(dtype, jnp.float32)
   x = jnp.asarray(x, dtype)
-  
+
   mean = jnp.mean(x, axes)
   mean2 = jnp.mean(_abs_sq(x), axes)
   if axis_name is not None:
@@ -279,9 +279,7 @@ class BatchNorm(Module):
 class LayerNorm(Module):
   """Layer normalization (https://arxiv.org/abs/1607.06450).
 
-  Operates on the last axis of the input data.
-
-  It normalizes the activations of the layer for each given example in a
+  LayerNorm normalizes the activations of the layer for each given example in a
   batch independently, rather than across a batch like Batch Normalization.
   i.e. applies a transformation that maintains the mean activation within
   each example close to 0 and the activation standard deviation close to 1.
@@ -296,6 +294,8 @@ class LayerNorm(Module):
       by the next layer.
     bias_init: Initializer for bias, by default, zero.
     scale_init: Initializer for scale, by default, one.
+    reduction_axis: Axis for computing normalization statistics.
+    feature_axis: Feature axis for learned bias and scaling.
   """
   epsilon: float = 1e-6
   dtype: Optional[Dtype] = None
@@ -304,6 +304,8 @@ class LayerNorm(Module):
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  reduction_axis: int = -1
+  feature_axis: int = -1
 
   @compact
   def __call__(self, x):
@@ -315,8 +317,8 @@ class LayerNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    reduction_axes = (-1,)
-    feature_axes = (-1,)
+    reduction_axes = (self.reduction_axis,)
+    feature_axes = (self.feature_axis,)
 
     # TODO(jheek) suport axis_name for model parallelism?
     mean, var = _compute_stats(x, reduction_axes, self.dtype, None, None)
