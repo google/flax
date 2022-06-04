@@ -1451,6 +1451,27 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(v['params']['Dense_0']['kernel'].shape, (5, 3, 3))
     m.apply(v, x)
 
+  def test_bound_methods_in_direct_transforms(self):
+    class CondModel(nn.Module):
+      def setup(self):
+        self.dense = nn.Dense(3)
+
+      def f1(self, arr):
+        arr = self.dense(arr)
+        return arr
+
+      def f2(self, arr):
+        _ = self.dense(arr)
+        return arr
+
+      def __call__(self, x):
+        return nn.cond(x.sum() > 0, self.f1, self.f2, self, x)
+
+    cond_model = CondModel()
+
+    output, init_params = jax.jit(cond_model.init_with_output)(
+        jax.random.PRNGKey(0),
+        x=jnp.ones(3))
 
 
 if __name__ == '__main__':

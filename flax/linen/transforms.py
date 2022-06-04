@@ -38,6 +38,7 @@ from flax.linen import module as linen_module
 from flax.linen.module import Module
 from flax.linen.module import Variable
 from flax.linen.module import wrap_method_once
+from flax.linen.module import _get_unbound_fn
 import jax
 
 traceback_util.register_exclusion(__file__)
@@ -419,6 +420,8 @@ def lift_direct_transform(transform: Callable[..., Any],
           ' That is function that takes a Module instance as its first arg.')
     elif not callable(target):
       raise ValueError('transform target must be callable')
+  # normalize self.foo bound methods to class.foo unbound methods.
+  targets = tuple(_get_unbound_fn(target) for target in targets)
   aug_transform = lambda *fns: functools.partial(transform, *fns)
   return decorator_lift_transform(
       aug_transform, targets, multi_scope=multi_scope)(mdl, *args, **kwargs)
@@ -1068,10 +1071,10 @@ def _cond_wrapper(t_fn, f_fn, scope, pred, *ops, variables, rngs):
 
 
 def cond(
-    pred: Any, 
+    pred: Any,
     true_fun: Callable[..., C], false_fun: Callable[..., C],
     mdl: Module, *operands,
-    variables: lift.CollectionFilter = True, 
+    variables: lift.CollectionFilter = True,
     rngs: lift.PRNGSequenceFilter = True) -> C:
   """Lifted version of ``jax.lax.cond``.
 
@@ -1082,7 +1085,7 @@ def cond(
   Note that this constraint is violated when
   creating variables or submodules in only one branch.
   Because initializing variables in just one branch
-  causes the paramater structure to be different.
+  causes the parameter structure to be different.
 
   Example::
 
@@ -1098,15 +1101,15 @@ def cond(
           mdl.variable('state', 'false_count').value += 1
           return -nn.Dense(2, name='dense')(x)
         return nn.cond(pred, true_fn, false_fn, self, x)
-  
-  
+
+
   Args:
     pred: determines if true_fun or false_fun is evaluated.
     true_fun: The function evalauted when ``pred`` is `True`.
-      The signature is (Scope, *operands) -> T.
+      The signature is (module, *operands) -> T.
     false_fun: The function evalauted when ``pred`` is `False`.
-      The signature is (Scope, *operands) -> T.
-    scope: A Scope or Pytree of scopes to pass 
+      The signature is (module, *operands) -> T.
+    mdl: A Module target to pass.
     *operands: The arguments passed to ``true_fun`` and ``false_fun``
     variables: The variable collections passed to the conditional
       branches (default: all)

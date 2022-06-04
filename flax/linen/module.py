@@ -384,7 +384,8 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
   Returns:
     An unbound version of input function.
   """
-  if inspect.ismethod(method_or_fn):
+  if (inspect.ismethod(method_or_fn) and
+      isinstance(method_or_fn.__self__, Module)):  # pytype: disable=attribute-error
     method_or_fn = method_or_fn.__func__  # pytype: disable=attribute-error
 
   # The method should be callable, and it should have at least one argument
