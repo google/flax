@@ -18,10 +18,11 @@ THe RNNCell modules can be scanned using lifted transforms. For more information
 see: https://flax.readthedocs.io/en/latest/design_notes/lift.html.
 """
 
-import abc
 from functools import partial   # pylint: disable=g-importing-member
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 
+import jax
+from flax.linen import transforms
 from flax.linen.activation import sigmoid
 from flax.linen.activation import tanh
 from flax.linen.dtypes import promote_dtype
@@ -33,6 +34,8 @@ from flax.linen.linear import Dense
 from flax.linen.linear import PrecisionLike
 from flax.linen.module import compact
 from flax.linen.module import Module
+from flax.core import lift
+from flax.core.frozen_dict import FrozenDict
 from jax import numpy as jnp
 from jax import random
 import numpy as np
@@ -497,3 +500,331 @@ class ConvLSTM(RNNCellBase):
     key1, key2 = random.split(rng)
     mem_shape = batch_dims + size
     return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
+
+class RNNBase(Module):
+  """Base class for RNN layers, in contains an `rnn_forward` method
+  that runs scan with a cell over the inputs. Subclasses can parameterize
+  `rnn_forward` to define their `__call__` method.
+
+  Here is an example of a barebone LSTM layer implementation::
+
+    class LSTM(RNNBase):
+      units: int
+
+      @compact
+      def __call__(self, inputs):
+        return self.rnn_forward(
+          LSTMCell(), inputs,
+          init_key=jax.random.PRNGKey(0), time_axis=-2,
+          carry_size=self.units, stateful=False,
+          return_state=False, reverse=False, 
+          initial_state=None, variable_axes={},
+          variable_broadcast='params', variable_carry=False, 
+          split_rngs={'params': False},
+        )
+  """
+  def rnn_forward(
+    self,
+    cell: RNNCellBase,
+    inputs: jnp.ndarray,
+    *,
+    init_key: jnp.ndarray,
+    time_axis: int,
+    carry_size: Union[int, Tuple[int, ...]],
+    stateful: bool,
+    return_state: bool,
+    reset_state: bool,
+    initial_state: Optional[Any],
+    mask: Optional[jnp.ndarray],
+    zero_output_for_mask: bool,
+    # scan args
+    reverse: bool,
+    unroll: int,
+    variable_axes: Mapping[lift.CollectionFilter,lift.InOutScanAxis],
+    variable_broadcast: lift.CollectionFilter,
+    variable_carry: lift.CollectionFilter,
+    split_rngs: Mapping[lift.PRNGSequenceFilter, bool],
+  ):
+    """
+    Takes an RNNCellBase `cell` and an input sequence `x` and `scan`s the 
+    cell over the sequence.
+
+    **Collections**
+  
+    * `memory`: if `stateful` is True, the RNN cell's state is stored in a variable
+      named `carry` under the `memory` collection.
+    * The `cell` might add its own collections (like `params`) as needed.
+    
+    **Input shape**
+    
+    `x` should be an ndarray of shape `(*batch, time, *feature)`where `*batch` are the batch
+    dimensions, `time` is the time dimension, and `*feature` are the feature dimensions. The 
+    time dimension can be in any position, internally the input will be processed as 
+    `(*batch, *feature)` at each time step. The feature dimensions should be last and are 
+    specified by the number of dimensions in `carry_size`. The batch dimensions will simply
+    be the remaining ones that are not the time axis or the features.
+
+    **Output shape**
+
+    If `return_state` is True, the output will be a `(carry, output)` tuple, otherwise
+    only the output will be returned. The `output` will be of shape `(*batch, time, *feature_out)`.
+
+    Args:
+      cell: an `RNNCellBase` instance.
+      x: the input sequence.
+      init_key: a random key to initialize the cell's carry.
+      time_axis: the axis corresponding to the time dimension.
+      carry_size: the `size` argument passed to `cell.initialize_carry`.
+      stateful: if True, the RNN cell's state is store in a variable named `carry` 
+        in the `memory` collection.
+      return_state: if True, a (carry, output) tuple is returned, otherwise only
+        the output is returned.
+      reset_state: if True, the RNN cell's state is reset to the initial state before
+        processing the sequence. 
+      reverse: if True, the input sequence is processed backwards, this argument is
+        passed to `scan`.
+      unrool: how many scan iterations to unroll within a single
+        iteration of a loop, this argument is passed to `scan`.
+      initial_state: an optional initial `carry` for the RNN cell. If stateful is True,
+        this will override the current value of the `carry`.
+      mask: an optional mask to apply to the input sequence. If given, it should be
+        an binary array of shape `(*batch, time)` indicating whether a given timestep
+        should be masked. True indicates that the timestep is used, False indicates
+        that the timestep is ignored.
+      zero_output_for_mask: when `mask` is given, if True, the output of masked-out
+        timesteps is set to zeros, else the output is set to the value of the
+        previous available timestep, if there are no previous available timesteps the
+        output is set to zeros.
+      variable_axes: the variable collections that are scanned over, this argument will 
+        be passed to `nn.scan`.
+      variable_broadcast: specifies the broadcasted variable collections, this argument
+        will be passed to `nn.scan`.
+      variable_carry: specifies the variable collections that are carried through
+        the loop, this argument will be passed to `nn.scan`.
+      split_rngs: a mapping from PRNGSequenceFilter to bool specifying whether to
+        a PRNG collection should be split such that its values are different at each
+        step, or replicated such that its values remain the same at each step. This
+        argument will be passed to `nn.scan`.
+    """
+
+    num_feature_dims = 1 if isinstance(carry_size, int) else len(carry_size)
+    time_axis = time_axis if time_axis >= 0 else time_axis + inputs.ndim
+    mask_axis = 0 if mask is None else mask.ndim - 1
+
+    if num_feature_dims < 1:
+      raise ValueError(
+        f'\'carry_size\' must have at least 1 element, got: \'{carry_size}\''
+      )
+    elif num_feature_dims >= len(inputs.shape):
+      raise ValueError(
+        f'The length of \'carry_size\' must be less than the length of the input '
+        f'shape, got: \'{carry_size}\' and \'{inputs.shape}\''
+      )
+
+    num_batch_dims = inputs.ndim - (num_feature_dims + 1) # features dims + time dim
+
+    # WARNING: this definition of initialization state
+    # is known to be problematic: https://github.com/google/flax/issues/652#issuecomment-1124216543
+    # Epecifically, this module will not update its cache if 
+    # 'params' are mutable, which can arise if users use `mutable=True`.
+    is_initializing = self.is_mutable_collection("params")
+
+    # get carry
+    if initial_state is not None:
+      initial_carry = initial_state
+    elif not reset_state and stateful and self.has_variable('memory', 'carry'):
+      initial_carry = self.get_variable('memory', 'carry')
+    else:
+      shape_without_time = inputs.shape[:time_axis] + inputs.shape[time_axis + 1:]
+      initial_carry = cell.initialize_carry(
+        init_key,
+        batch_dims=shape_without_time[:num_batch_dims],
+        size=carry_size,
+      )
+
+    def scan_fn(
+      cell: RNNCellBase, state: Tuple[Any, Array], x: Array, 
+      mask: Optional[jnp.ndarray]
+    ) -> Tuple[Tuple[Any, Array], Array]:
+      
+      carry_in, prev_non_masked_output = state
+      carry_next, y_next = cell(carry_in, x)
+
+      if mask is None:
+        carry_out, y_out = carry_next, y_next
+      else:
+        def apply_mask(value, masked_value):
+          # reshape mask to have same number of dimensions as value
+          mask_ = mask.reshape(mask.shape + (1,) * (value.ndim - mask.ndim))
+          return jnp.where(mask_, value, masked_value)
+        
+        carry_out = jax.tree_map(apply_mask, carry_next, carry_in)
+
+        if zero_output_for_mask:
+          y_out = jax.tree_map(apply_mask, y_next, jnp.zeros_like(y_next))
+        else:
+          y_out = jax.tree_map(apply_mask, y_next, prev_non_masked_output)
+          prev_non_masked_output = y_out
+
+      return (carry_out, prev_non_masked_output), y_out
+
+    scan = transforms.scan(
+      scan_fn,
+      in_axes=(time_axis, mask_axis), 
+      out_axes=time_axis,
+      reverse=reverse,
+      unroll=unroll,
+      variable_axes=variable_axes,
+      variable_broadcast=variable_broadcast,
+      variable_carry=variable_carry,
+      split_rngs=split_rngs,
+    )
+
+    if mask is not None and not zero_output_for_mask:
+      first_input = jax.lax.index_in_dim(inputs, 0, time_axis, keepdims=False)
+      initial_non_masked_output = jnp.zeros_like(cell(initial_carry, first_input)[1])
+    else:
+      initial_non_masked_output = None
+
+    (carry, _), outputs = scan(cell, (initial_carry, initial_non_masked_output), inputs, mask)
+
+    # if the module is initializing keep the initial carry
+    if is_initializing:
+      carry = initial_carry
+
+    if stateful:
+      self.put_variable('memory', 'carry', carry)
+
+    if return_state:
+      return carry, outputs
+    else:
+      return outputs
+
+class RNN(RNNBase):
+  """
+  A `RNN` layer that takes an arbitrary `RNNCellBase` and performs a `scan` over
+  the input's time dimension.
+
+  Example::
+    >>> import jax.numpy as jnp
+    >>> import jax
+    >>> import flax.linen as nn
+    >>> x = jnp.ones((10, 50, 32))
+    >>> lstm = nn.RNN(nn.LSTMCell(), 64)
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> y = lstm.apply(variables, x)
+    >>> y.shape
+    (10, 50, 64)
+
+  **Collections**
+
+    * `memory`: if `stateful` is True, the RNN cell's state is stored in a variable
+      named `carry` under the `memory` collection.
+    * The `cell` might add its own collections (like `params`) as needed.
+
+  **Input shape**
+    
+  `x` should be an ndarray of shape `(*batch, time, *feature)`where `*batch` are the batch
+  dimension, `time` is the time dimension, and `*feature` are the feature dimensions. The time
+  dimension can be in any position, internally the input will be processed as 
+  `(*batch, *feature)` at each time step. The feature dimensions should be last and are 
+  specified by the number of dimensions in `carry_size`. The batch dimensions will simply
+  be the remaining ones that are not the time axis or the features.
+
+  **Output shape**
+
+  If `return_state` is True, the output will be a `(carry, output)` tuple, otherwise
+  only the output will be returned. The `output` will be of shape `(*batch, time, *feature)`.
+
+  Attributes:
+    cell: the `RNNCellBase` instance.
+    carry_size: the `size` argument passed to `cell.initialize_carry`.
+    time_axis: the axis from the input corresponding to the time dimension.
+    stateful: if True, the RNN cell's state is stored in a variable named `carry`
+      in the `memory` collection.
+    return_state: if True, a (carry, output) tuple is returned, otherwise only
+      the output is returned. Defaults to False.
+    reverse: if True, the input sequence is processed backwards. Defaults to False.
+    unroll: how many scan iterations to unroll within a single iteration of a loop,
+      defaults to 1.
+    zero_output_for_mask: when `mask` is given, if True, the output of masked-out
+      timesteps is set to zeros, else the output is set to the value of the
+      previous available timestep, if there are no previous available timesteps the
+      output is set to zeros.
+    variable_axes: the variable collections that are scanned over, this argument will
+      be passed to `nn.scan`.
+    variable_broadcast: specifies the broadcasted variable collections, this argument
+      will be passed to `nn.scan`.
+    variable_carry: specifies the variable collections that are carried through
+      the loop, this argument will be passed to `nn.scan`.
+    split_rngs: a mapping from PRNGSequenceFilter to bool specifying whether to
+      a PRNG collection should be split such that its values are different at each
+      step, or replicated such that its values remain the same at each step. This
+      argument will be passed to `nn.scan`.
+  """
+  cell: RNNCellBase
+  carry_size: Union[int, Tuple[int, ...]]
+  time_axis: Optional[int] = None
+  stateful: bool = False
+  return_state: bool = False
+  reverse: bool = False
+  unroll: int = 1
+  zero_output_for_mask: bool = True
+  # scan args
+  variable_axes: Mapping[lift.CollectionFilter,lift.InOutScanAxis] = FrozenDict()
+  variable_broadcast: lift.CollectionFilter = ('params',)
+  variable_carry: lift.CollectionFilter = False
+  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict({'params': False})
+  
+  def __call__(self, 
+    inputs: jnp.ndarray, init_key: Optional[jnp.ndarray] = None, 
+    initial_state: Optional[Any] = None, reset_state: bool = False,
+    mask: Optional[jnp.ndarray] = None,
+    # overrides
+    return_state: Optional[bool] = None, reverse: Optional[bool] = None,
+    zero_output_for_mask: Optional[bool] = None,
+  ):
+    """
+    Arguments:
+      inputs: input tensor.
+      init_key: PRNG key.
+      initial_state: initial state of the RNN cell.
+      reset_state: if True, the RNN cell's state is reset to the initial state before
+        processing the sequence.
+      return_state: if True, a (carry, output) tuple is returned, otherwise only the
+        output is returned. If given, this argument overrides the `return_state` attribute
+        defined in the constructor.
+      reverse: if True, the input sequence is processed backwards. If given, this argument
+        overrides the `reverse` attribute defined in the constructor.
+      zero_output_for_mask: when `mask` is given, if True, the output of masked-out
+        timesteps is set to zeros, else the output is set to the value of the
+        previous available timestep, if there are no previous available timesteps the
+        output is set to zeros. If given, this argument overrides the `zero_output_for_mask`
+        attribute defined in the constructor.
+    """
+    num_feature_dims = 1 if isinstance(self.carry_size, int) else len(self.carry_size)
+
+    return self.rnn_forward(
+      self.cell, inputs,
+      init_key=init_key if init_key is not None else jax.random.PRNGKey(0),
+      time_axis=self.time_axis 
+      if self.time_axis is not None 
+      else -(num_feature_dims + 1), # 1 before features dims
+      carry_size=self.carry_size,
+      stateful=self.stateful,
+      return_state=return_state if return_state is not None else self.return_state,
+      reset_state=reset_state,
+      initial_state=initial_state,
+      mask=mask,
+      zero_output_for_mask=zero_output_for_mask 
+      if zero_output_for_mask is not None 
+      else self.zero_output_for_mask,
+      # scan args
+      reverse=reverse if reverse is not None else self.reverse,
+      unroll=self.unroll,
+      variable_axes=self.variable_axes,
+      variable_broadcast=self.variable_broadcast,
+      variable_carry=self.variable_carry,
+      split_rngs=self.split_rngs,
+    )
+

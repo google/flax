@@ -25,63 +25,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from flax.linen.recurrent import RNNCellBase
+
 Array = Any
 PRNGKey = Any
 
-
-class EncoderLSTM(nn.Module):
-  """EncoderLSTM Module wrapped in a lifted scan transform."""
-  eos_id: int
-
-  @functools.partial(
-      nn.scan,
-      variable_broadcast='params',
-      in_axes=1,
-      out_axes=1,
-      split_rngs={'params': False})
-  @nn.compact
-  def __call__(self, carry: Tuple[Array, Array],
-               x: Array) -> Tuple[Tuple[Array, Array], Array]:
-    """Applies the module."""
-    lstm_state, is_eos = carry
-    new_lstm_state, y = nn.LSTMCell()(lstm_state, x)
-    # Pass forward the previous state if EOS has already been reached.
-    def select_carried_state(new_state, old_state):
-      return jnp.where(is_eos[:, np.newaxis], old_state, new_state)
-    # LSTM state is a tuple (c, h).
-    carried_lstm_state = tuple(
-        select_carried_state(*s) for s in zip(new_lstm_state, lstm_state))
-    # Update `is_eos`.
-    is_eos = jnp.logical_or(is_eos, x[:, self.eos_id])
-    return (carried_lstm_state, is_eos), y
-
-  @staticmethod
-  def initialize_carry(batch_size: int, hidden_size: int):
-    # Use a dummy key since the default state init fn is just zeros.
-    return nn.LSTMCell.initialize_carry(
-        jax.random.PRNGKey(0), (batch_size,), hidden_size)
-
-
-class Encoder(nn.Module):
-  """LSTM encoder, returning state after finding the EOS token in the input."""
-  hidden_size: int
-  eos_id: int
-
-  @nn.compact
-  def __call__(self, inputs: Array):
-    # inputs.shape = (batch_size, seq_length, vocab_size).
-    batch_size = inputs.shape[0]
-    lstm = EncoderLSTM(name='encoder_lstm', eos_id=self.eos_id)
-    init_lstm_state = lstm.initialize_carry(batch_size, self.hidden_size)
-    # We use the `is_eos` array to determine whether the encoder should carry
-    # over the last lstm state, or apply the LSTM cell on the previous state.
-    init_is_eos = jnp.zeros(batch_size, dtype=bool)
-    init_carry = (init_lstm_state, init_is_eos)
-    (final_state, _), _ = lstm(init_carry, inputs)
-    return final_state
-
-
-class DecoderLSTM(nn.Module):
+class DecoderLSTMCell(RNNCellBase):
   """DecoderLSTM Module wrapped in a lifted scan transform.
 
   Attributes:
@@ -91,12 +40,6 @@ class DecoderLSTM(nn.Module):
   teacher_force: bool
   vocab_size: int
 
-  @functools.partial(
-      nn.scan,
-      variable_broadcast='params',
-      in_axes=1,
-      out_axes=1,
-      split_rngs={'params': False, 'lstm': True})
   @nn.compact
   def __call__(self, carry: Tuple[Array, Array], x: Array) -> Array:
     """Applies the DecoderLSTM model."""
@@ -114,40 +57,6 @@ class DecoderLSTM(nn.Module):
         predicted_token, self.vocab_size, dtype=jnp.float32)
 
     return (lstm_state, prediction), (logits, prediction)
-
-
-class Decoder(nn.Module):
-  """LSTM decoder.
-
-  Attributes:
-    init_state: [batch_size, hidden_size]
-      Initial state of the decoder (i.e., the final state of the encoder).
-    teacher_force: See docstring on Seq2seq module.
-    vocab_size: Size of the vocabulary.
-  """
-  init_state: Tuple[Any]
-  teacher_force: bool
-  vocab_size: int
-
-  @nn.compact
-  def __call__(self, inputs: Array) -> Tuple[Array, Array]:
-    """Applies the decoder model.
-
-    Args:
-      inputs: [batch_size, max_output_len-1, vocab_size]
-        Contains the inputs to the decoder at each time step (only used when not
-        using teacher forcing). Since each token at position i is fed as input
-        to the decoder at position i+1, the last token is not provided.
-
-    Returns:
-      Pair (logits, predictions), which are two arrays of respectively decoded
-      logits and predictions (in one hot-encoding format).
-    """
-    lstm = DecoderLSTM(teacher_force=self.teacher_force,
-                       vocab_size=self.vocab_size)
-    init_carry = (self.init_state, inputs[:, 0])
-    _, (logits, predictions) = lstm(init_carry, inputs)
-    return logits, predictions
 
 
 class Seq2seq(nn.Module):
@@ -188,13 +97,34 @@ class Seq2seq(nn.Module):
       containing respectively decoded logits and predictions (in one hot
       encoding format).
     """
-    # Encode inputs.
-    init_decoder_state = Encoder(
-        hidden_size=self.hidden_size, eos_id=self.eos_id)(encoder_inputs)
-    # Decode outputs.
-    logits, predictions = Decoder(
-        init_state=init_decoder_state,
-        teacher_force=self.teacher_force,
-        vocab_size=self.vocab_size)(decoder_inputs[:, :-1])
+
+    # Encode
+    encoder = nn.RNN(
+      nn.LSTMCell(), self.hidden_size, return_state=True, 
+      zero_output_for_mask=False, name='encoder')
+
+    # run the encoder while masking out all values after/including the EOS token
+    encoder_state, _ = encoder(encoder_inputs, mask=self.padding_mask(encoder_inputs))
+    
+    # Decode
+    decoder = nn.RNN(
+      DecoderLSTMCell(self.teacher_force, self.vocab_size), decoder_inputs.shape[-1], 
+      split_rngs={'params': False, 'lstm': True}, name="decoder")
+
+    # run the decoder using the encoder's final state and the first decoder input 
+    logits, predictions = decoder(
+      decoder_inputs[:, :-1], initial_state=(encoder_state, decoder_inputs[:, 0]))
 
     return logits, predictions
+
+  def padding_mask(self, inputs: Array) -> Array:
+    """
+    Creates a mask that is True for all values before the EOS token, and False
+    for all values after and including the EOS token.
+    """
+    # undo the one-hot encoding and find which steps are not EOS
+    not_eos = jnp.argmax(inputs, axis=-1) != self.eos_id
+    # use cumprod to select the steps before the EOS token and
+    # ignore all steps after the EOS token
+    mask = jnp.cumprod(not_eos, axis=-1).astype(bool)
+    return mask

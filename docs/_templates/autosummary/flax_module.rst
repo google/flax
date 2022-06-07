@@ -8,6 +8,7 @@
    {% block methods %}
 
    .. automethod:: __call__ 
+   .. automethod:: rnn_forward 
    
    {% if methods %}
    .. rubric:: Methods
