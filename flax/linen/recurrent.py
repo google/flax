@@ -620,7 +620,7 @@ class RNNBase(Module):
         f'The length of \'carry_size\' must be less than the length of the input '
         f'shape, got: \'{carry_size}\' and \'{inputs.shape}\''
       )
-
+    
     num_batch_dims = inputs.ndim - (num_feature_dims + 1) # features dims + time dim
 
     # WARNING: this definition of initialization state
@@ -628,6 +628,28 @@ class RNNBase(Module):
     # Epecifically, this module will not update its cache if 
     # 'params' are mutable, which can arise if users use `mutable=True`.
     is_initializing = self.is_mutable_collection("params")
+
+    # validate mask and calculate is_padding_mask
+    if mask is not None:
+      if mask.ndim == num_batch_dims:
+        if mask.dtype != jnp.int32:
+          raise ValueError(
+            f'\'mask\' must be an int32 array, got: \'{mask.dtype}\''
+          )
+        is_padding_mask = True
+      elif mask.ndim == num_batch_dims + 1:
+        if mask.dtype != jnp.bool_:
+          raise ValueError(
+            f'\'mask\' must be a bool array, got: \'{mask.dtype}\''
+          )
+        is_padding_mask = False
+      else:
+        raise ValueError(
+          f'\'mask\' must have {num_batch_dims} or {num_batch_dims + 1} '
+          f'dimensions, got: \'{mask.ndim}\''
+        )
+    else:
+      is_padding_mask = False
 
     # get carry
     if initial_state is not None:
@@ -645,12 +667,12 @@ class RNNBase(Module):
     def scan_fn(
       cell: RNNCellBase, state: Tuple[Any, Array], x: Array, 
       mask: Optional[jnp.ndarray]
-    ) -> Tuple[Tuple[Any, Array], Array]:
+    ) -> Tuple[Tuple[Any, Array], Tuple[Any, Array]]:
       
       carry_in, prev_non_masked_output = state
       carry_next, y_next = cell(carry_in, x)
 
-      if mask is None:
+      if mask is None or is_padding_mask:
         carry_out, y_out = carry_next, y_next
       else:
         def apply_mask(value, masked_value):
@@ -666,12 +688,12 @@ class RNNBase(Module):
           y_out = jax.tree_map(apply_mask, y_next, prev_non_masked_output)
           prev_non_masked_output = y_out
 
-      return (carry_out, prev_non_masked_output), y_out
+      return (carry_out, prev_non_masked_output), (carry_out, y_out)
 
     scan = transforms.scan(
       scan_fn,
       in_axes=(time_axis, mask_axis), 
-      out_axes=time_axis,
+      out_axes=(0, time_axis),
       reverse=reverse,
       unroll=unroll,
       variable_axes=variable_axes,
@@ -680,13 +702,16 @@ class RNNBase(Module):
       split_rngs=split_rngs,
     )
 
-    if mask is not None and not zero_output_for_mask:
+    if mask is not None and not zero_output_for_mask and not is_padding_mask:
       first_input = jax.lax.index_in_dim(inputs, 0, time_axis, keepdims=False)
       initial_non_masked_output = jnp.zeros_like(cell(initial_carry, first_input)[1])
     else:
       initial_non_masked_output = None
 
-    (carry, _), outputs = scan(cell, (initial_carry, initial_non_masked_output), inputs, mask)
+    (carry, _), (carry_t, outputs) = scan(cell, (initial_carry, initial_non_masked_output), inputs, mask)
+
+    if is_padding_mask:
+      carry = jnp.take_along_axis(carry_t, mask, axis=0)
 
     # if the module is initializing keep the initial carry
     if is_initializing:
