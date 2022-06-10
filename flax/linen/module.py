@@ -21,7 +21,7 @@ import inspect
 import threading
 import typing
 import weakref
-from typing import (Any, Callable, Dict, Generic, Iterable, List, Optional,
+from typing import (Any, Callable, Dict, Generic, Iterable, List, Mapping, Optional,
                     Sequence, Set, Tuple, Type, TypeVar, Union, overload)
 
 import jax
@@ -397,7 +397,7 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
   return method_or_fn
 
 def _validate_field_value(
-  name: str, val: str, variables: Mapping[str, Mapping[str, Any]]
+  name: str, val: str, module: "Module", variables: Mapping[str, Mapping[str, Any]]
 ):
   """Determines if a value created by `.param()` or `.variable()`
   was assigned to a field with the same name during `setup`. This logic
@@ -406,15 +406,8 @@ def _validate_field_value(
   Example::
 
     def setup(self)
-      self.baz = self.param('bar', ...)
+      self.baz = self.param('bar', ...) # Error
 
-  However, its not possible to do this in general, the following
-  code will also raise an error but its not clear if it should::
-
-    def setup(self)
-      self.bar = self.param('bar', ...)
-      self.baz = self.bar
-      # error: value found but no `baz` key exists
   """
   # check for Module names
   modules = (
@@ -438,6 +431,14 @@ def _validate_field_value(
           return
   
   if value_found:
+    for field_name, field_value in vars(module).items():
+      if field_name != name and field_value is val:
+        # value exists in a field with a different name, we don't want to raise an error
+        # here to allow this pattern to work:
+        #
+        #   self.bar = self.param('bar', ...)
+        #   self.baz = self.bar
+        return
     raise RuntimeError(
       f'Value being assigned to attribute \'{name}\' was found in variables but '
       f'\'{name}\' is not a known variable. You can only assign variable to attributes '
@@ -731,7 +732,7 @@ class Module:
     is_dataclass_attr = name in fields and fields[name].init
 
     if self._state.in_setup:
-      _validate_field_value(name, val, self.scope._variables)
+      _validate_field_value(name, val, self, self.scope._variables)
     else:
       if not self._state.is_initialized:
         # Setting attributes before end of Module.__post_init__()

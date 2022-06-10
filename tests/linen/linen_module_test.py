@@ -1562,7 +1562,7 @@ class ModuleTest(absltest.TestCase):
     self.assertIn("bar", variables["params"])
     self.assertIn("submod_0", variables["params"])
 
-  def test_correspondance_counter_example(self):
+  def test_correspondance_allow_repeated_values_from_fields(self):
     class Foo(nn.Module):
       def setup(self):
         self.bar = self.param("bar", lambda key: jnp.array(1))
@@ -1575,8 +1575,7 @@ class ModuleTest(absltest.TestCase):
 
     module = Foo(parent=None)
 
-    with self.assertRaises(RuntimeError):
-      variables = module.init(jax.random.PRNGKey(0))
+    variables = module.init(jax.random.PRNGKey(0))
   
 
 if __name__ == '__main__':
