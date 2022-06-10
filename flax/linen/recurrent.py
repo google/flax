@@ -523,6 +523,50 @@ class RNNBase(Module):
           split_rngs={'params': False},
         )
   """
+  @staticmethod
+  def _arange_like(shape: Tuple[int, ...]) -> jnp.ndarray:
+    ndim = len(shape)
+    values = jnp.arange(shape[-1])
+    values = jnp.reshape(values, (1,) * (ndim - 1) + (-1,))
+    return jnp.broadcast_to(values, shape)
+
+  @staticmethod
+  def _match_dims(x: Array, target: Array) -> Array:
+    return x.reshape(x.shape + (1,) * (target.ndim - x.ndim))
+
+  @staticmethod
+  def _order_values_with_mask(
+    values: Array, mask: Array, axis: int = -1
+  ) -> Tuple[Array, Array, Array]:
+    """Reorders values such that all masked-in values are at the beginning.
+    and all masked-out values are at the end.
+    """
+    num_steps = mask.shape[-1]
+
+    # Create an array of relative values for sorting, map masked-out 
+    # timesteps values bigger than any masked-in value
+    masked_in_values = RNNBase._arange_like(mask.shape)
+    masked_out_values = masked_in_values + num_steps
+    sorting_values = jnp.where(mask, masked_in_values, masked_out_values)
+
+    sort_indexes = jnp.argsort(sorting_values, axis=-1)
+    revert_indexes = jnp.argsort(sort_indexes, axis=-1)
+
+    # Reorder values
+    values = jnp.take_along_axis(
+      values, RNNBase._match_dims(sort_indexes, values), axis=axis)
+    mask = jnp.take_along_axis(mask, sort_indexes, axis=-1)
+
+    return values, mask, revert_indexes
+
+  @staticmethod
+  def _select_with_mask(mask, a, b):
+    def apply_mask(value, masked_value):
+      # reshape mask to have same number of dimensions as value
+      mask_ = RNNBase._match_dims(mask, value)
+      return jnp.where(mask_, value, masked_value)
+    return jax.tree_map(apply_mask, a, b)
+
   def rnn_forward(
     self,
     cell: RNNCellBase,
@@ -536,6 +580,7 @@ class RNNBase(Module):
     reset_state: bool,
     initial_state: Optional[Any],
     mask: Optional[jnp.ndarray],
+    mask_is_ordered: bool,
     zero_output_for_mask: bool,
     # scan args
     reverse: bool,
@@ -591,6 +636,9 @@ class RNNBase(Module):
         an binary array of shape `(*batch, time)` indicating whether a given timestep
         should be masked. True indicates that the timestep is used, False indicates
         that the timestep is ignored.
+      mask_is_ordered: if a `mask` is given assert that all masked-in values are at the
+        beginning of the sequence and all masked-out values are at the end. If no mask
+        is given this argument has no effect.
       zero_output_for_mask: when `mask` is given, if True, the output of masked-out
         timesteps is set to zeros, else the output is set to the value of the
         previous available timestep, if there are no previous available timesteps the
@@ -606,7 +654,7 @@ class RNNBase(Module):
         step, or replicated such that its values remain the same at each step. This
         argument will be passed to `nn.scan`.
     """
-
+    
     num_feature_dims = 1 if isinstance(carry_size, int) else len(carry_size)
     time_axis = time_axis if time_axis >= 0 else time_axis + inputs.ndim
     mask_axis = 0 if mask is None else mask.ndim - 1
@@ -629,27 +677,36 @@ class RNNBase(Module):
     # 'params' are mutable, which can arise if users use `mutable=True`.
     is_initializing = self.is_mutable_collection("params")
 
-    # validate mask and calculate is_padding_mask
+    # validate mask and calculate
+    seq_length = None
+    revert_indexes = None
+    original_mask = None
     if mask is not None:
       if mask.ndim == num_batch_dims:
         if mask.dtype != jnp.int32:
           raise ValueError(
             f'\'mask\' must be an int32 array, got: \'{mask.dtype}\''
           )
-        is_padding_mask = True
+        seq_length = mask
+        mask = seq_length[..., jnp.newaxis] < self._arange_like(
+          seq_length.shape + (inputs.shape[time_axis],))
+        original_mask = mask
+
       elif mask.ndim == num_batch_dims + 1:
         if mask.dtype != jnp.bool_:
           raise ValueError(
             f'\'mask\' must be a bool array, got: \'{mask.dtype}\''
           )
-        is_padding_mask = False
+        seq_length = jnp.count_nonzero(mask, axis=-1)
+        original_mask = mask
+        if not mask_is_ordered:
+          inputs, mask, revert_indexes = self._order_values_with_mask(
+            inputs, mask, axis=time_axis)
       else:
         raise ValueError(
           f'\'mask\' must have {num_batch_dims} or {num_batch_dims + 1} '
           f'dimensions, got: \'{mask.ndim}\''
         )
-    else:
-      is_padding_mask = False
 
     # get carry
     if initial_state is not None:
@@ -665,30 +722,39 @@ class RNNBase(Module):
       )
 
     def scan_fn(
-      cell: RNNCellBase, state: Tuple[Any, Array], x: Array, 
+      cell: RNNCellBase, carry_in: Any, x: Array, 
       mask: Optional[jnp.ndarray]
     ) -> Tuple[Tuple[Any, Array], Tuple[Any, Array]]:
+
+      carry_next, y_out = cell(carry_in, x)
+      carry_out = carry_next if mask is not None else None
+
+      return carry_next, (carry_out, y_out)
+    # def scan_fn(
+    #   cell: RNNCellBase, state: Tuple[Any, Array], x: Array, 
+    #   mask: Optional[jnp.ndarray]
+    # ) -> Tuple[Tuple[Any, Array], Tuple[Any, Array]]:
       
-      carry_in, prev_non_masked_output = state
-      carry_next, y_next = cell(carry_in, x)
+    #   carry_in, prev_non_masked_output = state
+    #   carry_next, y_next = cell(carry_in, x)
 
-      if mask is None or is_padding_mask:
-        carry_out, y_out = carry_next, y_next
-      else:
-        def apply_mask(value, masked_value):
-          # reshape mask to have same number of dimensions as value
-          mask_ = mask.reshape(mask.shape + (1,) * (value.ndim - mask.ndim))
-          return jnp.where(mask_, value, masked_value)
+    #   if mask is None or is_padding_mask:
+    #     carry_out, y_out = carry_next, y_next
+    #   else:
+    #     def apply_mask(value, masked_value):
+    #       # reshape mask to have same number of dimensions as value
+    #       mask_ = mask.reshape(mask.shape + (1,) * (value.ndim - mask.ndim))
+    #       return jnp.where(mask_, value, masked_value)
         
-        carry_out = jax.tree_map(apply_mask, carry_next, carry_in)
+    #     carry_out = jax.tree_map(apply_mask, carry_next, carry_in)
 
-        if zero_output_for_mask:
-          y_out = jax.tree_map(apply_mask, y_next, jnp.zeros_like(y_next))
-        else:
-          y_out = jax.tree_map(apply_mask, y_next, prev_non_masked_output)
-          prev_non_masked_output = y_out
+    #     if zero_output_for_mask:
+    #       y_out = jax.tree_map(apply_mask, y_next, jnp.zeros_like(y_next))
+    #     else:
+    #       y_out = jax.tree_map(apply_mask, y_next, prev_non_masked_output)
+    #       prev_non_masked_output = y_out
 
-      return (carry_out, prev_non_masked_output), (carry_out, y_out)
+    #   return (carry_out, prev_non_masked_output), (carry_out, y_out)
 
     scan = transforms.scan(
       scan_fn,
@@ -702,17 +768,43 @@ class RNNBase(Module):
       split_rngs=split_rngs,
     )
 
-    if mask is not None and not zero_output_for_mask and not is_padding_mask:
-      first_input = jax.lax.index_in_dim(inputs, 0, time_axis, keepdims=False)
-      initial_non_masked_output = jnp.zeros_like(cell(initial_carry, first_input)[1])
-    else:
-      initial_non_masked_output = None
+    carry, (carry_t, outputs) = scan(cell, initial_carry, inputs, mask)
 
-    (carry, _), (carry_t, outputs) = scan(cell, (initial_carry, initial_non_masked_output), inputs, mask)
+    # maybe apply mask and revert value order
+    if mask is not None:
+      assert seq_length is not None
+      # select carry
+      def _get_last_valid_carry(c0, cs):
+        cs = jnp.concatenate([c0[None], cs], axis=0)
+        # add time dim + carry feature dims
+        seq_length_ = self._match_dims(seq_length, c0)
+        return jnp.take_along_axis(cs, seq_length_[None], axis=0)[0]
+      carry = jax.tree_map(_get_last_valid_carry, initial_carry, carry_t)
 
-    if is_padding_mask:
-      carry = jnp.take_along_axis(carry_t, mask, axis=0)
+      # maybe revert values to their original order
+      
+      
+      if zero_output_for_mask:
+        # zero masked-out values
+        outputs = self._select_with_mask(mask, outputs, jnp.zeros_like(outputs))
 
+        if revert_indexes is not None:
+          outputs = jnp.take_along_axis(
+            outputs, self._match_dims(revert_indexes, outputs), axis=time_axis)
+      else:
+        # fill masked-out values with previous masked-in values
+        # if there is no previous masked-in values it fills with zeros
+        # this procedure also orders values back to their original positions
+        zeros_output = jnp.zeros_like(jax.lax.dynamic_slice_in_dim(outputs, 0, 1, time_axis))
+        padded_ordered_outputs = jnp.concatenate([zeros_output, outputs], axis=time_axis)
+        
+        valid_idx = jnp.cumsum(original_mask, axis=-1)
+        valid_idx = self._match_dims(valid_idx, padded_ordered_outputs)
+        repeated_outputs = jnp.take_along_axis(padded_ordered_outputs, valid_idx, axis=time_axis)
+
+        outputs = self._select_with_mask(
+          original_mask, repeated_outputs, jax.lax.stop_gradient(repeated_outputs))
+      
     # if the module is initializing keep the initial carry
     if is_initializing:
       carry = initial_carry
@@ -804,7 +896,7 @@ class RNN(RNNBase):
   def __call__(self, 
     inputs: jnp.ndarray, init_key: Optional[jnp.ndarray] = None, 
     initial_state: Optional[Any] = None, reset_state: bool = False,
-    mask: Optional[jnp.ndarray] = None,
+    mask: Optional[jnp.ndarray] = None, mask_is_ordered: bool = False,
     # overrides
     return_state: Optional[bool] = None, reverse: Optional[bool] = None,
     zero_output_for_mask: Optional[bool] = None,
@@ -816,6 +908,13 @@ class RNN(RNNBase):
       initial_state: initial state of the RNN cell.
       reset_state: if True, the RNN cell's state is reset to the initial state before
         processing the sequence.
+      mask: an optional mask to apply to the input sequence. If given, it should be
+        an binary array of shape `(*batch, time)` indicating whether a given timestep
+        should be masked. True indicates that the timestep is used, False indicates
+        that the timestep is ignored.
+      mask_is_ordered: if a `mask` is given assert that all masked-in values are at the
+        beginning of the sequence and all masked-out values are at the end. If no mask
+        is given this argument has no effect.
       return_state: if True, a (carry, output) tuple is returned, otherwise only the
         output is returned. If given, this argument overrides the `return_state` attribute
         defined in the constructor.
@@ -841,6 +940,7 @@ class RNN(RNNBase):
       reset_state=reset_state,
       initial_state=initial_state,
       mask=mask,
+      mask_is_ordered=mask_is_ordered,
       zero_output_for_mask=zero_output_for_mask 
       if zero_output_for_mask is not None 
       else self.zero_output_for_mask,
