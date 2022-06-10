@@ -396,6 +396,53 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
 
   return method_or_fn
 
+def _validate_field_value(
+  name: str, val: str, variables: Mapping[str, Mapping[str, Any]]
+):
+  """Determines if a value created by `.param()` or `.variable()`
+  was assigned to a field with the same name during `setup`. This logic
+  will cause the following code to raise an error:
+
+  Example::
+
+    def setup(self)
+      self.baz = self.param('bar', ...)
+
+  However, its not possible to do this in general, the following
+  code will also raise an error but its not clear if it should::
+
+    def setup(self)
+      self.bar = self.param('bar', ...)
+      self.baz = self.bar
+      # error: value found but no `baz` key exists
+  """
+  # check for Module names
+  modules = (
+    m for m in jax.tree_leaves(val, is_leaf=lambda x: isinstance(x, Module)) 
+    if isinstance(m, Module)
+  )
+
+  for module in modules:
+    if module.name is not None and module.name != name:
+      raise RuntimeError(
+        f'Module name \'{module.name}\' does not match field name \'{name}\''
+      )
+
+  
+  value_found = False
+  for collection in variables.values():
+    for field, existing_value in collection.items():
+      if val is existing_value:
+        value_found = True
+        if name == field:
+          return
+  
+  if value_found:
+    raise RuntimeError(
+      f'Value being assigned to attribute \'{name}\' was found in variables but '
+      f'\'{name}\' is not a known variable. You can only assign variable to attributes '
+      f'of the same name.'
+    )
 
 class SetupState(enum.IntEnum):
   # setup() has not been called.
@@ -683,7 +730,9 @@ class Module:
     fields = self.__dataclass_fields__  # pytype: disable=attribute-error
     is_dataclass_attr = name in fields and fields[name].init
 
-    if not self._state.in_setup:
+    if self._state.in_setup:
+      _validate_field_value(name, val, self.scope._variables)
+    else:
       if not self._state.is_initialized:
         # Setting attributes before end of Module.__post_init__()
         object.__setattr__(self, name, val)
@@ -928,6 +977,15 @@ class Module:
     `key` and `shape`, and both have to be passed on. The PRNG for `stats` has
     to be provided explicitly when calling :meth:`init` and :meth:`apply`.
 
+    When creating variables inside `setup` and assigning them to a Module 
+    attribute make sure that the name of the variable and the name of the
+    attribute match. The following example will yield an error::
+
+      def setup(self):
+        key = self.make_rng('stats')
+        # ERROR: attribute name and variable name do not match
+        self.avg = self.param('mean', lecun_normal(), key, (2, 2))
+
     Args:
       col: The variable collection name.
       name: The variable name.
@@ -966,6 +1024,14 @@ class Module:
     `key` and `shape`, but only `shape` has to be provided explicitly; `key`
     is set automatically using the PRNG for `params` that is passed when
     initializing the module using :meth:`init`.
+
+    When creating parameters inside `setup` and assigning them to a Module 
+    attribute make sure that the name of the parameter and the name of the
+    attribute match. The following example will yield an error::::
+
+      def setup(self):
+        # ERROR: attribute name and parameter name do not match
+        self.avg = self.param('mean', lecun_normal(), (2, 2))
 
     Args:
       name: The parameter name.
@@ -1632,3 +1698,4 @@ def init(fn: Callable[..., Any], module: Module,
   def init_wrapper(*args, **kwargs):
     return init_fn(*args, **kwargs)[1]
   return init_wrapper
+

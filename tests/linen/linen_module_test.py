@@ -28,7 +28,7 @@ from jax.nn import initializers
 import jax.numpy as jnp
 
 import numpy as np
-from typing import (Any, Tuple, Callable, Generic, Mapping, NamedTuple,
+from typing import (Any, Optional, Tuple, Callable, Generic, Mapping, NamedTuple,
                     Sequence, TypeVar)
 
 from flax import linen as nn
@@ -1516,6 +1516,68 @@ class ModuleTest(absltest.TestCase):
     k = random.PRNGKey(0)
     self.assertTrue(foo.apply({}, rngs={'bar': k}))
     self.assertFalse(foo.apply({}, rngs={'baz': k}))
+
+  def test_field_params_correspondance(self):
+    class Sub(nn.Module):
+      def __call__(self):
+        pass
+
+      def setup(self):
+        self.some_field = self.param("some_field", lambda key: 2)
+
+    class Foo(nn.Module):
+      field_name: str
+      module_name: Optional[str] = None
+
+      def setup(self):
+        self.bar = self.param(self.field_name, lambda key: {"a":1})
+        self.submod = [Sub(name=self.module_name)]
+
+      def __call__(self):
+        self.submod[0]()
+    
+    # test incorrect field name
+    module = Foo(field_name="baz", parent=None)
+
+    with self.assertRaisesWithPredicateMatch(
+      RuntimeError, lambda e: e.args[0].startswith('Value being assigned to attribute')
+    ):
+      variables = module.init(jax.random.PRNGKey(0))
+
+    # test incorrect module name
+    module = Foo(field_name="bar", module_name="baz", parent=None)
+    with self.assertRaisesWithPredicateMatch(
+      RuntimeError, lambda e: e.args[0].startswith('Module name')
+    ):
+      variables = module.init(jax.random.PRNGKey(0))
+    
+    # test correct field name
+    module = Foo(field_name="bar", parent=None)
+    variables = module.init(jax.random.PRNGKey(0))
+
+    # check no error in apply
+    _ = module.apply(variables)
+
+    # check variables
+    self.assertIn("bar", variables["params"])
+    self.assertIn("submod_0", variables["params"])
+
+  def test_correspondance_counter_example(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.bar = self.param("bar", lambda key: jnp.array(1))
+        # this will fail because assigned value is found but
+        # no 'baz' variable exists
+        self.baz = self.bar
+
+      def __call__(self):
+        pass
+
+    module = Foo(parent=None)
+
+    with self.assertRaises(RuntimeError):
+      variables = module.init(jax.random.PRNGKey(0))
+  
 
 if __name__ == '__main__':
   absltest.main()
