@@ -11,7 +11,6 @@ vNext
 -
 -
 -
-- Add `tabulate` functionality to Modules with rich tabular output.
 -
 -
 -
@@ -25,6 +24,12 @@ vNext
 -
 -
 -
+-
+
+0.5.1
+-----
+New features:
+- Added `nn.tabulate` and `Module.tabulate` to generate rich representations of the network structure.
 
 0.5.0
 -----
