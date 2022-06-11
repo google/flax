@@ -248,7 +248,7 @@ A minimal example of using `pack` to transpose each matrix in a variable collect
 from flax.core import lift
 from flax.core import Scope, init, apply, nn as core_nn
 
-def lift_transpose(fn, target='params', variables=True, rngs=True)
+def lift_transpose(fn, target='params', variables=True, rngs=True):
   # by default we transpose 'params' and simply pass through all other variables.
   def wrapper(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     # normally we would first call into a JAX transformed function here...
