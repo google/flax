@@ -244,6 +244,41 @@ class CheckpointsTest(parameterized.TestCase):
     expected_new_object = {str(k): v for k, v in enumerate(test_object1)}
     jtu.check_eq(new_object, expected_new_object)
 
+  def test_async_save_checkpoints(self):
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    test_object0 = {'a': np.array([0, 0, 0], np.int32),
+                    'b': np.array([0, 0, 0], np.int32)}
+    test_object1 = {'a': np.random.normal(size=(1000, 1000)),
+                    'b': np.random.normal(size=(1000, 1000))}
+    test_object2 = {'a': np.random.normal(size=(1000, 1000)),
+                    'b': np.random.normal(size=(1000, 1000))}
+    test_object3 = {'a': np.random.normal(size=(1000, 1000)),
+                    'b': np.random.normal(size=(1000, 1000))}
+    new_object = checkpoints.restore_checkpoint(
+        tmp_dir, test_object0, prefix='test_')
+    jtu.check_eq(new_object, test_object0)
+    # Create leftover temporary checkpoint, which should be ignored.
+    gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
+    am = checkpoints.AsyncManager()
+    checkpoints.save_checkpoint(
+        tmp_dir, test_object1, 0, prefix='test_', keep=1, async_manager=am)
+    # Hard-wait the write to be done, then check its content.
+    am.save_future.result()
+    self.assertIn('test_0', os.listdir(tmp_dir))
+    new_object = checkpoints.restore_checkpoint(
+        tmp_dir, test_object1, prefix='test_')
+    jtu.check_eq(new_object, test_object1)
+    # Check two consecutive saves happen in the right order.
+    checkpoints.save_checkpoint(
+        tmp_dir, test_object2, 1, prefix='test_', keep=1, async_manager=am)
+    checkpoints.save_checkpoint(
+        tmp_dir, test_object3, 2, prefix='test_', keep=1, async_manager=am)
+    am.save_future.result()
+    self.assertIn('test_2', os.listdir(tmp_dir))
+    new_object = checkpoints.restore_checkpoint(
+        tmp_dir, test_object1, prefix='test_')
+    jtu.check_eq(new_object, test_object3)
+
   def test_convert_pre_linen(self):
     params = checkpoints.convert_pre_linen({
         'mod_0': {
