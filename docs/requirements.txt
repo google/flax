@@ -1,5 +1,5 @@
 sphinx>=3.3.1
-sphinx_rtd_theme
+sphinx-book-theme
 Pygments>=2.6.1
 jax>=0.3
 jaxlib
