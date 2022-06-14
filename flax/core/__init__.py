@@ -45,4 +45,8 @@ from .lift import (
   jvp as jvp
 )
 
-
+from .meta import (
+  AxisMetadata as AxisMetadata,
+  unbox as unbox,
+  map_axis_meta as map_axis_meta,
+)

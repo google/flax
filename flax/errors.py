@@ -298,6 +298,24 @@ class JaxTransformError(FlaxError):
 
 
 #################################################
+# meta.py errors                               #
+#################################################
+
+
+class PartitioningUnspecifiedError(FlaxError):
+  """
+  This error is raised when trying to add an axis to a Partitioned variable by
+  using a transformation (e.g.: ``scan``, ``vmap``) without specifiying the
+  "partition_name" in the ``metadata_params`` dict.
+  """
+
+  def __init__(self, target):
+    super().__init__(
+        f'Trying to transform a Partitioned variable but "partition_name"'
+        f' is not specified in metadata_params: {target}')
+
+
+#################################################
 # module.py errors                              #
 #################################################
 

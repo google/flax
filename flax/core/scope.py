@@ -31,6 +31,7 @@ from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
 from . import tracers
+from . import meta
 import jax
 from jax import config as jax_config
 from jax import numpy as jnp
@@ -335,7 +336,7 @@ class Variable(Generic[T]):
   content and can be assigned to for mutation.
   """
 
-  def __init__(self, scope: 'Scope', collection: str, name: str):
+  def __init__(self, scope: 'Scope', collection: str, name: str, unbox: bool):
     """Initializes a variable.
 
     Args:
@@ -347,15 +348,21 @@ class Variable(Generic[T]):
     self.scope = scope
     self.collection = collection
     self.name = name
+    self.unbox = unbox
 
   @property
   def value(self) -> T:
     """Returns the value of this Variable."""
-    return self.scope.get_variable(self.collection, self.name)
+    v = self.scope.get_variable(self.collection, self.name)
+    return meta.unbox(v) if self.unbox else v
 
   @value.setter
   def value(self, value: T):
     """Updates the value of this Variable."""
+    if self.unbox:
+      cur = self.scope.get_variable(self.collection, self.name)
+      value = meta.replace_boxed(cur, value)
+      
     self.scope.put_variable(self.collection, self.name, value)
 
   def is_mutable(self) -> bool:
@@ -495,7 +502,7 @@ class Scope:
     """
     self._check_valid()
     scope = Scope(self._variables, self.rngs, self.name, self.mutable,
-                  self.parent, path=self.path, flags=self.flags)
+                  self.parent, flags=self.flags)
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
     return scope
@@ -709,7 +716,7 @@ class Scope:
 
   def variable(self, col: str, name: str,  # pylint: disable=keyword-arg-before-vararg
                init_fn: Optional[Callable[..., T]] = None,
-               *init_args) -> Variable[T]:
+               *init_args, unbox: bool = True) -> Variable[T]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
     Args:
@@ -719,6 +726,8 @@ class Scope:
         arguments. If None, the variable must already be initialized otherwise
         an error is raised.
       *init_args: the arguments to evaluate init_fn on lazily.
+      unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
+        value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
       The variable.
@@ -731,9 +740,10 @@ class Scope:
         raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
-    return Variable(self, col, name)
+    return Variable(self, col, name, unbox=unbox)
 
-  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+  def param(self, name: str, init_fn: Callable[..., T], *init_args,
+            unbox: bool = True) -> T:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
     If the parameter exists already, the existing value is simply returned.
@@ -743,6 +753,8 @@ class Scope:
       init_fn: a function taking a PRNGKey plus any other number of positional
         arguments.
       *init_args: the arguments to evaluate init_fn on lazily.
+      unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
+        value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
       The parameters.
@@ -774,7 +786,8 @@ class Scope:
         raise errors.ScopeParamNotFoundError(name, self.path_text)
       value = init_fn(self.make_rng('params'), *init_args)
       self.put_variable('params', name, value)
-
+    if unbox:
+      value = meta.unbox(value)
     return value
 
   def _populate_collections(self):

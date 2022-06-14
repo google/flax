@@ -22,6 +22,7 @@ from typing import (Any, Callable, Generic, Iterable, List, Mapping, Optional,
 import warnings
 
 from . import axes_scan
+from . import meta
 from flax import traceback_util
 from .frozen_dict import freeze
 from .frozen_dict import unfreeze
@@ -523,7 +524,8 @@ def vmap(fn: Callable[..., Any],
          out_axes=0,
          axis_size: Optional[int] = None,
          axis_name: Optional[str] = None,
-         spmd_axis_name: Optional[str] = None) -> Callable[..., Any]:
+         spmd_axis_name: Optional[str] = None,
+         metadata_params: Mapping[Any, Any] = {}) -> Callable[..., Any]:
   """A lifted version of ``jax.vmap``.
 
   See ``jax.vmap`` for the unlifted batch transform in Jax.
@@ -574,6 +576,8 @@ def vmap(fn: Callable[..., Any],
     spmd_axis_name: Axis name added to any pjit sharding constraints appearing
       in `fn`. See also
       https://github.com/google/flax/blob/main/flax/linen/partitioning.py.
+    metadata_params: arguments dict passed to AxisMetadata instances in the
+      variable tree.
 
   Returns:
     A vectorized version of the input scope function.
@@ -611,6 +615,15 @@ def vmap(fn: Callable[..., Any],
         tree_map_rngs(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
 
+    new_variable_groups = []
+    for var_group, axis in zip(variable_groups, variable_in_axes):
+      if axis is not None:
+        new_variable_groups.append(meta.remove_axis(
+            var_group, axis, metadata_params))
+      else:
+        new_variable_groups.append(var_group)
+    variable_groups = tuple(new_variable_groups)
+
     @functools.partial(
         jax.vmap,
         in_axes=(variable_in_axes, rng_axes, in_axes),
@@ -624,7 +637,15 @@ def vmap(fn: Callable[..., Any],
       y = fn(scope, *args)
       return y, repack_fn(scope)
 
-    return mapped(variable_groups, rng_groups, args)
+    y, vars_out = mapped(variable_groups, rng_groups, args)
+    new_vars_out = []
+    for var_group, axis in zip(vars_out, variable_out_axes):
+      if axis is not None:
+        new_vars_out.append(meta.add_axis(var_group, axis, metadata_params))
+      else:
+        new_vars_out.append(var_group)
+    vars_out = tuple(new_vars_out)
+    return y, vars_out
 
   return pack(
       inner, variable_in_groups, variable_out_groups, rng_groups,
@@ -633,7 +654,6 @@ def vmap(fn: Callable[..., Any],
 
 ScanAxis = int
 InOutScanAxis = Union[ScanAxis, In[ScanAxis], Out[ScanAxis]]
-
 
 def scan(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {},
@@ -645,6 +665,7 @@ def scan(fn: Callable[..., Any],
          reverse: bool = False,
          unroll: int = 1,
          data_transform: Optional[Callable[..., Any]] = None,
+         metadata_params: Mapping[Any, Any] = {},
          ) -> Callable[..., Any]:
   """A lifted version of ``jax.lax.scan``.
 
@@ -708,6 +729,8 @@ def scan(fn: Callable[..., Any],
       iteration of a loop (default: 1).
     data_transform: optional function to transform raw variable and rng groups,
       intended for inline SPMD annotations.
+    metadata_params: arguments dict passed to AxisMetadata instances in the
+      variable tree.
 
   Returns:
     The scan function with the signature
@@ -777,8 +800,16 @@ def scan(fn: Callable[..., Any],
     broadcast_vars = variable_groups[0]
     carry_vars = variable_groups[1]
     scan_vars = variable_groups[2:]
+    new_scan_vars = []
+    for scan_group, axis in zip(scan_vars, variable_in_axes):
+      new_scan_vars.append(meta.remove_axis(scan_group, axis, metadata_params))
     broadcast_vars, (carry_vars, c), (ys, scan_vars) = scanned(
-        broadcast_vars, (carry_vars, init), scan_vars, rng_groups, args)
+        broadcast_vars, (carry_vars, init), tuple(new_scan_vars),
+        rng_groups, args)
+    new_scan_vars = []
+    for scan_group, axis in zip(scan_vars, variable_out_axes):
+      new_scan_vars.append(meta.add_axis(scan_group, axis, metadata_params))
+    scan_vars = tuple(new_scan_vars)
     out_vars = (broadcast_vars, carry_vars,) + scan_vars
     return (c, ys), out_vars
 

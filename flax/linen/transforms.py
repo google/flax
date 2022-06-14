@@ -438,6 +438,7 @@ def vmap(target: Target,
          axis_size: Optional[int] = None,
          axis_name: Optional[str] = None,
          spmd_axis_name: Optional[str] = None,
+         metadata_params: Mapping[Any, Any] = {},
          methods=None) -> Target:
   """A lifted version of ``jax.vmap``.
 
@@ -491,6 +492,8 @@ def vmap(target: Target,
     spmd_axis_name: Axis name added to any pjit sharding constraints appearing
       in `fn`. See also
       https://github.com/google/flax/blob/main/flax/linen/partitioning.py.
+    metadata_params: arguments dict passed to AxisMetadata instances in the
+      variable tree.
 
   Returns:
     A batched/vectorized version of ``target``, with the same arguments but with
@@ -507,6 +510,7 @@ def vmap(target: Target,
       out_axes=out_axes,
       axis_size=axis_size,
       axis_name=axis_name,
+      metadata_params=metadata_params,
       spmd_axis_name=spmd_axis_name)
 
 
@@ -698,6 +702,7 @@ def scan(target: Target,
          reverse: bool = False,
          unroll: int = 1,
          data_transform: Optional[Callable[..., Any]] = None,
+         metadata_params: Mapping[Any, Any] = {},
          methods=None) -> Target:
   """A lifted version of ``jax.lax.scan``.
 
@@ -794,6 +799,8 @@ def scan(target: Target,
     data_transform: optional function to transform raw functional-core variable
       and rng groups inside lifted scan body_fn, intended for inline SPMD
       annotations.
+    metadata_params: arguments dict passed to AxisMetadata instances in the
+      variable tree.
     methods: If `target` is a `Module`, the methods of `Module` to scan over.
 
   Returns:
@@ -812,6 +819,7 @@ def scan(target: Target,
       reverse=reverse,
       unroll=unroll,
       data_transform=data_transform,
+      metadata_params=metadata_params,
       methods=methods)
 
 
