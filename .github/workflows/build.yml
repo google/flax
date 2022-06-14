@@ -88,3 +88,24 @@ jobs:
            "description": "'$status'",
            "context": "github-actions/Build"
            }'
+
+  test-import:
+    name: Test import standalone
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install standalone dependencies only
+      run: |
+        pip install .
+    - name: Test importing Flax
+      run: |
+        python -c "import flax"
+
+
