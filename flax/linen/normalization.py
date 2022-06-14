@@ -294,8 +294,8 @@ class LayerNorm(Module):
       by the next layer.
     bias_init: Initializer for bias, by default, zero.
     scale_init: Initializer for scale, by default, one.
-    reduction_axis: Axis for computing normalization statistics.
-    feature_axis: Feature axis for learned bias and scaling.
+    reduction_axes: Axes for computing normalization statistics.
+    feature_axes: Feature axes for learned bias and scaling.
   """
   epsilon: float = 1e-6
   dtype: Optional[Dtype] = None
@@ -304,8 +304,8 @@ class LayerNorm(Module):
   use_scale: bool = True
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
-  reduction_axis: int = -1
-  feature_axis: int = -1
+  reduction_axes: Axes = -1
+  feature_axes: Axes = -1
 
   @compact
   def __call__(self, x):
@@ -317,14 +317,11 @@ class LayerNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    reduction_axes = (self.reduction_axis,)
-    feature_axes = (self.feature_axis,)
-
     # TODO(jheek) suport axis_name for model parallelism?
-    mean, var = _compute_stats(x, reduction_axes, self.dtype, None, None)
+    mean, var = _compute_stats(x, self.reduction_axes, self.dtype, None, None)
 
     return _normalize(
-        self, x, mean, var, reduction_axes, feature_axes,
+        self, x, mean, var, self.reduction_axes, self.feature_axes,
         self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)
