@@ -32,7 +32,7 @@ install_requires = [
     "optax",
     "rich~=11.1",
     "typing_extensions>=4.1.1",
-    "PyYAML>=6.0",
+    "PyYAML>=5.4.1",
 ]
 
 tests_require = [
