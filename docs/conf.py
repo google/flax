@@ -35,6 +35,8 @@ sys.path.insert(0, os.path.abspath('..'))
 # Include local extension.
 sys.path.append(os.path.abspath('./_ext'))
 
+# patch sphinx
+import docs.conf_sphinx_patch
 # -- Project information -----------------------------------------------------
 
 project = 'Flax'
@@ -76,7 +78,7 @@ autosummary_generate = True
 
 master_doc = 'index'
 
-autodoc_typehints = 'description'
+autodoc_typehints = 'none'
 
 
 # -- Options for HTML output -------------------------------------------------
