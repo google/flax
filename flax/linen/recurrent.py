@@ -657,7 +657,7 @@ class RNNBase(Module):
     
     num_feature_dims = 1 if isinstance(carry_size, int) else len(carry_size)
     time_axis = time_axis if time_axis >= 0 else time_axis + inputs.ndim
-    mask_axis = 0 if mask is None else mask.ndim - 1
+    n_steps = inputs.shape[time_axis]
 
     if num_feature_dims < 1:
       raise ValueError(
@@ -670,6 +670,8 @@ class RNNBase(Module):
       )
     
     num_batch_dims = inputs.ndim - (num_feature_dims + 1) # features dims + time dim
+    shape_without_time = inputs.shape[:time_axis] + inputs.shape[time_axis + 1:]
+    shape_batch = shape_without_time[:num_batch_dims]
 
     # WARNING: this definition of initialization state
     # is known to be problematic: https://github.com/google/flax/issues/652#issuecomment-1124216543
@@ -682,21 +684,20 @@ class RNNBase(Module):
     revert_indexes = None
     original_mask = None
     if mask is not None:
-      if mask.ndim == num_batch_dims:
-        if mask.dtype != jnp.int32:
+      if mask.dtype == jnp.int32:
+        if shape_batch != mask.shape:
           raise ValueError(
-            f'\'mask\' must be an int32 array, got: \'{mask.dtype}\''
-          )
+            f'Integer mask must be of shape {shape_batch + (n_steps,)}, got: '
+            f'{mask.shape}')
         seq_length = mask
-        mask = seq_length[..., jnp.newaxis] < self._arange_like(
-          seq_length.shape + (inputs.shape[time_axis],))
+        step_index = self._arange_like(seq_length.shape + (inputs.shape[time_axis],))
+        mask = step_index < seq_length[..., jnp.newaxis]
         original_mask = mask
-
-      elif mask.ndim == num_batch_dims + 1:
-        if mask.dtype != jnp.bool_:
+      elif mask.dtype == jnp.bool_:
+        if shape_batch + (n_steps,) != mask.shape:
           raise ValueError(
-            f'\'mask\' must be a bool array, got: \'{mask.dtype}\''
-          )
+            f'Binary mask must be of shape {shape_batch + (n_steps,)}, got: '
+            f'{mask.shape}')
         seq_length = jnp.count_nonzero(mask, axis=-1)
         original_mask = mask
         if not mask_is_ordered:
@@ -704,9 +705,8 @@ class RNNBase(Module):
             inputs, mask, axis=time_axis)
       else:
         raise ValueError(
-          f'\'mask\' must have {num_batch_dims} or {num_batch_dims + 1} '
-          f'dimensions, got: \'{mask.ndim}\''
-        )
+          f'\'mask\' must be either an bool or int32 array, got: '
+          f'{mask.dtype}')
 
     # get carry
     if initial_state is not None:
@@ -714,7 +714,7 @@ class RNNBase(Module):
     elif not reset_state and stateful and self.has_variable('memory', 'carry'):
       initial_carry = self.get_variable('memory', 'carry')
     else:
-      shape_without_time = inputs.shape[:time_axis] + inputs.shape[time_axis + 1:]
+      
       initial_carry = cell.initialize_carry(
         init_key,
         batch_dims=shape_without_time[:num_batch_dims],
@@ -722,8 +722,7 @@ class RNNBase(Module):
       )
 
     def scan_fn(
-      cell: RNNCellBase, carry_in: Any, x: Array, 
-      mask: Optional[jnp.ndarray]
+      cell: RNNCellBase, carry_in: Any, x: Array
     ) -> Tuple[Tuple[Any, Array], Tuple[Any, Array]]:
 
       carry_next, y_out = cell(carry_in, x)
@@ -758,7 +757,7 @@ class RNNBase(Module):
 
     scan = transforms.scan(
       scan_fn,
-      in_axes=(time_axis, mask_axis), 
+      in_axes=time_axis,
       out_axes=(0, time_axis),
       reverse=reverse,
       unroll=unroll,
@@ -768,7 +767,7 @@ class RNNBase(Module):
       split_rngs=split_rngs,
     )
 
-    carry, (carry_t, outputs) = scan(cell, initial_carry, inputs, mask)
+    carry, (carry_t, outputs) = scan(cell, initial_carry, inputs)
 
     # maybe apply mask and revert value order
     if mask is not None:
@@ -781,9 +780,6 @@ class RNNBase(Module):
         return jnp.take_along_axis(cs, seq_length_[None], axis=0)[0]
       carry = jax.tree_map(_get_last_valid_carry, initial_carry, carry_t)
 
-      # maybe revert values to their original order
-      
-      
       if zero_output_for_mask:
         # zero masked-out values
         outputs = self._select_with_mask(mask, outputs, jnp.zeros_like(outputs))

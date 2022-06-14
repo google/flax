@@ -402,7 +402,6 @@ class RNNTest(absltest.TestCase):
       self.assertIn(layer_params['kernel'].shape[0], [channels_in, channels_out])
       self.assertEqual(layer_params['kernel'].shape[1], channels_out)
 
-
   def test_rnn_mask(self):
     batch_size = 3
     seq_len = 4
@@ -427,6 +426,51 @@ class RNNTest(absltest.TestCase):
       cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), (1,), channels_out)
       for seq_idx in range(seq_len):
         if mask[batch_idx, seq_idx]:
+          cell_input = xs[batch_idx:batch_idx+1, seq_idx]
+          cell_carry, cell_output = rnn.cell.apply(cell_variables, cell_carry, cell_input)
+
+          # check non-masked outputs are the same
+          np.testing.assert_allclose(cell_output[0], ys[batch_idx, seq_idx], rtol=1e-4)
+        else:
+          # check masked outputs are zeros
+          np.testing.assert_allclose(
+            ys[batch_idx, seq_idx], jnp.zeros_like(ys[batch_idx, seq_idx]), rtol=1e-4)
+
+      # check final carry state is the same
+      for cell_carry_i, carry_i in zip(cell_carry, carry):
+        np.testing.assert_allclose(cell_carry_i[0], carry_i[batch_idx], rtol=1e-4)
+
+    # check params
+    for layer_params in variables['params']['cell'].values():
+      if 'bias' in layer_params:
+        self.assertEqual(layer_params['bias'].shape, (channels_out,))
+      self.assertIn(layer_params['kernel'].shape[0], [channels_in, channels_out])
+      self.assertEqual(layer_params['kernel'].shape[1], channels_out)
+  
+  def test_rnn_int_mask(self):
+    batch_size = 3
+    seq_len = 4
+    channels_in = 5
+    channels_out = 15
+
+    key = jax.random.PRNGKey(0)
+    mask = jax.random.randint(key, shape=(batch_size,), minval=0, maxval=seq_len+1)
+
+    rnn = nn.RNN(nn.LSTMCell(), channels_out)
+    
+    xs = jnp.ones((batch_size, seq_len, channels_in))
+    variables = rnn.init(jax.random.PRNGKey(0), xs)
+    ys: jnp.ndarray
+    carry, ys = rnn.apply(variables, xs, mask=mask, return_state=True)
+
+    self.assertEqual(ys.shape, (batch_size, seq_len, channels_out))
+
+    # manually compute the carry and output from cell
+    cell_variables = {"params": variables['params']['cell']}
+    for batch_idx in range(batch_size):
+      cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), (1,), channels_out)
+      for seq_idx in range(seq_len):
+        if seq_idx < mask[batch_idx]:
           cell_input = xs[batch_idx:batch_idx+1, seq_idx]
           cell_carry, cell_output = rnn.cell.apply(cell_variables, cell_carry, cell_input)
 
@@ -495,6 +539,54 @@ class RNNTest(absltest.TestCase):
         self.assertEqual(layer_params['bias'].shape, (channels_out,))
       self.assertIn(layer_params['kernel'].shape[0], [channels_in, channels_out])
       self.assertEqual(layer_params['kernel'].shape[1], channels_out)
+  
+  def test_rnn_int_mask_no_zero_outputs(self):
+    batch_size = 3
+    seq_len = 4
+    channels_in = 5
+    channels_out = 15
+
+    key = jax.random.PRNGKey(0)
+    mask = jax.random.randint(key, shape=(batch_size,), minval=0, maxval=seq_len+1)
+
+    rnn = nn.RNN(nn.LSTMCell(), channels_out, zero_output_for_mask=False)
+    
+    xs = jnp.ones((batch_size, seq_len, channels_in))
+    variables = rnn.init(jax.random.PRNGKey(0), xs)
+    ys: jnp.ndarray
+    carry, ys = rnn.apply(variables, xs, mask=mask, return_state=True)
+
+    self.assertEqual(ys.shape, (batch_size, seq_len, channels_out))
+
+    # manually compute the carry and output from cell
+    cell_variables = {"params": variables['params']['cell']}
+    for batch_idx in range(batch_size):
+      cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), (1,), channels_out)
+      prev_non_masked_output = jnp.zeros_like(ys[batch_idx, 0])
+
+      for seq_idx in range(seq_len):
+        if seq_idx < mask[batch_idx]:
+          cell_input = xs[batch_idx:batch_idx+1, seq_idx]
+          cell_carry, cell_output = rnn.cell.apply(cell_variables, cell_carry, cell_input)
+          prev_non_masked_output = cell_output[0]
+
+          # check non-masked outputs are the same
+          np.testing.assert_allclose(cell_output[0], ys[batch_idx, seq_idx], rtol=1e-4)
+        else:
+          # check masked outputs the previous non-masked output
+          np.testing.assert_allclose(
+            ys[batch_idx, seq_idx], prev_non_masked_output, rtol=1e-4)
+
+      # check final carry state is the same
+      for cell_carry_i, carry_i in zip(cell_carry, carry):
+        np.testing.assert_allclose(cell_carry_i[0], carry_i[batch_idx], rtol=1e-4)
+
+    # check params
+    for layer_params in variables['params']['cell'].values():
+      if 'bias' in layer_params:
+        self.assertEqual(layer_params['bias'].shape, (channels_out,))
+      self.assertIn(layer_params['kernel'].shape[0], [channels_in, channels_out])
+      self.assertEqual(layer_params['kernel'].shape[1], channels_out)
 
   def test_rnn_mask_with_spatial(self):
     batch_size = 3
@@ -537,6 +629,48 @@ class RNNTest(absltest.TestCase):
       # check final carry state is the same
       for cell_carry_i, carry_i in zip(cell_carry, carry):
         np.testing.assert_allclose(cell_carry_i[0], carry_i[batch_idx], rtol=1e-4)
+  
+  def test_rnn_int_mask_with_spatial(self):
+    batch_size = 3
+    seq_len = 4
+    kernel_size = [3, 3]
+    channels_in = 5
+    channels_out = 15
+
+    key = jax.random.PRNGKey(0)
+    mask = jax.random.randint(key, shape=(batch_size,), minval=0, maxval=seq_len+1)
+
+    rnn = nn.RNN(
+      nn.ConvLSTM(channels_out, kernel_size), 
+      carry_size=(*kernel_size, channels_out),
+    )
+    
+    xs = jnp.ones((batch_size, seq_len, *kernel_size, channels_in))
+    variables = rnn.init(jax.random.PRNGKey(0), xs)
+    ys: jnp.ndarray
+    carry, ys = rnn.apply(variables, xs, mask=mask, return_state=True)
+
+    self.assertEqual(ys.shape, (batch_size, seq_len, *kernel_size, channels_out))
+
+    # manually compute the carry and output from cell
+    cell_variables = {"params": variables['params']['cell']}
+    for batch_idx in range(batch_size):
+      cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), (1,), (*kernel_size, channels_out))
+      for seq_idx in range(seq_len):
+        if seq_idx < mask[batch_idx]:
+          cell_input = xs[batch_idx:batch_idx+1, seq_idx]
+          cell_carry, cell_output = rnn.cell.apply(cell_variables, cell_carry, cell_input)
+
+          # check non-masked outputs are the same
+          np.testing.assert_allclose(cell_output[0], ys[batch_idx, seq_idx], rtol=1e-4)
+        else:
+          # check masked outputs are zeros
+          np.testing.assert_allclose(
+            ys[batch_idx, seq_idx], jnp.zeros_like(ys[batch_idx, seq_idx]), rtol=1e-4)
+
+      # check final carry state is the same
+      for cell_carry_i, carry_i in zip(cell_carry, carry):
+        np.testing.assert_allclose(cell_carry_i[0], carry_i[batch_idx], rtol=1e-4)
 
   def test_rnn_mask_multiple_batch_dims(self):
     batch_dims = (3, 7)
@@ -562,4 +696,28 @@ class RNNTest(absltest.TestCase):
         self.assertEqual(layer_params['bias'].shape, (channels_out,))
       self.assertIn(layer_params['kernel'].shape[0], [channels_in, channels_out])
       self.assertEqual(layer_params['kernel'].shape[1], channels_out)
+  
+  def test_rnn_int_mask_multiple_batch_dims(self):
+    batch_dims = (3, 7)
+    seq_len = 4
+    channels_in = 5
+    channels_out = 15
 
+    key = jax.random.PRNGKey(0)
+    mask = jax.random.randint(key, shape=batch_dims, minval=0, maxval=seq_len+1)
+
+    rnn = nn.RNN(nn.LSTMCell(), channels_out)
+    
+    xs = jnp.ones((*batch_dims, seq_len, channels_in))
+    variables = rnn.init(jax.random.PRNGKey(0), xs)
+    ys: jnp.ndarray
+    carry, ys = rnn.apply(variables, xs, mask=mask, return_state=True)
+
+    self.assertEqual(ys.shape, (*batch_dims, seq_len, channels_out))
+
+    # check params
+    for layer_params in variables['params']['cell'].values():
+      if 'bias' in layer_params:
+        self.assertEqual(layer_params['bias'].shape, (channels_out,))
+      self.assertIn(layer_params['kernel'].shape[0], [channels_in, channels_out])
+      self.assertEqual(layer_params['kernel'].shape[1], channels_out)
