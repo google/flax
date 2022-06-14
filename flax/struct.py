@@ -95,16 +95,15 @@ def dataclass(clz: _T) -> _T:
   Returns:
     The new class.
   """
-  # workaround for pytype not recognizing __dataclass_fields__
-  data_clz: Any = dataclasses.dataclass(frozen=True)(clz)
+  data_clz = dataclasses.dataclass(frozen=True)(clz)
   meta_fields = []
   data_fields = []
-  for name, field_info in data_clz.__dataclass_fields__.items():
+  for field_info in dataclasses.fields(data_clz):
     is_pytree_node = field_info.metadata.get('pytree_node', True)
     if is_pytree_node:
-      data_fields.append(name)
+      data_fields.append(field_info.name)
     else:
-      meta_fields.append(name)
+      meta_fields.append(field_info.name)
 
   def replace(self, **updates):
     """"Returns a new object replacing the specified fields with new values."""
