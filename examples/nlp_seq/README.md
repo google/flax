@@ -23,11 +23,6 @@ The model should run with other configurations and hardware, but explicitly test
 |:---:|:---:|:---:|:---:|:---:|:---:|
 | Nvidia Titan V (12GB) | 64  |  0.05 | 5:58h | 68.6% | [2022-05-01](https://tensorboard.dev/experiment/F5ULHlyzQlieVJn5PG8mRQ/) |
 
-<<<<<<< HEAD
-
-
-=======
->>>>>>> a6f9b02 (Updated with fresh tensorboard results for 20k step)
 ### Running 
 ```
 python train.py --batch_size=64 --model_dir=./ancient_greek \

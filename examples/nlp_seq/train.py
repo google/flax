@@ -27,13 +27,13 @@ from absl import logging
 from flax import jax_utils
 from flax import linen as nn
 from flax.metrics import tensorboard
-from flax.training import train_state
-import optax
 from flax.training import common_utils
+from flax.training import train_state
 import jax
 import jax.numpy as jnp
 from jax import random
 import numpy as np
+import optax
 import tensorflow as tf
 
 import input_pipeline
@@ -214,8 +214,7 @@ def train_step(state,
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
-  step = state.step
-  lr = learning_rate_fn(step)
+  lr = learning_rate_fn(state.step)
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grads = grad_fn(state.params)
   grads = jax.lax.pmean(grads, "batch")
@@ -340,8 +339,7 @@ def main(argv):
   for step, batch in zip(range(num_train_steps), train_iter):
     batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
 
-    state, metrics = p_train_step(
-        state, batch, dropout_rng=dropout_rngs)
+    state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
     if (step + 1) % eval_freq == 0:
       metrics_all = common_utils.get_metrics(metrics_all)
