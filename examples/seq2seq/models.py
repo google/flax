@@ -104,7 +104,7 @@ class Seq2seq(nn.Module):
       zero_output_for_mask=False, name='encoder')
 
     # run the encoder while masking out all values after/including the EOS token
-    encoder_state, _ = encoder(encoder_inputs, mask=self.padding_mask(encoder_inputs))
+    encoder_state, _ = encoder(encoder_inputs, mask=self.seq_length_mask(encoder_inputs))
     
     # Decode
     decoder = nn.RNN(
@@ -117,14 +117,13 @@ class Seq2seq(nn.Module):
 
     return logits, predictions
 
-  def padding_mask(self, inputs: Array) -> Array:
+  def seq_length_mask(self, inputs: Array) -> Array:
     """
-    Creates a mask that is True for all values before the EOS token, and False
-    for all values after and including the EOS token.
+    Calculate the length of each sequence in the batch.
     """
     # undo the one-hot encoding and find which steps are not EOS
     not_eos = jnp.argmax(inputs, axis=-1) != self.eos_id
-    # use cumprod to select the steps before the EOS token and
-    # ignore all steps after the EOS token
-    mask = jnp.cumprod(not_eos, axis=-1).astype(bool)
-    return mask
+    # use cumprod to select the steps before the EOS, then use 
+    # sum to count them.
+    seq_length = jnp.cumprod(not_eos, axis=-1).sum(axis=-1)
+    return seq_length
