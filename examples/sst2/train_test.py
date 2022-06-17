@@ -16,7 +16,7 @@
 from absl.testing import absltest
 from absl.testing import parameterized
 import jax
-import jax.test_util
+import jax._src.test_util
 import numpy as np
 
 from configs import default as default_config
