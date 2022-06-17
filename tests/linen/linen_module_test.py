@@ -1566,9 +1566,7 @@ class ModuleTest(absltest.TestCase):
     class Foo(nn.Module):
       def setup(self):
         self.bar = self.param("bar", lambda key: jnp.array(1))
-        # this will fail because assigned value is found but
-        # no 'baz' variable exists
-        self.baz = self.bar
+        self.baz = self.bar # this is OK
 
       def __call__(self):
         pass
