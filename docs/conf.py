@@ -111,10 +111,10 @@ html_theme_options = {
 
 # -- Options for myst ----------------------------------------------
 # Notebook cell execution timeout; defaults to 30.
-execution_timeout = 100
+nb_execution_timeout = 100
 # List of patterns, relative to source directory, that match notebook
 # files that will not be executed.
-execution_excludepatterns = [
+nb_execution_excludepatterns = [
   'notebooks/annotated_mnist.ipynb', # <-- times out 
   'notebooks/jax_for_the_impatient.ipynb', # <-- needs fix
 ]
