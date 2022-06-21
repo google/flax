@@ -102,21 +102,24 @@ html_logo = './flax.png'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-# -- Options for myst ----------------------------------------------
-execution_allow_errors = False
-execution_fail_on_error = True  # Requires https://github.com/executablebooks/MyST-NB/pull/296
+html_theme_options = {
+    "repository_url": "https://github.com/google/flax",
+    "use_repository_button": True,     # add a "link to repository" button
+    "use_issues_button": False,        # add an "Open an Issue" button
+    "path_to_docs": "docs",            # used to compute the path to launch notebooks in colab
+}
 
+# -- Options for myst ----------------------------------------------
 # Notebook cell execution timeout; defaults to 30.
 execution_timeout = 100
-
 # List of patterns, relative to source directory, that match notebook
 # files that will not be executed.
 execution_excludepatterns = [
   'notebooks/annotated_mnist.ipynb', # <-- times out 
   'notebooks/jax_for_the_impatient.ipynb', # <-- needs fix
 ]
-
 # raise exceptions on execution so CI can catch errors
+nb_execution_allow_errors = False
 nb_execution_raise_on_error = True
 
 # -- Extension configuration -------------------------------------------------

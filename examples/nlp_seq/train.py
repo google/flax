@@ -27,12 +27,13 @@ from absl import logging
 from flax import jax_utils
 from flax import linen as nn
 from flax.metrics import tensorboard
-from flax import optim
 from flax.training import common_utils
+from flax.training import train_state
 import jax
 import jax.numpy as jnp
 from jax import random
 import numpy as np
+import optax
 import tensorflow as tf
 
 import input_pipeline
@@ -191,35 +192,37 @@ def compute_metrics(logits, labels, weights):
   return metrics
 
 
-def train_step(optimizer, batch, learning_rate_fn, model, dropout_rng=None):
+def train_step(state,
+               batch,
+               model,
+               learning_rate_fn,
+               dropout_rng=None):
   """Perform a single training step."""
-
   train_keys = ['inputs', 'targets']
   (inputs, targets) = (batch.get(k, None) for k in train_keys)
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
-  dropout_rng, new_dropout_rng = random.split(dropout_rng)
+
+  dropout_rng = jax.random.fold_in(dropout_rng, state.step)
+
   def loss_fn(params):
-    """Loss function used for training."""
+    """loss function used for training."""
     logits = model.apply({'params': params}, inputs=inputs, train=True,
                          rngs={'dropout': dropout_rng})
     loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights)
+
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
-  step = optimizer.state.step
-  lr = learning_rate_fn(step)
+  lr = learning_rate_fn(state.step)
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-  (_, logits), grad = grad_fn(optimizer.target)
-  grad = jax.lax.pmean(grad, 'batch')
-  new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
-
+  (_, logits), grads = grad_fn(state.params)
+  grads = jax.lax.pmean(grads, "batch")
+  new_state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, targets, weights)
-  metrics['learning_rate'] = lr
+  metrics["learning_rate"] = lr
 
-  return new_optimizer, metrics, new_dropout_rng
-
-
+  return new_state, metrics
 
 
 def pad_examples(x, desired_batch_size):
@@ -296,17 +299,27 @@ def main(argv):
     return init_variables
   init_variables = initialize_variables(init_rng)
 
-  optimizer_def = optim.Adam(learning_rate, beta1=0.9, beta2=0.98,
-      eps=1e-9, weight_decay=1e-1)
-  optimizer = optimizer_def.create(init_variables['params'])
-  optimizer = jax_utils.replicate(optimizer)
-
   learning_rate_fn = create_learning_rate_scheduler(
       base_learning_rate=learning_rate)
 
+  optimizer = optax.adamw(
+      learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9,
+      weight_decay=1e-1)
+  state = train_state.TrainState.create(
+      apply_fn=model.apply,
+      params=init_variables["params"],
+      tx=optimizer)
+
+  # Replicate optimizer.
+  state = jax_utils.replicate(state)
+
   p_train_step = jax.pmap(
-      functools.partial(train_step, model=model, learning_rate_fn=learning_rate_fn),
-      axis_name='batch')
+      functools.partial(
+          train_step,
+          model=model,
+          learning_rate_fn=learning_rate_fn),
+      axis_name='batch',
+      donate_argnums=(0,))  # pytype: disable=wrong-arg-types
 
   def eval_step(params, batch):
     """Calculate evaluation metrics on a batch."""
@@ -326,9 +339,8 @@ def main(argv):
   for step, batch in zip(range(num_train_steps), train_iter):
     batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
 
-    optimizer, metrics, dropout_rngs = p_train_step(optimizer, batch, dropout_rng=dropout_rngs)
+    state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
-
     if (step + 1) % eval_freq == 0:
       metrics_all = common_utils.get_metrics(metrics_all)
       lr = metrics_all.pop('learning_rate').mean()
@@ -361,7 +373,8 @@ def main(argv):
               lambda x: pad_examples(x, batch_size), eval_batch)
         eval_batch = common_utils.shard(eval_batch)
 
-        metrics = p_eval_step(optimizer.target, eval_batch)
+        metrics = p_eval_step(state.params, eval_batch)
+
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
       eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
