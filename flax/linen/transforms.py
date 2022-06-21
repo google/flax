@@ -788,7 +788,7 @@ def scan(target: Target,
       in_axes=in_axes, out_axes=out_axes,
       length=length,
       reverse=reverse,
-      unroll=1,
+      unroll=unroll,
       data_transform=data_transform,
       methods=methods)
 
