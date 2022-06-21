@@ -1166,7 +1166,7 @@ def switch(
         return nn.switch(index, [a_fn, b_fn, c_fn], self, x)
 
   If you want to have a different parameter structure for each branch
-  you should run all branche on initialization before calling switch::
+  you should run all branches on initialization before calling switch::
 
     class MultiHeadSwitchExample(nn.Module):
       def setup(self) -> None:
