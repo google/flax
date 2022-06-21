@@ -1417,14 +1417,93 @@ class TransformTest(absltest.TestCase):
           return -nn.Dense(2, name='dense')(x)
         
         return nn.cond(pred, true_fn, false_fn, self, x)
+  
+  def test_switch(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, pred):
+        self.variable('state', 'a_count', lambda: 0)
+        self.variable('state', 'b_count', lambda: 0)
+        self.variable('state', 'c_count', lambda: 0)
+        def a_fn(mdl, x):
+          mdl.variable('state', 'a_count').value += 1
+          return nn.Dense(2, name='dense')(x)
+
+        def b_fn(mdl, x):
+          mdl.variable('state', 'b_count').value += 1
+          return -nn.Dense(2, name='dense')(x)
+
+        def c_fn(mdl, x):
+          mdl.variable('state', 'c_count').value += 1
+          return nn.Dense(2, name='dense')(x)
+        
+        return nn.switch(pred, [a_fn, b_fn, c_fn], self, x)
     
     x = jnp.ones((1, 3))
     foo = Foo()
-    y1, vars = foo.init_with_output(random.PRNGKey(0), x, True)
-    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
-    y2, vars = foo.apply(vars, x, False, mutable="state")
-    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    y1, vars = foo.init_with_output(random.PRNGKey(0), x, 0)
+    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 0, 'c_count': 0})
+    y2, updates = foo.apply(vars, x, 1, mutable="state")
+    vars = vars.copy(updates)
+    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 0})
     np.testing.assert_allclose(y1, -y2)
+    y3, updates = foo.apply(vars, x, 2, mutable="state")
+    vars = vars.copy(updates)
+    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 1})
+    np.testing.assert_allclose(y1, y3)
+
+  def test_switch_multihead(self):
+    class Foo(nn.Module):
+      def setup(self) -> None:
+        self.heads = [
+          nn.Sequential([nn.Dense(10), nn.Dense(7), nn.Dense(5)]),
+          nn.Sequential([nn.Dense(11), nn.Dense(5)]),
+          nn.Dense(5),
+        ]
+
+      @nn.compact
+      def __call__(self, x, index):
+        def head_fn(i):
+          def fn(mdl, x):
+            mdl.variable('state', f'{i}_count', lambda: -1).value += 1
+            return mdl.heads[i](x)
+          return fn
+
+        branches = [head_fn(i) for i in range(len(self.heads))]
+
+        if self.is_mutable_collection('params'):
+          for branch in branches:
+            _ = branch(self, x)
+          
+        return nn.switch(index, branches, self, x)
+    
+    x = jnp.ones((1, 3))
+    foo = Foo()
+    y1, vars = foo.init_with_output(random.PRNGKey(0), x, 0)
+    self.assertEqual(vars['state'].unfreeze(), {'0_count': 1, '1_count': 0, '2_count': 0})
+    y2, updates = foo.apply(vars, x, 1, mutable="state")
+    vars = vars.copy(updates)
+    self.assertEqual(vars['state'].unfreeze(), {'0_count': 1, '1_count': 1, '2_count': 0})
+    y3, updates = foo.apply(vars, x, 2, mutable="state")
+    vars = vars.copy(updates)
+    self.assertEqual(vars['state'].unfreeze(), {'0_count': 1, '1_count': 1, '2_count': 1})
+
+    self.assertEqual(vars['params']['heads_0']['layers_0']['kernel'].shape, (3, 10))
+    self.assertEqual(vars['params']['heads_0']['layers_0']['bias'].shape, (10,))
+    self.assertEqual(vars['params']['heads_0']['layers_1']['kernel'].shape, (10, 7))
+    self.assertEqual(vars['params']['heads_0']['layers_1']['bias'].shape, (7,))
+    self.assertEqual(vars['params']['heads_0']['layers_2']['kernel'].shape, (7, 5))
+    self.assertEqual(vars['params']['heads_0']['layers_2']['bias'].shape, (5,))
+
+    self.assertEqual(vars['params']['heads_1']['layers_0']['kernel'].shape, (3, 11))
+    self.assertEqual(vars['params']['heads_1']['layers_0']['bias'].shape, (11,))
+    self.assertEqual(vars['params']['heads_1']['layers_1']['kernel'].shape, (11, 5))
+    self.assertEqual(vars['params']['heads_1']['layers_1']['bias'].shape, (5,))
+
+    self.assertEqual(vars['params']['heads_2']['kernel'].shape, (3, 5))
+    self.assertEqual(vars['params']['heads_2']['bias'].shape, (5,))
+
+
 
   def test_lift_instance_error(self):
     class Foo(nn.Module):

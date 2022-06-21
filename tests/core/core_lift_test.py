@@ -158,6 +158,39 @@ class LiftTest(absltest.TestCase):
     y2, vars = apply(f, mutable="state")(vars, x, False)
     self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
     np.testing.assert_allclose(y1, -y2)
+  
+  def test_switch(self):
+    def f(scope, x, index):
+      scope.variable('state', 'a_count', lambda: 0)
+      scope.variable('state', 'b_count', lambda: 0)
+      scope.variable('state', 'c_count', lambda: 0)
+
+      def a_fn(scope, x):
+        scope.variable('state', 'a_count').value += 1
+        return scope.child(nn.dense)(x, 2)
+
+      def b_fn(scope, x):
+        scope.variable('state', 'b_count').value += 1
+        return -scope.child(nn.dense)(x, 2)
+
+      def c_fn(scope, x):
+        scope.variable('state', 'c_count').value += 1
+        return scope.child(nn.dense)(x, 2)
+      
+      return lift.switch(index, [a_fn, b_fn, c_fn], scope, x)
+    
+    x = jnp.ones((1, 3))
+    y1, vars = init(f)(random.PRNGKey(0), x, 0)
+    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 0, 'c_count': 0})
+    y2, updates = apply(f, mutable="state")(vars, x, 1)
+    vars = vars.copy(updates)
+    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 0})
+    np.testing.assert_allclose(y1, -y2)
+    y3, updates = apply(f, mutable="state")(vars, x, 2)
+    vars = vars.copy(updates)
+    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 1})
+    np.testing.assert_allclose(y1, y3)
+
 
 
 
