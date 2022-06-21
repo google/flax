@@ -98,6 +98,14 @@ html_logo = './flax.png'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
+html_theme_options = {
+    "repository_url": "https://github.com/google/flax",
+    "use_repository_button": True,     # add a "link to repository" button
+    "use_issues_button": False,        # add an "Open an Issue" button
+    "path_to_docs": "docs",            # used to compute the path to launch notebooks in colab
+}
+
+
 nbsphinx_codecell_lexer = 'ipython3'
 
 nbsphinx_prolog = r"""
