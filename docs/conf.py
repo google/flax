@@ -58,8 +58,7 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
-    'nbsphinx',
-    'recommonmark',
+    'myst_nb',
     'codediff',
     'sphinx_markdown_tables'
 ]
@@ -72,7 +71,12 @@ templates_path = ['_templates']
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-source_suffix = ['.rst', '.md']
+# The suffix(es) of source filenames.
+# Note: important to list ipynb before md here: we have both md and ipynb
+# copies of each notebook, and myst will choose which to convert based on
+# the order in the source_suffix list. Notebooks which are not executed have
+# outputs stored in ipynb but not in md, so we must convert the ipynb.
+source_suffix = ['.rst', '.ipynb', '.md']
 
 autosummary_generate = True
 
@@ -105,24 +109,18 @@ html_theme_options = {
     "path_to_docs": "docs",            # used to compute the path to launch notebooks in colab
 }
 
-
-nbsphinx_codecell_lexer = 'ipython3'
-
-nbsphinx_prolog = r"""
-{% set docname = 'docs/' + env.doc2path(env.docname, base=None) %}
-
-.. only:: html
-
-    .. role:: raw-html(raw)
-        :format: html
-
-    .. nbinfo::
-
-        :raw-html:`<a href="https://colab.research.google.com/github/google/flax/blob/main/{{ docname }}"><img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg" style="vertical-align:text-bottom"></a>`
-        :raw-html:`<a href="https://github.com/google/flax/blob/main/{{ docname }}"><img alt="Open On GitHub" src="https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub" style="vertical-align:text-bottom"></a>`
-
-
-"""
+# -- Options for myst ----------------------------------------------
+# Notebook cell execution timeout; defaults to 30.
+nb_execution_timeout = 100
+# List of patterns, relative to source directory, that match notebook
+# files that will not be executed.
+nb_execution_excludepatterns = [
+  'notebooks/annotated_mnist.ipynb', # <-- times out 
+  'notebooks/jax_for_the_impatient.ipynb', # <-- needs fix
+]
+# raise exceptions on execution so CI can catch errors
+nb_execution_allow_errors = False
+nb_execution_raise_on_error = True
 
 # -- Extension configuration -------------------------------------------------
 
