@@ -1,6 +1,6 @@
 absl-py==1.0.0
 flax==0.3.6
-numpy==1.21.4
+numpy==1.22.0
 optax==0.1.0
 Pillow==9.0.1
 tensorflow==2.8.1
