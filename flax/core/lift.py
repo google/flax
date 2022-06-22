@@ -935,6 +935,92 @@ def cond(pred: Any,
       (rngs,),
       name='cond')(scope)
 
+def switch(index: Any, 
+           branches: Sequence[Callable[..., C]],
+           scope: Scope, *operands,
+           variables: CollectionFilter = True, 
+           rngs: PRNGSequenceFilter = True) -> C:
+  """Lifted version of ``jax.lax.switch``.
+
+  The returned values from ``branches``
+  must have the same Pytree structure, shapes, and dtypes.
+  The variables created or updated inside the
+  branches must also have the same structure.
+  Note that this constraint is violated when
+  creating variables or submodules in only one branch.
+  Because initializing variables in just one branch
+  causes the paramater structure to be different.
+
+  Example::
+
+    def switch_example(scope, x, index):
+      scope.variable('state', 'a_count', lambda: 0)
+      scope.variable('state', 'b_count', lambda: 0)
+      scope.variable('state', 'c_count', lambda: 0)
+      def a_fn(scope, x):
+        scope.variable('state', 'a_count').value += 1
+        return scope.child(nn.dense)(x, 2)
+      def b_fn(scope, x):
+        scope.variable('state', 'b_count').value += 1
+        return -scope.child(nn.dense)(x, 2)
+      def c_fn(scope, x):
+        scope.variable('state', 'c_count').value += 1
+        return scope.child(nn.dense)(x, 2)
+      return lift.switch(index, [a_fn, b_fn, c_fn], scope, x)
+
+  If you want to have a different parameter structure for each branch
+  you should run all branche on initialization before calling switch::
+
+    def multihead_switch_example(scope, x, index):
+      def a_fn(scope, x):
+        x = scope.child(nn.dense)(x, 10)
+        x = scope.child(nn.dense)(x, 7)
+        return scope.child(nn.dense)(x, 5)
+      def b_fn(scope, x):
+        x = scope.child(nn.dense)(x, 11)
+        return scope.child(nn.dense)(x, 5)
+      def c_fn(scope, x):
+        return scope.child(nn.dense)(x, 5)
+
+      branches = [a_fn, b_fn, c_fn]
+
+      # run all branches on init
+      if scope.is_mutable_collection('params'):
+        for branch in branches:
+          _ = branch(scope, x)
+        
+      return lift.switch(index, branches, scope, x)
+
+  Args:
+    index: Integer scalar type, indicating which branch function to apply.
+    branches: Sequence of functions to be applied based on index.
+      The signature of each function is (Scope, *operands) -> T.
+    scope: A Scope or Pytree of scopes to pass
+    *operands: The arguments passed to ``true_fun`` and ``false_fun``
+    variables: The variable collections passed to the conditional
+      branches (default: all)
+    rngs: The PRNG sequences passed to the conditionals (default: all)
+  Returns:
+    The result of the evaluated branch.
+  """
+
+  def inner(scope_fn, repack_fn,
+            variable_groups, rng_groups):
+    def branch_wrapper(branch_fn, *operands):
+      scope = scope_fn(variable_groups, rng_groups)
+      y = branch_fn(scope, *operands)
+      return y, repack_fn(scope)
+    pure_branches = [
+        functools.partial(branch_wrapper, branch_fn)
+        for branch_fn in branches]
+    return jax.lax.switch(index, pure_branches, *operands)
+
+  return pack(
+      inner,
+      (variables,),
+      (variables,),
+      (rngs,),
+      name='switch')(scope)
 
 def custom_vjp(fn: Callable[..., Any],
                forward_fn: Callable[..., Any],
