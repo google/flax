@@ -6,7 +6,7 @@ jax==0.3.4
 jaxlib==0.3.2+cuda11.cudnn82  # Make sure CUDA version matches the base image.
 jraph==0.0.2.dev0
 ml-collections==0.1.0
-numpy==1.21.4
+numpy==1.22.0
 optax==0.1.0
 sklearn==0.0
 tensorflow==2.8.1
