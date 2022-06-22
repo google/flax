@@ -13,6 +13,22 @@ on:
       - main
 
 jobs:
+  pre-commit:
+    name: Test pre-commit hooks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Cancel previous
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ github.token }}
+        if: ${{github.ref != 'refs/head/main'}}
+      - uses: actions/checkout@v3
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.7
+      - uses: pre-commit/action@v2.0.3
   build:
     runs-on: ubuntu-latest
     strategy:

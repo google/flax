@@ -114,7 +114,8 @@ from .transforms import (
   vjp as vjp,
   vmap as vmap,
   while_loop as while_loop,
-  cond as cond
+  cond as cond,
+  switch as switch,
 )
 from .summary import tabulate
 # pylint: enable=g-multiple-import

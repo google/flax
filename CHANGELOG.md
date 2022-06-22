@@ -26,6 +26,10 @@ vNext
 -
 -
 
+0.5.2
+-----
+- Fixes missing PyYAML dependecy.
+
 0.5.1
 -----
 New features:

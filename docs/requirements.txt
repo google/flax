@@ -4,7 +4,7 @@ Pygments>=2.6.1
 jax>=0.3
 jaxlib
 ipykernel
-nbsphinx
+myst_nb
 recommonmark
 sphinx_markdown_tables
 ipython_genutils
@@ -22,3 +22,6 @@ sklearn
 ml_collections
 tensorflow
 tensorflow_datasets
+
+# notebooks
+einops

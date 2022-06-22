@@ -55,7 +55,15 @@ Follow these steps to contribute code:
    pip install -r docs/requirements.txt
    ```
 
-5. Add the Google Flax repo (not your fork) as an upstream remote, so you can use it to sync your
+5. Setup pre-commit hooks, this will run some automated checks during each `git` commit and
+   possibly update some files that require changes.
+   
+   ```bash
+   pip install pre-commit
+   pre-commit install
+   ```
+
+6. Add the Google Flax repo (not your fork) as an upstream remote, so you can use it to sync your
    changes.
 
    ```bash
@@ -63,13 +71,13 @@ Follow these steps to contribute code:
    ```
 
 
-6. Create a branch where you will develop from:
+7. Create a branch where you will develop from:
 
    ```bash
    git checkout -b name-of-change
    ```
 
-7. Implement your changes using your favorite editor (we recommend
+8. Implement your changes using your favorite editor (we recommend
    [Visual Studio Code](https://code.visualstudio.com/)).
 
    Make sure the tests pass by running the following command from the top of
@@ -79,7 +87,7 @@ Follow these steps to contribute code:
    ./tests/run_all_tests.sh
    ```
 
-8. Once your change is done, create a commit as follows 
+9.  Once your change is done, create a commit as follows 
    ([how to write a commit message](https://chris.beams.io/posts/git-commit/)):
 
    ```bash
@@ -93,7 +101,7 @@ Follow these steps to contribute code:
    git rebase upstream/main
    ```
 
-9. Finally push your commit on your development branch and create a remote 
+11. Finally push your commit on your development branch and create a remote 
    branch in your fork that you can use to create a Pull Request from:
 
    ```bash
@@ -103,11 +111,78 @@ Follow these steps to contribute code:
    After running the command, you should see a Github link in your terminal output that you can click on to create a Pull Request.
    If you do not see this link in the terminal after doing a `git push`, go to the Github web UI; there should be a button there that lets you turn the commit into a Pull Request yourself.
 
-10. Make sure your PR passes the 
+11. Make sure your PR passes the 
    [PR checklist](https://github.com/google/flax/blob/main/.github/pull_request_template.md#checklist).
    If so, create a Pull Request from the Flax repository and send it for review.
    Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/)
    for more information on using pull requests.
+
+### Update notebooks
+
+We use [jupytext](https://jupytext.readthedocs.io/) to maintain two synced copies of the notebooks
+in `docs/notebooks`: one in `ipynb` format, and one in `md` format. The advantage of the former
+is that it can be opened and executed directly in Colab; the advantage of the latter is that
+it makes it much easier to track diffs within version control.
+
+#### Editing ipynb
+
+For making large changes that substantially modify code and outputs, it is easiest to
+edit the notebooks in Jupyter or in Colab. To edit notebooks in the Colab interface,
+open <http://colab.research.google.com> and `Upload` from your local repo.
+Update it as needed, `Run all cells` then `Download ipynb`.
+You may want to test that it executes properly, using `sphinx-build` as explained above.
+
+#### Editing md
+
+For making smaller changes to the text content of the notebooks, it is easiest to edit the
+`.md` versions using a text editor.
+
+#### Syncing notebooks
+
+After editing either the ipynb or md versions of the notebooks, you can sync the two versions
+using [jupytext](https://jupytext.readthedocs.io/) by running `jupytext --sync` on the updated
+notebooks; for example:
+
+```
+pip install jupytext==1.13.8
+jupytext --sync docs/notebooks/quickstart.ipynb
+```
+
+The jupytext version should match that specified in
+[.pre-commit-config.yaml](https://github.com/google/flax/blob/main/.pre-commit-config.yaml).
+
+To check that the markdown and ipynb files are properly synced, you may use the
+[pre-commit](https://pre-commit.com/) framework to perform the same check used
+by the github CI:
+
+```
+git add docs -u  # pre-commit runs on files in git staging.
+pre-commit run jupytext
+```
+
+#### Creating new notebooks
+
+If you are adding a new notebook to the documentation and would like to use the `jupytext --sync`
+command discussed here, you can set up your notebook for jupytext by using the following command:
+
+```
+jupytext --set-formats ipynb,md:myst path/to/the/notebook.ipynb
+```
+
+This works by adding a `"jupytext"` metadata field to the notebook file which specifies the
+desired formats, and which the `jupytext --sync` command recognizes when invoked.
+
+#### Notebooks within the sphinx build
+
+Some of the notebooks are built automatically as part of the pre-submit checks and
+as part of the [Read the docs](https://flax.readthedocs.io/en/latest) build.
+The build will fail if cells raise errors. If the errors are intentional, you can either catch them,
+or tag the cell with `raises-exceptions` metadata ([example PR](https://github.com/google/jax/pull/2402/files)).
+You have to add this metadata by hand in the `.ipynb` file. It will be preserved when somebody else
+re-saves the notebook.
+
+We exclude some notebooks from the build, e.g., because they contain long computations.
+See `exclude_patterns` in [conf.py](https://github.com/google/flax/blob/main/docs/conf.py).
 
 ### Updating the Pull Request contents
 
