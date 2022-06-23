@@ -36,7 +36,7 @@ from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (  # pylint: disable=g-multiple-import
     CollectionFilter, DenyList, FrozenVariableDict, Variable, VariableDict,
     union_filters)
-from flax.linen import summary 
+from flax.linen import summary
 
 
 
@@ -1033,6 +1033,20 @@ class Module:
       raise ValueError("Can't use RNGs on unbound modules")
     return self.scope.make_rng(name)
 
+  def is_initializing(self) -> bool:
+    """Returns True if running under self.init(...) or nn.init(...)().
+
+    This is a helper method to handle the common case of simple initialization
+    where we wish to have setup logic occur when only called under
+    ``module.init`` or ``nn.init``.  For more complicated multi-phase
+    initialization scenarios it is better to test for the mutability of
+    particular variable collections or for the presence of particular
+    variables that potentially need to be initialized.
+    """
+    if self.scope is None:
+      raise ValueError("Can't check if running under init() on unbound modules")
+    return self.scope.get_flag('initializing', False)
+
   @traceback_util.api_boundary
   def bind(self,
            variables: VariableDict,
@@ -1099,8 +1113,7 @@ class Module:
             rngs: Optional[RNGSequences] = None,
             method: Optional[Callable[..., Any]] = None,
             mutable: CollectionFilter = False,
-            capture_intermediates: Union[bool, Callable[['Module', str],
-                                                        bool]] = False,
+            capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
     """Applies a module method to variables and returns output and modified variables.
 
@@ -1158,7 +1171,8 @@ class Module:
     method = _get_unbound_fn(method)
     return apply(
         method, self,
-        mutable=mutable, capture_intermediates=capture_intermediates
+        mutable=mutable,
+        capture_intermediates=capture_intermediates,
     )(variables, *args, **kwargs, rngs=rngs)
 
   @traceback_util.api_boundary
@@ -1167,6 +1181,7 @@ class Module:
                        *args,
                        method: Optional[Callable[..., Any]] = None,
                        mutable: CollectionFilter = DenyList('intermediates'),
+                       capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
                        **kwargs) -> Tuple[Any, FrozenVariableDict]:
     """Initializes a module method with variables and returns output and modified variables.
 
@@ -1180,6 +1195,12 @@ class Module:
         ``str``: The name of a single mutable collection. ``list``: A
         list of names of mutable collections. By default all collections
         except "intermediates" are mutable.
+      capture_intermediates: If `True`, captures intermediate return values
+        of all Modules inside the "intermediates" collection. By default only
+        the return values of all ``__call__`` methods are stored. A function can
+        be passed to change the filter behavior. The filter function takes
+        the Module instance and method name and returns a bool indicating
+        whether the output of that method invocation should be stored.
       **kwargs: Keyword arguments passed to the init function.
     Returns:
       `(output, vars)``, where ``vars`` are is a dict of the modified
@@ -1191,8 +1212,15 @@ class Module:
             'RNGs should be of shape (2,) or KeyArray in Module '
             f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
-    return self.apply(
-        {}, *args, rngs=rngs, method=method, mutable=mutable, **kwargs)
+    if method is None:
+      method = self.__call__
+    method = _get_unbound_fn(method)
+    return init_with_output(
+        method,
+        self,
+        mutable=mutable,
+        capture_intermediates=capture_intermediates
+    )(rngs, *args, **kwargs)
 
   @traceback_util.api_boundary
   def init(self,
@@ -1200,6 +1228,7 @@ class Module:
            *args,
            method: Optional[Callable[..., Any]] = None,
            mutable: CollectionFilter = DenyList('intermediates'),
+           capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
@@ -1220,13 +1249,23 @@ class Module:
         ``str``: The name of a single mutable collection. ``list``: A
         list of names of mutable collections. By default all collections
         except "intermediates" are mutable.
+      capture_intermediates: If `True`, captures intermediate return values
+        of all Modules inside the "intermediates" collection. By default only
+        the return values of all ``__call__`` methods are stored. A function can
+        be passed to change the filter behavior. The filter function takes
+        the Module instance and method name and returns a bool indicating
+        whether the output of that method invocation should be stored.
       **kwargs: Keyword arguments passed to the init function.
     Returns:
       The initialized variable dict.
     """
     _, v_out = self.init_with_output(
-        rngs, *args,
-        method=method, mutable=mutable, **kwargs)
+        rngs,
+        *args,
+        method=method,
+        mutable=mutable,
+        capture_intermediates=capture_intermediates,
+        **kwargs)
     return v_out
 
   @property
@@ -1357,7 +1396,7 @@ class Module:
     return True
 
   def tabulate(
-    self, 
+    self,
     rngs: Union[PRNGKey, RNGSequences],
     *args,
     method: Optional[Callable[..., Any]] = None,
@@ -1370,8 +1409,8 @@ class Module:
     This method has the same signature as `init`, but instead of returning
     the variables, it returns the string summarizing the Module in a table.
     `tabulate` uses `jax.eval_shape` to run the forward computation without
-    consuming any FLOPs or allocating memory. 
-    
+    consuming any FLOPs or allocating memory.
+
     Example::
 
       import jax
@@ -1387,11 +1426,11 @@ class Module:
       x = jnp.ones((16, 9))
 
       print(Foo().tabulate(jax.random.PRNGKey(0), x))
-    
+
 
     This gives the following output::
-      
-                         Foo Summary                    
+
+                         Foo Summary
       ┏━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
       ┃ path    ┃ outputs       ┃ params               ┃
       ┡━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
@@ -1411,11 +1450,11 @@ class Module:
       ├─────────┼───────────────┼──────────────────────┤
       │         │         Total │ 50 (200 B)           │
       └─────────┴───────────────┴──────────────────────┘
-                                                        
+
                 Total Parameters: 50 (200 B)
 
-    **Note**: rows order in the table does not represent execution order, 
-    instead it aligns with the order of keys in `variables` which are sorted 
+    **Note**: rows order in the table does not represent execution order,
+    instead it aligns with the order of keys in `variables` which are sorted
     alphabetically.
 
     Args:
@@ -1428,10 +1467,10 @@ class Module:
         ``str``: The name of a single mutable collection. ``list``: A
         list of names of mutable collections. By default all collections
         except 'intermediates' are mutable.
-      depth: controls how many submodule deep the summary can go. By default its 
-        `None` which means no limit. If a submodule is not shown because of the 
-        depth limit, its parameter count and bytes will be added to the row of 
-        its first shown ancestor such that the sum of all rows always adds up to 
+      depth: controls how many submodule deep the summary can go. By default its
+        `None` which means no limit. If a submodule is not shown because of the
+        depth limit, its parameter count and bytes will be added to the row of
+        its first shown ancestor such that the sum of all rows always adds up to
         the total number of parameters of the Module.
       exclude_methods: A sequence of strings that specifies which methods should
         be ignored. In case a module calls a helper method from its main method,
@@ -1443,11 +1482,11 @@ class Module:
       A string summarizing the Module.
     """
 
-    tabulate_fn = summary.tabulate(self, rngs, method=method, 
+    tabulate_fn = summary.tabulate(self, rngs, method=method,
                                    mutable=mutable, depth=depth,
                                    exclude_methods=exclude_methods)
     return tabulate_fn(*args, **kwargs)
-    
+
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.
@@ -1487,7 +1526,8 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
 @traceback_util.api_boundary
 def apply(fn: Callable[..., Any], module: Module,
           mutable: CollectionFilter = False,
-          capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False) -> Callable[..., Any]:
+          capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
+          ) -> Callable[..., Any]:
   """Creates an apply function to call ``fn`` with a bound module.
 
   Unlike ``Module.apply`` this function returns a new function with the signature
@@ -1546,6 +1586,7 @@ def apply(fn: Callable[..., Any], module: Module,
 @traceback_util.api_boundary
 def init_with_output(fn: Callable[..., Any], module: Module,
                      mutable: CollectionFilter = DenyList('intermediates'),
+                     capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
                      ) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
   """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
@@ -1579,18 +1620,34 @@ def init_with_output(fn: Callable[..., Any], module: Module,
       ``str``: The name of a single mutable collection. ``list``: A
       list of names of mutable collections. By default all collections
       except "intermediates" are mutable.
+    capture_intermediates: If `True`, captures intermediate return values
+      of all Modules inside the "intermediates" collection. By default only
+      the return values of all `__call__` methods are stored. A function can
+      be passed to change the filter behavior. The filter function takes
+      the Module instance and method name and returns a bool indicating
+      whether the output of that method invocation should be stored.
   Returns:
     The init function wrapping ``fn``.
   """
   @functools.wraps(fn)
   def scope_fn(scope, *args, **kwargs):
-    return fn(module.clone(parent=scope), *args, **kwargs)
+    _context.capture_stack.append(capture_intermediates)
+    try:
+      return fn(module.clone(parent=scope), *args, **kwargs)
+    finally:
+      _context.capture_stack.pop()
+
+  if capture_intermediates is True:  # pylint: disable=g-bool-id-comparison
+    capture_intermediates = capture_call_intermediates
+  if capture_intermediates:
+    mutable = union_filters(mutable, 'intermediates')
   return core.init(scope_fn, mutable=mutable)
 
 
 @traceback_util.api_boundary
 def init(fn: Callable[..., Any], module: Module,
          mutable: CollectionFilter = DenyList('intermediates'),
+         capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
          ) -> Callable[..., FrozenVariableDict]:
   """Creates an init function to call ``fn`` with a bound module.
 
@@ -1624,10 +1681,16 @@ def init(fn: Callable[..., Any], module: Module,
       ``str``: The name of a single mutable collection. ``list``: A
       list of names of mutable collections. By default all collections
       except "intermediates" are mutable.
+    capture_intermediates: If `True`, captures intermediate return values
+      of all Modules inside the "intermediates" collection. By default only
+      the return values of all `__call__` methods are stored. A function can
+      be passed to change the filter behavior. The filter function takes
+      the Module instance and method name and returns a bool indicating
+      whether the output of that method invocation should be stored.
   Returns:
     The init function wrapping ``fn``.
   """
-  init_fn = init_with_output(fn, module, mutable)
+  init_fn = init_with_output(fn, module, mutable, capture_intermediates)
   @functools.wraps(init_fn)
   def init_wrapper(*args, **kwargs):
     return init_fn(*args, **kwargs)[1]

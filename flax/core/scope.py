@@ -367,6 +367,11 @@ class _ChildRNGSentinel:
 # used to identify that an rng counter is meant for a child scope
 child_rng_token = _ChildRNGSentinel()
 
+class _DefaultSentinel:
+  pass
+# used to denote no default flag value on scope
+no_flag = _DefaultSentinel()
+
 
 class Scope:
   """A Scope allows easy access to variables and manages RNGS of a neural network layer.
@@ -387,7 +392,8 @@ class Scope:
                name: Optional[str] = None,
                mutable: CollectionFilter = False,
                parent: Optional['Scope'] = None,
-               path: Iterable[str] = ()):
+               path: Iterable[str] = (),
+               flags: Optional[Dict] = None):
     """Initializes a Scope.
 
     Args:
@@ -397,6 +403,7 @@ class Scope:
       mutable: A CollectionFilter determining which variables are mutable.
       parent: The parent scope.
       path: The path in the variable tree from the root scope to this scope.
+      flags: internal flags.
     """
     rngs = {k: LazyRng.create(v) for k, v in rngs.items()} if rngs else {}
     self._variables = variables
@@ -405,6 +412,7 @@ class Scope:
     self.path = tuple(path)
     self.rngs = rngs
     self.mutable = mutable
+    self.flags = freeze({} if flags is None else flags)
 
     self._root = parent.root if parent else None
     self.trace_level = tracers.trace_level(tracers.current_trace())
@@ -485,7 +493,7 @@ class Scope:
     """
     self._check_valid()
     scope = Scope(self._variables, self.rngs, self.name, self.mutable,
-                  self.parent)
+                  self.parent, flags=self.flags)
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
     return scope
@@ -552,7 +560,8 @@ class Scope:
                   rngs=rngs,
                   parent=self,
                   mutable=self.mutable,
-                  path=self.path + (name,))
+                  path=self.path + (name,),
+                  flags=self.flags)
     scope.rng_counters = rng_counters
     return scope
 
@@ -761,6 +770,13 @@ class Scope:
     for col in collections:
       self._collection(col)
 
+  def has_flag(self, key) -> bool:
+    return key in self.flags
+
+  def get_flag(self, key, default=no_flag) -> Any:
+    if key not in self.flags and default is no_flag:
+      return ValueError(f'Flag {key} not present on scope.')
+    return self.flags.get(key, default)
 
 def _unfreeze_variables(variables, mutable):
   new_variables = {}
@@ -774,7 +790,8 @@ def _unfreeze_variables(variables, mutable):
 
 def bind(variables: VariableDict,
          rngs: Optional[RNGSequences] = None,
-         mutable: CollectionFilter = False):
+         mutable: CollectionFilter = False,
+         flags: Optional[Dict] = None):
   """Binds variables and rngs to a new ``Scope``.
 
   bind provides a ``Scope`` instance without transforming a function with
@@ -791,6 +808,7 @@ def bind(variables: VariableDict,
     variables: Variable dictionary to bind.
     rngs: RNGs to bind.
     mutable: Which variable colections to treat as mutable.
+    flags: internal flags.
 
   Returns:
     A new scope with the variables and rngs bound to it.
@@ -801,16 +819,18 @@ def bind(variables: VariableDict,
     raise errors.InvalidRngError(
         'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
   new_variables = _unfreeze_variables(variables, mutable)
-  return Scope(new_variables, rngs=rngs, mutable=mutable)
+  return Scope(new_variables, rngs=rngs, mutable=mutable, flags=flags)
 
 
 def apply(fn: Callable[..., Any],
-          mutable: CollectionFilter = False) -> Callable[..., Any]:
+          mutable: CollectionFilter = False,
+          flags: Optional[Dict] = None) -> Callable[..., Any]:
   """Functionalize a `Scope` function.
 
   Args:
     fn: a function taking a `Scope` as its first argument.
     mutable: the filter determining which variable collections are mutable.
+    flags: internal flags.
 
   Returns:
     `fn` with the scope partially applied.
@@ -827,7 +847,7 @@ def apply(fn: Callable[..., Any],
         (dict, FrozenDict)) and 'params' in variables['params']:
       raise errors.ApplyScopeInvalidVariablesStructureError(variables)
 
-    with bind(variables, rngs=rngs, mutable=mutable).temporary() as root:
+    with bind(variables, rngs=rngs, mutable=mutable, flags=flags).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:
       return y, root.mutable_variables()
@@ -838,12 +858,14 @@ def apply(fn: Callable[..., Any],
 
 
 def init(fn: Callable[..., Any],
-         mutable: CollectionFilter = True) -> Callable[..., Any]:
+         mutable: CollectionFilter = True,
+         flags: Optional[Dict] = None) -> Callable[..., Any]:
   """Functionalize a `Scope` function for initialization.
 
   Args:
     fn: a function taking a `Scope` as its first argument.
     mutable: the filter determining which variable collections are mutable.
+    flags: internal flags.
 
   Returns:
     `fn` with the scope partially applied.
@@ -857,7 +879,8 @@ def init(fn: Callable[..., Any],
                        '`jax.PRNGKey`.')
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
-    return apply(fn, mutable=mutable)({}, *args, rngs=rngs, **kwargs)
+    init_flags = {**(flags if flags is not None else {}), 'initializing': True}
+    return apply(fn, mutable=mutable, flags=init_flags)({}, *args, rngs=rngs, **kwargs)
 
   return wrapper
 
