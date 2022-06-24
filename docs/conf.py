@@ -107,6 +107,9 @@ html_theme_options = {
     "use_repository_button": True,     # add a "link to repository" button
     "use_issues_button": False,        # add an "Open an Issue" button
     "path_to_docs": "docs",            # used to compute the path to launch notebooks in colab
+    "launch_buttons": {
+        "colab_url": "https://colab.research.google.com/",
+    },
 }
 
 # -- Options for myst ----------------------------------------------
