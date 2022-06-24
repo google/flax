@@ -116,7 +116,6 @@ nb_execution_timeout = 100
 # files that will not be executed.
 nb_execution_excludepatterns = [
   'notebooks/annotated_mnist.ipynb', # <-- times out 
-  'notebooks/jax_for_the_impatient.ipynb', # <-- needs fix
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False

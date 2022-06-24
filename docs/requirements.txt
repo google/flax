@@ -8,6 +8,7 @@ myst_nb
 recommonmark
 sphinx_markdown_tables
 ipython_genutils
+jupytext
 
 # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
 # ReadTheDocs: https://stackoverflow.com/a/68008428

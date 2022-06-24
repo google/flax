@@ -37,16 +37,15 @@ We will show you how to…
 ```
 
 ```{code-cell} ipython3
-import flax
-from flax import linen as nn
+from functools import partial
 
 import jax
 from jax import numpy as jnp
 from jax import random
-
 import optax
 
-from functools import partial
+from flax import linen as nn
+
 
 #@title
 # Initialize random variables
@@ -92,6 +91,7 @@ First we define `update_step` as follow (with dummy loss that should be replaced
 ```{code-cell} ipython3
 :id: B7xxRU02VeJb
 
+@partial(jax.jit, static_argnums=(0,))
 def update_step(apply_fn, x, opt_state, params, state):
   def loss(params):
     y, updated_state = apply_fn({'params': params, **state},
@@ -169,6 +169,7 @@ Secondly, we need to specify the same name when calling `vmap` in our training c
 ```{code-cell} ipython3
 :id: 0jurc8PdWLVP
 
+@partial(jax.jit, static_argnums=(0,))
 def update_step(apply_fn, x_batch, y_batch, opt_state, params, state):
 
   def batch_loss(params):
