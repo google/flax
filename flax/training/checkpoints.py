@@ -93,8 +93,11 @@ def safe_normpath(path: str) -> str:
 
 class AsyncManager():
   """A simple object to track asnyc threads.
-
   Can potentially be extended to handle use cases other than checkpointing.
+
+  How to use: create an instance and pass to save_checkpoint() calls:
+    am = AsnycManager()
+    save_checkpoint(..., async_manager=am)
   """
 
   def __init__(self, max_workers: int = 1):
@@ -127,7 +130,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     keep: int = 1,
                     overwrite: bool = False,
                     keep_every_n_steps: Optional[int] = None,
-                    async_manager: AsyncManager = None) -> str:
+                    async_manager: Optional[AsyncManager] = None) -> str:
   """Save a checkpoint of the model.
 
   Attempts to be pre-emption safe by writing to temporary before
@@ -150,8 +153,8 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     Filename of saved checkpoint.
   """
 
-  def _save_checkpoint_files(target: bytes, paths: Tuple[str],
-                             checkpoint_files: list[Any], keep: int,
+  def _save_checkpoint_files(target: bytes, paths: Tuple[str, str],
+                             checkpoint_files: List[Any], keep: int,
                              overwrite: bool,
                              keep_every_n_steps: Optional[int]):
     """Save the checkpoint bytes via file system."""
