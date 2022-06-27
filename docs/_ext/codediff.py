@@ -24,9 +24,10 @@ Use directive as follows:
   ---
   <CODE_BLOCK_RIGHT>
 
-In order to highlight a line of code, prepend it with "#!".
+In order to highlight a line of code, append "#!" to it.
 """
 import itertools
+from typing import List, Tuple
 
 from docutils import nodes
 from docutils.parsers.rst import directives
@@ -35,10 +36,14 @@ from docutils.statemachine import ViewList
 import sphinx
 from sphinx.util.docutils import SphinxDirective
 
+MISSING = object()
 
 class CodeDiffParser:
 
-  def parse(self, lines, title_left='Base', title_right='Diff', code_sep='---'):
+  def parse(
+    self, lines, title_left='Base', title_right='Diff', code_sep='---', sync=MISSING):
+    sync = sync is not MISSING
+
     if code_sep not in lines:
       raise ValueError('Code separator not found! Code snippets should be '
                        f'separated by {code_sep}.')
@@ -47,19 +52,10 @@ class CodeDiffParser:
     test_code = lines[idx+1:]
     code_right = self._code_block(test_code)
 
-    self.max_left = max(len(x) for x in code_left + [title_left])
-    self.max_right = max(len(x) for x in code_right + [title_right])
+    output = self._tabs(
+      (title_left, code_left), (title_right, code_right), sync=sync)
 
-    output = [
-        self._hline(),
-        self._table_row(title_left, title_right),
-        self._hline(),
-    ]
-
-    for l, r in itertools.zip_longest(code_left, code_right, fillvalue=''):
-      output += [self._table_row(l, r)]
-
-    return output + [self._hline()], test_code
+    return output, test_code
 
   def _code_block(self, lines):
     """Creates a codeblock."""
@@ -77,17 +73,20 @@ class CodeDiffParser:
     # Indent code and add empty line so the code is picked up by the directive.
     return directive + [''] + list(map(lambda x: '  ' + x, code))
 
-  def _hline(self):
-    return '+' + '-'*(self.max_left+2) + '+' + '-'*(self.max_right+2) + '+'
+  def _tabs(self, *contents: Tuple[str, List[str]], sync):
+    output = ['.. tab-set::'] + ['  ']
+    
+    for title, content in contents:
+      output += [f'  .. tab-item:: {title}']
+      
+      if sync:
+        key = title.strip()
+        output += [f'    :sync: {key}']
 
-  def _rfill(self, text, max_len):
-    return text + ' ' * (max_len-len(text))
+      output += ['    ']
+      output += ['    ' + line for line in content]
 
-  def _table_row(self, left, right):
-    text_left = self._rfill(left, self.max_left)
-    text_right = self._rfill(right, self.max_right)
-    return '| ' + text_left + ' | ' + text_right + ' |'
-
+    return output
 
 class CodeDiffDirective(SphinxDirective):
   has_content = True
@@ -95,6 +94,7 @@ class CodeDiffDirective(SphinxDirective):
       'title_left': directives.unchanged,
       'title_right': directives.unchanged,
       'code_sep': directives.unchanged,
+      'sync': directives.flag,
   }
 
   def run(self):

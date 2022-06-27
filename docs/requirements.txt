@@ -6,8 +6,8 @@ jaxlib
 ipykernel
 myst_nb
 recommonmark
-sphinx_markdown_tables
 ipython_genutils
+sphinx-design
 jupytext
 
 # Need to pin docutils to 0.16 to make bulleted lists appear correctly on

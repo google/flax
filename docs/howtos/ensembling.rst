@@ -71,6 +71,7 @@ GPUs/TPUs).
 .. codediff::
   :title_left: Single-model
   :title_right: Ensemble
+  :sync:
 
   #!
   def create_train_state(rng, learning_rate, momentum):
@@ -109,6 +110,7 @@ the average *across devices*. This also requires us to specify the
 .. codediff::
   :title_left: Single-model
   :title_right: Ensemble
+  :sync:
 
   @jax.jit  #!
   def apply_model(state, images, labels):
@@ -156,6 +158,7 @@ for all devices where necessary, and de-duplicating the return values.
 .. codediff::
   :title_left: Single-model
   :title_right: Ensemble
+  :sync:
 
   def train_epoch(state, train_ds, batch_size, rng):
     train_ds_size = len(train_ds['image'])
@@ -217,6 +220,7 @@ directly.
 .. codediff::
   :title_left: Single-model
   :title_right: Ensemble
+  :sync:
 
   train_ds, test_ds = get_datasets()
   #!
