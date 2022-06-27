@@ -348,4 +348,6 @@ def convert_pre_linen(params: PyTree) -> PyTree:
       counts[module] = num + 1
     params_renamed[name] = convert_pre_linen(value)
 
-  return core.freeze(params_renamed)
+  if isinstance(params, core.FrozenDict):
+    params_renamed = core.freeze(params_renamed)
+  return params_renamed
