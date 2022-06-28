@@ -117,6 +117,7 @@ html_theme_options = {
 nb_execution_timeout = 100
 # List of patterns, relative to source directory, that match notebook
 # files that will not be executed.
+myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
   'notebooks/annotated_mnist.ipynb', # <-- times out 
 ]
