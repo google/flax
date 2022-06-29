@@ -101,7 +101,7 @@ Consider this PyTorch model:
 
     def forward(self, x):
       x = self.conv(x)
-      x = x.view(x.shape[0], -1)
+      x = x.reshape(x.shape[0], -1)
       x = self.fc(x)
       return x
 
