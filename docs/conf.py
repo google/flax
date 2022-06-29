@@ -60,7 +60,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'myst_nb',
     'codediff',
-    'sphinx_markdown_tables'
+    'sphinx_design',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -91,7 +91,7 @@ autodoc_typehints = 'none'
 # a list of builtin themes.
 #
 html_theme = 'sphinx_book_theme'
-# html_style = 'css/flax_theme.css'
+html_css_files = ["css/flax_theme.css"]
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.

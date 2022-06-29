@@ -101,6 +101,7 @@ For example using this schedule on MNIST would require changing the ``train_step
 .. codediff:: 
   :title_left: Default learning rate
   :title_right: Learning rate schedule
+  :sync:
   
   @jax.jit
   def train_step(state, batch):
@@ -137,6 +138,7 @@ And the ``train_epoch`` function:
 .. codediff::
   :title_left: Default learning rate
   :title_right: Learning rate schedule
+  :sync:
   
   def train_epoch(state, train_ds, batch_size, epoch, rng):
     """Trains for a single epoch."""
@@ -193,6 +195,7 @@ And the ``create_train_state`` function:
 .. codediff::
   :title_left: Default learning rate
   :title_right: Learning rate schedule
+  :sync:
 
   def create_train_state(rng, config):
     """Creates initial `TrainState`."""
