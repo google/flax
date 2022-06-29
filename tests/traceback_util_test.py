@@ -14,6 +14,7 @@
 
 """Tests for flax.traceback_util."""
 
+import contextlib
 import traceback
 import sys
 from absl.testing import absltest
@@ -30,7 +31,7 @@ from flax import traceback_util
 # __tracebackhide__ is a python >=3.7 feature.
 TRACEBACKHIDE_SUPPORTED = tuple(sys.version_info)[:3] >= (3, 7, 0)
 
-EXPECTED_FILES = (__file__, '<embedded stdlib>/contextlib.py')
+EXPECTED_FILES = (__file__, contextlib.__spec__.origin)
 
 
 def jax_name_stack_used():
