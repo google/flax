@@ -60,10 +60,8 @@ vscode:
 ---
 import functools
 from typing import Any, Callable, Sequence, Optional
-import numpy as np
 import jax
 from jax import lax, random, numpy as jnp
-import flax
 from flax.core import freeze, unfreeze
 from flax import linen as nn
 ```
@@ -709,13 +707,4 @@ print('initialized parameter shapes:\n', jax.tree_map(jnp.shape, unfreeze(init_v
 
 y = model.apply(init_variables, xs)
 print('output:\n', y)
-```
-
-```{code-cell}
----
-id: 3aXsCdxGZiYq
-vscode:
-  languageId: python
----
-
 ```

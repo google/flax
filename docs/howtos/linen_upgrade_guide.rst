@@ -31,6 +31,7 @@ Defining Simple Modules
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync:
   
   from flax import nn
 
@@ -96,6 +97,7 @@ Using Modules inside other Modules
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync:
   
   class Encoder(nn.Module):
 
@@ -127,6 +129,7 @@ Sharing submodules and defining multiple methods
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync: 
   
   class AutoEncoder(nn.Module):
     def _create_submodules(self):
@@ -178,6 +181,7 @@ Sharing submodules and defining multiple methods
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync:
   
   # no import #!
    
@@ -234,6 +238,7 @@ Top-level training code patterns
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync:
 
   def create_model(key):
     _, initial_params = CNN.init_by_shape(
@@ -311,6 +316,7 @@ Non-trainable variables ("state"): Use within Modules
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync:
   
   class BatchNorm(nn.Module):
     def apply(self, x, ...):
@@ -342,6 +348,7 @@ Non-trainable variables ("state"): Top-level training code patterns
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync:
 
   # initial params and state
   def initial_model(key, init_batch):
@@ -428,6 +435,7 @@ Randomness
 .. codediff:: 
   :title_left: Old Flax
   :title_right: Linen
+  :sync:
   
   def dropout(inputs, rate, deterministic=False):
     keep_prob = 1. - rate

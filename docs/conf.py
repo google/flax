@@ -60,7 +60,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'myst_nb',
     'codediff',
-    'sphinx_markdown_tables'
+    'sphinx_design',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -91,7 +91,7 @@ autodoc_typehints = 'none'
 # a list of builtin themes.
 #
 html_theme = 'sphinx_book_theme'
-# html_style = 'css/flax_theme.css'
+html_css_files = ["css/flax_theme.css"]
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
@@ -107,6 +107,9 @@ html_theme_options = {
     "use_repository_button": True,     # add a "link to repository" button
     "use_issues_button": False,        # add an "Open an Issue" button
     "path_to_docs": "docs",            # used to compute the path to launch notebooks in colab
+    "launch_buttons": {
+        "colab_url": "https://colab.research.google.com/",
+    },
 }
 
 # -- Options for myst ----------------------------------------------
@@ -114,9 +117,9 @@ html_theme_options = {
 nb_execution_timeout = 100
 # List of patterns, relative to source directory, that match notebook
 # files that will not be executed.
+myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
   'notebooks/annotated_mnist.ipynb', # <-- times out 
-  'notebooks/jax_for_the_impatient.ipynb', # <-- needs fix
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False

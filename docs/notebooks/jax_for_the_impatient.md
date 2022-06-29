@@ -1,6 +1,7 @@
 ---
 jupytext:
   formats: ipynb,md:myst
+  main_language: python
   text_representation:
     extension: .md
     format_name: myst
@@ -149,43 +150,9 @@ vscode:
 ---
 x = jnp.array([[1.0, 2.0, 3.0, 4.0],
                [5.0, 6.0, 7.0, 8.0]])
-updated = jax.ops.index_update(x,(0,0), 3.0) # whereas x[0,0] = 3.0 would fail
+updated = x.at[0, 0].set(3.0) # whereas x[0,0] = 3.0 would fail
 print("x: \n", x) # Note that x didn't change, no in-place mutation.
 print("updated: \n", updated)
-```
-
-+++ {"id": "DkyHWojBsOLE"}
-
-Index operators can be found in `jax.ops` and follow the `index_*` pattern. To create an index with that syntax, you can use the `jax.ops.index` syntactic sugar.
-
-```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: inv0IawpnHIb
-outputId: e9b2d23e-815e-4857-e812-de2f8319f64a
-vscode:
-  languageId: python
----
-x = jnp.array([[1.0, 2.0, 3.0, 4.0],
-               [5.0, 6.0, 7.0, 8.0]])
-jax.ops.index_update(x,jax.ops.index[0,:], 3.0) # Same as x[O,:] = 3.0 in NumPy.
-```
-
-+++ {"id": "1QGmV0B4TOWA"}
-
-Finally, a more concise (and modern) way would be to use the `.at` attribute that plays the same syntactic sugar role as previously:
-
-```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: UzUUfYRiS7OU
-outputId: 398bb225-b551-4e59-f1ac-947a16b6475e
-vscode:
-  languageId: python
----
-x.at[0,:].set(3.0) # Note: this returns a new array and doesn't mutate in place.
 ```
 
 +++ {"id": "Sz_9b-XUTjjl"}
@@ -684,12 +651,12 @@ def update_params_pytree(params, learning_rate, x_samples, y_samples):
   return params
 
 learning_rate = 0.3  # Gradient step size.
-print('Loss for "true" W,b: ', mse_pytree({'W': W, 'b': b}))
+print('Loss for "true" W,b: ', mse_pytree({'W': W, 'b': b}, x_samples, y_samples))
 for i in range(101):
   # Perform one gradient update.
-  params = update_params_pytree(params, x_samples, y_samples)
+  params = update_params_pytree(params, learning_rate, x_samples, y_samples)
   if (i % 5 == 0):
-    print(f"Loss step {i}: ", mse_pytree(params))
+    print(f"Loss step {i}: ", mse_pytree(params, x_samples, y_samples))
 ```
 
 Besides `jax.grad()`, another useful function is `jax.value_and_grad()`, which returns the value of the input function and of its gradient.

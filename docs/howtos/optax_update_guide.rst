@@ -45,8 +45,9 @@ optimizer state, parameters, and other associated data in a single dataclass
 (not used in code below).
 
 .. codediff::
-  :title_left: ``flax.optim``
-  :title_right: ``optax``
+  :title_left: flax.optim
+  :title_right: optax
+  :sync:
 
   @jax.jit
   def train_step(optimizer, batch):
@@ -128,8 +129,9 @@ weight decay can be added as another "gradient transformation"
 .. _optax.add_decayed_weights(): https://optax.readthedocs.io/en/latest/api.html#optax.add_decayed_weights
 
 .. codediff::
-  :title_left: ``flax.optim``
-  :title_right: ``optax``
+  :title_left: flax.optim
+  :title_right: optax
+  :sync:
 
   optimizer_def = flax.optim.Adam(
       learning_rate, weight_decay=weight_decay)
@@ -159,8 +161,9 @@ becomes just another gradient transformation |optax.clip_by_global_norm()|_.
 .. _optax.clip_by_global_norm(): https://optax.readthedocs.io/en/latest/api.html#optax.clip_by_global_norm
 
 .. codediff::
-  :title_left: ``flax.optim``
-  :title_right: ``optax``
+  :title_left: flax.optim
+  :title_right: optax
+  :sync:
 
   def train_step(optimizer, batch):
     grads = jax.grad(loss)(optimizer.target, batch)
@@ -202,8 +205,9 @@ learning rate schedule as a parameter for ``learning_rate``.
 .. _optax.inject_hyperparams(): https://optax.readthedocs.io/en/latest/api.html#optax.inject_hyperparams
 
 .. codediff::
-  :title_left: ``flax.optim``
-  :title_right: ``optax``
+  :title_left: flax.optim
+  :title_right: optax
+  :sync:
 
   def train_step(step, optimizer, batch):
     grads = jax.grad(loss)(optimizer.target, batch)
@@ -243,8 +247,9 @@ that is not readily available outside the outer mask).
 .. _optax.multi_transform(): https://optax.readthedocs.io/en/latest/api.html#optax.multi_transform
 
 .. codediff::
-  :title_left: ``flax.optim``
-  :title_right: ``optax``
+  :title_left: flax.optim
+  :title_right: optax
+  :sync:
 
   kernels = flax.traverse_util.ModelParamTraversal(lambda p, _: 'kernel' in p)
   biases = flax.traverse_util.ModelParamTraversal(lambda p, _: 'bias' in p)
