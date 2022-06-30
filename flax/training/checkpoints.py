@@ -22,7 +22,7 @@ checkpoint files.
 from concurrent.futures import thread
 import os
 import re
-from typing import Any, Iterable, List, Optional, Union
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 from absl import logging
 from flax import core
@@ -65,8 +65,9 @@ def natural_sort(file_list: Iterable[str], signed: bool = True) -> List[str]:
 
   Args:
     file_list: list of paths to sort containing numerical substrings.
-    signed: bool: if leading '-' (or '+') signs should be included in
-      numerical substrings as a sign or treated as a separator.
+    signed: bool: if leading '-' (or '+') signs should be included in numerical
+      substrings as a sign or treated as a separator.
+
   Returns:
     List of filenames sorted 'naturally', not lexicographically: any
     integer substrings are used to subsort numerically. e.g.
@@ -90,13 +91,46 @@ def safe_normpath(path: str) -> str:
   return (d['scheme'] or '') + os.path.normpath(d['path'])
 
 
+class AsyncManager():
+  """A simple object to track async threads.
+  Can potentially be extended to handle use cases other than checkpointing.
+
+  How to use: create an instance and pass to save_checkpoint() calls:
+    am = AsyncManager()
+    save_checkpoint(..., async_manager=am)
+  """
+
+  def __init__(self, max_workers: int = 1):
+    self.executor = thread.ThreadPoolExecutor(max_workers=max_workers)
+    self.save_future = None
+
+  def wait_previous_save(self):
+    """Block until the previous save finishes, to keep files' consistency."""
+    if self.save_future and not self.save_future.done():
+      logging.warning(
+          'The previous async save_checkpoint has not finished yet. Waiting '
+          'for it to complete before the next save.'
+      )
+      self.save_future.result()
+
+  def save_async(self, task: Callable[[], Any]):
+    """Run a task async. The future will be tracked as self.save_future.
+
+    Args:
+      task: The callable to be executed asynchrously.
+    """
+    self.wait_previous_save()
+    self.save_future = self.executor.submit(task)
+
+
 def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     target: PyTree,
                     step: int,
                     prefix: str = 'checkpoint_',
                     keep: int = 1,
                     overwrite: bool = False,
-                    keep_every_n_steps: Optional[int] = None) -> str:
+                    keep_every_n_steps: Optional[int] = None,
+                    async_manager: Optional[AsyncManager] = None) -> str:
   """Save a checkpoint of the model.
 
   Attempts to be pre-emption safe by writing to temporary before
@@ -108,13 +142,59 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     step: int or float: training step number or other metric number.
     prefix: str: checkpoint file name prefix.
     keep: number of past checkpoint files to keep.
-    overwrite: overwrite existing checkpoint files if a checkpoint
-      at the current or a later step already exits (default: False).
+    overwrite: overwrite existing checkpoint files if a checkpoint at the
+      current or a later step already exits (default: False).
     keep_every_n_steps: if defined, keep every checkpoints every n steps (in
       addition to keeping the last 'keep' checkpoints).
+    async_manager: if defined, the save will run without blocking the main
+      thread. Only works for single host. Note that an ongoing save will still
+      block subsequent saves, to make sure overwrite/keep logic works correctly.
   Returns:
     Filename of saved checkpoint.
   """
+
+  def _save_checkpoint_files(target: bytes, paths: Tuple[str, str],
+                             checkpoint_files: List[Any], keep: int,
+                             overwrite: bool,
+                             keep_every_n_steps: Optional[int]):
+    """Save the checkpoint bytes via file system."""
+    ckpt_tmp_path, ckpt_path = paths
+    with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
+      fp.write(target)
+
+    # Rename once serialization and writing finished.
+    gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
+    logging.info('Saved checkpoint at %s', ckpt_path)
+
+    # Remove newer checkpoints
+    if overwrite:
+      ind = checkpoint_files.index(ckpt_path) + 1
+      newer_ckpts = checkpoint_files[ind:]
+      checkpoint_files = checkpoint_files[:ind]
+      for path in newer_ckpts:
+        logging.info('Removing checkpoint at %s', path)
+        gfile.remove(path)
+
+    # Remove old checkpoint files.
+    last_kept = -float('inf')
+    if len(checkpoint_files) > keep:
+      old_ckpts = checkpoint_files[:-keep]
+      # Note: old_ckpts is sorted from oldest to newest.
+      for path in old_ckpts:
+        if keep_every_n_steps:
+          step_number = _checkpoint_path_step(path)
+          if step_number and (step_number - last_kept) >= keep_every_n_steps:
+            logging.debug('Not deleting %s, because last_kept=%f and keeping '
+                          'every %d steps.',
+                          path, last_kept, keep_every_n_steps)
+            last_kept = step_number
+            continue
+        logging.info('Removing checkpoint at %s', path)
+        gfile.remove(path)
+
+  if async_manager:
+    async_manager.wait_previous_save()
+
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
   logging.info('Saving checkpoint at step: %s', step)
@@ -141,38 +221,17 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     if not overwrite:
       raise errors.InvalidCheckpointError(ckpt_path, step)
 
-  with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
-    fp.write(serialization.to_bytes(target))
+  to_write = serialization.to_bytes(target)
 
-  # Rename once serialization and writing finished.
-  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
-  logging.info('Saved checkpoint at %s', ckpt_path)
-
-  # Remove newer checkpoints
-  if overwrite:
-    ind = checkpoint_files.index(ckpt_path) + 1
-    newer_ckpts = checkpoint_files[ind:]
-    checkpoint_files = checkpoint_files[:ind]
-    for path in newer_ckpts:
-      logging.info('Removing checkpoint at %s', path)
-      gfile.remove(path)
-
-  # Remove old checkpoint files.
-  last_kept = -float('inf')
-  if len(checkpoint_files) > keep:
-    old_ckpts = checkpoint_files[:-keep]
-    # Note: old_ckpts is sorted from oldest to newest.
-    for path in old_ckpts:
-      if keep_every_n_steps:
-        step_number = _checkpoint_path_step(path)
-        if step_number and (step_number - last_kept) >= keep_every_n_steps:
-          logging.debug('Not deleting %s, because last_kept=%f and keeping '
-                        'every %d steps.',
-                        path, last_kept, keep_every_n_steps)
-          last_kept = step_number
-          continue
-      logging.info('Removing checkpoint at %s', path)
-      gfile.remove(path)
+  # Save the files via I/O sync or async.
+  def save_task():
+    return _save_checkpoint_files(to_write, (ckpt_tmp_path, ckpt_path),
+                                  checkpoint_files, keep, overwrite,
+                                  keep_every_n_steps)
+  if async_manager:
+    async_manager.save_async(save_task)
+  else:
+    save_task()
 
   return ckpt_path
 
@@ -217,8 +276,8 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
 
   Args:
     ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
-    target: matching object to rebuild via deserialized state-dict. If None,
-      the deserialized state-dict is returned as-is.
+    target: matching object to rebuild via deserialized state-dict. If None, the
+      deserialized state-dict is returned as-is.
     step: int: step number to load or None to load latest. If specified,
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
