@@ -1517,5 +1517,14 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(foo.apply({}, rngs={'bar': k}))
     self.assertFalse(foo.apply({}, rngs={'baz': k}))
 
+  def test_is_initializing(self):
+    class Foo(nn.Module):
+      def __call__(self):
+        return self.is_initializing()
+    foo = Foo()
+    k = random.PRNGKey(0)
+    self.assertTrue(foo.init_with_output(k)[0])
+    self.assertFalse(foo.apply({}))
+
 if __name__ == '__main__':
   absltest.main()

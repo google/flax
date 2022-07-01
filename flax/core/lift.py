@@ -181,7 +181,7 @@ def pack(fn: Callable[..., Any],
         inner_scope = Scope(
             variables, name=scope.name, rngs=rngs,
             mutable=scope_mutable, parent=None,
-            path=new_path)
+            path=new_path, flags=scope.flags)
         inner_scope.rng_counters = rng_counters
         inner_scopes.append(inner_scope)
       inner_scopes = _dup_scopes(scopes, inner_scopes, paths)
