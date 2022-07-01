@@ -55,7 +55,7 @@ class CNN(nn.Module):
 def apply_model(state, images, labels):
   """Computes gradients, loss and accuracy for a single batch."""
   def loss_fn(params):
-    logits = CNN().apply({'params': params}, images)
+    logits = state.apply_fn({'params': params}, images)
     one_hot = jax.nn.one_hot(labels, 10)
     loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=one_hot))
     return loss, logits
