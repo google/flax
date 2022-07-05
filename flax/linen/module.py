@@ -1056,14 +1056,14 @@ class Module:
     """Creates an interactive Module instance by binding variables and RNGs.
 
     ``bind`` provides an "interactive" instance of a Module directly without
-    transforming a function with ``apply``. This is particalary useful for debugging
+    transforming a function with ``apply``. This is particularly useful for debugging
     and interactive use cases like notebooks where a function would limit the ability
-    split up code into different cells.
+    to split up code into different cells.
 
     Once the variables (and optionally RNGs) are bound to a ``Module`` it becomes a
     stateful object. Note that idiomatic JAX is functional and therefore an interactive
-    instance does not mix well well with vanilla JAX APIs. ``bind()`` should only be used
-    for interactive experimentation, and in all other cases we strongly encourage
+    instance does not mix well with vanilla JAX APIs. ``bind()`` should only be used
+    for interactive experimentation, and in all other cases we strongly encourage users
     to use ``apply()`` instead.
 
     Example::
