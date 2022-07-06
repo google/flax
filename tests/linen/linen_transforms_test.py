@@ -956,7 +956,7 @@ class TransformTest(absltest.TestCase):
       def _helper(self):
         return Foo()
     b = Bar()
-    with self.assertRaises(errors.TransformedMethodReturnValueError):
+    with self.assertRaises(errors.JitPytreeError):
       b.apply({}, jnp.ones(2))
 
   def test_nowrap(self):

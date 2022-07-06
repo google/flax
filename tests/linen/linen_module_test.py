@@ -17,8 +17,8 @@
 import dataclasses
 import functools
 import operator
-from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
-                    Tuple, TypeVar)
+from typing import (Any, Callable, Generic, Iterable, Mapping, NamedTuple,
+                    Sequence, Tuple, TypeVar)
 
 from absl.testing import absltest
 from flax import errors
@@ -1731,6 +1731,56 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(foo.init_with_output(k)[0])
     self.assertFalse(foo.apply({}))
 
+  def test_jit_pytree_error(self):
+    class Foo(nn.Module):
+
+      @compact
+      def __call__(self, x):
+        return x
+
+    x = jnp.ones((3, 2))
+    foo = Foo()
+    variables = foo.init(random.PRNGKey(0), x)
+
+    @jax.jit
+    def step(model, params, x):
+      unused_logits = model.apply(params, x)
+      return params
+
+    with self.assertRaisesRegex(errors.JitPytreeError, 'use static_argnames'):
+      _ = step(foo, variables, x)
+
+  # See module_lifecycle.rst.
+  def test_function_closure(self):
+    class Partial(struct.PyTreeNode):
+      fn: Callable = struct.field(pytree_node=False)
+      args: Iterable[Any]
+
+      def __call__(self, *args, **kwargs):
+        return self.fn(*(tuple(self.args) + args), **kwargs)
+
+    class Foo(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        dense = nn.Dense(x.shape[-1])
+        fn = lambda mdl, x: mdl(x) + 1
+        vmap_inner = nn.vmap(
+            Foo.inner,
+            in_axes=0,
+            variable_axes={'params': 0},
+            split_rngs={'params': True})
+        return vmap_inner(self, x, Partial(fn, [dense]))
+
+      def inner(self, x, fn):
+        for _ in range(3):
+          x = fn(x)
+        return x
+
+    x = jax.numpy.ones((3, 2))
+    model = Foo()
+    variables = model.init(random.PRNGKey(0), x)
+    assert variables['params']['Dense_0']['kernel'].shape == (3, 2, 2)
 
 if __name__ == '__main__':
   absltest.main()

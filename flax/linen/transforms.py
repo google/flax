@@ -103,6 +103,8 @@ def get_module_scopes(module, args=None, kwargs=None):
   particular scopes) and Module instances that are passed as arguments to
   methods.
 
+  Treat modules as leaves instead of intermediate nodes.
+
   Args:
     module: a bound flax Module.
     args: an *args list possibly containing Variables or Module instances
@@ -135,10 +137,12 @@ def get_module_scopes(module, args=None, kwargs=None):
           for f in dataclasses.fields(x)
           if f.name != 'parent' and f.init
       }
-      attrs = jax.tree_util.tree_map(get_arg_scope, attrs)
+      attrs = jax.tree_util.tree_map(
+          get_arg_scope, attrs, is_leaf=lambda x: isinstance(x, Module))
       return InstancePlaceholder(x.__class__, attrs, x._id)
     return x
-  new_args, new_kwargs = jax.tree_util.tree_map(get_arg_scope, (args, kwargs))
+  new_args, new_kwargs = jax.tree_util.tree_map(
+      get_arg_scope, (args, kwargs), is_leaf=lambda x: isinstance(x, Module))
 
   # Gather scopes in Variables and Submodules passed as Module attributes.
   @functools.partial(_memoize_by_id, refs=refs)
@@ -157,7 +161,8 @@ def get_module_scopes(module, args=None, kwargs=None):
         for f in dataclasses.fields(module)
         if f.name != 'parent' and f.init
     }
-    jax.tree_util.tree_map(get_scopes_inner, attrs)
+    jax.tree_util.tree_map(
+        get_scopes_inner, attrs, is_leaf=lambda x: isinstance(x, Module))
     scopes.append(module.scope)
   get_scopes(module)
   return scopes, new_args, new_kwargs
@@ -203,15 +208,15 @@ def set_module_scopes(module, args, kwargs, scopes):
     elif isinstance(x, InstancePlaceholder):
       instance_scope = scopes[idx]
       idx += 1
-      instance_attrs = jax.tree_util.tree_map(set_arg_scope, x.attrs)
+      instance_attrs = jax.tree_util.tree_map(set_arg_scope, x.attrs, is_leaf=lambda x: isinstance(x, Module))
       return x.cls(parent=instance_scope, **instance_attrs)
     return x
 
-  def is_placeholder(x):
-    return isinstance(x, (VariablePlaceholder, InstancePlaceholder))
+  def is_placeholder_or_module(x):
+    return isinstance(x, (VariablePlaceholder, InstancePlaceholder, Module))
 
   new_args, new_kwargs = jax.tree_util.tree_map(
-      set_arg_scope, (args, kwargs), is_leaf=is_placeholder)
+      set_arg_scope, (args, kwargs), is_leaf=is_placeholder_or_module)
 
   # set scopes in Variables and Submodules passed as Module attributes
   @functools.partial(_memoize_by_id, refs=refs)
@@ -235,7 +240,8 @@ def set_module_scopes(module, args, kwargs, scopes):
         for f in dataclasses.fields(module)
         if f.name != 'parent' and f.init
     }
-    new_attrs = jax.tree_util.tree_map(set_scopes_inner, attrs)
+    new_attrs = jax.tree_util.tree_map(set_scopes_inner, attrs,
+                             is_leaf=lambda x: isinstance(x, Module))
     new_module = module.clone(parent=scopes[idx], **new_attrs)
     idx += 1
     return new_module
