@@ -109,6 +109,7 @@ jobs:
       run: |
         pip install .
         pip install .[testing]
+        pip install -r docs/requirements.txt
     - name: Test with pytest and generate coverage report
       run: |
         tests/run_all_tests.sh --with-cov
