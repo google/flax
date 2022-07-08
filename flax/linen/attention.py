@@ -32,7 +32,7 @@ from jax import random
 import jax.numpy as jnp
 
 PRNGKey = Any
-Shape = Tuple[int]
+Shape = Tuple[int, ...]
 Dtype = Any
 Array = Any
 
