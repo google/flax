@@ -253,7 +253,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class DummyModuleWithoutCompact(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -307,7 +307,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -327,7 +327,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       @compact
       def __call__(self, x):
@@ -345,7 +345,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -364,7 +364,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.biases = [
@@ -384,7 +384,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.biases = {
@@ -409,7 +409,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -429,7 +429,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.bias = self.param('bias', initializers.ones, self.xshape)
@@ -450,7 +450,7 @@ class ModuleTest(absltest.TestCase):
     rngkey = jax.random.PRNGKey(0)
 
     class Dummy(nn.Module):
-      xshape: Tuple[int]
+      xshape: Tuple[int, ...]
 
       def setup(self):
         self.bias = DummyModule()
