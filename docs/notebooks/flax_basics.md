@@ -1,5 +1,6 @@
 ---
 jupytext:
+  formats: ipynb,md:myst
   text_representation:
     extension: .md
     format_name: myst
@@ -40,7 +41,7 @@ outputId: e30aa464-fa52-4f35-df96-716c68a4b3ee
 tags: [skip-execution]
 ---
 # Install the latest JAXlib version.
-!pip install --upgrade -q pip jax jaxlib
+!pip install --upgrade -q pip jax jaxlib 
 # Install Flax at head:
 !pip install --upgrade -q git+https://github.com/google/flax.git
 ```
@@ -49,9 +50,8 @@ tags: [skip-execution]
 :id: kN6bZDaReZO2
 
 import jax
-from typing import Any, Callable, Sequence, Optional
+from typing import Any, Callable, Sequence
 from jax import lax, random, numpy as jnp
-import flax
 from flax.core import freeze, unfreeze
 from flax import linen as nn
 ```

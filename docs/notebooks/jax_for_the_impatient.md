@@ -29,11 +29,8 @@ Here we will cover the basics of JAX so that you can get started with Flax, howe
 Let's start by exploring the NumPy API coming from JAX and the main differences you should be aware of.
 
 ```{code-cell}
----
-id: 5csM8DZYEqk6
-vscode:
-  languageId: python
----
+:id: 5csM8DZYEqk6
+
 import jax
 from jax import numpy as jnp, random
 
@@ -52,8 +49,6 @@ colab:
   base_uri: https://localhost:8080/
 id: L2HKiLTNJ4Eh
 outputId: c4297a1a-4e4b-4bdc-ca5d-3d33aca92b3b
-vscode:
-  languageId: python
 ---
 m = jnp.ones((4,4)) # We're generating one 4 by 4 matrix filled with ones.
 n = jnp.array([[1.0, 2.0, 3.0, 4.0],
@@ -73,8 +68,6 @@ colab:
   base_uri: https://localhost:8080/
 id: 9do-ZRGaRThn
 outputId: 9c4feb4d-3bd1-4921-97ce-c8087b37496f
-vscode:
-  languageId: python
 ---
 jnp.dot(n, m).block_until_ready() # Note: yields the same result as np.dot(m)
 ```
@@ -91,8 +84,6 @@ colab:
   base_uri: https://localhost:8080/
 id: hFthGlHoRZ59
 outputId: 15892d6a-c06c-4f98-a7d4-ad432bdd1f57
-vscode:
-  languageId: python
 ---
 x = np.random.normal(size=(4,4)) # Creating one standard NumPy array instance
 jnp.dot(x,m)
@@ -108,8 +99,6 @@ colab:
   base_uri: https://localhost:8080/
 id: -VABtdIwTFfN
 outputId: 08965869-bdd7-44c8-ae46-207061b5112c
-vscode:
-  languageId: python
 ---
 x = np.random.normal(size=(4,4))
 x = jax.device_put(x)
@@ -126,8 +115,6 @@ colab:
   base_uri: https://localhost:8080/
 id: vEJ1mSvStjEC
 outputId: 00a8cc38-59a2-4cf9-ed23-eb5fbb708495
-vscode:
-  languageId: python
 ---
 x = jnp.array([[1.0, 2.0, 3.0, 4.0],
                [5.0, 6.0, 7.0, 8.0]])
@@ -145,8 +132,6 @@ colab:
   base_uri: https://localhost:8080/
 id: -erZrgZXawFW
 outputId: c3c03081-6235-482f-a88c-cc180f661954
-vscode:
-  languageId: python
 ---
 x = jnp.array([[1.0, 2.0, 3.0, 4.0],
                [5.0, 6.0, 7.0, 8.0]])
@@ -174,8 +159,6 @@ colab:
   base_uri: https://localhost:8080/
 id: 8iz9KGF4s7nN
 outputId: c5bb1581-090b-42ed-cc42-08436154bc14
-vscode:
-  languageId: python
 ---
 key = random.PRNGKey(0)
 key
@@ -200,8 +183,6 @@ colab:
   base_uri: https://localhost:8080/
 id: lOBv5CaB3dMa
 outputId: ac89afdc-a73e-4c31-d005-7e1e6ad551cd
-vscode:
-  languageId: python
 ---
 print("old key", key, "--> normal", random.normal(key, shape=(1,)))
 key, subkey = random.split(key)
@@ -219,8 +200,6 @@ colab:
   base_uri: https://localhost:8080/
 id: G3zRojMs4Cce
 outputId: e48e1ed0-4f16-49cb-dc2b-cb51d3ec56b5
-vscode:
-  languageId: python
 ---
 key, *subkeys = random.split(key, 4)
 key, subkeys
@@ -255,8 +234,6 @@ colab:
   base_uri: https://localhost:8080/
 id: zDOydrLMcIzp
 outputId: 580c14ed-d1a3-4f92-c9b9-78d58c87bc76
-vscode:
-  languageId: python
 ---
 key = random.PRNGKey(0)
 def f(x):
@@ -278,8 +255,6 @@ colab:
   base_uri: https://localhost:8080/
 id: ael3pVHmhhTs
 outputId: 4d0c5122-1ead-4a94-9153-7eb3b399dae2
-vscode:
-  languageId: python
 ---
 v = random.normal(key,(4,))
 print("Original v:")
@@ -312,8 +287,6 @@ colab:
   base_uri: https://localhost:8080/
 id: Q2ntaHBeh-5u
 outputId: 93591ad3-832f-4928-c1f8-073cc3b7aae7
-vscode:
-  languageId: python
 ---
 def f(x):
   return jnp.multiply(x,x)/2.0
@@ -345,8 +318,6 @@ colab:
   base_uri: https://localhost:8080/
 id: _1VTl9zXqsFl
 outputId: f3f143a9-b1f1-4a4d-e4b1-c24a0fa114b8
-vscode:
-  languageId: python
 ---
 (val, jvp_fun) = jax.vjp(f,x)
 print("x = ", x)
@@ -372,8 +343,6 @@ colab:
   base_uri: https://localhost:8080/
 id: D6p_wQ9xeIiu
 outputId: af7ea5af-5ee1-4aa5-d8d7-8f6a20da2b0e
-vscode:
-  languageId: python
 ---
 def selu(x, alpha=1.67, lmbda=1.05):
   return lmbda * jnp.where(x > 0, x, alpha * jnp.exp(x) - alpha)
@@ -392,8 +361,6 @@ colab:
   base_uri: https://localhost:8080/
 id: us5pWySG0jWL
 outputId: e8ff3b7b-3917-40fc-8f29-eb9e6df262e5
-vscode:
-  languageId: python
 ---
 selu_jit = jax.jit(selu)
 %timeit selu_jit(v).block_until_ready()
@@ -414,8 +381,6 @@ colab:
   base_uri: https://localhost:8080/
 id: j-E6MsKF0tmZ
 outputId: bfa377e8-92ee-4473-abd4-8d52338e2cc5
-vscode:
-  languageId: python
 ---
 mat = random.normal(key, (15, 10))
 batched_x = random.normal(key, (5, 10)) # Batch size on axis 0
@@ -438,11 +403,8 @@ $$\mathcal{L}(W,b)\rightarrow\frac{1}{k}\sum_{i=1}^{k} \frac{1}{2}\|y_i-f_{W,b}(
 (Note: depending on how you cast the regression problem you might end up with different setups. Theoretically we should be minimizing the expectation of the loss wrt to the data distribution, however for the sake of simplicity here we consider only the sampled loss).
 
 ```{code-cell}
----
-id: 5W9p_zVe2Cj-
-vscode:
-  languageId: python
----
+:id: 5W9p_zVe2Cj-
+
 # Linear feed-forward.
 def predict(W, b, x):
   return jnp.dot(x, W) + b
@@ -458,11 +420,8 @@ def mse(W, b, x_batched, y_batched):
 ```
 
 ```{code-cell}
----
-id: qMkIxjjsduPY
-vscode:
-  languageId: python
----
+:id: qMkIxjjsduPY
+
 # Set problem dimensions.
 n_samples = 20
 x_dim = 10
@@ -487,8 +446,6 @@ colab:
   base_uri: https://localhost:8080/
 id: 5L2np6wve_xp
 outputId: 9db5c834-d7da-4291-d1ec-d4c39008d5ed
-vscode:
-  languageId: python
 ---
 # Initialize estimated W and b with zeros.
 W_hat = jnp.zeros_like(W)
@@ -538,11 +495,8 @@ The JAX ecosystem uses pytrees everywhere and we do as well in Flax (the previou
 JAX provides a few utilities to work with pytrees that live in the `tree_util` package.
 
 ```{code-cell}
----
-id: 9SNY5eA1UdkJ
-vscode:
-  languageId: python
----
+:id: 9SNY5eA1UdkJ
+
 from jax import tree_util
 
 t = [1, {"k1": 2, "k2": (3, 4)}, 5]
@@ -558,8 +512,6 @@ colab:
   base_uri: https://localhost:8080/
 id: szDhssVBUjTa
 outputId: 9ae4ebf1-a3c4-4ecb-b3df-67c8450310f8
-vscode:
-  languageId: python
 ---
 tree_util.tree_map(lambda x: x*x, t)
 ```
@@ -574,8 +526,6 @@ colab:
   base_uri: https://localhost:8080/
 id: bNOYK_E7UnOh
 outputId: d211bf85-5993-488c-9fec-aeaf375df007
-vscode:
-  languageId: python
 ---
 t2 = tree_util.tree_map(lambda x: x*x, t)
 tree_util.tree_map(lambda x,y: x+y, t, t2)
@@ -591,11 +541,8 @@ Here we show an alternative based on pytrees, using the same data from the previ
 Now, our `params` is a pytree containing both the `W` and `b` entries.
 
 ```{code-cell}
----
-id: 8v8gNkvUVZnl
-vscode:
-  languageId: python
----
+:id: 8v8gNkvUVZnl
+
 # Linear feed-forward that takes a params pytree.
 def predict_pytree(params, x):
   return jnp.dot(x, params['W']) + params['b']
@@ -623,8 +570,6 @@ colab:
   base_uri: https://localhost:8080/
 id: 8zc7cMaiWSny
 outputId: a69605cb-1eed-4f81-fc2e-93646c9694dd
-vscode:
-  languageId: python
 ---
 jax.grad(mse_pytree)(params, x_samples, y_samples)
 ```
@@ -639,8 +584,6 @@ colab:
   base_uri: https://localhost:8080/
 id: jEntdcDBXBCj
 outputId: f309aff7-2aad-453f-ad88-019d967d4289
-vscode:
-  languageId: python
 ---
 # Always remember to jit!
 @jax.jit

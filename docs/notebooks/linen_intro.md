@@ -7,7 +7,8 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: Python 3
+  display_name: 'Python 3.8.11 (''.venv'': venv)'
+  language: python
   name: python3
 ---
 
@@ -40,12 +41,9 @@ The below is an alpha API preview and things might break.  The surface syntax of
 # Install and Import
 
 ```{code-cell}
----
-id: HgRZ_G8wGcoB
-tags: [skip-execution]
-vscode:
-  languageId: python
----
+:id: HgRZ_G8wGcoB
+:tags: [skip-execution]
+
 # Install the newest JAXlib version.
 !pip install --upgrade -q pip jax jaxlib
 # Install Flax at head:
@@ -53,11 +51,8 @@ vscode:
 ```
 
 ```{code-cell}
----
-id: Kvx7GmavHZbD
-vscode:
-  languageId: python
----
+:id: Kvx7GmavHZbD
+
 import functools
 from typing import Any, Callable, Sequence, Optional
 import jax
@@ -76,11 +71,8 @@ Let's instantiate a `Dense` layer.
  - Modules are actually objects in this API, so we provide _contructor arguments_ when initializing the Module.  In this case, we only have to provide the output `features` dimension.
 
 ```{code-cell}
----
-id: EcDH20Uufc-v
-vscode:
-  languageId: python
----
+:id: EcDH20Uufc-v
+
 model = nn.Dense(features=3)
 ```
 
@@ -96,8 +88,6 @@ colab:
   base_uri: https://localhost:8080/
 id: Vjx0HWNcfa8h
 outputId: 3adfaeaf-977e-4e82-8adf-d254fae6eb91
-vscode:
-  languageId: python
 ---
 # Make RNG Keys and a fake input.
 key1, key2 = random.split(random.PRNGKey(0), 2)
@@ -123,8 +113,6 @@ colab:
   base_uri: https://localhost:8080/
 id: R9QZ6EOBg5X8
 outputId: e8c389a6-29f3-4f93-97ea-703e85a8b811
-vscode:
-  languageId: python
 ---
 y = model.apply(init_variables, x)
 y
@@ -154,8 +142,6 @@ colab:
 id: qB6l-9EabOwH
 outputId: 1a6c6a17-0b95-42c2-b5bf-b9ad80fd7758
 tags: []
-vscode:
-  languageId: python
 ---
 class ExplicitMLP(nn.Module):
   features: Sequence[int]
@@ -196,8 +182,6 @@ colab:
 id: UPNGIr6wcGaw
 outputId: b3709789-e66e-4e20-f6b2-04022f8a62bb
 tags: []
-vscode:
-  languageId: python
 ---
 class SimpleMLP(nn.Module):
   features: Sequence[int]
@@ -251,8 +235,6 @@ colab:
 id: 7OACbTFHjMvl
 outputId: bc5cb1f2-c5e9-4159-d131-73247009e32f
 tags: []
-vscode:
-  languageId: python
 ---
 class SimpleDense(nn.Module):
   features: int
@@ -292,8 +274,6 @@ colab:
 id: CE0CTLVvZ8Yn
 outputId: 1e822bd8-7a08-4e80-e0e6-a86637c46772
 tags: []
-vscode:
-  languageId: python
 ---
 class ExplicitDense(nn.Module):
   features_in: int  # <-- explicit input shape
@@ -349,8 +329,6 @@ colab:
 id: u6_fbrW2XT5t
 outputId: 2a8f5453-81b1-44dc-a431-d14b372c5710
 tags: []
-vscode:
-  languageId: python
 ---
 class Counter(nn.Module):
   @nn.compact
@@ -390,8 +368,6 @@ colab:
 id: BBrbcEdCnQ4o
 outputId: 8f299a5c-74c8-476c-93fa-e5543901ec45
 tags: []
-vscode:
-  languageId: python
 ---
 class Block(nn.Module):
   features: int
@@ -453,8 +429,6 @@ colab:
 id: UEUTO8bf0Kf2
 outputId: 3f324d0f-259f-40f0-8273-103f7fc281c5
 tags: []
-vscode:
-  languageId: python
 ---
 class MLP(nn.Module):
   features: Sequence[int]
@@ -497,8 +471,6 @@ colab:
 id: sogMxDQpyMZE
 outputId: 7fe8e13b-7dd6-4e55-ee50-ce334e8ed178
 tags: []
-vscode:
-  languageId: python
 ---
 class RematMLP(nn.Module):
   features: Sequence[int]
@@ -552,8 +524,6 @@ colab:
 id: PIGiriD0yFXo
 outputId: 223d880e-c7b2-4210-ebb5-dbfcdd9aed09
 tags: []
-vscode:
-  languageId: python
 ---
 class RawDotProductAttention(nn.Module):
   attn_dropout_rate: float = 0.1
@@ -681,8 +651,6 @@ colab:
 id: oxA_lWm7tH2B
 outputId: 7d9ebed3-64de-4ca8-9dce-4b09ba9e31a1
 tags: []
-vscode:
-  languageId: python
 ---
 class SimpleScan(nn.Module):
   @nn.compact
