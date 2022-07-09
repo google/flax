@@ -717,7 +717,7 @@ class Module:
       raise AttributeError(
           f'"{self.__class__.__name__}" object has no attribute "{name}"')
 
-  def __dir__(self) -> Iterable[str]:
+  def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
     return object.__dir__(self)  # pytype: disable=attribute-error
