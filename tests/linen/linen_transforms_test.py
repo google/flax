@@ -17,7 +17,6 @@
 from functools import partial
 from typing import Any, Tuple, Iterable, Callable, Sequence
 import operator
-import unittest
 
 from absl.testing import absltest
 import jax
@@ -129,7 +128,6 @@ class TransformTest(absltest.TestCase):
     self.assertTrue(np.all(y1 == y2))
 
   def test_remat_kwargs(self):
-    raise unittest.SkipTest("test breaks with grad")
     class ConditionalReLU(nn.Module):
       @nn.compact
       def __call__(self, input, apply_relu : bool = False):
@@ -141,9 +139,6 @@ class TransformTest(absltest.TestCase):
     y = remat_model.apply(p, x, apply_relu=True)
 
     self.assertTrue(np.all(y == jnp.zeros_like(x)))
-
-    # This next line crashes with a concretization error
-    _ = jax.grad(lambda x: remat_model.apply(p, x, apply_relu=True))(x)
 
   def test_vmap(self):
     key1, key2 = random.split(random.PRNGKey(3), 2)
