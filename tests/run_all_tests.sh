@@ -5,6 +5,7 @@ export FLAX_PROFILE=1
 export FLAX_LAZY_RNG=1
 
 PYTEST_OPTS=
+RUN_DOCTEST=true
 for flag in "$@"; do
 case $flag in
   --with-cov)
@@ -14,6 +15,9 @@ case $flag in
   echo "Usage:"
   echo "  --with-cov: Also generate pytest coverage."
   exit
+  ;;
+  --no-doctest)
+  RUN_DOCTEST=false
   ;;
   *)
   echo "Unknown flag: $flag"
@@ -38,6 +42,11 @@ handle_errors () {
       exit 1
     fi
 }
+
+# Run embedded tests inside docs
+if $RUN_DOCTEST; then
+  sphinx-build -M doctest docs docs/_build
+fi
 
 # Run battery of core FLAX API tests.
 pytest -n auto tests $PYTEST_OPTS

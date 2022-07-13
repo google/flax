@@ -112,7 +112,7 @@ jobs:
         pip install -r docs/requirements.txt
     - name: Test with pytest and generate coverage report
       run: |
-        tests/run_all_tests.sh --with-cov
+        tests/run_all_tests.sh --with-cov --no-doctest
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:
