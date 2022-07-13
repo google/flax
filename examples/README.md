@@ -95,6 +95,7 @@ official Flax example, and start from there.
 
 |             Link              |       Author       |             Task type             |                               Reference                               |
 | ----------------------------- | ------------------ | --------------------------------- | --------------------------------------------------------------------- |
+| [conceptofmind/vit-flax]      | [@conceptofmind] [@lucidrains] | Computer Vision       | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...         |
 | [matthias-wright/flaxmodels]  | [@matthias-wright] | Various                           | GPT-2, ResNet, StyleGAN-2, VGG, ...                                    |
 | [DarshanDeshpande/jax-models] | [@DarshanDeshpande] | Various                           | Segformer, Swin Transformer, ... also some stand-alone layers        |
 | [google/vision_transformer]   | [@andsteing]       | Image classification, fine-tuning | https://arxiv.org/abs/2010.11929 and https://arxiv.org/abs/2105.01601 |
@@ -103,6 +104,7 @@ official Flax example, and start from there.
 | [BigBird Fine-tuning]         | [@vasudevgupta7]   | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
 | [jax-resnet]                  | [@n2cholas]        | Various resnet implementations    | `torch.hub`                                                            |
 
+[conceptofmind/vit-flax]: https://github.com/conceptofmind/vit-flax
 [matthias-wright/flaxmodels]: https://github.com/matthias-wright/flaxmodels
 [DarshanDeshpande/jax-models]: https://github.com/DarshanDeshpande/jax-models
 [google/vision_transformer]: https://github.com/google-research/vision_transformer
@@ -110,6 +112,8 @@ official Flax example, and start from there.
 [DCGAN]: https://github.com/bkkaggle/jax-dcgan
 [BigBird Fine-tuning]: https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/big_bird
 [jax-resnet]: https://github.com/n2cholas/jax-resnet
+[@conceptofmind]: https://github.com/conceptofmind
+[@lucidrains]: https://github.com/lucidrains
 [@matthias-wright]: https://github.com/matthias-wright
 [@DarshanDeshpande]: https://github.com/DarshanDeshpande
 [@andsteing]: https://github.com/andsteing
