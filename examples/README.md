@@ -98,27 +98,27 @@ official Flax example, and start from there.
 | [matthias-wright/flaxmodels]  | [@matthias-wright] | Various                           | GPT-2, ResNet, StyleGAN-2, VGG, ...                                    |
 | [DarshanDeshpande/jax-models] | [@DarshanDeshpande] | Various                           | Segformer, Swin Transformer, ... also some stand-alone layers        |
 | [google/vision_transformer]   | [@andsteing]       | Image classification, fine-tuning | https://arxiv.org/abs/2010.11929 and https://arxiv.org/abs/2105.01601 |
-| [conceptofmind/vit-flax]      | [@conceptofmind] [@lucidrains] | Computer Vision       | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...         |
 | [JAX-RL]                      | [@henry-prior]     | Reinforcement learning            | N/A                                                                    |
 | [DCGAN] Colab                 | [@bkkaggle]        | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
+| [conceptofmind/vit-flax]      | [@conceptofmind] [@lucidrains]   | Computer Vision                   | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...        |
 | [BigBird Fine-tuning]         | [@vasudevgupta7]   | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
 | [jax-resnet]                  | [@n2cholas]        | Various resnet implementations    | `torch.hub`                                                            |
 
 [matthias-wright/flaxmodels]: https://github.com/matthias-wright/flaxmodels
 [DarshanDeshpande/jax-models]: https://github.com/DarshanDeshpande/jax-models
 [google/vision_transformer]: https://github.com/google-research/vision_transformer
-[conceptofmind/vit-flax]: https://github.com/conceptofmind/vit-flax
 [JAX-RL]: https://github.com/henry-prior/jax-rl
 [DCGAN]: https://github.com/bkkaggle/jax-dcgan
+[conceptofmind/vit-flax]: https://github.com/conceptofmind/vit-flax
 [BigBird Fine-tuning]: https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/big_bird
 [jax-resnet]: https://github.com/n2cholas/jax-resnet
 [@matthias-wright]: https://github.com/matthias-wright
 [@DarshanDeshpande]: https://github.com/DarshanDeshpande
 [@andsteing]: https://github.com/andsteing
-[@conceptofmind]: https://github.com/conceptofmind
-[@lucidrains]: https://github.com/lucidrains
 [@henry-prior]: https://github.com/henry-prior
 [@bkkaggle]: https://github.com/bkkaggle
+[@conceptofmind]: https://github.com/conceptofmind
+[@lucidrains]: https://github.com/lucidrains
 [@vasudevgupta7]: https://github.com/vasudevgupta7
 [@n2cholas]: https://github.com/n2cholas
 
