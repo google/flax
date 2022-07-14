@@ -100,7 +100,7 @@ official Flax example, and start from there.
 | [google/vision_transformer]   | [@andsteing]       | Image classification, fine-tuning | https://arxiv.org/abs/2010.11929 and https://arxiv.org/abs/2105.01601 |
 | [JAX-RL]                      | [@henry-prior]     | Reinforcement learning            | N/A                                                                    |
 | [DCGAN] Colab                 | [@bkkaggle]        | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
-| [conceptofmind/vit-flax]      | [@conceptofmind] [@lucidrains]   | Computer Vision                   | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...        |
+| [conceptofmind/vit-flax]      | [@conceptofmind] [@lucidrains]   | Computer Vision     | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...        |
 | [BigBird Fine-tuning]         | [@vasudevgupta7]   | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
 | [jax-resnet]                  | [@n2cholas]        | Various resnet implementations    | `torch.hub`                                                            |
 
