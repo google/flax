@@ -207,4 +207,4 @@ There are two configuratoins available:
 - `configs/v100_x8.py` : Full precision GPU training
 - `configs/v100_x8_mixed_precision.py` : Mixed precision GPU training. Note that
   mixed precision handling is implemented manually with
-  [`optim.dynamic_scale`](https://github.com/google/flax/blob/main/flax/optim/dynamic_scale.py)
+  [`training.dynamic_scale`](https://github.com/google/flax/blob/main/flax/training/dynamic_scale.py)
