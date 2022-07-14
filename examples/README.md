@@ -102,7 +102,7 @@ official Flax example, and start from there.
 | [DCGAN] Colab                 | [@bkkaggle]        | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
 | [BigBird Fine-tuning]         | [@vasudevgupta7]   | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
 | [jax-resnet]                  | [@n2cholas]        | Various resnet implementations    | `torch.hub`                                                           |
-| [conceptofmind/vit-flax]      | [@conceptofmind]  [@lucidrains] | Computer Vision                   | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...        |
+| [conceptofmind/vit-flax]      | [@conceptofmind]<br/>[@lucidrains] | Computer Vision   | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...        |
 
 [matthias-wright/flaxmodels]: https://github.com/matthias-wright/flaxmodels
 [DarshanDeshpande/jax-models]: https://github.com/DarshanDeshpande/jax-models
