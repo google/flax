@@ -190,8 +190,24 @@ class LiftTest(absltest.TestCase):
     vars = vars.copy(updates)
     self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 1})
     np.testing.assert_allclose(y1, y3)
-
-
+  
+  def test_subscope_var_aliasing(self):
+    def test(scope, x):
+      subscope = scope.push(name="a")
+      subscope.put_variable('state', 'x', 0.)
+      _ = lift.while_loop(
+        lambda scope, x: False, 
+        lambda scope, x: x, 
+        scope,
+        jnp.array(0, jnp.int32),
+        carry_variables=['state'],
+      )
+      subscope.put_variable('state', 'x', 1.)
+      val0 = scope.variables()['state']['a']['x']
+      val1 = subscope.variables()['state']['x']
+      self.assertEqual(val0, val1)
+      return x
+    init(test)( random.PRNGKey(0), 1.)
 
 
 if __name__ == '__main__':

@@ -693,7 +693,15 @@ class Scope:
     if not self.is_mutable_collection(col):
       raise errors.ModifyScopeVariableError(col, name, self.path_text)
     variables = self._mutable_collection(col)
-    variables[name] = value
+    # Make sure reference sharing of child variable dictionaries isn't broken
+    def put(target, key, val):
+      if key in target and isinstance(target[key], dict) and isinstance(val, Mapping):
+        for k, v in val.items():
+          put(target[key], k, v)
+      else:
+        target[key] = val
+
+    put(variables, name, value)
 
   def variable(self, col: str, name: str,  # pylint: disable=keyword-arg-before-vararg
                init_fn: Optional[Callable[..., T]] = None,
