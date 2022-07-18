@@ -829,8 +829,12 @@ class Module:
           object.__setattr__(subvalue, 'name', None)
           key = id(subvalue)
           if key not in cache:
-            cache[key] = subvalue.clone()
-          subvalue = cache[key]
+            # since we use id() as key, we need to keep a reference to original
+            # subvalue to ensure it's lifetime is long enough for the entire
+            # model setup and the id() is not recycled.
+            # TODO(levskaya): consider switching to per-module UUIDs
+            cache[key] = (subvalue.clone(), subvalue)
+          subvalue = cache[key][0]
         if subvalue.name is None:
           object.__setattr__(subvalue, 'parent', self)
           object.__setattr__(subvalue, 'name', f'{name}{suffix}')
