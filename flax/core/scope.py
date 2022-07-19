@@ -754,8 +754,8 @@ class Scope:
       # catch it with an error message.
       # NOTE: We could consider moving this to `self.`
       abs_value = jax.eval_shape(lambda rng: init_fn(rng, *init_args), abs_rng)
-      abs_value_flat = jax.tree_leaves(abs_value)
-      value_flat = jax.tree_leaves(value)
+      abs_value_flat = jax.tree_util.tree_leaves(abs_value)
+      value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
         # NOTE: We could check dtype consistency here as well but it's
         # usefuleness is less obvious. We might intentionally change the dtype
