@@ -262,7 +262,8 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
                        target: Optional[PyTree],
                        step: Optional[int] = None,
                        prefix: str = 'checkpoint_',
-                       parallel: bool = True) -> PyTree:
+                       parallel: bool = True,
+                       pool_size:Optional[int]=32) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -282,6 +283,7 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
+    pool_size: int: number of parallel threads to use.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
@@ -328,7 +330,7 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
             checkpoint_contents[i * buf_size:i * buf_size + len(buf)] = buf
           return len(buf) / buf_size
 
-      pool_size = 32
+
       pool = thread.ThreadPoolExecutor(pool_size)
       results = pool.map(read_chunk, range(int(num_bufs) + 1))
       pool.shutdown(wait=False)
