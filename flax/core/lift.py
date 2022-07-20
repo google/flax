@@ -607,7 +607,7 @@ def vmap(fn: Callable[..., Any],
     @functools.partial(jax.vmap,
                        in_axes=(variable_in_axes, rng_axes, in_axes),
                        out_axes=(out_axes, variable_out_axes),
-                       axis_name=axis_name)
+                       axis_name=axis_name, axis_size=axis_size)
     @functools.wraps(fn)
     def mapped(variable_groups, rng_groups, args):
       scope = scope_fn(variable_groups, rng_groups)
