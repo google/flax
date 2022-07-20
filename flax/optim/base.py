@@ -100,7 +100,7 @@ class OptimizerDef:
     return new_params, new_state
 
   def init_state(self, params):
-    param_states = jax.tree_map(self.init_param_state, params)
+    param_states = jax.tree_util.tree_map(self.init_param_state, params)
     state = OptimizerState(jnp.asarray(0, dtype=jnp.int32), param_states)
     return state
 
@@ -403,7 +403,7 @@ class ReplicatedOptimizer(OptimizerDef):
     return jax.lax.psum(grad, axis_name=self.axis_name) / axis_size
 
   def apply_gradient(self, hyper_params, params, state, grads):
-    grads = jax.tree_map(self._cross_replica_mean, grads)
+    grads = jax.tree_util.tree_map(self._cross_replica_mean, grads)
     return self.optimizer_def.apply_gradient(hyper_params, params, state, grads)
 
   def update_hyper_params(self, **hyper_param_overrides):
@@ -412,7 +412,7 @@ class ReplicatedOptimizer(OptimizerDef):
   def state_dict(self, target, state):
     state_dict = self.optimizer_def.state_dict(target, state)
     # only the first copy of the parameters and optimizer state are stored.
-    state_dict = jax.tree_map(lambda x: x[0], state_dict)
+    state_dict = jax.tree_util.tree_map(lambda x: x[0], state_dict)
     return state_dict
 
   def restore_state(self, target, opt_state, state_dict):
@@ -487,7 +487,7 @@ class MultiOptimizer(OptimizerDef):
     self.sub_optimizers = sub_optimizers
 
   def init_state(self, params):
-    param_states = jax.tree_map(_ShapeDtype.create, params)
+    param_states = jax.tree_util.tree_map(_ShapeDtype.create, params)
     overlap = False
     for idx, (traversal,
               opt) in enumerate(zip(self.traversals, self.sub_optimizers)):
@@ -499,18 +499,18 @@ class MultiOptimizer(OptimizerDef):
     if overlap:
       raise ValueError(
           'Multiple optimizers match the same leaves : ' +
-          str(jax.tree_map(lambda match: match._indices, param_states)))
+          str(jax.tree_util.tree_map(lambda match: match._indices, param_states)))
     for traversal, opt in zip(self.traversals, self.sub_optimizers):
       param_states = traversal.update(lambda x: opt.init_param_state(x._value), param_states)
     # Use None as initial state for params that are not optimized by any sub optimizer.
-    param_states = jax.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, param_states)
+    param_states = jax.tree_util.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, param_states)
 
     return OptimizerState(jnp.asarray(0, dtype=jnp.int32), param_states)
 
   def apply_gradient(self, hyper_params, params, state, grads):
     new_params = params
     it = zip(self.traversals, self.sub_optimizers, hyper_params)
-    new_param_states = jax.tree_map(_ShapeDtype.create, params)
+    new_param_states = jax.tree_util.tree_map(_ShapeDtype.create, params)
     for focus, opt, hp in it:
       ps = tuple(focus.iterate(params))
       gs = tuple(focus.iterate(grads))
@@ -520,7 +520,8 @@ class MultiOptimizer(OptimizerDef):
       new_params = focus.set(list(new_ps), new_params)
       new_param_states = focus.set(list(new_ss.param_states), new_param_states)
     # Update state to None when param is not optimized by any sub optimizer.
-    new_param_states = jax.tree_map(lambda x: None if isinstance(x, _ShapeDtype) else x, new_param_states)
+    new_param_states = jax.tree_util.tree_map(
+        lambda x: None if isinstance(x, _ShapeDtype) else x, new_param_states)
     return new_params, OptimizerState(state.step + 1, new_param_states)
 
   def update_hyper_params(self, **hyper_param_overrides):
