@@ -17,6 +17,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, List
+import typer
 
 import pandas as pd
 import requests
@@ -407,4 +408,4 @@ def main(
   plt.show()
 
 if __name__ == '__main__':
-  main()
+  typer.run(main)
