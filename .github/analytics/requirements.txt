@@ -1,2 +1,4 @@
 pandas
 typer
+requests
+matplotlib
