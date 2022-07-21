@@ -87,7 +87,7 @@ def scan(
       perm = tuple(range(x.ndim))
       perm = (ax,) + tuple(np.delete(perm, ax))
       return jnp.transpose(x, perm)
-    return jax.tree_map(trans, xs)
+    return jax.tree_util.tree_map(trans, xs)
 
   def transpose_from_front(ax, xs):
     if ax is broadcast:
@@ -102,31 +102,31 @@ def scan(
       assert pax < x.ndim
       perm = tuple(range(1, pax + 1)) + (0,) + tuple(range(pax + 1, x.ndim))
       return jnp.transpose(x, perm)
-    return jax.tree_map(trans, xs)
+    return jax.tree_util.tree_map(trans, xs)
 
   def scan_fn(broadcast_in, init, *args):
-    xs = jax.tree_map(transpose_to_front, in_axes, args)
+    xs = jax.tree_util.tree_map(transpose_to_front, in_axes, args)
 
     def body_fn(c, xs, init_mode=False):
       # inject constants
-      xs = jax.tree_map(lambda ax, arg, x: (arg if ax is broadcast else x),
-                             in_axes, args, xs)
+      xs = jax.tree_util.tree_map(
+          lambda ax, arg, x: (arg if ax is broadcast else x), in_axes, args, xs)
       broadcast_out, c, ys = fn(broadcast_in, c, *xs)
 
       if init_mode:
-        ys = jax.tree_map(lambda ax, y: (y if ax is broadcast else ()),
-                               out_axes, ys)
+        ys = jax.tree_util.tree_map(
+            lambda ax, y: (y if ax is broadcast else ()), out_axes, ys)
         return broadcast_out, ys
       else:
-        ys = jax.tree_map(lambda ax, y: (() if ax is broadcast else y),
-                               out_axes, ys)
+        ys = jax.tree_util.tree_map(
+            lambda ax, y: (() if ax is broadcast else y), out_axes, ys)
         return c, ys
     broadcast_body = functools.partial(body_fn, init_mode=True)
 
-    carry_avals = jax.tree_map(
+    carry_avals = jax.tree_util.tree_map(
         lambda x: jax.ShapedArray(jnp.shape(x), jnp.result_type(x)),
         init)
-    scan_avals = jax.tree_map(
+    scan_avals = jax.tree_util.tree_map(
         lambda x: jax.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)),
         xs)
     input_avals = (carry_avals, scan_avals)
@@ -147,8 +147,8 @@ def scan(
 
     c, ys = lax.scan(body_fn, init, xs, length=length,
                      reverse=reverse, unroll=unroll)
-    ys = jax.tree_map(transpose_from_front, out_axes, ys)
-    ys = jax.tree_map(
+    ys = jax.tree_util.tree_map(transpose_from_front, out_axes, ys)
+    ys = jax.tree_util.tree_map(
         lambda ax, const, y: (const if ax is broadcast else y), out_axes,
         constants_out, ys)
     return broadcast_in, c, ys
