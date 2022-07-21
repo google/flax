@@ -22,7 +22,7 @@ import typing
 from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
                     Sequence, Set, Tuple, TypeVar, Union)
 
-from . import tracers
+from flax.ids import uuid
 from flax import config
 from flax import errors
 from flax import struct
@@ -30,6 +30,7 @@ from flax import traceback_util
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
+from . import tracers
 import jax
 from jax import config as jax_config
 from jax import numpy as jnp
@@ -50,7 +51,6 @@ Filter = Union[bool, str, typing.Collection[str], 'DenyList']
 
 # When conditioning on filters we require explicit boolean comparisons.
 # pylint: disable=g-bool-id-comparison
-
 
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
@@ -343,6 +343,7 @@ class Variable(Generic[T]):
       collection: The collection of the variable (e.g., "params").
       name: The name of the variable (e.g., "dense").
     """
+    self._id = uuid()
     self.scope = scope
     self.collection = collection
     self.name = name

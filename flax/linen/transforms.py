@@ -43,6 +43,7 @@ import jax
 
 traceback_util.register_exclusion(__file__)
 
+# pylint: disable=protected-access
 
 # Utils
 # -----------------------------------------------------------------------------
@@ -79,12 +80,12 @@ def _memoize_by_id(fn, refs):
     nonlocal refs
     if isinstance(x, (VariablePlaceholder, InstancePlaceholder)):
       x_id = x.id
+    elif isinstance(x, (Variable, Module)):
+      x_id = x._id
     else:
-      x_id = id(x)
+      return fn(x)
     if x_id not in refs:
       refs[x_id] = fn(x)
-    else:
-      pass
     return refs[x_id]
   return wrapped_fn
 
@@ -124,9 +125,9 @@ def get_module_scopes(module, args=None, kwargs=None):
     nonlocal scopes
     if isinstance(x, Variable) and isinstance(x.scope, Scope):
       scopes.append(x.scope)
-      return VariablePlaceholder(x.collection, x.name, id(x))
+      return VariablePlaceholder(x.collection, x.name, x._id)
     elif isinstance(x, Module) and isinstance(x.scope, Scope):
-      x._try_setup(shallow=True)  # pylint: disable=protected-access
+      x._try_setup(shallow=True)
       scopes.append(x.scope)
       attrs = {
           f.name: getattr(x, f.name)
@@ -134,7 +135,7 @@ def get_module_scopes(module, args=None, kwargs=None):
           if f.name != 'parent' and f.init
       }
       attrs = jax.tree_util.tree_map(get_arg_scope, attrs)
-      return InstancePlaceholder(x.__class__, attrs, id(x))
+      return InstancePlaceholder(x.__class__, attrs, x._id)
     return x
   new_args, new_kwargs = jax.tree_util.tree_map(get_arg_scope, (args, kwargs))
 
@@ -142,7 +143,7 @@ def get_module_scopes(module, args=None, kwargs=None):
   @functools.partial(_memoize_by_id, refs=refs)
   def get_scopes(module):
     nonlocal scopes
-    module._try_setup(shallow=True)  # pylint: disable=protected-access
+    module._try_setup(shallow=True)
     def get_scopes_inner(x):
       nonlocal scopes
       if isinstance(x, Module) and isinstance(x.scope, Scope):
@@ -303,9 +304,9 @@ def module_class_lift_transform(
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
         cloned, args, kwargs = set_module_scopes(cloned, args, kwargs, scopes)
-        object.__setattr__(cloned, '_state', state.export())  # pylint: disable=protected-access
+        object.__setattr__(cloned, '_state', state.export())
         res = fn(cloned, *args, **kwargs)
-        self._state.reimport(cloned._state)  # pylint: disable=protected-access
+        self._state.reimport(cloned._state)
         _test_transformed_return_values(res, fn_name)
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
@@ -351,9 +352,9 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
       if not multi_scope:
         scopes = [scopes]
       cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-      object.__setattr__(cloned, '_state', state.export())  # pylint: disable=protected-access
+      object.__setattr__(cloned, '_state', state.export())
       res = prewrapped_fn(cloned, *args, **kwargs)
-      self._state.reimport(cloned._state)  # pylint: disable=protected-access
+      self._state.reimport(cloned._state)
       _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
       return res
     core_fns = [functools.partial(core_fn, prewrapped_fn, class_fn)
@@ -1325,8 +1326,8 @@ def named_call(class_fn, force=True):
     prewrapped_fn = wrap_method_once(class_fn)
     @functools.wraps(prewrapped_fn)
     def wrapped_fn(self, *args, **kwargs):
-      if ((not force and not linen_module._use_named_call)  # pylint: disable=protected-access
-          or self._state.in_setup):  # pylint: disable=protected-access
+      if ((not force and not linen_module._use_named_call)
+          or self._state.in_setup):
         return prewrapped_fn(self, *args, **kwargs)
       fn_name = class_fn.__name__
       method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
@@ -1335,9 +1336,9 @@ def named_call(class_fn, force=True):
       # make a scope-function to transform
       def core_fn(scopes, *args, **kwargs):
         cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-        object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
+        object.__setattr__(cloned, '_state', self._state.export())
         res = prewrapped_fn(cloned, *args, **kwargs)
-        self._state.reimport(cloned._state)  # pylint: disable=protected-access
+        self._state.reimport(cloned._state)
         _test_transformed_return_values(res, fn_name)
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
