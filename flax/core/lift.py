@@ -39,7 +39,7 @@ T = TypeVar('T')
 
 def tree_map_rngs(fn, tree):
   """Needed for mapping JAX random.* functions over KeyArray leaves."""
-  return jax.tree_map(
+  return jax.tree_util.tree_map(
       fn, tree, is_leaf=lambda x: isinstance(x, random.KeyArray))
 
 
@@ -169,7 +169,7 @@ def pack(fn: Callable[..., Any],
           rngs.update(rng_group)
         # make sure variable dicts are cloned and can't be manipulated by ref
         # sharing.
-        variables = jax.tree_map(lambda x: x, variables)
+        variables = jax.tree_util.tree_map(lambda x: x, variables)
         scope_mutable = intersect_filters(
             intersect_filters(scope.mutable, mutable), mutable_filter)
         new_path = scope.path
@@ -458,7 +458,8 @@ def jvp(
       return p * x
 
     def f(scope, x):
-      vars_t = jax.tree_map(jnp.ones_like, scope.variables().get('params', {}))
+      vars_t = jax.tree_util.tree_map(jnp.ones_like,
+                                      scope.variables().get('params', {}))
       x, out_t = lift.jvp(
           learn_scale, scope, (x,), (jnp.zeros_like(x),),
           variable_tangents={'params': vars_t})
@@ -587,8 +588,9 @@ def vmap(fn: Callable[..., Any],
       return ()
 
     # split rngs
-    axis_sizes = jax.tree_map(find_axis_size, (variable_in_axes, in_axes),
-                                   (variable_groups, args))
+    axis_sizes = jax.tree_util.tree_map(find_axis_size,
+                                        (variable_in_axes, in_axes),
+                                        (variable_groups, args))
     axis_sizes = set(jax.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
       d_axis_size, = axis_sizes
@@ -723,7 +725,7 @@ def scan(fn: Callable[..., Any],
           return leaves[0].shape[axis]
       return ()
     # split rngs
-    lengths = jax.tree_map(find_length, in_axes, args)
+    lengths = jax.tree_util.tree_map(find_length, in_axes, args)
     lengths = set(jax.tree_leaves(lengths))
     if length is None and len(lengths) == 1:
       d_length, = lengths
@@ -871,10 +873,10 @@ def while_loop(cond_fn: Callable[[Scope, C], bool],
       name='while_loop')(scope)
 
 
-def cond(pred: Any, 
+def cond(pred: Any,
          true_fun: Callable[..., C], false_fun: Callable[..., C],
          scope: Scope, *operands,
-         variables: CollectionFilter = True, 
+         variables: CollectionFilter = True,
          rngs: PRNGSequenceFilter = True) -> C:
   """Lifted version of ``jax.lax.cond``.
 
@@ -907,7 +909,7 @@ def cond(pred: Any,
       The signature is (Scope, *operands) -> T.
     false_fun: The function evalauted when ``pred`` is `False`.
       The signature is (Scope, *operands) -> T.
-    scope: A Scope or Pytree of scopes to pass 
+    scope: A Scope or Pytree of scopes to pass
     *operands: The arguments passed to ``true_fun`` and ``false_fun``
     variables: The variable collections passed to the conditional
       branches (default: all)
@@ -935,10 +937,11 @@ def cond(pred: Any,
       (rngs,),
       name='cond')(scope)
 
-def switch(index: Any, 
+
+def switch(index: Any,
            branches: Sequence[Callable[..., C]],
            scope: Scope, *operands,
-           variables: CollectionFilter = True, 
+           variables: CollectionFilter = True,
            rngs: PRNGSequenceFilter = True) -> C:
   """Lifted version of ``jax.lax.switch``.
 
@@ -988,7 +991,7 @@ def switch(index: Any,
       if scope.is_mutable_collection('params'):
         for branch in branches:
           _ = branch(scope, x)
-        
+
       return lift.switch(index, branches, scope, x)
 
   Args:
@@ -1022,6 +1025,7 @@ def switch(index: Any,
       (rngs,),
       name='switch')(scope)
 
+
 def custom_vjp(fn: Callable[..., Any],
                forward_fn: Callable[..., Any],
                backward_fn: Callable[..., Any],
@@ -1054,7 +1058,7 @@ def custom_vjp(fn: Callable[..., Any],
 
     def bwd(features, vjp_fn, y_t):
       input_t, params_t = vjp_fn(y_t)
-      params_t = jax.tree_map(jnp.sign, params_t)
+      params_t = jax.tree_util.tree_map(jnp.sign, params_t)
       return input_t, params_t
 
     dense_sign_grad = lift.custom_vjp(

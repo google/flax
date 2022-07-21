@@ -253,7 +253,7 @@ def with_sharding_constraint(
   if not _axis_rules.rules or logical_axis_resources is None:
     return x
   # Translate logical names to mesh assignments.
-  return jax.tree_map(
+  return jax.tree_util.tree_map(
       functools.partial(
           _with_sharding_constraint_one_fallback, fallback=fallback),
       logical_axis_resources,
@@ -479,7 +479,7 @@ def get_axis_names(axes_metadata):
   def leaf_rewrite(x):
     return None if x is None else pjit.PartitionSpec(*x)
   def rewrite(tree):
-    return jax.tree_map(leaf_rewrite, tree, is_leaf=_is_logical_spec)
+    return jax.tree_util.tree_map(leaf_rewrite, tree, is_leaf=_is_logical_spec)
   axes_metadata = unfreeze(axes_metadata)  # pytype: disable=wrong-arg-types
   flat_dict = {
       re.sub(r'_axes$', '', '/'.join(k)): rewrite(v.names)
@@ -496,7 +496,7 @@ def get_axis_names(axes_metadata):
 def _tree_map_axes(fn, tree):
   """Only map over AxisMetadata leaves in pytree - identity for other leaves."""
   safe_fn = lambda x: fn(x) if isinstance(x, AxisMetadata) else x
-  return jax.tree_map(
+  return jax.tree_util.tree_map(
       safe_fn, tree, is_leaf=lambda x: isinstance(x, AxisMetadata))
 
 
@@ -537,7 +537,8 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
     return tuple(names)
 
   def insert_fn(x):
-    new_names = jax.tree_map(insert_fn_leaf, x.names, is_leaf=_is_logical_spec)
+    new_names = jax.tree_util.tree_map(insert_fn_leaf, x.names,
+                                       is_leaf=_is_logical_spec)
     return x.replace(names=new_names)
 
   def remove_fn_leaf(names):
@@ -551,7 +552,8 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
     return tuple(names)
 
   def remove_fn(x):
-    new_names = jax.tree_map(remove_fn_leaf, x.names, is_leaf=_is_logical_spec)
+    new_names = jax.tree_util.tree_map(remove_fn_leaf, x.names,
+                                       is_leaf=_is_logical_spec)
     return x.replace(names=new_names)
 
   return nn.transforms.map_variables(
