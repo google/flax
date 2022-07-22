@@ -22,12 +22,17 @@ checkpoint files.
 from concurrent.futures import thread
 import os
 import re
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from absl import logging
 from flax import core
 from flax import errors
 from flax import serialization
+from flax import traverse_util
+from jax import process_index
+from jax.experimental.gda_serialization.serialization import get_tensorstore_spec
+from jax.experimental.gda_serialization.serialization import GlobalAsyncCheckpointManager
+from jax.experimental.global_device_array import GlobalDeviceArray
 from tensorflow.io import gfile  # pytype: disable=import-error
 
 
@@ -42,6 +47,11 @@ UNSIGNED_FLOAT_RE = re.compile(
 MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
 # Alternative schemes handled by `gfile`, e.g. on Google Cloud Storage (GCS).
 SCHEME_RE = re.compile('^(?P<scheme>[a-z][a-z0-9.+-]+://)?(?P<path>.*)', re.I)
+
+# GlobalDeviceArrays is across devices and would not be stored in the same file
+# with non-GDA data. So their occurrences in the target pytree will be replaced
+# by this string placeholder.
+GDA_PH = '//GDAPlaceholder:'
 
 PyTree = Any
 
@@ -58,6 +68,69 @@ def _checkpoint_path_step(path: str) -> Optional[float]:
     if SIGNED_FLOAT_RE.match(s):
       return float(s)
   return None
+
+
+def _split_gdas(
+    target: Dict[str, Any]) -> Tuple[Dict[str, Any], List[GlobalDeviceArray]]:
+  # Traverse the target and handle GlobalDeviceArrays.
+  flattened = traverse_util.flatten_dict(target, keep_empty_nodes=True)
+  gda_targets = []
+  for key, value in flattened.items():
+    if isinstance(value, GlobalDeviceArray):
+      subpath = '/'.join(key)
+      gda_targets.append((value, subpath))
+      flattened[key] = GDA_PH + subpath
+  target = traverse_util.unflatten_dict(flattened)
+  return target, gda_targets
+
+
+def _save_gdas(gda_manager: GlobalAsyncCheckpointManager,
+               gda_targets: List[Tuple[GlobalDeviceArray, str]],
+               tmp_path: str, final_path: str):
+  gda_list, gda_subpaths = zip(*gda_targets)
+  ts_specs = [
+      get_tensorstore_spec(os.path.join(tmp_path, x)) for x in gda_subpaths
+  ]
+  gda_manager.serialize(
+      list(gda_list),
+      ts_specs,
+      temp_checkpoint_dir=tmp_path,
+      final_checkpoint_dir=final_path)
+
+
+def _restore_gdas(state_dict,
+                  target: Optional[PyTree],
+                  ckpt_path: str,
+                  step: Optional[int] = None,
+                  gda_manager: Optional[GlobalAsyncCheckpointManager] = None):
+
+  # Check if a GDA is present in the restored pytree
+  flattened = traverse_util.flatten_dict(state_dict, keep_empty_nodes=True)
+
+  gda_paths = []
+  for key, value in flattened.items():
+    if isinstance(value, str) and value.startswith(GDA_PH):
+      subpath = value[len(GDA_PH):]
+      gda_paths.append((key, os.path.join(ckpt_path+'_gda', subpath)))
+
+  if gda_paths:
+    if not gda_manager:
+      raise errors.GDACheckpointingRequiredError(ckpt_path, step)
+    if not target:
+      raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
+    target_flattened = traverse_util.flatten_dict(
+        serialization.to_state_dict(target), keep_empty_nodes=True)
+    target_gdas = [target_flattened[x[0]] for x in gda_paths]
+    if not all(isinstance(x, GlobalDeviceArray) for x in target_gdas):
+      raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
+    meshes = [x.mesh for x in target_gdas]
+    partition_specs = [x.mesh_axes for x in target_gdas]
+    ts_specs = [get_tensorstore_spec(x[1]) for x in gda_paths]
+    gda_list = gda_manager.deserialize(meshes, partition_specs, ts_specs)
+    for gda, (key, _) in zip(gda_list, gda_paths):
+      flattened[key] = gda
+  state_dict = traverse_util.unflatten_dict(flattened)
+  return state_dict
 
 
 def natural_sort(file_list: Iterable[str], signed: bool = True) -> List[str]:
@@ -92,8 +165,7 @@ def safe_normpath(path: str) -> str:
 
 
 class AsyncManager():
-  """A simple object to track async threads.
-  Can potentially be extended to handle use cases other than checkpointing.
+  """A simple object to track async checkpointing.
 
   How to use: create an instance and pass to save_checkpoint() calls:
     am = AsyncManager()
@@ -130,7 +202,9 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     keep: int = 1,
                     overwrite: bool = False,
                     keep_every_n_steps: Optional[int] = None,
-                    async_manager: Optional[AsyncManager] = None) -> str:
+                    async_manager: Optional[AsyncManager] = None,
+                    gda_manager: Optional[
+                        GlobalAsyncCheckpointManager] = None) -> str:
   """Save a checkpoint of the model.
 
   Attempts to be pre-emption safe by writing to temporary before
@@ -149,6 +223,9 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     async_manager: if defined, the save will run without blocking the main
       thread. Only works for single host. Note that an ongoing save will still
       block subsequent saves, to make sure overwrite/keep logic works correctly.
+    gda_manager: required if target contains a JAX GlobalDeviceArray. Will save
+      the GDAs to a separate subdirectory with postfix "_gda" asynchronously. 
+      Same as async_manager, this will block subsequent saves.
   Returns:
     Filename of saved checkpoint.
   """
@@ -159,6 +236,22 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                              keep_every_n_steps: Optional[int]):
     """Save the checkpoint bytes via file system."""
     ckpt_tmp_path, ckpt_path = paths
+    gfile.makedirs(os.path.dirname(ckpt_path))
+    if ckpt_path in checkpoint_files:
+      if not overwrite:
+        raise errors.InvalidCheckpointError(ckpt_path, step)
+    else:
+      checkpoint_files.append(ckpt_path)
+
+    checkpoint_files = natural_sort(checkpoint_files)
+    # Handle the case if the job was preempted after the temporary checkpoint
+    # was written, but before it was renamed to the final checkpoint name
+    if checkpoint_files[-1] == ckpt_tmp_path:
+      checkpoint_files.pop()
+    if ckpt_path != checkpoint_files[-1]:
+      if not overwrite:
+        raise errors.InvalidCheckpointError(ckpt_path, step)
+
     with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
       fp.write(target)
 
@@ -173,12 +266,14 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       checkpoint_files = checkpoint_files[:ind]
       for path in newer_ckpts:
         logging.info('Removing checkpoint at %s', path)
-        gfile.remove(path)
+        gfile.rmtree(path)
 
     # Remove old checkpoint files.
     last_kept = -float('inf')
     if len(checkpoint_files) > keep:
-      old_ckpts = checkpoint_files[:-keep]
+      exclude_gda = [f for f in checkpoint_files if f[:-4] != '_gda']
+      ind = checkpoint_files.index(exclude_gda[-keep])
+      old_ckpts = checkpoint_files[:ind]
       # Note: old_ckpts is sorted from oldest to newest.
       for path in old_ckpts:
         if keep_every_n_steps:
@@ -192,8 +287,12 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
         logging.info('Removing checkpoint at %s', path)
         gfile.remove(path)
 
+  # Make sure all saves are finished before the logic of checking and removing
+  # outdated checkpoints happens.
   if async_manager:
     async_manager.wait_previous_save()
+  if gda_manager:
+    gda_manager.wait_until_finished()
 
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
@@ -202,36 +301,29 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   ckpt_dir = safe_normpath(ckpt_dir)
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
-  gfile.makedirs(os.path.dirname(ckpt_path))
   base_path = os.path.join(ckpt_dir, prefix)
   checkpoint_files = gfile.glob(base_path + '*')
 
-  if ckpt_path in checkpoint_files:
-    if not overwrite:
-      raise errors.InvalidCheckpointError(ckpt_path, step)
-  else:
-    checkpoint_files.append(ckpt_path)
-
-  checkpoint_files = natural_sort(checkpoint_files)
-  # Handle the case if the job was preempted after the temporary checkpoint was
-  # written, but before it was renamed to the final checkpoint name
-  if checkpoint_files[-1] == ckpt_tmp_path:
-    checkpoint_files.pop(-1)
-  if ckpt_path != checkpoint_files[-1]:
-    if not overwrite:
-      raise errors.InvalidCheckpointError(ckpt_path, step)
-
-  to_write = serialization.to_bytes(target)
+  target = serialization.to_state_dict(target)
+  target, gda_targets = _split_gdas(target)
+  target = serialization.msgpack_serialize(target)
 
   # Save the files via I/O sync or async.
   def save_task():
-    return _save_checkpoint_files(to_write, (ckpt_tmp_path, ckpt_path),
+    return _save_checkpoint_files(target, (ckpt_tmp_path, ckpt_path),
                                   checkpoint_files, keep, overwrite,
                                   keep_every_n_steps)
-  if async_manager:
-    async_manager.save_async(save_task)
-  else:
-    save_task()
+  if process_index() == 0:
+    if async_manager:
+      async_manager.save_async(save_task)
+    else:
+      save_task()
+
+  if gda_targets:
+    if not gda_manager:
+      raise errors.GDACheckpointingRequiredError(ckpt_path, step)
+    gda_tmp_path, gda_final_path = ckpt_tmp_path + '_gda', ckpt_path + '_gda'
+    _save_gdas(gda_manager, gda_targets, gda_tmp_path, gda_final_path)
 
   return ckpt_path
 
@@ -251,18 +343,23 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
   glob_path = os.path.join(ckpt_dir, f'{prefix}*')
   checkpoint_files = natural_sort(gfile.glob(glob_path))
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
-  checkpoint_files = [f for f in checkpoint_files if f != ckpt_tmp_path]
+  checkpoint_files = [
+      f for f in checkpoint_files
+      if f != ckpt_tmp_path and not f.endswith('_gda')
+  ]
   if checkpoint_files:
     return checkpoint_files[-1]
   else:
     return None
 
 
-def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
-                       target: Optional[PyTree],
-                       step: Optional[int] = None,
-                       prefix: str = 'checkpoint_',
-                       parallel: bool = True) -> PyTree:
+def restore_checkpoint(
+    ckpt_dir: Union[str, os.PathLike],
+    target: Optional[PyTree],
+    step: Optional[int] = None,
+    prefix: str = 'checkpoint_',
+    parallel: bool = True,
+    gda_manager: Optional[GlobalAsyncCheckpointManager] = None) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -282,6 +379,8 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
+    gda_manager: required if checkpoint contains a JAX GlobalDeviceArray. Will
+      read the GDAs from the separate subdirectory with postfix "_gda".
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
@@ -336,10 +435,12 @@ def restore_checkpoint(ckpt_dir: Union[str, os.PathLike],
     else:
       checkpoint_contents = fp.read()
 
-    if target is None:
-      return serialization.msgpack_restore(checkpoint_contents)
-    else:
-      return serialization.from_bytes(target, checkpoint_contents)
+  state_dict = serialization.msgpack_restore(checkpoint_contents)
+  state_dict = _restore_gdas(state_dict, target, ckpt_path, step, gda_manager)
+
+  if target is None:
+    return state_dict
+  return serialization.from_state_dict(target, state_dict)
 
 
 def convert_pre_linen(params: PyTree) -> PyTree:

@@ -551,6 +551,38 @@ class InvalidCheckpointError(FlaxError):
     super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')
 
 
+class GDACheckpointingRequiredError(FlaxError):
+  """To optimally save and restore a GlobalDeviceArray, use GlobalAsyncCheckpointManager.
+
+  You can create an GlobalAsyncCheckpointManager at top-level and pass it as
+  argument::
+
+    from jax.experimental.gda_serialization import serialization as gdas
+    gda_manager = gdas.GlobalAsyncCheckpointManager()
+    save_checkpoint(..., gda_manager=gda_manager)
+
+  """
+  def __init__(self, path, step):
+    super().__init__(
+        f'Checkpoint failed at step: "{step}" and path: "{path}": Target contains a GlobalDeviceArray should be saved/restored with a GlobalAsyncCheckpointManager.'
+    )
+
+
+class GDARestoreTargetRequiredError(FlaxError):
+  """Provide a valid target when restoring a checkpoint with GlobalDeviceArray.
+
+  To restore a checkpoint that contains a GlobalDeviceArray, make sure
+  to pass a valid ``target`` argument that contains GDAs with correct global
+  meshes and partition specs.
+
+  """
+
+  def __init__(self, path, step):
+    super().__init__(
+        f'Restore checkpoint failed at step: "{step}" and path: "{path}": Checkpoints containing a GlobalDeviceArray need to be restored with a valid target.'
+    )
+
+
 #################################################
 # transforms.py errors                          #
 #################################################

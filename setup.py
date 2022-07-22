@@ -31,6 +31,7 @@ install_requires = [
     "msgpack",
     "optax",
     "rich~=11.1",
+    "tensorstore",
     "typing_extensions>=4.1.1",
     "PyYAML>=5.4.1",
 ]

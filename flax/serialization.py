@@ -46,7 +46,7 @@ def from_state_dict(target, state: Dict[str, Any]):
   as well as lets us add assertions that shapes and dtypes don't change.
 
   In practice, none of the leaf values in `target` are actually
-  used. Only the tree structure, shapes and types.
+  used. Only the tree structure, shapes and dtypes.
 
   Args:
     target: the object of which the state should be restored.
