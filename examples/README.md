@@ -115,6 +115,7 @@ official Flax example, and start from there.
 | [DCGAN] Colab                 | [@bkkaggle]         | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
 | [BigBird Fine-tuning]         | [@vasudevgupta7]    | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
 | [jax-resnet]                  | [@n2cholas]         | Various resnet implementations    | `torch.hub`                                                           |
+| [conceptofmind/vit-flax]      | [@conceptofmind]<br/>[@lucidrains] | Computer Vision    | ViT, CaiT, Cross ViT, CvT, DeepViT, LeViT, PiT, RegionViT, ...        |
 
 [matthias-wright/flaxmodels]: https://github.com/matthias-wright/flaxmodels
 [DarshanDeshpande/jax-models]: https://github.com/DarshanDeshpande/jax-models
@@ -123,6 +124,7 @@ official Flax example, and start from there.
 [DCGAN]: https://github.com/bkkaggle/jax-dcgan
 [BigBird Fine-tuning]: https://github.com/huggingface/transformers/tree/master/examples/research_projects/jax-projects/big_bird
 [jax-resnet]: https://github.com/n2cholas/jax-resnet
+[conceptofmind/vit-flax]: https://github.com/conceptofmind/vit-flax
 [@matthias-wright]: https://github.com/matthias-wright
 [@DarshanDeshpande]: https://github.com/DarshanDeshpande
 [@andsteing]: https://github.com/andsteing
@@ -130,6 +132,8 @@ official Flax example, and start from there.
 [@bkkaggle]: https://github.com/bkkaggle
 [@vasudevgupta7]: https://github.com/vasudevgupta7
 [@n2cholas]: https://github.com/n2cholas
+[@conceptofmind]: https://github.com/conceptofmind
+[@lucidrains]: https://github.com/lucidrains
 
 ## Anatomy of a Flax Example
 
