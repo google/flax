@@ -319,7 +319,7 @@ def group_collections(
     group = {}
     for col in cols:
       if in_filter(col_filter, col):
-        group[col] = jax.tree_map(lambda x: x, xs[col])
+        group[col] = jax.tree_util.tree_map(lambda x: x, xs[col])
       else:
         remaining_cols.append(col)
     cols = remaining_cols
@@ -366,6 +366,7 @@ class _ChildRNGSentinel:
   pass
 # used to identify that an rng counter is meant for a child scope
 child_rng_token = _ChildRNGSentinel()
+
 
 class _DefaultSentinel:
   pass
@@ -693,7 +694,16 @@ class Scope:
     if not self.is_mutable_collection(col):
       raise errors.ModifyScopeVariableError(col, name, self.path_text)
     variables = self._mutable_collection(col)
-    variables[name] = value
+    # Make sure reference sharing of child variable dictionaries isn't broken
+    def put(target, key, val):
+      if (key in target and isinstance(target[key], dict) and
+          isinstance(val, Mapping)):
+        for k, v in val.items():
+          put(target[key], k, v)
+      else:
+        target[key] = val
+
+    put(variables, name, value)
 
   def variable(self, col: str, name: str,  # pylint: disable=keyword-arg-before-vararg
                init_fn: Optional[Callable[..., T]] = None,
@@ -746,8 +756,8 @@ class Scope:
       # catch it with an error message.
       # NOTE: We could consider moving this to `self.`
       abs_value = jax.eval_shape(lambda rng: init_fn(rng, *init_args), abs_rng)
-      abs_value_flat = jax.tree_leaves(abs_value)
-      value_flat = jax.tree_leaves(value)
+      abs_value_flat = jax.tree_util.tree_leaves(abs_value)
+      value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):
         # NOTE: We could check dtype consistency here as well but it's
         # usefuleness is less obvious. We might intentionally change the dtype
@@ -777,6 +787,7 @@ class Scope:
     if key not in self.flags and default is no_flag:
       return ValueError(f'Flag {key} not present on scope.')
     return self.flags.get(key, default)
+
 
 def _unfreeze_variables(variables, mutable):
   new_variables = {}
@@ -847,7 +858,8 @@ def apply(fn: Callable[..., Any],
         (dict, FrozenDict)) and 'params' in variables['params']:
       raise errors.ApplyScopeInvalidVariablesStructureError(variables)
 
-    with bind(variables, rngs=rngs, mutable=mutable, flags=flags).temporary() as root:
+    with bind(variables, rngs=rngs, mutable=mutable,
+              flags=flags).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:
       return y, root.mutable_variables()
@@ -880,7 +892,8 @@ def init(fn: Callable[..., Any],
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
     init_flags = {**(flags if flags is not None else {}), 'initializing': True}
-    return apply(fn, mutable=mutable, flags=init_flags)({}, *args, rngs=rngs, **kwargs)
+    return apply(fn, mutable=mutable, flags=init_flags)({}, *args, rngs=rngs,
+                                                        **kwargs)
 
   return wrapper
 

@@ -133,10 +133,10 @@ def get_module_scopes(module, args=None, kwargs=None):
           for f in dataclasses.fields(x)
           if f.name != 'parent' and f.init
       }
-      attrs = jax.tree_map(get_arg_scope, attrs)
+      attrs = jax.tree_util.tree_map(get_arg_scope, attrs)
       return InstancePlaceholder(x.__class__, attrs, id(x))
     return x
-  new_args, new_kwargs = jax.tree_map(get_arg_scope, (args, kwargs))
+  new_args, new_kwargs = jax.tree_util.tree_map(get_arg_scope, (args, kwargs))
 
   # Gather scopes in Variables and Submodules passed as Module attributes.
   @functools.partial(_memoize_by_id, refs=refs)
@@ -155,7 +155,7 @@ def get_module_scopes(module, args=None, kwargs=None):
         for f in dataclasses.fields(module)
         if f.name != 'parent' and f.init
     }
-    jax.tree_map(get_scopes_inner, attrs)
+    jax.tree_util.tree_map(get_scopes_inner, attrs)
     scopes.append(module.scope)
   get_scopes(module)
   return scopes, new_args, new_kwargs
@@ -201,14 +201,14 @@ def set_module_scopes(module, args, kwargs, scopes):
     elif isinstance(x, InstancePlaceholder):
       instance_scope = scopes[idx]
       idx += 1
-      instance_attrs = jax.tree_map(set_arg_scope, x.attrs)
+      instance_attrs = jax.tree_util.tree_map(set_arg_scope, x.attrs)
       return x.cls(parent=instance_scope, **instance_attrs)
     return x
 
   def is_placeholder(x):
     return isinstance(x, (VariablePlaceholder, InstancePlaceholder))
 
-  new_args, new_kwargs = jax.tree_map(
+  new_args, new_kwargs = jax.tree_util.tree_map(
       set_arg_scope, (args, kwargs), is_leaf=is_placeholder)
 
   # set scopes in Variables and Submodules passed as Module attributes
@@ -233,7 +233,7 @@ def set_module_scopes(module, args, kwargs, scopes):
         for f in dataclasses.fields(module)
         if f.name != 'parent' and f.init
     }
-    new_attrs = jax.tree_map(set_scopes_inner, attrs)
+    new_attrs = jax.tree_util.tree_map(set_scopes_inner, attrs)
     new_module = module.clone(parent=scopes[idx], **new_attrs)
     idx += 1
     return new_module
@@ -810,7 +810,7 @@ def map_variables(
       @nn.compact
       def __call__(self, x):
         def sign(x):
-          return jax.tree_map(jnp.sign, x)
+          return jax.tree_util.tree_map(jnp.sign, x)
         MapDense = nn.map_variables(nn.Dense, "params", sign, init=True)
         return MapDense(4)(x)
 
@@ -946,7 +946,8 @@ def jvp(
       @nn.compact
       def __call__(self, x):
         scale = LearnScale()
-        vars_t = jax.tree_map(jnp.ones_like, scale.variables.get('params', {}))
+        vars_t = jax.tree_util.tree_map(jnp.ones_like,
+                                        scale.variables.get('params', {}))
         _, out_t = nn.jvp(
             lambda mdl, x: mdl(x), scale, (x,), (jnp.zeros_like(x),),
             variable_tangents={'params': vars_t})
@@ -959,7 +960,7 @@ def jvp(
       return p * x
 
     def f(scope, x):
-      vars_t = jax.tree_map(jnp.ones_like, scope.variables().get('params', {}))
+      vars_t = jax.tree_util.tree_map(jnp.ones_like, scope.variables().get('params', {}))
       x, out_t = lift.jvp(
           learn_scale, scope, (x,), (jnp.zeros_like(x),),
           variable_tangents={'params': vars_t})
@@ -1255,7 +1256,7 @@ def custom_vjp(fn: Callable[..., Any],
 
         def bwd(vjp_fn, y_t):
           input_t, params_t = vjp_fn(y_t)
-          params_t = jax.tree_map(jnp.sign, params_t)
+          params_t = jax.tree_util.tree_map(jnp.sign, params_t)
           return input_t, params_t
 
         sign_grad = nn.custom_vjp(

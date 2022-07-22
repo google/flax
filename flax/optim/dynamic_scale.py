@@ -120,8 +120,8 @@ class DynamicScale(struct.PyTreeNode):
       aux, grad = grad_fn(*args)
       aux = (aux[0] / self.scale, aux[1]) if has_aux else aux / self.scale
 
-      grad = jax.tree_map(lambda g: jnp.asarray(g, jnp.float32) / self.scale,
-                          grad)
+      grad = jax.tree_util.tree_map(
+          lambda g: jnp.asarray(g, jnp.float32) / self.scale, grad)
       if axis_name is not None:
         grad = lax.pmean(grad, axis_name)
 
