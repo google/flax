@@ -47,8 +47,8 @@ class TrainTest(parameterized.TestCase):
     new_state, metrics = train_step_fn(state, batch, rngs)
     self.assertIsInstance(new_state, train.TrainState)
     self.assertIsInstance(metrics, train.Metrics)
-    old_param_values = jax.tree_leaves(state.params)
-    new_param_values = jax.tree_leaves(new_state.params)
+    old_param_values = jax.tree_util.tree_leaves(state.params)
+    new_param_values = jax.tree_util.tree_leaves(new_state.params)
     for old_array, new_array in zip(old_param_values, new_param_values):
       # Make sure parameters were updated.
       self.assertFalse(np.allclose(old_array, new_array))

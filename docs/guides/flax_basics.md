@@ -91,7 +91,7 @@ outputId: 06feb9d2-db50-4f41-c169-6df4336f43a5
 key1, key2 = random.split(random.PRNGKey(0))
 x = random.normal(key1, (10,)) # Dummy input
 params = model.init(key2, x) # Initialization call
-jax.tree_map(lambda x: x.shape, params) # Checking output shapes
+jax.tree_util.tree_map(lambda x: x.shape, params) # Checking output shapes
 ```
 
 +++ {"id": "NH7Y9xMEewmO"}
@@ -207,7 +207,7 @@ loss_grad_fn = jax.value_and_grad(mse)
 
 @jax.jit
 def update_params(params, learning_rate, grads):
-  params = jax.tree_map(
+  params = jax.tree_util.tree_map(
       lambda p, g: p - learning_rate * g, params, grads)
   return params
 
@@ -352,7 +352,7 @@ model = ExplicitMLP(features=[3,4,5])
 params = model.init(key2, x)
 y = model.apply(params, x)
 
-print('initialized parameter shapes:\n', jax.tree_map(jnp.shape, unfreeze(params)))
+print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, unfreeze(params)))
 print('output:\n', y)
 ```
 
@@ -414,7 +414,7 @@ model = SimpleMLP(features=[3,4,5])
 params = model.init(key2, x)
 y = model.apply(params, x)
 
-print('initialized parameter shapes:\n', jax.tree_map(jnp.shape, unfreeze(params)))
+print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, unfreeze(params)))
 print('output:\n', y)
 ```
 

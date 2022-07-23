@@ -126,7 +126,7 @@ class DynamicScale(struct.PyTreeNode):
         grad = lax.pmean(grad, axis_name)
 
       finite = jnp.array(True)
-      for g in jax.tree_leaves(grad):
+      for g in jax.tree_util.tree_leaves(grad):
         finite &= jnp.all(lax.is_finite(g))
 
       grow = self.fin_steps == self.growth_interval

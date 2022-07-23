@@ -25,7 +25,7 @@ from flax.core import init, unfreeze, lift, nn
 
 def transpose(fn):
   def trans(variables):
-    return jax.tree_map(lambda x: x.T, variables)
+    return jax.tree_util.tree_map(lambda x: x.T, variables)
 
   return lift.map_variables(
       fn, "params", map_in_fn=trans, map_out_fn=trans,
@@ -58,7 +58,7 @@ class TiedAutoEncoderTest(absltest.TestCase):
     x_r, variables = init(ae)(random.PRNGKey(0), x)
 
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(param_shapes, {
         'kernel': (4, 2),
     })
@@ -70,7 +70,7 @@ class TiedAutoEncoderTest(absltest.TestCase):
     x_r, variables = init(ae.decode)(random.PRNGKey(0), z)
 
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(param_shapes, {
         'kernel': (4, 2),
     })

@@ -57,7 +57,7 @@ class WeightStdTest(absltest.TestCase):
     y, variables = init(mlp)(random.PRNGKey(1), x)
 
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(param_shapes, {
         'hidden_0': {'kernel': (4, 8), 'bias': (8,)},
         'out': {'kernel': (8, 1), 'bias': (1,)},

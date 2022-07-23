@@ -349,7 +349,7 @@ Remarks:
   `OptimizerDef`).
 - The functions `init_param_state()` and `apply_param_gradient()` are called
   for every leaf in the params/grads pytree. This makes it possible to write the
-  calculations directly without `jax.tree_map()`.
+  calculations directly without `jax.tree_util.tree_map()`.
 - The interface was defined in pre-Linen without the distinction of `params` vs.
   other collections in `variables` in mind. The original API was elegant because
   one only needed to pass around the optimizer, which included the parameters,
@@ -500,5 +500,5 @@ rng = jax.random.PRNGKey(0)
 ds = tfds.load('mnist')['train'].take(160).map(pp).batch(16)
 batch = next(iter(ds))
 variables = model.init(rng, jnp.array(batch['image'][:1]))
-jax.tree_map(jnp.shape, variables)
+jax.tree_util.tree_map(jnp.shape, variables)
 ```

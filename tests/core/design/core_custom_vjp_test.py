@@ -40,7 +40,7 @@ def mlp_custom_grad(scope: Scope, x: Array,
     del features
     vjp_fn = res
     input_t, params_t = vjp_fn(y_t)
-    params_t = jax.tree_map(jnp.sign, params_t)
+    params_t = jax.tree_util.tree_map(jnp.sign, params_t)
     return input_t, params_t
 
   dense_custom_grad = lift.custom_vjp(
@@ -61,11 +61,11 @@ class CustomVJPTest(absltest.TestCase):
     x = random.normal(random.PRNGKey(0), (1, 4))
     y, variables = init(mlp_custom_grad)(random.PRNGKey(1), x)
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     loss_fn = lambda p, x: jnp.mean(apply(mlp_custom_grad)(p, x) ** 2)
     grad = jax.grad(loss_fn)(variables, x)
     grad_shapes = unfreeze(
-        jax.tree_map(jnp.shape, grad['params']))
+        jax.tree_util.tree_map(jnp.shape, grad['params']))
     self.assertEqual(y.shape, (1, 1))
     expected_param_shapes = {
         'hidden_0': {'kernel': (4, 8), 'bias': (8,)},
@@ -73,7 +73,7 @@ class CustomVJPTest(absltest.TestCase):
     }
     self.assertEqual(param_shapes, expected_param_shapes)
     self.assertEqual(grad_shapes, expected_param_shapes)
-    for g in jax.tree_leaves(grad):
+    for g in jax.tree_util.tree_leaves(grad):
       self.assertTrue(np.all(g == np.sign(g)))
 
 

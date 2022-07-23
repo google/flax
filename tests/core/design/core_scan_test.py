@@ -56,7 +56,7 @@ class ScanTest(absltest.TestCase):
     y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=False)
 
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(variables['counter']['i'], 2)
     self.assertEqual(param_shapes, {
       'dense_0': {'kernel': (2, 4, 1), 'bias': (2, 1)},
@@ -72,7 +72,7 @@ class ScanTest(absltest.TestCase):
     y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=True)
 
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(variables['counter']['i'], 2)
     self.assertEqual(param_shapes, {
       'dense_0': {'kernel': (4, 1), 'bias': (1,)},

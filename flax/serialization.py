@@ -328,7 +328,7 @@ def msgpack_serialize(pytree, in_place: bool = False) -> bytes:
     msgpack-encoded bytes of pytree.
   """
   if not in_place:
-    pytree = jax.tree_map(lambda x: x, pytree)
+    pytree = jax.tree_util.tree_map(lambda x: x, pytree)
   pytree = _np_convert_in_place(pytree)
   pytree = _chunk_array_leaves_in_place(pytree)
   return msgpack.packb(pytree, default=_msgpack_ext_pack, strict_types=True)

@@ -63,9 +63,9 @@ class BigResnetTest(absltest.TestCase):
     y, variables = init(big_resnet)(random.PRNGKey(1), x)
     self.assertEqual(y.shape, (1, 8, 8, 8))
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     batch_stats_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['batch_stats']))
+        jax.tree_util.tree_map(jnp.shape, variables['batch_stats']))
     self.assertEqual(param_shapes, {
         'conv_1': {'kernel': (10, 5, 3, 3, 8, 8)},
         'conv_2': {'kernel': (10, 5, 3, 3, 8, 8)},

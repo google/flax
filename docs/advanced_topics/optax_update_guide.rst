@@ -167,10 +167,10 @@ becomes just another gradient transformation |optax.clip_by_global_norm()|_.
 
   def train_step(optimizer, batch):
     grads = jax.grad(loss)(optimizer.target, batch)
-    grads_flat, _ = jax.tree_flatten(grads)
+    grads_flat, _ = jax.tree_util.tree_flatten(grads)
     global_l2 = jnp.sqrt(sum([jnp.vdot(p, p) for p in grads_flat]))
     g_factor = jnp.minimum(1.0, grad_clip_norm / global_l2)
-    grads = jax.tree_map(lambda g: g * g_factor, grads)
+    grads = jax.tree_util.tree_map(lambda g: g * g_factor, grads)
     return optimizer.apply_gradient(grads)
 
   ---
@@ -268,7 +268,7 @@ that is not readily available outside the outer mask).
   kernels = flax.traverse_util.ModelParamTraversal(lambda p, _: 'kernel' in p)
   biases = flax.traverse_util.ModelParamTraversal(lambda p, _: 'bias' in p)
 
-  all_false = jax.tree_map(lambda _: False, params)
+  all_false = jax.tree_util.tree_map(lambda _: False, params)
   kernels_mask = kernels.update(lambda _: True, all_false)
   biases_mask = biases.update(lambda _: True, all_false)
 

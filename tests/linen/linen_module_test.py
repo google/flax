@@ -38,7 +38,7 @@ jax.config.parse_flags_with_absl()
 
 
 def tree_equals(x, y):
-  return jax.tree_util.tree_all(jax.tree_map(operator.eq, x, y))
+  return jax.tree_util.tree_all(jax.tree_util.tree_map(operator.eq, x, y))
 
 
 class DummyModule(nn.Module):
@@ -103,7 +103,7 @@ class ModuleTest(absltest.TestCase):
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
-    param_shape = jax.tree_map(jnp.shape, params)
+    param_shape = jax.tree_util.tree_map(jnp.shape, params)
     self.assertEqual(param_shape, {
         'Dense_0': {
             'kernel': (10, 3)
@@ -142,7 +142,7 @@ class ModuleTest(absltest.TestCase):
     params = scope.variables()['params']
     y2 = Top(parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
-    param_shape = jax.tree_map(jnp.shape, params)
+    param_shape = jax.tree_util.tree_map(jnp.shape, params)
     self.assertEqual(param_shape, {
         'MLP_0': {
             'Dense_0': {
@@ -177,7 +177,7 @@ class ModuleTest(absltest.TestCase):
     params = scope.variables()['params']
     y2 = MLP(parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
-    param_shape = jax.tree_map(jnp.shape, params)
+    param_shape = jax.tree_util.tree_map(jnp.shape, params)
     self.assertEqual(param_shape, {
         'lyrs1_a': {
             'kernel': (10, 3)
@@ -200,7 +200,7 @@ class ModuleTest(absltest.TestCase):
     foo = Foo()
     x = jnp.ones(shape=(1, 3))
     params = foo.init(random.PRNGKey(0), x)['params']
-    param_shape = jax.tree_map(jnp.shape, params)
+    param_shape = jax.tree_util.tree_map(jnp.shape, params)
     self.assertEqual(param_shape,
                      {'a_(1, 2)': {
                          'kernel': (3, 2),
@@ -1095,7 +1095,7 @@ class ModuleTest(absltest.TestCase):
         return self.foo(x)
 
     variables = A().init(random.PRNGKey(0), jnp.ones((1,)))
-    var_shapes = jax.tree_map(jnp.shape, variables)
+    var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
     ref_var_shapes = freeze({
         'params': {
             'b': {
@@ -1120,7 +1120,7 @@ class ModuleTest(absltest.TestCase):
         return self.foo(x)
 
     variables = B().init(random.PRNGKey(0), jnp.ones((1,)))
-    var_shapes = jax.tree_map(jnp.shape, variables)
+    var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
     ref_var_shapes = freeze({
         'params': {
             'foo': {
@@ -1170,7 +1170,7 @@ class ModuleTest(absltest.TestCase):
     y = model.apply(variables, x)
     self.assertEqual(y.shape, (4, 5))
 
-    var_shapes = jax.tree_map(jnp.shape, variables)
+    var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
     ref_var_shapes = freeze({
         'params': {
             'dense_out': {
@@ -1227,7 +1227,7 @@ class ModuleTest(absltest.TestCase):
     })
     self.assertTrue(
         jax.tree_util.tree_all(
-            jax.tree_map(
+            jax.tree_util.tree_map(
                 lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
                 counters, ref_counters)))
 
@@ -1261,7 +1261,7 @@ class ModuleTest(absltest.TestCase):
     b = B(a)
     c = C(a, b)
     p = c.init(key, x)
-    var_shapes = jax.tree_map(jnp.shape, p)
+    var_shapes = jax.tree_util.tree_map(jnp.shape, p)
     ref_var_shapes = freeze({
         'params': {
             'Dense_0': {
@@ -1306,7 +1306,7 @@ class ModuleTest(absltest.TestCase):
     k = jax.random.PRNGKey(0)
     x = jnp.zeros((5, 5))
     init_vars = b.init(k, x)
-    var_shapes = jax.tree_map(jnp.shape, init_vars)
+    var_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
     ref_var_shapes = freeze({
         'params': {
             'a': {
@@ -1482,7 +1482,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y2, y3)
     bs_1 = new_state['batch_stats']
     bs_2 = foo_b.variables['batch_stats']
-    for x, y in zip(jax.tree_leaves(bs_1), jax.tree_leaves(bs_2)):
+    for x, y in zip(jax.tree_util.tree_leaves(bs_1), jax.tree_util.tree_leaves(bs_2)):
       np.testing.assert_allclose(x, y)
 
   def test_passing_mutable_variables(self):
@@ -1518,7 +1518,7 @@ class ModuleTest(absltest.TestCase):
     x = jnp.ones((4, 7))
 
     variables = Bar().init(k, x)
-    shapes = jax.tree_map(np.shape, variables['params'])
+    shapes = jax.tree_util.tree_map(np.shape, variables['params'])
     self.assertEqual(
         shapes, {
             'Dense_0': {

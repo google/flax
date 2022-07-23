@@ -47,8 +47,8 @@ A simplified example implementation:
 ```python
 def promote_arrays(*xs, dtype):
  if dtype is None:
-   dtype = jnp.result_type(*jax.tree_leaves(xs))
- return jax.tree_map(lambda x: jnp.asarray(x, dtype), xs)
+   dtype = jnp.result_type(*jax.tree_util.tree_leaves(xs))
+ return jax.tree_util.tree_map(lambda x: jnp.asarray(x, dtype), xs)
 
 Dtype = Any
 class Dense(nn.Module):

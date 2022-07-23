@@ -87,15 +87,15 @@ class OptimizerDef:
       A tuple containing the new parameters and the new optimizer state.
     """
     step = state.step
-    params_flat, treedef = jax.tree_flatten(params)
+    params_flat, treedef = jax.tree_util.tree_flatten(params)
     states_flat = treedef.flatten_up_to(state.param_states)
     grads_flat = treedef.flatten_up_to(grads)
     out = [self.apply_param_gradient(step, hyper_params, param, state, grad)
            for param, state, grad in zip(params_flat, states_flat, grads_flat)]
 
     new_params_flat, new_states_flat = list(zip(*out)) if out else ((), ())
-    new_params = jax.tree_unflatten(treedef, new_params_flat)
-    new_param_states = jax.tree_unflatten(treedef, new_states_flat)
+    new_params = jax.tree_util.tree_unflatten(treedef, new_params_flat)
+    new_param_states = jax.tree_util.tree_unflatten(treedef, new_states_flat)
     new_state = OptimizerState(step + 1, new_param_states)
     return new_params, new_state
 
