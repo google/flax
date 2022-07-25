@@ -87,6 +87,8 @@ Installation
 
    pip install flax
 
+Flax installs the vanilla CPU version of JAX, if you need a custom version please check out `JAX's installation page <https://github.com/google/jax#installation>`__.
+
 Basic usage
 ^^^^^^^^^^^^
 
