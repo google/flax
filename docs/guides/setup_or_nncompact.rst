@@ -1,4 +1,4 @@
-Should I use ``setup`` or ``nn.compact``?
+``setup`` vs ``compact``
 =========================================
 
 In Flax's module system (named `Linen`_), submodules and variables (parameters or others)

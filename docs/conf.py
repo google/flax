@@ -40,7 +40,7 @@ import docs.conf_sphinx_patch
 # -- Project information -----------------------------------------------------
 
 project = 'Flax'
-copyright = '2020, The Flax authors'  # pylint: disable=redefined-builtin
+copyright = '2021, The Flax authors'  # pylint: disable=redefined-builtin
 author = 'The Flax authors'
 
 
@@ -90,36 +90,45 @@ autodoc_typehints = 'none'
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
+# html_theme = 'pydata_sphinx_theme'
 html_theme = 'sphinx_book_theme'
-html_css_files = ["css/flax_theme.css"]
+html_css_files = ['css/flax_theme.css']
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
 html_logo = './flax.png'
+html_favicon = './flax.png'
+
+# title of the website
+html_title = ''
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
+# so a file named 'default.css' will overwrite the builtin 'default.css'.
 html_static_path = ['_static']
 
 html_theme_options = {
-    "repository_url": "https://github.com/google/flax",
-    "use_repository_button": True,     # add a "link to repository" button
-    "use_issues_button": False,        # add an "Open an Issue" button
-    "path_to_docs": "docs",            # used to compute the path to launch notebooks in colab
-    "launch_buttons": {
-        "colab_url": "https://colab.research.google.com/",
+    'repository_url': 'https://github.com/google/flax',
+    'use_repository_button': True,     # add a 'link to repository' button
+    'use_issues_button': False,        # add an 'Open an Issue' button
+    'path_to_docs': 'docs',            # used to compute the path to launch notebooks in colab
+    'launch_buttons': {
+        'colab_url': 'https://colab.research.google.com/',
     },
+    'prev_next_buttons_location': None,
+    'show_navbar_depth': 1,
 }
 
 # -- Options for myst ----------------------------------------------
+# uncomment line below to avoid running notebooks during development
+# nb_execution_mode = 'off'
 # Notebook cell execution timeout; defaults to 30.
 nb_execution_timeout = 100
 # List of patterns, relative to source directory, that match notebook
 # files that will not be executed.
 myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
-  'notebooks/annotated_mnist.ipynb', # <-- times out 
+  'getting_started.ipynb', # <-- times out 
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False

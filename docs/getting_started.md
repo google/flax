@@ -18,7 +18,7 @@ kernelspec:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/annotated_mnist.ipynb)
 [![Open On GitHub](https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub)](https://github.com/google/flax/blob/main/docs/notebooks/annotated_mnist.ipynb)
 
-# Annotated MNIST
+# Getting Started
 
 This tutorial demonstrates how to construct a simple convolutional neural
 network (CNN) using the [Flax](https://flax.readthedocs.io) Linen API and train
