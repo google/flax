@@ -14,8 +14,10 @@
 
 """Tests for flax.linen."""
 
+import copy
 from absl.testing import absltest, parameterized
 
+from flax import ids
 from flax import linen as nn
 
 import jax
@@ -359,6 +361,20 @@ class RecurrentTest(absltest.TestCase):
 
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)
     jtu.check_eq(lstm_params, lstm_opt_params)
+
+
+class IdsTest(absltest.TestCase):
+
+  def test_hashable(self):
+    id1 = ids.uuid()
+    id2 = ids.uuid()
+    self.assertEqual(id1, id1)
+    self.assertNotEqual(id1, id2)
+    self.assertNotEqual(hash(id1), hash(id2))
+    id1c = copy.copy(id1)
+    id1dc = copy.deepcopy(id1)
+    self.assertNotEqual(hash(id1), hash(id1c))
+    self.assertNotEqual(hash(id1), hash(id1dc))
 
 
 if __name__ == '__main__':
