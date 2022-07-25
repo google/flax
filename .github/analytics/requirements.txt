@@ -1,4 +1,4 @@
 pandas
-typer
+absl-py
 requests
 matplotlib

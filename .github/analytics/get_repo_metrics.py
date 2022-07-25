@@ -17,7 +17,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, List
-import typer
+from absl import app, flags
 
 import pandas as pd
 import requests
@@ -301,10 +301,14 @@ def _process_issues(df: pd.DataFrame) -> pd.Series:
 #-----------------------------------------------------------------------------
 # main
 #-----------------------------------------------------------------------------
-def main(
-    repo_owner: str = 'google',
-    repo_name: str = 'flax',
-):
+FLAGS = flags.FLAGS
+flags.DEFINE_string('repo_owner', 'google', 'User name or organization')
+flags.DEFINE_string('repo_name', 'flax', 'Name of the repository')
+
+def main(_):
+  repo_owner: str = FLAGS.repo_owner
+  repo_name: str = FLAGS.repo_name
+
   # Download issue data
   issues = GithubGrabber(
     '.github/analytics/issue_activity_since_date.gql',
@@ -408,4 +412,4 @@ def main(
   plt.show()
 
 if __name__ == '__main__':
-  typer.run(main)
+  app.run(main)
