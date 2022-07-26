@@ -20,6 +20,7 @@ checkpoint files.
 """
 
 from concurrent.futures import thread
+import functools
 import os
 import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
@@ -89,6 +90,12 @@ def _split_gdas(
   return target, gda_targets
 
 
+def on_commit_callback(temp_path, final_path):
+  logging.info('Renaming %s to %s', temp_path, final_path)
+  gfile.rename(temp_path, final_path)
+  logging.info('Finished saving checkpoint to `%s`.', final_path)
+
+
 def _save_gdas(gda_manager: GlobalAsyncCheckpointManager,
                gda_targets: List[Tuple[GlobalDeviceArray, str]],
                tmp_path: str, final_path: str):
@@ -99,8 +106,8 @@ def _save_gdas(gda_manager: GlobalAsyncCheckpointManager,
   gda_manager.serialize(
       list(gda_list),
       ts_specs,
-      temp_checkpoint_dir=tmp_path,
-      final_checkpoint_dir=final_path)
+      on_commit_callback=functools.partial(on_commit_callback, tmp_path,
+                                           final_path))
 
 
 def _restore_gdas(state_dict,
