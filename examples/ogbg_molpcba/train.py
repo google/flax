@@ -349,7 +349,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
     # Perform one step of training.
     with jax.profiler.StepTraceAnnotation('train', step_num=step):
-      graphs = jax.tree_map(np.asarray, next(train_iter))
+      graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
       state, metrics_update = train_step(
           state, graphs, rngs={'dropout': dropout_rng})
 

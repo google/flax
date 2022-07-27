@@ -32,7 +32,7 @@ class FrozenDictTest(absltest.TestCase):
   def test_frozen_dict_maps(self):
     xs = {'a': 1, 'b': {'c': 2}}
     frozen = FrozenDict(xs)
-    frozen2 = jax.tree_map(lambda x: x + x, frozen)
+    frozen2 = jax.tree_util.tree_map(lambda x: x + x, frozen)
     self.assertEqual(unfreeze(frozen2), {'a': 2, 'b': {'c': 4}})
 
   def test_frozen_dict_pop(self):
@@ -42,7 +42,7 @@ class FrozenDictTest(absltest.TestCase):
     self.assertEqual(unfreeze(b), {'b': {'c': 2}})
 
   def test_frozen_dict_partially_maps(self):
-    x = jax.tree_map(
+    x = jax.tree_util.tree_map(
         lambda a, b: (a, b),
         freeze({'a': 2}), freeze({'a': {'b': 1}}))
     self.assertEqual(unfreeze(x), {'a': (2, {'b': 1})})

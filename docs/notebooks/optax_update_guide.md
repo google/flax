@@ -80,7 +80,7 @@ def loss(params, batch):
 model = Perceptron([50, 10])
 variables = model.init(jax.random.PRNGKey(0), batch['image'])
 
-jax.tree_map(jnp.shape, variables)
+jax.tree_util.tree_map(jnp.shape, variables)
 ```
 
 ```{code-cell}
@@ -94,12 +94,12 @@ import tensorflow_datasets as tfds
 
 builder = tfds.builder('mnist')
 builder.download_and_prepare()
-ds_test = jax.tree_map(jnp.array, builder.as_dataset('test', batch_size=-1))
+ds_test = jax.tree_util.tree_map(jnp.array, builder.as_dataset('test', batch_size=-1))
 get_ds_train = lambda: (
-    jax.tree_map(jnp.array, x)
+    jax.tree_util.tree_map(jnp.array, x)
     for x in builder.as_dataset('train').batch(128))
 batch = next(get_ds_train())
-jax.tree_map(jnp.shape, batch)
+jax.tree_util.tree_map(jnp.shape, batch)
 ```
 
 ```{code-cell}
@@ -308,10 +308,10 @@ outputId: aae283d2-623e-4a43-c001-3e62b11483ae
 @jax.jit
 def train_step(optimizer, batch):
   grads = jax.grad(loss)(optimizer.target, batch)
-  grads_flat, _ = jax.tree_flatten(grads)
+  grads_flat, _ = jax.tree_util.tree_flatten(grads)
   global_l2 = jnp.sqrt(sum([jnp.vdot(p, p) for p in grads_flat]))
   g_factor = jnp.minimum(1.0, grad_clip_norm / global_l2)
-  grads = jax.tree_map(lambda g: g * g_factor, grads)
+  grads = jax.tree_util.tree_map(lambda g: g * g_factor, grads)
   return optimizer.apply_gradient(grads)
 
 optimizer = flax.optim.Momentum(learning_rate, momentum).create(
@@ -456,7 +456,7 @@ def train_step(params, opt_state, batch):
 kernels = flax.traverse_util.ModelParamTraversal(lambda p, _: 'kernel' in p)
 biases = flax.traverse_util.ModelParamTraversal(lambda p, _: 'bias' in p)
 
-all_false = jax.tree_map(lambda _: False, params)
+all_false = jax.tree_util.tree_map(lambda _: False, params)
 kernels_mask = kernels.update(lambda _: True, all_false)
 biases_mask = biases.update(lambda _: True, all_false)
 
@@ -491,7 +491,7 @@ def train_step(params, opt_state, batch):
 kernels = flax.traverse_util.ModelParamTraversal(lambda p, _: 'kernel' in p)
 biases = flax.traverse_util.ModelParamTraversal(lambda p, _: 'bias' in p)
 
-all_false = jax.tree_map(lambda _: False, params)
+all_false = jax.tree_util.tree_map(lambda _: False, params)
 kernels_mask = kernels.update(lambda _: True, all_false)
 biases_mask = biases.update(lambda _: True, all_false)
 

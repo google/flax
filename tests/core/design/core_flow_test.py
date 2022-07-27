@@ -71,7 +71,7 @@ class FlowTest(absltest.TestCase):
     flow = StackFlow((DenseFlow(),) * 3)
     y, variables = init(flow.forward)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(y.shape, (1, 3))
     self.assertEqual(param_shapes, {
         '0': {'kernel': (3, 3), 'bias': (3,)},

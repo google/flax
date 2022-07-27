@@ -157,7 +157,7 @@ def batch_to_numpy(batch: Dict[str, tf.Tensor]) -> Dict[str, Array]:
   """Converts a batch with TF tensors to a batch of NumPy arrays."""
   # _numpy() reuses memory, does not make a copy.
   # pylint: disable=protected-access
-  return jax.tree_map(lambda x: x._numpy(), batch)
+  return jax.tree_util.tree_map(lambda x: x._numpy(), batch)
 
 
 def evaluate_model(

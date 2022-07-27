@@ -198,12 +198,12 @@ In the following code example we check if any intermediate activations are non-f
   def predict(variables, x):
     y, state = CNN().apply(variables, x, capture_intermediates=True, mutable=["intermediates"])
     intermediates = state['intermediates']
-    fin = jax.tree_map(lambda xs: jnp.all(jnp.isfinite(xs)), intermediates)
+    fin = jax.tree_util.tree_map(lambda xs: jnp.all(jnp.isfinite(xs)), intermediates)
     return y, fin
 
   variables = init(jax.random.PRNGKey(0), batch)
   y, is_finite = predict(variables, batch)
-  all_finite = all(jax.tree_leaves(is_finite))
+  all_finite = all(jax.tree_util.tree_leaves(is_finite))
   assert all_finite, "non finite intermediate detected!"
 
 By default only the intermediates of ``__call__`` methods are collected.

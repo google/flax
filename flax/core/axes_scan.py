@@ -131,7 +131,7 @@ def scan(
         xs)
     input_avals = (carry_avals, scan_avals)
 
-    in_avals, in_tree = jax.tree_flatten(input_avals)
+    in_avals, in_tree = jax.tree_util.tree_flatten(input_avals)
     f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
         lu.wrap_init(broadcast_body), in_tree)
     in_pvals = list(map(pe.PartialVal.unknown, in_avals))
@@ -143,7 +143,7 @@ def scan(
         raise ValueError(
             'broadcasted variable has a data dependency on the scan body.')
       out_flat.append(const)
-    broadcast_in, constants_out = jax.tree_unflatten(out_tree(), out_flat)
+    broadcast_in, constants_out = jax.tree_util.tree_unflatten(out_tree(), out_flat)
 
     c, ys = lax.scan(body_fn, init, xs, length=length,
                      reverse=reverse, unroll=unroll)

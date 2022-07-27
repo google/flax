@@ -86,7 +86,7 @@ class ManualVmapMLP(nn.Module):
 
 xs = jnp.ones((3, 4))
 variables = ManualVmapMLP().init(random.PRNGKey(0), xs)
-print(jax.tree_map(jnp.shape, variables['params']))
+print(jax.tree_util.tree_map(jnp.shape, variables['params']))
 """==>
 {
     mlp: {
@@ -257,7 +257,7 @@ def lift_transpose(fn, target='params', variables=True, rngs=True):
       if x.ndim == 2:
         return x.T
       return x
-    target = jax.tree_map(trans, target)
+    target = jax.tree_util.tree_map(trans, target)
     variable_groups = (target, rest)
     scope = scope_fn(variable_groups, rng_groups)
     y = fn(scope, *args)
@@ -307,7 +307,7 @@ class LinenVmapMLP(nn.Module):
     return VmapMLP(name='mlp')(xs)
 
 variables = LinenVmapMLP().init(random.PRNGKey(0), xs)
-print(jax.tree_map(jnp.shape, variables['params']))
+print(jax.tree_util.tree_map(jnp.shape, variables['params']))
 """==>
 {
     mlp: {

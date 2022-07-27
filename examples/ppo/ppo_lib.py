@@ -157,7 +157,7 @@ def train_step(
     loss: loss summed over training steps
   """
   iterations = trajectories[0].shape[0] // batch_size
-  trajectories = jax.tree_map(
+  trajectories = jax.tree_util.tree_map(
       lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trajectories)
   loss = 0.
   for batch in zip(*trajectories):

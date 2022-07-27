@@ -201,5 +201,5 @@ if __name__ == '__main__':
 
   print('input shape: ', inputs.shape)
   print('parameter shapes:')
-  pprint(jax.tree_map(jnp.shape, unfreeze(params)))
+  pprint(jax.tree_util.tree_map(jnp.shape, unfreeze(params)))
   print('output shape: ', y.shape)

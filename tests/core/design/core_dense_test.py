@@ -101,7 +101,7 @@ class DenseTest(absltest.TestCase):
     x = jnp.ones((1, 3))
     y, variables = init(model)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(y.shape, (1, 4))
     self.assertEqual(param_shapes, {
         'kernel': (3, 4),
@@ -112,7 +112,7 @@ class DenseTest(absltest.TestCase):
     x = jnp.ones((1, 3))
     y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(y.shape, (1, 4))
     self.assertEqual(param_shapes, {
         'kernel': (3, 4),
@@ -123,7 +123,7 @@ class DenseTest(absltest.TestCase):
     x = jnp.ones((1, 4))
     y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(y.shape, (1, 1))
     self.assertEqual(param_shapes, {
         'dense_0': ExplicitDense((4, 3), (3,)),
@@ -134,7 +134,7 @@ class DenseTest(absltest.TestCase):
     x = jnp.ones((1, 4))
     y, variables = init(semi_explicit_mlp)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(y.shape, (1, 1))
     self.assertEqual(param_shapes, {
         'dense_0': {'kernel': (4, 3), 'bias': (3,)},

@@ -387,10 +387,10 @@ class TraverseTree(Traversal):
   """
 
   def update(self, fn, inputs):
-    return jax.tree_map(fn, inputs)
+    return jax.tree_util.tree_map(fn, inputs)
 
   def iterate(self, inputs):
-    yield from jax.tree_leaves(inputs)
+    yield from jax.tree_util.tree_leaves(inputs)
 
 
 def _get_params_dict(inputs):

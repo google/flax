@@ -55,7 +55,7 @@ class VMapTest(absltest.TestCase):
     y, variables = init(mlp_vmap)(random.PRNGKey(1), x, share_params=True)
 
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(param_shapes, {
         'hidden_0' : {'kernel': (4, 8), 'bias': (8,)},
         'out': {'kernel': (8, 1), 'bias': (1,)},
@@ -70,7 +70,7 @@ class VMapTest(absltest.TestCase):
     y, variables = init(mlp_vmap)(random.PRNGKey(1), x, share_params=False)
 
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(param_shapes, {
         'hidden_0': {'kernel': (2, 4, 8), 'bias': (2, 8)},
         'out': {'kernel': (2, 8, 1), 'bias': (2, 1)},

@@ -88,7 +88,7 @@ class WeightNorm(OptimizerDef):
       else:
         return param, ()
 
-    leaves, treedef = jax.tree_flatten(params)
+    leaves, treedef = jax.tree_util.tree_flatten(params)
     eps = self.hyper_params.wn_eps
     directions, scales = zip(*(split_param(p) for p in leaves))
     directions = treedef.unflatten(directions)
@@ -103,7 +103,7 @@ class WeightNorm(OptimizerDef):
     return state.replace(param_states=param_states)
 
   def apply_gradient(self, hyper_params, params, state, grads):
-    treedef = jax.tree_structure(params)
+    treedef = jax.tree_util.tree_structure(params)
     s_leaves = treedef.flatten_up_to(state.param_states)
     direction = treedef.unflatten(x.direction for x in s_leaves)
     scale = treedef.unflatten(x.scale for x in s_leaves)

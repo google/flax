@@ -81,7 +81,7 @@ class ResNetTest(absltest.TestCase):
     x = random.normal(random.PRNGKey(0), (1, 64, 64, 3))
     y, variables = init(resnet)(random.PRNGKey(1), x, block_sizes=block_sizes, features=16)
     param_shapes = unfreeze(
-        jax.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(y.shape, (1, 1000))
 
     self.assertEqual(param_shapes, {

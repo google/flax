@@ -42,4 +42,4 @@ from dense import Dense
 #   {'params': random.PRNGKey(42)},
 #   jnp.ones((1, 16)))
 # print("reconstruct", jnp.shape(tae(jnp.ones((1, 16)))))
-# print("var shapes", jax.tree_map(jnp.shape, tae.variables))
+# print("var shapes", jax.tree_util.tree_map(jnp.shape, tae.variables))

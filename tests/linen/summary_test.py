@@ -30,7 +30,7 @@ from flax.linen.summary import _get_module_table
 jax.config.parse_flags_with_absl()
 
 def _get_shapes(pytree):
-  return jax.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, pytree)
+  return jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, pytree)
 
 class ConvBlock(nn.Module):
   features: int

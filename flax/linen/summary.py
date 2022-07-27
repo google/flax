@@ -403,7 +403,7 @@ def _size_and_bytes_repr(size: int, num_bytes: int) -> str:
 
 
 def _size_and_bytes(pytree: Any) -> Tuple[int, int]:
-  leaves = jax.tree_leaves(pytree)
+  leaves = jax.tree_util.tree_leaves(pytree)
   size = sum(x.size for x in leaves)
   num_bytes = sum(x.size * x.dtype.itemsize for x in leaves)
   return size, num_bytes

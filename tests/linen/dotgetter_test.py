@@ -87,7 +87,7 @@ class DotGetterTest(absltest.TestCase):
     dg2 = DotGetter({'a': jnp.array([2.0]),
                      'b': {'c': jnp.array([4.0]),
                            'd': jnp.array([6.0])}})
-    self.assertEqual(jax.tree_map(lambda x: 2 * x, dg1), dg2)
+    self.assertEqual(jax.tree_util.tree_map(lambda x: 2 * x, dg1), dg2)
 
   def test_statedict(self):
     d = {'a': jnp.array([1.0]),

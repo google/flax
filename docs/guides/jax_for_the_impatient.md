@@ -576,7 +576,7 @@ jax.grad(mse_pytree)(params, x_samples, y_samples)
 
 +++ {"id": "nW1IKnjqXFdN"}
 
-Now using our tree of params, we can write the gradient descent in a simpler way using `jax.tree_map`:
+Now using our tree of params, we can write the gradient descent in a simpler way using `jax.tree_util.tree_map`:
 
 ```{code-cell}
 ---
@@ -588,7 +588,7 @@ outputId: f309aff7-2aad-453f-ad88-019d967d4289
 # Always remember to jit!
 @jax.jit
 def update_params_pytree(params, learning_rate, x_samples, y_samples):
-  params = jax.tree_map(
+  params = jax.tree_util.tree_map(
         lambda p, g: p - learning_rate * g, params,
         jax.grad(mse_pytree)(params, x_samples, y_samples))
   return params
@@ -616,7 +616,7 @@ loss_grad_fn = jax.value_and_grad(mse_pytree)
 for i in range(101):
   # Note that here the loss is computed before the param update.
     loss_val, grads = loss_grad_fn(params, x_samples, y_samples)
-    params = jax.tree_map(
+    params = jax.tree_util.tree_map(
         lambda p, g: p - learning_rate * g, params, grads)
     if (i % 5 == 0):
         print(f"Loss step {i}: ", loss_val)

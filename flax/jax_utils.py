@@ -58,7 +58,7 @@ def replicate(tree, devices=None):
 
 def unreplicate(tree):
   """Returns a single instance of a replicated array."""
-  return jax.tree_map(lambda x: x[0], tree)
+  return jax.tree_util.tree_map(lambda x: x[0], tree)
 
 
 def pmean(xs, axis_name):
@@ -90,14 +90,14 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   # TODO(mattjj,jheek): use a public JAX API
   f = lambda *inputs: fn(*inputs, *args, **kwargs)
   input_structs = [_parse_spec(spec) for spec in input_spec]
-  inputs_flat, in_tree = jax.tree_flatten(input_structs)
+  inputs_flat, in_tree = jax.tree_util.tree_flatten(input_structs)
   f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(f), in_tree)
   in_pvals = [pe.PartialVal.unknown(jax.ShapedArray(x.shape, x.dtype))
               for x in inputs_flat]
   _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
   out_flat = [const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
               for pv, const in out_pvals]
-  return jax.tree_unflatten(out_tree(), out_flat)
+  return jax.tree_util.tree_unflatten(out_tree(), out_flat)
 
 
 def _parse_spec(spec):
@@ -155,7 +155,7 @@ def prefetch_to_device(iterator, size, devices=None):
 
   def enqueue(n):  # Enqueues *up to* `n` elements from the iterator.
     for data in itertools.islice(iterator, n):
-      queue.append(jax.tree_map(_prefetch, data))
+      queue.append(jax.tree_util.tree_map(_prefetch, data))
 
   enqueue(size)  # Fill up the buffer.
   while queue:
@@ -231,17 +231,17 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
 
   def body_wrapper(c, xs):
     if keepdims:
-      xs = jax.tree_map(lambda x: x.reshape((1,) * len(axis) + x.shape), xs)
-      xs = jax.tree_map(transpose_out, xs)
+      xs = jax.tree_util.tree_map(lambda x: x.reshape((1,) * len(axis) + x.shape), xs)
+      xs = jax.tree_util.tree_map(transpose_out, xs)
     c, ys = body_fn(c, xs)
     if keepdims:
-      ys = jax.tree_map(transpose_in, ys)
-      ys = jax.tree_map(lambda x: x.reshape(x.shape[len(axis):]), ys)
+      ys = jax.tree_util.tree_map(transpose_in, ys)
+      ys = jax.tree_util.tree_map(lambda x: x.reshape(x.shape[len(axis):]), ys)
     return c, ys
 
-  xs = jax.tree_map(transpose_in, xs)
+  xs = jax.tree_util.tree_map(transpose_in, xs)
   c, ys = _scan_nd(body_wrapper, init, xs, n=len(axis), unroll=unroll)
-  ys = jax.tree_map(transpose_out, ys)
+  ys = jax.tree_util.tree_map(transpose_out, ys)
   return c, ys
 
 
@@ -288,10 +288,10 @@ def pad_shard_unpad(wrapped, static_argnums=(0,), static_argnames=(),
     batch_sizes = set()
     for i, a in enumerate(args):
       if i not in static_argnums:
-        batch_sizes |= {t.shape[0] for t in jax.tree_leaves(a)}
+        batch_sizes |= {t.shape[0] for t in jax.tree_util.tree_leaves(a)}
     for k, v in kw.items():
       if k not in static_argnames:
-        batch_sizes |= {t.shape[0] for t in jax.tree_leaves(v)}
+        batch_sizes |= {t.shape[0] for t in jax.tree_util.tree_leaves(v)}
     assert len(batch_sizes) == 1, f"Inconsistent batch-sizes: {batch_sizes}"
     b = batch_sizes.pop()
 
@@ -309,7 +309,7 @@ def pad_shard_unpad(wrapped, static_argnums=(0,), static_argnames=(),
 
     def maybe_pad(tree, actually_pad=True):
       if not actually_pad: return tree  # For call-site convenience below.
-      return jax.tree_map(pad, tree)
+      return jax.tree_util.tree_map(pad, tree)
 
     args = [maybe_pad(a, i not in static_argnums) for i, a in enumerate(args)]
     kw = {k: maybe_pad(v, k not in static_argnames) for k, v in kw.items()}
@@ -318,6 +318,6 @@ def pad_shard_unpad(wrapped, static_argnums=(0,), static_argnames=(),
     def unpad(x):
       # Transfer back before cutting, to reduce on-device shape diversity.
       return jax.device_get(x).reshape([np.prod(x.shape[:2]), *x.shape[2:]])[:b]
-    return out if static_return else jax.tree_map(unpad, out)
+    return out if static_return else jax.tree_util.tree_map(unpad, out)
 
   return pad_shard_unpad_wrapper

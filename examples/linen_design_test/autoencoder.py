@@ -81,7 +81,7 @@ print("encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method=ae.
 
 # `ae.variables` is a frozen dict that looks like
 # {'params': {"decoder": {"Dense_0": {"bias": ..., "kernel": ...}, ...}}
-print("var shapes", jax.tree_map(jnp.shape, params))
+print("var shapes", jax.tree_util.tree_map(jnp.shape, params))
 
 
 # TODO(avital, levskaya): resurrect this example once interactive api is restored.
@@ -90,10 +90,10 @@ print("var shapes", jax.tree_map(jnp.shape, params))
 # You can access submodules defined in setup(), they are just references on
 # the autoencoder instance
 # encoder = ae.encoder
-# print("encoder var shapes", jax.tree_map(jnp.shape, encoder.variables))
+# print("encoder var shapes", jax.tree_util.tree_map(jnp.shape, encoder.variables))
 
 
 # # You can also access submodules that were defined in-line.
 # # (We may add syntactic sugar here, e.g. to allow `ae.encoder.Dense_0`)
 # encoder_dense0 = ae.encoder.children['Dense_0']
-# print("encoder dense0 var shapes", jax.tree_map(jnp.shape, encoder_dense0.variables))
+# print("encoder dense0 var shapes", jax.tree_util.tree_map(jnp.shape, encoder_dense0.variables))

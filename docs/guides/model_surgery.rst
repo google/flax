@@ -47,7 +47,7 @@ Let's create a small convolutional neural network model for our demo.
   key = jax.random.PRNGKey(0)
   params = get_initial_params(key)
 
-  print(jax.tree_map(jnp.shape, params))
+  print(jax.tree_util.tree_map(jnp.shape, params))
 
 .. testoutput::
 
@@ -77,7 +77,7 @@ Next, get a flat dict for doing model surgery as follows:
 
   # Get flattened-key: value list.
   flat_params = traverse_util.flatten_dict(params)
-  print(jax.tree_map(jnp.shape, flat_params))
+  print(jax.tree_util.tree_map(jnp.shape, flat_params))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
@@ -99,7 +99,7 @@ After doing whatever you want, unflatten back:
   unflat_params = traverse_util.unflatten_dict(flat_params)
   # Refreeze.
   unflat_params = freeze(unflat_params)
-  print(jax.tree_map(jnp.shape, unflat_params))
+  print(jax.tree_util.tree_map(jnp.shape, unflat_params))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
@@ -138,7 +138,7 @@ optimizer state that mirrors the original state.
   opt_state = tx.init(params)
 
   # The optimizer state is a tuple of gradient transformation states.
-  print(jax.tree_map(jnp.shape, opt_state))
+  print(jax.tree_util.tree_map(jnp.shape, opt_state))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
@@ -163,7 +163,7 @@ parameters and can be flattened / modified exactly the same way
   flat_mu = traverse_util.flatten_dict(opt_state[0].mu)
   flat_nu = traverse_util.flatten_dict(opt_state[0].nu)
 
-  print(jax.tree_map(jnp.shape, flat_mu))
+  print(jax.tree_util.tree_map(jnp.shape, flat_mu))
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE

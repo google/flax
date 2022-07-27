@@ -919,7 +919,7 @@ class LinearTest(parameterized.TestCase):
     x = jnp.ones((2, 4, 8))
     y, variables = Foo().init_with_output(random.PRNGKey(0), x)
     self.assertEqual(
-        jax.tree_map(jnp.shape, variables['params']),
+        jax.tree_util.tree_map(jnp.shape, variables['params']),
         {'dense': {
             'kernel': (4, 6),
             'bias': (6,)
@@ -936,7 +936,7 @@ class LinearTest(parameterized.TestCase):
     x = jnp.ones((2, 4, 8))
     y, variables = Foo().init_with_output(random.PRNGKey(0), x)
     self.assertEqual(
-        jax.tree_map(jnp.shape, variables['params']),
+        jax.tree_util.tree_map(jnp.shape, variables['params']),
         {'dense': {
             'kernel': (2, 4, 6),
             'bias': (6,)

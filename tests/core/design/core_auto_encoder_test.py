@@ -106,7 +106,7 @@ class AutoEncoderTest(absltest.TestCase):
     x = jnp.ones((1, 4))
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
-    variable_shapes = unfreeze(jax.tree_map(jnp.shape, variables['params']))
+    variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(variable_shapes, {
         'encoder': {
             'hidden': {'kernel': (4, 3), 'bias': (3,)},
@@ -124,7 +124,7 @@ class AutoEncoderTest(absltest.TestCase):
 
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
-    variable_shapes = unfreeze(jax.tree_map(jnp.shape, variables['params']))
+    variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(variable_shapes, {
         'encode': {
             'hidden': {'kernel': (4, 3), 'bias': (3,)},
@@ -142,7 +142,7 @@ class AutoEncoderTest(absltest.TestCase):
 
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
-    variable_shapes = unfreeze(jax.tree_map(jnp.shape, variables['params']))
+    variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(variable_shapes, {
         'encode': {
             'hidden': {'kernel': (4, 3), 'bias': (3,)},

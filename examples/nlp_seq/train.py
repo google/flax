@@ -337,16 +337,16 @@ def main(argv):
   tick = time.time()
   best_dev_score = 0
   for step, batch in zip(range(num_train_steps), train_iter):
-    batch = common_utils.shard(jax.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
+    batch = common_utils.shard(jax.tree_util.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
 
     state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)
     if (step + 1) % eval_freq == 0:
       metrics_all = common_utils.get_metrics(metrics_all)
       lr = metrics_all.pop('learning_rate').mean()
-      metrics_sums = jax.tree_map(jnp.sum, metrics_all)
+      metrics_sums = jax.tree_util.tree_map(jnp.sum, metrics_all)
       denominator = metrics_sums.pop('denominator')
-      summary = jax.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
+      summary = jax.tree_util.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
       summary['learning_rate'] = lr
       logging.info('train in step: %d, loss: %.4f', step, summary['loss'])
       if jax.process_index() == 0:
@@ -364,12 +364,12 @@ def main(argv):
       eval_iter = iter(eval_ds)
 
       for eval_batch in eval_iter:
-        eval_batch = jax.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
+        eval_batch = jax.tree_util.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
         # Handle final odd-sized batch by padding instead of dropping it.
         cur_pred_batch_size = eval_batch['inputs'].shape[0]
         if cur_pred_batch_size != batch_size:
           # pad up to batch size
-          eval_batch = jax.tree_map(
+          eval_batch = jax.tree_util.tree_map(
               lambda x: pad_examples(x, batch_size), eval_batch)
         eval_batch = common_utils.shard(eval_batch)
 
@@ -377,9 +377,9 @@ def main(argv):
 
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
-      eval_metrics_sums = jax.tree_map(jnp.sum, eval_metrics)
+      eval_metrics_sums = jax.tree_util.tree_map(jnp.sum, eval_metrics)
       eval_denominator = eval_metrics_sums.pop('denominator')
-      eval_summary = jax.tree_map(
+      eval_summary = jax.tree_util.tree_map(
           lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
           eval_metrics_sums)
 

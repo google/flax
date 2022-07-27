@@ -146,7 +146,7 @@ class AttentionTest(absltest.TestCase):
 
     rngs = {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
     y, variables = jax.jit(init(model))(rngs, inputs, inputs)
-    variable_shapes = jax.tree_map(jnp.shape, variables['params'])
+    variable_shapes = jax.tree_util.tree_map(jnp.shape, variables['params'])
     self.assertEqual(y.shape, (2, 7, 16))
     self.assertEqual(unfreeze(variable_shapes), {
         'key': {'kernel': (2, 16, 8)},

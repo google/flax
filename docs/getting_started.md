@@ -306,7 +306,7 @@ Create a model evaluation function that:
 def eval_model(params, test_ds):
   metrics = eval_step(params, test_ds)
   metrics = jax.device_get(metrics)
-  summary = jax.tree_map(lambda x: x.item(), metrics)
+  summary = jax.tree_util.tree_map(lambda x: x.item(), metrics)
   return summary['loss'], summary['accuracy']
 ```
 

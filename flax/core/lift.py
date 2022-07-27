@@ -109,7 +109,7 @@ def pack(fn: Callable[..., Any],
       msg = 'kwargs are not supported in {}, so \"{}\" is(are) ignored'
       warnings.warn(msg.format(name, ', '.join(kwargs.keys())), RuntimeWarning)
     # pylint: disable=protected-access
-    scopes, treedef = jax.tree_flatten(scope_tree)
+    scopes, treedef = jax.tree_util.tree_flatten(scope_tree)
     scopes, paths = _dedup_scopes(scopes)
 
     variable_groups_xs = []
@@ -271,7 +271,7 @@ def map_variables(fn: Callable[..., Any],
     if init:
       scopes = scope_fn((target, variables), rng_groups)
       has_mutable_cols = any(not is_filter_empty(scope.mutable)
-                             for scope in jax.tree_leaves(scopes))
+                             for scope in jax.tree_util.tree_leaves(scopes))
       if has_mutable_cols:
         fn(scopes, *args, **kwargs)
         target, _ = repack(scopes)
@@ -421,7 +421,7 @@ def vjp(
     y, bwd, (aux, out_vars) = jax.vjp(
         wrapper, vjp_vars, *args,
         reduce_axes=reduce_axes, has_aux=True)
-    treedef = jax.tree_structure(scope)
+    treedef = jax.tree_util.tree_structure(scope)
     bwd = jax.tree_util.Partial(
         functools.partial(_bwd_wrapper, treedef), bwd)
     if has_aux:
@@ -504,7 +504,7 @@ def jvp(
     return (y, out_tangents[0]), out_vars
   # filter out empty tangent collections because JAX will error on non-equal
   # tree structure for example: {"params": {}} != {}.
-  treedef = jax.tree_structure(scope)
+  treedef = jax.tree_util.tree_structure(scope)
 
   variable_tangents = tuple({k: v  # pylint: disable=g-complex-comprehension
                              for k, v in vt.items()
@@ -582,7 +582,7 @@ def vmap(fn: Callable[..., Any],
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
     def find_axis_size(axis, x):
       if axis is not None:
-        leaves = jax.tree_leaves(x)
+        leaves = jax.tree_util.tree_leaves(x)
         if leaves:
           return leaves[0].shape[axis]
       return ()
@@ -591,7 +591,7 @@ def vmap(fn: Callable[..., Any],
     axis_sizes = jax.tree_util.tree_map(find_axis_size,
                                         (variable_in_axes, in_axes),
                                         (variable_groups, args))
-    axis_sizes = set(jax.tree_leaves(axis_sizes))
+    axis_sizes = set(jax.tree_util.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
       d_axis_size, = axis_sizes
     elif len(axis_sizes) > 1:
@@ -720,13 +720,13 @@ def scan(fn: Callable[..., Any],
             init, *args):
     def find_length(axis, x):
       if axis is not axes_scan.broadcast:
-        leaves = jax.tree_leaves(x)
+        leaves = jax.tree_util.tree_leaves(x)
         if leaves:
           return leaves[0].shape[axis]
       return ()
     # split rngs
     lengths = jax.tree_util.tree_map(find_length, in_axes, args)
-    lengths = set(jax.tree_leaves(lengths))
+    lengths = set(jax.tree_util.tree_leaves(lengths))
     if length is None and len(lengths) == 1:
       d_length, = lengths
     elif len(lengths) > 1:
@@ -1094,7 +1094,7 @@ def custom_vjp(fn: Callable[..., Any],
     def f_fwd(grad_variables, *args):
       nonlocal scopes_treedef
       scopes = scope_fn((grad_variables, other_variables), rng_groups)
-      scopes_treedef = jax.tree_structure(scopes)
+      scopes_treedef = jax.tree_util.tree_structure(scopes)
       y, res = forward_fn(scopes, *args)
       vars_out = repack_fn(scopes)
       return (y, vars_out), res
@@ -1270,7 +1270,7 @@ def jit(fn: Callable[..., Any],
     try:
       scope_fn = scope_fun
       repack_fn = repack_fun
-      scopes = jax.tree_leaves(scope_fn(variable_groups, rng_groups))
+      scopes = jax.tree_util.tree_leaves(scope_fn(variable_groups, rng_groups))
       mutable = tuple(_hashable_filter(scope.mutable) for scope in scopes)
       return jitted(mutable, variable_groups, rng_groups, *args)
     finally:

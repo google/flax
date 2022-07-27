@@ -34,12 +34,12 @@ jax.config.parse_flags_with_absl()
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(
-      jax.tree_map(operator.eq, x, y))
+      jax.tree_util.tree_map(operator.eq, x, y))
 
 
 def tree_allclose(x, y):
   return jax.tree_util.tree_all(
-      jax.tree_map(lambda x,y: np.all(np.isclose(x,y)), x, y))
+      jax.tree_util.tree_map(lambda x,y: np.all(np.isclose(x,y)), x, y))
 
 
 id_fn = lambda x: x
@@ -553,7 +553,7 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((10, 10))
     p = D().init(key, x)
 
-    variable_shapes = jax.tree_map(jnp.shape, p)
+    variable_shapes = jax.tree_util.tree_map(jnp.shape, p)
     self.assertEqual(
         variable_shapes['params']['A_0']['Dense_0']['kernel'],
         (10, 10, 3))
@@ -594,7 +594,7 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((10, 10))
     p = D().init(key, x)
 
-    variable_shapes = jax.tree_map(jnp.shape, p)
+    variable_shapes = jax.tree_util.tree_map(jnp.shape, p)
     self.assertEqual(
         variable_shapes['params']['A_0']['Dense_0']['kernel'],
         (10, 10, 3))
@@ -772,7 +772,7 @@ class TransformTest(absltest.TestCase):
         },
       })
     self.assertTrue(jax.tree_util.tree_all(
-        jax.tree_map(
+        jax.tree_util.tree_map(
             lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
             cntrs, ref_cntrs)
         ))
@@ -786,7 +786,7 @@ class TransformTest(absltest.TestCase):
         variable_axes={'params':0},
         split_rngs={'params':True})(4)
     init_vars = vmap_dense.init(k, x)
-    init_vars_shapes = jax.tree_map(jnp.shape, init_vars)
+    init_vars_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
     ref_var_shapes = freeze({
         'params': {
             'kernel': (3, 4, 4),
@@ -810,7 +810,7 @@ class TransformTest(absltest.TestCase):
             split_rngs={'params':True})(self, x)
 
     init_vars = Foo().init(k, x)
-    init_vars_shapes = jax.tree_map(jnp.shape, init_vars)
+    init_vars_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
     ref_var_shapes = freeze({
         'params': {
           'Dense_0': {'kernel': (3, 4, 2)}
@@ -991,7 +991,7 @@ class TransformTest(absltest.TestCase):
 
   def test_map_variables_tied_autoencoder(self):
     def trans(variables):
-      return jax.tree_map(lambda x: x.T, variables)
+      return jax.tree_util.tree_map(lambda x: x.T, variables)
 
     class TiedAutencoder(nn.Module):
 
@@ -1021,7 +1021,7 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((2, 4))
     ae = TiedAutencoder(4, 5)
     variables = ae.init(random.PRNGKey(0), x)
-    param_shapes = jax.tree_map(jnp.shape, variables["params"])
+    param_shapes = jax.tree_util.tree_map(jnp.shape, variables["params"])
     self.assertEqual(param_shapes, {
       "Dense_0": {"kernel": (4, 5)}
     })
@@ -1032,7 +1032,7 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         def sign(x):
-          return jax.tree_map(jnp.sign, x)
+          return jax.tree_util.tree_map(jnp.sign, x)
         BitDense = nn.map_variables(nn.Dense, "params", sign, init=True)
         return BitDense(4)(x)
     bw = BitWeights()
@@ -1052,7 +1052,7 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((2, 8))
     model = BigModel()
     variables = model.init(random.PRNGKey(0), x)
-    param_shapes = jax.tree_map(jnp.shape, variables['params'])
+    param_shapes = jax.tree_util.tree_map(jnp.shape, variables['params'])
     self.assertEqual(param_shapes["dense_stack"]["kernel"], (100, 8, 8))
     self.assertEqual(param_shapes["dense_stack"]["bias"], (100, 8))
     y = model.apply(variables, x)
@@ -1094,7 +1094,7 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         bar = Bar()
-        vars_t = jax.tree_map(jnp.ones_like, bar.variables.get('params', {}))
+        vars_t = jax.tree_util.tree_map(jnp.ones_like, bar.variables.get('params', {}))
         _, out_t = nn.jvp(Bar.__call__, bar, (x,), (jnp.zeros_like(x),), {'params': vars_t})
         return out_t
 
@@ -1149,7 +1149,7 @@ class TransformTest(absltest.TestCase):
 
         def bwd(vjp_fn, y_t):
           input_t, params_t = vjp_fn(y_t)
-          params_t = jax.tree_map(jnp.sign, params_t)
+          params_t = jax.tree_util.tree_map(jnp.sign, params_t)
           return input_t, params_t
 
         sign_grad = nn.custom_vjp(
@@ -1158,7 +1158,7 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((2,))
     variables = Foo().init(random.PRNGKey(0), x)
     grad = jax.grad(Foo().apply)(variables, x)
-    for grad_leaf in jax.tree_leaves(grad):
+    for grad_leaf in jax.tree_util.tree_leaves(grad):
       self.assertTrue(jnp.all(jnp.abs(grad_leaf) == 1.))
 
   def test_transform_with_setup_and_methods_on_submodules(self):
@@ -1188,8 +1188,8 @@ class TransformTest(absltest.TestCase):
         return self.helper(x, self.inner)
     vs_bar = Bar().init(k, x)
     self.assertTrue(tree_equals(
-      jax.tree_map(jnp.shape, vs_foo),
-      jax.tree_map(jnp.shape, vs_bar)))
+      jax.tree_util.tree_map(jnp.shape, vs_foo),
+      jax.tree_util.tree_map(jnp.shape, vs_bar)))
 
   def test_transform_methods_on_submodules_still_reserve_names(self):
     class Foo(nn.Module):
