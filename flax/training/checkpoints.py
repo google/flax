@@ -58,7 +58,7 @@ PyTree = Any
 
 
 def _checkpoint_path(ckpt_dir: str,
-                     step: Union[int, str],
+                     step: Union[int, float, str],
                      prefix: str = 'checkpoint_') -> str:
   return os.path.join(ckpt_dir, f'{prefix}{step}')
 
@@ -113,7 +113,7 @@ def _save_gdas(gda_manager: GlobalAsyncCheckpointManager,
 def _restore_gdas(state_dict,
                   target: Optional[Any],
                   ckpt_path: str,
-                  step: Optional[int] = None,
+                  step: Optional[Union[int, float]] = None,
                   gda_manager: Optional[GlobalAsyncCheckpointManager] = None):
 
   # When target is a single leaf instead of a pytree dict.
@@ -222,7 +222,7 @@ class AsyncManager():
 
 def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     target: PyTree,
-                    step: int,
+                    step: Union[int, float],
                     prefix: str = 'checkpoint_',
                     keep: int = 1,
                     overwrite: bool = False,
@@ -381,7 +381,7 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
 def restore_checkpoint(
     ckpt_dir: Union[str, os.PathLike],
     target: Optional[Any],
-    step: Optional[int] = None,
+    step: Optional[Union[int, float]] = None,
     prefix: str = 'checkpoint_',
     parallel: bool = True,
     gda_manager: Optional[GlobalAsyncCheckpointManager] = None) -> PyTree:
@@ -400,7 +400,7 @@ def restore_checkpoint(
     ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
     target: matching object to rebuild via deserialized state-dict. If None, the
       deserialized state-dict is returned as-is.
-    step: int: step number to load or None to load latest. If specified,
+    step: int or float: step number to load or None to load latest. If specified,
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
