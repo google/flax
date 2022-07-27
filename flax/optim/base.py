@@ -48,7 +48,7 @@ class OptimizerDef:
     self.hyper_params = hyper_params
     warnings.warn(
         'Use `optax` instead of `flax.optim`. Refer to the update guide '
-        'https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html '
+        'https://flax.readthedocs.io/en/latest/advanced_topics/optax_update_guide.html '
         'for detailed instructions.', DeprecationWarning)
 
   def apply_param_gradient(self, step, hyper_params, param, state, grad):

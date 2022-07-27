@@ -15,7 +15,7 @@
 """Recurrent neural network modules.
 
 THe RNNCell modules can be scanned using lifted transforms. For more information
-see: https://flax.readthedocs.io/en/latest/design_notes/lift.html.
+see: https://flax.readthedocs.io/en/latest/advanced_topics/lift.html.
 """
 
 import abc
