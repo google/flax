@@ -29,24 +29,15 @@ jobs:
         with:
           python-version: 3.7
       - uses: pre-commit/action@v2.0.3
-  build:
+  commit-count:
+    name: Check commit count
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.7]
     steps:
     - name: Cancel previous
       uses: styfle/cancel-workflow-action@0.8.0
       with:
         access_token: ${{ github.token }}          
-    - name: Install native dependencies
-      run: |
-        sudo apt-get -y install pandoc
     - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
     # We allow at most 5 commits in a branch to ensure our CI doesn't break.
     - name: Check commit count in PR
       if: always()
@@ -68,6 +59,25 @@ jobs:
           echo "See $url for help on how to resolve this."
           exit 1
         fi
+  test-docs:
+    name: Test documentation
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7]
+    steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@0.8.0
+      with:
+        access_token: ${{ github.token }}          
+    - name: Install native dependencies
+      run: |
+        sudo apt-get -y install pandoc
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
         pip install .
@@ -79,9 +89,30 @@ jobs:
     - name: Build documentation
       run: |
         sphinx-build -M html docs docs/_build
+  run-tests:
+    name: Run tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7]
+    steps:
+    - name: Cancel previous
+      uses: styfle/cancel-workflow-action@0.8.0
+      with:
+        access_token: ${{ github.token }}          
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        pip install .
+        pip install .[testing]
+        pip install -r docs/requirements.txt
     - name: Test with pytest and generate coverage report
       run: |
-        tests/run_all_tests.sh --with-cov
+        tests/run_all_tests.sh --with-cov --no-doctest
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v1
       with:
@@ -104,7 +135,6 @@ jobs:
            "description": "'$status'",
            "context": "github-actions/Build"
            }'
-
   test-import:
     name: Test import standalone
     runs-on: ubuntu-latest
