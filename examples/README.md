@@ -85,6 +85,19 @@ of examples, in many cases with pre-trained weights:
   classification, segmentation, and detection models for multiple modalities
   including images, video, audio, and multimodal combinations of them.
 
+- [Big Vision](https://github.com/google-research/big_vision/) is a codebase
+  designed for training large-scale vision models using Cloud TPU VMs or GPU
+  machines. It is based on Jax/Flax libraries, and uses tf.data and TensorFlow
+  Datasets for scalable and reproducible input pipelines. This is the original
+  codebase of ViT, MLP-Mixer, LiT, UViM, and many more models.
+
+- [T5X](https://github.com/google-research/t5x)  is a modular, composable,
+  research-friendly framework for high-performance, configurable, self-service
+  training, evaluation, and inference of sequence models (starting with
+  language) at many scales.
+
+
+
 ## Community Examples
 
 In addition to the curated list of official Flax examples, there is a growing
@@ -93,15 +106,15 @@ are happy to showcase any example built by the community here! If you want to
 submit your own example, we suggest that you start by forking one of the
 official Flax example, and start from there.
 
-|             Link              |       Author       |             Task type             |                               Reference                               |
-| ----------------------------- | ------------------ | --------------------------------- | --------------------------------------------------------------------- |
-| [matthias-wright/flaxmodels]  | [@matthias-wright] | Various                           | GPT-2, ResNet, StyleGAN-2, VGG, ...                                    |
-| [DarshanDeshpande/jax-models] | [@DarshanDeshpande] | Various                           | Segformer, Swin Transformer, ... also some stand-alone layers        |
-| [google/vision_transformer]   | [@andsteing]       | Image classification, fine-tuning | https://arxiv.org/abs/2010.11929 and https://arxiv.org/abs/2105.01601 |
-| [JAX-RL]                      | [@henry-prior]     | Reinforcement learning            | N/A                                                                    |
-| [DCGAN] Colab                 | [@bkkaggle]        | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
-| [BigBird Fine-tuning]         | [@vasudevgupta7]   | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
-| [jax-resnet]                  | [@n2cholas]        | Various resnet implementations    | `torch.hub`                                                            |
+|             Link              |       Author        |             Task type             |                               Reference                               |
+| ----------------------------- | ------------------- | --------------------------------- | --------------------------------------------------------------------- |
+| [matthias-wright/flaxmodels]  | [@matthias-wright]  | Various                           | GPT-2, ResNet, StyleGAN-2, VGG, ...                                   |
+| [DarshanDeshpande/jax-models] | [@DarshanDeshpande] | Various                           | Segformer, Swin Transformer, ... also some stand-alone layers         |
+| [google/vision_transformer]   | [@andsteing]        | Image classification, image/text  | https://arxiv.org/abs/2010.11929, https://arxiv.org/abs/2105.01601, https://arxiv.org/abs/2111.07991, ... |
+| [JAX-RL]                      | [@henry-prior]      | Reinforcement learning            | N/A                                                                   |
+| [DCGAN] Colab                 | [@bkkaggle]         | Image Synthesis                   | https://arxiv.org/abs/1511.06434                                      |
+| [BigBird Fine-tuning]         | [@vasudevgupta7]    | Question-Answering                | https://arxiv.org/abs/2007.14062                                      |
+| [jax-resnet]                  | [@n2cholas]         | Various resnet implementations    | `torch.hub`                                                           |
 
 [matthias-wright/flaxmodels]: https://github.com/matthias-wright/flaxmodels
 [DarshanDeshpande/jax-models]: https://github.com/DarshanDeshpande/jax-models

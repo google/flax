@@ -43,6 +43,7 @@ import jax
 
 traceback_util.register_exclusion(__file__)
 
+# pylint: disable=protected-access
 
 # Utils
 # -----------------------------------------------------------------------------
@@ -79,12 +80,12 @@ def _memoize_by_id(fn, refs):
     nonlocal refs
     if isinstance(x, (VariablePlaceholder, InstancePlaceholder)):
       x_id = x.id
+    elif isinstance(x, (Variable, Module)):
+      x_id = x._id
     else:
-      x_id = id(x)
+      return fn(x)
     if x_id not in refs:
       refs[x_id] = fn(x)
-    else:
-      pass
     return refs[x_id]
   return wrapped_fn
 
@@ -124,25 +125,25 @@ def get_module_scopes(module, args=None, kwargs=None):
     nonlocal scopes
     if isinstance(x, Variable) and isinstance(x.scope, Scope):
       scopes.append(x.scope)
-      return VariablePlaceholder(x.collection, x.name, id(x))
+      return VariablePlaceholder(x.collection, x.name, x._id)
     elif isinstance(x, Module) and isinstance(x.scope, Scope):
-      x._try_setup(shallow=True)  # pylint: disable=protected-access
+      x._try_setup(shallow=True)
       scopes.append(x.scope)
       attrs = {
           f.name: getattr(x, f.name)
           for f in dataclasses.fields(x)
           if f.name != 'parent' and f.init
       }
-      attrs = jax.tree_map(get_arg_scope, attrs)
-      return InstancePlaceholder(x.__class__, attrs, id(x))
+      attrs = jax.tree_util.tree_map(get_arg_scope, attrs)
+      return InstancePlaceholder(x.__class__, attrs, x._id)
     return x
-  new_args, new_kwargs = jax.tree_map(get_arg_scope, (args, kwargs))
+  new_args, new_kwargs = jax.tree_util.tree_map(get_arg_scope, (args, kwargs))
 
   # Gather scopes in Variables and Submodules passed as Module attributes.
   @functools.partial(_memoize_by_id, refs=refs)
   def get_scopes(module):
     nonlocal scopes
-    module._try_setup(shallow=True)  # pylint: disable=protected-access
+    module._try_setup(shallow=True)
     def get_scopes_inner(x):
       nonlocal scopes
       if isinstance(x, Module) and isinstance(x.scope, Scope):
@@ -155,7 +156,7 @@ def get_module_scopes(module, args=None, kwargs=None):
         for f in dataclasses.fields(module)
         if f.name != 'parent' and f.init
     }
-    jax.tree_map(get_scopes_inner, attrs)
+    jax.tree_util.tree_map(get_scopes_inner, attrs)
     scopes.append(module.scope)
   get_scopes(module)
   return scopes, new_args, new_kwargs
@@ -201,14 +202,14 @@ def set_module_scopes(module, args, kwargs, scopes):
     elif isinstance(x, InstancePlaceholder):
       instance_scope = scopes[idx]
       idx += 1
-      instance_attrs = jax.tree_map(set_arg_scope, x.attrs)
+      instance_attrs = jax.tree_util.tree_map(set_arg_scope, x.attrs)
       return x.cls(parent=instance_scope, **instance_attrs)
     return x
 
   def is_placeholder(x):
     return isinstance(x, (VariablePlaceholder, InstancePlaceholder))
 
-  new_args, new_kwargs = jax.tree_map(
+  new_args, new_kwargs = jax.tree_util.tree_map(
       set_arg_scope, (args, kwargs), is_leaf=is_placeholder)
 
   # set scopes in Variables and Submodules passed as Module attributes
@@ -233,7 +234,7 @@ def set_module_scopes(module, args, kwargs, scopes):
         for f in dataclasses.fields(module)
         if f.name != 'parent' and f.init
     }
-    new_attrs = jax.tree_map(set_scopes_inner, attrs)
+    new_attrs = jax.tree_util.tree_map(set_scopes_inner, attrs)
     new_module = module.clone(parent=scopes[idx], **new_attrs)
     idx += 1
     return new_module
@@ -303,9 +304,9 @@ def module_class_lift_transform(
         # we reference module_class, not self.__class__ to avoid infinite loop
         cloned = module_class(parent=None, **attrs)
         cloned, args, kwargs = set_module_scopes(cloned, args, kwargs, scopes)
-        object.__setattr__(cloned, '_state', state.export())  # pylint: disable=protected-access
+        object.__setattr__(cloned, '_state', state.export())
         res = fn(cloned, *args, **kwargs)
-        self._state.reimport(cloned._state)  # pylint: disable=protected-access
+        self._state.reimport(cloned._state)
         _test_transformed_return_values(res, fn_name)
         return res
       # here we apply the given lifting transform to the scope-ingesting fn
@@ -351,9 +352,9 @@ def decorator_lift_transform(transform, class_fn, *trafo_args,
       if not multi_scope:
         scopes = [scopes]
       cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-      object.__setattr__(cloned, '_state', state.export())  # pylint: disable=protected-access
+      object.__setattr__(cloned, '_state', state.export())
       res = prewrapped_fn(cloned, *args, **kwargs)
-      self._state.reimport(cloned._state)  # pylint: disable=protected-access
+      self._state.reimport(cloned._state)
       _test_transformed_return_values(res, getattr(class_fn, '__name__', None))
       return res
     core_fns = [functools.partial(core_fn, prewrapped_fn, class_fn)
@@ -810,7 +811,7 @@ def map_variables(
       @nn.compact
       def __call__(self, x):
         def sign(x):
-          return jax.tree_map(jnp.sign, x)
+          return jax.tree_util.tree_map(jnp.sign, x)
         MapDense = nn.map_variables(nn.Dense, "params", sign, init=True)
         return MapDense(4)(x)
 
@@ -946,7 +947,8 @@ def jvp(
       @nn.compact
       def __call__(self, x):
         scale = LearnScale()
-        vars_t = jax.tree_map(jnp.ones_like, scale.variables.get('params', {}))
+        vars_t = jax.tree_util.tree_map(jnp.ones_like,
+                                        scale.variables.get('params', {}))
         _, out_t = nn.jvp(
             lambda mdl, x: mdl(x), scale, (x,), (jnp.zeros_like(x),),
             variable_tangents={'params': vars_t})
@@ -959,7 +961,7 @@ def jvp(
       return p * x
 
     def f(scope, x):
-      vars_t = jax.tree_map(jnp.ones_like, scope.variables().get('params', {}))
+      vars_t = jax.tree_util.tree_map(jnp.ones_like, scope.variables().get('params', {}))
       x, out_t = lift.jvp(
           learn_scale, scope, (x,), (jnp.zeros_like(x),),
           variable_tangents={'params': vars_t})
@@ -1255,7 +1257,7 @@ def custom_vjp(fn: Callable[..., Any],
 
         def bwd(vjp_fn, y_t):
           input_t, params_t = vjp_fn(y_t)
-          params_t = jax.tree_map(jnp.sign, params_t)
+          params_t = jax.tree_util.tree_map(jnp.sign, params_t)
           return input_t, params_t
 
         sign_grad = nn.custom_vjp(
@@ -1324,8 +1326,8 @@ def named_call(class_fn, force=True):
     prewrapped_fn = wrap_method_once(class_fn)
     @functools.wraps(prewrapped_fn)
     def wrapped_fn(self, *args, **kwargs):
-      if ((not force and not linen_module._use_named_call)  # pylint: disable=protected-access
-          or self._state.in_setup):  # pylint: disable=protected-access
+      if ((not force and not linen_module._use_named_call)
+          or self._state.in_setup):
         return prewrapped_fn(self, *args, **kwargs)
       fn_name = class_fn.__name__
       method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
@@ -1334,9 +1336,9 @@ def named_call(class_fn, force=True):
       # make a scope-function to transform
       def core_fn(scopes, *args, **kwargs):
         cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-        object.__setattr__(cloned, '_state', self._state.export())  # pylint: disable=protected-access
+        object.__setattr__(cloned, '_state', self._state.export())
         res = prewrapped_fn(cloned, *args, **kwargs)
-        self._state.reimport(cloned._state)  # pylint: disable=protected-access
+        self._state.reimport(cloned._state)
         _test_transformed_return_values(res, fn_name)
         return res
       # here we apply the given lifting transform to the scope-ingesting fn

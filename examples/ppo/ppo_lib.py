@@ -340,4 +340,4 @@ def train(
           entropy_coeff=config.entropy_coeff)
     if (step + 1) % checkpoint_frequency == 0:
       checkpoints.save_checkpoint(model_dir, state, step + 1)
-  return train_state
+  return state

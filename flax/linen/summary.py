@@ -351,7 +351,8 @@ def _render_table(table: Table) -> str:
 
       if collection in row.module_variables:
         col_repr += _as_yaml_str(
-            jax.tree_map(_format_value, row.module_variables[collection]))
+            jax.tree_util.tree_map(_format_value,
+                                   row.module_variables[collection]))
         col_repr += '\n\n'
 
       col_repr += f'[bold]{_size_and_bytes_repr(*size_bytes)}[/bold]'
@@ -359,7 +360,7 @@ def _render_table(table: Table) -> str:
 
     rich_table.add_row(
         '/'.join(row.path) if row.path else table.module.__class__.__name__,
-        _as_yaml_str(jax.tree_map(_format_value, row.outputs)),
+        _as_yaml_str(jax.tree_util.tree_map(_format_value, row.outputs)),
         *collections_size_repr)
 
   # add footer with totals

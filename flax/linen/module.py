@@ -36,6 +36,7 @@ from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (  # pylint: disable=g-multiple-import
     CollectionFilter, DenyList, FrozenVariableDict, Variable, VariableDict,
     union_filters)
+from flax.ids import uuid
 from flax.linen import summary
 
 
@@ -730,6 +731,7 @@ class Module:
     # initialization, attach this Module as a submodule of a parent, or bind
     # this Module at the top-level to variables and rngs.
 
+    object.__setattr__(self, '_id', uuid())
     object.__setattr__(self, '_state', _ModuleInternalState())
 
     # Typically we set the parent based on the dynamic module context.
@@ -827,7 +829,9 @@ class Module:
           # Module was passed from outside. It needs to be cloned.
           # Outside modules are named by attachment, not an outer name.
           object.__setattr__(subvalue, 'name', None)
-          key = id(subvalue)
+          # Preserve sharing-by-reference relationships during adoption
+          # via cache keyed on unique instance ids.
+          key = subvalue._id
           if key not in cache:
             cache[key] = subvalue.clone()
           subvalue = cache[key]

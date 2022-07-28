@@ -209,6 +209,13 @@ class ScopeTest(absltest.TestCase):
     self.assertEqual(abc.value, 1)
     with self.assertRaises(errors.ScopeVariableNotFoundError):
       root.variable('state', 'test')
+  
+  def test_variable_alias(self):
+    scope = Scope({}, mutable='state')
+    subscope = scope.push(name="a")
+    subscope.put_variable('state', 'x', 0.)
+    scope.put_variable('state', 'a', {'x': jnp.array(1., jnp.float32)})
+    self.assertEqual(scope.variables()['state']['a']['x'], subscope.variables()['state']['x'])
 
 
 if __name__ == '__main__':

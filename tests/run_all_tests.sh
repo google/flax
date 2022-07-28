@@ -42,8 +42,15 @@ handle_errors () {
 # Run embedded tests inside docs
 sphinx-build -M doctest docs docs/_build
 
+# Run some test on separate process, avoiding device configs poluting each other
+PYTEST_IGNORE=
+for file in "tests/jax_utils_test.py"; do
+    echo "pytest -n auto $file $PYTEST_OPTS"
+    pytest -n auto $file $PYTEST_OPTS
+    PYTEST_IGNORE+=" --ignore=$file"
+done
 # Run battery of core FLAX API tests.
-pytest -n auto tests $PYTEST_OPTS
+pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
 
 # Per-example tests.
 #
