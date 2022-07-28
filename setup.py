@@ -54,7 +54,6 @@ tests_require = [
     "tensorflow_datasets",
     "tensorflow",
     "torch",
-    "pandas", # get_repo_metrics script
 ]
 
 __version__ = None
