@@ -577,6 +577,7 @@ def scan_with_axes(
     out_axes=0,
     length: Optional[int] = None,
     reverse: bool = False,
+    unroll: int = 1,
     axis_name: str = 'layers',
     axes_collections: Tuple[str, ...] = ('params',),
     data_transform: Optional[Callable[..., Any]] = None,
@@ -600,6 +601,7 @@ def scan_with_axes(
       out_axes=out_axes,
       length=length,
       reverse=reverse,
+      unroll=unroll,
       data_transform=data_transform,
       methods=methods)
 
