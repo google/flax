@@ -72,11 +72,12 @@ def _checkpoint_path_step(path: str) -> Optional[float]:
 
 
 def _split_gdas(
-    target: Dict[str, Any]) -> Tuple[Dict[str, Any], List[GlobalDeviceArray]]:
+    target: Dict[str, Any]
+) -> Tuple[Dict[str, Any], List[Tuple[GlobalDeviceArray, str]]]:
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(target, (core.FrozenDict, dict)):
     if isinstance(target, GlobalDeviceArray):
-      return GDA_PH, [target]
+      return GDA_PH, [(target, '')]
     return target, []
   # Traverse the target and handle GlobalDeviceArrays.
   flattened = traverse_util.flatten_dict(target, keep_empty_nodes=True)
@@ -119,7 +120,7 @@ def _restore_gdas(state_dict,
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
     if isinstance(target, GlobalDeviceArray) and isinstance(
-        state_dict, GlobalDeviceArray):
+        state_dict, str) and state_dict.startswith(GDA_PH):
       if not gda_manager:
         raise errors.GDACheckpointingRequiredError(ckpt_path, step)
       if not target:
