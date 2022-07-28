@@ -555,6 +555,9 @@ colab:
 id: TUgAbUPpnaJw
 outputId: 0906fbab-b866-4956-d231-b1374415d448
 ---
+from functools import partial
+
+@partial(jax.jit, static_argnums=(0, 1))
 def update_step(tx, apply_fn, x, opt_state, params, state):
 
   def loss(params):
