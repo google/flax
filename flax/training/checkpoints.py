@@ -58,7 +58,7 @@ PyTree = Any
 
 
 def _checkpoint_path(ckpt_dir: str,
-                     step: Union[int, str],
+                     step: Union[int, float, str],
                      prefix: str = 'checkpoint_') -> str:
   return os.path.join(ckpt_dir, f'{prefix}{step}')
 
@@ -114,7 +114,7 @@ def _save_gdas(gda_manager: GlobalAsyncCheckpointManager,
 def _restore_gdas(state_dict,
                   target: Optional[Any],
                   ckpt_path: str,
-                  step: Optional[int] = None,
+                  step: Optional[Union[int, float]] = None,
                   gda_manager: Optional[GlobalAsyncCheckpointManager] = None):
 
   # When target is a single leaf instead of a pytree dict.
@@ -223,7 +223,7 @@ class AsyncManager():
 
 def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     target: PyTree,
-                    step: int,
+                    step: Union[int, float],
                     prefix: str = 'checkpoint_',
                     keep: int = 1,
                     overwrite: bool = False,
