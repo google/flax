@@ -255,7 +255,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   Returns:
     Filename of saved checkpoint.
   """
-
+  logging.info("test")
   def _save_checkpoint_files(target: bytes, paths: Tuple[str, str],
                              checkpoint_files: List[Any], keep: int,
                              overwrite: bool,
