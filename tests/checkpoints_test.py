@@ -255,6 +255,17 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
     jtu.check_eq(new_object, test_object0)
 
+  def test_save_restore_checkpoints_target_empty(self):
+    tmp_dir = self.create_tempdir().full_path
+    test_object0 = {}
+    test_object1 = []
+    checkpoints.save_checkpoint(tmp_dir, test_object1, 0)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
+    jtu.check_eq(new_object, test_object0)
+    checkpoints.save_checkpoint(tmp_dir, test_object0, 1)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
+    jtu.check_eq(new_object, test_object1)
+
   def test_async_save_checkpoints(self):
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
