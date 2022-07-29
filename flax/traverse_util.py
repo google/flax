@@ -113,6 +113,8 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
       path = prefix + (key,)
       result.update(_flatten(value, path))
     if keep_empty_nodes and is_empty:
+      if prefix == ():  # when the whole input is empty
+        return {}
       return {_key(prefix): empty_node}
     return result
   return _flatten(xs, ())
