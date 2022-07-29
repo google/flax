@@ -339,7 +339,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     return _save_checkpoint_files(target, (ckpt_tmp_path, ckpt_path),
                                   checkpoint_files, keep, overwrite,
                                   keep_every_n_steps)
-  if process_index() == 0:
+  if process_index() == 0 or not gda_targets:
     if async_manager:
       async_manager.save_async(save_task)
     else:
