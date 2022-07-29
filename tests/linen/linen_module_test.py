@@ -26,7 +26,6 @@ from flax import linen as nn
 from flax import struct
 from flax.core import Scope, freeze, tracers
 from flax.linen import compact
-from flax.linen.module import override_named_call
 import jax
 from jax import random
 from jax.nn import initializers
@@ -1584,13 +1583,12 @@ class ModuleTest(absltest.TestCase):
     class MyModule2(nn.Module):
       submodule: MyComponent2[jnp.ndarray]
 
-  def test_named_call_rng_equivalance(self):
+  def test_jit_rng_equivalance(self):
     model = nn.Dense(1, use_bias=False)
-    with override_named_call(False):
-      param = model.init(random.PRNGKey(0), np.ones((1, 1)))['params']['kernel']
-    with override_named_call(True):
-      param_2 = model.init(random.PRNGKey(0), np.ones(
-          (1, 1)))['params']['kernel']
+    jit_model = nn.jit(nn.Dense)(1, use_bias=False)
+    param = model.init(random.PRNGKey(0), np.ones((1, 1)))['params']['kernel']
+    param_2 = jit_model.init(random.PRNGKey(0), np.ones(
+        (1, 1)))['params']['kernel']
     self.assertEqual(param, param_2)
 
   def test_rng_reuse_after_rewind(self):

@@ -34,15 +34,6 @@ TRACEBACKHIDE_SUPPORTED = tuple(sys.version_info)[:3] >= (3, 7, 0)
 EXPECTED_FILES = (__file__, contextlib.__spec__.origin)
 
 
-def jax_name_stack_used():
-  # The presence of JAX's name stack introduces some new stack frames
-  # below via context manager that we need to account for.
-  if (hasattr(jax.config, 'jax_experimental_name_stack') and
-      jax.config.jax_experimental_name_stack):
-    return True
-  return False
-
-
 class TracebackTest(absltest.TestCase):
 
   def test_exclusion_list(self):
@@ -87,8 +78,7 @@ class TracebackTest(absltest.TestCase):
         filtered_frames += 1
       unfiltered_frames += 1
 
-    self.assertEqual(filtered_frames,
-                     6 if jax_name_stack_used() else 3)
+    self.assertEqual(filtered_frames, 3)
     self.assertGreater(unfiltered_frames, filtered_frames)
 
 
@@ -126,8 +116,7 @@ class TracebackTest(absltest.TestCase):
     for _, _ in traceback.walk_tb(tb_unfiltered):
       unfiltered_frames += 1
 
-    self.assertEqual(filtered_frames,
-                     6 if jax_name_stack_used() else 3)
+    self.assertEqual(filtered_frames, 3)
     self.assertGreater(unfiltered_frames, filtered_frames)
 
 
@@ -200,8 +189,7 @@ class TracebackTest(absltest.TestCase):
                      unfiltered_frames_w_flax + filtered_frames_w_flax)
     self.assertEqual(unfiltered_frames_all + filtered_frames_all,
                      unfiltered_frames_no_flax + filtered_frames_no_flax)
-    self.assertEqual(unfiltered_frames_no_flax,
-                     6 if jax_name_stack_used() else 3)
+    self.assertEqual(unfiltered_frames_no_flax, 3)
     self.assertGreater(unfiltered_frames_all, unfiltered_frames_w_flax)
     self.assertGreater(unfiltered_frames_w_flax, unfiltered_frames_no_flax)
 

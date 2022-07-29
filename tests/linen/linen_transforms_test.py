@@ -431,46 +431,46 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(new_vars['counter']['outer2']['cntr']['foo'],
                      jnp.array([4], jnp.int32))
 
-  def test_multiscope_lifting_simple_decorator_w_named_call(self):
+  def test_multiscope_lifting_simple_decorator_w_jit(self):
     # TODO: actually test jaxpr on a simpler module.
-    with nn.override_named_call(True):
-      class Counter(nn.Module):
-        @nn.jit
-        @nn.compact
-        def __call__(self):
-          v = self.variable('counter', 'foo', lambda: jnp.array([0]))
-          v.value += jnp.array([1])
-          return v.value
-      class Outer(nn.Module):
-        @nn.jit
-        @nn.compact
-        def __call__(self, x):
-          cntr = Counter(name='cntr')()
-          return x
-      class Inner(nn.Module):
-        outer_module: nn.Module
-        @nn.jit
-        @nn.compact
-        def __call__(self, x):
-          return self.outer_module(x)
-      class Test(nn.Module):
-        @nn.compact
-        def __call__(self, x):
-          outer_dense = Outer(name='outer')
-          # we share stateful outer module as arg to two different, transformed modules:
-          inner = Inner(outer_dense, name='inner1')
-          inner2 = Inner(outer_dense, name='inner2')
-          res = inner(x) + inner2(x)
-          return res
+    class Counter(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self):
+        v = self.variable('counter', 'foo', lambda: jnp.array([0]))
+        v.value += jnp.array([1])
+        return v.value
+    class Outer(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        cntr = Counter(name='cntr')()
+        return x
+    class Inner(nn.Module):
+      outer_module: nn.Module
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return self.outer_module(x)
+    class Test(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        outer_dense = Outer(name='outer')
+        # we share stateful outer module as arg to two different, transformed modules:
+        inner = Inner(outer_dense, name='inner1')
+        inner2 = Inner(outer_dense, name='inner2')
+        res = inner(x) + inner2(x)
+        return res
 
-      x = jnp.ones((1, 1))
-      rngs = random.PRNGKey(0)
-      init_vars = Test(None).init(rngs, x)
-      _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
-      self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
-                      jnp.array([2], jnp.int32))
-      self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
-                      jnp.array([4], jnp.int32))
+    x = jnp.ones((1, 1))
+    rngs = random.PRNGKey(0)
+    init_vars = Test(None).init(rngs, x)
+    _, new_vars = Test(None).apply(init_vars, x, mutable=['counter'])
+    self.assertEqual(init_vars['counter']['outer']['cntr']['foo'],
+                    jnp.array([2], jnp.int32))
+    self.assertEqual(new_vars['counter']['outer']['cntr']['foo'],
+                    jnp.array([4], jnp.int32))
 
   def test_vmapped_outer_module(self):
     class Outer(nn.Module):
@@ -954,27 +954,6 @@ class TransformTest(absltest.TestCase):
     with self.assertRaises(errors.TransformedMethodReturnValueError):
       b.apply({}, jnp.ones(2))
 
-  def test_nowrap_named_call(self):
-    with nn.override_named_call(True):
-      class Foo(nn.Module):
-        @nn.compact
-        def __call__(self, x):
-          return x
-      class Bar(nn.Module):
-        @nn.compact
-        def __call__(self, x):
-          f = self._helper()
-          return f(x)
-        # will fail without nowrap
-        @nn.nowrap
-        def _helper(self):
-          return Foo()
-
-      b = Bar()
-      x = jnp.ones(2)
-      y = b.apply({}, x)
-      np.testing.assert_array_equal(x, y)
-
   def test_nowrap(self):
     class Bar(nn.Module):
       @nn.compact
@@ -1104,37 +1083,39 @@ class TransformTest(absltest.TestCase):
     np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
   def test_complicated_alias_mutation(self):
-    with nn.module.override_named_call(True):
-      class A(nn.Module):
-        b: nn.Module
-        @nn.compact
-        def __call__(self, x):
-          return self.b(x)
-      class B(nn.Module):
-        c: nn.Module
-        @nn.compact
-        def __call__(self, x):
-          y = C(name='outer_c')(x)
-          z = self.c(x)
-          return z
-      class C(nn.Module):
-        @nn.compact
-        def __call__(self, x):
-          initialized = self.has_variable('muts', 'v')
-          v = self.variable('muts', 'v', lambda: jnp.zeros_like(x))
-          if initialized:
-            v.value += x
-          return x
+    class A(nn.Module):
+      b: nn.Module
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        return self.b(x)
+    class B(nn.Module):
+      c: nn.Module
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        y = C(name='outer_c')(x)
+        z = self.c(x)
+        return z
+    class C(nn.Module):
+      @nn.jit
+      @nn.compact
+      def __call__(self, x):
+        initialized = self.has_variable('muts', 'v')
+        v = self.variable('muts', 'v', lambda: jnp.zeros_like(x))
+        if initialized:
+          v.value += x
+        return x
 
-      a = A(b=B(c=C()))
-      k = random.PRNGKey(0)
-      x = jnp.ones((1,), jnp.float32)
-      vs = a.init(k, x)
-      y, vs_new = a.apply(vs, x, mutable=['muts',])
-      np.testing.assert_array_equal(vs_new['muts']['b']['c']['v'],
-                                    jnp.array([1.], jnp.float32))
-      np.testing.assert_array_equal(vs_new['muts']['b']['outer_c']['v'],
-                                    jnp.array([1.], jnp.float32))
+    a = A(b=B(c=C()))
+    k = random.PRNGKey(0)
+    x = jnp.ones((1,), jnp.float32)
+    vs = a.init(k, x)
+    y, vs_new = a.apply(vs, x, mutable=['muts',])
+    np.testing.assert_array_equal(vs_new['muts']['b']['c']['v'],
+                                  jnp.array([1.], jnp.float32))
+    np.testing.assert_array_equal(vs_new['muts']['b']['outer_c']['v'],
+                                  jnp.array([1.], jnp.float32))
 
   def test_custom_vjp(self):
 
@@ -1174,8 +1155,7 @@ class TransformTest(absltest.TestCase):
         return self.helper(x, self.inner)
     k = random.PRNGKey(0)
     x = jnp.ones((2,))
-    with nn.module.override_named_call(True):
-      vs_foo = Foo().init(k, x)
+    vs_foo = Foo().init(k, x)
 
     class Bar(nn.Module):
       def setup(self):
@@ -1235,13 +1215,21 @@ class TransformTest(absltest.TestCase):
         return ms[0](x) + ms[1](x)
       def __call__(self, x):
         return self.helper(x, self.inners)
+    class JitFoo(nn.Module):
+      def setup(self):
+        self.inners = [nn.Dense(2), nn.Dense(2)]
+      @nn.jit
+      def helper(self, x, ms):
+        return ms[0](x) + ms[1](x)
+      @nn.jit
+      def __call__(self, x):
+        return self.helper(x, self.inners)
+    
     k = random.PRNGKey(0)
     x = jnp.ones((2,))
 
-    with nn.module.override_named_call(False):
-      vs_0 = Foo().init(k, x)
-    with nn.module.override_named_call(True):
-      vs_1 = Foo().init(k, x)
+    vs_0 = Foo().init(k, x)
+    vs_1 = JitFoo().init(k, x)
 
     self.assertTrue(tree_allclose(vs_0, vs_1))
 
@@ -1352,7 +1340,7 @@ class TransformTest(absltest.TestCase):
     x = jnp.zeros((2, 2))
     _ = Bar().init(k, x)
 
-  def test_named_call_on_setup_helpers(self):
+  def test_jit_with_setup_helpers(self):
     class Foo(nn.Module):
       def setup(self):
         self.a = nn.Dense(2)
@@ -1361,14 +1349,21 @@ class TransformTest(absltest.TestCase):
         self.b = nn.Dense(2)
       def __call__(self, x):
         return self.b(self.a(x))
+    class JitFoo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(2)
+        self.setup_helper()
+      def setup_helper(self):
+        self.b = nn.Dense(2)
+      @nn.jit
+      def __call__(self, x):
+        return self.b(self.a(x))
     k = random.PRNGKey(0)
     x = jnp.ones((2,2))
-    with nn.override_named_call(True):
-      vs = Foo().init(k, x)
-      y0 = Foo().apply(vs, x)
-    with nn.override_named_call(False):
-      vs = Foo().init(k, x)
-      y1 = Foo().apply(vs, x)
+    vs = JitFoo().init(k, x)
+    y0 = JitFoo().apply(vs, x)
+    vs = Foo().init(k, x)
+    y1 = Foo().apply(vs, x)
     np.testing.assert_array_equal(y0, y1)
 
   def test_while_loop(self):

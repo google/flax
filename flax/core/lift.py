@@ -1345,22 +1345,6 @@ def remat_scan(
   return fn
 
 
-def named_call(fn: Callable[..., Any], name: str) -> Callable[..., Any]:
-  """Adds a name scope to `fn` during profiling."""
-  def inner(scope_fn, repack_fn, variable_groups, rng_groups, args, kwargs):
-    @functools.wraps(fn)
-    def named(variable_groups, rng_groups):
-      scope = scope_fn(variable_groups, rng_groups)
-      y = fn(scope, *args, **kwargs)
-      return y, repack_fn(scope)
-    named = jax.named_call(named, name=name)
-    return named(variable_groups, rng_groups)
-  lifted = pack(inner, (True,), (True,), (True,))
-  def wrapper(scope, *args, **kwargs):
-    return lifted(scope, args, kwargs)
-  return wrapper
-
-
 def _unzip2(xs):
   ys = tuple(zip(*xs))
   return ys if ys else ((), ())

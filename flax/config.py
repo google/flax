@@ -21,8 +21,8 @@
 
 .. data:: flax_profile
 
-    Whether to automatically wrap Module methods with named_call for profiles.
-    Set by the FLAX_PROFILE environment variable.  Defaults to False.
+    Whether to automatically wrap Module methods with jax.named_scope for
+    profiles.  Set by the FLAX_PROFILE environment variable.  Defaults to True.
 """
 
 import os
@@ -38,6 +38,8 @@ def bool_env(varname: str, default: bool) -> bool:
   Args:
     varname: the name of the variable
     default: the default boolean value
+  Returns:
+    boolean return value derived from defaults and environment.
   Raises: ValueError if the environment variable is anything else.
   """
   val = os.getenv(varname, str(default))
@@ -56,10 +58,8 @@ def bool_env(varname: str, default: bool) -> bool:
 # Whether to hide flax-internal stack frames from tracebacks.
 flax_filter_frames = bool_env('FLAX_FILTER_FRAMES', True)
 
-# Whether to automatically wrap Module methods with named_call for profiles.
-# We profile by default if JAX's dynamic name-stack based named_call is used.
-flax_profile = (bool_env('FLAX_PROFILE', False) or
-                bool_env('JAX_EXPERIMENTAL_NAME_STACK', False))
+# Whether to run Module methods under jax.named_scope for profiles.
+flax_profile = bool_env('FLAX_PROFILE', True)
 
 # Whether to use the lazy rng implementation
 flax_lazy_rng = bool_env('FLAX_LAZY_RNG', True)

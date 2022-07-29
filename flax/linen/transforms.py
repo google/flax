@@ -39,6 +39,7 @@ from flax.linen.module import Module
 from flax.linen.module import Variable
 from flax.linen.module import wrap_method_once
 from flax.linen.module import _get_unbound_fn
+from flax.linen.module import _derive_profiling_name
 import jax
 
 traceback_util.register_exclusion(__file__)
@@ -1296,9 +1297,11 @@ def custom_vjp(fn: Callable[..., Any],
       multi_scope=False)
 
 
-# Special case of decorator_lift_transform to handle named calls for profiling.
 def named_call(class_fn, force=True):
   """Labels a method for labelled traces in profiles.
+
+  Note that it is better to use the `jax.named_scope` context manager directly
+  to add names to JAX's metadata name stack.
 
   Args:
     class_fn: The class method to label.
@@ -1307,44 +1310,12 @@ def named_call(class_fn, force=True):
   Returns:
     A wrapped version of ``class_fn`` that is labeled.
   """
-  if (hasattr(jax.config, 'jax_experimental_name_stack') and
-      jax.config.jax_experimental_name_stack):
-    # Use JAX's improved dynamic name-stack named_call.
-    # No transform boundary needed!
-    @functools.wraps(class_fn)
-    def wrapped_fn(self, *args, **kwargs):
-      fn_name = class_fn.__name__
-      method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
-      module_name = self.name or self.__class__.__name__
-      full_name = f'{module_name}{method_suffix}'
-      return jax.named_call(class_fn, name=full_name)(self, *args, **kwargs)
-  else:
-    # Use JAX's old purely-functional call-based named_call.
-    # Due to the ordering of method decorators, we must wrap the class_fn
-    # with the module state management wrapper first to maintain Module state
-    # correctly.
-    prewrapped_fn = wrap_method_once(class_fn)
-    @functools.wraps(prewrapped_fn)
-    def wrapped_fn(self, *args, **kwargs):
-      if ((not force and not linen_module._use_named_call)
-          or self._state.in_setup):
-        return prewrapped_fn(self, *args, **kwargs)
-      fn_name = class_fn.__name__
-      method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
-      module_name = self.name or self.__class__.__name__
-      full_name = f'{module_name}{method_suffix}'
-      # make a scope-function to transform
-      def core_fn(scopes, *args, **kwargs):
-        cloned, args, kwargs = set_module_scopes(self, args, kwargs, scopes)
-        object.__setattr__(cloned, '_state', self._state.export())
-        res = prewrapped_fn(cloned, *args, **kwargs)
-        self._state.reimport(cloned._state)
-        _test_transformed_return_values(res, fn_name)
-        return res
-      # here we apply the given lifting transform to the scope-ingesting fn
-      trafo_fn = lift.named_call(core_fn, full_name)
-      module_scopes, args, kwargs = get_module_scopes(self, args, kwargs)
-      return trafo_fn(module_scopes, *args, **kwargs)
-
+  # We use JAX's dynamic name-stack named_call. No transform boundary needed!
+  @functools.wraps(class_fn)
+  def wrapped_fn(self, *args, **kwargs):
+    if ((not force and not linen_module._use_named_call)  # pylint: disable=protected-access
+        or self._state.in_setup):  # pylint: disable=protected-access
+      return class_fn(self, *args, **kwargs)
+    full_name = _derive_profiling_name(self, class_fn)
+    return jax.named_call(class_fn, name=full_name)(self, *args, **kwargs)
   return wrapped_fn
-

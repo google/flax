@@ -588,19 +588,11 @@ class GDARestoreTargetRequiredError(FlaxError):
 #################################################
 
 class TransformedMethodReturnValueError(FlaxError):
-  """
-  Transformed Module methods cannot return other Modules or Variables.
+  """Transformed Module methods cannot return other Modules or Variables."""
 
-  This commonly occurs when ``@nn.named_call`` is automatically applied to
-  helper constructor methods when profiling is enabled (``FLAX_PROFILE=true``
-  environment variable or via ``nn.enable_named_call()``), and can be mitigated
-  by using the ``@nn.nowrap`` decorator to prevent automatic wrapping.
-  """
   def __init__(self, name):
     super().__init__(
-      f'Transformed module method {name} cannot return Modules or Variables. '
-      f'For helper constructor methods use the @nn.nowrap decorator to prevent '
-      f'decoration by the automatic named_call transform.')
+        f'Transformed module method {name} cannot return Modules or Variables.')
 
 
 class TransformTargetError(FlaxError):

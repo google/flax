@@ -581,7 +581,7 @@ class Scope:
       fn: the function to partially apply the child Scope to.
       name: optional name of the child.
       prefix: prefix used for generating name if it is `None`.
-      named_call: if true, `fn` will be wrapped with `lift.named_call`. The XLA
+      named_call: if true, `fn` will be run under `jax.named_scope`. The XLA
         profiler will use this to name tag the computation.
       **partial_kwargs: additional kwargs partially applied to `fn`.
 
@@ -593,15 +593,16 @@ class Scope:
         prefix = fn.__name__ + '_' if hasattr(fn, '__name__') else ''
       name = self.default_name(prefix)
     scope = self.push(name)
-    if named_call:
-      # We import named_call at runtime to avoid a circular import issue.
-      from . import lift  # pylint: disable=g-import-not-at-top
-      fn = lift.named_call(fn, name)
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
       kwargs = dict(partial_kwargs, **kwargs)
-      return fn(scope.rewound(), *args, **kwargs)
+      if named_call:
+        with jax.named_scope(name):
+          res = fn(scope.rewound(), *args, **kwargs)
+      else:
+        res = fn(scope.rewound(), *args, **kwargs)
+      return res
 
     return wrapper
 

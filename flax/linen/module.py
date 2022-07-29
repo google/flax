@@ -142,15 +142,26 @@ _unspecified_parent = _Sentinel()
 _use_named_call = config.flax_profile
 
 
+def _derive_profiling_name(module, fn):
+  def _get_fn_name(fn):
+    if isinstance(fn, functools.partial):
+      return _get_fn_name(fn.func)
+    return fn.__name__
+  fn_name = _get_fn_name(fn)
+  method_suffix = f'.{fn_name}' if fn_name != '__call__' else ''
+  module_name = module.name or module.__class__.__name__
+  return f'{module_name}{method_suffix}'
+
+
 def enable_named_call():
   """Enables named call wrapping for labelling profile traces.
 
   When named call wrapping is enabled all JAX ops executed in a Module
-  will be wrapped with ``jax.named_call``. The ``Module`` class name will
+  will be run under ``jax.named_scope``. The ``Module`` class name will
   show up around the operations belonging to that Module in the
   Tensorboard profiling UI, simplifying the profiling process.
 
-  Note that ``jax.named_call`` only works for
+  Note that ``jax.named_scope`` only works for
   compiled functions (e.g.: using jax.jit or jax.pmap).
   """
   global _use_named_call
@@ -281,9 +292,6 @@ def nowrap(fun: _CallableT) -> _CallableT:
   with the state handler or a separate named_call transform.
 
   This is needed in several concrete instances:
-   - if you have a helper method that returns Modules or Variables to prevent
-     it from being functionalized by named_call. (Functionalized methods
-     can't return Modules/Variables.)
    - if you're subclassing a method like Module.param and don't want this
      overriden core function decorated with the state management wrapper.
    - If you want a method to be callable from an unbound Module (e.g.: a
@@ -608,12 +616,7 @@ class Module:
       method = getattr(cls, key)
       if hasattr(method, 'nowrap'):
         continue
-      wrapped_method = wrap_method_once(method)
-      if key != 'setup':
-        # We import named_call at runtime to avoid a circular import issue.
-        from flax.linen.transforms import named_call  # pylint: disable=g-import-not-at-top
-        wrapped_method = named_call(wrapped_method, force=False)
-      setattr(cls, key, wrapped_method)
+      setattr(cls, key, wrap_method_once(method))
     return cls
 
   def _call_wrapped_method(self, fun, args, kwargs):
@@ -649,7 +652,11 @@ class Module:
       self._state.in_compact_method = True
     _context.module_stack.append(self)
     try:
-      y = fun(self, *args, **kwargs)
+      if _use_named_call:
+        with jax.named_scope(_derive_profiling_name(self, fun)):
+          y = fun(self, *args, **kwargs)
+      else:
+        y = fun(self, *args, **kwargs)
       if _context.capture_stack:
         filter_fn = _context.capture_stack[-1]
         if filter_fn and filter_fn(self, fun_name):
@@ -880,7 +887,7 @@ class Module:
   def _name_taken(self,
                   name: str,
                   module: 'Module' = None,
-                  reuse_scopes : bool = False) -> bool:
+                  reuse_scopes: bool = False) -> bool:
     if name in _all_names_on_object(self):
       val = getattr(self, name, None)
       if module is not None and val is module:

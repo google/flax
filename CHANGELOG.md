@@ -6,7 +6,8 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
 -
 -
--
+- Switched to using `jax.named_scope` for all profile naming, cut some pointless
+  stack traces out.
 -
 -
 -
