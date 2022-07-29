@@ -61,6 +61,9 @@ SCHEME_RE = re.compile('^(?P<scheme>[a-z][a-z0-9.+-]+://)?(?P<path>.*)', re.I)
 # with non-GDA data. So their occurrences in the target pytree will be replaced
 # by this string placeholder.
 GDA_PH = '//GDAPlaceholder:'
+# Add a copy-success file to GDA directory to indicate the GDA save is complete.
+# We need this for GCS because GCS's directory move is not atomic.
+COMMIT_SUCCESS_FILE = 'commit_success.txt'
 
 PyTree = Any
 
@@ -99,16 +102,28 @@ def _split_gdas(
   return target, gda_targets
 
 
-def on_commit_callback(temp_path, final_path):
-  logging.info('Renaming %s to %s', temp_path, final_path)
-  gfile.rename(temp_path, final_path)
-  logging.info('Finished saving checkpoint to `%s`.', final_path)
+def on_commit_callback(tmp_path, final_path):
+  if tmp_path == final_path:
+    with gfile.GFile(
+        os.path.join(final_path, COMMIT_SUCCESS_FILE), 'w') as f:
+      f.write(f'Checkpoint commit was successful to {final_path}')
+  else:
+    logging.info('Renaming %s to %s', tmp_path, final_path)
+    gfile.rename(tmp_path, final_path)
+    logging.info('Finished saving checkpoint to `%s`.', final_path)
 
 
 def _save_gdas(gda_manager,
                gda_targets: List[Tuple[GlobalDeviceArray, str]],
                tmp_path: str, final_path: str):
   gda_list, gda_subpaths = zip(*gda_targets)
+  # If the checkpoint directory is a GCS directory, then keep the final
+  # checkpoint directory as the temporary checkpoint directory. This is because
+  # renames are not atomic on GCS. When restoring check for the existence of a
+  # success file.
+  # TODO: figure out a way to unit-test the behavior.
+  if tmp_path.startswith('gs://'):
+    tmp_path = final_path
   ts_specs = [
       get_tensorstore_spec(os.path.join(tmp_path, x)) for x in gda_subpaths
   ]
@@ -125,18 +140,31 @@ def _restore_gdas(state_dict,
                   step: Optional[Union[int, float]] = None,
                   gda_manager: Optional[Any] = None):
 
+  def _check_gda_errors():
+    if not gda_manager:
+      raise errors.GDACheckpointingRequiredError(ckpt_path, step)
+    if not target:
+      raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
+
+  def _safe_deserialize(
+      target_gdas: List[GlobalDeviceArray], gda_paths: List[str],
+      gda_manager: GlobalAsyncCheckpointManager) -> List[GlobalDeviceArray]:
+    gda_manager.wait_until_finished()
+    # Check if reading from GCS and the GDA dir is potentially corrupted.
+    if ckpt_path.startswith('gs://') and not gfile.exists(
+        os.path.join(ckpt_path + '_gda', COMMIT_SUCCESS_FILE)):
+      raise errors.GDARestoreDataCorruptedError(step, ckpt_path)
+    meshes = [x.mesh for x in target_gdas]
+    partition_specs = [x.mesh_axes for x in target_gdas]
+    ts_specs = [get_tensorstore_spec(x) for x in gda_paths]
+    return gda_manager.deserialize(meshes, partition_specs, ts_specs)
+
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
     if isinstance(target, GlobalDeviceArray) and isinstance(
         state_dict, str) and state_dict.startswith(GDA_PH):
-      if not gda_manager:
-        raise errors.GDACheckpointingRequiredError(ckpt_path, step)
-      if not target:
-        raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
-      gda_list = gda_manager.deserialize(
-          [target.mesh], [target.mesh_axes],
-          [get_tensorstore_spec(ckpt_path + '_gda')])
-      return gda_list[0]
+      _check_gda_errors()
+      return _safe_deserialize([target], [ckpt_path + '_gda'], gda_manager)[0]
     return state_dict
 
   # Check if a GDA is present in the restored pytree
@@ -148,19 +176,14 @@ def _restore_gdas(state_dict,
       gda_paths.append((key, os.path.join(ckpt_path+'_gda', subpath)))
 
   if gda_paths:
-    if not gda_manager:
-      raise errors.GDACheckpointingRequiredError(ckpt_path, step)
-    if not target:
-      raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
+    _check_gda_errors()
     target_flattened = traverse_util.flatten_dict(
         serialization.to_state_dict(target), keep_empty_nodes=True)
     target_gdas = [target_flattened[x[0]] for x in gda_paths]
     if not all(isinstance(x, GlobalDeviceArray) for x in target_gdas):
       raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
-    meshes = [x.mesh for x in target_gdas]
-    partition_specs = [x.mesh_axes for x in target_gdas]
-    ts_specs = [get_tensorstore_spec(x[1]) for x in gda_paths]
-    gda_list = gda_manager.deserialize(meshes, partition_specs, ts_specs)
+    gda_list = _safe_deserialize(target_gdas, [x[1] for x in gda_paths],
+                                 gda_manager)
     for gda, (key, _) in zip(gda_list, gda_paths):
       flattened[key] = gda
   state_dict = traverse_util.unflatten_dict(flattened)

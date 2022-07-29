@@ -564,7 +564,9 @@ class GDACheckpointingRequiredError(FlaxError):
   """
   def __init__(self, path, step):
     super().__init__(
-        f'Checkpoint failed at step: "{step}" and path: "{path}": Target contains a GlobalDeviceArray should be saved/restored with a GlobalAsyncCheckpointManager.'
+        f'Checkpoint failed at step: "{step}" and path: "{path}": Target '
+        'contains a GlobalDeviceArray should be saved/restored with a '
+        'GlobalAsyncCheckpointManager.'
     )
 
 
@@ -579,7 +581,23 @@ class GDARestoreTargetRequiredError(FlaxError):
 
   def __init__(self, path, step):
     super().__init__(
-        f'Restore checkpoint failed at step: "{step}" and path: "{path}": Checkpoints containing a GlobalDeviceArray need to be restored with a valid target.'
+        f'Restore checkpoint failed at step: "{step}" and path: "{path}": '
+        'Checkpoints containing a GlobalDeviceArray need to be restored with '
+        'a valid target.'
+    )
+
+class GDARestoreDataCorruptedError(FlaxError):
+  """A GDA stored in Google Cloud Storage doesn't contain
+  a "commit_success.txt" file, which should be written at the end of the save.
+
+  Failure of finding it could indicate a corruption of your saved GDA data.
+  """
+
+  def __init__(self, step, path):
+    super().__init__(
+        f'Restore checkpoint failed at step: "{step}" on GlobalDeviceArray at '
+        f' "{path}": No "commit_success.txt" found on this GDA directory. '
+        'Was its save halted before completion?'
     )
 
 
