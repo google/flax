@@ -40,6 +40,7 @@ from  flax.training import train_state
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
+import flax.optim
 import optax
 ```
 

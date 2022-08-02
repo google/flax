@@ -85,10 +85,10 @@ jobs:
         pip install -r docs/requirements.txt
     - name: Test testcode blocks in documentation
       run: |
-        sphinx-build -M doctest docs docs/_build
+        sphinx-build -M doctest docs docs/_build -T
     - name: Build documentation
       run: |
-        sphinx-build -M html docs docs/_build
+        sphinx-build -M html docs docs/_build -T
   run-tests:
     name: Run tests
     runs-on: ubuntu-latest

@@ -495,7 +495,7 @@ class Scope:
     """
     self._check_valid()
     scope = Scope(self._variables, self.rngs, self.name, self.mutable,
-                  self.parent, flags=self.flags)
+                  self.parent, path=self.path, flags=self.flags)
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
     return scope
