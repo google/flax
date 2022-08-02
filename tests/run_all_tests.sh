@@ -45,7 +45,7 @@ handle_errors () {
 
 # Run embedded tests inside docs
 if $RUN_DOCTEST; then
-  sphinx-build -M doctest docs docs/_build
+  sphinx-build -M doctest docs docs/_build -T
 fi
 
 # Run some test on separate process, avoiding device configs poluting each other
