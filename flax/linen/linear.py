@@ -603,7 +603,7 @@ class ConvTranspose(Module):
       total_pad = [
           ((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs
       ]
-      y = np.pad(y, [(0, 0)] + total_pad + [(0, 0)])
+      y = jnp.pad(y, [(0, 0)] + total_pad + [(0, 0)])
       # Wrap the result periodically around each spatial dimension,
       # one by one.
       for i in range(1, y.ndim - 1):

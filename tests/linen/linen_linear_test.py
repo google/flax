@@ -773,6 +773,21 @@ class LinearTest(parameterized.TestCase):
     )
     np.testing.assert_allclose(y, correct_ans)
 
+  def test_circular_conv_transpose_2d_with_vmap(self):
+    layer = nn.ConvTranspose(features=5, kernel_size=(3,), padding="CIRCULAR")
+
+    # this is ok
+    sample_input = jnp.ones((1, 32, 2))
+    out, vars = layer.init_with_output(jax.random.PRNGKey(0), sample_input)
+    self.assertEqual(out.shape, (1, 32, 5))
+
+    batch_input = jnp.ones((8, 32, 2))
+    batch_apply = jax.vmap(layer.apply, in_axes=(None, 0))
+
+    # this breaks with the error provided
+    batch_out = batch_apply(vars, batch_input)
+    self.assertEqual(batch_out.shape, (8, 32, 5))
+
   def test_circular_conv_transpose_1d_custom(self):
     """Test 1d transposed convolution with circular padding and a stride."""
     rng = dict(params=random.PRNGKey(0))
