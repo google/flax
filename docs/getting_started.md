@@ -403,4 +403,4 @@ Congrats! You made it to the end of the annotated MNIST example. You can revisit
 the same example, but structured differently as a couple of Python modules, test
 modules, config files, another Colab, and documentation in Flax's Git repo:
 
-https://github.com/google/flax/tree/main/examples/mnist
+[https://github.com/google/flax/tree/main/examples/mnist](https://github.com/google/flax/tree/main/examples/mnist)
