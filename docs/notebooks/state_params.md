@@ -103,7 +103,7 @@ def update_step(apply_fn, x, opt_state, params, state):
       loss, has_aux=True)(params)
   updates, opt_state = tx.update(grads, opt_state)  # Defined below.
   params = optax.apply_updates(params, updates)
-  return opt_state, params, state
+  return opt_state, params, updated_state
 ```
 
 +++ {"id": "zM_EyHqwVlEw"}
