@@ -45,6 +45,7 @@ tests_require = [
     "opencv-python",
     "pytest",
     "pytest-cov",
+    "pytest-custom_exit_code",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
     "pytype",
     "sentencepiece",  # WMT example.
