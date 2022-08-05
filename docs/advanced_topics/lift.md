@@ -284,11 +284,15 @@ Please open a GitHub issue when you find a use case that is not supported yet by
 | scan | ✅ | Carry variables cannot be initialized inside the scan body. |
 | remat | ✅ |  |
 | jit | ✅ | Current implementation might cause unnecessary recompilation. |
-| pmap | ❌ |  |
-| grad | ❌ |  |
-| xmap | ❌ |  |
-| custom_vjp | ❌ |  |
+| jvp | ✅ |  |
+| vjp | ✅ |  |
+| custom_vjp | ✅ |  |
 | custom_jvp | ❌ |  |
+| while_loop | ✅ | Carry variables cannot be initialized inside the while_loop body. |
+| cond | ✅ | Variable initialization / mutation must structurally match across branches. |
+| switch | ✅ | Variable initialization / mutation must structurally match across branches. |
+| pmap | ❌ |  |
+| xmap | ❌ |  |
 
 References:
 - [Linen transforms documentation](https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.linen.transforms).
