@@ -45,3 +45,18 @@ Early Stopping
 
 .. autoclass:: EarlyStopping
     :members: reset, update
+
+Common Utilities
+------------------------
+
+.. currentmodule:: flax.training.common_utils
+
+.. autofunction:: shard
+
+.. autofunction:: shard_prng_key
+
+.. autofunction:: stack_forest
+
+.. autofunction:: get_metrics
+
+.. autofunction:: onehot
