@@ -88,7 +88,6 @@ jobs:
         sphinx-build -M doctest docs docs/_build -T
         # test docstrings
         pytest -n auto flax --doctest-modules --suppress-no-test-exit-code
-          
     - name: Build documentation
       run: |
         sphinx-build -M html docs docs/_build -T
