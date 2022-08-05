@@ -15,6 +15,8 @@
 """Write Summaries from JAX for use with Tensorboard.
 """
 
+import contextlib
+import functools
 import os
 
 # pylint: disable=g-import-not-at-top
@@ -53,14 +55,30 @@ def _flatten_dict(input_dict, parent_key='', sep='.'):
   return dict(items)
 
 
+@contextlib.contextmanager
+def _as_default(summary_writer: tf.summary.SummaryWriter, auto_flush: bool):
+  """No-flush variation of summary_writer.as_default()."""
+  context_manager = summary_writer.as_default()
+  try:
+    context_manager.__enter__()
+    yield summary_writer
+  finally:
+    old_flush = summary_writer.flush
+    new_flush = old_flush if auto_flush else lambda: None
+    summary_writer.flush = new_flush
+    context_manager.__exit__()
+    summary_writer.flush = old_flush
+
+
 class SummaryWriter:
   """Saves data in event and summary protos for tensorboard."""
 
-  def __init__(self, log_dir):
+  def __init__(self, log_dir, auto_flush=True):
     """Create a new SummaryWriter.
 
     Args:
       log_dir: path to record tfevents files in.
+      auto_flush: if true, flush after every reported metric.
     """
     log_dir = os.fspath(log_dir)
 
@@ -68,7 +86,8 @@ class SummaryWriter:
     if not tf.io.gfile.isdir(log_dir):
       tf.io.gfile.makedirs(log_dir)
 
-    self._event_writer = tf.summary.create_file_writer(log_dir, 10, 120, None)
+    self._event_writer = tf.summary.create_file_writer(log_dir)
+    self._as_default = functools.partial(_as_default, auto_flush=auto_flush)
     self._closed = False
 
   def close(self):
@@ -90,7 +109,7 @@ class SummaryWriter:
       step: int: training step
     """
     value = float(np.array(value))
-    with self._event_writer.as_default():
+    with self._as_default(self._event_writer):
       tf.summary.scalar(name=tag, data=value, step=step)
 
   def image(self, tag, image, step, max_outputs=3):
@@ -122,7 +141,7 @@ class SummaryWriter:
 
     # Convert to tensor value as tf.summary.image expects data to be a tensor.
     image = tf.convert_to_tensor(image)
-    with self._event_writer.as_default():
+    with self._as_default(self._event_writer):
       tf.summary.image(name=tag, data=image, step=step, max_outputs=max_outputs)
 
   def audio(self, tag, audiodata, step, sample_rate=44100, max_outputs=3):
@@ -145,7 +164,7 @@ class SummaryWriter:
 
     # Convert to tensor value as tf.summary.audio expects data to be a tensor.
     audio = tf.convert_to_tensor(audiodata, dtype=tf.float32)
-    with self._event_writer.as_default():
+    with self._as_default(self._event_writer):
       tf.summary.audio(
           name=tag, data=audio, sample_rate=sample_rate, step=step,
           max_outputs=max_outputs, encoding='wav')
@@ -161,7 +180,7 @@ class SummaryWriter:
     """
     values = np.array(values)
     values = np.reshape(values, -1)
-    with self._event_writer.as_default():
+    with self._as_default(self._event_writer):
       tf.summary.histogram(name=tag, data=values, step=step, buckets=bins)
 
   def text(self, tag, textdata, step):
@@ -175,7 +194,7 @@ class SummaryWriter:
     """
     if not isinstance(textdata, (str, bytes)):
       raise ValueError('`textdata` should be of the type `str` or `bytes`.')
-    with self._event_writer.as_default():
+    with self._as_default(self._event_writer):
       tf.summary.text(name=tag, data=tf.constant(textdata), step=step)
 
   def write(self, tag, tensor, step, metadata=None):
@@ -190,7 +209,7 @@ class SummaryWriter:
       metadata: Optional SummaryMetadata, as a proto or serialized bytes.
     Note: markdown formatting is rendered by tensorboard.
     """
-    with self._event_writer.as_default():
+    with self._as_default(self._event_writer):
       tf.summary.write(
           tag=tag,
           tensor=tensor,
@@ -204,5 +223,5 @@ class SummaryWriter:
       hparams: Flat mapping from hyper parameter name to value.
     """
 
-    with self._event_writer.as_default():
+    with self._as_default(self._event_writer):
       hparams_api.hparams(hparams=_flatten_dict(hparams))

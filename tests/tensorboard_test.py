@@ -14,6 +14,7 @@
 
 """Tests for flax.metrics.tensorboard."""
 import itertools
+import pathlib
 import tempfile
 
 from absl.testing import absltest
@@ -29,6 +30,19 @@ from flax.metrics.tensorboard import SummaryWriter, _flatten_dict
 def _process_event(event):
   for value in event.summary.value:
     yield {'wall_time': event.wall_time, 'step': event.step, 'value': value}
+
+
+def _disk_usage(path: pathlib.Path):
+  """Recursively computes the disk usage of a directory."""
+  if path.is_file():
+    return path.stat().st_size
+  elif path.is_dir():
+    size_bytes = 0
+    for file in path.iterdir():
+      size_bytes += _disk_usage(file)
+    return size_bytes
+  else:
+    raise NotImplementedError("What filetype is {file}?")
 
 
 class TensorboardTest(absltest.TestCase):
@@ -314,6 +328,25 @@ class TensorboardTest(absltest.TestCase):
     }
 
     self.assertDictEqual(result_hparams, expected_hparams)
+
+  def test_auto_flush(self):
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    summary_writer = SummaryWriter(tmp_dir, auto_flush=True)
+    summary_writer.scalar("metric", 123, 1)
+    filesize_before_flush = _disk_usage(tmp_dir)
+    summary_writer.flush()
+    filesize_after_flush = _disk_usage(tmp_dir)
+    self.assertEqual(filesize_before_flush, filesize_after_flush)
+
+  def test_no_auto_flush(self):
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    summary_writer = SummaryWriter(tmp_dir, auto_flush=False)
+    summary_writer.scalar("metric", 123, 1)
+    filesize_before_flush = _disk_usage(tmp_dir)
+    summary_writer.flush()
+    filesize_after_flush = _disk_usage(tmp_dir)
+    self.assertLess(filesize_before_flush, filesize_after_flush)
+
 
 if __name__ == '__main__':
   absltest.main()
