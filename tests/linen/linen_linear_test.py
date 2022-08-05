@@ -204,6 +204,25 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((1, 6, 4), expected))
 
 
+  @parameterized.product(
+      use_bias=(True, False))
+  def test_multibatch_input_conv(self, use_bias):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((2, 5, 8, 3))
+    conv_module = nn.Conv(
+        features=4,
+        use_bias=use_bias,
+        kernel_size=(3,),
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+    self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
+    expected = 10. if use_bias else 9.
+    np.testing.assert_allclose(y, np.full((2, 5, 6, 4), expected))
+
+
   def test_conv_local(self):
     rng = dict(params=random.PRNGKey(0))
     x = jnp.ones((1, 8, 2))
@@ -638,6 +657,38 @@ class LinearTest(parameterized.TestCase):
                              [10., 10., 10., 10.],
                              [ 7.,  7.,  7.,  7.],
                              [ 4.,  4.,  4.,  4.]]])
+    if not use_bias:
+      correct_ans -= 1.
+    np.testing.assert_allclose(y, correct_ans)
+
+  @parameterized.product(
+      use_bias=(True, False),
+  )
+  def test_multibatch_input_conv_transpose(self, use_bias):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((2, 5, 8, 3))
+    conv_transpose_module = nn.ConvTranspose(
+        features=4,
+        use_bias=use_bias,
+        kernel_size=(3,),
+        padding='VALID',
+        kernel_init=initializers.ones,
+        bias_init=initializers.ones,
+    )
+    y, initial_params = conv_transpose_module.init_with_output(rng, x)
+    self.assertEqual(initial_params['params']['kernel'].shape, (3, 3, 4))
+    correct_ans = np.array([[[ 4.,  4.,  4.,  4.],
+                             [ 7.,  7.,  7.,  7.],
+                             [10., 10., 10., 10.],
+                             [10., 10., 10., 10.],
+                             [10., 10., 10., 10.],
+                             [10., 10., 10., 10.],
+                             [10., 10., 10., 10.],
+                             [10., 10., 10., 10.],
+                             [ 7.,  7.,  7.,  7.],
+                             [ 4.,  4.,  4.,  4.]]])
+    correct_ans = np.repeat(correct_ans[None], repeats=2, axis=0)
+    correct_ans = np.repeat(correct_ans, repeats=5, axis=1)
     if not use_bias:
       correct_ans -= 1.
     np.testing.assert_allclose(y, correct_ans)
