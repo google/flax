@@ -46,6 +46,8 @@ handle_errors () {
 # Run embedded tests inside docs
 if $RUN_DOCTEST; then
   sphinx-build -M doctest docs docs/_build -T
+  # test docstrings
+  pytest -n auto flax --doctest-modules --suppress-no-test-exit-code
 fi
 
 # Run some test on separate process, avoiding device configs poluting each other
