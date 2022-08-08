@@ -279,10 +279,11 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     async_manager: if defined, the save will run without blocking the main
       thread. Only works for single host. Note that an ongoing save will still
       block subsequent saves, to make sure overwrite/keep logic works correctly.
-    gda_manager: required if target contains a JAX GlobalDeviceArray. Type 
+    gda_manager: required if target contains a JAX GlobalDeviceArray. Type
       should be GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will save the GDAs to a separate subdirectory with postfix 
-      "_gda" asynchronously. Same as async_manager, this will block subsequent saves.
+      correctly). Will save the GDAs to a separate subdirectory with postfix
+      "_gda" asynchronously. Same as async_manager, this will block subsequent
+      saves.
   Returns:
     Filename of saved checkpoint.
   """
@@ -416,6 +417,7 @@ def restore_checkpoint(
     step: Optional[Union[int, float]] = None,
     prefix: str = 'checkpoint_',
     parallel: bool = True,
+    strict: bool = False,
     gda_manager: Optional[Any] = None) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
@@ -432,13 +434,14 @@ def restore_checkpoint(
     ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
     target: matching object to rebuild via deserialized state-dict. If None, the
       deserialized state-dict is returned as-is.
-    step: int or float: step number to load or None to load latest. If specified,
-      ckpt_dir must be a directory.
+    step: int or float: step number to load or None to load latest. If
+      specified, ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
-    gda_manager: required if checkpoint contains a JAX GlobalDeviceArray. Type 
+    strict: bool: if true, explicitly error if a checkpoint file isn't found.
+    gda_manager: required if checkpoint contains a JAX GlobalDeviceArray. Type
       should be GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will read the GDAs from the separate subdirectory with postfix 
+      correctly). Will read the GDAs from the separate subdirectory with postfix
       "_gda".
 
   Returns:
@@ -456,15 +459,23 @@ def restore_checkpoint(
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
     if not gfile.exists(ckpt_dir):
-      logging.info('Found no checkpoint directory at %s', ckpt_dir)
+      if strict:
+        raise ValueError(f'Found no checkpoints at {ckpt_dir}')
+      else:
+        logging.warning('Found no checkpoints at %s, returning template.',
+                        ckpt_dir)
       return target
     if not gfile.isdir(ckpt_dir):
       ckpt_path = ckpt_dir
     else:
       ckpt_path = latest_checkpoint(ckpt_dir, prefix)
       if not ckpt_path:
-        logging.info('Found no checkpoint files in %s with prefix %s',
-                     ckpt_dir, prefix)
+        if strict:
+          raise ValueError(f'Found no checkpoint files in {ckpt_dir} '
+                           f'with prefix {prefix}')
+        else:
+          logging.warning('Found no checkpoint files in %s with prefix %s',
+                          ckpt_dir, prefix)
         return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
@@ -490,7 +501,7 @@ def restore_checkpoint(
       pool = thread.ThreadPoolExecutor(pool_size)
       results = pool.map(read_chunk, range(int(num_bufs) + 1))
       pool.shutdown(wait=False)
-      logging.debug(f'results: {list(results)}')
+      logging.debug('results: %s', list(results))
     else:
       checkpoint_contents = fp.read()
 

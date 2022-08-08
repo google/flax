@@ -336,6 +336,20 @@ class CheckpointsTest(parameterized.TestCase):
             },
         })
 
+  def test_save_restore_checkpoints_strict(self):
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    test_object0 = {'a': np.array([0, 0, 0], np.int32),
+                    'b': np.array([0, 0, 0], np.int32)}
+    with self.assertRaises(ValueError):
+      _ = checkpoints.restore_checkpoint(
+          tmp_dir, test_object0, prefix='test_', strict=True)
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    sub_dir = tmp_dir / 'subdir'
+    sub_dir.mkdir()
+    with self.assertRaises(ValueError):
+      _ = checkpoints.restore_checkpoint(
+          sub_dir, test_object0, prefix='test_', strict=True)
+
 
 if __name__ == '__main__':
   absltest.main()
