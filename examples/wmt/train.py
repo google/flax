@@ -29,9 +29,9 @@ from clu import metric_writers
 from clu import periodic_actions
 from flax import jax_utils
 from flax import linen as nn
-from flax.optim import dynamic_scale as dynamic_scale_lib
 from flax.training import checkpoints
 from flax.training import common_utils
+from flax.training import dynamic_scale as dynamic_scale_lib
 from flax.training import train_state
 import jax
 import jax.numpy as jnp
