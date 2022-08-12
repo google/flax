@@ -271,6 +271,7 @@ As previously mentioned, `jax.grad` only works for scalar-valued functions. JAX 
 ### Jacobian-Vector product
 
 Let's consider a map $f:\mathbb{R}^n\rightarrow\mathbb{R}^m$. As a reminder, the differential of f is the map $df:\mathbb{R}^n \rightarrow \mathcal{L}(\mathbb{R}^n,\mathbb{R}^m)$ where $\mathcal{L}(\mathbb{R}^n,\mathbb{R}^m)$ is the space of linear maps from $\mathbb{R}^n$ to $\mathbb{R}^m$ (hence $df(x)$ is often represented as a Jacobian matrix). The linear approximation of f at point $x$ reads:
+
 $$f(x+v) = f(x) + df(x)\bullet v + o(v)$$
 
 The $\bullet$ operator means you are applying the linear map $df(x)$ to the vector v.
