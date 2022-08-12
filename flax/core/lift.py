@@ -519,9 +519,11 @@ def jvp(
 def vmap(fn: Callable[..., Any],
          variable_axes: Mapping[CollectionFilter, InOutAxis],
          split_rngs: Mapping[PRNGSequenceFilter, bool],
-         in_axes=0, out_axes=0,
+         in_axes=0,
+         out_axes=0,
          axis_size: Optional[int] = None,
-         axis_name: Optional[str] = None) -> Callable[..., Any]:
+         axis_name: Optional[str] = None,
+         spmd_axis_name: Optional[str] = None) -> Callable[..., Any]:
   """A lifted version of ``jax.vmap``.
 
   See ``jax.vmap`` for the unlifted batch transform in Jax.
@@ -569,6 +571,9 @@ def vmap(fn: Callable[..., Any],
     axis_name: Specifies a name for the batch axis. Can be used together
       with parallel reduction primitives (e.g. `jax.lax.pmean`,
       `jax.lax.ppermute`, etc.)
+    spmd_axis_name: Axis name added to any pjit sharding constraints appearing
+      in `fn`. See also
+      https://github.com/google/flax/blob/main/flax/linen/partitioning.py.
 
   Returns:
     A vectorized version of the input scope function.
@@ -606,10 +611,13 @@ def vmap(fn: Callable[..., Any],
         tree_map_rngs(split_fn, rng_group) if split else rng_group
         for rng_group, split in zip(rng_groups, rng_splits))
 
-    @functools.partial(jax.vmap,
-                       in_axes=(variable_in_axes, rng_axes, in_axes),
-                       out_axes=(out_axes, variable_out_axes),
-                       axis_name=axis_name, axis_size=axis_size)
+    @functools.partial(
+        jax.vmap,
+        in_axes=(variable_in_axes, rng_axes, in_axes),
+        out_axes=(out_axes, variable_out_axes),
+        axis_name=axis_name,
+        axis_size=axis_size,
+        spmd_axis_name=spmd_axis_name)
     @functools.wraps(fn)
     def mapped(variable_groups, rng_groups, args):
       scope = scope_fn(variable_groups, rng_groups)

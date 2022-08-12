@@ -626,6 +626,7 @@ def vmap_with_axes(target: flax.linen.transforms.Target,
                    axis_size: Optional[int] = None,
                    axis_name: Optional[str] = None,
                    partitioning_axis_names: Mapping[str, str] = {},
+                   spmd_axis_name: Optional[str] = None,
                    methods=None) -> flax.linen.transforms.Target:
   """Wrapped version of nn.vmap that handles logical axis metadata."""
 
@@ -644,6 +645,7 @@ def vmap_with_axes(target: flax.linen.transforms.Target,
       out_axes=out_axes,
       axis_size=axis_size,
       axis_name=axis_name,
+      spmd_axis_name=spmd_axis_name,
       methods=methods)
 
   for collection_name, axis in variable_axes.items():
