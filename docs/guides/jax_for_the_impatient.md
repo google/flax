@@ -226,6 +226,7 @@ JAX provides first-class support for gradients and automatic differentiation in 
 $$f(x) = \frac{1}{2} x^T x$$
 
 with the (known) gradient:
+
 $$\nabla f(x) = x$$
 
 ```{code-cell}
@@ -275,6 +276,7 @@ $$f(x+v) = f(x) + df(x)\bullet v + o(v)$$
 The $\bullet$ operator means you are applying the linear map $df(x)$ to the vector v.
 
 Even though you are rarely interested in computing the full Jacobian matrix representing the linear map $df(x)$ in a standard basis, you are often interested in the quantity $df(x)\bullet v$. This is exactly what `jax.jvp` is for, and `jax.jvp(f, (x,), (v,))` returns the tuple:
+
 $$(f(x), df(x)\bullet v)$$
 
 +++ {"id": "F5nI_gbeqj2y"}
@@ -303,11 +305,13 @@ print(jax.jvp(f, (x,),(v,)))
 
 ### Vector-Jacobian product
 Keeping our $f:\mathbb{R}^n\rightarrow\mathbb{R}^m$ it's often the case (for example, when you are working with a scalar loss function) that you are interested in the composition $x\rightarrow\phi\circ f(x)$ where $\phi :\mathbb{R}^m\rightarrow\mathbb{R}$. In that case, the gradient reads:
+
 $$\nabla(\phi\circ f)(x) = J_f(x)^T\nabla\phi(f(x))$$
 
 Where $J_f(x)$ is the Jacobian matrix of f evaluated at x, meaning that $df(x)\bullet v = J_f(x)v$.
 
 `jax.vjp(f,x)` returns the tuple:
+
 $$(f(x),v\rightarrow v^TJ_f(x))$$
 
 Keeping the same example as previously, using $v=(1,\ldots,1)$, applying the VJP function returned by JAX should return the $x$ value:
@@ -398,6 +402,7 @@ print("Batched example shape: ", jax.vmap(apply_matrix)(batched_x).shape)
 ## Full example: linear regression
 
 Let's implement one of the simplest models using everything we have seen so far: a linear regression. From a set of data points $\{(x_i,y_i), i\in \{1,\ldots, k\}, x_i\in\mathbb{R}^n,y_i\in\mathbb{R}^m\}$, we try to find a set of parameters $W\in \mathcal{M}_{m,n}(\mathbb{R}), b\in\mathbb{R}^m$ such that the function $f_{W,b}(x)=Wx+b$ minimizes the mean squared error:
+
 $$\mathcal{L}(W,b)\rightarrow\frac{1}{k}\sum_{i=1}^{k} \frac{1}{2}\|y_i-f_{W,b}(x_i)\|^2_2$$
 
 (Note: depending on how you cast the regression problem you might end up with different setups. Theoretically we should be minimizing the expectation of the loss wrt to the data distribution, however for the sake of simplicity here we consider only the sampled loss).
