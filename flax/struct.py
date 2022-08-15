@@ -67,8 +67,8 @@ def dataclass(clz: _T) -> _T:
     model_grad = jax.grad(some_loss_fn)(model)
 
   Note that dataclasses have an auto-generated ``__init__`` where
-  the arguments of the constructor and the attributed of the created
-  instance match 1:1. This correspondance is what makes these objects
+  the arguments of the constructor and the attributes of the created
+  instance match 1:1. This correspondence is what makes these objects
   valid containers that work with JAX transformations and
   more generally the `jax.tree_util` library.
 
