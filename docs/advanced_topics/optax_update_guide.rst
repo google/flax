@@ -7,7 +7,7 @@ Upgrading my Codebase to Optax
 We have proposed to replace :py:mod:`flax.optim` with `Optax
 <https://optax.readthedocs.io>`_ in 2021 with `FLIP #1009
 <https://github.com/google/flax/blob/main/docs/flip/1009-optimizer-api.md>`_ and
-the Flax optimizers are now *effectively deprecated*. This guide is targeted
+the Flax optimizers have been removed in v0.6.0 - this guide is targeted
 towards :py:mod:`flax.optim` users to help them update their code to Optax.
 
 See also Optax's quick start documentation:

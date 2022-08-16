@@ -15,10 +15,12 @@
 
 """Flax API."""
 
-from . import core as core
-from . import linen as linen
+from . import core
+from . import jax_utils
+from . import linen
+from . import serialization
+from . import traverse_util
+
 # DO NOT REMOVE - Marker for internal deprecated API.
 # DO NOT REMOVE - Marker for internal logging.
 from .version import __version__
-
-# Allow `import flax`; `flax.optim.[...]`, etc

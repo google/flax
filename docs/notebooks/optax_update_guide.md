@@ -27,7 +27,8 @@ https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html
 :id: I4PiwrnnO6Fw
 :tags: [skip-execution]
 
-!pip install -q flax optax
+# flax.optim was deprecated after 0.5.3
+!pip install -q --force-reinstall flax==0.5.3 optax
 ```
 
 ```{code-cell}

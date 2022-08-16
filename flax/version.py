@@ -13,5 +13,5 @@
 # limitations under the License.
 
 """Current Flax version at head on Github."""
-__version__ = "0.5.3"
+__version__ = "0.6.0"
 

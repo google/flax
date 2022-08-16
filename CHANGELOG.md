@@ -6,26 +6,32 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
 -
 -
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+
+0.6.0
+-----
+
+- Removed deprecated optimizers in `flax.optim` package.
+- Moved `flax.optim.dynamic_scale` to `flax.training.dynamic_scale`.
 - Switched to using `jax.named_scope` for all profile naming, cut some pointless
   stack traces out.
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
 
 0.5.3
 -----
