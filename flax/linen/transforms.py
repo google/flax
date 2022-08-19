@@ -433,9 +433,11 @@ def vmap(target: Target,
          variable_axes: Mapping[lift.CollectionFilter,
                                 lift.InOutAxis] = FrozenDict(),
          split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(),
-         in_axes=0, out_axes=0,
+         in_axes=0,
+         out_axes=0,
          axis_size: Optional[int] = None,
          axis_name: Optional[str] = None,
+         spmd_axis_name: Optional[str] = None,
          methods=None) -> Target:
   """A lifted version of ``jax.vmap``.
 
@@ -486,6 +488,9 @@ def vmap(target: Target,
       with parallel reduction primitives (e.g. `jax.lax.pmean`,
       `jax.lax.ppermute`, etc.)
     methods: If `target` is a `Module`, the methods of `Module` to vmap over.
+    spmd_axis_name: Axis name added to any pjit sharding constraints appearing
+      in `fn`. See also
+      https://github.com/google/flax/blob/main/flax/linen/partitioning.py.
 
   Returns:
     A batched/vectorized version of ``target``, with the same arguments but with
@@ -493,10 +498,16 @@ def vmap(target: Target,
     but with extra axes at positions indicated by ``out_axes``.
   """
   return lift_transform(
-      lift.vmap, target, variable_axes, split_rngs,
+      lift.vmap,
+      target,
+      variable_axes,
+      split_rngs,
       methods=methods,
-      in_axes=in_axes, out_axes=out_axes,
-      axis_size=axis_size, axis_name=axis_name)
+      in_axes=in_axes,
+      out_axes=out_axes,
+      axis_size=axis_size,
+      axis_name=axis_name,
+      spmd_axis_name=spmd_axis_name)
 
 
 def jit(target: Target,
