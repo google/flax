@@ -1046,25 +1046,26 @@ class TransformTest(absltest.TestCase):
   def test_vjp(self):
     class Bar(nn.Module):
       @nn.compact
-      def __call__(self, x):
-        p = self.param('test', nn.initializers.zeros, ())
+      def __call__(self, x, y):
+        p = self.param('test', nn.initializers.constant(0.5), ())
         self.variable('state', 'counter', lambda: 0)
-        return p * x
+        return p * x * y
 
     class Foo(nn.Module):
       @nn.compact
-      def __call__(self, x):
-        y, bwd = nn.vjp(Bar.__call__, Bar(), x)
-        params_grad, x_grad = bwd(jnp.ones(y.shape))
-        return params_grad, x_grad
+      def __call__(self, x, y):
+        z, bwd = nn.vjp(Bar.__call__, Bar(), x, y)
+        return bwd(jnp.ones(z.shape))
 
-    x = jnp.ones((3,))
-    params = Foo().init(random.PRNGKey(0), x)
-    x_grad, params_grad = Foo().apply(params, x)
+    x = jnp.array([1., 2., 3.])
+    y = jnp.array([4., 5., 6.])
+    params = Foo().init(random.PRNGKey(0), x, y)
+    params_grad, x_grad, y_grad = Foo().apply(params, x, y)
     self.assertEqual(params_grad, {
-      'params': nn.FrozenDict({'test': 3.}),
+      'params': nn.FrozenDict({'test': 32.}),
     })
-    np.testing.assert_allclose(x_grad, 0. * x)
+    np.testing.assert_allclose(x_grad, [2., 2.5, 3.])
+    np.testing.assert_allclose(y_grad, [0.5, 1., 1.5])
 
   def test_jvp(self):
     class Bar(nn.Module):
@@ -1134,9 +1135,9 @@ class TransformTest(absltest.TestCase):
           return nn.vjp(f, mdl, x)
 
         def bwd(vjp_fn, y_t):
-          input_t, params_t = vjp_fn(y_t)
+          params_t, input_t = vjp_fn(y_t)
           params_t = jax.tree_util.tree_map(jnp.sign, params_t)
-          return input_t, params_t
+          return params_t, input_t
 
         sign_grad = nn.custom_vjp(
             f, forward_fn=fwd, backward_fn=bwd)
@@ -1229,7 +1230,7 @@ class TransformTest(absltest.TestCase):
       @nn.jit
       def __call__(self, x):
         return self.helper(x, self.inners)
-    
+
     k = random.PRNGKey(0)
     x = jnp.ones((2,))
 
@@ -1415,9 +1416,9 @@ class TransformTest(absltest.TestCase):
         def false_fn(mdl, x):
           mdl.variable('state', 'false_count').value += 1
           return -nn.Dense(2, name='dense')(x)
-        
+
         return nn.cond(pred, true_fn, false_fn, self, x)
-  
+
   def test_switch(self):
     class Foo(nn.Module):
       @nn.compact
@@ -1436,9 +1437,9 @@ class TransformTest(absltest.TestCase):
         def c_fn(mdl, x):
           mdl.variable('state', 'c_count').value += 1
           return nn.Dense(2, name='dense')(x)
-        
+
         return nn.switch(pred, [a_fn, b_fn, c_fn], self, x)
-    
+
     x = jnp.ones((1, 3))
     foo = Foo()
     y1, vars = foo.init_with_output(random.PRNGKey(0), x, 0)
@@ -1474,9 +1475,9 @@ class TransformTest(absltest.TestCase):
         if self.is_mutable_collection('params'):
           for branch in branches:
             _ = branch(self, x)
-          
+
         return nn.switch(index, branches, self, x)
-    
+
     x = jnp.ones((1, 3))
     foo = Foo()
     y1, vars = foo.init_with_output(random.PRNGKey(0), x, 0)
