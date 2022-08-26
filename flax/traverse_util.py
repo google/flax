@@ -43,13 +43,16 @@ returns a copy of the data including the provided updates.
 import abc
 import copy
 import dataclasses
+from typing import Any, Callable, Dict, Tuple
 import warnings
 
 import jax
 import flax
+from flax.core.scope import VariableDict
 
 from . import struct
 
+Path = Tuple[str, ...]
 
 # the empty node is a struct.dataclass to be compatible with JAX.
 @struct.dataclass
@@ -159,6 +162,32 @@ def unflatten_dict(xs, sep=None):
     cursor[path[-1]] = value
   return result
 
+def path_aware_map(
+  f: Callable[[Path, Any], Any], nested_dict: VariableDict) -> VariableDict:
+  """A map function that operates over nested dictionary structures while taking
+  the path to each leaf into account.
+
+  Example::
+    
+    >>> import jax.numpy as jnp
+    >>> from flax import traverse_util
+    ...
+    >>> params = {'a': {'x': 10, 'y': 3}, 'b': {'x': 20}}
+    >>> f = lambda path, x: x + 5 if 'x' in path else -x
+    >>> traverse_util.path_aware_map(f, params)
+    {'a': {'x': 15, 'y': -3}, 'b': {'x': 25}}
+
+  Args:
+    f: A callable that takes in ``(path, value)`` arguments and maps them
+      to a new value. Here ``path`` is a tuple of strings.
+    nested_dict: A nested dictionary structure.
+  
+  Returns:
+    A new nested dictionary structure with the mapped values.
+  """
+  flat = flatten_dict(nested_dict, keep_empty_nodes=True)
+  return unflatten_dict({
+    k: f(k, v) if v is not empty_node else v for k, v in flat.items()})
 
 class Traversal(abc.ABC):
   """Base class for all traversals."""
