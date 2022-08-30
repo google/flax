@@ -1,0 +1,1 @@
+JAX_PLATFORM_NAME=cpu python main.py --workdir=./benchmark_temp --config=configs/ipu_x1.py > log_fori_loop.log 2>&1
