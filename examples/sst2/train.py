@@ -65,7 +65,7 @@ def create_train_state(rng, config: ml_collections.ConfigDict, model):
   params = get_initial_params(rng, model)
   tx = optax.chain(
       optax.sgd(learning_rate=config.learning_rate, momentum=config.momentum),
-      optax.additive_weight_decay(weight_decay=config.weight_decay))
+      optax.add_decayed_weights(weight_decay=config.weight_decay))
   state = TrainState.create(apply_fn=model.apply, params=params, tx=tx)
   return state
 
