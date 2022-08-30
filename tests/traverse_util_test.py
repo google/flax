@@ -17,10 +17,13 @@
 
 import collections
 from absl.testing import absltest
+import numpy as np
+import optax
 import flax
 from flax.core import freeze
 from flax import traverse_util
 import jax
+import jax.numpy as jnp
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -252,6 +255,57 @@ class ModelParamTraversalTest(absltest.TestCase):
           '/x/kernel', '/x/bias', '/x/y/kernel', '/x/y/bias']))
       new_model = traversal.update(lambda x: x + x, model)
       self.assertEqual(new_model, expected_model)
+
+  def test_path_value(self):
+    params_in = {'a': {'b': 10, 'c': 2}}
+    params_out = traverse_util.path_aware_map(
+      lambda path, x: x + 1 if 'b' in path else -x, params_in)
+    
+    self.assertEqual(params_out, {'a': {'b': 11, 'c': -2}})
+    
+  def test_path_aware_map_with_multi_transform(self):
+    params = {'linear_1': {'w': jnp.zeros((5, 6)), 'b': jnp.zeros(5)},
+            'linear_2': {'w': jnp.zeros((6, 1)), 'b': jnp.zeros(1)}}
+    gradients = jax.tree_util.tree_map(jnp.ones_like, params)  # dummy gradients
+
+    param_labels = traverse_util.path_aware_map(
+      lambda path, x: 'kernel' if 'w' in path else 'bias', params)
+    tx = optax.multi_transform(
+      {'kernel': optax.sgd(1.0), 'bias': optax.set_to_zero()}, param_labels)
+    state = tx.init(params)
+    updates, new_state = tx.update(gradients, state, params)
+    new_params = optax.apply_updates(params, updates)
+    
+
+    self.assertTrue(np.allclose(new_params['linear_1']['b'], params['linear_1']['b']))
+    self.assertTrue(np.allclose(new_params['linear_2']['b'], params['linear_2']['b']))
+    self.assertFalse(np.allclose(new_params['linear_1']['w'], params['linear_1']['w']))
+    self.assertFalse(np.allclose(new_params['linear_2']['w'], params['linear_2']['w']))
+  
+  def test_path_aware_map_with_masked(self):
+    params = {'linear_1': {'w': jnp.zeros((5, 6)), 'b': jnp.zeros(5)},
+            'linear_2': {'w': jnp.zeros((6, 1)), 'b': jnp.zeros(1)}}
+    gradients = jax.tree_util.tree_map(jnp.ones_like, params)  # dummy gradients
+
+    params_mask = traverse_util.path_aware_map(
+      lambda path, x: 'w' in path, params)
+    tx = optax.masked(optax.sgd(1.0), params_mask)
+    state = tx.init(params)
+    updates, new_state = tx.update(gradients, state, params)
+    new_params = optax.apply_updates(params, updates)
+    
+
+    self.assertTrue(np.allclose(new_params['linear_1']['b'], gradients['linear_1']['b']))
+    self.assertTrue(np.allclose(new_params['linear_2']['b'], gradients['linear_2']['b']))
+    self.assertTrue(np.allclose(new_params['linear_1']['w'], -gradients['linear_1']['w']))
+    self.assertTrue(np.allclose(new_params['linear_2']['w'], -gradients['linear_2']['w']))
+
+  def test_path_aware_map_with_empty_nodes(self):
+    params_in = {'a': {'b': 10, 'c': 2}, 'b': {}}
+    params_out = traverse_util.path_aware_map(
+      lambda path, x: x + 1 if 'b' in path else -x, params_in)
+    
+    self.assertEqual(params_out, {'a': {'b': 11, 'c': -2}, 'b': {}})
 
 
 if __name__ == '__main__':

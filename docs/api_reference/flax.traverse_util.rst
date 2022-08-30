@@ -43,6 +43,8 @@ Dict utils
 
 .. autofunction:: unflatten_dict
 
+.. autofunction:: path_aware_map
+
 
 Model parameter traversal
 --------------------------
