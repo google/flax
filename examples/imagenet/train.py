@@ -141,8 +141,10 @@ def train_step(apply_fn, state, batch, learning_rate_fn):
     # grad = lax.pmean(grad, axis_name='batch')
   new_model_state, logits = aux[1]
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
-  # metrics = compute_metrics(logits, batch[1])
-  # metrics['learning_rate'] = lr
+
+  metrics = compute_metrics(logits, batch[1])
+  metrics['learning_rate'] = lr
+
 
   if dynamic_scale:
     # if is_fin == False the gradients contain Inf/NaNs and the old optimizer
@@ -154,7 +156,9 @@ def train_step(apply_fn, state, batch, learning_rate_fn):
   new_state = state.replace(
       step=step + 1, optimizer=new_optimizer, model_state=new_model_state,
       dynamic_scale=dynamic_scale)
-  return new_state
+
+  return new_state, (metrics["accuracy"], metrics["loss"])
+
 
 
 def eval_step(apply_fn, state, batch):
@@ -162,8 +166,6 @@ def eval_step(apply_fn, state, batch):
   variables = {'params': params, **state.model_state}
   logits = apply_fn(
       variables, batch[0], train=False, mutable=False)
-  # met =  compute_metrics(logits, batch[1])
-  # return met['loss'], met['accuracy']
   return compute_metrics(logits, batch[1])
 
 
@@ -176,7 +178,8 @@ def prepare_tf_data(xs):
 
     # reshape (host_batch_size, height, width, 3) to
     # (local_devices, device_batch_size, height, width, 3)
-    return x.reshape((local_device_count, -1) + x.shape[1:])
+    # return x.reshape((local_device_count, -1) + x.shape[1:])
+    return x
 
   return jax.tree_map(_prepare, xs)
 
@@ -187,7 +190,7 @@ def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
       dataset_builder, batch_size, image_size=image_size, dtype=dtype,
       train=train, cache=cache)
   it = map(prepare_tf_data, ds)
-  it = jax_utils.prefetch_to_device(it, 2)
+  # it = jax_utils.prefetch_to_device(it, 2)
   return it
 
 
@@ -288,10 +291,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       dataset_builder.info.splits['train'].num_examples // config.batch_size
   )
 
-  if config.num_train_steps == -1:
-    num_steps = int(steps_per_epoch * config.num_epochs)
-  else:
-    num_steps = config.num_train_steps
+  # if config.num_train_steps == -1:
+  #   num_steps = int(steps_per_epoch * config.num_epochs)
+  # else:
+  #   num_steps = config.num_train_steps
 
   if config.steps_per_eval == -1:
     num_validation_examples = dataset_builder.info.splits[
@@ -300,7 +303,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   else:
     steps_per_eval = config.steps_per_eval
 
-  steps_per_checkpoint = steps_per_epoch * 10
+  # steps_per_checkpoint = steps_per_epoch * 10
 
   base_learning_rate = config.learning_rate * config.batch_size / 256.
 
@@ -311,8 +314,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   state = create_train_state(rng, config, model, image_size)
   state = restore_checkpoint(state, workdir)
   # step_offset > 0 if restarting from checkpoint
-  step_offset = int(state.step)
-  # print("state.step: ",state.step)
+  # step_offset = int(state.step)
   # state = jax_utils.replicate(state)
 
   learning_rate_fn = create_learning_rate_fn(
@@ -321,28 +323,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   p_train_step = functools.partial(train_step, model.apply,
                                   learning_rate_fn=learning_rate_fn)
 
-  p_eval_step = jax.jit(
-      functools.partial(eval_step, model.apply),
-                        backend='ipu')
-
-  # p_eval_step2 = jax.pmap(
-  #     functools.partial(eval_step, model.apply),
-  #     backend='ipu', axis_name='batch', donate_argnums=[0])
-
-  # p_eval_step = functools.partial(eval_step, model.apply)
+  p_eval_step = functools.partial(eval_step, model.apply)
 
   to_infeed_shape = (jax.ShapedArray((config.batch_size, image_size, image_size, 3), dtype=jnp.float32),
                    jax.ShapedArray((config.batch_size, 1), dtype=jnp.int32))
 
 
-  def update_(i, state):
+  def update_(_, state):
     token = lax.create_token()
     batch, token = lax.infeed(
         token, shape=to_infeed_shape)
-    state = p_train_step(state, batch)
+    state, metrics = p_train_step(state, batch)
+    lax.outfeed(token, metrics)
     return state
 
-  def eval_(i, state):
+  def eval_(_, state):
     token = lax.create_token()
     batch, token = lax.infeed(
         token, shape=to_infeed_shape)
@@ -354,113 +349,54 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     state = lax.fori_loop(start, end, update_, state)
     return state
 
-  # @functools.partial(jax.jit, backend='ipu', donate_argnums=[1])
-  @functools.partial(jax.jit, backend='ipu')
+  @functools.partial(jax.jit, backend='ipu', donate_argnums=[1])
   def eval_loop(n_eval_num, state):
     state = lax.fori_loop(0, n_eval_num, eval_, state)
-    return n_eval_num
+    return state
 
-  epoch_metrics = []
   eval_metrics = []
 
   x = jnp.array(1, dtype=jnp.float32)
   y = jnp.array(1, dtype=jnp.float32)
 
-  hooks = []
-  if jax.host_id() == 0:
-    hooks += [periodic_actions.Profile(num_profile_steps=5, logdir=workdir)]
-  t_loop_start = time.time()
+  epoch_metrics = []
+
   logging.info('Initial compilation, this might take some minutes...')
   device = jax.devices(backend='ipu')[0]
-  # for batch in train_iter:  
   for epoch in range(config.num_epochs):
-    for _, batch in zip(range(steps_per_epoch), train_iter):
-      # for step, batch in zip(range(1000), train_iter):
-      batch = tuple(batch.values())
-      batch = (batch[0].reshape(config.batch_size,image_size, image_size, 3), batch[1])
-      device.transfer_to_infeed(batch)
     start_time = time.time()
+    logging.info('Prepare train dataset!')
+    for _, batch in zip(range(steps_per_epoch), train_iter):
+      batch = tuple(batch.values())
+      device.transfer_to_infeed(batch)
+    logging.info('Finished train dataset!')
     state = train_loop(epoch * steps_per_epoch, (epoch + 1) * steps_per_epoch, state)
-    # state = train_loop(epoch * steps_per_epoch, 200, state)
     epoch_time = time.time() - start_time
-    print("Epoch {} in {:0.2f} sec".format(epoch, epoch_time))
+    print("Train epoch {} in {:0.2f} sec".format(epoch, epoch_time))
+    for _ in range(steps_per_epoch):
+      train_acc, train_loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
+                                          .with_major_to_minor_layout_if_absent())
+      epoch_metrics.append({"loss":train_loss, "accuracy":train_acc})
     
+    epoch_metrics = common_utils.get_metrics(epoch_metrics)
+    summary = jax.tree_map(lambda x: x.mean(), epoch_metrics)
+    logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f',
+                  epoch, summary['loss'], summary['accuracy'] * 100)
+
+    epoch_metrics = []
     eval_metrics = []
 
-    # steps_per_eval = 100
-    for step, batch in zip(range(steps_per_eval), eval_iter):
+    logging.info('Prepare eval dataset!')
+    for _, batch in zip(range(steps_per_eval), eval_iter):
       batch = tuple(batch.values())
-      batch = (batch[0].reshape(config.batch_size,image_size, image_size, 3), batch[1])
       device.transfer_to_infeed(batch)
-      
-    # for _ in range(steps_per_eval):
-    #   eval_batch = next(eval_iter)
-    #   eval_batch["image"] = eval_batch["image"].reshape(1, 224, 224, 3)
-    #   metrics = p_eval_step(state, eval_batch)
-    #   eval_metrics.append(metrics)
+    logging.info('Finished eval dataset!')
     
-    eval_loop(steps_per_eval, state)
+    state = eval_loop(steps_per_eval, state)
     for _ in range(steps_per_eval):
-      # loss, acc = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
-      #                                     .with_major_to_minor_layout_if_absent())
-      # print("loss: {0}, accuracy: {1}".format(loss, acc))
-      acc, loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
+      eval_acc, eval_loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
                                           .with_major_to_minor_layout_if_absent())
-      # print("loss: {0}, accuracy: {1}".format(loss, acc))
-      eval_metrics.append({"loss":loss, "accuracy":acc})
-    
-    eval_metrics = common_utils.get_metrics(eval_metrics)
-    summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
-    logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
-                   epoch, summary['loss'], summary['accuracy'] * 100)
-    eval_time = time.time() - start_time
-    print("Epoch {} in {:0.2f} sec, with eval".format(epoch, eval_time))
-    # logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
-    #                epoch, metrics['loss'], metrics['accuracy'] * 100)
-
-  # for step, batch in zip(range(step_offset, num_steps), train_iter):
-  #   state, metrics = p_train_step(state, batch)
-  #   for h in hooks:
-  #     h(step)
-  #   if step == step_offset:
-  #     logging.info('Initial compilation completed.')
-  #   epoch_metrics.append(metrics)
-  #   if (step + 1) % steps_per_epoch == 0:
-  #     epoch = step // steps_per_epoch
-  #     epoch_metrics = common_utils.get_metrics(epoch_metrics)
-  #     summary = jax.tree_map(lambda x: x.mean(), epoch_metrics)
-  #     logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f',
-  #                  epoch, summary['loss'], summary['accuracy'] * 100)
-  #     steps_per_sec = steps_per_epoch / (time.time() - t_loop_start)
-  #     t_loop_start = time.time()
-  #     if jax.host_id() == 0:
-  #       for key, vals in epoch_metrics.items():
-  #         tag = 'train_%s' % key
-  #         for i, val in enumerate(vals):
-  #           summary_writer.scalar(tag, val, step - len(vals) + i + 1)
-  #       summary_writer.scalar('steps per second', steps_per_sec, step)
-
-  #     epoch_metrics = []
-  #     eval_metrics = []
-
-  #     # sync batch statistics across replicas
-  #     state = sync_batch_stats(state)
-  #     for _ in range(steps_per_eval):
-  #       eval_batch = next(eval_iter)
-  #       metrics = p_eval_step(state, eval_batch)
-  #       eval_metrics.append(metrics)
-  #     eval_metrics = common_utils.get_metrics(eval_metrics)
-  #     summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
-  #     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
-  #                  epoch, summary['loss'], summary['accuracy'] * 100)
-  #     if jax.host_id() == 0:
-  #       for key, val in eval_metrics.items():
-  #         tag = 'eval_%s' % key
-  #         summary_writer.scalar(tag, val.mean(), step)
-  #       summary_writer.flush()
-  #   if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
-  #     state = sync_batch_stats(state)
-  #     save_checkpoint(state, workdir)
+      eval_metrics.append({"loss":eval_loss, "accuracy":eval_acc})
 
   # Wait until computations are done before exiting
   jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
