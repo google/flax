@@ -40,6 +40,7 @@ import jax
 from jax import lax
 from jax import random
 from jax.lib import xla_client
+import numpy as np
 
 import jax.numpy as jnp
 
@@ -58,7 +59,7 @@ def create_model(*, model_cls, half_precision, **kwargs):
       model_dtype = jnp.float16
   else:
     model_dtype = jnp.float32
-  return model_cls(num_classes=1000, dtype=model_dtype, **kwargs)
+  return model_cls(num_classes=10, dtype=model_dtype, **kwargs)
 
 
 def initialized(key, image_size, model):
@@ -73,7 +74,7 @@ def initialized(key, image_size, model):
 
 def cross_entropy_loss(logits, labels):
   return -jnp.sum(
-      common_utils.onehot(labels, num_classes=1000) * logits) / labels.size
+      common_utils.onehot(labels, num_classes=10) * logits) / labels.size
 
 
 def compute_metrics(logits, labels):
@@ -138,7 +139,6 @@ def train_step(apply_fn, state, batch, learning_rate_fn):
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     aux, grad = grad_fn(optimizer.target)
     # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
-    # grad = lax.pmean(grad, axis_name='batch')
   new_model_state, logits = aux[1]
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
@@ -156,10 +156,7 @@ def train_step(apply_fn, state, batch, learning_rate_fn):
   new_state = state.replace(
       step=step + 1, optimizer=new_optimizer, model_state=new_model_state,
       dynamic_scale=dynamic_scale)
-
   return new_state, (metrics["accuracy"], metrics["loss"])
-
-
 
 def eval_step(apply_fn, state, batch):
   params = state.optimizer.target
@@ -175,10 +172,9 @@ def prepare_tf_data(xs):
   def _prepare(x):
     # Use _numpy() for zero-copy conversion between TF and NumPy.
     x = x._numpy()  # pylint: disable=protected-access
-
-    # reshape (host_batch_size, height, width, 3) to
-    # (local_devices, device_batch_size, height, width, 3)
-    # return x.reshape((local_device_count, -1) + x.shape[1:])
+    # Change data type from int64 to int32 as ipu-infeed does not take int64.
+    if (len(x.shape) == 1):
+      x = x.astype(np.int32)
     return x
 
   return jax.tree_map(_prepare, xs)
@@ -291,19 +287,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       dataset_builder.info.splits['train'].num_examples // config.batch_size
   )
 
-  # if config.num_train_steps == -1:
-  #   num_steps = int(steps_per_epoch * config.num_epochs)
-  # else:
-  #   num_steps = config.num_train_steps
-
   if config.steps_per_eval == -1:
     num_validation_examples = dataset_builder.info.splits[
         'validation'].num_examples
     steps_per_eval = num_validation_examples // config.batch_size
   else:
     steps_per_eval = config.steps_per_eval
-
-  # steps_per_checkpoint = steps_per_epoch * 10
 
   base_learning_rate = config.learning_rate * config.batch_size / 256.
 
@@ -314,8 +303,6 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   state = create_train_state(rng, config, model, image_size)
   state = restore_checkpoint(state, workdir)
   # step_offset > 0 if restarting from checkpoint
-  # step_offset = int(state.step)
-  # state = jax_utils.replicate(state)
 
   learning_rate_fn = create_learning_rate_fn(
       config, base_learning_rate, steps_per_epoch)
@@ -328,8 +315,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   to_infeed_shape = (jax.ShapedArray((config.batch_size, image_size, image_size, 3), dtype=jnp.float32),
                    jax.ShapedArray((config.batch_size, 1), dtype=jnp.int32))
 
-
-  def update_(_, state):
+  def train_loop(_, state):
     token = lax.create_token()
     batch, token = lax.infeed(
         token, shape=to_infeed_shape)
@@ -337,7 +323,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     lax.outfeed(token, metrics)
     return state
 
-  def eval_(_, state):
+  def eval_loop(_, state):
     token = lax.create_token()
     batch, token = lax.infeed(
         token, shape=to_infeed_shape)
@@ -345,13 +331,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     return state
 
   @functools.partial(jax.jit, backend='ipu', donate_argnums=[2])
-  def train_loop(start, end, state):
-    state = lax.fori_loop(start, end, update_, state)
+  def train_loops(start, end, state):
+    state = lax.fori_loop(start, end, train_loop, state)
     return state
 
-  @functools.partial(jax.jit, backend='ipu', donate_argnums=[1])
-  def eval_loop(n_eval_num, state):
-    state = lax.fori_loop(0, n_eval_num, eval_, state)
+  @functools.partial(jax.jit, backend='ipu', donate_argnums=[2])
+  def eval_loops(start, end, state):
+    state = lax.fori_loop(start, end, eval_loop, state)
     return state
 
   eval_metrics = []
@@ -370,7 +356,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       batch = tuple(batch.values())
       device.transfer_to_infeed(batch)
     logging.info('Finished train dataset!')
-    state = train_loop(epoch * steps_per_epoch, (epoch + 1) * steps_per_epoch, state)
+    state = train_loops(epoch * steps_per_epoch, (epoch + 1) * steps_per_epoch, state)
     epoch_time = time.time() - start_time
     print("Train epoch {} in {:0.2f} sec".format(epoch, epoch_time))
     for _ in range(steps_per_epoch):
@@ -391,12 +377,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       batch = tuple(batch.values())
       device.transfer_to_infeed(batch)
     logging.info('Finished eval dataset!')
-    
-    state = eval_loop(steps_per_eval, state)
+    state = eval_loops(0, steps_per_eval, state)
     for _ in range(steps_per_eval):
       eval_acc, eval_loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
                                           .with_major_to_minor_layout_if_absent())
       eval_metrics.append({"loss":eval_loss, "accuracy":eval_acc})
+    
+    eval_metrics = common_utils.get_metrics(eval_metrics)
+    summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
+    logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
+                   epoch, summary['loss'], summary['accuracy'] * 100)
+    eval_time = time.time() - start_time
+    print("Epoch {} in {:0.2f} sec, with eval".format(epoch, eval_time))
 
   # Wait until computations are done before exiting
   jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
