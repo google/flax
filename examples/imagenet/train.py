@@ -28,6 +28,8 @@ from clu import periodic_actions
 import flax
 from flax import jax_utils
 from flax import optim
+from jax.dtypes import dtype
+from jax.interpreters.pxla import replicate
 
 import input_pipeline
 import models
@@ -84,7 +86,7 @@ def compute_metrics(logits, labels):
       'loss': loss,
       'accuracy': accuracy,
   }
-  # metrics = lax.pmean(metrics, axis_name='batch')
+  metrics = lax.pmean(metrics, axis_name='batch')
   return metrics
 
 
@@ -132,13 +134,14 @@ def train_step(apply_fn, state, batch, learning_rate_fn):
 
   if dynamic_scale:
     grad_fn = dynamic_scale.value_and_grad(
-        loss_fn, has_aux=True)
+        loss_fn, has_aux=True, axis_name='batch')
     dynamic_scale, is_fin, aux, grad = grad_fn(optimizer.target)
     # dynamic loss takes care of averaging gradients across replicas
   else:
     grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
     aux, grad = grad_fn(optimizer.target)
     # Re-use same axis_name as in the call to `pmap(...train_step...)` below.
+    grad = lax.pmean(grad, axis_name='batch')
   new_model_state, logits = aux[1]
   new_optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
@@ -259,10 +262,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   rng = random.PRNGKey(0)
 
   image_size = 224
-
-  if config.batch_size % jax.device_count() > 0:
+  
+  if config.batch_size % jax.device_count("ipu") > 0:
     raise ValueError('Batch size must be divisible by the number of devices')
-  local_batch_size = config.batch_size // jax.host_count()
+  local_batch_size = config.batch_size // jax.device_count("ipu")
+  logging.info(f'batch size per IPU: {local_batch_size}')
 
   platform = jax.local_devices()[0].platform
 
@@ -312,8 +316,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   p_eval_step = functools.partial(eval_step, model.apply)
 
-  to_infeed_shape = (jax.ShapedArray((config.batch_size, image_size, image_size, 3), dtype=jnp.float32),
-                   jax.ShapedArray((config.batch_size, 1), dtype=jnp.int32))
+  to_infeed_shape = (jax.ShapedArray((local_batch_size, image_size, image_size, 3), dtype=jnp.float32),
+                   jax.ShapedArray((local_batch_size, 1), dtype=jnp.int32))
 
   def train_loop(_, state):
     token = lax.create_token()
@@ -330,13 +334,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     lax.outfeed(token, p_eval_step(state, batch))
     return state
 
-  @functools.partial(jax.jit, backend='ipu', donate_argnums=[2])
-  def train_loops(start, end, state):
+  @functools.partial(jax.pmap, backend='ipu', donate_argnums=[2], in_axes=(None, None, None, 0), axis_name='batch')
+  def train_loops(start, end, state, dummy):
     state = lax.fori_loop(start, end, train_loop, state)
     return state
 
-  @functools.partial(jax.jit, backend='ipu', donate_argnums=[2])
-  def eval_loops(start, end, state):
+  @functools.partial(jax.pmap, backend='ipu', donate_argnums=[2], in_axes=(None, None, None, 0), axis_name='batch')
+  def eval_loops(start, end, state, dummy):
     state = lax.fori_loop(start, end, eval_loop, state)
     return state
 
@@ -348,23 +352,32 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   epoch_metrics = []
 
   logging.info('Initial compilation, this might take some minutes...')
-  device = jax.devices(backend='ipu')[0]
+  devices = jax.devices(backend='ipu')
+  n_devices = len(devices)
+  logging.info(f'IPUs: {devices}')
+  dummy = jnp.arange(n_devices, dtype=jnp.float32).reshape(n_devices, 1)
+
   for epoch in range(config.num_epochs):
     start_time = time.time()
     logging.info('Prepare train dataset!')
-    for _, batch in zip(range(steps_per_epoch), train_iter):
-      batch = tuple(batch.values())
-      device.transfer_to_infeed(batch)
+    for device in devices:
+      for _, batch in zip(range(steps_per_epoch), train_iter):
+        batch = tuple(batch.values())
+        device.transfer_to_infeed(batch)
     logging.info('Finished train dataset!')
-    state = train_loops(epoch * steps_per_epoch, (epoch + 1) * steps_per_epoch, state)
+    state = train_loops(epoch * steps_per_epoch, (epoch + 1) * steps_per_epoch, state, dummy)
+    state = jax_utils.unreplicate(state)
     epoch_time = time.time() - start_time
     print("Train epoch {} in {:0.2f} sec".format(epoch, epoch_time))
-    for _ in range(steps_per_epoch):
-      train_acc, train_loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
-                                          .with_major_to_minor_layout_if_absent())
-      epoch_metrics.append({"loss":train_loss, "accuracy":train_acc})
+    for i, device in enumerate(devices):
+      for _ in range(steps_per_epoch):
+        train_acc, train_loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
+                                            .with_major_to_minor_layout_if_absent())
+        if i == 0:
+          epoch_metrics.append({"loss":train_loss, "accuracy":train_acc})
     
-    epoch_metrics = common_utils.get_metrics(epoch_metrics)
+    # epoch_metrics = common_utils.get_metrics(epoch_metrics)
+    epoch_metrics = common_utils.stack_forest(epoch_metrics)
     summary = jax.tree_map(lambda x: x.mean(), epoch_metrics)
     logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f',
                   epoch, summary['loss'], summary['accuracy'] * 100)
@@ -373,17 +386,22 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     eval_metrics = []
 
     logging.info('Prepare eval dataset!')
-    for _, batch in zip(range(steps_per_eval), eval_iter):
-      batch = tuple(batch.values())
-      device.transfer_to_infeed(batch)
+    for device in devices:
+      for _, batch in zip(range(steps_per_eval), eval_iter):
+        batch = tuple(batch.values())
+        device.transfer_to_infeed(batch)
     logging.info('Finished eval dataset!')
-    state = eval_loops(0, steps_per_eval, state)
-    for _ in range(steps_per_eval):
-      eval_acc, eval_loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
-                                          .with_major_to_minor_layout_if_absent())
-      eval_metrics.append({"loss":eval_loss, "accuracy":eval_acc})
+    state = eval_loops(0, steps_per_eval, state, dummy)
+    state = jax_utils.unreplicate(state)
+    for i, device in enumerate(devices):
+      for _ in range(steps_per_eval):
+        eval_acc, eval_loss = device.transfer_from_outfeed(xla_client.shape_from_pyval((x, y))
+                                            .with_major_to_minor_layout_if_absent())
+        if i == 0:
+          eval_metrics.append({"loss":eval_loss, "accuracy":eval_acc})
     
-    eval_metrics = common_utils.get_metrics(eval_metrics)
+    # eval_metrics = common_utils.get_metrics(eval_metrics)
+    eval_metrics = common_utils.stack_forest(eval_metrics)
     summary = jax.tree_map(lambda x: x.mean(), eval_metrics)
     logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
                    epoch, summary['loss'], summary['accuracy'] * 100)

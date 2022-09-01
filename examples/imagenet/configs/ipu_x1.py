@@ -28,7 +28,7 @@ def get_config():
   config.learning_rate = 0.1
   config.warmup_epochs = 1
   config.momentum = 0.9
-  config.batch_size = 1
+  config.batch_size = 2
   config.num_epochs = 10
 
   config.cache = False
