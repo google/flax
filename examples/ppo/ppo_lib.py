@@ -19,11 +19,13 @@ from typing import Any, Callable, Tuple, List
 
 from absl import logging
 import flax
+from flax import jax_utils
 from flax import linen as nn
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import train_state
 import jax
+from jax import lax
 import jax.random
 import jax.numpy as jnp
 import ml_collections
@@ -125,7 +127,29 @@ def loss_fn(
 
   return ppo_loss + vf_coeff*value_loss - entropy_coeff*entropy
 
-@functools.partial(jax.jit, static_argnums=(2,))
+
+@functools.partial(jax.pmap,
+                   axis_name='batch',
+                   donate_argnums=(0,))
+def grad_step(train_state,
+              states,
+              actions,
+              old_log_probs,
+              returns,
+              advantages,
+              clip_param,
+              vf_coeff,
+              entropy_coeff,
+            ):
+  grad_fn = jax.value_and_grad(loss_fn)
+  batch = (states, actions, old_log_probs, returns, advantages)
+  loss, grads = grad_fn(train_state.params, train_state.apply_fn, batch, clip_param, vf_coeff,
+                    entropy_coeff)
+  grads = lax.pmean(grads, axis_name='batch')  # synchronize device gradients
+  new_state = train_state.apply_gradients(grads=grads)
+  return new_state, loss
+
+
 def train_step(
     state: train_state.TrainState,
     trajectories: Tuple,
@@ -156,16 +180,53 @@ def train_step(
     optimizer: new optimizer after the parameters update
     loss: loss summed over training steps
   """
+  num_devices = jax.device_count()
   iterations = trajectories[0].shape[0] // batch_size
-  trajectories = jax.tree_util.tree_map(
+  trajectories = jax.tree_map(
       lambda x: x.reshape((iterations, batch_size) + x.shape[1:]), trajectories)
   loss = 0.
+
+  # replicate args
+  clip_param = jax_utils.replicate(clip_param)
+  vf_coeff = jax_utils.replicate(vf_coeff)
+  entropy_coeff = jax_utils.replicate(entropy_coeff)
+
+  # NOTE: no need to replicate state here
   for batch in zip(*trajectories):
-    grad_fn = jax.value_and_grad(loss_fn)
-    l, grads = grad_fn(state.params, state.apply_fn, batch, clip_param, vf_coeff,
-                      entropy_coeff)
-    loss += l
-    state = state.apply_gradients(grads=grads)
+    batch_states, \
+    batch_actions, \
+    batch_old_log_probs, \
+    batch_returns, \
+    batch_advantages = batch
+
+    # shard per device
+    batch_size_per_device, ragged = divmod(batch_states.shape[0], num_devices)
+    if ragged:
+      msg = "batch size must be divisible by device count, got {} and {}."
+      raise ValueError(msg.format(batch_size, num_devices))
+    shape_prefix = (num_devices, batch_size_per_device)
+    states = batch_states.reshape(shape_prefix + batch_states.shape[1:])
+    actions = batch_actions.reshape(shape_prefix + batch_actions.shape[1:])
+    old_log_probs = batch_old_log_probs.reshape(shape_prefix + batch_old_log_probs.shape[1:])
+    returns = batch_returns.reshape(shape_prefix + batch_returns.shape[1:])
+    advantages = batch_advantages.reshape(shape_prefix + batch_advantages.shape[1:])
+
+    # parallel grad update
+    state, l = grad_step(
+      state,  # train state
+      states,
+      actions,
+      old_log_probs,
+      returns,
+      advantages,
+      clip_param,
+      vf_coeff,
+      entropy_coeff,
+    )
+
+    loss += jnp.mean(l)  # mean across devices
+
+  # NOTE: do not unreplicate state
   return state, loss
 
 def get_experience(
@@ -288,7 +349,8 @@ def train(
   Returns:
     optimizer: the trained optimizer
   """
-  
+  # The following line is dangerous for TPUs
+  # logging.info(f'Number of devices found: {jax.device_count()}')
   game = config.game + 'NoFrameskip-v4'
   simulators = [agent.RemoteSimulator(game)
                 for _ in range(config.num_agents)]
@@ -313,18 +375,24 @@ def train(
   start_step = int(state.step) // config.num_epochs // iterations_per_step
   logging.info('Start training from step: %s', start_step)
 
+  # replicate params
+  state = jax_utils.replicate(state)
+
   for step in range(start_step, loop_steps):
     # Bookkeeping and testing.
     if step % log_frequency == 0:
-      score = test_episodes.policy_test(1, state.apply_fn, state.params, game)
+      unrepl_state = jax_utils.unreplicate(state)
+      score = test_episodes.policy_test(1, unrepl_state.apply_fn, unrepl_state.params, game)
       frames = step * config.num_agents * config.actor_steps
       summary_writer.scalar('game_score', score, frames)
       logging.info('Step %s:\nframes seen %s\nscore %s\n\n', step, frames, score)
 
     # Core training code.
     alpha = 1. - step / loop_steps if config.decaying_lr_and_clip_param else 1.
+
+    unrepl_state = jax_utils.unreplicate(state)
     all_experiences = get_experience(
-        state, simulators, config.actor_steps)
+        unrepl_state, simulators, config.actor_steps)
     trajectories = process_experience(
         all_experiences, config.actor_steps, config.num_agents, config.gamma,
         config.lambda_)
@@ -339,5 +407,10 @@ def train(
           vf_coeff=config.vf_coeff,
           entropy_coeff=config.entropy_coeff)
     if (step + 1) % checkpoint_frequency == 0:
-      checkpoints.save_checkpoint(model_dir, state, step + 1)
-  return state
+      # unreplicate params
+      unrepl_state = jax_utils.unreplicate(state)
+      checkpoints.save_checkpoint(model_dir, unrepl_state, step + 1)
+
+  # this is noop. driver program never uses return value.
+  # should actually be unreplicated state, but this is a module.
+  return train_state
