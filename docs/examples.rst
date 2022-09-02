@@ -159,7 +159,7 @@ Models
     * - `jax-resnet <https://github.com/n2cholas/jax-resnet>`__
       - `@n2cholas <https://github.com/n2cholas>`__
       - Various resnet implementations
-      - `torch.hub`
+      - ``torch.hub``
 
 Examples
 ********
@@ -202,15 +202,16 @@ Tutorials
 
 Contributing Policy
 ********************
-If you are interested in adding an project to the Community Examples section, take the following 
+
+If you are interested in adding a project to the Community Examples section, take the following 
 into consideration:
 
 * **Examples**: examples should contain a README that is helpful, clear, and makes it easy to run 
   the code. The code itself should be easy to follow.
-* **Tutorials**:  tutorials must preferably be runnable notebooks, be well written, and discuss 
+* **Tutorials**: tutorials must preferably be runnable notebooks, be well written, and discuss 
   an interesting topic. Also, the tutorial's content must be different from the existing
   guides in the Flax documentation and other community examples to be considered for inclusion.
-* **Models**:  repositories with model's ported to Flax must provide at least one of the following:
+* **Models**: repositories with models ported to Flax must provide at least one of the following:
   
   * Metrics that are comparable to the original work when the model is trained to completion. Having 
     available plots of the metric's history during training is highly encouraged.
@@ -218,7 +219,4 @@ into consideration:
     + weights = same outputs) preferably using pretrained weights.
 
 On all cases above, code should work with the latest stable version of packages like ``jax``, 
-``flax``, and ``optax``, and make substancial use of Flax.
-
-
-
+``flax``, and ``optax``, and make substantial use of Flax.
