@@ -18,6 +18,7 @@ This script trains a ResNet-50 on the ImageNet dataset.
 The data is loaded using tensorflow_datasets.
 """
 
+
 import functools
 import time
 from typing import Any
