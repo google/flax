@@ -357,6 +357,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     async_manager.wait_previous_save()
   if gda_manager:
     gda_manager.wait_until_finished()
+    sync_global_devices('before_save_checkpoint')
 
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   # Write temporary checkpoint file.
