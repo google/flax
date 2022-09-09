@@ -80,7 +80,8 @@ def avg_pool(inputs, window_shape, strides=None, padding="VALID", count_include_
     padding: either the string `'SAME'`, the string `'VALID'`, or a sequence
       of `n` `(low, high)` integer pairs that give the padding to apply before
       and after each spatial dimension (default: `'VALID'`).
-    count_include_pad: ...
+    count_include_pad: a boolean whether to include padded tokens
+      in the average calculation (default: `True`).
   Returns:
     The average for each window slice.
   """
