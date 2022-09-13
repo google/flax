@@ -611,6 +611,9 @@ def checkpoint(target: Target,
     A wrapped version of ``target``. When computing gradients intermediate
     computations will be re-computed on the backward pass.
   """
+  # subtract 1 from each static_argnums because 'self' is not passed to the
+  # lifted function
+  static_argnums = jax.tree_util.tree_map(lambda x: x - 1, static_argnums)
   return lift_transform(
       lift.checkpoint, target,
       variables=variables, rngs=rngs, concrete=concrete,
