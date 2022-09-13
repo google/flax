@@ -59,44 +59,13 @@ jobs:
           echo "See $url for help on how to resolve this."
           exit 1
         fi
-  test-docs:
-    name: Test documentation
+  tests:
+    name: Run Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [3.7]
-    steps:
-    - name: Cancel previous
-      uses: styfle/cancel-workflow-action@0.8.0
-      with:
-        access_token: ${{ github.token }}          
-    - name: Install native dependencies
-      run: |
-        sudo apt-get -y install pandoc
-    - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        pip install .
-        pip install .[testing]
-        pip install -r docs/requirements.txt
-    - name: Test testcode blocks in documentation
-      run: |
-        sphinx-build -M doctest docs docs/_build -T
-        # test docstrings
-        pytest -n auto flax --doctest-modules --suppress-no-test-exit-code
-    - name: Build documentation
-      run: |
-        sphinx-build -M html docs docs/_build -T
-  run-tests:
-    name: Run tests
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.7]
+        test-type: [doctest, pytest, pytype]
     steps:
     - name: Cancel previous
       uses: styfle/cancel-workflow-action@0.8.0
@@ -112,10 +81,20 @@ jobs:
         pip install .
         pip install .[testing]
         pip install -r docs/requirements.txt
-    - name: Test with pytest and generate coverage report
+    - name: Test with ${{ matrix.test-type }}
       run: |
-        tests/run_all_tests.sh --with-cov --no-doctest
+        if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
+          tests/run_all_tests.sh --no-pytest --no-pytype
+        elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
+          tests/run_all_tests.sh --no-doctest --no-pytype --with-cov
+        elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
+          tests/run_all_tests.sh --no-doctest --no-pytest
+        else
+          echo "Unknown test type: ${{ matrix.test-type }}"
+          exit 1
+        fi
     - name: Upload coverage to Codecov
+      if: matrix.test-type == 'pytest'
       uses: codecov/codecov-action@v1
       with:
         file: ./coverage.xml
