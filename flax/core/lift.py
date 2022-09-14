@@ -1138,6 +1138,7 @@ def checkpoint(fn: Callable[..., Any],
                rngs: PRNGSequenceFilter = True,
                concrete: bool = False,
                prevent_cse: bool = True,
+               static_argnums: Union[int, Tuple[int, ...]] = (),
                policy: Optional[Callable[..., bool]] = None,
                ) -> Callable[..., Any]:
   """Lifted version of ``jax.checkpoint``.
@@ -1164,15 +1165,21 @@ def checkpoint(fn: Callable[..., Any],
       ``pmap``, CSE can defeat the purpose of this decorator. But in some
       settings, like when used inside a ``scan``, this CSE prevention mechanism
       is unnecessary, in which case ``prevent_cse`` can be set to False.
+    static_argnums: Optional, int or sequence of ints, indicates which argument 
+      values on which to specialize for tracing and caching purposes. Specifying 
+      arguments as static can avoid ConcretizationTypeErrors when tracing, but 
+      at the cost of more retracing overheads.
     policy: Experimental checkpoint policy, see ``jax.checkpoint``.
   Returns:
     A wrapped version of ``fn``. When computing gradients intermediate
     computations will be re-computed when computing gradients.
   """
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args, **kwargs):
+    # add 2 to each static_argnums because we add two initial arguments to rematted
+    static_argnums_ = jax.tree_util.tree_map(lambda x: x + 2, static_argnums)
     @functools.partial(jax.remat,
-                       concrete=concrete, prevent_cse=prevent_cse,
-                       policy=policy)
+                       concrete=concrete, static_argnums=static_argnums_, 
+                       prevent_cse=prevent_cse, policy=policy)
     @functools.wraps(fn)
     def rematted(variable_groups, rng_groups, *args, **kwargs):
       scope = scope_fn(variable_groups, rng_groups)

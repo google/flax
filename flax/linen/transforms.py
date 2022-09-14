@@ -572,6 +572,7 @@ def checkpoint(target: Target,
                rngs: lift.PRNGSequenceFilter = True,
                concrete: bool = False,
                prevent_cse: bool = True,
+               static_argnums: Union[int, Tuple[int, ...]] = (),
                policy: Optional[Callable[..., bool]] = None,
                methods=None) -> Target:
   """Lifted version of ``jax.checkpoint``.
@@ -599,6 +600,10 @@ def checkpoint(target: Target,
       ``pmap``, CSE can defeat the purpose of this decorator. But in some
       settings, like when used inside a ``scan``, this CSE prevention mechanism
       is unnecessary, in which case ``prevent_cse`` should be set to False.
+    static_argnums: Optional, int or sequence of ints, indicates which argument 
+      values on which to specialize for tracing and caching purposes. Specifying 
+      arguments as static can avoid ConcretizationTypeErrors when tracing, but 
+      at the cost of more retracing overheads.
     policy: Experimental checkpoint policy, see ``jax.checkpoint``.
     methods: If `target` is a `Module`, the methods of `Module` to checkpoint.
 
@@ -606,9 +611,13 @@ def checkpoint(target: Target,
     A wrapped version of ``target``. When computing gradients intermediate
     computations will be re-computed on the backward pass.
   """
+  # subtract 1 from each static_argnums because 'self' is not passed to the
+  # lifted function
+  static_argnums = jax.tree_util.tree_map(lambda x: x - 1, static_argnums)
   return lift_transform(
       lift.checkpoint, target,
       variables=variables, rngs=rngs, concrete=concrete,
+      static_argnums=static_argnums,
       prevent_cse=prevent_cse, policy=policy,
       methods=methods)
 

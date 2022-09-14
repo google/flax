@@ -145,6 +145,73 @@ class TransformTest(absltest.TestCase):
     # This next line crashes with a concretization error
     _ = jax.grad(lambda x: remat_model.apply(p, x, apply_relu=True))(x)
 
+  def test_remat_static_argnums(self):
+    test = self
+    
+    class Foo(nn.Module):
+      train_is_static: bool
+
+      @nn.compact
+      def __call__(self, inputs, train: bool):
+        if self.train_is_static:
+          test.assertTrue(isinstance(train, bool))
+        else:
+          test.assertTrue(isinstance(train, jnp.ndarray))
+        
+        return nn.Dense(3, use_bias=False)(inputs)
+
+    # set train as a static argument
+    FooRemat = nn.remat(Foo, static_argnums=(2,))
+    foo = FooRemat(train_is_static=True)
+
+    x = jnp.empty((1, 2))
+    variables = foo.init(random.PRNGKey(0), x, True)
+    y = foo.apply(variables, x, False)
+    self.assertEqual(y.shape, (1, 3))
+
+    # set train as a non-static arguments
+    FooRemat = nn.remat(Foo, static_argnums=())
+    foo = FooRemat(train_is_static=False)
+
+    variables = foo.init(random.PRNGKey(0), x, True)
+    y = foo.apply(variables, x, False)
+    self.assertEqual(y.shape, (1, 3))
+  
+  def test_remat_decorator_static_argnums(self):
+    test = self
+
+    class FooTrainStatic(nn.Module):
+      @partial(nn.remat, static_argnums=(2,))
+      @nn.compact
+      def __call__(self, inputs, train: bool):
+        test.assertTrue(isinstance(train, bool))
+        
+        return nn.Dense(3, use_bias=False)(inputs)
+
+    # set train as a static argument
+    foo = FooTrainStatic()
+
+    x = jnp.empty((1, 2))
+    variables = foo.init(random.PRNGKey(0), x, True)
+    y = foo.apply(variables, x, False)
+    self.assertEqual(y.shape, (1, 3))
+
+    class FooTrainDynamic(nn.Module):
+      @partial(nn.remat, static_argnums=())
+      @nn.compact
+      def __call__(self, inputs, train: bool):
+        test.assertTrue(isinstance(train, jnp.ndarray))
+        
+        return nn.Dense(3, use_bias=False)(inputs)
+
+    # set train as a non-static arguments
+    foo = FooTrainDynamic()
+
+    variables = foo.init(random.PRNGKey(0), x, True)
+    y = foo.apply(variables, x, False)
+    self.assertEqual(y.shape, (1, 3))
+    
+
   def test_vmap(self):
     key1, key2 = random.split(random.PRNGKey(3), 2)
     x = random.uniform(key1, (4, 4))
