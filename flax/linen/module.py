@@ -115,7 +115,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
   else:
     return f'{cls_name}()'
 
-# 
+#
 # -----------------------------------------------------------------------------
 
 _find_non_lifted_module = re.compile(r'.*\((.*)\)')
@@ -697,7 +697,7 @@ class Module:
       if add_call_info:
         call_index = _context.call_info_stack[-1].get_call_index(self)
         scope_path = jax.tree_util.tree_map(_fix_path_part, self.scope.path)
-      
+
       # call method
       if _use_named_call:
         with jax.named_scope(_derive_profiling_name(self, fun)):
@@ -1332,6 +1332,34 @@ class Module:
         **kwargs)
     return v_out
 
+  @traceback_util.api_boundary
+  def init_with_dce(self,
+                    rngs: Union[PRNGKey, RNGSequences],
+                    *args,
+                    method: Optional[Callable[..., Any]] = None,
+                    mutable: CollectionFilter = DenyList('intermediates'),
+                    capture_intermediates: Union[bool, Callable[['Module', str],
+                                                                bool]] = False,
+                    **kwargs) -> FrozenVariableDict:
+
+    def wrapper(*args):
+      return self.init_with_output(
+          rngs,
+          *args,
+          method=method,
+          mutable=mutable,
+          capture_intermediates=capture_intermediates,
+          **kwargs)[1]
+
+    in_tree = jax.tree_structure(args)
+    f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(wrapper), in_tree)
+    pvs = [pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype)) for x in jax.tree_leaves(args)]
+    jaxpr, pvs, res = pe.trace_to_jaxpr_nounits(f_flat, pvs)
+    pvs = [pv.get_known() for pv in pvs]
+    pvs = out_tree().unflatten(pvs)
+    return pvs
+
+
   @property
   def variables(self) -> VariableDict:
     """Returns the variables in this module."""
@@ -1544,7 +1572,7 @@ class Module:
       A string summarizing the Module.
     """
     from flax.linen import summary
-    
+
     tabulate_fn = summary.tabulate(self, rngs, depth=depth,
                                    show_repeated=show_repeated, mutable=mutable,
                                    console_kwargs=console_kwargs)
