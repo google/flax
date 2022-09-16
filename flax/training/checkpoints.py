@@ -83,6 +83,37 @@ def _checkpoint_path_step(path: str) -> Optional[float]:
   return None
 
 
+class AsyncManager():
+  """A simple object to track async checkpointing.
+
+  How to use: create an instance and pass to save_checkpoint() calls:
+    am = AsyncManager()
+    save_checkpoint(..., async_manager=am)
+  """
+
+  def __init__(self, max_workers: int = 1):
+    self.executor = thread.ThreadPoolExecutor(max_workers=max_workers)
+    self.save_future = None
+
+  def wait_previous_save(self):
+    """Block until the previous save finishes, to keep files' consistency."""
+    if self.save_future and not self.save_future.done():
+      logging.warning(
+          'The previous async save_checkpoint has not finished yet. Waiting '
+          'for it to complete before the next save.'
+      )
+      self.save_future.result()
+
+  def save_async(self, task: Callable[[], Any]):
+    """Run a task async. The future will be tracked as self.save_future.
+
+    Args:
+      task: The callable to be executed asynchrously.
+    """
+    self.wait_previous_save()
+    self.save_future = self.executor.submit(task)
+
+
 def _split_gdas(
     target: Dict[str, Any]
 ) -> Tuple[Dict[str, Any], List[Tuple[GlobalDeviceArray, str]]]:
@@ -103,42 +134,50 @@ def _split_gdas(
   return target, gda_targets
 
 
-def on_commit_callback(tmp_path, final_path):
-  if tmp_path == final_path:
-    with gfile.GFile(
-        os.path.join(final_path, COMMIT_SUCCESS_FILE), 'w') as f:
-      f.write(f'Checkpoint commit was successful to {final_path}')
-  else:
-    logging.info('Renaming %s to %s', tmp_path, final_path)
-    gfile.rename(tmp_path, final_path)
-    logging.info('Finished saving checkpoint to `%s`.', final_path)
-
-
 def _make_gda_dirs(gda_targets: List[Tuple[GlobalDeviceArray, str]],
                    tmp_path: str):
+  gda_tmp_path = tmp_path + '_gda'
+  # Clean up the previous GDA dir, in case some leftover from last preemption
+  # lingers.
+  if gfile.exists(gda_tmp_path):
+    logging.info('Removing outdated GDA temporary files at %s', gda_tmp_path)
+    gfile.rmtree(gda_tmp_path)
   _, gda_subpaths = zip(*gda_targets)
   for subpath in gda_subpaths:
-    gfile.makedirs(os.path.join(tmp_path, subpath))
+    gfile.makedirs(os.path.join(gda_tmp_path, subpath))
 
 
-def _save_gdas(gda_manager,
-               gda_targets: List[Tuple[GlobalDeviceArray, str]],
-               tmp_path: str, final_path: str):
+def _save_gdas(gda_manager, gda_targets: List[Tuple[GlobalDeviceArray, str]],
+               tmp_path: str, final_path: str, base_path: str, keep: int,
+               overwrite: bool, keep_every_n_steps: Optional[int],
+               async_manager: Optional[AsyncManager] = None):
   gda_list, gda_subpaths = zip(*gda_targets)
+  gda_tmp_path, gda_final_path = tmp_path + '_gda', final_path + '_gda'
+  write_commit_success = False
   # If the checkpoint directory is a GCS directory, then keep the final
   # checkpoint directory as the temporary checkpoint directory. This is because
   # renames are not atomic on GCS. When restoring check for the existence of a
   # success file.
   # TODO: figure out a way to unit-test the behavior.
   if tmp_path.startswith('gs://'):
-    tmp_path = final_path
-  gda_paths = [os.path.join(tmp_path, x) for x in gda_subpaths]
+    gda_tmp_path = gda_final_path
+    write_commit_success = True
+  gda_paths = [os.path.join(gda_tmp_path, x) for x in gda_subpaths]
   ts_specs = [get_tensorstore_spec(x) for x in gda_paths]
   gda_manager.serialize(
       list(gda_list),
       ts_specs,
-      on_commit_callback=functools.partial(on_commit_callback, tmp_path,
-                                           final_path))
+      on_commit_callback=functools.partial(
+          _save_commit,
+          tmp_path,
+          final_path,
+          base_path,
+          keep,
+          overwrite,
+          keep_every_n_steps,
+          has_gda=True,
+          write_commit_success=write_commit_success,
+          async_manager=async_manager))
 
 
 def _restore_gdas(state_dict,
@@ -228,35 +267,148 @@ def safe_normpath(path: str) -> str:
   return (d['scheme'] or '') + os.path.normpath(d['path'])
 
 
-class AsyncManager():
-  """A simple object to track async checkpointing.
+def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
+                          overwrite: bool, keep_every_n_steps: Optional[int],
+                          has_gda: bool) -> None:
+  """Check the parameters and clean up the checkpoint space accordingly."""
+  checkpoint_files = gfile.glob(base_path + '*')
+  checkpoint_files = [c for c in checkpoint_files if not c.endswith('_gda')]
+  checkpoint_files = natural_sort(checkpoint_files)
 
-  How to use: create an instance and pass to save_checkpoint() calls:
-    am = AsyncManager()
-    save_checkpoint(..., async_manager=am)
+  # Remove newer checkpoints
+  if overwrite:
+    ind = checkpoint_files.index(ckpt_path) + 1
+    newer_ckpts = checkpoint_files[ind:]
+    checkpoint_files = checkpoint_files[:ind]
+    for path in newer_ckpts:
+      logging.info('Removing checkpoint at %s', path)
+      if has_gda:
+        # GDA might be removed already but the main ckpt is still there. This
+        # can happen if the job is previously preempted after deleting the GDA
+        # checkpoint folder and before deleting the main checkpoint.
+        if gfile.exists(path + '_gda'):
+          gfile.rmtree(path + '_gda')
+      gfile.rmtree(path)
+
+  # Remove old checkpoint files.
+  last_kept = -float('inf')
+  if len(checkpoint_files) > keep:
+    old_ckpts = checkpoint_files[:-keep]
+    # Note: old_ckpts is sorted from oldest to newest.
+    for path in old_ckpts:
+      if keep_every_n_steps:
+        step_number = _checkpoint_path_step(path)
+        if step_number and (step_number - last_kept) >= keep_every_n_steps:
+          logging.debug('Not deleting %s, because last_kept=%f and keeping '
+                        'every %d steps.',
+                        path, last_kept, keep_every_n_steps)
+          last_kept = step_number
+          continue
+      logging.info('Removing checkpoint at %s', path)
+      if has_gda:
+        # GDA might be removed already but the main ckpt is still there.
+        if gfile.exists(path + '_gda'):
+          gfile.rmtree(path + '_gda')
+      gfile.rmtree(path)
+
+
+def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
+                 overwrite: bool, keep_every_n_steps: Optional[int],
+                 has_gda: bool, write_commit_success: bool,
+                 async_manager: Optional[AsyncManager] = None) -> None:
+  """Commit changes after saving checkpoints to disk.
+
+  This function does the following, sequentially:
+    1. Make sure all ckpt writing finishes, and rename them from temp path to
+    the final path.
+    2. Remove newer checkpoints (files that ordered larger than this save) if
+    `overwrite=True`.
+    3. Remove old checkpoint files based on `keep` and `keep_every_n_steps`.
   """
+  gda_ckpt_tmp_path, gda_ckpt_path = ckpt_tmp_path + '_gda', ckpt_path + '_gda'
+  # Rename GDA path once serialization and writing finished.
+  if has_gda:
+    if write_commit_success:
+      commit_success_path = os.path.join(gda_ckpt_path, COMMIT_SUCCESS_FILE)
+      with gfile.GFile(commit_success_path, 'w') as f:
+        f.write(f'Checkpoint commit was successful to {gda_ckpt_path}')
+    else:
+      # Commits are a two stage process (renaming the GDA folder and renaming
+      # the main ckpt file in sequential order). We always try tp  overwrite
+      # here because the GDA ckpt might be already renamed in a previously
+      # interrupted commit. NOTE: gfile.rename does not support overwriting
+      # directories via `rename` so we manually overwrite it.
+      if gfile.exists(gda_ckpt_path):
+        logging.info('Removing outdated checkpoint at %s', gda_ckpt_path)
+        gfile.rmtree(gda_ckpt_path)
+      gfile.rename(gda_ckpt_tmp_path, gda_ckpt_path)
+  # Commit the main checkpoint file after gda checkpoints (if any) are committed
+  if async_manager:
+    async_manager.wait_previous_save()
+  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
+  logging.info('Saved checkpoint at %s', ckpt_path)
 
-  def __init__(self, max_workers: int = 1):
-    self.executor = thread.ThreadPoolExecutor(max_workers=max_workers)
-    self.save_future = None
+  # Remove newer and older invalid checkpoints.
+  _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
+                        keep_every_n_steps, has_gda)
 
-  def wait_previous_save(self):
-    """Block until the previous save finishes, to keep files' consistency."""
-    if self.save_future and not self.save_future.done():
-      logging.warning(
-          'The previous async save_checkpoint has not finished yet. Waiting '
-          'for it to complete before the next save.'
-      )
-      self.save_future.result()
 
-  def save_async(self, task: Callable[[], Any]):
-    """Run a task async. The future will be tracked as self.save_future.
 
-    Args:
-      task: The callable to be executed asynchrously.
-    """
-    self.wait_previous_save()
-    self.save_future = self.executor.submit(task)
+def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
+                           step: int):
+  """Throw error if a ckpt file of this step or higher already exists."""
+  checkpoint_files = gfile.glob(base_path + '*')
+  checkpoint_files = [c for c in checkpoint_files if not c.endswith('_gda')]
+  if ckpt_path in checkpoint_files:
+    raise errors.InvalidCheckpointError(ckpt_path, step)
+  checkpoint_files.append(ckpt_path)
+
+  checkpoint_files = natural_sort(checkpoint_files)
+  # Handle the case if the job was preempted after the temporary checkpoint
+  # was written, but before it was renamed to the final checkpoint name
+  if checkpoint_files[-1] == ckpt_tmp_path:
+    checkpoint_files.pop()
+  if ckpt_path != checkpoint_files[-1]:
+    raise errors.InvalidCheckpointError(ckpt_path, step)
+
+
+def _save_main_ckpt_file(target: bytes, has_gda: bool, paths: Tuple[str, str],
+                         base_path: str, step: int,
+                         keep: int, overwrite: bool,
+                         keep_every_n_steps: Optional[int]):
+  """Save the main checkpoint file via file system."""
+  ckpt_tmp_path, ckpt_path = paths
+  gfile.makedirs(os.path.dirname(ckpt_path))
+
+  with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
+    fp.write(target)
+
+  # Postpone the commitment of checkpoint to after GDA writes are done.
+  if not has_gda:
+    _save_commit(
+        ckpt_tmp_path,
+        ckpt_path,
+        base_path,
+        keep,
+        overwrite,
+        keep_every_n_steps,
+        has_gda=False,
+        write_commit_success=False)
+
+
+def _get_checkpoint_paths(
+    ckpt_dir: Union[str, os.PathLike],
+    step: Union[int, float],
+    prefix: str = 'checkpoint_') -> Tuple[str, str, str]:
+  """Generate the checkpoint paths used in this save operation."""
+  ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
+  logging.info('Saving checkpoint at step: %s', step)
+  # normalize path because gfile.glob() can modify path './', '//' ...
+  ckpt_dir = safe_normpath(ckpt_dir)
+  ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
+  ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
+  base_path = os.path.join(ckpt_dir, prefix)
+  return ckpt_path, ckpt_tmp_path, base_path
 
 
 def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
@@ -266,12 +418,19 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     keep: int = 1,
                     overwrite: bool = False,
                     keep_every_n_steps: Optional[int] = None,
-                    async_manager: Optional[AsyncManager] = None,
-                    gda_manager: Optional[Any] = None) -> str:
-  """Save a checkpoint of the model.
+                    async_manager: Optional[AsyncManager] = None) -> str:
+  """Save a checkpoint of the model. Suitable for single-host.
+  
+  In this method, every JAX process saves the checkpoint on its own. Do not
+  use it if you have multiple processes and you intend for them to save data
+  to a common directory (e.g., a GCloud bucket). To save multi-process 
+  checkpoints to a shared storage or to save `GlobalDeviceArray`s, use
+  `save_checkpoint_multiprocess()` instead.
 
-  Attempts to be pre-emption safe by writing to temporary before
-  a final rename and cleanup of past files.
+  Pre-emption safe by writing to temporary before a final rename and cleanup
+  of past files. However, if async_manager is used, the final
+  commit will happen inside an async callback, which can be explicitly waited
+  by calling `async_manager.wait_previous_save()`.
 
   Args:
     ckpt_dir: str or pathlib-like path to store checkpoint files in.
@@ -286,114 +445,115 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     async_manager: if defined, the save will run without blocking the main
       thread. Only works for single host. Note that an ongoing save will still
       block subsequent saves, to make sure overwrite/keep logic works correctly.
-    gda_manager: required if target contains a JAX GlobalDeviceArray. Type 
-      should be GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will save the GDAs to a separate subdirectory with postfix 
-      "_gda" asynchronously. Same as async_manager, this will block subsequent saves.
   Returns:
     Filename of saved checkpoint.
   """
-
-  def _save_checkpoint_files(target: bytes, paths: Tuple[str, str],
-                             checkpoint_files: List[Any], keep: int,
-                             overwrite: bool,
-                             keep_every_n_steps: Optional[int]):
-    """Save the checkpoint bytes via file system."""
-    ckpt_tmp_path, ckpt_path = paths
-    gfile.makedirs(os.path.dirname(ckpt_path))
-    if ckpt_path in checkpoint_files:
-      if not overwrite:
-        raise errors.InvalidCheckpointError(ckpt_path, step)
-    else:
-      checkpoint_files.append(ckpt_path)
-
-    checkpoint_files = natural_sort(checkpoint_files)
-    # Handle the case if the job was preempted after the temporary checkpoint
-    # was written, but before it was renamed to the final checkpoint name
-    if checkpoint_files[-1] == ckpt_tmp_path:
-      checkpoint_files.pop()
-    if ckpt_path != checkpoint_files[-1]:
-      if not overwrite:
-        raise errors.InvalidCheckpointError(ckpt_path, step)
-
-    with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
-      fp.write(target)
-
-    # Rename once serialization and writing finished.
-    gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
-    logging.info('Saved checkpoint at %s', ckpt_path)
-
-    # Remove newer checkpoints
-    if overwrite:
-      ind = checkpoint_files.index(ckpt_path) + 1
-      newer_ckpts = checkpoint_files[ind:]
-      checkpoint_files = checkpoint_files[:ind]
-      for path in newer_ckpts:
-        logging.info('Removing checkpoint at %s', path)
-        gfile.rmtree(path)
-
-    # Remove old checkpoint files.
-    last_kept = -float('inf')
-    if len(checkpoint_files) > keep:
-      exclude_gda = [f for f in checkpoint_files if f[:-4] != '_gda']
-      ind = checkpoint_files.index(exclude_gda[-keep])
-      old_ckpts = checkpoint_files[:ind]
-      # Note: old_ckpts is sorted from oldest to newest.
-      for path in old_ckpts:
-        if keep_every_n_steps:
-          step_number = _checkpoint_path_step(path)
-          if step_number and (step_number - last_kept) >= keep_every_n_steps:
-            logging.debug('Not deleting %s, because last_kept=%f and keeping '
-                          'every %d steps.',
-                          path, last_kept, keep_every_n_steps)
-            last_kept = step_number
-            continue
-        logging.info('Removing checkpoint at %s', path)
-        gfile.remove(path)
-
   # Make sure all saves are finished before the logic of checking and removing
   # outdated checkpoints happens.
+  if async_manager:
+    async_manager.wait_previous_save()
+
+  target = serialization.to_bytes(target)
+
+  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
+      ckpt_dir, step, prefix)
+  if not overwrite:
+    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)
+  # Save the files via I/O sync or async.
+  def save_main_ckpt_task():
+    return _save_main_ckpt_file(target, False, (ckpt_tmp_path, ckpt_path),
+                                base_path, step, keep,
+                                overwrite, keep_every_n_steps)
+  if async_manager:
+    async_manager.save_async(save_main_ckpt_task)
+  else:
+    save_main_ckpt_task()
+  return ckpt_path
+
+
+def save_checkpoint_multiprocess(ckpt_dir: Union[str, os.PathLike],
+                                 target: PyTree,
+                                 step: Union[int, float],
+                                 prefix: str = 'checkpoint_',
+                                 keep: int = 1,
+                                 overwrite: bool = False,
+                                 keep_every_n_steps: Optional[int] = None,
+                                 async_manager: Optional[AsyncManager] = None,
+                                 gda_manager: Optional[Any] = None) -> str:
+  """Save a checkpoint of the model in multi-process environment.
+  
+  Use this method to save `GlobalDeviceArray`s, or to save data to a
+  common directory. Only process 0 will save the main checkpoint file and
+  remove old checkpoint files.
+
+  Pre-emption safe by writing to temporary before a final rename and cleanup
+  of past files. However, if async_manager or gda_manager is used, the final
+  commit will happen inside an async callback, which can be explicitly waited
+  by calling `async_manager.wait_previous_save()` or
+  `gda_manager.wait_until_finished()`.
+
+  Args:
+    ckpt_dir: str or pathlib-like path to store checkpoint files in.
+    target: serializable flax object, usually a flax optimizer.
+    step: int or float: training step number or other metric number.
+    prefix: str: checkpoint file name prefix.
+    keep: number of past checkpoint files to keep.
+    overwrite: overwrite existing checkpoint files if a checkpoint at the
+      current or a later step already exits (default: False).
+    keep_every_n_steps: if defined, keep every checkpoints every n steps (in
+      addition to keeping the last 'keep' checkpoints).
+    async_manager: if defined, the save will run without blocking the main
+      thread. Only works for single host. Note that an ongoing save will still
+      block subsequent saves, to make sure overwrite/keep logic works correctly.
+    gda_manager: required if target contains a JAX GlobalDeviceArray. Type
+      should be GlobalAsyncCheckpointManager (needs Tensorstore to be imported
+      correctly). Will save the GDAs to a separate subdirectory with postfix
+      "_gda" asynchronously. Same as async_manager, this will block subsequent
+      saves.
+
+  Returns:
+    Filename of saved checkpoint.
+  """
+  # Make sure all saves are finished before the logic of checking and removing
+  # outdated checkpoints happens.
+  sync_global_devices('starting_save_checkpoint')
   if async_manager:
     async_manager.wait_previous_save()
   if gda_manager:
     gda_manager.wait_until_finished()
     sync_global_devices('before_save_checkpoint')
 
-  ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
-  # Write temporary checkpoint file.
-  logging.info('Saving checkpoint at step: %s', step)
-  # normalize path because gfile.glob() can modify path './', '//' ...
-  ckpt_dir = safe_normpath(ckpt_dir)
-  ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
-  ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
-  base_path = os.path.join(ckpt_dir, prefix)
-  checkpoint_files = gfile.glob(base_path + '*')
-
   target = serialization.to_state_dict(target)
   target, gda_targets = _split_gdas(target)
   target = serialization.msgpack_serialize(target)
+  has_gda = gda_targets and _IMPORT_GDAM_SUCCESSFUL
 
+  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
+      ckpt_dir, step, prefix)
+  if not overwrite:
+    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)
   # Save the files via I/O sync or async.
-  def save_task():
-    return _save_checkpoint_files(target, (ckpt_tmp_path, ckpt_path),
-                                  checkpoint_files, keep, overwrite,
-                                  keep_every_n_steps)
-  if process_index() == 0 or not gda_targets:
+  def save_main_ckpt_task():
+    return _save_main_ckpt_file(target, has_gda, (ckpt_tmp_path, ckpt_path),
+                                base_path, step, keep,
+                                overwrite, keep_every_n_steps)
+  # Write the main checkpoint file only via process 0, to avoid race condition.
+  if process_index() == 0:
     if async_manager:
-      async_manager.save_async(save_task)
+      async_manager.save_async(save_main_ckpt_task)
     else:
-      save_task()
+      save_main_ckpt_task()
 
-  if gda_targets and _IMPORT_GDAM_SUCCESSFUL:
+  if has_gda:
     if not gda_manager:
       raise errors.GDACheckpointingRequiredError(ckpt_path, step)
-    gda_tmp_path, gda_final_path = ckpt_tmp_path + '_gda', ckpt_path + '_gda'
     # Creating the directory containing GDAs explicitly. This should happen only
-    # on process 0 and before any worker starts to write data.
+    # on process 0 and before any worker starts to write GDA data.
     if process_index() == 0:
-      _make_gda_dirs(gda_targets, gda_tmp_path)
-    sync_global_devices('sync_after_create_dir')
-    _save_gdas(gda_manager, gda_targets, gda_tmp_path, gda_final_path)
+      _make_gda_dirs(gda_targets, ckpt_tmp_path)
+    sync_global_devices('sync_after_create_gda_dir')
+    _save_gdas(gda_manager, gda_targets, ckpt_tmp_path, ckpt_path, base_path,
+               keep, overwrite, keep_every_n_steps, async_manager)
 
   return ckpt_path
 
@@ -449,9 +609,9 @@ def restore_checkpoint(
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
-    gda_manager: required if checkpoint contains a JAX GlobalDeviceArray. Type 
+    gda_manager: required if checkpoint contains a JAX GlobalDeviceArray. Type
       should be GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will read the GDAs from the separate subdirectory with postfix 
+      correctly). Will read the GDAs from the separate subdirectory with postfix
       "_gda".
 
   Returns:
