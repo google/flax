@@ -33,6 +33,7 @@ from flax import traverse_util
 from jax import process_index
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
+from tensorflow import errors as tf_errors
 from tensorflow.io import gfile  # pytype: disable=import-error
 
 _IMPORT_GDAM_SUCCESSFUL = False
@@ -82,6 +83,11 @@ def _checkpoint_path_step(path: str) -> Optional[float]:
       return float(s)
   return None
 
+def _allowempty_listdir(path: str):
+  try:
+    return gfile.listdir(path)
+  except tf_errors.NotFoundError:
+    return []
 
 class AsyncManager():
   """A simple object to track async checkpointing.
@@ -271,8 +277,12 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
                           overwrite: bool, keep_every_n_steps: Optional[int],
                           has_gda: bool) -> None:
   """Check the parameters and clean up the checkpoint space accordingly."""
-  checkpoint_files = gfile.glob(base_path + '*')
-  checkpoint_files = [c for c in checkpoint_files if not c.endswith('_gda')]
+  dir_path, prefix = os.path.split(base_path)
+  checkpoint_files = [
+      os.path.join(dir_path, c)
+      for c in gfile.listdir(dir_path)
+      if c.startswith(prefix) and not c.endswith('_gda')
+  ]
   checkpoint_files = natural_sort(checkpoint_files)
 
   # Remove newer checkpoints
@@ -357,8 +367,12 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
 def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
                            step: int):
   """Throw error if a ckpt file of this step or higher already exists."""
-  checkpoint_files = gfile.glob(base_path + '*')
-  checkpoint_files = [c for c in checkpoint_files if not c.endswith('_gda')]
+  dir_path, prefix = os.path.split(base_path)
+  checkpoint_files = [
+      os.path.join(dir_path, c)
+      for c in _allowempty_listdir(dir_path)
+      if c.startswith(prefix) and not c.endswith('_gda')
+  ]
   if ckpt_path in checkpoint_files:
     raise errors.InvalidCheckpointError(ckpt_path, step)
   checkpoint_files.append(ckpt_path)
@@ -570,13 +584,12 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
     The latest checkpoint path or None if no checkpoints were found.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
-  glob_path = os.path.join(ckpt_dir, f'{prefix}*')
-  checkpoint_files = natural_sort(gfile.glob(glob_path))
-  ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   checkpoint_files = [
-      f for f in checkpoint_files
-      if f != ckpt_tmp_path and not f.endswith('_gda')
+      os.path.join(ckpt_dir, c)
+      for c in _allowempty_listdir(ckpt_dir)
+      if c.startswith(prefix) and not c.endswith('_gda') and c != f'{prefix}tmp'
   ]
+  checkpoint_files = natural_sort(checkpoint_files)
   if checkpoint_files:
     return checkpoint_files[-1]
   else:
