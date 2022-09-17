@@ -587,7 +587,7 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
   checkpoint_files = [
       os.path.join(ckpt_dir, c)
       for c in _allowempty_listdir(ckpt_dir)
-      if c.startswith(prefix) and not c.endswith('_gda') and c != f'{prefix}tmp'
+      if c.startswith(prefix) and not c.endswith('_gda/') and c != f'{prefix}tmp'
   ]
   checkpoint_files = natural_sort(checkpoint_files)
   if checkpoint_files:
