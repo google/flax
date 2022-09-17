@@ -301,6 +301,28 @@ class CheckpointsTest(parameterized.TestCase):
         tmp_dir, test_object1, prefix='test_')
     jtu.check_eq(new_object, test_object3)
 
+  def test_last_checkpoint(self):
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    with gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w') as f:
+        f.write('test_tmp')
+    gfile.makedirs(os.path.join(tmp_dir, 'test_tmp_gda'))
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), 
+                     None)
+                     
+    with gfile.GFile(os.path.join(tmp_dir, 'test_0'), 'w') as f:
+        f.write('test_0')
+    gfile.makedirs(os.path.join(tmp_dir, 'test_0_gda'))
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), 
+                     os.path.join(tmp_dir, 'test_0'))
+    
+    with gfile.GFile(os.path.join(tmp_dir, 'test_10'), 'w') as f:
+        f.write('test_10')
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), 
+                     os.path.join(tmp_dir, 'test_10'))
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'), 
+                     None)
+
+  
   def test_convert_pre_linen(self):
     params = checkpoints.convert_pre_linen({
         'mod_0': {
