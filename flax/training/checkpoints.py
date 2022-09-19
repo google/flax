@@ -22,6 +22,7 @@ checkpoint files.
 from concurrent.futures import thread
 import functools
 import os
+import pathlib
 import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -142,6 +143,9 @@ def _split_gdas(
 
 def _make_gda_dirs(gda_targets: List[Tuple[GlobalDeviceArray, str]],
                    tmp_path: str):
+  # Temporary GDA path is not used in GCS.
+  if tmp_path.startswith('gs://'):
+    return
   gda_tmp_path = tmp_path + '_gda'
   # Clean up the previous GDA dir, in case some leftover from last preemption
   # lingers.
@@ -278,10 +282,11 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
                           has_gda: bool) -> None:
   """Check the parameters and clean up the checkpoint space accordingly."""
   dir_path, prefix = os.path.split(base_path)
+  checkpoint_files = [pathlib.PurePath(c) for c in gfile.listdir(dir_path)]
   checkpoint_files = [
       os.path.join(dir_path, c)
-      for c in gfile.listdir(dir_path)
-      if c.startswith(prefix) and not c.endswith('_gda')
+      for c in checkpoint_files
+      if c.match(f'{prefix}*') and not c.match('*_gda')
   ]
   checkpoint_files = natural_sort(checkpoint_files)
 
@@ -368,10 +373,11 @@ def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
                            step: int):
   """Throw error if a ckpt file of this step or higher already exists."""
   dir_path, prefix = os.path.split(base_path)
+  checkpoint_files = [pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)]
   checkpoint_files = [
       os.path.join(dir_path, c)
-      for c in _allowempty_listdir(dir_path)
-      if c.startswith(prefix) and not c.endswith('_gda')
+      for c in checkpoint_files
+      if c.match(f'{prefix}*') and not c.match('*_gda')
   ]
   if ckpt_path in checkpoint_files:
     raise errors.InvalidCheckpointError(ckpt_path, step)
@@ -584,10 +590,11 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
     The latest checkpoint path or None if no checkpoints were found.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
+  checkpoint_files = [pathlib.PurePath(c) for c in _allowempty_listdir(ckpt_dir)]
   checkpoint_files = [
       os.path.join(ckpt_dir, c)
-      for c in _allowempty_listdir(ckpt_dir)
-      if c.startswith(prefix) and not c.endswith('_gda') and c != f'{prefix}tmp'
+      for c in checkpoint_files
+      if c.match(f'{prefix}*') and not c.match('*_gda') and not c.match(f'{prefix}tmp')
   ]
   checkpoint_files = natural_sort(checkpoint_files)
   if checkpoint_files:
