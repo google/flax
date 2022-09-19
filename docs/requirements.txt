@@ -16,7 +16,7 @@ docutils==0.16
 
 # The next packages are for notebooks.
 matplotlib
-sklearn
+scikit-learn
 # Must install flax itself for notebook execution and autodocs to work.
 .
 # The next packages are used in testcode blocks.
