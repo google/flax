@@ -60,7 +60,7 @@ replaced for yours):
         loss, has_aux=True)(params)
     updates, opt_state = tx.update(grads, opt_state)  # Defined below.
     params = optax.apply_updates(params, updates)
-    return opt_state, params, state
+    return opt_state, params, updated_state
 
 Then we can write the actual training code.
 
