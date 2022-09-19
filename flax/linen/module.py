@@ -775,8 +775,11 @@ class Module:
     if name in self.__dict__:
       return self.__dict__[name]
     else:
-      raise AttributeError(
-          f'"{self.__class__.__name__}" object has no attribute "{name}"')
+      msg = f'"{self.__class__.__name__}" object has no attribute "{name}".'
+      if self.scope is None:
+        msg += (f' If "{name}" is defined in \'.setup()\', remember these fields '
+          'are only accessible from inside \'init\' or \'apply\'.')
+      raise AttributeError(msg)
 
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
