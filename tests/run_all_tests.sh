@@ -1,11 +1,10 @@
 #!/bin/bash
 
-export JAX_NUMPY_RANK_PROMOTION=raise
-export FLAX_PROFILE=1
-export FLAX_LAZY_RNG=1
-
 PYTEST_OPTS=
 RUN_DOCTEST=true
+RUN_PYTEST=true
+RUN_PYTYPE=true
+
 for flag in "$@"; do
 case $flag in
   --with-cov)
@@ -19,12 +18,28 @@ case $flag in
   --no-doctest)
   RUN_DOCTEST=false
   ;;
+  --no-pytest)
+  RUN_PYTEST=false
+  ;;
+  --no-pytype)
+  RUN_PYTYPE=false
+  ;;
   *)
   echo "Unknown flag: $flag"
   exit 1
   ;;
 esac
 done
+
+echo "====== test config ======="
+echo "PYTEST_OPTS: $PYTEST_OPTS"
+echo "RUN_DOCTEST: $RUN_DOCTEST"
+echo "RUN_PYTEST: $RUN_PYTEST"
+echo "RUN_PYTYPE: $RUN_PYTYPE"
+echo "jax: $(python -c 'import jax; print(jax.__version__)')"
+echo "flax: $(python -c 'import flax; print(flax.__version__)')"
+echo "=========================="
+echo ""
 
 sh $(dirname "$0")/download_dataset_metadata.sh || exit
 
@@ -45,40 +60,55 @@ handle_errors () {
 
 # Run embedded tests inside docs
 if $RUN_DOCTEST; then
+  echo "=== RUNNING DOCTESTS ==="
+  # test doctest
   sphinx-build -M doctest docs docs/_build -T
+  # test build html
+  sphinx-build -M html docs docs/_build -T
   # test docstrings
   pytest -n auto flax --doctest-modules --suppress-no-test-exit-code
 fi
 
-# Run some test on separate process, avoiding device configs poluting each other
-PYTEST_IGNORE=
-for file in "tests/jax_utils_test.py"; do
-    echo "pytest -n auto $file $PYTEST_OPTS"
-    pytest -n auto $file $PYTEST_OPTS
-    PYTEST_IGNORE+=" --ignore=$file"
-done
-# Run battery of core FLAX API tests.
-pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
+# env vars must be set after doctest
+export JAX_NUMPY_RANK_PROMOTION=raise
+export FLAX_PROFILE=1
+export FLAX_LAZY_RNG=1
 
-# Per-example tests.
-#
-# we apply pytest within each example to avoid pytest's annoying test-filename collision.
-# In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
-# /foo/bar and /baz/bleep aren't set up as packages.
-for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-    pytest $egd
-done
+if $RUN_PYTEST; then
+  echo "=== RUNNING PYTESTS ==="
+  # Run some test on separate process, avoiding device configs poluting each other
+  PYTEST_IGNORE=
+  for file in "tests/jax_utils_test.py"; do
+      echo "pytest -n auto $file $PYTEST_OPTS"
+      pytest -n auto $file $PYTEST_OPTS
+      PYTEST_IGNORE+=" --ignore=$file"
+  done
+  # Run battery of core FLAX API tests.
+  pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
 
-# Validate types in library code.
-pytype --config pytype.cfg flax/
+  # Per-example tests.
+  #
+  # we apply pytest within each example to avoid pytest's annoying test-filename collision.
+  # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
+  # /foo/bar and /baz/bleep aren't set up as packages.
+  for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+      pytest $egd
+  done
+fi
 
-# Validate types in examples.
-for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-    # use cd to make sure pytpe cache lives in example dir and doesn't name clash
-    # use *.py to avoid importing configs as a top-level import which leads to import errors
-    # because config files use relative imports (e.g. from config import ...).
-    (cd $egd ; pytype --config ../../pytype.cfg "*.py")
-done
+if $RUN_PYTYPE; then
+  echo "=== RUNNING PYTYPE ==="
+  # Validate types in library code.
+  pytype --config pytype.cfg flax/
+
+  # Validate types in examples.
+  for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
+      # use cd to make sure pytpe cache lives in example dir and doesn't name clash
+      # use *.py to avoid importing configs as a top-level import which leads to import errors
+      # because config files use relative imports (e.g. from config import ...).
+      (cd $egd ; pytype --config ../../pytype.cfg "*.py")
+  done
+fi
 
 # Return error code 0 if no real failures happened.
 echo "finished all tests."
