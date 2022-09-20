@@ -31,7 +31,10 @@ from flax import core
 from flax import errors
 from flax import serialization
 from flax import traverse_util
+import jax
 from jax import process_index
+from jax.experimental import array
+from jax.experimental import sharding
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
 from tensorflow import errors as tf_errors
@@ -60,15 +63,21 @@ MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
 # Alternative schemes handled by `gfile`, e.g. on Google Cloud Storage (GCS).
 SCHEME_RE = re.compile('^(?P<scheme>[a-z][a-z0-9.+-]+://)?(?P<path>.*)', re.I)
 
-# GlobalDeviceArrays is across devices and would not be stored in the same file
-# with non-GDA data. So their occurrences in the target pytree will be replaced
-# by this string placeholder.
-GDA_PH = '//GDAPlaceholder:'
-# Add a copy-success file to GDA directory to indicate the GDA save is complete.
+# Multiprocess arrays (GlobalDeviceArray, or JAX array with multiprocess
+# sharding) is across processes and will be stored in directories with this
+# postfix, seperated from the non-distributed data (e.g. the larger pytree)
+MP_ARRAY_POSTFIX = '_gda'
+# Occurrences of multiprocess arrays in the target pytree will be
+# replaced by this string placeholder.
+MP_ARRAY_PH = '//GDAPlaceholder:'
+
+# Add a copy-success file to a distributed array directory to indicate the
+# array save is complete.
 # We need this for GCS because GCS's directory move is not atomic.
 COMMIT_SUCCESS_FILE = 'commit_success.txt'
 
 PyTree = Any
+MultiprocessArrayType = Union[GlobalDeviceArray, array.Array]
 
 
 def _checkpoint_path(ckpt_dir: str,
@@ -121,48 +130,59 @@ class AsyncManager():
     self.save_future = self.executor.submit(task)
 
 
-def _split_gdas(
+def _use_multiprocess_serialization(value: Any) -> bool:
+  """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
+  if isinstance(value, GlobalDeviceArray):
+    return True
+  if isinstance(value, array.Array):
+    return not value.is_fully_addressable()
+  return False
+
+
+def _split_mp_arrays(
     target: Dict[str, Any]
-) -> Tuple[Dict[str, Any], List[Tuple[GlobalDeviceArray, str]]]:
+) -> Tuple[Dict[str, Any], List[Tuple[MultiprocessArrayType, str]]]:
+  """Split out the multiprocess arrays from the target pytree to save."""
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(target, (core.FrozenDict, dict)):
-    if isinstance(target, GlobalDeviceArray):
-      return GDA_PH, [(target, '')]
+    if _use_multiprocess_serialization(target):
+      return MP_ARRAY_PH, [(target, '')]
     return target, []
-  # Traverse the target and handle GlobalDeviceArrays.
+  # Traverse the target and handle distributed arrays.
   flattened = traverse_util.flatten_dict(target, keep_empty_nodes=True)
-  gda_targets = []
+  mpa_targets = []
   for key, value in flattened.items():
-    if isinstance(value, GlobalDeviceArray):
+    if _use_multiprocess_serialization(value):
       subpath = '/'.join(key)
-      gda_targets.append((value, subpath))
-      flattened[key] = GDA_PH + subpath
+      mpa_targets.append((value, subpath))
+      flattened[key] = MP_ARRAY_PH + subpath
   target = traverse_util.unflatten_dict(flattened)
-  return target, gda_targets
+  return target, mpa_targets
 
 
-def _make_gda_dirs(gda_targets: List[Tuple[GlobalDeviceArray, str]],
+def _make_mpa_dirs(mpa_targets: List[Tuple[MultiprocessArrayType, str]],
                    tmp_path: str):
-  # Temporary GDA path is not used in GCS.
+  # Temporary array path is not used in GCS.
   if tmp_path.startswith('gs://'):
     return
-  gda_tmp_path = tmp_path + '_gda'
-  # Clean up the previous GDA dir, in case some leftover from last preemption
+  mpa_tmp_path = tmp_path + MP_ARRAY_POSTFIX
+  # Clean up the previous MPA dir, in case some leftover from last preemption
   # lingers.
-  if gfile.exists(gda_tmp_path):
-    logging.info('Removing outdated GDA temporary files at %s', gda_tmp_path)
-    gfile.rmtree(gda_tmp_path)
-  _, gda_subpaths = zip(*gda_targets)
-  for subpath in gda_subpaths:
-    gfile.makedirs(os.path.join(gda_tmp_path, subpath))
+  if gfile.exists(mpa_tmp_path):
+    logging.info('Removing outdated MPA temporary files at %s', mpa_tmp_path)
+    gfile.rmtree(mpa_tmp_path)
+  _, mpa_subpaths = zip(*mpa_targets)
+  for subpath in mpa_subpaths:
+    gfile.makedirs(os.path.join(mpa_tmp_path, subpath))
 
 
-def _save_gdas(gda_manager, gda_targets: List[Tuple[GlobalDeviceArray, str]],
+def _save_mpas(gda_manager, mpa_targets: List[Tuple[MultiprocessArrayType, str]],
                tmp_path: str, final_path: str, base_path: str, keep: int,
                overwrite: bool, keep_every_n_steps: Optional[int],
                async_manager: Optional[AsyncManager] = None):
-  gda_list, gda_subpaths = zip(*gda_targets)
-  gda_tmp_path, gda_final_path = tmp_path + '_gda', final_path + '_gda'
+  """Save the multiprocess arrays given the paths."""
+  mpa_list, mpa_subpaths = zip(*mpa_targets)
+  mpa_tmp_path, mpa_final_path = tmp_path + MP_ARRAY_POSTFIX, final_path + MP_ARRAY_POSTFIX
   write_commit_success = False
   # If the checkpoint directory is a GCS directory, then keep the final
   # checkpoint directory as the temporary checkpoint directory. This is because
@@ -170,12 +190,12 @@ def _save_gdas(gda_manager, gda_targets: List[Tuple[GlobalDeviceArray, str]],
   # success file.
   # TODO: figure out a way to unit-test the behavior.
   if tmp_path.startswith('gs://'):
-    gda_tmp_path = gda_final_path
+    mpa_tmp_path = mpa_final_path
     write_commit_success = True
-  gda_paths = [os.path.join(gda_tmp_path, x) for x in gda_subpaths]
-  ts_specs = [get_tensorstore_spec(x) for x in gda_paths]
+  mpa_paths = [os.path.join(mpa_tmp_path, x) for x in mpa_subpaths]
+  ts_specs = [get_tensorstore_spec(x) for x in mpa_paths]
   gda_manager.serialize(
-      list(gda_list),
+      list(mpa_list),
       ts_specs,
       on_commit_callback=functools.partial(
           _save_commit,
@@ -185,63 +205,84 @@ def _save_gdas(gda_manager, gda_targets: List[Tuple[GlobalDeviceArray, str]],
           keep,
           overwrite,
           keep_every_n_steps,
-          has_gda=True,
+          has_mpa=True,
           write_commit_success=write_commit_success,
           async_manager=async_manager))
 
 
-def _restore_gdas(state_dict,
+def _restore_mpas(state_dict,
                   target: Optional[Any],
                   ckpt_path: str,
                   step: Optional[Union[int, float]] = None,
                   gda_manager: Optional[Any] = None):
+  """Restore the multiprocess arrays given the target structure and type."""
 
-  def _check_gda_errors():
+  def _check_mpa_errors():
     if not gda_manager:
-      raise errors.GDACheckpointingRequiredError(ckpt_path, step)
+      raise errors.MPACheckpointingRequiredError(ckpt_path, step)
     if not target:
-      raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
+      raise errors.MPARestoreTargetRequiredError(ckpt_path, step)
 
   def _safe_deserialize(
-      target_gdas: List[GlobalDeviceArray], gda_paths: List[str],
-      gda_manager: GlobalAsyncCheckpointManager) -> List[GlobalDeviceArray]:
+      target_mpas: List[MultiprocessArrayType], mpa_paths: List[str],
+      gda_manager: GlobalAsyncCheckpointManager) -> List[MultiprocessArrayType]:
     gda_manager.wait_until_finished()
-    # Check if reading from GCS and the GDA dir is potentially corrupted.
+
+    # Check if reading from GCS and the array dir is potentially corrupted.
     if ckpt_path.startswith('gs://') and not gfile.exists(
-        os.path.join(ckpt_path + '_gda', COMMIT_SUCCESS_FILE)):
-      raise errors.GDARestoreDataCorruptedError(step, ckpt_path)
-    meshes = [x.mesh for x in target_gdas]
-    partition_specs = [x.mesh_axes for x in target_gdas]
-    ts_specs = [get_tensorstore_spec(x) for x in gda_paths]
+        os.path.join(ckpt_path + MP_ARRAY_POSTFIX, COMMIT_SUCCESS_FILE)):
+      raise errors.MPARestoreDataCorruptedError(step, ckpt_path)
+
+    # Check if the given target array types are valid.
+    meshes, partition_specs = [], []
+    for i, arr in enumerate(target_mpas):
+      # Use GDA with jax.config.jax_array turned off, or jax.experimental.array
+      # with jax.config.jax_array turned on.
+      if isinstance(arr, GlobalDeviceArray) is jax.config.jax_array:
+        raise errors.MPARestoreTypeNotMatchError(step, mpa_paths[i])
+      if isinstance(arr, GlobalDeviceArray):
+        meshes.append(arr.mesh)
+        partition_specs.append(arr.mesh_axes)
+      elif isinstance(arr, array.Array):
+        assert isinstance(arr.sharding, sharding.MeshPspecSharding)
+        meshes.append(arr.sharding.mesh)
+        partition_specs.append(arr.sharding.spec)
+
+    # Restore the arrays.
+    ts_specs = [get_tensorstore_spec(x) for x in mpa_paths]
     return gda_manager.deserialize(meshes, partition_specs, ts_specs)
 
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
-    if isinstance(target, GlobalDeviceArray) and isinstance(
-        state_dict, str) and state_dict.startswith(GDA_PH):
-      _check_gda_errors()
-      return _safe_deserialize([target], [ckpt_path + '_gda'], gda_manager)[0]
+    if _use_multiprocess_serialization(target) and isinstance(
+        state_dict, str) and state_dict.startswith(MP_ARRAY_PH):
+      _check_mpa_errors()
+      return _safe_deserialize([target], [ckpt_path + MP_ARRAY_POSTFIX],
+                               gda_manager)[0]
     return state_dict
 
-  # Check if a GDA is present in the restored pytree
+  # Check if some multiprocess arrays are present in the restored pytree
   flattened = traverse_util.flatten_dict(state_dict, keep_empty_nodes=True)
-  gda_paths = []
+  mpa_paths = []
   for key, value in flattened.items():
-    if isinstance(value, str) and value.startswith(GDA_PH):
-      subpath = value[len(GDA_PH):]
-      gda_paths.append((key, os.path.join(ckpt_path+'_gda', subpath)))
+    if isinstance(value, str) and value.startswith(MP_ARRAY_PH):
+      subpath = value[len(MP_ARRAY_PH):]
+      mpa_paths.append(
+          (key, os.path.join(ckpt_path + MP_ARRAY_POSTFIX, subpath)))
 
-  if gda_paths:
-    _check_gda_errors()
+  if mpa_paths:
+    _check_mpa_errors()
     target_flattened = traverse_util.flatten_dict(
         serialization.to_state_dict(target), keep_empty_nodes=True)
-    target_gdas = [target_flattened[x[0]] for x in gda_paths]
-    if not all(isinstance(x, GlobalDeviceArray) for x in target_gdas):
-      raise errors.GDARestoreTargetRequiredError(ckpt_path, step)
-    gda_list = _safe_deserialize(target_gdas, [x[1] for x in gda_paths],
+    target_mpas = [target_flattened[x[0]] for x in mpa_paths]
+    # Make sure that for each entry with the MPA placeholder, the corresponding
+    # entry in target is a valid GDA or jax.Array.
+    if not all(_use_multiprocess_serialization(x) for x in target_mpas):
+      raise errors.MPARestoreTargetRequiredError(ckpt_path, step)
+    mpa_list = _safe_deserialize(target_mpas, [x[1] for x in mpa_paths],
                                  gda_manager)
-    for gda, (key, _) in zip(gda_list, gda_paths):
-      flattened[key] = gda
+    for mpa, (key, _) in zip(mpa_list, mpa_paths):
+      flattened[key] = mpa
   state_dict = traverse_util.unflatten_dict(flattened)
   return state_dict
 
@@ -279,14 +320,14 @@ def safe_normpath(path: str) -> str:
 
 def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
                           overwrite: bool, keep_every_n_steps: Optional[int],
-                          has_gda: bool) -> None:
+                          has_mpa: bool) -> None:
   """Check the parameters and clean up the checkpoint space accordingly."""
   dir_path, prefix = os.path.split(base_path)
   checkpoint_files = [pathlib.PurePath(c) for c in gfile.listdir(dir_path)]
   checkpoint_files = [
       os.path.join(dir_path, c)
       for c in checkpoint_files
-      if c.match(f'{prefix}*') and not c.match('*_gda')
+      if c.match(f'{prefix}*') and not c.match(f'*{MP_ARRAY_POSTFIX}')
   ]
   checkpoint_files = natural_sort(checkpoint_files)
 
@@ -297,12 +338,12 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
     checkpoint_files = checkpoint_files[:ind]
     for path in newer_ckpts:
       logging.info('Removing checkpoint at %s', path)
-      if has_gda:
-        # GDA might be removed already but the main ckpt is still there. This
-        # can happen if the job is previously preempted after deleting the GDA
+      if has_mpa:
+        # MPA might be removed already but the main ckpt is still there. This
+        # can happen if the job is previously preempted after deleting the MPA
         # checkpoint folder and before deleting the main checkpoint.
-        if gfile.exists(path + '_gda'):
-          gfile.rmtree(path + '_gda')
+        if gfile.exists(path + MP_ARRAY_POSTFIX):
+          gfile.rmtree(path + MP_ARRAY_POSTFIX)
       gfile.rmtree(path)
 
   # Remove old checkpoint files.
@@ -320,16 +361,16 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
           last_kept = step_number
           continue
       logging.info('Removing checkpoint at %s', path)
-      if has_gda:
-        # GDA might be removed already but the main ckpt is still there.
-        if gfile.exists(path + '_gda'):
-          gfile.rmtree(path + '_gda')
+      if has_mpa:
+        # MPA might be removed already but the main ckpt is still there.
+        if gfile.exists(path + MP_ARRAY_POSTFIX):
+          gfile.rmtree(path + MP_ARRAY_POSTFIX)
       gfile.rmtree(path)
 
 
 def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
                  overwrite: bool, keep_every_n_steps: Optional[int],
-                 has_gda: bool, write_commit_success: bool,
+                 has_mpa: bool, write_commit_success: bool,
                  async_manager: Optional[AsyncManager] = None) -> None:
   """Commit changes after saving checkpoints to disk.
 
@@ -340,24 +381,24 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
     `overwrite=True`.
     3. Remove old checkpoint files based on `keep` and `keep_every_n_steps`.
   """
-  gda_ckpt_tmp_path, gda_ckpt_path = ckpt_tmp_path + '_gda', ckpt_path + '_gda'
-  # Rename GDA path once serialization and writing finished.
-  if has_gda:
+  mpa_ckpt_tmp_path, mpa_ckpt_path = ckpt_tmp_path + MP_ARRAY_POSTFIX, ckpt_path + MP_ARRAY_POSTFIX
+  # Rename the multiprocess array path once serialization and writing finished.
+  if has_mpa:
     if write_commit_success:
-      commit_success_path = os.path.join(gda_ckpt_path, COMMIT_SUCCESS_FILE)
+      commit_success_path = os.path.join(mpa_ckpt_path, COMMIT_SUCCESS_FILE)
       with gfile.GFile(commit_success_path, 'w') as f:
-        f.write(f'Checkpoint commit was successful to {gda_ckpt_path}')
+        f.write(f'Checkpoint commit was successful to {mpa_ckpt_path}')
     else:
-      # Commits are a two stage process (renaming the GDA folder and renaming
-      # the main ckpt file in sequential order). We always try tp  overwrite
-      # here because the GDA ckpt might be already renamed in a previously
+      # Commits are a two stage process (renaming the array folder and renaming
+      # the main ckpt file in sequential order). We always try to overwrite
+      # here because the array ckpt might be already renamed in a previously
       # interrupted commit. NOTE: gfile.rename does not support overwriting
       # directories via `rename` so we manually overwrite it.
-      if gfile.exists(gda_ckpt_path):
-        logging.info('Removing outdated checkpoint at %s', gda_ckpt_path)
-        gfile.rmtree(gda_ckpt_path)
-      gfile.rename(gda_ckpt_tmp_path, gda_ckpt_path)
-  # Commit the main checkpoint file after gda checkpoints (if any) are committed
+      if gfile.exists(mpa_ckpt_path):
+        logging.info('Removing outdated checkpoint at %s', mpa_ckpt_path)
+        gfile.rmtree(mpa_ckpt_path)
+      gfile.rename(mpa_ckpt_tmp_path, mpa_ckpt_path)
+  # Commit the main checkpoint file after arrays (if any) are committed
   if async_manager:
     async_manager.wait_previous_save()
   gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
@@ -365,7 +406,7 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
 
   # Remove newer and older invalid checkpoints.
   _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
-                        keep_every_n_steps, has_gda)
+                        keep_every_n_steps, has_mpa)
 
 
 
@@ -377,7 +418,7 @@ def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
   checkpoint_files = [
       os.path.join(dir_path, c)
       for c in checkpoint_files
-      if c.match(f'{prefix}*') and not c.match('*_gda')
+      if c.match(f'{prefix}*') and not c.match(f'*{MP_ARRAY_POSTFIX}')
   ]
   if ckpt_path in checkpoint_files:
     raise errors.InvalidCheckpointError(ckpt_path, step)
@@ -392,7 +433,7 @@ def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
     raise errors.InvalidCheckpointError(ckpt_path, step)
 
 
-def _save_main_ckpt_file(target: bytes, has_gda: bool, paths: Tuple[str, str],
+def _save_main_ckpt_file(target: bytes, has_mpa: bool, paths: Tuple[str, str],
                          base_path: str, step: int,
                          keep: int, overwrite: bool,
                          keep_every_n_steps: Optional[int]):
@@ -403,8 +444,8 @@ def _save_main_ckpt_file(target: bytes, has_gda: bool, paths: Tuple[str, str],
   with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
     fp.write(target)
 
-  # Postpone the commitment of checkpoint to after GDA writes are done.
-  if not has_gda:
+  # Postpone the commitment of checkpoint to after MPA writes are done.
+  if not has_mpa:
     _save_commit(
         ckpt_tmp_path,
         ckpt_path,
@@ -412,7 +453,7 @@ def _save_main_ckpt_file(target: bytes, has_gda: bool, paths: Tuple[str, str],
         keep,
         overwrite,
         keep_every_n_steps,
-        has_gda=False,
+        has_mpa=False,
         write_commit_success=False)
 
 
@@ -544,17 +585,18 @@ def save_checkpoint_multiprocess(ckpt_dir: Union[str, os.PathLike],
     sync_global_devices('before_save_checkpoint')
 
   target = serialization.to_state_dict(target)
-  target, gda_targets = _split_gdas(target)
+  target, mpa_targets = _split_mp_arrays(target)
   target = serialization.msgpack_serialize(target)
-  has_gda = gda_targets and _IMPORT_GDAM_SUCCESSFUL
+  has_mpa = mpa_targets and _IMPORT_GDAM_SUCCESSFUL
 
   ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
       ckpt_dir, step, prefix)
   if not overwrite:
     _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)
+    sync_global_devices('check_overwrite_strictly_before_save')
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
-    return _save_main_ckpt_file(target, has_gda, (ckpt_tmp_path, ckpt_path),
+    return _save_main_ckpt_file(target, has_mpa, (ckpt_tmp_path, ckpt_path),
                                 base_path, step, keep,
                                 overwrite, keep_every_n_steps)
   # Write the main checkpoint file only via process 0, to avoid race condition.
@@ -564,15 +606,15 @@ def save_checkpoint_multiprocess(ckpt_dir: Union[str, os.PathLike],
     else:
       save_main_ckpt_task()
 
-  if has_gda:
+  if has_mpa:
     if not gda_manager:
-      raise errors.GDACheckpointingRequiredError(ckpt_path, step)
+      raise errors.MPACheckpointingRequiredError(ckpt_path, step)
     # Creating the directory containing GDAs explicitly. This should happen only
     # on process 0 and before any worker starts to write GDA data.
     if process_index() == 0:
-      _make_gda_dirs(gda_targets, ckpt_tmp_path)
-    sync_global_devices('sync_after_create_gda_dir')
-    _save_gdas(gda_manager, gda_targets, ckpt_tmp_path, ckpt_path, base_path,
+      _make_mpa_dirs(mpa_targets, ckpt_tmp_path)
+    sync_global_devices('Flax:Checkpointing:AfterCreateMPADir')
+    _save_mpas(gda_manager, mpa_targets, ckpt_tmp_path, ckpt_path, base_path,
                keep, overwrite, keep_every_n_steps, async_manager)
 
   return ckpt_path
@@ -594,7 +636,8 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
   checkpoint_files = [
       os.path.join(ckpt_dir, c)
       for c in checkpoint_files
-      if c.match(f'{prefix}*') and not c.match('*_gda') and not c.match(f'{prefix}tmp')
+      if c.match(f'{prefix}*') and not c.match(f'{prefix}tmp') and
+      not c.match(f'*{MP_ARRAY_POSTFIX}')
   ]
   checkpoint_files = natural_sort(checkpoint_files)
   if checkpoint_files:
@@ -629,10 +672,11 @@ def restore_checkpoint(
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
-    gda_manager: required if checkpoint contains a JAX GlobalDeviceArray. Type
-      should be GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will read the GDAs from the separate subdirectory with postfix
-      "_gda".
+    gda_manager: required if checkpoint contains a multiprocess array 
+      (GlobalDeviceArray or jax Array from pjit). Type should be
+      GlobalAsyncCheckpointManager (needs Tensorstore to be imported
+      correctly). Will read the arrays from the separate subdirectory with 
+      postfix "_gda".
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
@@ -689,7 +733,7 @@ def restore_checkpoint(
 
   state_dict = serialization.msgpack_restore(checkpoint_contents)
   if _IMPORT_GDAM_SUCCESSFUL:
-    state_dict = _restore_gdas(state_dict, target, ckpt_path, step, gda_manager)
+    state_dict = _restore_mpas(state_dict, target, ckpt_path, step, gda_manager)
 
   if target is None:
     return state_dict

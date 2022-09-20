@@ -551,8 +551,8 @@ class InvalidCheckpointError(FlaxError):
     super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')
 
 
-class GDACheckpointingRequiredError(FlaxError):
-  """To optimally save and restore a GlobalDeviceArray, use GlobalAsyncCheckpointManager.
+class MPACheckpointingRequiredError(FlaxError):
+  """To optimally save and restore a multiprocess array (GDA or jax Array outputted from pjit), use GlobalAsyncCheckpointManager.
 
   You can create an GlobalAsyncCheckpointManager at top-level and pass it as
   argument::
@@ -565,15 +565,15 @@ class GDACheckpointingRequiredError(FlaxError):
   def __init__(self, path, step):
     super().__init__(
         f'Checkpoint failed at step: "{step}" and path: "{path}": Target '
-        'contains a GlobalDeviceArray should be saved/restored with a '
+        'contains a multiprocess array should be saved/restored with a '
         'GlobalAsyncCheckpointManager.'
     )
 
 
-class GDARestoreTargetRequiredError(FlaxError):
-  """Provide a valid target when restoring a checkpoint with GlobalDeviceArray.
+class MPARestoreTargetRequiredError(FlaxError):
+  """Provide a valid target when restoring a checkpoint with a multiprocess array.
 
-  To restore a checkpoint that contains a GlobalDeviceArray, make sure
+  To restore a checkpoint that contains a a multiprocess array, make sure
   to pass a valid ``target`` argument that contains GDAs with correct global
   meshes and partition specs.
 
@@ -582,22 +582,38 @@ class GDARestoreTargetRequiredError(FlaxError):
   def __init__(self, path, step):
     super().__init__(
         f'Restore checkpoint failed at step: "{step}" and path: "{path}": '
-        'Checkpoints containing a GlobalDeviceArray need to be restored with '
+        'Checkpoints containing a multiprocess array need to be restored with '
         'a valid target.'
     )
 
-class GDARestoreDataCorruptedError(FlaxError):
-  """A GDA stored in Google Cloud Storage doesn't contain
-  a "commit_success.txt" file, which should be written at the end of the save.
+class MPARestoreDataCorruptedError(FlaxError):
+  """A multiprocess array stored in Google Cloud Storage doesn't contain a "commit_success.txt" file, which should be written at the end of the save.
 
   Failure of finding it could indicate a corruption of your saved GDA data.
   """
 
   def __init__(self, step, path):
     super().__init__(
-        f'Restore checkpoint failed at step: "{step}" on GlobalDeviceArray at '
-        f' "{path}": No "commit_success.txt" found on this GDA directory. '
+        f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
+        f' "{path}": No "commit_success.txt" found on this "_gda" directory. '
         'Was its save halted before completion?'
+    )
+    
+    
+class MPARestoreTypeNotMatchError(FlaxError):
+  """Make sure the multiprocess array type you use matches your configuration in jax.config.jax_array.
+  
+  If you turned `jax.config.jax_array` on, you should use 
+  `jax.experimental.array.Array` everywhere, instead of using 
+  `GlobalDeviceArray`. Otherwise, avoid using jax.experimental.array 
+  to restore your checkpoint.
+  """
+
+  def __init__(self, step, gda_path):
+    super().__init__(
+        f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
+        f' "{gda_path}": The array type provided by the target does not match '
+        'the JAX global configuration, namely the jax.config.jax_array.'
     )
 
 

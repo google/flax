@@ -26,6 +26,7 @@ from flax import errors
 from flax import linen as nn
 from flax.training import checkpoints
 import jax
+from jax import numpy as jnp
 from jax import test_util as jtu
 import numpy as np
 from tensorflow.io import gfile
@@ -321,6 +322,25 @@ class CheckpointsTest(parameterized.TestCase):
                      os.path.join(tmp_dir, 'test_10'))
     self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'), 
                      None)
+    
+  @parameterized.parameters({'jax_array_config': True},
+                            {'jax_array_config': False})
+  def test_jax_array(self, jax_array_config):
+    jax.config.update('jax_array', jax_array_config)
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    test_object0 = {'a': jnp.zeros(3), 'b': jnp.arange(3)}
+    test_object1 = {'a': jnp.ones(3), 'b': jnp.arange(3, 6)}
+    new_object = checkpoints.restore_checkpoint(
+        tmp_dir, test_object0, prefix='test_')
+    jtu.check_eq(new_object, test_object0)
+    # Create leftover temporary checkpoint, which should be ignored.
+    gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
+    checkpoints.save_checkpoint(
+        tmp_dir, test_object1, 0, prefix='test_', keep=1)
+    self.assertIn('test_0', os.listdir(tmp_dir))
+    new_object = checkpoints.restore_checkpoint(
+        tmp_dir, test_object0, prefix='test_')
+    jtu.check_eq(new_object, {'a': np.ones(3), 'b': np.arange(3, 6)})
 
   
   def test_convert_pre_linen(self):
