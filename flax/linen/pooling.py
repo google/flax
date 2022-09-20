@@ -89,7 +89,9 @@ def avg_pool(inputs, window_shape, strides=None, padding="VALID", count_include_
   if count_include_pad:
     y = y / np.prod(window_shape)
   else:
-    div_shape = (1,) + inputs.shape[1:-1] + (1,)
+    div_shape = inputs.shape[:-1] + (1,)
+    if len(div_shape) - 2 == len(window_shape):
+        div_shape = (1,) + div_shape[1:]
     y = y / pool(jnp.ones(div_shape), 0., lax.add, window_shape, strides, padding)
   return y
 
