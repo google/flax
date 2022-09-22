@@ -39,7 +39,7 @@ from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (  # pylint: disable=g-multiple-import
     CollectionFilter, DenyList, FrozenVariableDict, Variable, VariableDict,
     union_filters)
-from flax.ids import uuid
+from flax.ids import FlaxId, uuid
 
 
 traceback_util.register_exclusion(__file__)
@@ -520,10 +520,19 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 
 # Base Module definition.
 # -----------------------------------------------------------------------------
+class _ModuleBase:
+  """A class that contains annotations for Module's base fields.
+  This pattern is used to make static analysis tools happy.
+  """
+  scope: Optional[Scope]
+  name: Optional[str]
+  parent: Union[Scope, 'Module', _Sentinel, None]
+  _state: _ModuleInternalState
+  _id: FlaxId
 
 
 @dataclass_transform()
-class Module:
+class Module(_ModuleBase):
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
@@ -565,6 +574,9 @@ class Module:
     def __call__(self, *args, **kwargs) -> Any:
       # this stub allows pytype to accept Modules as Callables.
       pass
+  else:
+    def __getattr__(self, name: str) -> Any:
+      return self._getattr(name)
 
   @classmethod
   def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -651,7 +663,7 @@ class Module:
     """Wraps user-defined non-inherited methods with state management functions."""
     exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__', '__hash__',
-                   '__post_init__'])
+                   '__post_init__', '_getattr'])
     for key in _get_local_method_names(cls, exclude=exclusions):
       method = getattr(cls, key)
       if hasattr(method, 'nowrap'):
@@ -766,7 +778,8 @@ class Module:
     # attached in setup(), we run some extra logic in that case.
     self._register_submodules(name, val)
 
-  def __getattr__(self, name: str) -> Any:
+  # this method called by __getattr__, refactored to avoid issue with IDEs
+  def _getattr(self, name: str) -> Any:
     """Call setup() before getting any setup-defined attributes."""
     # We don't want to return anything for python copy / pickle methods.
     if name in _UNDEFINED_COPY_PICKLE_METHODS:

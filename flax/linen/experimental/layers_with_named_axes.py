@@ -238,18 +238,17 @@ def _normalize(mdl: nn.Module, x: Array, mean: Array, var: Array,
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
   if use_scale:
-    scale = mdl.param_with_axes(
-        'scale',
-        scale_init,
-        reduced_feature_shape,
-        param_dtype,
-        axes=('embed',)).reshape(feature_shape)
+    
+    scale = param_with_axes(
+        'scale', scale_init,
+        reduced_feature_shape, param_dtype,
+        axes=('embed',), module=mdl).reshape(feature_shape)
     mul *= scale
   y *= mul
   if use_bias:
-    bias = mdl.param_with_axes(
+    bias = param_with_axes(
         'bias', bias_init, reduced_feature_shape, param_dtype,
-        axes=('embed',)).reshape(feature_shape)
+        axes=('embed',), module=mdl).reshape(feature_shape)
     y += bias
   return jnp.asarray(y, dtype)
 
