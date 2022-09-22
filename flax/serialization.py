@@ -61,7 +61,10 @@ def from_state_dict(target, state: Dict[str, Any]):
   else:
     ty = type(target)
   if ty not in _STATE_DICT_REGISTRY:
-    return state
+    if target is None:
+      return state
+    else:
+      raise ValueError(f'No serialization handler for target of type "{ty.__name__}"')
   ty_from_state_dict = _STATE_DICT_REGISTRY[ty][1]
   return ty_from_state_dict(target, state)
 
