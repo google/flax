@@ -1462,6 +1462,50 @@ class Module:
     self.scope.put_variable(col, name, xs)
     return True
 
+  def perturb(self, name: str, value: T, collection: str = 'perturbations') -> T:
+    """Add an zero-value variable ('perturbation') to the intermediate value.
+    
+    The gradient of `value` would be the same as the gradient of this
+    perturbation variable. Therefore, if you define your loss function with
+    both params and perturbations as standalone arguments, you can get the
+    intermediate gradients of `value` by running `jax.grad` on the perturbation
+    argument.
+    
+    Note: this is an experimental API and may be tweaked later for better
+    performance and usability.
+    At its current stage, it creates extra dummy variables that occupies extra
+    memory space. Use it only to debug gradients in training.
+
+    Example::
+
+      import jax
+      import jax.numpy as jnp
+      import flax.linen as nn
+
+      class Foo(nn.Module):
+          @nn.compact
+          def __call__(self, x):
+              x = nn.Dense(3)(x)
+              x = self.perturb('dense3', x)
+              return nn.Dense(2)(x)
+
+      def loss(params, perturbations, inputs, targets):
+        variables = {'params': params, 'perturbations': perturbations}
+        preds = model.apply(variables, inputs)
+        return jnp.square(preds - targets).mean()
+
+      x = jnp.ones((2, 9))
+      y = jnp.ones((2, 2))
+      model = Foo()
+      variables = model.init(jax.random.PRNGKey(0), x)
+      intm_grads = jax.grad(loss, argnums=1)(variables['params'], variables['perturbations'], x, y)
+      print(intm_grads['dense3']) # ==> [[-1.456924   -0.44332537  0.02422847]
+                                  #      [-1.456924   -0.44332537  0.02422847]]
+
+    """
+    value += self.variable(collection, name, lambda: jnp.zeros_like(value)).value
+    return value
+  
   def tabulate(
     self,
     rngs: Union[PRNGKey, RNGSequences],
