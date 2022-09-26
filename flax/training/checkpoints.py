@@ -33,7 +33,6 @@ from flax import serialization
 from flax import traverse_util
 import jax
 from jax import process_index
-from jax.experimental import array
 from jax.experimental import sharding
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
@@ -77,7 +76,7 @@ MP_ARRAY_PH = '//GDAPlaceholder:'
 COMMIT_SUCCESS_FILE = 'commit_success.txt'
 
 PyTree = Any
-MultiprocessArrayType = Union[GlobalDeviceArray, array.Array]
+MultiprocessArrayType = Union[GlobalDeviceArray, jax.Array]
 
 
 def _checkpoint_path(ckpt_dir: str,
@@ -134,7 +133,7 @@ def _use_multiprocess_serialization(value: Any) -> bool:
   """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
   if isinstance(value, GlobalDeviceArray):
     return True
-  if isinstance(value, array.Array):
+  if isinstance(value, jax.Array):
     return not value.is_fully_addressable()
   return False
 
@@ -243,7 +242,7 @@ def _restore_mpas(state_dict,
       if isinstance(arr, GlobalDeviceArray):
         meshes.append(arr.mesh)
         partition_specs.append(arr.mesh_axes)
-      elif isinstance(arr, array.Array):
+      elif isinstance(arr, jax.Array):
         assert isinstance(arr.sharding, sharding.MeshPspecSharding)
         meshes.append(arr.sharding.mesh)
         partition_specs.append(arr.sharding.spec)
