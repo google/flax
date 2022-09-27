@@ -33,12 +33,18 @@ from flax import serialization
 from flax import traverse_util
 import jax
 from jax import process_index
-from jax.experimental import array
-from jax.experimental import sharding
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
 from tensorflow import errors as tf_errors
 from tensorflow.io import gfile  # pytype: disable=import-error
+
+# TODO(flax-dev): Remove this when jax>=0.3.19
+# pylint: disable=g-import-not-at-top,bare-except
+try:
+  from jax import sharding
+except ImportError:
+  from jax.experimental import sharding  # pytype: disable=import-error
+# pylint: enable=g-import-not-at-top,bare-except
 
 _IMPORT_GDAM_SUCCESSFUL = False
 try:

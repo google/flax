@@ -21,7 +21,6 @@ import enum
 from typing import Any, Dict, List
 
 import jax
-from jax.experimental import array
 import msgpack
 import numpy as np
 
