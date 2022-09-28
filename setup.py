@@ -54,7 +54,7 @@ tests_require = [
     "tensorflow_datasets",
     "tensorflow",
     "torch",
-]
+] 
 
 __version__ = None
 
