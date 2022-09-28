@@ -33,12 +33,18 @@ from flax import serialization
 from flax import traverse_util
 import jax
 from jax import process_index
-from jax.experimental import array
-from jax.experimental import sharding
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
 from tensorflow import errors as tf_errors
 from tensorflow.io import gfile  # pytype: disable=import-error
+
+# TODO(flax-dev): Remove this when jax>=0.3.19
+# pylint: disable=g-import-not-at-top,bare-except
+try:
+  from jax import sharding
+except ImportError:
+  from jax.experimental import sharding  # pytype: disable=import-error
+# pylint: enable=g-import-not-at-top,bare-except
 
 _IMPORT_GDAM_SUCCESSFUL = False
 try:
@@ -77,7 +83,13 @@ MP_ARRAY_PH = '//GDAPlaceholder:'
 COMMIT_SUCCESS_FILE = 'commit_success.txt'
 
 PyTree = Any
-MultiprocessArrayType = Union[GlobalDeviceArray, array.Array]
+
+# TODO(flax-dev): Remove this once flax is using the latest jax release
+# containing jax.Array attribute.
+if hasattr(jax, 'Array'):
+  MultiprocessArrayType = Union[GlobalDeviceArray, jax.Array]
+else:
+  MultiprocessArrayType = Union[GlobalDeviceArray, Any]
 
 
 def _checkpoint_path(ckpt_dir: str,
@@ -134,7 +146,7 @@ def _use_multiprocess_serialization(value: Any) -> bool:
   """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
   if isinstance(value, GlobalDeviceArray):
     return True
-  if isinstance(value, array.Array):
+  if jax.config.jax_array and isinstance(value, jax.Array):
     return not value.is_fully_addressable()
   return False
 
@@ -238,12 +250,12 @@ def _restore_mpas(state_dict,
     for i, arr in enumerate(target_mpas):
       # Use GDA with jax.config.jax_array turned off, or jax.experimental.array
       # with jax.config.jax_array turned on.
-      if isinstance(arr, GlobalDeviceArray) is jax.config.jax_array:
+      if isinstance(arr, GlobalDeviceArray) and jax.config.jax_array:
         raise errors.MPARestoreTypeNotMatchError(step, mpa_paths[i])
       if isinstance(arr, GlobalDeviceArray):
         meshes.append(arr.mesh)
         partition_specs.append(arr.mesh_axes)
-      elif isinstance(arr, array.Array):
+      elif jax.config.jax_array and isinstance(arr, jax.Array):
         assert isinstance(arr.sharding, sharding.MeshPspecSharding)
         meshes.append(arr.sharding.mesh)
         partition_specs.append(arr.sharding.spec)

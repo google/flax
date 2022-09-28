@@ -21,7 +21,6 @@ import enum
 from typing import Any, Dict, List
 
 import jax
-from jax.experimental import array
 import msgpack
 import numpy as np
 
@@ -175,7 +174,7 @@ register_serialization_state(_NamedTuple,
 
 def _ndarray_to_bytes(arr) -> bytes:
   """Save ndarray to simple msgpack encoding."""
-  if isinstance(arr, (jax.xla.DeviceArray, array.Array)):
+  if isinstance(arr, jax.Array):
     arr = np.array(arr)
   if arr.dtype.hasobject or arr.dtype.isalignedstruct:
     raise ValueError('Object and structured dtypes not supported '
@@ -212,7 +211,7 @@ def _msgpack_ext_pack(x):
   """Messagepack encoders for custom types."""
   # TODO(flax-dev): Array here only work when they are fully addressable.
   # If they are not fully addressable, use the GDA path for checkpointing.
-  if isinstance(x, (np.ndarray, jax.xla.DeviceArray, array.Array)):
+  if isinstance(x, (np.ndarray, jax.Array)):
     return msgpack.ExtType(_MsgpackExtType.ndarray, _ndarray_to_bytes(x))
   if np.issctype(type(x)):
     # pack scalar as ndarray
@@ -251,11 +250,11 @@ def _np_convert_in_place(d):
   """Convert any jax devicearray leaves to numpy arrays in place."""
   if isinstance(d, dict):
     for k, v in d.items():
-      if isinstance(v, (jax.xla.DeviceArray, array.Array)):
+      if isinstance(v, jax.Array):
         d[k] = np.array(v)
       elif isinstance(v, dict):
         _np_convert_in_place(v)
-  elif isinstance(d, (jax.xla.DeviceArray, array.Array)):
+  elif isinstance(d, jax.Array):
     return np.array(d)
   return d
 

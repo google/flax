@@ -1417,6 +1417,29 @@ class ModuleTest(absltest.TestCase):
     _, state = Foo().apply({}, 1, capture_intermediates=fn)
     self.assertEqual(state, {'intermediates': {'Bar_0': {'test': (2,)}}})
 
+  def test_perturb(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(10)(x)
+        x = self.perturb('before_multiply', x)
+        x = 4 * x
+        x = self.perturb('after_multiply', x)
+        return x
+    
+    def loss(params, perturbations, inputs, targets):
+      variables = {'params': params, 'perturbations': perturbations}
+      preds = Foo().apply(variables, inputs)
+      return jnp.square(preds - targets).mean()
+
+    x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10, ))
+    y = jax.random.uniform(jax.random.PRNGKey(2), shape=(10, ))
+    variables = Foo().init(jax.random.PRNGKey(0), x)
+    pred = Foo().apply(variables, x)
+    intm_grads = jax.grad(loss, argnums=1)(variables['params'], variables['perturbations'], x, y)
+    # activation * 4 so reverse gradient also * 4
+    self.assertTrue(all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply']))
+
   def test_functional_apply(self):
 
     class Foo(nn.Module):
