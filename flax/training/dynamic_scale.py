@@ -52,11 +52,13 @@ class DynamicScale(struct.PyTreeNode):
 
   Example::
 
+    from flax.training.dynamic_scale import DynamicScale
+
     def loss_fn(p):
       return jnp.asarray(p, jnp.float16) ** 2
     p = jnp.array(1., jnp.float32)
 
-    dyn_scale = optim.DynamicScale(growth_interval=10)
+    dyn_scale = DynamicScale(growth_interval=10)
     compute_grad = jax.jit(lambda ds, p: ds.value_and_grad(loss_fn)(p))
     for _ in range(100):
       dyn_scale, is_fin, loss, grad = compute_grad(dyn_scale, p)
