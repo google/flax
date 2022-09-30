@@ -64,8 +64,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7]
+        python-version: [3.7, 3.8, 3.9]
         test-type: [doctest, pytest, pytype]
+        exclude:
+          - test-type: pytype
+            python-version: 3.7
+          - test-type: pytype
+            python-version: 3.8
     steps:
     - name: Cancel previous
       uses: styfle/cancel-workflow-action@0.8.0
@@ -121,7 +126,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7]
+        python-version: [3.7, 3.8, 3.9]
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
