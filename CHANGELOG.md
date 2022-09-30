@@ -25,6 +25,17 @@ vNext
 -
 -
 
+0.6.1
+-----
+- Adds axis_name and axis_index_groups to LayerNorm and GroupNorm. by @copybara-service in [#2402](https://github.com/google/flax/pull/2402)
+- Plumb spmd_axis_name through transforms.vmap through to JAX vmap by @copybara-service in [#2398](https://github.com/google/flax/pull/2398)
+- Support multiple inputs in flax lifted vjp/custom_vjp by @copybara-service in [#2399](https://github.com/google/flax/pull/2399)
+- Improve tabulate by @cgarciae in [#2316](https://github.com/google/flax/pull/2316)
+- Add path_aware_map function by @cgarciae in [#2371](https://github.com/google/flax/pull/2371)
+- Add static_argnums to nn.checkpoint by @cgarciae in [#2457](https://github.com/google/flax/pull/2457)
+- Adding "count_include_pad" argument to flax.linen.pooling.avg_pool by @dslisleedh in [#2451](https://github.com/google/flax/pull/2451)
+- Add perturb() to allow capturing intermediate gradients by @IvyZX in [#2476](https://github.com/google/flax/pull/2476)
+
 0.6.0
 -----
 
