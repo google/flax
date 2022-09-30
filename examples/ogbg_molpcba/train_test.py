@@ -29,6 +29,7 @@ from jax import numpy as jnp
 import jraph
 import tensorflow as tf
 import tensorflow_datasets as tfds
+import numpy as np
 
 from configs import default
 from configs import test
@@ -305,8 +306,7 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     self.assertGreaterEqual(evaluate_metrics_vals['loss'], 0)
     self.assertGreaterEqual(evaluate_metrics_vals['accuracy'], 0)
     self.assertLessEqual(evaluate_metrics_vals['accuracy'], 1)
-    self.assertGreaterEqual(evaluate_metrics_vals['mean_average_precision'], 0)
-    self.assertLessEqual(evaluate_metrics_vals['mean_average_precision'], 1)
+    self.assertTrue(np.isnan(evaluate_metrics_vals['mean_average_precision']))
 
   def test_train_and_evaluate(self):
     # Create a temporary directory where TensorBoard metrics are written.

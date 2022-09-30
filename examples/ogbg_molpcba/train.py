@@ -134,8 +134,8 @@ class MeanAveragePrecision(
     for task in range(num_tasks):
       # AP is only defined when there is at least one negative data
       # and at least one positive data.
-      if np.sum(labels[:, task] == 0) > 0 and np.sum(labels[:, task] == 1) > 0:
-        is_labeled = mask[:, task]
+      is_labeled = mask[:, task]
+      if len(np.unique(labels[is_labeled, task])) >= 2:
         average_precisions[task] = sklearn.metrics.average_precision_score(
             labels[is_labeled, task], probs[is_labeled, task])
 
