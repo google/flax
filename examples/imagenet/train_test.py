@@ -81,6 +81,7 @@ class TrainTest(parameterized.TestCase):
     config.num_epochs = 1
     config.num_train_steps = 1
     config.steps_per_eval = 1
+    config.restore_checkpoints = False
 
     with tfds.testing.mock_data(num_examples=1, data_dir=data_dir):
       train.train_and_evaluate(workdir=workdir, config=config)

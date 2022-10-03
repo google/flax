@@ -313,7 +313,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       config, base_learning_rate, steps_per_epoch)
 
   state = create_train_state(rng, config, model, image_size, learning_rate_fn)
-  state = restore_checkpoint(state, workdir)
+  if config.restore_checkpoints:
+    state = restore_checkpoint(state, workdir)
   # step_offset > 0 if restarting from checkpoint
   step_offset = int(state.step)
   state = jax_utils.replicate(state)

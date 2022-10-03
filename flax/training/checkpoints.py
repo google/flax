@@ -693,9 +693,7 @@ def restore_checkpoint(
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
     no checkpoint files present, returns the passed-in `target` unchanged.
-    If a file path is specified and is not found, the passed-in `target` will be
-    returned. This is to match the behavior of the case where a directory path
-    is specified but the directory has not yet been created.
+    If a file path is specified and is not found, raise ValueError.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   ckpt_dir = safe_normpath(ckpt_dir)
@@ -705,16 +703,13 @@ def restore_checkpoint(
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
     if not gfile.exists(ckpt_dir):
-      logging.info('Found no checkpoint directory at %s', ckpt_dir)
-      return target
+      raise ValueError(f'Found no checkpoint directory at {ckpt_dir}')
     if not gfile.isdir(ckpt_dir):
       ckpt_path = ckpt_dir
     else:
       ckpt_path = latest_checkpoint(ckpt_dir, prefix)
       if not ckpt_path:
-        logging.info('Found no checkpoint files in %s with prefix %s',
-                     ckpt_dir, prefix)
-        return target
+        raise ValueError(f'Found no checkpoint files in {ckpt_dir} with prefix {prefix}')
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
   with gfile.GFile(ckpt_path, 'rb') as fp:

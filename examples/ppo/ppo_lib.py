@@ -307,7 +307,8 @@ def train(
   state = create_train_state(initial_params, model, config,
                              loop_steps * config.num_epochs * iterations_per_step)
   del initial_params
-  state = checkpoints.restore_checkpoint(model_dir, state)
+  if config.restore_checkpoints:
+    state = checkpoints.restore_checkpoint(model_dir, state)
   # number of train iterations done by each train_step
 
   start_step = int(state.step) // config.num_epochs // iterations_per_step

@@ -54,4 +54,8 @@ def get_config():
   # num_epochs using the entire dataset. Similarly for steps_per_eval.
   config.num_train_steps = -1
   config.steps_per_eval = -1
+  
+  # Whether to restore from existing model checkpoints.
+  config.restore_checkpoints = True
+  
   return config

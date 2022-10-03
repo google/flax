@@ -53,6 +53,8 @@ class TrainTest(absltest.TestCase):
     config.max_target_length = 32
     config.max_eval_target_length = 32
     config.max_predict_length = 32
+    
+    config.restore_checkpoints = False
 
     workdir = tempfile.mkdtemp()
 

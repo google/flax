@@ -97,9 +97,9 @@ class CheckpointsTest(parameterized.TestCase):
                     'b': np.array([1, 1, 1], np.int32)}
     test_object2 = {'a': np.array([4, 5, 6], np.int32),
                     'b': np.array([2, 2, 2], np.int32)}
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
-    jtu.check_eq(new_object, test_object0)
+    with self.assertRaises(ValueError):
+        checkpoints.restore_checkpoint(
+            tmp_dir, test_object0, prefix='test_')
     # Create leftover temporary checkpoint, which should be ignored.
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
@@ -129,12 +129,10 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(
         os.path.join(tmp_dir, 'test_3'), test_object0)
     jtu.check_eq(new_object, test_object2)
-    # If a specific path is specified, but it does not exist, the same behavior
-    # as when a directory is empty should apply: the target is returned
-    # unchanged.
-    new_object = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_not_there'), test_object0)
-    jtu.check_eq(new_object, test_object0)
+    # If a specific path is specified, but it does not exist, raise error.
+    with self.assertRaises(ValueError):
+      checkpoints.restore_checkpoint(
+          os.path.join(tmp_dir, 'test_not_there'), test_object0)
     with self.assertRaises(ValueError):
       checkpoints.restore_checkpoint(
           tmp_dir, test_object0, step=5, prefix='test_')
@@ -277,9 +275,6 @@ class CheckpointsTest(parameterized.TestCase):
                     'b': np.random.normal(size=(1000, 1000))}
     test_object3 = {'a': np.random.normal(size=(1000, 1000)),
                     'b': np.random.normal(size=(1000, 1000))}
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
-    jtu.check_eq(new_object, test_object0)
     # Create leftover temporary checkpoint, which should be ignored.
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     am = checkpoints.AsyncManager()
@@ -330,9 +325,8 @@ class CheckpointsTest(parameterized.TestCase):
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': jnp.zeros(3), 'b': jnp.arange(3)}
     test_object1 = {'a': jnp.ones(3), 'b': jnp.arange(3, 6)}
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
-    jtu.check_eq(new_object, test_object0)
+    with self.assertRaises(ValueError):
+        checkpoints.restore_checkpoint(tmp_dir, test_object0, prefix='test_')
     # Create leftover temporary checkpoint, which should be ignored.
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(

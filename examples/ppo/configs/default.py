@@ -51,4 +51,6 @@ def get_config():
   # Linearly decay learning rate and clipping parameter to zero during
   # the training.
   config.decaying_lr_and_clip_param = True
+  # Whether to restore from existing model checkpoints.
+  config.restore_checkpoints = True
   return config
