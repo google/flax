@@ -681,6 +681,8 @@ class Module:
     add_call_info = not is_setup_method and len(_context.call_info_stack) > 0
     # We lazily call setup() only when needed.
     if is_setup_method:
+      if self.scope is None:
+        raise errors.CallSetupUnboundModuleError()
       is_recurrent = self._state.in_setup
       self._state.in_setup = True
     else:
