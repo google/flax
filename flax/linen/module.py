@@ -41,6 +41,7 @@ from flax.core.scope import (  # pylint: disable=g-multiple-import
     union_filters)
 from flax.ids import FlaxId
 from flax.ids import uuid
+from flax.linen import kw_only_dataclasses
 
 
 traceback_util.register_exclusion(__file__)
@@ -519,6 +520,9 @@ tuple_init = lambda: ()
 capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 
 
+_ParentType = Union[Type['Module'], Type[Scope], Type[_Sentinel], None]
+
+
 # Base Module definition.
 # -----------------------------------------------------------------------------
 
@@ -587,34 +591,19 @@ class Module:
 
   @classmethod
   def _customized_dataclass_transform(cls):
-    """Handles final optional dataclass attributes: `parent` and `name`."""
-    # Use cls.__dict__ to get annotations of cls itself (no parent class).
+    """Transforms `cls` into a dataclass, with custom additional behavior.
+
+    1. Inject `parent` and `name` fields.  (If they are already present,
+       then check that they have the expected types.)
+    2. Set compare, hash, and repr to False for non-init fields.
+    3. Generate a hash function (if not provided by cls).
+    """
+    # Check reserved attributes have expected type annotations.
     annotations = dict(cls.__dict__.get('__annotations__', {}))
-    parent_annotation = Union[Type[Module], Type[Scope],
-                              Type[_Sentinel], None]
-    if ('parent' in annotations
-        and annotations['parent'] != parent_annotation):
+    if annotations.get('parent', _ParentType) != _ParentType:
       raise errors.ReservedModuleAttributeError(annotations)
-    if 'name' in annotations and annotations['name'] not in ('str', str):
+    if annotations.get('name', str) not in ('str', str, Optional[str]):
       raise errors.ReservedModuleAttributeError(annotations)
-    # Add `parent` and `name` default fields at end.
-    # We temporarily modify base class __dataclass_fields__ to force desired
-    # argument behavior and ordering from dataclass class-transform.
-    parent_dataclass_fields = []
-    for clz in cls.__mro__[1:]:
-      pdf = dict(getattr(clz, '__dataclass_fields__', {}))
-      parent_dataclass_fields.append(pdf)
-
-      # Remove 'parent' and 'name' from parents because we always want parent
-      # and name to show up last in the dataclass args.
-      if 'parent' in pdf:
-        clz.__dataclass_fields__.pop('parent')  # pytype: disable=attribute-error
-      if 'name' in pdf:
-        clz.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
-
-    annotations['parent'] = parent_annotation
-    cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
-    annotations['name'] = str
 
     # any non-init field will only be set in setup
     # During __hash__ and __eq__ the field is not set yet
@@ -626,17 +615,21 @@ class Module:
         field_meta.hash = False
         field_meta.repr = False
 
-    cls.name = None  # default value of name is None.
-    cls.__annotations__ = annotations
+    extra_fields = [('parent', _ParentType,
+                     kw_only_dataclasses.field(
+                         repr=False, default=_unspecified_parent,
+                         kw_only=True)),
+                    ('name', Optional[str],
+                     kw_only_dataclasses.field(default=None, kw_only=True))]
+
     # Now apply dataclass transform (which operates in-place).
     # Do generate a hash function only if not provided by the class.
-    dataclasses.dataclass(
-        cls, unsafe_hash='__hash__' not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
+    kw_only_dataclasses.dataclass(
+        cls,
+        unsafe_hash='__hash__' not in cls.__dict__,
+        repr=False,
+        extra_fields=extra_fields)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
-    # Restore original base class __dataclass_fields__.
-    for clz, pdf in zip(cls.__mro__[1:], parent_dataclass_fields):
-      if dataclasses.is_dataclass(clz):
-        clz.__dataclass_fields__ = pdf
 
   @classmethod
   def _verify_single_or_no_compact(cls):
