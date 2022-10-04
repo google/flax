@@ -16,6 +16,7 @@
 
 import dataclasses
 import functools
+import gc
 import operator
 from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
                     Tuple, TypeVar)
@@ -31,6 +32,7 @@ from jax import random
 from jax.nn import initializers
 import jax.numpy as jnp
 import numpy as np
+from unittest.mock import patch
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -1753,6 +1755,32 @@ class ModuleTest(absltest.TestCase):
     k = random.PRNGKey(0)
     self.assertTrue(foo.init_with_output(k)[0])
     self.assertFalse(foo.apply({}))
+
+
+class LeakTests(absltest.TestCase):
+
+  def test_tracer_leaks(self):
+    model = nn.Sequential([nn.Dense(50)])
+
+    @jax.jit
+    @functools.partial(jax.vmap, in_axes=(0, None))
+    def sample_from_prior(rng, inp):
+      params = model.init(rng, np.zeros((10, 50)))
+      out = model.apply(params, inp)
+      del params
+      return out
+
+    # disable manual gc.collect call in jax leak checker
+    # so that we can test tracer leaks in ref-cycles.  This is a
+    # reasonable proxy for transiently leaked memory during
+    # eager execution.
+    with patch.object(gc, 'collect', return_value=0):
+      with jax.checking_leaks():
+        for i in range(5):
+          rngs = jax.random.split(jax.random.PRNGKey(23), 100)
+          out = sample_from_prior(rngs, np.ones((4, 50)))
+          out.block_until_ready()
+          del out, rngs
 
 
 if __name__ == '__main__':

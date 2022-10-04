@@ -523,6 +523,27 @@ capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 _ParentType = Union[Type['Module'], Type[Scope], Type[_Sentinel], None]
 
 
+class ParentDescriptor:
+  """Wraps parent module references in weak refs.
+
+  This prevents reference cycles from forming via parent links which can lead
+  to accidental OOMs in eager mode due to slow garbage collection as well as
+  spurious tracer leaks during jit compilation.
+
+  Note: "descriptors" are the underlying python mechanism for implementing
+  dynamic @property decorators.  We need to use a raw descriptor instead of the
+  more common decorator in order to force that the appropriate getter/setter
+  logic applies in subclasses even after various dataclass transforms.
+  """
+  def __get__(self, obj, objtype=None):
+    parent = object.__getattribute__(obj, "_parent_ref")
+    return parent() if isinstance(parent, weakref.ReferenceType) else parent
+
+  def __set__(self, obj, value):
+    maybe_weak = weakref.ref(value) if isinstance(value, Module) else value
+    object.__setattr__(obj, "_parent_ref", maybe_weak)
+
+
 # Base Module definition.
 # -----------------------------------------------------------------------------
 
@@ -588,6 +609,8 @@ class Module:
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state
     cls.scope: Optional[Scope] = None
+    # Handles weak referencing of parent Modules to prevent reference cycles.
+    cls.parent = ParentDescriptor()
 
   @classmethod
   def _customized_dataclass_transform(cls):
