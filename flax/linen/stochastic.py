@@ -53,19 +53,19 @@ class Dropout(Module):
     """
     deterministic = merge_param(
         'deterministic', self.deterministic, deterministic)
-    if self.rate == 0.:
+
+    if (self.rate == 0.) or deterministic:
       return inputs
+
     # Prevent gradient NaNs in 1.0 edge-case.
     if self.rate == 1.0:
       return jnp.zeros_like(inputs)
+
     keep_prob = 1. - self.rate
-    if deterministic:
-      return inputs
-    else:
-      rng = self.make_rng('dropout')
-      broadcast_shape = list(inputs.shape)
-      for dim in self.broadcast_dims:
-        broadcast_shape[dim] = 1
-      mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
-      mask = jnp.broadcast_to(mask, inputs.shape)
-      return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
+    rng = self.make_rng('dropout')
+    broadcast_shape = list(inputs.shape)
+    for dim in self.broadcast_dims:
+      broadcast_shape[dim] = 1
+    mask = random.bernoulli(rng, p=keep_prob, shape=broadcast_shape)
+    mask = jnp.broadcast_to(mask, inputs.shape)
+    return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
