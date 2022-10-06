@@ -246,23 +246,20 @@ def _restore_mpas(state_dict,
       raise errors.MPARestoreDataCorruptedError(step, ckpt_path)
 
     # Check if the given target array types are valid.
-    meshes, partition_specs = [], []
+    shardings = []
     for i, arr in enumerate(target_mpas):
       # Use GDA with jax.config.jax_array turned off, or jax.experimental.array
       # with jax.config.jax_array turned on.
       if isinstance(arr, GlobalDeviceArray) and jax.config.jax_array:
         raise errors.MPARestoreTypeNotMatchError(step, mpa_paths[i])
       if isinstance(arr, GlobalDeviceArray):
-        meshes.append(arr.mesh)
-        partition_specs.append(arr.mesh_axes)
+        shardings.append(sharding.MeshPspecSharding(arr.mesh, arr.mesh_axes))
       elif jax.config.jax_array and isinstance(arr, jax.Array):
-        assert isinstance(arr.sharding, sharding.MeshPspecSharding)
-        meshes.append(arr.sharding.mesh)
-        partition_specs.append(arr.sharding.spec)
+        shardings.append(arr.sharding)
 
     # Restore the arrays.
     ts_specs = [get_tensorstore_spec(x) for x in mpa_paths]
-    return gda_manager.deserialize(meshes, partition_specs, ts_specs)
+    return gda_manager.deserialize(shardings, ts_specs)
 
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
