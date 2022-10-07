@@ -2,7 +2,7 @@
 
 <!--
 
-Great, you are contributing to Flax! 
+Great, you are contributing to Flax!
 
 But... please read the following carefully so we can make sure your PR is merged
 easily.

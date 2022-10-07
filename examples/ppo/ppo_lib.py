@@ -288,7 +288,7 @@ def train(
   Returns:
     optimizer: the trained optimizer
   """
-  
+
   game = config.game + 'NoFrameskip-v4'
   simulators = [agent.RemoteSimulator(game)
                 for _ in range(config.num_agents)]

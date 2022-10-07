@@ -75,10 +75,10 @@ class CodeDiffParser:
 
   def _tabs(self, *contents: Tuple[str, List[str]], sync):
     output = ['.. tab-set::'] + ['  ']
-    
+
     for title, content in contents:
       output += [f'  .. tab-item:: {title}']
-      
+
       if sync:
         key = title.strip()
         output += [f'    :sync: {key}']

@@ -36,7 +36,7 @@ Let's start with a high-level overview of the Module lifecycle. First, define a 
       self.hidden = nn.Dense(self.hidden_size)
       self.out = nn.Dense(self.out_size)
 
-    # 3. User methods  
+    # 3. User methods
     def __call__(self, x):
       a = self.hidden(x)
       h = nn.relu(a)
@@ -378,4 +378,4 @@ Imagine we want to call just the decoder using `auto_encoder.decoder.apply(decod
 
 There are two possible solutions to make this use case more ergonomic. First, setup could be made to run immediately after construction before it becomes bound. This means you can still create sub modules but you can no longer define or manipulate variables. Therefore, this would be a breaking change and it would require a new API for defining variables lazily
 
-Alternatively, an additional special method could be introduced that runs right away after Module construction and before it becomes bound. In this case, the ``setup`` method would preserve its original semantics. 
+Alternatively, an additional special method could be introduced that runs right away after Module construction and before it becomes bound. In this case, the ``setup`` method would preserve its original semantics.

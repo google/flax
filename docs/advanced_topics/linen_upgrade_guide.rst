@@ -28,11 +28,11 @@ can use this upgrade guide to upgrade it to Linen.
 Defining Simple Modules
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
   :sync:
-  
+
   from flax import nn
 
   class Dense(base.Module):
@@ -50,8 +50,8 @@ Defining Simple Modules
         bias = self.param(
           'bias', (features,), bias_init)
         y = y + bias
-      return y  
-  
+      return y
+
     return new_state, metrics
   ---
   from flax import linen as nn  # [1] #!
@@ -94,11 +94,11 @@ Defining Simple Modules
 Using Modules inside other Modules
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
   :sync:
-  
+
   class Encoder(nn.Module):
 
     def apply(self, x):
@@ -126,11 +126,11 @@ Using Modules inside other Modules
 Sharing submodules and defining multiple methods
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
-  :sync: 
-  
+  :sync:
+
   class AutoEncoder(nn.Module):
     def _create_submodules(self):
       return Decoder.shared(name="encoder")
@@ -178,13 +178,13 @@ Sharing submodules and defining multiple methods
 ``Module.partial`` inside other modules
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
   :sync:
-  
+
   # no import #!
-   
+
   class ResNet(nn.Module):
     """ResNetV1."""
 
@@ -204,7 +204,7 @@ Sharing submodules and defining multiple methods
       x = norm(x, name='bn_init')
 
       # [...]
-      return x 
+      return x
   ---
   from functools import partial  #!
 
@@ -230,12 +230,12 @@ Sharing submodules and defining multiple methods
       return x
 
 Use normal ``functools.partial`` instead of ``Module.partial``. The rest stays
-the same. 
+the same.
 
 Top-level training code patterns
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
   :sync:
@@ -289,7 +289,7 @@ Top-level training code patterns
 1. We no longer use the ``Model`` abstraction -- instead we pass parameters
    around directly, usually encapsulated in a `Train State`_ object, which can
    directly be passed to JAX transformations.
-   
+
 2. To compute initial parameters, construct a module instance and call |init|_
    or |init_with_output|_. We haven't ported over ``init_by_shape`` because this
    function did some magic we did not like (it evaluated the function by shape.
@@ -313,11 +313,11 @@ Top-level training code patterns
 Non-trainable variables ("state"): Use within Modules
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
   :sync:
-  
+
   class BatchNorm(nn.Module):
     def apply(self, x, ...):
       # [...]
@@ -325,7 +325,7 @@ Non-trainable variables ("state"): Use within Modules
         'mean', (x.shape[-1], ), initializers.zeros)
       ra_var = self.state(
         'var', (x.shape[-1], ), initializers.ones)
-      # [...] 
+      # [...]
   ---
   class BatchNorm(nn.Module):
     def __call__(self, x):
@@ -345,7 +345,7 @@ using JAX transformations inside modules.
 Non-trainable variables ("state"): Top-level training code patterns
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
   :sync:
@@ -386,7 +386,7 @@ Non-trainable variables ("state"): Top-level training code patterns
     variables = {'params': params, 'batch_stats': batch_stats}  # [2] #!
     logits, new_variables = ResNet(train=true).apply(
       variables, batch['image'], mutable=['batch_stats'])  # [3] #!
-    new_batch_stats = new_variables['batch_stats'] 
+    new_batch_stats = new_variables['batch_stats']
     # [...]
 
 
@@ -396,7 +396,7 @@ Non-trainable variables ("state"): Top-level training code patterns
     logits = ResNet(train=False).apply(
       variables, batch['image'], mutable=False)  # [4] #!
     return compute_metrics(logits, batch['label'])
-  
+
 1. |init|_ returns a variable dict, e.g. ``{"param": ..., "batch_stats": ...}``
    (see `Variable documentation`_).
 
@@ -432,11 +432,11 @@ TODO: Add an example here how to load a new ``TrainState`` object.
 Randomness
 --------------------------------
 
-.. codediff:: 
+.. codediff::
   :title_left: Old Flax
   :title_right: Linen
   :sync:
-  
+
   def dropout(inputs, rate, deterministic=False):
     keep_prob = 1. - rate
     if deterministic:

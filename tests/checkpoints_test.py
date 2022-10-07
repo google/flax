@@ -307,22 +307,22 @@ class CheckpointsTest(parameterized.TestCase):
     with gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w') as f:
         f.write('test_tmp')
     gfile.makedirs(os.path.join(tmp_dir, 'test_tmp_gda'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), 
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
                      None)
-                     
+
     with gfile.GFile(os.path.join(tmp_dir, 'test_0'), 'w') as f:
         f.write('test_0')
     gfile.makedirs(os.path.join(tmp_dir, 'test_0_gda'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), 
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
                      os.path.join(tmp_dir, 'test_0'))
-    
+
     with gfile.GFile(os.path.join(tmp_dir, 'test_10'), 'w') as f:
         f.write('test_10')
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), 
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
                      os.path.join(tmp_dir, 'test_10'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'), 
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'),
                      None)
-    
+
   @parameterized.parameters({'jax_array_config': True},
                             {'jax_array_config': False})
   def test_jax_array(self, jax_array_config):
@@ -342,7 +342,7 @@ class CheckpointsTest(parameterized.TestCase):
         tmp_dir, test_object0, prefix='test_')
     jtu.check_eq(new_object, {'a': np.ones(3), 'b': np.arange(3, 6)})
 
-  
+
   def test_convert_pre_linen(self):
     params = checkpoints.convert_pre_linen({
         'mod_0': {

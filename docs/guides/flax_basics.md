@@ -41,7 +41,7 @@ outputId: e30aa464-fa52-4f35-df96-716c68a4b3ee
 tags: [skip-execution]
 ---
 # Install the latest JAXlib version.
-!pip install --upgrade -q pip jax jaxlib 
+!pip install --upgrade -q pip jax jaxlib
 # Install Flax at head:
 !pip install --upgrade -q git+https://github.com/google/flax.git
 ```
@@ -469,7 +469,7 @@ print('output:\n', y)
 
 +++ {"id": "MKyhfzVpzC94"}
 
-Here, we see how to both declare and assign a parameter to the model using the `self.param` method. It takes as input `(name, init_fn, *init_args)` : 
+Here, we see how to both declare and assign a parameter to the model using the `self.param` method. It takes as input `(name, init_fn, *init_args)` :
 
 *   `name` is simply the name of the parameter that will end up in the parameter structure.
 *   `init_fn` is a function with input `(PRNGKey, *init_args)` returning an Array, with `init_args` being the arguments needed to call the initialisation function.

@@ -33,7 +33,7 @@ id: 62DTHYCYHWp1
 outputId: b38d096f-58db-4d61-effa-eafa4c732826
 tags: [skip-execution]
 ---
-!pip install -q chex einops 
+!pip install -q chex einops
 # tfds.split_for_jax_process() was added in 4.5.1
 !pip install -q tensorflow_datasets -U
 # flax.jax_utils.pad_shard_unpad() is only available at HEAD

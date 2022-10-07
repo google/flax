@@ -60,7 +60,7 @@ class Dense(nn.Module):
 
  @nn.compact
  def __call__(self, x):
-   kernel = self.param("kernel", 
+   kernel = self.param("kernel",
                        self.kernel_init,
                        (x.shape[-1], self.features), self.param_dtype)
    bias = self.param("bias", self.bias_init, (self.features,), self.param_dtype)

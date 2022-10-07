@@ -110,7 +110,7 @@ def parse_single_query(data, query_type):
   Parses the data returned by `send_query`
 
   .. warning::
-      
+
     Like `send_query`, the logic here depends on the specific structure
     of the query (e.g. it must be an issue or PR query, and must have a
     total count).
@@ -206,7 +206,7 @@ def _get_pr_features(prs):
     time_labeled_or_assigned = None
     time_merged_or_closed = None
     time_review = None
-    
+
     if pr["reviews"]["nodes"]:
       review = pr["reviews"]["nodes"][0]
       time_review = _to_datetime(review["createdAt"])
@@ -258,9 +258,9 @@ def _shift_n_months(date: datetime, n: int) -> datetime:
 
 
 def _rolling_window(
-  df: pd.DataFrame, 
-  f: Callable[[pd.DataFrame], pd.Series], 
-  window_size: int = 6, 
+  df: pd.DataFrame,
+  f: Callable[[pd.DataFrame], pd.Series],
+  window_size: int = 6,
   step: int = 1,
 ) -> pd.DataFrame:
   # start of month of the first issue
