@@ -95,8 +95,7 @@ def dataclass(clz: _T) -> _T:
   Returns:
     The new class.
   """
-  # check if the class is already a dataclass
-  
+  # check if already a flax dataclass
   if '_flax_dataclass' in clz.__dict__:
     return clz
       
