@@ -276,7 +276,7 @@ class TransformTest(absltest.TestCase):
     y1 = normal_model.apply(init_variables, x2.reshape((-1, 4)), mutable=['batch_stats'])[0]
     y1 = y1.reshape((5, 4, 3))
     y2 = vmap_model.apply(init_variables, x2, mutable=['batch_stats'])[0]
-    np.testing.assert_allclose(y1, y2, atol=1e-6)
+    np.testing.assert_allclose(y1, y2, atol=1e-5)
 
   def test_scan(self):
     class SimpleScan(nn.Module):

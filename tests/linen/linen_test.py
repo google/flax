@@ -266,8 +266,8 @@ class StochasticTest(absltest.TestCase):
       all_counts = np.prod((100, 100, n_trials))
       frac = np.sum(nonzero_counts) / all_counts
       keep_rate = 1.0 - rate
-      # just check within 3 sigma.
-      delta = 3 * np.sqrt(rate * keep_rate) / np.sqrt(all_counts)
+      # just check within 4 sigma.
+      delta = 4 * np.sqrt(rate * keep_rate) / np.sqrt(all_counts)
       self.assertTrue(keep_rate - delta < frac < keep_rate + delta)
 
   def test_dropout_rate_limits(self):
