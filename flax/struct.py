@@ -95,6 +95,11 @@ def dataclass(clz: _T) -> _T:
   Returns:
     The new class.
   """
+  # check if the class is already a dataclass
+  
+  if '_flax_dataclass' in clz.__dict__:
+    return clz
+      
   data_clz = dataclasses.dataclass(frozen=True)(clz)
   meta_fields = []
   data_fields = []
@@ -155,6 +160,9 @@ def dataclass(clz: _T) -> _T:
 
   serialization.register_serialization_state(
       data_clz, to_state_dict, from_state_dict)
+
+  # add a _flax_dataclass flag to distinguish from regular dataclasses
+  data_clz._flax_dataclass = True
 
   return data_clz
 
