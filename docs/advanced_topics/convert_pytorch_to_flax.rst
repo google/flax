@@ -24,25 +24,25 @@ and the Flax kernel has shape [inC, outC]. Transposing the kernel will do the tr
 .. testcode::
 
   t_fc = torch.nn.Linear(in_features=3, out_features=4)
-  
+
   kernel = t_fc.weight.detach().cpu().numpy()
   bias = t_fc.bias.detach().cpu().numpy()
-  
+
   # [outC, inC] -> [inC, outC]
   kernel = jnp.transpose(kernel, (1, 0))
-  
+
   key = random.PRNGKey(0)
   x = random.normal(key, (1, 3))
-  
+
   variables = {'params': {'kernel': kernel, 'bias': bias}}
   j_fc = nn.Dense(features=4)
   j_out = j_fc.apply(variables, x)
-  
+
   t_x = torch.from_numpy(np.array(x))
   t_out = t_fc(t_x)
   t_out = t_out.detach().cpu().numpy()
-  
-  np.testing.assert_almost_equal(j_out, t_out)  
+
+  np.testing.assert_almost_equal(j_out, t_out)
 
 
 Convolutions
@@ -55,30 +55,30 @@ and the Flax kernel has shape [kH, kW, inC, outC]. Transposing the kernel will d
 .. testcode::
 
   t_conv = torch.nn.Conv2d(in_channels=3, out_channels=4, kernel_size=2, padding='valid')
-  
+
   kernel = t_conv.weight.detach().cpu().numpy()
   bias = t_conv.bias.detach().cpu().numpy()
-  
+
   # [outC, inC, kH, kW] -> [kH, kW, inC, outC]
   kernel = jnp.transpose(kernel, (2, 3, 1, 0))
-  
+
   key = random.PRNGKey(0)
   x = random.normal(key, (1, 6, 6, 3))
-  
+
   variables = {'params': {'kernel': kernel, 'bias': bias}}
   j_conv = nn.Conv(features=4, kernel_size=(2, 2), padding='valid')
   j_out = j_conv.apply(variables, x)
-  
+
   # [N, H, W, C] -> [N, C, H, W]
   t_x = torch.from_numpy(np.transpose(np.array(x), (0, 3, 1, 2)))
   t_out = t_conv(t_x)
   # [N, C, H, W] -> [N, H, W, C]
   t_out = np.transpose(t_out.detach().cpu().numpy(), (0, 2, 3, 1))
-  
-  np.testing.assert_almost_equal(j_out, t_out, decimal=6)  
+
+  np.testing.assert_almost_equal(j_out, t_out, decimal=6)
 
 
-   
+
 Convolutions and FC Layers
 --------------------------------
 
@@ -116,7 +116,7 @@ Now, if you want to use the weights from this model in Flax, the corresponding F
 .. testcode::
 
   class JModel(nn.Module):
-      
+
     @nn.compact
     def __call__(self, x):
       x = nn.Conv(features=4, kernel_size=(2, 2), padding='valid', name='conv')(x)
@@ -147,10 +147,10 @@ Other than the transpose operation before reshaping, we can convert the weights 
 
   # [outC, inC, kH, kW] -> [kH, kW, inC, outC]
   conv_kernel = jnp.transpose(conv_kernel, (2, 3, 1, 0))
-  
+
   # [outC, inC] -> [inC, outC]
   fc_kernel = jnp.transpose(fc_kernel, (1, 0))
-  
+
   variables = {'params': {'conv': {'kernel': conv_kernel, 'bias': conv_bias},
                           'fc': {'kernel': fc_kernel, 'bias': fc_bias}}}
 
@@ -158,12 +158,12 @@ Other than the transpose operation before reshaping, we can convert the weights 
   x = random.normal(key, (1, 6, 6, 3))
 
   j_out = j_model.apply(variables, x)
-  
+
   # [N, H, W, C] -> [N, C, H, W]
   t_x = torch.from_numpy(np.transpose(np.array(x), (0, 3, 1, 2)))
   t_out = t_model(t_x)
   t_out = t_out.detach().cpu().numpy()
-  
+
   np.testing.assert_almost_equal(j_out, t_out, decimal=6)
 
 
@@ -183,29 +183,29 @@ while Flax multiplies the estimated statistic with ``momentum`` and the new obse
 
   t_bn = torch.nn.BatchNorm2d(num_features=3, momentum=0.1)
   t_bn.eval()
-  
+
   scale = t_bn.weight.detach().cpu().numpy()
   bias = t_bn.bias.detach().cpu().numpy()
   mean = t_bn.running_mean.detach().cpu().numpy()
   var = t_bn.running_var.detach().cpu().numpy()
-  
+
   variables = {'params': {'scale': scale, 'bias': bias},
                'batch_stats': {'mean': mean, 'var': var}}
-  
+
   key = random.PRNGKey(0)
   x = random.normal(key, (1, 6, 6, 3))
-  
+
   j_bn = nn.BatchNorm(momentum=0.9, use_running_average=True)
-  
+
   j_out = j_bn.apply(variables, x)
-  
+
   # [N, H, W, C] -> [N, C, H, W]
   t_x = torch.from_numpy(np.transpose(np.array(x), (0, 3, 1, 2)))
   t_out = t_bn(t_x)
   # [N, C, H, W] -> [N, H, W, C]
   t_out = np.transpose(t_out.detach().cpu().numpy(), (0, 2, 3, 1))
-  
-  np.testing.assert_almost_equal(j_out, t_out)  
+
+  np.testing.assert_almost_equal(j_out, t_out)
 
 
 
@@ -226,7 +226,7 @@ operation. ``nn.pool()`` is the core function behind |nn.avg_pool()|_ and |nn.ma
 
 
 .. testcode::
-  
+
   def avg_pool(inputs, window_shape, strides=None, padding='VALID'):
     """
     Pools the input by taking the average over a window.
@@ -234,25 +234,25 @@ operation. ``nn.pool()`` is the core function behind |nn.avg_pool()|_ and |nn.ma
     consider the padded zero's for the average computation.
     """
     assert len(window_shape) == 2
-  
+
     y = nn.pool(inputs, 0., jax.lax.add, window_shape, strides, padding)
     counts = nn.pool(jnp.ones_like(inputs), 0., jax.lax.add, window_shape, strides, padding)
-    y = y / counts 
+    y = y / counts
     return y
 
 
   key = random.PRNGKey(0)
   x = random.normal(key, (1, 6, 6, 3))
-  
+
   j_out = avg_pool(x, window_shape=(2, 2), strides=(1, 1), padding=((1, 1), (1, 1)))
   t_pool = torch.nn.AvgPool2d(kernel_size=2, stride=1, padding=1, count_include_pad=False)
-  
+
   # [N, H, W, C] -> [N, C, H, W]
   t_x = torch.from_numpy(np.transpose(np.array(x), (0, 3, 1, 2)))
   t_out = t_pool(t_x)
   # [N, C, H, W] -> [N, H, W, C]
   t_out = np.transpose(t_out.detach().cpu().numpy(), (0, 2, 3, 1))
-  
+
   np.testing.assert_almost_equal(j_out, t_out)
 
 

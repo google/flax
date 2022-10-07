@@ -123,7 +123,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 _find_non_lifted_module = re.compile(r'.*\((.*)\)')
 
 def _fix_path_part(part: str):
-  """Fixes a path part by removing transformation name and parenthesis sometimes 
+  """Fixes a path part by removing transformation name and parenthesis sometimes
   inserted by lifted transformations"""
   match = _find_non_lifted_module.match(part)
   if match:
@@ -1537,9 +1537,9 @@ class Module:
     **kwargs) -> str:
     """Creates a summary of the Module represented as a table.
 
-    This method has the same signature and internally calls `Module.init`, 
-    but instead of returning the variables, it returns the string summarizing 
-    the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward 
+    This method has the same signature and internally calls `Module.init`,
+    but instead of returning the variables, it returns the string summarizing
+    the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward
     computation without consuming any FLOPs or allocating memory.
 
     Example::
@@ -1602,8 +1602,8 @@ class Module:
         name of a single mutable collection. ``list``: A list of names of mutable
         collections. By default all collections except 'intermediates' are
         mutable.
-      console_kwargs: An optional dictionary with additional keyword arguments that 
-        are passed to `rich.console.Console` when rendering the table. Default arguments 
+      console_kwargs: An optional dictionary with additional keyword arguments that
+        are passed to `rich.console.Console` when rendering the table. Default arguments
         are `{'force_terminal': True, 'force_jupyter': False}`.
       **kwargs: keyword arguments to pass to the forward computation.
 

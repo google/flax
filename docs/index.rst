@@ -35,11 +35,11 @@ Features
          :class-title: sd-fs-5
 
          .. div:: sd-font-normal
-            
-            Flax is designed for correctness and safety. Thanks to its immutable Modules 
-            and Functional API, Flax helps mitigate bugs that araise when handling state 
+
+            Flax is designed for correctness and safety. Thanks to its immutable Modules
+            and Functional API, Flax helps mitigate bugs that araise when handling state
             in JAX.
-   
+
    .. grid-item::
       :columns: 12 12 12 6
 
@@ -49,10 +49,10 @@ Features
          :class-title: sd-fs-5
 
          .. div:: sd-font-normal
-            
+
             Flax grants more fine grained control and expressivity than most Neural Network
             frameworks via its Variable Collections, RNG Collections and Mutability conditions.
-   
+
    .. grid-item::
       :columns: 12 12 12 6
 
@@ -62,9 +62,9 @@ Features
          :class-title: sd-fs-5
 
          .. div:: sd-font-normal
-            
+
             Flax's functional API radically redefines what Modules can do via lifted transformations like vmap, scan, etc, while also enabling seamless integration with other JAX libraries like Optax and Chex.
-   
+
    .. grid-item::
       :columns: 12 12 12 6
 
@@ -74,7 +74,7 @@ Features
          :class-title: sd-fs-5
 
          .. div:: sd-font-normal
-            
+
             Flax's :meth:`compact <flax.linen.compact>` Modules enables submodules to be defined directly at their callsite, leading to code that is easier to read and avoids repetition.
 
 
@@ -125,8 +125,8 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
-      
-      .. card:: :material-regular:`rocket_launch;2em` Getting Started 
+
+      .. card:: :material-regular:`rocket_launch;2em` Getting Started
          :class-card: sd-text-black sd-bg-light
          :link: getting_started.html
 
@@ -179,83 +179,83 @@ Notable examples include:
          :class-title: sd-text-center sd-fs-5
 
          .. div:: sd-text-center sd-font-italic
-            
+
             NLP and Computer Vision models
-   
+
    .. grid-item::
       :columns: 6 6 6 4
-      
+
       .. card:: `🥑 DALLE Mini <https://huggingface.co/dalle-mini>`__
          :class-card: sd-text-black sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
          .. div:: sd-text-center sd-font-italic
-            
+
             Model for Text-to-Image generation
 
    .. grid-item::
       :columns: 6 6 6 4
-      
+
       .. card:: `PaLM <https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html>`__
          :class-card: sd-text-black sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
          .. div:: sd-text-center sd-font-italic
-            
+
             540 Billion parameter model for text generation
 
    .. grid-item::
       :columns: 6 6 6 4
-      
+
       .. card:: `Imagen <https://imagen.research.google>`__
          :class-card: sd-text-black sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
          .. div:: sd-text-center sd-font-italic
-            
+
             Text-to-Image Diffusion Models
-   
+
    .. grid-item::
       :columns: 6 6 6 4
-      
+
       .. card:: `Big Vision <https://github.com/google-research/big_vision>`__
          :class-card: sd-text-black sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
          .. div:: sd-text-center sd-font-italic
-            
+
             Large scale Computer Vision models
-   
+
    .. grid-item::
       :columns: 6 6 6 4
-      
+
       .. card:: `T5x <https://github.com/google-research/t5x>`__
          :class-card: sd-text-black sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
          .. div:: sd-text-center sd-font-italic
-            
+
             Large Language Models
-   
+
    .. grid-item::
       :columns: 6 6 6 4
-      
+
       .. card:: `Brax <https://github.com/google/brax>`__
          :class-card: sd-text-black sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
          .. div:: sd-text-center sd-font-italic
-            
+
             On-device differentiable RL environments
 
 
-      
+
 
 .. toctree::
    :hidden:

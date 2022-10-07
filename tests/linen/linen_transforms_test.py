@@ -147,7 +147,7 @@ class TransformTest(absltest.TestCase):
 
   def test_remat_static_argnums(self):
     test = self
-    
+
     class Foo(nn.Module):
       train_is_static: bool
 
@@ -157,7 +157,7 @@ class TransformTest(absltest.TestCase):
           test.assertTrue(isinstance(train, bool))
         else:
           test.assertTrue(isinstance(train, jnp.ndarray))
-        
+
         return nn.Dense(3, use_bias=False)(inputs)
 
     # set train as a static argument
@@ -176,7 +176,7 @@ class TransformTest(absltest.TestCase):
     variables = foo.init(random.PRNGKey(0), x, True)
     y = foo.apply(variables, x, False)
     self.assertEqual(y.shape, (1, 3))
-  
+
   def test_remat_decorator_static_argnums(self):
     test = self
 
@@ -185,7 +185,7 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, inputs, train: bool):
         test.assertTrue(isinstance(train, bool))
-        
+
         return nn.Dense(3, use_bias=False)(inputs)
 
     # set train as a static argument
@@ -201,7 +201,7 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, inputs, train: bool):
         test.assertTrue(isinstance(train, jnp.ndarray))
-        
+
         return nn.Dense(3, use_bias=False)(inputs)
 
     # set train as a non-static arguments
@@ -210,7 +210,7 @@ class TransformTest(absltest.TestCase):
     variables = foo.init(random.PRNGKey(0), x, True)
     y = foo.apply(variables, x, False)
     self.assertEqual(y.shape, (1, 3))
-    
+
 
   def test_vmap(self):
     key1, key2 = random.split(random.PRNGKey(3), 2)

@@ -81,7 +81,7 @@ class InputPipelineTest(absltest.TestCase):
     batch_size = 2
     fixed_pad_length = 77
     for batch in self.dataset.get_batches(
-            batch_size=batch_size, shuffle=False, 
+            batch_size=batch_size, shuffle=False,
             fixed_pad_length=fixed_pad_length).take(1):
       length = batch['token_ids'].numpy().shape[-1]
       self.assertEqual(fixed_pad_length, length)

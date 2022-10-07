@@ -290,7 +290,7 @@ class TensorboardTest(absltest.TestCase):
         "None": None,
         "List": [1, 2, 3],
         "Tuple": (1, 2, 3),
-        "Complex": complex("1+1j"), 
+        "Complex": complex("1+1j"),
         "np.complex_": np.complex_("1+1j"),
         "Bool": True,
         "Int": 1,
@@ -302,7 +302,7 @@ class TensorboardTest(absltest.TestCase):
         "np.character": np.str_("test")
       }
     }
-    
+
     result_hparams = _flatten_dict(input_hparams)
 
     expected_hparams={

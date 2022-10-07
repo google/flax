@@ -45,7 +45,7 @@ use the following notation:
 #
 #   def sum(a, b):
 #     return a + b
-#   
+#
 #   sum(0, 1)
 ```
 
@@ -87,19 +87,19 @@ You can use the second method if the `path_to_obj` is very long. Some examples:
 # :func:`my_func`
 
 # Create a reference "Module.apply()" to method flax.linen.Module.apply.
-# :meth:`Module.apply() <flax.linen.Module.apply>`  # 
-``` 
+# :meth:`Module.apply() <flax.linen.Module.apply>`  #
+```
 
 To creata a hyperlink, use the following syntax:
 ```bash
-# Note the double underscore at the end: 
+# Note the double underscore at the end:
 # `Link to Google <http://www.google.com>`__
 ```
 
 ### How to specify arguments for classes and methods
 
 *  Class attributes should be specified using the `Attributes:` tag.
-*  Method argument should be specified using the `Args:` tags. 
+*  Method argument should be specified using the `Args:` tags.
 *  All attributes and arguments should have types.
 
 Here is an example from our library:

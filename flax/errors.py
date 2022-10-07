@@ -598,14 +598,14 @@ class MPARestoreDataCorruptedError(FlaxError):
         f' "{path}": No "commit_success.txt" found on this "_gda" directory. '
         'Was its save halted before completion?'
     )
-    
-    
+
+
 class MPARestoreTypeNotMatchError(FlaxError):
   """Make sure the multiprocess array type you use matches your configuration in jax.config.jax_array.
-  
-  If you turned `jax.config.jax_array` on, you should use 
-  `jax.experimental.array.Array` everywhere, instead of using 
-  `GlobalDeviceArray`. Otherwise, avoid using jax.experimental.array 
+
+  If you turned `jax.config.jax_array` on, you should use
+  `jax.experimental.array.Array` everywhere, instead of using
+  `GlobalDeviceArray`. Otherwise, avoid using jax.experimental.array
   to restore your checkpoint.
   """
 
@@ -649,7 +649,7 @@ class TransformTargetError(FlaxError):
       @nn.compact
       def __call__(self, x):
         return nn.vmap(
-            lambda mdl, x: mdl(x), 
+            lambda mdl, x: mdl(x),
             variable_axes={'params': 0}, split_rngs={'params': True})(nn.Dense(3), x)
 
   """

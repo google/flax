@@ -101,7 +101,7 @@ init_variables
 
 +++ {"id": "ubFTzroGhErh"}
 
-We call the `apply` method on the instantiated Module.  If the Module `__call__` method has args `(self, *args, **kwargs)` then we call `apply` with `(variables, *args, rngs=<RNGS>, mutable=<MUTABLEKINDS>, **kwargs)` where 
+We call the `apply` method on the instantiated Module.  If the Module `__call__` method has args `(self, *args, **kwargs)` then we call `apply` with `(variables, *args, rngs=<RNGS>, mutable=<MUTABLEKINDS>, **kwargs)` where
  - `<RNGS>` are the optional _call time_ RNGs for things like dropout. For simple Modules this is just a single key, but if your module has multiple __kinds__ of data, it's a dictionary of rng-keys per-kind, e.g. `{'params': key0, 'dropout': key1}` for a Module with dropout layers.
  - `<MUTABLEKINDS>` is an optional list of names of __kinds__ that are expected to be mutated during the call. e.g. `['batch_stats']` for a layer updating batchnorm statistics.
 
@@ -218,9 +218,9 @@ print('output:\n', y)
 Flax uses lazy initialization, which allows declared variables to be initialized only at the first site of their use, using whatever shape information is available a the local call site for shape inference.  Once a variable has been initialized, a reference to the data is kept for use in subsequent calls.
 
 For declaring parameters that aren't mutated inside the model, but rather by gradient descent, we use the syntax:
- 
+
  `self.param(parameter_name, parameter_init_fn, *init_args)`
- 
+
 with arguments:
  - `parameter_name` just the name, a string
  - `parameter_init_fn` a function taking an RNG key and a variable number of other arguments, i.e. `fn(rng, *args)`. typically those in `nn.initializers` take an `rng` and a `shape` argument.
@@ -280,7 +280,7 @@ class ExplicitDense(nn.Module):
   features: int
   kernel_init: Callable = nn.initializers.lecun_normal()
   bias_init: Callable = nn.initializers.zeros
-  
+
   def setup(self):
     self.kernel = self.param('kernel',
                              self.kernel_init,
@@ -311,9 +311,9 @@ print('output:\n', y)
 +++ {"id": "CJatarOTpByQ"}
 
 For declaring generally mutable _variables_ that may be mutated inside the model we use the call:
- 
+
  `self.variable(variable_kind, variable_name, variable_init_fn, *init_args)`
- 
+
 with arguments:
  - `variable_kind` the "kind" of state this variable is, i.e. the name of the nested-dict collection that this will be stored in inside the top Modules variables.  e.g. `batch_stats` for the moving statistics for a batch norm layer or `cache` for autoregressive cache data.  Note that parameters also have a kind, but they're set to the default `param` kind.
  - `variable_name` just the name, a string
@@ -387,18 +387,18 @@ model = Block(features=3, training=True)
 init_variables = model.init({'params': key2, 'dropout': key3}, x)
 _, init_params = init_variables.pop('params')
 
-# When calling `apply` with mutable kinds, returns a pair of output, 
+# When calling `apply` with mutable kinds, returns a pair of output,
 # mutated_variables.
 y, mutated_variables = model.apply(
     init_variables, x, rngs={'dropout': key4}, mutable=['batch_stats'])
 
 # Now we reassemble the full variables from the updates (in a real training
 # loop, with the updated params from an optimizer).
-updated_variables = freeze(dict(params=init_params, 
+updated_variables = freeze(dict(params=init_params,
                                 **mutated_variables))
 
 print('updated variables:\n', updated_variables)
-print('initialized variable shapes:\n', 
+print('initialized variable shapes:\n',
       jax.tree_util.tree_map(jnp.shape, init_variables))
 print('output:\n', y)
 
@@ -474,7 +474,7 @@ tags: []
 ---
 class RematMLP(nn.Module):
   features: Sequence[int]
-  # For all transforms, we can annotate a method, or wrap an existing 
+  # For all transforms, we can annotate a method, or wrap an existing
   # Module class. Here we annotate the method.
   @nn.remat
   @nn.compact
@@ -510,7 +510,7 @@ You can now `vmap` Modules inside.  The transform has a lot of arguments, they h
 
 In addition, we provide for each __kind__ of variable it's axis rules:
 
- - `variable_in_axes` - a dict from kinds to a single integer or `None` specifying the input axes to map 
+ - `variable_in_axes` - a dict from kinds to a single integer or `None` specifying the input axes to map
  - `variable_out_axes` - a dict from kinds to a single integer or `None` specifying the output axes to map
  - `split_rngs` - a dict from RNG-kinds to a bool, specifying whether to split the rng along the axis.
 
@@ -542,7 +542,7 @@ class RawDotProductAttention(nn.Module):
       attn_weights += bias
     norm_dims = tuple(range(attn_weights.ndim // 2, attn_weights.ndim))
     attn_weights = jax.nn.softmax(attn_weights, axis=norm_dims)
-    attn_weights = nn.Dropout(self.attn_dropout_rate)(attn_weights, 
+    attn_weights = nn.Dropout(self.attn_dropout_rate)(attn_weights,
                                                       deterministic=not self.train)
     attn_weights = attn_weights.astype(dtype)
 
@@ -637,7 +637,7 @@ print('output:\n', y.shape)
 +++ {"id": "8oiRXIC6xQ--"}
 
 Scan allows us to apply `lax.scan` to Modules, including their parameters and mutable variables.  To use it we have to specify how we want each "kind" of variable to be transformed.  For scanned variables we specify similar to vmap via in `variable_in_axes`, `variable_out_axes`:
- - `nn.broadcast` broadcast the variable kind across the scan steps as a constant 
+ - `nn.broadcast` broadcast the variable kind across the scan steps as a constant
  - `<axis:int>` scan along `axis` for e.g. unique parameters at each step
 
 OR we specify that the variable kind is to be treated like a "carry" by passing to the `variable_carry` argument.
@@ -656,8 +656,8 @@ class SimpleScan(nn.Module):
   @nn.compact
   def __call__(self, xs):
     dummy_rng = random.PRNGKey(0)
-    init_carry = nn.LSTMCell.initialize_carry(dummy_rng, 
-                                              xs.shape[:1], 
+    init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
+                                              xs.shape[:1],
                                               xs.shape[-1])
     LSTM = nn.scan(nn.LSTMCell,
                    in_axes=1, out_axes=1,

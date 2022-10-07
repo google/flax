@@ -29,9 +29,9 @@ jax.config.parse_flags_with_absl()
 class EarlyStoppingTests(absltest.TestCase):
 
   def test_update(self):
-    es = early_stopping.EarlyStopping(min_delta=0, 
+    es = early_stopping.EarlyStopping(min_delta=0,
                                       patience=0)
-    
+
     for i in range(2):
       improve_steps = 0
       for step in range(10):
@@ -48,9 +48,9 @@ class EarlyStoppingTests(absltest.TestCase):
       es = es.reset()  # ensure object is reusable if reset.
 
   def test_patience(self):
-    es = early_stopping.EarlyStopping(min_delta=0, 
+    es = early_stopping.EarlyStopping(min_delta=0,
                                       patience=0)
-    patient_es = early_stopping.EarlyStopping(min_delta=0, 
+    patient_es = early_stopping.EarlyStopping(min_delta=0,
                                               patience=6)
     for step in range(10):
       metric = 1.
@@ -69,11 +69,11 @@ class EarlyStoppingTests(absltest.TestCase):
     self.assertEqual(patient_step, 7)
 
   def test_delta(self):
-    es = early_stopping.EarlyStopping(min_delta=0, 
+    es = early_stopping.EarlyStopping(min_delta=0,
                                       patience=0)
-    delta_es = early_stopping.EarlyStopping(min_delta=1e-3, 
+    delta_es = early_stopping.EarlyStopping(min_delta=1e-3,
                                             patience=0)
-    delta_patient_es = early_stopping.EarlyStopping(min_delta=1e-3, 
+    delta_patient_es = early_stopping.EarlyStopping(min_delta=1e-3,
                                                     patience=1)
     metric = 1.
     for step in range(100):
@@ -90,10 +90,10 @@ class EarlyStoppingTests(absltest.TestCase):
       did_improve, delta_es = delta_es.update(metric)
       if delta_es.should_stop:
         break
-      
+
     self.assertEqual(step, 1)
 
-    metrics = [0.01, 0.005, 0.0033, 0.0025, 0.002, 
+    metrics = [0.01, 0.005, 0.0033, 0.0025, 0.002,
                0.0017, 0.0014, 0.0012, 0.0011, 0.001]
     improvement_steps = 0
     for step in range(10):
@@ -103,7 +103,7 @@ class EarlyStoppingTests(absltest.TestCase):
         improvement_steps += 1
       if delta_patient_es.should_stop:
         break
-      
+
     self.assertEqual(improvement_steps, 4)  # steps 0, 1, 2, 4
     self.assertEqual(step, 6)
 

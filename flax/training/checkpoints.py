@@ -490,10 +490,10 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     keep_every_n_steps: Optional[int] = None,
                     async_manager: Optional[AsyncManager] = None) -> str:
   """Save a checkpoint of the model. Suitable for single-host.
-  
+
   In this method, every JAX process saves the checkpoint on its own. Do not
   use it if you have multiple processes and you intend for them to save data
-  to a common directory (e.g., a GCloud bucket). To save multi-process 
+  to a common directory (e.g., a GCloud bucket). To save multi-process
   checkpoints to a shared storage or to save `GlobalDeviceArray`s, use
   `save_checkpoint_multiprocess()` instead.
 
@@ -551,7 +551,7 @@ def save_checkpoint_multiprocess(ckpt_dir: Union[str, os.PathLike],
                                  async_manager: Optional[AsyncManager] = None,
                                  gda_manager: Optional[Any] = None) -> str:
   """Save a checkpoint of the model in multi-process environment.
-  
+
   Use this method to save `GlobalDeviceArray`s, or to save data to a
   common directory. Only process 0 will save the main checkpoint file and
   remove old checkpoint files.
@@ -681,10 +681,10 @@ def restore_checkpoint(
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
-    gda_manager: required if checkpoint contains a multiprocess array 
+    gda_manager: required if checkpoint contains a multiprocess array
       (GlobalDeviceArray or jax Array from pjit). Type should be
       GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will read the arrays from the separate subdirectory with 
+      correctly). Will read the arrays from the separate subdirectory with
       postfix "_gda".
 
   Returns:

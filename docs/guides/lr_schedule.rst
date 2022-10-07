@@ -29,10 +29,10 @@ We will show you how to...
   import ml_collections
   from absl import logging
 
-   
+
   class CNN(nn.Module):
     """A simple CNN model."""
-   
+
     @nn.compact
     def __call__(self, x):
       x = nn.Conv(features=32, kernel_size=(3, 3))(x)
@@ -46,16 +46,16 @@ We will show you how to...
       x = nn.relu(x)
       x = nn.Dense(features=10)(x)
       return x
-   
+
   def get_dummy_data(ds_size):
     image = np.random.rand(ds_size, 28, 28, 1)
     label = np.random.randint(low=0, high=10, size=(ds_size,))
     return {'image': image, 'label': label}
-  
+
   def get_config():
     """Get the default hyperparameter configuration."""
     config = ml_collections.ConfigDict()
-  
+
     config.learning_rate = 0.001
     config.momentum = 0.9
     config.batch_size = 128
@@ -76,7 +76,7 @@ We will show you how to...
 
 
 .. testcode::
-  
+
   def create_learning_rate_fn(config, base_learning_rate, steps_per_epoch):
     """Creates learning rate schedule."""
     warmup_fn = optax.linear_schedule(
@@ -98,11 +98,11 @@ For example using this schedule on MNIST would require changing the ``train_step
 .. |Optax| replace:: ``Optax``
 .. _Optax: https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules
 
-.. codediff:: 
+.. codediff::
   :title_left: Default learning rate
   :title_right: Learning rate schedule
   :sync:
-  
+
   @jax.jit
   def train_step(state, batch):
     def loss_fn(params):
@@ -114,8 +114,8 @@ For example using this schedule on MNIST would require changing the ``train_step
     (_, logits), grads = grad_fn(state.params)
     new_state = state.apply_gradients(grads=grads)
     metrics = compute_metrics(logits, batch['label'])
-  
-  
+
+
     return new_state, metrics
   ---
   @functools.partial(jax.jit, static_argnums=2) #!
@@ -139,7 +139,7 @@ And the ``train_epoch`` function:
   :title_left: Default learning rate
   :title_right: Learning rate schedule
   :sync:
-  
+
   def train_epoch(state, train_ds, batch_size, epoch, rng):
     """Trains for a single epoch."""
     train_ds_size = len(train_ds['image'])
@@ -152,16 +152,16 @@ And the ``train_epoch`` function:
       batch = {k: v[perm, ...] for k, v in train_ds.items()}
       state, metrics = train_step(state, batch)
       batch_metrics.append(metrics)
-  
+
     # compute mean of metrics across each batch in epoch.
     batch_metrics = jax.device_get(batch_metrics)
     epoch_metrics = {
         k: np.mean([metrics[k] for metrics in batch_metrics])
         for k in batch_metrics[0]}
-  
+
     logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
                  epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
-  
+
     return state, epoch_metrics
   ---
   def train_epoch(state, train_ds, batch_size, epoch, learning_rate_fn, rng): #!
@@ -176,16 +176,16 @@ And the ``train_epoch`` function:
       batch = {k: v[perm, ...] for k, v in train_ds.items()}
       state, metrics = train_step(state, batch, learning_rate_fn) #!
       batch_metrics.append(metrics)
-  
+
     # compute mean of metrics across each batch in epoch.
     batch_metrics = jax.device_get(batch_metrics)
     epoch_metrics = {
         k: np.mean([metrics[k] for metrics in batch_metrics])
         for k in batch_metrics[0]}
-  
+
     logging.info('train epoch: %d, loss: %.4f, accuracy: %.2f', epoch,
                  epoch_metrics['loss'], epoch_metrics['accuracy'] * 100)
-  
+
     return state, epoch_metrics
 
 
@@ -217,11 +217,11 @@ And the ``create_train_state`` function:
 .. testcleanup::
 
   config = get_config()
-  
+
   train_ds_size = config.train_ds_size
   steps_per_epoch = train_ds_size // config.batch_size
   learning_rate_fn = create_learning_rate_fn(config, config.learning_rate, steps_per_epoch)
-  
+
   rng = jax.random.PRNGKey(0)
   state = create_train_state(rng, config, learning_rate_fn)
 
@@ -231,5 +231,5 @@ And the ``create_train_state`` function:
 
   assert 'accuracy' in epoch_metrics and 'learning_rate' in epoch_metrics
 
-   
+
 

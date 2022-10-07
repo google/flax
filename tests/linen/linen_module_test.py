@@ -1428,7 +1428,7 @@ class ModuleTest(absltest.TestCase):
         x = 4 * x
         x = self.perturb('after_multiply', x)
         return x
-    
+
     def loss(params, perturbations, inputs, targets):
       variables = {'params': params, 'perturbations': perturbations}
       preds = Foo().apply(variables, inputs)

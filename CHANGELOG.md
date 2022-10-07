@@ -53,7 +53,7 @@ New features:
 - Added async option to `save_checkpoints()` on single-process scenario.
 - Improved documentation pages.
 
-Bug fixes: 
+Bug fixes:
 - Fixed variable aliasing in put_variable
 - Fixed missing passthrough of nn.scan unroll arg
 - Fixed the MNIST example

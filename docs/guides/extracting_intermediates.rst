@@ -43,10 +43,10 @@ Store intermediate values in a new variable collection
 The CNN can be augmented with calls to ``sow`` to store intermediates as following:
 
 
-.. codediff:: 
+.. codediff::
   :title_left: Default CNN
   :title_right: CNN using sow API
-  
+
   class CNN(nn.Module):
     @nn.compact
     def __call__(self, x):
@@ -223,7 +223,7 @@ Use ``Sequential``
 
 You could also define ``CNN`` using a simple implementation of a ``Sequential`` combinator (this is quite common in more stateful approaches). This may be useful
 for very simple models and gives you arbitrary model
-surgery. But it can be very limiting -- if you even want to add one conditional, you are 
+surgery. But it can be very limiting -- if you even want to add one conditional, you are
 forced to refactor away from ``Sequential`` and structure
 your model more explicitly.
 

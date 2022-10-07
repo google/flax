@@ -167,7 +167,7 @@ class ScopeTest(absltest.TestCase):
       self.assertTrue(scope._is_valid_rng(random.PRNGKey(0)))
     finally:
       jax_config.update('jax_enable_custom_prng', old_setting)
-  
+
   def test_jax_leak_detector(self):
     with jax.check_tracer_leaks(True):
       def f(scope):
@@ -199,7 +199,7 @@ class ScopeTest(absltest.TestCase):
     root = Scope({'state': {}})
     with self.assertRaises(errors.ScopeCollectionNotFound):
       root.variable('state', 'test', jnp.zeros, ())
-  
+
   def test_variable_no_init(self):
     root = Scope({}, mutable='state')
     with self.assertRaises(errors.ScopeCollectionNotFound):
@@ -209,7 +209,7 @@ class ScopeTest(absltest.TestCase):
     self.assertEqual(abc.value, 1)
     with self.assertRaises(errors.ScopeVariableNotFoundError):
       root.variable('state', 'test')
-  
+
   def test_variable_alias(self):
     scope = Scope({}, mutable='state')
     subscope = scope.push(name="a")

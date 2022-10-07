@@ -1,6 +1,6 @@
 # How to Contribute
 
-Everyone can contribute to Flax, and we value everyone's contributions. 
+Everyone can contribute to Flax, and we value everyone's contributions.
 You can contribute in many more ways than just writing code. Answering questions
 on our [Discussions page](https://github.com/google/flax/discussions), helping
 each other, and improving our documentation are extremely valuable to our
@@ -32,7 +32,7 @@ Follow these steps to contribute code:
 
 2. Install Python >=3.6 and `svn` for running the tests (see below).
 
-3. (Optional) Create a virtual environment or a Docker container. See 
+3. (Optional) Create a virtual environment or a Docker container. See
    [`dev/README.md`](https://github.com/google/flax/blob/main/dev/README.md)
    for details on how to setup a Docker Container. To setup a virtual environment,
    run the following:
@@ -41,7 +41,7 @@ Follow these steps to contribute code:
    python3.6 -m virtualenv env
    . env/bin/activate
    ```
-  
+
    This ensures all your dependencies are installed in this environment.
 
 4. `pip install` your fork from source. This allows you to modify the code
@@ -57,7 +57,7 @@ Follow these steps to contribute code:
 
 5. Setup pre-commit hooks, this will run some automated checks during each `git` commit and
    possibly update some files that require changes.
-   
+
    ```bash
    pip install pre-commit
    pre-commit install
@@ -87,7 +87,7 @@ Follow these steps to contribute code:
    ./tests/run_all_tests.sh
    ```
 
-9.  Once your change is done, create a commit as follows 
+9.  Once your change is done, create a commit as follows
    ([how to write a commit message](https://chris.beams.io/posts/git-commit/)):
 
    ```bash
@@ -101,17 +101,17 @@ Follow these steps to contribute code:
    git rebase upstream/main
    ```
 
-11. Finally push your commit on your development branch and create a remote 
+11. Finally push your commit on your development branch and create a remote
    branch in your fork that you can use to create a Pull Request from:
 
    ```bash
    git push --set-upstream origin name-of-change
    ```
-   
+
    After running the command, you should see a Github link in your terminal output that you can click on to create a Pull Request.
    If you do not see this link in the terminal after doing a `git push`, go to the Github web UI; there should be a button there that lets you turn the commit into a Pull Request yourself.
 
-11. Make sure your PR passes the 
+11. Make sure your PR passes the
    [PR checklist](https://github.com/google/flax/blob/main/.github/pull_request_template.md#checklist).
    If so, create a Pull Request from the Flax repository and send it for review.
    Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/)

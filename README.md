@@ -87,7 +87,7 @@ To upgrade to the latest version of Flax, you can use:
 
 ## What does Flax look like?
 
-We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder. 
+We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder.
 
 To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
 [HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html).
@@ -174,11 +174,11 @@ decoded = model.apply(variables, encoded, method=model.decode)
 
 ## 🤗 Hugging Face
 
-In-detail examples to train and evaluate a variety of Flax models for 
-Natural Language Processing, Computer Vision, and Speech Recognition are 
+In-detail examples to train and evaluate a variety of Flax models for
+Natural Language Processing, Computer Vision, and Speech Recognition are
 actively maintained in the [🤗 Transformers repository](https://github.com/huggingface/transformers/tree/master/examples/flax).
 
-As of October 2021, the [19 most-used Transformer architectures](https://huggingface.co/transformers/#supported-frameworks) are supported in Flax 
+As of October 2021, the [19 most-used Transformer architectures](https://huggingface.co/transformers/#supported-frameworks) are supported in Flax
 and over 5000 pretrained checkpoints in Flax have been uploaded to the [🤗 Hub](https://huggingface.co/models?library=jax&sort=downloads).
 
 ## Citing Flax

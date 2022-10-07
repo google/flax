@@ -22,7 +22,7 @@ https://optax.readthedocs.io/en/latest/optax-101.html
   import optax
 
   # Note: this is the minimal code required to make below code run. See in the
-  # Colab linked above for a more meaningful definition of datasets etc. 
+  # Colab linked above for a more meaningful definition of datasets etc.
   batch = {'image': jnp.ones([1, 28, 28, 1]), 'label': jnp.array([0])}
   ds_train = [batch]
   get_ds_train = lambda: [batch]
@@ -106,7 +106,7 @@ generic building blocks.
   #
 
   tx = optax.chain(
-      # 1. Step: keep a trace of past updates and add to gradients. 
+      # 1. Step: keep a trace of past updates and add to gradients.
       optax.trace(decay=momentum),
       # 2. Step: multiply result from step 1 with negative learning rate.
       # Note that `optax.apply_updates()` simply adds the final updates to the

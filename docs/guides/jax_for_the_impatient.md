@@ -34,12 +34,12 @@ Let's start by exploring the NumPy API coming from JAX and the main differences 
 import jax
 from jax import numpy as jnp, random
 
-import numpy as np # We import the standard NumPy library 
+import numpy as np # We import the standard NumPy library
 ```
 
 +++ {"id": "Z5BLL6v_JUSI"}
 
-`jax.numpy` is the NumPy-like API that needs to be imported, and we will also use `jax.random` to generate some data to work on. 
+`jax.numpy` is the NumPy-like API that needs to be imported, and we will also use `jax.random` to generate some data to work on.
 
 Let's start by generating some matrices, and then try matrix multiplication.
 
