@@ -147,7 +147,7 @@ def _use_multiprocess_serialization(value: Any) -> bool:
   if isinstance(value, GlobalDeviceArray):
     return True
   if jax.config.jax_array and isinstance(value, jax.Array):
-    return not value.is_fully_addressable()
+    return not value.is_fully_addressable
   return False
 
 
