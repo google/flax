@@ -353,7 +353,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # checkpoint folder and before deleting the main checkpoint.
         if gfile.exists(path + MP_ARRAY_POSTFIX):
           gfile.rmtree(path + MP_ARRAY_POSTFIX)
-      gfile.rmtree(path)
+      gfile.remove(path)
 
   # Remove old checkpoint files.
   last_kept = -float('inf')
@@ -374,7 +374,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # MPA might be removed already but the main ckpt is still there.
         if gfile.exists(path + MP_ARRAY_POSTFIX):
           gfile.rmtree(path + MP_ARRAY_POSTFIX)
-      gfile.rmtree(path)
+      gfile.remove(path)
 
 
 def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
