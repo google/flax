@@ -101,19 +101,22 @@ Basic usage
 
 .. testcode::
 
-   class MLP(nn.Module):
+   class MLP(nn.Module):                    # create a Flax Module dataclass
+     out_dims: int
+
      @nn.compact
      def __call__(self, x):
-       x = nn.Dense(16)(x)                # inline submodules
+       x = x.reshape((x.shape[0], -1))
+       x = nn.Dense(128)(x)                 # create inline Flax Module submodules
        x = nn.relu(x)
-       x = nn.Dense(16)(x)                # inline submodules
+       x = nn.Dense(self.out_dims)(x)       # shape inference
        return x
 
-   model = MLP()                          # create model
+   model = MLP(out_dims=10)                 # instantiate the MLP model
 
-   x = jnp.ones((4, 16))                  # get some data
-   variables = model.init(PRNGKey(42), x) # initialize weights
-   y = model.apply(variables, x)          # make forward pass
+   x = jnp.empty((4, 28, 28, 1))            # generate random data
+   variables = model.init(PRNGKey(42), x)   # initialize the weights
+   y = model.apply(variables, x)            # make forward pass
 
 ----
 
@@ -124,7 +127,6 @@ Learn more
 
    .. grid-item::
       :columns: 6 6 6 4
-
 
       .. card:: :material-regular:`rocket_launch;2em` Getting Started
          :class-card: sd-text-black sd-bg-light
