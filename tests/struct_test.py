@@ -67,7 +67,7 @@ class StructTest(absltest.TestCase):
       raise e('in_axes')
 
   def test_double_wrap_no_op(self):
-    
+
     class A:
       a: int
 

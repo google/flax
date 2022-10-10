@@ -98,7 +98,7 @@ def dataclass(clz: _T) -> _T:
   # check if already a flax dataclass
   if '_flax_dataclass' in clz.__dict__:
     return clz
-      
+
   data_clz = dataclasses.dataclass(frozen=True)(clz)
   meta_fields = []
   data_fields = []
