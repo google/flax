@@ -27,7 +27,7 @@ from flax import linen as nn
 from flax.training import checkpoints
 import jax
 from jax import numpy as jnp
-from jax import test_util as jtu
+from jax._src import test_util as jtu
 import numpy as np
 from tensorflow.io import gfile
 
