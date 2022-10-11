@@ -11,6 +11,8 @@ Checkpoints
 
 .. autofunction:: save_checkpoint
 
+.. autofunction:: save_checkpoint_multiprocess
+
 .. autofunction:: latest_checkpoint
 
 .. autofunction:: restore_checkpoint
