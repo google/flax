@@ -179,6 +179,10 @@ Examples
       - `@vasudevgupta7 <https://github.com/vasudevgupta7>`__
       - Question-Answering
       - https://arxiv.org/abs/2007.14062
+    * - `BlackJAX using MNIST <https://blackjax-devs.github.io/blackjax/examples/SGMCMC.html>`__
+      - `@rlouf <https://github.com/rlouf>`__
+      - Bayesian Inference, SGMCMC
+      - https://arxiv.org/abs/1402.4102
     * - `DCGAN <https://github.com/bkkaggle/jax-dcgan>`__
       - `@bkkaggle <https://github.com/bkkaggle>`__
       - Image Synthesis
