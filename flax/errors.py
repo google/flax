@@ -569,6 +569,25 @@ class CallSetupUnboundModuleError(FlaxError):
   def __init__(self):
     super().__init__('Can\'t call compact methods on unbound modules')
 
+class InvalidInstanceModuleError(FlaxError):
+  """
+  This error occurs when you are trying to call `.init()`, `.init_with_output()` or `.apply()
+  on the Module class itself, instead of an instance of the Module class.
+  For example, the error will be raised when trying to run this code::
+
+    class B(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+
+    k = random.PRNGKey(0)
+    x = random.uniform(random.PRNGKey(1), (2,))
+    B.init(k, x)   # B is module class, not B() a module instance
+    B.apply(vs, x)   # similar issue with apply called on class instead of instance.
+  """
+  def __init__(self):
+    super().__init__('Can only call init, init_with_output or apply methods on an instance of the Module class, not the Module class itself')
+
 
 class InvalidCheckpointError(FlaxError):
   """

@@ -1756,6 +1756,22 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(foo.init_with_output(k)[0])
     self.assertFalse(foo.apply({}))
 
+  def test_throws_invalid_instance_module_error(self):
+
+    class B(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+
+    k = random.PRNGKey(0)
+    x = random.uniform(random.PRNGKey(1), (2,))
+
+    with self.assertRaises(errors.InvalidInstanceModuleError):
+      B.init(k, x)   # B is module class, not B() a module instance
+    with self.assertRaises(errors.InvalidInstanceModuleError):
+      B.init_with_output(k, x)
+    with self.assertRaises(errors.InvalidInstanceModuleError):
+      B.apply({}, x)   # similar issue w. apply called on class instead of instance.
 
 class LeakTests(absltest.TestCase):
 

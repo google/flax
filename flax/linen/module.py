@@ -1255,6 +1255,9 @@ class Module:
       mutable, returns ``(output, vars)``, where ``vars`` are is a dict
       of the modified collections.
     """
+    if not isinstance(self, Module):
+      raise errors.InvalidInstanceModuleError()
+
     if method is None:
       method = self.__call__
     method = _get_unbound_fn(method)
@@ -1295,6 +1298,9 @@ class Module:
       `(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
     """
+    if not isinstance(self, Module):
+      raise errors.InvalidInstanceModuleError()
+
     if not isinstance(rngs, dict):
       if not core.scope._is_valid_rng(rngs):
         raise errors.InvalidRngError(
@@ -1348,6 +1354,9 @@ class Module:
     Returns:
       The initialized variable dict.
     """
+    if not isinstance(self, Module):
+      raise errors.InvalidInstanceModuleError()
+
     _, v_out = self.init_with_output(
         rngs,
         *args,
