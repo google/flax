@@ -27,6 +27,11 @@ import jax.numpy as jnp
 class Dropout(Module):
   """Create a dropout layer.
 
+    Note: When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
+    to include an RNG seed named `'dropout'`. For example::
+
+      model.apply({'params': params}, inputs=inputs, train=True, rngs={'dropout': dropout_rng})`
+
     Attributes:
       rate: the dropout probability.  (_not_ the keep rate!)
       broadcast_dims: dimensions that will share the same dropout mask

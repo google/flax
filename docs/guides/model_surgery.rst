@@ -13,7 +13,7 @@ Model Surgery
   import jax
   import optax
 
-We will show how to get a flat dict of all the tensors, and then go back to a 
+We will show how to get a flat dict of all the tensors, and then go back to a
 nested, frozen dict. This will be demonstrated for both Flax modules and optimizers.
 
 Surgery with Flax Modules
@@ -154,7 +154,7 @@ optimizer state that mirrors the original state.
       Dense_0: { bias: (256,), kernel: (3136, 256), },
       Dense_1: { bias: (10,), kernel: (256, 10), },
   })), EmptyState())
-  
+
 The pytrees inside the optimizer state follow the same structure as the
 parameters and can be flattened / modified exactly the same way
 
@@ -167,7 +167,7 @@ parameters and can be flattened / modified exactly the same way
 
 .. testoutput::
   :options: +NORMALIZE_WHITESPACE
-  
+
   {('Conv_0', 'bias'): (32,),
    ('Conv_0', 'kernel'): (3, 3, 1, 32),
    ('Conv_1', 'bias'): (64,),

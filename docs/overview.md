@@ -24,7 +24,7 @@ JAX that is **designed for flexibility**:
 Try new forms of training by forking an example and by modifying the training
 loop, not by adding features to a framework.
 
-Flax is being developed in close collaboration with the JAX team and 
+Flax is being developed in close collaboration with the JAX team and
 comes with everything you need to start your research, including:
 
 * **Neural network API** (`flax.linen`): Dense, Conv, {Batch|Layer|Group} Norm, Attention, Pooling, {LSTM|GRU} Cell, Dropout

@@ -398,7 +398,7 @@ def _core_variable_with_axes(
     name: str,
     init_fn: Callable[..., Any],
     *init_args,
-    axes: Tuple[str, ...] = (),
+    axes: Optional[Tuple[str, ...]] = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
   """Variant of flax core variable scope call with sharding constraints."""
   scope.reserve(name)
@@ -406,7 +406,7 @@ def _core_variable_with_axes(
     if not scope.is_mutable_collection(col):
       raise flax.errors.ScopeVariableNotFoundError(name, col, scope.path_text)
     init_value = init_fn(*init_args)
-    if axes:
+    if axes is not None:
       init_value = with_sharding_constraint(init_value, axes, fallback=fallback)
     scope.put_variable(col, name, init_value)
   return PartitionedVariable(scope, col, name, axes, fallback)
@@ -417,7 +417,7 @@ def variable_with_axes(
     name: str,
     init_fn,
     *init_args,
-    axes: Tuple[str, ...] = (),
+    axes: Optional[Tuple[str, ...]] = None,
     module: Optional[nn.Module] = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
   """Declares and returns a variable with logical axes in the current Module.
@@ -456,7 +456,7 @@ def variable_with_axes(
       *init_args,
       axes=axes,
       fallback=fallback)
-  if axes:
+  if axes is not None:
     # record logical axis constraint for global axis metadata
     module.sow(
         f'{collection}_axes', f'{name}_axes', AxisMetadata(axes),

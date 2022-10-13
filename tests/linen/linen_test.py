@@ -22,7 +22,7 @@ from flax import linen as nn
 
 import jax
 from jax import random
-from jax import test_util as jtu
+from jax._src import test_util as jtu
 from jax.nn import initializers
 import jax.numpy as jnp
 

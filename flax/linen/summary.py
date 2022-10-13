@@ -130,8 +130,8 @@ def tabulate(
 ) -> Callable[..., str]:
   """Returns a function that creates a summary of the Module represented as a table.
 
-  This function accepts most of the same arguments and internally calls `Module.init`, 
-  except that it returns a function of the form `(*args, **kwargs) -> str` where `*args` 
+  This function accepts most of the same arguments and internally calls `Module.init`,
+  except that it returns a function of the form `(*args, **kwargs) -> str` where `*args`
   and `**kwargs` are passed to `method` (e.g. `__call__`) during the forward pass.
 
   `tabulate` uses `jax.eval_shape` under the hood to run the forward computation without
@@ -157,7 +157,7 @@ def tabulate(
 
   This gives the following output::
 
-                                    Foo Summary                                
+                                    Foo Summary
     ┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
     ┃ path    ┃ module ┃ inputs        ┃ outputs       ┃ params               ┃
     ┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
@@ -175,8 +175,8 @@ def tabulate(
     ├─────────┼────────┼───────────────┼───────────────┼──────────────────────┤
     │         │        │               │         Total │ 50 (200 B)           │
     └─────────┴────────┴───────────────┴───────────────┴──────────────────────┘
-                                                                              
-                          Total Parameters: 50 (200 B)                        
+
+                          Total Parameters: 50 (200 B)
 
 
   **Note**: rows order in the table does not represent execution order,
@@ -199,8 +199,8 @@ def tabulate(
     show_repeated: If `True`, repeated calls to the same module will be shown
       in the table, otherwise only the first call will be shown. Default is
       `False`.
-    console_kwargs: An optional dictionary with additional keyword arguments that 
-      are passed to `rich.console.Console` when rendering the table. Default arguments 
+    console_kwargs: An optional dictionary with additional keyword arguments that
+      are passed to `rich.console.Console` when rendering the table. Default arguments
       are `{'force_terminal': True, 'force_jupyter': False}`.
     **kwargs: Additional arguments passed to `Module.init`.
 
@@ -226,7 +226,7 @@ def _get_module_table(
   but returns the Table representation of the Module."""
 
   def _get_table_fn(*args, **kwargs):
-    
+
     with module_lib._tabulate_context():
 
       def _get_variables():
@@ -261,11 +261,11 @@ def _get_module_table(
       else:
         module_vars, _ = _get_module_variables(c.path, variables, all_paths)
         counted_vars = module_vars
-        
+
       visited_paths.add(c.path)
       rows.append(
         Row(c.path, c.module_type, c.method, inputs, c.outputs, module_vars, counted_vars))
-        
+
     return Table(module, tuple(collections), rows)
 
   return _get_table_fn
@@ -273,7 +273,7 @@ def _get_module_table(
 def _get_module_variables(
   path: Tuple[str, ...], variables: FrozenVariableDict, all_paths: Set[Tuple[str, ...]]
 ) -> Tuple[MutableVariableDict, Any]:
-  """A function that takes a path and variables structure and returns a 
+  """A function that takes a path and variables structure and returns a
   (module_variables, submodule_variables) tuple for that path. _get_module_variables
   uses the `all_paths` set to determine if a variable belongs to a submodule or not."""
   module_variables = _get_path_variables(path, variables)
@@ -291,7 +291,7 @@ def _get_module_variables(
   return module_variables, submodule_variables
 
 def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) -> MutableVariableDict:
-  """A function that takes a path and a variables structure and returns the variable structure at 
+  """A function that takes a path and a variables structure and returns the variable structure at
   that path."""
   path_variables = {}
 
@@ -305,7 +305,7 @@ def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) ->
 
     if collection_variables is not None:
       path_variables[collection] = collection_variables.unfreeze()
-    
+
   return path_variables
 
 def _process_inputs(args, kwargs) -> Any:
@@ -327,7 +327,7 @@ def _render_table(table: Table, console_extras: Optional[Mapping[str, Any]]) -> 
   console_kwargs = {'force_terminal': True, 'force_jupyter': False}
   if console_extras is not None:
     console_kwargs.update(console_extras)
-    
+
   non_params_cols = 4
   rich_table = rich.table.Table(
       show_header=True,

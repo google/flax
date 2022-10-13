@@ -24,7 +24,7 @@ JAX is an excellent basis for current research in many fields in numerical compu
 
 We, on the Flax team, aim to ensure the JAX ecosystem has the necessary tools and guidance to facilitate and maximize this new space of research directions in the form of libraries, integrated examples for both educational purposes, as well as ready-to-fork reference implementations, guides, support channels, and best practices.
 
-Flax aims to support researchers' needs, while exposing the full power of JAX, rather than encapsulating it away. We think that this is the best path towards ground-breaking research that builds on JAX's unique capabilities. Some recent examples of innovative research projects on top of Flax include [NetKet](https://www.netket.org/) for many-body quantum systems, [T5X](https://github.com/google-research/t5x) for very large scale language model and [Brax](https://github.com/google/brax) for differentiable on-device rigid body simulations. 
+Flax aims to support researchers' needs, while exposing the full power of JAX, rather than encapsulating it away. We think that this is the best path towards ground-breaking research that builds on JAX's unique capabilities. Some recent examples of innovative research projects on top of Flax include [NetKet](https://www.netket.org/) for many-body quantum systems, [T5X](https://github.com/google-research/t5x) for very large scale language model and [Brax](https://github.com/google/brax) for differentiable on-device rigid body simulations.
 
 It is challenging to design a library that is ergonomic for researchers, while building on a purely functional library like JAX, which may be confusing to some. But we see this challenge as **an opportunity**. How do you design a smooth user experience where the complexity is progressively disclosed? How do you help users avoid "silent footguns", such as accidentally mutating batch norm stats during prediction? How do you make sure errors guide users to the right solution, even when there may be multiple correct ones? How do you design examples and tutorials that are simple enough to be educational, while being good enough to act as forkable starter codebases? These are the types of questions that inform our design process.
 
@@ -42,6 +42,6 @@ Does this mission excite you? If so, take a look at [our job posting](https://ca
 
 With great hopes for the future,
 
-Marc, Jonathan, George, Bertrand, Avital, Anselm, Andreas, 
+Marc, Jonathan, George, Bertrand, Avital, Anselm, Andreas,
 
 on behalf of The Flax Team

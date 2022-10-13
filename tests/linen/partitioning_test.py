@@ -244,6 +244,22 @@ class PartitioningTest(parameterized.TestCase):
     x = jnp.ones((2, 2))
     _ = VarTest().init(k, x)
 
+  def test_variable_with_empty_tuple_has_empty_axes(self):
+
+    class VarTest(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        foo = partitioning.variable_with_axes(
+            'test', 'foo', jnp.zeros, (2, 2), x.dtype, axes=())
+        return x + foo.value
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((2, 2))
+    variables = VarTest().init(k, x)
+    logical_axis_names = partitioning.get_axis_names(variables['test_axes'])
+    self.assertEqual(logical_axis_names, {'foo': pjit.PartitionSpec()})
+
   def test_variable_with_axes(self):
     class VarTest(nn.Module):
 

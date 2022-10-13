@@ -57,7 +57,7 @@ def module_method(fn, name=None):
     name = fn.__name__ if hasattr(fn, '__name__') else None
 
   def wrapper(self, *args, **kwargs):
-    scope = self.scope.rewound()  
+    scope = self.scope.rewound()
     mod_fn = lambda scope: fn(self, scope, *args, **kwargs)
     return scope.child(mod_fn, name)()
   return wrapper
@@ -135,7 +135,7 @@ class AutoEncoderTest(absltest.TestCase):
             'out': {'kernel': (3, 4), 'bias': (4,)},
         },
     })
-  
+
   def test_auto_encoder_bind_method(self):
     ae = lambda scope, x: AutoEncoder3.create(scope, latents=2, features=4, hidden=3)(x)
     x = jnp.ones((1, 4))

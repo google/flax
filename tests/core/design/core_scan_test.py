@@ -61,11 +61,11 @@ class ScanTest(absltest.TestCase):
     self.assertEqual(param_shapes, {
       'dense_0': {'kernel': (2, 4, 1), 'bias': (2, 1)},
     })
-    
+
     self.assertNotEqual(y[0], y[1])
     k1, k2 = variables['params']['dense_0']['kernel']
     self.assertFalse(jnp.allclose(k1, k2))
-  
+
   def test_scan_shared_params(self):
     x = random.normal(random.PRNGKey(0), (1, 4))
     x = jnp.concatenate([x, x], 0)
@@ -77,7 +77,7 @@ class ScanTest(absltest.TestCase):
     self.assertEqual(param_shapes, {
       'dense_0': {'kernel': (4, 1), 'bias': (1,)},
     })
-    
+
     self.assertEqual(y[0], y[1])
 
 

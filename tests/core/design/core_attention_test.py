@@ -140,7 +140,7 @@ class AttentionTest(absltest.TestCase):
   def test_attention(self):
     inputs = jnp.ones((2, 7, 16))
     model = partial(
-        multi_head_dot_product_attention, 
+        multi_head_dot_product_attention,
         num_heads=2, batch_axes=(0,),
         attn_fn=with_dropout(softmax_attn, 0.1, deterministic=False))
 

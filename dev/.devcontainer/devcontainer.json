@@ -5,9 +5,9 @@
 	"context": "..",
 	"dockerFile": "Dockerfile",
 
-	// Use 'settings' to set *default* container specific settings.json values on container create. 
+	// Use 'settings' to set *default* container specific settings.json values on container create.
 	// You can edit these settings after create using File > Preferences > Settings > Remote.
-	"settings": { 
+	"settings": {
 		"terminal.integrated.shell.linux": "/bin/bash",
 		"python.pythonPath": "/usr/local/bin/python",
 		"python.linting.enabled": true,
@@ -24,7 +24,7 @@
 	"runArgs": ["-v", "${env:HOME}${env:USERPROFILE}/.ssh:/root/.ssh-localhost:ro"],
 	"postCreateCommand": "sudo cp -r /root/.ssh-localhost ~/.ssh && sudo chown -R $(id -u):$(id -g) ~/.ssh && chmod 700 ~/.ssh && chmod 600 ~/.ssh/* && pip install -e ./flax",
 
-	// Uncomment the next line to have VS Code connect as an existing non-root user in the container. 
+	// Uncomment the next line to have VS Code connect as an existing non-root user in the container.
 	// On Linux, by default, the container user's UID/GID will be updated to match your local user. See
 	// https://aka.ms/vscode-remote/containers/non-root for details on adding a non-root user if none exist.
 	// "remoteUser": "vscode",

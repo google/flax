@@ -129,7 +129,7 @@ class DenseTest(absltest.TestCase):
         'dense_0': ExplicitDense((4, 3), (3,)),
         'dense_1': ExplicitDense((3, 1), (1,))
     })
-  
+
   def test_semi_explicit_dense(self):
     x = jnp.ones((1, 4))
     y, variables = init(semi_explicit_mlp)(random.PRNGKey(0), x)

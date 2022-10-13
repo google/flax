@@ -147,7 +147,7 @@ For example, we want to share all parameter variables when we add a batch dimens
 At the same time we can write generic code that uses transformations without knowing exactly what kind of variables the submodules will create.
 Collections thus strike a balance between fine-grained control and generality.
 We also avoid brittle string matching code that loops over all variables and tries to split up collections in an ad-hoc way based on
-naming conventions like: target all variables with the name prefix "kernel". 
+naming conventions like: target all variables with the name prefix "kernel".
 If more fine-grained control is necessary a user can simply split up a set of variables over multiple collections that should be handled differently.
 
 
@@ -160,7 +160,7 @@ The reason for this choice is that there are many different transformations with
 For example: `vmap` has broadcasted and vectorized arguments, while `scan` has scan, carry, and broadcast arguments.
 A variable would have to define its behavior for all these transformations otherwise a `Module` would not be compatible with
 these transformations. Alternatively, we would have to make default decisions for how transformations are handled.
-However, this could lead to silent bugs because the behavior might not actually be valid given the users intent. 
+However, this could lead to silent bugs because the behavior might not actually be valid given the users intent.
 
 The lift package also provides a general purpose `transform`, which allows an arbitrary function to transform a variable collection.
 For example, this can be used to tie the weights in a tied auto-encoder by transposing the weights.
@@ -231,7 +231,7 @@ The `pack(fn, in_vars, out_vars, rngs)` API goes through the following stages:
     After we have used the lifted scopes we have to retrieve the updated variables (PRNG sequences can simply be discarded).
     pack passes the `repack_fn` to support this.
     This stage is similar to stage 2 except that we only lift variables and immutable variables are ignored.
-    Immutable variables cannot be updated. Therefore, they should not be returned from the transformed function. 
+    Immutable variables cannot be updated. Therefore, they should not be returned from the transformed function.
 
 6. *Commit stage*
 

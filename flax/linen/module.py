@@ -41,6 +41,7 @@ from flax.core.scope import (  # pylint: disable=g-multiple-import
     union_filters)
 from flax.ids import FlaxId
 from flax.ids import uuid
+from flax.linen import kw_only_dataclasses
 
 
 traceback_util.register_exclusion(__file__)
@@ -122,7 +123,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 _find_non_lifted_module = re.compile(r'.*\((.*)\)')
 
 def _fix_path_part(part: str):
-  """Fixes a path part by removing transformation name and parenthesis sometimes 
+  """Fixes a path part by removing transformation name and parenthesis sometimes
   inserted by lifted transformations"""
   match = _find_non_lifted_module.match(part)
   if match:
@@ -519,6 +520,30 @@ tuple_init = lambda: ()
 capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 
 
+_ParentType = Union[Type['Module'], Type[Scope], Type[_Sentinel], None]
+
+
+class ParentDescriptor:
+  """Wraps parent module references in weak refs.
+
+  This prevents reference cycles from forming via parent links which can lead
+  to accidental OOMs in eager mode due to slow garbage collection as well as
+  spurious tracer leaks during jit compilation.
+
+  Note: "descriptors" are the underlying python mechanism for implementing
+  dynamic @property decorators.  We need to use a raw descriptor instead of the
+  more common decorator in order to force that the appropriate getter/setter
+  logic applies in subclasses even after various dataclass transforms.
+  """
+  def __get__(self, obj, objtype=None):
+    parent = object.__getattribute__(obj, "_parent_ref")
+    return parent() if isinstance(parent, weakref.ReferenceType) else parent
+
+  def __set__(self, obj, value):
+    maybe_weak = weakref.ref(value) if isinstance(value, Module) else value
+    object.__setattr__(obj, "_parent_ref", maybe_weak)
+
+
 # Base Module definition.
 # -----------------------------------------------------------------------------
 
@@ -584,37 +609,24 @@ class Module:
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state
     cls.scope: Optional[Scope] = None
+    # Handles weak referencing of parent Modules to prevent reference cycles.
+    cls.parent = ParentDescriptor()
 
   @classmethod
   def _customized_dataclass_transform(cls):
-    """Handles final optional dataclass attributes: `parent` and `name`."""
-    # Use cls.__dict__ to get annotations of cls itself (no parent class).
+    """Transforms `cls` into a dataclass, with custom additional behavior.
+
+    1. Inject `parent` and `name` fields.  (If they are already present,
+       then check that they have the expected types.)
+    2. Set compare, hash, and repr to False for non-init fields.
+    3. Generate a hash function (if not provided by cls).
+    """
+    # Check reserved attributes have expected type annotations.
     annotations = dict(cls.__dict__.get('__annotations__', {}))
-    parent_annotation = Union[Type[Module], Type[Scope],
-                              Type[_Sentinel], None]
-    if ('parent' in annotations
-        and annotations['parent'] != parent_annotation):
+    if annotations.get('parent', _ParentType) != _ParentType:
       raise errors.ReservedModuleAttributeError(annotations)
-    if 'name' in annotations and annotations['name'] not in ('str', str):
+    if annotations.get('name', str) not in ('str', str, Optional[str]):
       raise errors.ReservedModuleAttributeError(annotations)
-    # Add `parent` and `name` default fields at end.
-    # We temporarily modify base class __dataclass_fields__ to force desired
-    # argument behavior and ordering from dataclass class-transform.
-    parent_dataclass_fields = []
-    for clz in cls.__mro__[1:]:
-      pdf = dict(getattr(clz, '__dataclass_fields__', {}))
-      parent_dataclass_fields.append(pdf)
-
-      # Remove 'parent' and 'name' from parents because we always want parent
-      # and name to show up last in the dataclass args.
-      if 'parent' in pdf:
-        clz.__dataclass_fields__.pop('parent')  # pytype: disable=attribute-error
-      if 'name' in pdf:
-        clz.__dataclass_fields__.pop('name')  # pytype: disable=attribute-error
-
-    annotations['parent'] = parent_annotation
-    cls.parent = dataclasses.field(repr=False, default=_unspecified_parent)
-    annotations['name'] = str
 
     # any non-init field will only be set in setup
     # During __hash__ and __eq__ the field is not set yet
@@ -626,17 +638,21 @@ class Module:
         field_meta.hash = False
         field_meta.repr = False
 
-    cls.name = None  # default value of name is None.
-    cls.__annotations__ = annotations
+    extra_fields = [('parent', _ParentType,
+                     kw_only_dataclasses.field(
+                         repr=False, default=_unspecified_parent,
+                         kw_only=True)),
+                    ('name', Optional[str],
+                     kw_only_dataclasses.field(default=None, kw_only=True))]
+
     # Now apply dataclass transform (which operates in-place).
     # Do generate a hash function only if not provided by the class.
-    dataclasses.dataclass(
-        cls, unsafe_hash='__hash__' not in cls.__dict__, repr=False)  # pytype: disable=wrong-keyword-args
+    kw_only_dataclasses.dataclass(
+        cls,
+        unsafe_hash='__hash__' not in cls.__dict__,
+        repr=False,
+        extra_fields=extra_fields)  # pytype: disable=wrong-keyword-args
     cls.__hash__ = _wrap_hash(cls.__hash__)
-    # Restore original base class __dataclass_fields__.
-    for clz, pdf in zip(cls.__mro__[1:], parent_dataclass_fields):
-      if dataclasses.is_dataclass(clz):
-        clz.__dataclass_fields__ = pdf
 
   @classmethod
   def _verify_single_or_no_compact(cls):
@@ -682,6 +698,8 @@ class Module:
     add_call_info = not is_setup_method and len(_context.call_info_stack) > 0
     # We lazily call setup() only when needed.
     if is_setup_method:
+      if self.scope is None:
+        raise errors.CallSetupUnboundModuleError()
       is_recurrent = self._state.in_setup
       self._state.in_setup = True
     else:
@@ -1521,9 +1539,9 @@ class Module:
     **kwargs) -> str:
     """Creates a summary of the Module represented as a table.
 
-    This method has the same signature and internally calls `Module.init`, 
-    but instead of returning the variables, it returns the string summarizing 
-    the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward 
+    This method has the same signature and internally calls `Module.init`,
+    but instead of returning the variables, it returns the string summarizing
+    the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward
     computation without consuming any FLOPs or allocating memory.
 
     Example::
@@ -1586,8 +1604,8 @@ class Module:
         name of a single mutable collection. ``list``: A list of names of mutable
         collections. By default all collections except 'intermediates' are
         mutable.
-      console_kwargs: An optional dictionary with additional keyword arguments that 
-        are passed to `rich.console.Console` when rendering the table. Default arguments 
+      console_kwargs: An optional dictionary with additional keyword arguments that
+        are passed to `rich.console.Console` when rendering the table. Default arguments
         are `{'force_terminal': True, 'force_jupyter': False}`.
       **kwargs: keyword arguments to pass to the forward computation.
 

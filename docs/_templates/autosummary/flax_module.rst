@@ -7,8 +7,8 @@
 
    {% block methods %}
 
-   .. automethod:: __call__ 
-   
+   .. automethod:: __call__
+
    {% if methods %}
    .. rubric:: Methods
 

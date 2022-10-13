@@ -34,14 +34,14 @@ class EarlyStopping(struct.PyTreeNode):
       if early_stop.should_stop:
         print('Met early stopping criteria, breaking...')
         break
-  
+
   Attributes:
     min_delta: Minimum delta between updates to be considered an
         improvement.
     patience: Number of steps of no improvement before stopping.
     best_metric: Current best metric value.
     patience_count: Number of steps since last improving update.
-    should_stop: Whether the training loop should stop to avoid 
+    should_stop: Whether the training loop should stop to avoid
         overfitting.
   """
   min_delta: float = 0
@@ -57,7 +57,7 @@ class EarlyStopping(struct.PyTreeNode):
 
   def update(self, metric):
     """Update the state based on metric.
-    
+
     Returns:
       A pair (has_improved, early_stop), where `has_improved` is True when there
       was an improvement greater than `min_delta` from the previous

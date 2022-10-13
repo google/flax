@@ -44,7 +44,7 @@ class ImagenetBenchmarkFakeData(Benchmark):
     # Warm-up first so that we are not measuring just compilation.
     with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
       train.train_and_evaluate(config, workdir)
-    
+
     start_time = time.time()
     with tfds.testing.mock_data(num_examples=1024, data_dir=data_dir):
       train.train_and_evaluate(config, workdir)

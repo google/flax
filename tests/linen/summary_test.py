@@ -52,7 +52,7 @@ class ConvBlock(nn.Module):
     x = self.dropout(x, deterministic=not training)
     x = nn.relu(x)
     return x
-  
+
   def __call__(self, x: Array, training: bool) -> Array:
     x = self.conv(x)
 
@@ -71,7 +71,7 @@ class CNN(nn.Module):
     self.block1 = ConvBlock(32, [3, 3], test_sow=self.test_sow)
     self.block2 = ConvBlock(64, [3, 3], test_sow=self.test_sow)
     self.dense = nn.Dense(10)
-  
+
   def cnn_method(self, x: Array, training: bool) -> Array:
     x = self.block1.block_method(x, training=training)
     x = self.block2.block_method(x, training=training)
@@ -109,9 +109,9 @@ class SummaryTest(absltest.TestCase):
     x = jnp.ones((batch_size, 28, 28, 1))
     module = CNN(test_sow=False)
 
-    table = summary._get_module_table(module, depth=None, show_repeated=True)( 
+    table = summary._get_module_table(module, depth=None, show_repeated=True)(
       {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
-      x, training=True, mutable=True, 
+      x, training=True, mutable=True,
     )
     # get values for inputs and outputs from their _ValueRepresentation
     for row in table:
@@ -173,7 +173,7 @@ class SummaryTest(absltest.TestCase):
         row.module_variables,
         row.counted_variables,
       )
-  
+
   def test_module_summary_with_depth(self):
     """
     This test creates a Table using `module_summary` set the `depth` argument to `1`,
@@ -186,7 +186,7 @@ class SummaryTest(absltest.TestCase):
 
     table = summary._get_module_table(module, depth=1, show_repeated=True)(
       {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
-      x, training=True, mutable=True, 
+      x, training=True, mutable=True,
     )
     # get values for inputs and outputs from their _ValueRepresentation
     for row in table:
@@ -230,10 +230,10 @@ class SummaryTest(absltest.TestCase):
     self.assertEqual(table[0].module_variables, table[0].counted_variables)
     self.assertEqual(table[3].module_variables, table[3].counted_variables)
 
-  
+
   def test_tabulate(self):
     """
-    This test creates a string representation of a Module using `Module.tabulate` 
+    This test creates a string representation of a Module using `Module.tabulate`
     and checks that it matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
     """
     batch_size = 32
@@ -242,8 +242,8 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-        {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)}, 
-        x, 
+        {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
+        x,
         training=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
     )
@@ -263,7 +263,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("inputs", lines[3])
     self.assertIn("outputs", lines[3])
     self.assertIn("params", lines[3])
-    self.assertIn("batch_stats", lines[3]) 
+    self.assertIn("batch_stats", lines[3])
 
     # collection counts
     self.assertIn("Total", lines[-6])
@@ -286,15 +286,15 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=True)
 
     module_repr = module.tabulate(
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)}, 
-      x, 
+      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
+      x,
       training=True,
       console_kwargs=CONSOLE_TEST_KWARGS,
     )
 
     self.assertIn("intermediates", module_repr)
     self.assertIn("INTERM", module_repr)
-  
+
   def test_tabulate_with_method(self):
 
     batch_size = 32
@@ -303,8 +303,8 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)}, 
-      x, 
+      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
+      x,
       training=True,
       method=CNN.cnn_method,
       console_kwargs=CONSOLE_TEST_KWARGS,
@@ -315,7 +315,7 @@ class SummaryTest(absltest.TestCase):
 
   def test_tabulate_function(self):
     """
-    This test creates a string representation of a Module using `Module.tabulate` 
+    This test creates a string representation of a Module using `Module.tabulate`
     and checks that it matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
     """
     batch_size = 32
@@ -384,9 +384,9 @@ class SummaryTest(absltest.TestCase):
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
         random.PRNGKey(0),
-        x=jnp.ones((32, 128, 64)), 
+        x=jnp.ones((32, 128, 64)),
         console_kwargs=CONSOLE_TEST_KWARGS)
-    
+
     lines = module_repr.splitlines()
 
     self.assertIn("LSTM", lines[5])
@@ -394,7 +394,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("LSTMCell", lines[9])
     self.assertIn("ScanLSTM/ii", lines[13])
     self.assertIn("Dense", lines[13])
-  
+
   def test_lifted_transform_no_rename(self):
     class LSTM(nn.Module):
       batch_size: int
@@ -420,7 +420,7 @@ class SummaryTest(absltest.TestCase):
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
         random.PRNGKey(0),
-        x=jnp.ones((32, 128, 64)), 
+        x=jnp.ones((32, 128, 64)),
         console_kwargs=CONSOLE_TEST_KWARGS)
 
     lines = module_repr.splitlines()
@@ -452,7 +452,7 @@ class SummaryTest(absltest.TestCase):
 
     x = jnp.ones((4, 28, 28, 32))
     module_repr = CNN().tabulate(
-      jax.random.PRNGKey(0), 
+      jax.random.PRNGKey(0),
       x=x,
       show_repeated=True,
       console_kwargs=CONSOLE_TEST_KWARGS)
@@ -473,7 +473,7 @@ class SummaryTest(absltest.TestCase):
     self.assertNotIn("mean", lines[25])
     self.assertNotIn("bias", lines[25])
     self.assertIn("ConvBlock_0/Dropout_0", lines[27])
-    
+
     # third call
     self.assertIn("ConvBlock_0/Conv_0", lines[31])
     self.assertNotIn("bias", lines[31])
@@ -493,7 +493,7 @@ class SummaryTest(absltest.TestCase):
     lines = module_repr.splitlines()
 
     self.assertRegex(lines[5], r'|\s*|\s*EmptyInput\s*|\s*|\s*1\s*|')
-  
+
   def test_numpy_scalar(self):
     class Submodule(nn.Module):
       def __call__(self, x):

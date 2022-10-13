@@ -168,7 +168,7 @@ def path_aware_map(
   the path to each leaf into account.
 
   Example::
-    
+
     >>> import jax.numpy as jnp
     >>> from flax import traverse_util
     ...
@@ -181,7 +181,7 @@ def path_aware_map(
     f: A callable that takes in ``(path, value)`` arguments and maps them
       to a new value. Here ``path`` is a tuple of strings.
     nested_dict: A nested dictionary structure.
-  
+
   Returns:
     A new nested dictionary structure with the mapped values.
   """
