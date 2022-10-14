@@ -18,7 +18,7 @@ docutils==0.16
 matplotlib
 scikit-learn
 # Must install flax itself for notebook execution and autodocs to work.
-.
+
 # The next packages are used in testcode blocks.
 ml_collections
 tensorflow
