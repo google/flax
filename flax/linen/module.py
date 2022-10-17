@@ -1136,6 +1136,16 @@ class Module:
       raise ValueError("Can't check if running under init() on unbound modules")
     return self.scope.get_flag('initializing', False)
 
+  def _module_checks(self):
+    """Run standard runtime checks."""
+
+    if not isinstance(self, Module):
+      raise errors.InvalidInstanceModuleError()
+
+    overridden_post_init = self.__post_init__ != Module.__post_init__
+    if overridden_post_init and not hasattr(self, "_id"):
+      raise errors.IncorrectPostInitOverrideError()
+
   @traceback_util.api_boundary
   def bind(self,
            variables: VariableDict,
@@ -1191,6 +1201,8 @@ class Module:
     Returns:
       A copy of this instance with bound variables and RNGs.
     """
+    Module._module_checks(self)
+
     del args
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope)
@@ -1255,8 +1267,7 @@ class Module:
       mutable, returns ``(output, vars)``, where ``vars`` are is a dict
       of the modified collections.
     """
-    if not isinstance(self, Module):
-      raise errors.InvalidInstanceModuleError()
+    Module._module_checks(self)
 
     if method is None:
       method = self.__call__
@@ -1298,8 +1309,7 @@ class Module:
       `(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
     """
-    if not isinstance(self, Module):
-      raise errors.InvalidInstanceModuleError()
+    Module._module_checks(self)
 
     if not isinstance(rngs, dict):
       if not core.scope._is_valid_rng(rngs):
@@ -1354,8 +1364,7 @@ class Module:
     Returns:
       The initialized variable dict.
     """
-    if not isinstance(self, Module):
-      raise errors.InvalidInstanceModuleError()
+    Module._module_checks(self)
 
     _, v_out = self.init_with_output(
         rngs,

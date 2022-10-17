@@ -1772,6 +1772,23 @@ class ModuleTest(absltest.TestCase):
       B.init_with_output(k, x)
     with self.assertRaises(errors.InvalidInstanceModuleError):
       B.apply({}, x)   # similar issue w. apply called on class instead of instance.
+    with self.assertRaises(errors.InvalidInstanceModuleError):
+      B.bind({}, x)   # similar issue w. apply called on class instead of instance.
+
+  def test_throws_incorrect_post_init_override_error(self):
+
+    class A(nn.Module):
+      x: float
+      def __post_init__(self):
+        self.x_square = self.x ** 2
+      @nn.compact
+      def __call__(self, input):
+        return input + 3
+
+    r = A(x=3)
+
+    with self.assertRaises(errors.IncorrectPostInitOverrideError):
+      r.init(jax.random.PRNGKey(2), jnp.ones(3))
 
 class LeakTests(absltest.TestCase):
 

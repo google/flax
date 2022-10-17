@@ -571,7 +571,7 @@ class CallSetupUnboundModuleError(FlaxError):
 
 class InvalidInstanceModuleError(FlaxError):
   """
-  This error occurs when you are trying to call `.init()`, `.init_with_output()` or `.apply()
+  This error occurs when you are trying to call `.init()`, `.init_with_output()`, `.apply() or `.bind()`
   on the Module class itself, instead of an instance of the Module class.
   For example, the error will be raised when trying to run this code::
 
@@ -587,6 +587,29 @@ class InvalidInstanceModuleError(FlaxError):
   """
   def __init__(self):
     super().__init__('Can only call init, init_with_output or apply methods on an instance of the Module class, not the Module class itself')
+
+class IncorrectPostInitOverrideError(FlaxError):
+  """
+  This error occurs when you overrode `.__post_init__()` without calling `super().__post_init__()`.
+  For example, the error will be raised when trying to run this code::
+
+    from flax import linen as nn
+    import jax.numpy as jnp
+    import jax
+    class A(nn.Module):
+      x: float
+      def __post_init__(self):
+        self.x_square = self.x ** 2
+        # super().__post_init__() <-- forgot to add this line
+      @nn.compact
+      def __call__(self, input):
+        return input + 3
+
+    r = A(x=3)
+    r.init(jax.random.PRNGKey(2), jnp.ones(3))
+  """
+  def __init__(self):
+    super().__init__('Overrode `.__post_init__()` without calling `super().__post_init__()`')
 
 
 class InvalidCheckpointError(FlaxError):
