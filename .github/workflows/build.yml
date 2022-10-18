@@ -13,16 +13,21 @@ on:
       - main
 
 jobs:
+  cancel-previous:
+    name: Cancel Previous Runs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel previous
+        uses: styfle/cancel-workflow-action@0.10.1
+        if: ${{github.ref != 'refs/head/main'}}
+        with:
+          access_token: ${{ github.token }}
+          workflow_id: ${{ github.event.workflow.id }}
+          all_but_latest: true
   pre-commit:
     name: Test pre-commit hooks
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - name: Cancel previous
-        uses: styfle/cancel-workflow-action@0.9.1
-        with:
-          access_token: ${{ github.token }}
-        if: ${{github.ref != 'refs/head/main'}}
       - uses: actions/checkout@v3
       - name: Set up Python 3.8
         uses: actions/setup-python@v3
@@ -33,10 +38,6 @@ jobs:
     name: Check commit count
     runs-on: ubuntu-latest
     steps:
-    - name: Cancel previous
-      uses: styfle/cancel-workflow-action@0.8.0
-      with:
-        access_token: ${{ github.token }}
     - uses: actions/checkout@v2
     # We allow at most 5 commits in a branch to ensure our CI doesn't break.
     - name: Check commit count in PR
@@ -59,8 +60,27 @@ jobs:
           echo "See $url for help on how to resolve this."
           exit 1
         fi
+  test-import:
+    name: Test import standalone
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v1
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install standalone dependencies only
+      run: |
+        pip install .
+    - name: Test importing Flax
+      run: |
+        python -c "import flax"
   tests:
     name: Run Tests
+    needs: [cancel-previous, pre-commit, commit-count, test-import]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -72,10 +92,6 @@ jobs:
           - test-type: pytype
             python-version: 3.8
     steps:
-    - name: Cancel previous
-      uses: styfle/cancel-workflow-action@0.8.0
-      with:
-        access_token: ${{ github.token }}
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v1
@@ -121,23 +137,3 @@ jobs:
            "description": "'$status'",
            "context": "github-actions/Build"
            }'
-  test-import:
-    name: Test import standalone
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.7, 3.8, 3.9]
-    steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install standalone dependencies only
-      run: |
-        pip install .
-    - name: Test importing Flax
-      run: |
-        python -c "import flax"
-
-
