@@ -224,8 +224,8 @@ class BatchNorm(Module):
     """Normalizes the input using batch statistics.
 
     NOTE:
-    During initialization (when parameters are mutable) the running average
-    of the batch statistics will not be updated. Therefore, the inputs
+    During initialization (when `self.is_initializing()` is `True`) the running
+    average of the batch statistics will not be updated. Therefore, the inputs
     fed during initialization don't need to match that of the actual input
     distribution and the reduction axis (set with `axis_name`) does not have
     to exist.
@@ -245,9 +245,6 @@ class BatchNorm(Module):
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
     feature_shape = [x.shape[ax] for ax in feature_axes]
 
-    # see NOTE above on initialization behavior
-    initializing = self.is_mutable_collection('params')
-
     ra_mean = self.variable('batch_stats', 'mean',
                             lambda s: jnp.zeros(s, jnp.float32),
                             feature_shape)
@@ -261,10 +258,10 @@ class BatchNorm(Module):
       mean, var = _compute_stats(
           x, reduction_axes,
           dtype=self.dtype,
-          axis_name=self.axis_name if not initializing else None,
+          axis_name=self.axis_name if not self.is_initializing() else None,
           axis_index_groups=self.axis_index_groups)
 
-      if not initializing:
+      if not self.is_initializing():
         ra_mean.value = self.momentum * ra_mean.value + (1 -
                                                          self.momentum) * mean
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
