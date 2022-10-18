@@ -90,7 +90,8 @@ To upgrade to the latest version of Flax, you can use:
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder.
 
 To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
-[HOWTO guides](https://flax.readthedocs.io/en/latest/howtos.html).
+[guides](https://flax.readthedocs.io/en/latest/guides/index.html) and
+[advanced topics documentation](https://flax.readthedocs.io/en/latest/advanced_topics/index.html).
 
 ```py
 from typing import Sequence
