@@ -7,6 +7,7 @@
 # Run the hooks on all files with
 # 'pre-commit run --all'
 
+repos:
 - repo: https://github.com/mwouts/jupytext
   rev: v1.13.8
   hooks:
