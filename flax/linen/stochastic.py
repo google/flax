@@ -38,10 +38,12 @@ class Dropout(Module):
       deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
         masked, whereas if true, no mask is applied and the inputs are returned
         as is.
+      rng_collection: the rng collection name to use when requesting an rng key.
   """
   rate: float
   broadcast_dims: Sequence[int] = ()
   deterministic: Optional[bool] = None
+  rng_collection: str = 'dropout'
 
   @compact
   def __call__(self, inputs, deterministic: Optional[bool] = None):
@@ -67,7 +69,7 @@ class Dropout(Module):
     if deterministic:
       return inputs
     else:
-      rng = self.make_rng('dropout')
+      rng = self.make_rng(self.rng_collection)
       broadcast_shape = list(inputs.shape)
       for dim in self.broadcast_dims:
         broadcast_shape[dim] = 1
