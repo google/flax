@@ -8,7 +8,7 @@ myst_nb
 recommonmark
 ipython_genutils
 sphinx-design
-jupytext
+jupytext==1.13.8
 
 # Need to pin docutils to 0.16 to make bulleted lists appear correctly on
 # ReadTheDocs: https://stackoverflow.com/a/68008428
