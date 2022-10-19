@@ -391,7 +391,7 @@ for epoch in range(1, num_epochs + 1):
   rng, input_rng = jax.random.split(rng)
   # Run an optimization step over a training batch
   state = train_epoch(state, train_ds, batch_size, epoch, input_rng)
-  # Evaluate on the test set after each training epoch 
+  # Evaluate on the test set after each training epoch
   test_loss, test_accuracy = eval_model(state.params, test_ds)
   print(' test epoch: %d, loss: %.2f, accuracy: %.2f' % (
       epoch, test_loss, test_accuracy * 100))

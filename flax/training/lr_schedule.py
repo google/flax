@@ -16,7 +16,7 @@
 
 Note that with `FLIP #1009`_ learning rate schedules in ``flax.training`` are
 **effectively deprecated** in favor of Optax_ schedules. Please refer to
-`Optimizer Schedules`_ for more information. 
+`Optimizer Schedules`_ for more information.
 
 .. _FLIP #1009: https://github.com/google/flax/blob/main/docs/flip/1009-optimizer-api.md
 .. _Optax: https://github.com/deepmind/optax

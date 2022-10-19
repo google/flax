@@ -6,16 +6,16 @@ Core examples
 ##############
 
 
-Core examples are hosted on the Flax repo in the `examples <https://github.com/google/flax/tree/main/examples>`__ 
+Core examples are hosted on the Flax repo in the `examples <https://github.com/google/flax/tree/main/examples>`__
 directory.
 
 Each example is designed to be **self-contained and easily forkable**, while
 reproducing relevant results in different areas of machine learning.
 
-As discussed in `#231 <https://github.com/google/flax/issues/231>`__, we decided 
-to go for a standard pattern for all examples including the simplest ones (like MNIST). 
-This makes every example a bit more verbose, but once you know one example, you 
-know the structure of all of them. Having unit tests and integration tests is also 
+As discussed in `#231 <https://github.com/google/flax/issues/231>`__, we decided
+to go for a standard pattern for all examples including the simplest ones (like MNIST).
+This makes every example a bit more verbose, but once you know one example, you
+know the structure of all of them. Having unit tests and integration tests is also
 very useful when you fork these examples.
 
 Some of the examples below have a link "Interactive🕹" that lets you run them
@@ -105,7 +105,7 @@ of examples, in many cases with pre-trained weights:
   `Flax/JAX models <https://huggingface.co/models?library=jax&sort=downloads>`__ in
   their repository.
 
-- `🥑 DALLE Mini <https://huggingface.co/dalle-mini>`__ is a Transformer-based 
+- `🥑 DALLE Mini <https://huggingface.co/dalle-mini>`__ is a Transformer-based
   text-to-image model implemented in JAX/Flax that follows the ideas from the
   original `DALLE <https://openai.com/blog/dall-e/>`__ paper by OpenAI.
 
@@ -179,6 +179,10 @@ Examples
       - `@vasudevgupta7 <https://github.com/vasudevgupta7>`__
       - Question-Answering
       - https://arxiv.org/abs/2007.14062
+    * - `Bayesian Networks with BlackJAX <https://blackjax-devs.github.io/blackjax/examples/SGMCMC.html>`__
+      - `@rlouf <https://github.com/rlouf>`__
+      - Bayesian Inference, SGMCMC
+      - https://arxiv.org/abs/1402.4102
     * - `DCGAN <https://github.com/bkkaggle/jax-dcgan>`__
       - `@bkkaggle <https://github.com/bkkaggle>`__
       - Image Synthesis
@@ -203,20 +207,20 @@ Tutorials
 Contributing Policy
 ********************
 
-If you are interested in adding a project to the Community Examples section, take the following 
+If you are interested in adding a project to the Community Examples section, take the following
 into consideration:
 
-* **Examples**: examples should contain a README that is helpful, clear, and makes it easy to run 
+* **Examples**: examples should contain a README that is helpful, clear, and makes it easy to run
   the code. The code itself should be easy to follow.
-* **Tutorials**: tutorials must preferably be runnable notebooks, be well written, and discuss 
+* **Tutorials**: tutorials must preferably be runnable notebooks, be well written, and discuss
   an interesting topic. Also, the tutorial's content must be different from the existing
   guides in the Flax documentation and other community examples to be considered for inclusion.
 * **Models**: repositories with models ported to Flax must provide at least one of the following:
-  
-  * Metrics that are comparable to the original work when the model is trained to completion. Having 
+
+  * Metrics that are comparable to the original work when the model is trained to completion. Having
     available plots of the metric's history during training is highly encouraged.
-  * Tests to verify numerical equivalence against a well known implementation (same inputs 
+  * Tests to verify numerical equivalence against a well known implementation (same inputs
     + weights = same outputs) preferably using pretrained weights.
 
-On all cases above, code should work with the latest stable version of packages like ``jax``, 
+On all cases above, code should work with the latest stable version of packages like ``jax``,
 ``flax``, and ``optax``, and make substantial use of Flax.

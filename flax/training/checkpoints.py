@@ -147,7 +147,7 @@ def _use_multiprocess_serialization(value: Any) -> bool:
   if isinstance(value, GlobalDeviceArray):
     return True
   if jax.config.jax_array and isinstance(value, jax.Array):
-    return not value.is_fully_addressable()
+    return not value.is_fully_addressable
   return False
 
 
@@ -246,23 +246,20 @@ def _restore_mpas(state_dict,
       raise errors.MPARestoreDataCorruptedError(step, ckpt_path)
 
     # Check if the given target array types are valid.
-    meshes, partition_specs = [], []
+    shardings = []
     for i, arr in enumerate(target_mpas):
       # Use GDA with jax.config.jax_array turned off, or jax.experimental.array
       # with jax.config.jax_array turned on.
       if isinstance(arr, GlobalDeviceArray) and jax.config.jax_array:
         raise errors.MPARestoreTypeNotMatchError(step, mpa_paths[i])
       if isinstance(arr, GlobalDeviceArray):
-        meshes.append(arr.mesh)
-        partition_specs.append(arr.mesh_axes)
+        shardings.append(sharding.MeshPspecSharding(arr.mesh, arr.mesh_axes))
       elif jax.config.jax_array and isinstance(arr, jax.Array):
-        assert isinstance(arr.sharding, sharding.MeshPspecSharding)
-        meshes.append(arr.sharding.mesh)
-        partition_specs.append(arr.sharding.spec)
+        shardings.append(arr.sharding)
 
     # Restore the arrays.
     ts_specs = [get_tensorstore_spec(x) for x in mpa_paths]
-    return gda_manager.deserialize(meshes, partition_specs, ts_specs)
+    return gda_manager.deserialize(shardings, ts_specs)
 
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
@@ -356,7 +353,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # checkpoint folder and before deleting the main checkpoint.
         if gfile.exists(path + MP_ARRAY_POSTFIX):
           gfile.rmtree(path + MP_ARRAY_POSTFIX)
-      gfile.rmtree(path)
+      gfile.remove(path)
 
   # Remove old checkpoint files.
   last_kept = -float('inf')
@@ -377,7 +374,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # MPA might be removed already but the main ckpt is still there.
         if gfile.exists(path + MP_ARRAY_POSTFIX):
           gfile.rmtree(path + MP_ARRAY_POSTFIX)
-      gfile.rmtree(path)
+      gfile.remove(path)
 
 
 def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
@@ -493,10 +490,10 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     keep_every_n_steps: Optional[int] = None,
                     async_manager: Optional[AsyncManager] = None) -> str:
   """Save a checkpoint of the model. Suitable for single-host.
-  
+
   In this method, every JAX process saves the checkpoint on its own. Do not
   use it if you have multiple processes and you intend for them to save data
-  to a common directory (e.g., a GCloud bucket). To save multi-process 
+  to a common directory (e.g., a GCloud bucket). To save multi-process
   checkpoints to a shared storage or to save `GlobalDeviceArray`s, use
   `save_checkpoint_multiprocess()` instead.
 
@@ -554,7 +551,7 @@ def save_checkpoint_multiprocess(ckpt_dir: Union[str, os.PathLike],
                                  async_manager: Optional[AsyncManager] = None,
                                  gda_manager: Optional[Any] = None) -> str:
   """Save a checkpoint of the model in multi-process environment.
-  
+
   Use this method to save `GlobalDeviceArray`s, or to save data to a
   common directory. Only process 0 will save the main checkpoint file and
   remove old checkpoint files.
@@ -684,10 +681,10 @@ def restore_checkpoint(
       ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
-    gda_manager: required if checkpoint contains a multiprocess array 
+    gda_manager: required if checkpoint contains a multiprocess array
       (GlobalDeviceArray or jax Array from pjit). Type should be
       GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will read the arrays from the separate subdirectory with 
+      correctly). Will read the arrays from the separate subdirectory with
       postfix "_gda".
 
   Returns:

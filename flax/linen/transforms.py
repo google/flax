@@ -600,9 +600,9 @@ def checkpoint(target: Target,
       ``pmap``, CSE can defeat the purpose of this decorator. But in some
       settings, like when used inside a ``scan``, this CSE prevention mechanism
       is unnecessary, in which case ``prevent_cse`` should be set to False.
-    static_argnums: Optional, int or sequence of ints, indicates which argument 
-      values on which to specialize for tracing and caching purposes. Specifying 
-      arguments as static can avoid ConcretizationTypeErrors when tracing, but 
+    static_argnums: Optional, int or sequence of ints, indicates which argument
+      values on which to specialize for tracing and caching purposes. Specifying
+      arguments as static can avoid ConcretizationTypeErrors when tracing, but
       at the cost of more retracing overheads.
     policy: Experimental checkpoint policy, see ``jax.checkpoint``.
     methods: If `target` is a `Module`, the methods of `Module` to checkpoint.

@@ -22,7 +22,6 @@ from flax import linen as nn
 
 import jax
 from jax import random
-from jax import test_util as jtu
 from jax.nn import initializers
 import jax.numpy as jnp
 
@@ -30,6 +29,11 @@ import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+
+
+def check_eq(xs, ys):
+  return jax.tree_util.tree_all(
+      jax.tree_util.tree_map(np.testing.assert_allclose, xs, ys))
 
 
 class PoolTest(parameterized.TestCase):
@@ -80,9 +84,9 @@ class PoolTest(parameterized.TestCase):
     pool = lambda x: nn.avg_pool(x, (2, 2), padding="SAME", count_include_pad=count_include_pad)
     y = pool(x)
     if count_include_pad:
-        expected_y = jnp.array([10.0 / 4, 6.0 / 4, 7.0 / 4, 4.0 / 4]).reshape((1, 2, 2, 1))
+      expected_y = jnp.array([10.0 / 4, 6.0 / 4, 7.0 / 4, 4.0 / 4]).reshape((1, 2, 2, 1))
     else:
-        expected_y = jnp.array([10.0 / 4, 6.0 / 2, 7.0 / 2, 4.0 / 1]).reshape((1, 2, 2, 1))
+      expected_y = jnp.array([10.0 / 4, 6.0 / 2, 7.0 / 2, 4.0 / 1]).reshape((1, 2, 2, 1))
     np.testing.assert_allclose(y, expected_y)
 
   def test_max_pool(self):
@@ -110,9 +114,9 @@ class PoolTest(parameterized.TestCase):
     pool = lambda x: nn.avg_pool(x, (2, 2), padding="SAME", count_include_pad=count_include_pad)
     y = pool(x)
     if count_include_pad:
-        expected_y = jnp.array([10.0 / 4, 6.0 / 4, 7.0 / 4, 4.0 / 4]).reshape((1, 2, 2, 1))
+      expected_y = jnp.array([10.0 / 4, 6.0 / 4, 7.0 / 4, 4.0 / 4]).reshape((1, 2, 2, 1))
     else:
-        expected_y = jnp.array([10.0 / 4, 6.0 / 2, 7.0 / 2, 4.0 / 1]).reshape((1, 2, 2, 1))
+      expected_y = jnp.array([10.0 / 4, 6.0 / 2, 7.0 / 2, 4.0 / 1]).reshape((1, 2, 2, 1))
     np.testing.assert_allclose(y, expected_y)
 
 
@@ -391,7 +395,7 @@ class RecurrentTest(absltest.TestCase):
     (_, y_opt), lstm_opt_params = lstm_opt.init_with_output(key2, (c0, h0), x)
 
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)
-    jtu.check_eq(lstm_params, lstm_opt_params)
+    check_eq(lstm_params, lstm_opt_params)
 
 
 class IdsTest(absltest.TestCase):

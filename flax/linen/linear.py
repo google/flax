@@ -468,7 +468,7 @@ class _Conv(Module):
 
 class Conv(_Conv):
   """Convolution Module wrapping `lax.conv_general_dilated`.
-  
+
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,
@@ -511,7 +511,7 @@ class Conv(_Conv):
 
 class ConvLocal(_Conv):
   """Local convolution Module wrapping `lax.conv_general_dilated_local`.
-  
+
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel. For 1D convolution,

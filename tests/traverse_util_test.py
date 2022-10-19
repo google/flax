@@ -260,9 +260,9 @@ class ModelParamTraversalTest(absltest.TestCase):
     params_in = {'a': {'b': 10, 'c': 2}}
     params_out = traverse_util.path_aware_map(
       lambda path, x: x + 1 if 'b' in path else -x, params_in)
-    
+
     self.assertEqual(params_out, {'a': {'b': 11, 'c': -2}})
-    
+
   def test_path_aware_map_with_multi_transform(self):
     params = {'linear_1': {'w': jnp.zeros((5, 6)), 'b': jnp.zeros(5)},
             'linear_2': {'w': jnp.zeros((6, 1)), 'b': jnp.zeros(1)}}
@@ -275,13 +275,13 @@ class ModelParamTraversalTest(absltest.TestCase):
     state = tx.init(params)
     updates, new_state = tx.update(gradients, state, params)
     new_params = optax.apply_updates(params, updates)
-    
+
 
     self.assertTrue(np.allclose(new_params['linear_1']['b'], params['linear_1']['b']))
     self.assertTrue(np.allclose(new_params['linear_2']['b'], params['linear_2']['b']))
     self.assertFalse(np.allclose(new_params['linear_1']['w'], params['linear_1']['w']))
     self.assertFalse(np.allclose(new_params['linear_2']['w'], params['linear_2']['w']))
-  
+
   def test_path_aware_map_with_masked(self):
     params = {'linear_1': {'w': jnp.zeros((5, 6)), 'b': jnp.zeros(5)},
             'linear_2': {'w': jnp.zeros((6, 1)), 'b': jnp.zeros(1)}}
@@ -293,7 +293,7 @@ class ModelParamTraversalTest(absltest.TestCase):
     state = tx.init(params)
     updates, new_state = tx.update(gradients, state, params)
     new_params = optax.apply_updates(params, updates)
-    
+
 
     self.assertTrue(np.allclose(new_params['linear_1']['b'], gradients['linear_1']['b']))
     self.assertTrue(np.allclose(new_params['linear_2']['b'], gradients['linear_2']['b']))
@@ -304,7 +304,7 @@ class ModelParamTraversalTest(absltest.TestCase):
     params_in = {'a': {'b': 10, 'c': 2}, 'b': {}}
     params_out = traverse_util.path_aware_map(
       lambda path, x: x + 1 if 'b' in path else -x, params_in)
-    
+
     self.assertEqual(params_out, {'a': {'b': 11, 'c': -2}, 'b': {}})
 
 

@@ -123,7 +123,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 _find_non_lifted_module = re.compile(r'.*\((.*)\)')
 
 def _fix_path_part(part: str):
-  """Fixes a path part by removing transformation name and parenthesis sometimes 
+  """Fixes a path part by removing transformation name and parenthesis sometimes
   inserted by lifted transformations"""
   match = _find_non_lifted_module.match(part)
   if match:
@@ -698,6 +698,8 @@ class Module:
     add_call_info = not is_setup_method and len(_context.call_info_stack) > 0
     # We lazily call setup() only when needed.
     if is_setup_method:
+      if self.scope is None:
+        raise errors.CallSetupUnboundModuleError()
       is_recurrent = self._state.in_setup
       self._state.in_setup = True
     else:
@@ -1134,6 +1136,16 @@ class Module:
       raise ValueError("Can't check if running under init() on unbound modules")
     return self.scope.get_flag('initializing', False)
 
+  def _module_checks(self):
+    """Run standard runtime checks."""
+
+    if not isinstance(self, Module):
+      raise errors.InvalidInstanceModuleError()
+
+    overridden_post_init = self.__post_init__ != Module.__post_init__
+    if overridden_post_init and not hasattr(self, "_id"):
+      raise errors.IncorrectPostInitOverrideError()
+
   @traceback_util.api_boundary
   def bind(self,
            variables: VariableDict,
@@ -1189,6 +1201,8 @@ class Module:
     Returns:
       A copy of this instance with bound variables and RNGs.
     """
+    Module._module_checks(self)
+
     del args
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope)
@@ -1253,6 +1267,8 @@ class Module:
       mutable, returns ``(output, vars)``, where ``vars`` are is a dict
       of the modified collections.
     """
+    Module._module_checks(self)
+
     if method is None:
       method = self.__call__
     method = _get_unbound_fn(method)
@@ -1293,6 +1309,8 @@ class Module:
       `(output, vars)``, where ``vars`` are is a dict of the modified
       collections.
     """
+    Module._module_checks(self)
+
     if not isinstance(rngs, dict):
       if not core.scope._is_valid_rng(rngs):
         raise errors.InvalidRngError(
@@ -1346,6 +1364,8 @@ class Module:
     Returns:
       The initialized variable dict.
     """
+    Module._module_checks(self)
+
     _, v_out = self.init_with_output(
         rngs,
         *args,
@@ -1537,9 +1557,9 @@ class Module:
     **kwargs) -> str:
     """Creates a summary of the Module represented as a table.
 
-    This method has the same signature and internally calls `Module.init`, 
-    but instead of returning the variables, it returns the string summarizing 
-    the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward 
+    This method has the same signature and internally calls `Module.init`,
+    but instead of returning the variables, it returns the string summarizing
+    the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward
     computation without consuming any FLOPs or allocating memory.
 
     Example::
@@ -1602,8 +1622,8 @@ class Module:
         name of a single mutable collection. ``list``: A list of names of mutable
         collections. By default all collections except 'intermediates' are
         mutable.
-      console_kwargs: An optional dictionary with additional keyword arguments that 
-        are passed to `rich.console.Console` when rendering the table. Default arguments 
+      console_kwargs: An optional dictionary with additional keyword arguments that
+        are passed to `rich.console.Console` when rendering the table. Default arguments
         are `{'force_terminal': True, 'force_jupyter': False}`.
       **kwargs: keyword arguments to pass to the forward computation.
 

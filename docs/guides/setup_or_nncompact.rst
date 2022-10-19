@@ -8,34 +8,34 @@ can be defined in two ways:
 
    Assign submodules or variables to ``self.<attr>`` inside a
    :meth:`setup <flax.linen.Module.setup>` method. Then use the submodules
-   and variables assigned to ``self.<attr>`` in ``setup`` from 
+   and variables assigned to ``self.<attr>`` in ``setup`` from
    any "forward pass" method defined on the class.
    This resembles how modules are defined in PyTorch.
 
 2. **In-line** (using ``nn.compact``):
-  
+
    Write your network's logic directly within a single "forward pass" method annotated
    with :meth:`nn.compact <flax.linen.compact>`. This allows you to define your whole module
-   in a single method, and "co-locate" submodules and variables next to 
+   in a single method, and "co-locate" submodules and variables next to
    where they are used.
 
 **Both of these approaches are perfectly valid, behave the same way, and interoperate with all of Flax**.
 
 Here is a short example of a module defined in both ways, with exactly
-the same functionality. 
+the same functionality.
 
 .. testsetup::
 
   import flax.linen as nn
 
-.. codediff:: 
+.. codediff::
   :title_left: Using ``setup``
   :title_right: Using ``nn.compact``
-  
+
   class MLP(nn.Module):
     def setup(self):
       # Submodule names are derived by the attributes you assign to. In this
-      # case, "dense1" and "dense2". This follows the logic in PyTorch. 
+      # case, "dense1" and "dense2". This follows the logic in PyTorch.
       self.dense1 = nn.Dense(32)
       self.dense2 = nn.Dense(32)
 

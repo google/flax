@@ -9,7 +9,7 @@
 
 ## Summary
 
-This FLIP proposes to extend Flax's variable collections with a generic axis metadata API. 
+This FLIP proposes to extend Flax's variable collections with a generic axis metadata API.
 The core of the API is an abstract base class that is recognized by lifting transformations that can add an axis (vmap, scan).
 Users can extend the base class to keep track of per-axis metadata in a way that works with lifted transformations.
 
@@ -153,7 +153,7 @@ To illustrate this, let's consider a metadata class that keeps track of Partitio
 class Partitioned(flax.struct.PyTreeNode, AxisMetadata):
   value: Any
   names: Tuple[Optional[str], ...] = flax.struct.field(pytree_node=False)
-  
+
   def add_axis(self, index: int, params: Dict[Any, Any]) -> TAxisMetadata:
     axis_name = self._get_partition_name(params)
     names = list(self.names)
@@ -172,7 +172,7 @@ def with_partitioning(init_fn, names):
   return wrapper
 ```
 
-Here we also defined a small utility called ``with_partitioning`` that we can use to wrap existing initialzers to add metadata: 
+Here we also defined a small utility called ``with_partitioning`` that we can use to wrap existing initialzers to add metadata:
 
 
 ```python
@@ -198,7 +198,7 @@ def to_sharding_spec(x):
     # fully replicated
     return PartitionSpec()
 
-# Result: {"params": {"kernel": PartitionSpec(None, "data"), bias: PartitionSpec()}} 
+# Result: {"params": {"kernel": PartitionSpec(None, "data"), bias: PartitionSpec()}}
 variables_pspec = jax.tree_map(to_sharding_spec, variables, is_leaf=lambda x: isinstance(x, Partitioned))
 ```
 

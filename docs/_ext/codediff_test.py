@@ -24,7 +24,7 @@ class CodeDiffTest(absltest.TestCase):
   def test_parse(self):
 
     input_text = r'''@jax.jit #!
-def get_initial_params(key):   #!  
+def get_initial_params(key):   #!
   init_val = jnp.ones((1, 28, 28, 1), jnp.float32)
   initial_params = CNN().init(key, init_val)['params']
   extra_line

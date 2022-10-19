@@ -538,6 +538,79 @@ class CallCompactUnboundModuleError(FlaxError):
   def __init__(self):
     super().__init__('Can\'t call compact methods on unbound modules')
 
+class CallSetupUnboundModuleError(FlaxError):
+  """
+  This error occurs when you are trying to call `.setup()` directly. For instance, the
+  error will be raised when trying to run this code::
+
+    from flax import linen as nn
+    import jax.numpy as jnp
+
+    class MyModule(nn.Module):
+      def setup(self):
+        self.submodule = MySubModule()
+
+    module = MyModule()
+    module.setup() # <-- ERROR!
+    submodule = module.submodule
+
+  In general you shouldn't call `.setup()` yourself, if you need to get access
+  to a field or submodule defined inside `setup` you can instead create a function
+  to extract it and pass it to `nn.apply`::
+
+    # setup() will be called automatically by `nn.apply`
+    def get_submodule(module):
+      return module.submodule.clone() # avoid leaking the Scope
+
+    empty_variables = {} # you can also use the real variables
+    submodule = nn.apply(get_submodule, module)(empty_variables)
+
+  """
+  def __init__(self):
+    super().__init__('Can\'t call compact methods on unbound modules')
+
+class InvalidInstanceModuleError(FlaxError):
+  """
+  This error occurs when you are trying to call `.init()`, `.init_with_output()`, `.apply() or `.bind()`
+  on the Module class itself, instead of an instance of the Module class.
+  For example, the error will be raised when trying to run this code::
+
+    class B(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return x
+
+    k = random.PRNGKey(0)
+    x = random.uniform(random.PRNGKey(1), (2,))
+    B.init(k, x)   # B is module class, not B() a module instance
+    B.apply(vs, x)   # similar issue with apply called on class instead of instance.
+  """
+  def __init__(self):
+    super().__init__('Can only call init, init_with_output or apply methods on an instance of the Module class, not the Module class itself')
+
+class IncorrectPostInitOverrideError(FlaxError):
+  """
+  This error occurs when you overrode `.__post_init__()` without calling `super().__post_init__()`.
+  For example, the error will be raised when trying to run this code::
+
+    from flax import linen as nn
+    import jax.numpy as jnp
+    import jax
+    class A(nn.Module):
+      x: float
+      def __post_init__(self):
+        self.x_square = self.x ** 2
+        # super().__post_init__() <-- forgot to add this line
+      @nn.compact
+      def __call__(self, input):
+        return input + 3
+
+    r = A(x=3)
+    r.init(jax.random.PRNGKey(2), jnp.ones(3))
+  """
+  def __init__(self):
+    super().__init__('Overrode `.__post_init__()` without calling `super().__post_init__()`')
+
 
 class InvalidCheckpointError(FlaxError):
   """
@@ -598,14 +671,14 @@ class MPARestoreDataCorruptedError(FlaxError):
         f' "{path}": No "commit_success.txt" found on this "_gda" directory. '
         'Was its save halted before completion?'
     )
-    
-    
+
+
 class MPARestoreTypeNotMatchError(FlaxError):
   """Make sure the multiprocess array type you use matches your configuration in jax.config.jax_array.
-  
-  If you turned `jax.config.jax_array` on, you should use 
-  `jax.experimental.array.Array` everywhere, instead of using 
-  `GlobalDeviceArray`. Otherwise, avoid using jax.experimental.array 
+
+  If you turned `jax.config.jax_array` on, you should use
+  `jax.experimental.array.Array` everywhere, instead of using
+  `GlobalDeviceArray`. Otherwise, avoid using jax.experimental.array
   to restore your checkpoint.
   """
 
@@ -649,7 +722,7 @@ class TransformTargetError(FlaxError):
       @nn.compact
       def __call__(self, x):
         return nn.vmap(
-            lambda mdl, x: mdl(x), 
+            lambda mdl, x: mdl(x),
             variable_axes={'params': 0}, split_rngs={'params': True})(nn.Dense(3), x)
 
   """
