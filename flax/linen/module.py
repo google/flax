@@ -611,6 +611,7 @@ class Module:
     cls.scope: Optional[Scope] = None
     # Handles weak referencing of parent Modules to prevent reference cycles.
     cls.parent = ParentDescriptor()
+    cls._parent_ref = None
 
   @classmethod
   def _customized_dataclass_transform(cls):
