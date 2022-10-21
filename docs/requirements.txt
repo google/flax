@@ -26,3 +26,4 @@ tensorflow_datasets
 
 # notebooks
 einops
+transformers[flax]

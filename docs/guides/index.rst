@@ -9,6 +9,7 @@ Guides
    state_params
    setup_or_nncompact
    model_surgery
+   transfer_learning
    extracting_intermediates
    lr_schedule
 
