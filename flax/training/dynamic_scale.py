@@ -132,9 +132,10 @@ class DynamicScale(struct.PyTreeNode):
         finite &= jnp.all(lax.is_finite(g))
 
       grow = self.fin_steps == self.growth_interval
-      fin_scale = jnp.where(grow & finite,
-                            self.scale * self.growth_factor,
-                            self.scale)
+      fin_scale = jnp.where(
+          grow & finite,
+          jnp.minimum(self.scale * self.growth_factor, jnp.finfo(jnp.float32).max),
+          self.scale)
       inf_scale = self.scale * self.backoff_factor
       new_scale = jnp.where(finite, fin_scale, inf_scale)
       new_fin_steps = jnp.where(grow | (~finite), 0, self.fin_steps + 1)
