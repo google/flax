@@ -1,4 +1,4 @@
-# How to Contribute
+# How to contribute
 
 Everyone can contribute to Flax, and we value everyone's contributions.
 You can contribute in many more ways than just writing code. Answering questions
@@ -6,7 +6,7 @@ on our [Discussions page](https://github.com/google/flax/discussions), helping
 each other, and improving our documentation are extremely valuable to our
 ecosystem.
 
-We also appreciate if you spread the word, for instance by starring our Github
+We also appreciate if you spread the word, for instance by starring our GitHub
 repo, or referencing Flax in blog posts of projects that used it.
 
 This project follows
@@ -15,8 +15,9 @@ This project follows
 ## Ways to contribute
 
 We welcome pull requests (PRs), in particular for those issues
-[marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22). For other proposals, we ask that you first open a Github Issue or
-Github Discussion to discuss your planned contribution.
+[marked as PR-ready](https://github.com/google/flax/issues?q=is%3Aopen+is%3Aissue+label%3A%22Status%3A+pull+requests+welcome%22).
+For other proposals, you should first open a GitHub Issue or a GitHub Discussion to
+start a conversation about your planned contribution.
 
 ## Contributing code using Pull Requests
 
@@ -34,18 +35,18 @@ Follow these steps to contribute code:
 
 3. (Optional) Create a virtual environment or a Docker container. See
    [`dev/README.md`](https://github.com/google/flax/blob/main/dev/README.md)
-   for details on how to setup a Docker Container. To setup a virtual environment,
+   for details on how to set up a Docker Container. To setup a virtual environment,
    run the following:
 
    ```bash
-   python3.6 -m virtualenv env
+   python3 -m virtualenv env
    . env/bin/activate
    ```
 
    This ensures all your dependencies are installed in this environment.
 
-4. `pip install` your fork from source. This allows you to modify the code
-   and immediately test it out:
+4. Clone your local forked Flax repo, then install the required packages with PyPi](https://pip.pypa.io/en/stable/cli/pip_install/).
+   This enables you to immediately test the code after modifying it:
 
    ```bash
    git clone https://github.com/YOUR_USERNAME/flax
@@ -55,7 +56,7 @@ Follow these steps to contribute code:
    pip install -r docs/requirements.txt
    ```
 
-5. Setup pre-commit hooks, this will run some automated checks during each `git` commit and
+5. Set up pre-commit hooks, this will run some automated checks during each `git` commit and
    possibly update some files that require changes.
 
    ```bash
@@ -108,52 +109,68 @@ Follow these steps to contribute code:
    git push --set-upstream origin name-of-change
    ```
 
-   After running the command, you should see a Github link in your terminal output that you can click on to create a Pull Request.
-   If you do not see this link in the terminal after doing a `git push`, go to the Github web UI; there should be a button there that lets you turn the commit into a Pull Request yourself.
+   After running the command, you should see a GitHub link in your terminal output that you can click on to create a Pull Request.
+   If you do not see this link in the terminal after doing a `git push`, go to the GitHub web UI; there should be a button there that lets you turn the commit into a Pull Request yourself.
 
 11. Make sure your PR passes the
    [PR checklist](https://github.com/google/flax/blob/main/.github/pull_request_template.md#checklist).
    If so, create a Pull Request from the Flax repository and send it for review.
    Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/)
-   for more information on using pull requests.
+   for more information on using Pull Requests.
 
 ### Update notebooks
 
-We use [jupytext](https://jupytext.readthedocs.io/) to maintain two synced copies of the notebooks
-in `docs/notebooks`: one in `ipynb` format, and one in `md` format. The advantage of the former
-is that it can be opened and executed directly in Colab; the advantage of the latter is that
-it makes it much easier to track diffs within version control.
+We use [jupytext](https://jupytext.readthedocs.io/) to maintain two synced copies of docs
+in `docs/notebooks`: one in the Jupyter Notebook (`.ipynb`) format, and one in Markdown (`.md`).
 
-#### Editing ipynb
+The former can be opened and executed directly in [Google Colab](https://colab.research.google.com/).
+Markdown makes it easier to track changes/diffs within version control and, for example, GitHub
+web UI, since `.ipynb` files are based on JSON.
 
-For making large changes that substantially modify code and outputs, it is easiest to
-edit the notebooks in Jupyter or in Colab. To edit notebooks in the Colab interface,
-open <http://colab.research.google.com> and `Upload` from your local repo.
-Update it as needed, `Run all cells` then `Download ipynb`.
-You may want to test that it executes properly, using `sphinx-build` as explained above.
+#### Editing Jupyter Notebooks (`.ipynb`)
 
-#### Editing md
+For making large changes that substantially modify code and outputs, it's recommended to edit
+the notebooks in [Jupyter](https://jupyter.org/install) or in [Colab](https://colab.research.google.com/).
+
+If you choose to work in Colab, go to **File** and click **Upload notebook**, then pick your file.
+After loading it into Colab and editing it, make sure you run the cells, and that there aren't any errors.
+Click on **Runtime**, then select **Run all**. After you finish, click **File** > **Download** > **Download ipynb**.
+You may also want to test that the file executes properly by using `sphinx-build`, as explained above.
+
+#### Editing Markdown files (`.md`)
 
 For making smaller changes to the text content of the notebooks, it is easiest to edit the
 `.md` versions using a text editor.
 
 #### Syncing notebooks
 
-After editing either the ipynb or md versions of the notebooks, you can sync the two versions
+After editing either the `.ipynb` or `.md` versions of the docs, sync the two versions
 using [jupytext](https://jupytext.readthedocs.io/) by running `jupytext --sync` on the updated
-notebooks; for example:
+notebooks
+
+First, make sure you have jupytext (version 1.13.8) installed. The jupytext version should match
+the one specified in [.pre-commit-config.yaml](https://github.com/google/flax/blob/main/.pre-commit-config.yaml).
 
 ```
 pip install jupytext==1.13.8
-jupytext --sync docs/notebooks/quickstart.ipynb
 ```
 
-The jupytext version should match that specified in
-[.pre-commit-config.yaml](https://github.com/google/flax/blob/main/.pre-commit-config.yaml).
+Then, if you worked on a Jupyter Notebook document, sync the contents with its Markdown-equivalent
+file by running the following command:
 
-To check that the markdown and ipynb files are properly synced, you may use the
-[pre-commit](https://pre-commit.com/) framework to perform the same check used
-by the github CI:
+```
+jupytext --sync path/to/the/file.ipynb
+```
+
+Similarly, to sync your Markdown file with its Jupyter Notebook version, run:
+
+```
+jupytext --sync path/to/the/file.md
+```
+
+To check that the `.md` and `.ipynb` files are properly synced, you can also use the
+[pre-commit](https://pre-commit.com/) framework to perform the same checks used
+in the GitHub CI:
 
 ```
 git add docs -u  # pre-commit runs on files in git staging.
@@ -162,8 +179,9 @@ pre-commit run jupytext
 
 #### Creating new notebooks
 
-If you are adding a new notebook to the documentation and would like to use the `jupytext --sync`
-command discussed here, you can set up your notebook for jupytext by using the following command:
+If you are adding a new notebook to the documentation, you can use `jupytext --sync`, which
+can set up both the Jupyter Notebook (`.ipynb`) and Markdown (`.md`) versions with jupytext
+by running the following command:
 
 ```
 jupytext --set-formats ipynb,md:myst path/to/the/notebook.ipynb
@@ -172,17 +190,20 @@ jupytext --set-formats ipynb,md:myst path/to/the/notebook.ipynb
 This works by adding a `"jupytext"` metadata field to the notebook file which specifies the
 desired formats, and which the `jupytext --sync` command recognizes when invoked.
 
+After you make changes in your file(s), follow the steps from the _Syncing notebooks_
+section above to keep the contents of both Markdown and Jupyter Notebook files in sync.
+
 #### Notebooks within the sphinx build
 
 Some of the notebooks are built automatically as part of the pre-submit checks and
-as part of the [Read the docs](https://flax.readthedocs.io/en/latest) build.
+as part of the [Read the Docs](https://flax.readthedocs.io/en/latest) build.
 The build will fail if cells raise errors. If the errors are intentional, you can either catch them,
 or tag the cell with `raises-exceptions` metadata ([example PR](https://github.com/google/jax/pull/2402/files)).
 You have to add this metadata by hand in the `.ipynb` file. It will be preserved when somebody else
 re-saves the notebook.
 
-We exclude some notebooks from the build, e.g., because they contain long computations.
-See `exclude_patterns` in [conf.py](https://github.com/google/flax/blob/main/docs/conf.py).
+We exclude some notebooks from the build because, for example, they contain long computations.
+See `exclude_patterns` in [`conf.py`](https://github.com/google/flax/blob/main/docs/conf.py).
 
 ### Updating the Pull Request contents
 
@@ -199,16 +220,16 @@ Assuming you now have only one commit in your Pull Request, and want to add chan
 
 ### Too many commits in a PR
 
-If your PR has too many commits associated with it, then our build process will
+If your PR has too many commits associated with it, then our build process may
 fail with an error message. This is because of two reasons:
 
 * We prefer to keep our commit history clean.
 
 * Our source sync process will fail if our commit tree is too large.
 
-If you encounter this error message, you should squash your commits. In order to
-rebase your branch to main and creating a new commit containing all your
-changes, please run the following command:
+If you encounter this error message, you should squash your commits. To
+rebase your branch to `main` and create a new commit containing all your
+changes, run the following command:
 
 ```bash
 git rebase main && git reset --soft main && git commit
@@ -217,10 +238,10 @@ git rebase main && git reset --soft main && git commit
 This will apply all your changes to the main branch. Note that if you had to
 resolve any conflicts while working on your change (for instance, you did a
 `pull upstream main` which led to conflict), then you will have to resolve these
-conflicts agin.
+conflicts again.
 
-Once you successfully rebased your branch, you should push your changes. Since
-you are changing the commit history, you should use `git push --force`.
+After you have successfully rebased your branch, you should push your changes.
+And because you changed the commit history, you may have to use `git push --force`.
 
 ## Contributor License Agreement
 
