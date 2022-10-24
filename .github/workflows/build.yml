@@ -77,7 +77,7 @@ jobs:
         pip install .
     - name: Test importing Flax
       run: |
-        python -c "import flax"
+        python -c  "import flax"
   tests:
     name: Run Tests
     needs: [cancel-previous, pre-commit, commit-count, test-import]
