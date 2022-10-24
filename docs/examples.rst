@@ -187,6 +187,10 @@ Examples
       - `@bkkaggle <https://github.com/bkkaggle>`__
       - Image Synthesis
       - https://arxiv.org/abs/1511.06434
+    * - `denoising-diffusion-flax <https://github.com/yiyixuxu/denoising-diffusion-flax>`__
+      - `@yiyixuxu <https://github.com/yiyixuxu>`__
+      - Image generation
+      - https://arxiv.org/abs/2006.11239
 
 Tutorials
 ********
