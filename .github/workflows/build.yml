@@ -22,8 +22,6 @@ jobs:
         if: ${{github.ref != 'refs/head/main'}}
         with:
           access_token: ${{ github.token }}
-          workflow_id: ${{ github.event.workflow.id }}
-          all_but_latest: true
   pre-commit:
     name: Test pre-commit hooks
     runs-on: ubuntu-latest
