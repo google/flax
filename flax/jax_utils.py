@@ -36,8 +36,7 @@ def _pmap_device_order():
   # for single-host, that's the XLA default device assignment
   # for multi-host, it's the order of jax.local_devices()
   if jax.process_count() == 1:
-    return [d for d in xb.get_backend().get_default_device_assignment(
-        jax.device_count()) if d.process_index == jax.process_index()]
+    return xb.get_backend().get_default_device_assignment(jax.device_count())
   else:
     return jax.local_devices()
 
