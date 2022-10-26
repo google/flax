@@ -35,7 +35,9 @@ def _pmap_device_order():
   # match the default device assignments used in pmap:
   # for single-host, that's the XLA default device assignment
   # for multi-host, it's the order of jax.local_devices()
-  if jax.process_count() == 1:
+  # TODO(phawkins): remove this code and use jax.local_devices() after jax
+  # 0.3.24 is the minimum.
+  if jax.__version_info__ < (0, 3, 24) and jax.process_count() == 1:
     return xb.get_backend().get_default_device_assignment(jax.device_count())
   else:
     return jax.local_devices()
