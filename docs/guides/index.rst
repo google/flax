@@ -12,6 +12,7 @@ Guides
    transfer_learning
    extracting_intermediates
    lr_schedule
+   use_checkpointing
 
 .. toctree::
    :maxdepth: 1
