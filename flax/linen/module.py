@@ -536,6 +536,9 @@ class ParentDescriptor:
   logic applies in subclasses even after various dataclass transforms.
   """
   def __get__(self, obj, objtype=None):
+    # check if obj is None, happens during %autoreload
+    if obj is None:
+      return None
     parent = object.__getattribute__(obj, "_parent_ref")
     return parent() if isinstance(parent, weakref.ReferenceType) else parent
 
@@ -610,6 +613,7 @@ class Module:
     cls._state = _uninitialized_module_internal_state
     cls.scope: Optional[Scope] = None
     # Handles weak referencing of parent Modules to prevent reference cycles.
+    cls._parent_ref = None
     cls.parent = ParentDescriptor()
 
   @classmethod
