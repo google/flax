@@ -12,8 +12,6 @@ kernelspec:
   name: python3
 ---
 
-+++ {"id": "6e9134fa"}
-
 # Checkpointing with `flax.training.checkpoints`
 
 In this guide, you will learn about [`flax.training.checkpoints`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#module-flax.training.checkpoints)—a simplistic and generic checkpointing library built into Flax. With Flax Checkpoints, you can save and load model parameters, metadata, and a variety of Python data. In addition, it provides basic features for versioning, automatic bookkeeping of past checkpoints, and asynchronous saving to reduce training wait time.
@@ -25,38 +23,22 @@ This guide covers the following:
 * How to save and load checkpoints when you run in multi-host scenarios with
 [`flax.training.checkpoints.save_checkpoint_multiprocess`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.save_checkpoint_multiprocess).
 
-+++ {"id": "b7ece792"}
-
 ## Setup
-
-+++ {"id": "yyJl1CIeT_4_"}
 
 Install/upgrade Flax, JAX, [Optax](https://optax.readthedocs.io/) and [TensorStore](https://google.github.io/tensorstore/). For JAX installation with GPU/TPU support, visit [this section on GitHub](https://github.com/google/jax#installation).
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: e80f8743
-outputId: 71fb142e-825d-4c08-e7c8-f2a59de8ae39
----
 !pip install -U -q flax jax jaxlib optax tensorstore
 ```
-
-+++ {"id": "-icO30rwmKYj"}
 
 Note: Before running `import jax`, create eight fake devices to mimic multi-host checkpointing in this notebook. Note that the order of imports is important here. The `os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=8'` command works only with the CPU backend. This means it won't work with GPU/TPU acceleration on if you're running this notebook in Google Colab. If you are already running the code on multiple devices (for example, in a 4x2 TPU environment), you can skip running the next cell.
 
 ```{code-cell} ipython3
-:id: ArKLnsyGRxGv
-
 import os
 os.environ["XLA_FLAGS"] = '--xla_force_host_platform_device_count=8'
 ```
 
 ```{code-cell} ipython3
-:id: SJT9DTxTytjn
-
 from typing import Optional, Any
 import shutil
 
@@ -73,8 +55,6 @@ from flax import struct, serialization
 import optax
 ```
 
-+++ {"id": "40d434cd"}
-
 ## Save checkpoints
 
 In Flax, you save and load any given JAX [pytree](https://jax.readthedocs.io/en/latest/pytrees.html) using the `flax.training.checkpoints` package. This includes not only typical Python and NumPy containers, but also customized classes extended from [`flax.struct.dataclass`](https://flax.readthedocs.io/en/latest/api_reference/flax.struct.html#flax.struct.dataclass). That means you can store almost any data generated—not only your model parameters, but any arrays/dictionaries, metadata/configs, and so on.
@@ -82,12 +62,6 @@ In Flax, you save and load any given JAX [pytree](https://jax.readthedocs.io/en/
 Create a pytree with many data structures and containers, and play with it:
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: 56dec3f6
-outputId: bc5c6685-1c3f-4c6d-a46d-d0f6d4d299c3
----
 # A simple model with one linear layer.
 key1, key2 = random.split(random.PRNGKey(0))
 x1 = random.normal(key1, (5,))      # A simple JAX array.
@@ -110,20 +84,11 @@ ckpt = {'model': state, 'config': config, 'data': [x1]}
 ckpt
 ```
 
-+++ {"id": "6fc59dfa"}
-
 Now save the checkpoint. You can add annotations like step number, prefix, and so on to your checkpoint.
 
 When saving a checkpoint, Flax will bookkeep the existing checkpoints based on your arguments. For example, by setting `overwrite=False` in [`flax.checkpoints.save_checkpoint`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.save_checkpoint), Flax will not automatically save your checkpoint if there is already a step that is equal to the current one or newer is present in the checkpoint directory. By setting `keep=2`, Flax will keep a maximum of 2 checkpoints in the directory. Learn more in the [API reference](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#module-flax.training.checkpoints).
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-  height: 37
-id: 4cdb35ef
-outputId: 170c3f5d-c6bf-46d1-80d2-4f5c596de92e
----
 # Import Flax Checkpoints.
 from flax.training import checkpoints
 
@@ -141,24 +106,14 @@ checkpoints.save_checkpoint(ckpt_dir=ckpt_dir,
                             keep=2)
 ```
 
-+++ {"id": "6b658bd1"}
-
 ## Restore checkpoints
 
 To restore a checkpoint, use [`flax.training.checkpoints.restore_checkpoint`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.restore_checkpoint) and pass in the checkpoint directory. Flax will automatically select the latest checkpoint in the directory. You can also choose to specify a step number or the path of the checkpoint file. You can always restore a pytree out of your checkpoints by setting `target=None`.
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: 150b20a0
-outputId: 9dc3804e-e63b-4ef1-d049-56165562b86e
----
 raw_restored = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=None)
 raw_restored
 ```
-
-+++ {"id": "987b981f"}
 
 However, when using `target=None`, the restored `raw_restored` will be different from the original `ckpt` in the following ways:
 
@@ -173,12 +128,6 @@ To resolve this, you should pass an example `target` in `flax.training.checkpoin
 It's often recommended to refactor out the process of initializing a checkpoint's structure (for example, a `TrainState`), so that saving/loading is easier and less error-prone. This is because complicated objects like `apply_fn` and `tx` are not stored in the checkpoint file and must be initiated by code.
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: 58f42513
-outputId: 4da4a59e-9d32-4454-b210-0c6749a8103c
----
 empty_state = train_state.TrainState.create(
     apply_fn=model.apply,
     params=np.zeros_like(variables['params']),  # values of the tree leaf doesn't matter
@@ -189,8 +138,6 @@ state_restored = checkpoints.restore_checkpoint(ckpt_dir, target=target, step=0)
 state_restored
 ```
 
-+++ {"id": "136a300a"}
-
 ### Backward/forward dataclass compatibility
 
 The flexibility of using *Flax dataclasses*—[`flax.struct.dataclass`](https://flax.readthedocs.io/en/latest/api_reference/flax.struct.html#flax.struct.dataclass)—means that changes in Flax dataclass fields may break your existing checkpoints. For example, if you decide to add a field `batch_stats` to your `TrainState`, old checkpoints without this field may not be successfully restored. Same goes for removing a field in your dataclass.
@@ -198,12 +145,6 @@ The flexibility of using *Flax dataclasses*—[`flax.struct.dataclass`](https://
 Note: Flax supports [`flax.struct.dataclass`](https://flax.readthedocs.io/en/latest/api_reference/flax.struct.html#flax.struct.dataclass), not Python's built-in `dataclasses.dataclass`.
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: be65d4af
-outputId: 18ffe385-9333-4850-83aa-44e2c223d646
----
 class CustomTrainState(train_state.TrainState):
     batch_stats: Any = None
 
@@ -235,19 +176,11 @@ except ValueError as e:
     
 ```
 
-+++ {"id": "379c2255"}
-
 It is recommended to keep your checkpoints up to date with your pytree dataclass definitions. You can keep a copy of your code along with your checkpoints.
 
 But if you must restore checkpoints and Flax dataclasses with incompatible fields, you can manually add/remove corresponding fields before passing in the correct target structure:
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: 29fd1e33
-outputId: 41059738-c2e8-41e3-c704-46371cf65f1d
----
 # Pass no target to get a raw state dictionary first.
 raw_state_dict = checkpoints.restore_checkpoint(ckpt_dir, target=None, step=0)
 # Add/remove fields as needed.
@@ -255,8 +188,6 @@ raw_state_dict['model']['batch_stats'] = np.arange(10)
 # Restore the classes with correct target now
 serialization.from_state_dict(custom_target, raw_state_dict)
 ```
-
-+++ {"id": "a6b39501"}
 
 ## Asynchronized checkpointing
 
@@ -271,12 +202,6 @@ Note that you should use the same `async_manager` to handle all your async saves
 Whenever you want to explicitly wait until an async save is done, you can call `async_manager.wait_previous_save()`.
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: 85be68a6
-outputId: 41db815d-3e6c-43bf-d4fd-cd8604668056
----
 am = checkpoints.AsyncManager()
 
 # Mimic a training loop here:
@@ -289,8 +214,6 @@ am.wait_previous_save()  # Block until the checkpoint saving is completed.
 checkpoints.restore_checkpoint(ckpt_dir, target=None, step=2)
 ```
 
-+++ {"id": "13e93db6"}
-
 ## Multi-host/multi-process checkpointing
 
 JAX provides a few ways to scale up your code on multiple hosts at the same time. This usually happens when the number of devices (CPU/GPU/TPU) is so large that different devices are managed by different hosts (CPU). To get started on JAX in multi-process settings, check out [Using JAX in multi-host and multi-process environments](https://jax.readthedocs.io/en/latest/multi_process.html).
@@ -302,8 +225,6 @@ Flax provides an easy interface for users to pass in a `GlobalAsyncCheckpointMan
 Unfortunately, Python Jupyter notebooks are single-host only and cannot activate the multi-host mode. As a workaround, use the following code as a sample to run your multi-host checkpointing.
 
 ```{code-cell} ipython3
-:id: d199c8fa
-
 # Set up a checkpoint with a multi-process array.
 
 # In reality, you should set this with multiple num_processes.
@@ -312,8 +233,6 @@ jax.distributed.initialize("localhost:8889", num_processes=1, process_id=0)
 ```
 
 ```{code-cell} ipython3
-:id: ubdUvyMrhD-1
-
 # Create a multi-process array.
 mesh_shape = (4, 2)
 devices = np.asarray(jax.devices()).reshape(*mesh_shape)
@@ -331,8 +250,6 @@ with maps.Mesh(mesh.devices, mesh.axis_names):
 mp_ckpt = {'model': mp_array}
 ```
 
-+++ {"id": "edc355ce"}
-
 ### Example: Save a checkpoint in a multi-process setting with `save_checkpoint_multiprocess`
 
 The arguments in [`flax.training.checkpoints.save_checkpoint_multiprocess`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.save_checkpoint_multiprocess) are the same as in [`flax.training.checkpoints.save_checkpoint`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.save_checkpoint), except for the additional `gda_manager` argument.
@@ -340,31 +257,16 @@ The arguments in [`flax.training.checkpoints.save_checkpoint_multiprocess`](http
 If your checkpoint is too large, you can specify `timeout_secs` in the manager and give it more time to finish writing.
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-  height: 37
-id: 5d10039b
-outputId: 676b6af4-6ee2-4609-a9f3-0eb0213f6f62
----
 gacm = GlobalAsyncCheckpointManager(timeout_secs=50)
 checkpoints.save_checkpoint_multiprocess(ckpt_dir, mp_ckpt, step=3, overwrite=True, 
                                          keep=4, gda_manager=gacm)
 ```
-
-+++ {"id": "d954c3c7"}
 
 ### Example: Restoring a checkpoint with `flax.training.checkpoints.restore_checkpoint`
 
 Note that, when using [`flax.training.checkpoints.restore_checkpoint`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.restore_checkpoint), you need to pass a `target` with valid multi-process arrays at the correct structural location. Flax only uses the `target` arrays' meshes and mesh axes to restore the checkpoint. This means that the multi-process array in the `target` arg doesn't have to be as large as your checkpoint's size (the shape of the multi-process array doesn't need to have the same shape as the actual array in your checkpoint).
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: a9f9724c
-outputId: 7dfdd719-63d2-4def-bb79-6edf9479b262
----
 with maps.Mesh(mesh.devices, mesh.axis_names):
     mp_smaller_array = f(np.zeros(8).reshape(4, 2))
 
