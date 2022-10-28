@@ -31,11 +31,11 @@ Follow these steps to contribute code:
    [repository page](http://www.github.com/google/flax). This creates a copy
    of the Flax repository in your own account.
 
-2. Install Python >=3.6 and `svn` for running the tests (see below).
+2. Install [Python >=3.6](https://www.python.org/downloads/) and `svn` for running the tests (see below).
 
 3. (Optional) Create a virtual environment or a Docker container. See
    [`dev/README.md`](https://github.com/google/flax/blob/main/dev/README.md)
-   for details on how to set up a Docker Container. To setup a virtual environment,
+   for details on how to set up a Docker Container. To set up a virtual environment,
    run the following:
 
    ```bash
@@ -45,7 +45,7 @@ Follow these steps to contribute code:
 
    This ensures all your dependencies are installed in this environment.
 
-4. Clone your local forked Flax repo, then install the required packages with PyPi](https://pip.pypa.io/en/stable/cli/pip_install/).
+4. Clone your local forked Flax repo, then install the required packages with [PyPi](https://pip.pypa.io/en/stable/cli/pip_install/).
    This enables you to immediately test the code after modifying it:
 
    ```bash
@@ -102,8 +102,8 @@ Follow these steps to contribute code:
    git rebase upstream/main
    ```
 
-11. Finally push your commit on your development branch and create a remote
-   branch in your fork that you can use to create a Pull Request from:
+10. Finally push your commit on your development branch and create a remote
+   branch in your fork that you can use to create a Pull Request form:
 
    ```bash
    git push --set-upstream origin name-of-change
@@ -179,16 +179,15 @@ pre-commit run jupytext
 
 #### Creating new notebooks
 
-If you are adding a new notebook to the documentation, you can use `jupytext --sync`, which
-can set up both the Jupyter Notebook (`.ipynb`) and Markdown (`.md`) versions with jupytext
-by running the following command:
+If you are adding a new Jupyter Notebook to the documentation, you can use `jupytext --set-formats`.
+It can set up both the Jupyter Notebook (`.ipynb`) and Markdown (`.md`) versions of the file:
 
 ```
 jupytext --set-formats ipynb,md:myst path/to/the/notebook.ipynb
 ```
 
 This works by adding a `"jupytext"` metadata field to the notebook file which specifies the
-desired formats, and which the `jupytext --sync` command recognizes when invoked.
+desired formats. The `jupytext --sync` command can then recognize them when invoked.
 
 After you make changes in your file(s), follow the steps from the _Syncing notebooks_
 section above to keep the contents of both Markdown and Jupyter Notebook files in sync.
