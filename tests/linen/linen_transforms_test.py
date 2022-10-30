@@ -211,7 +211,6 @@ class TransformTest(absltest.TestCase):
     y = foo.apply(variables, x, False)
     self.assertEqual(y.shape, (1, 3))
 
-
   def test_vmap(self):
     key1, key2 = random.split(random.PRNGKey(3), 2)
     x = random.uniform(key1, (4, 4))
@@ -593,7 +592,6 @@ class TransformTest(absltest.TestCase):
                       variable_axes={'params': 0}, split_rngs={'params': True})
     variables = FooVmap().init(random.PRNGKey(0), jnp.ones((4,)))
     self.assertEqual(variables['params']['test'].shape, (4,))
-
 
   def test_nested_module_args_vmap(self):
     class A(nn.Module):
@@ -977,7 +975,6 @@ class TransformTest(absltest.TestCase):
     np.testing.assert_allclose(variables['test']['inner']['baz'],
                                 jnp.array([2.0,]), atol=1e-7)
 
-
   def test_nested_variable_passing(self):
     class NestedVarUser(nn.Module):
       somevar: nn.Variable
@@ -1090,7 +1087,6 @@ class TransformTest(absltest.TestCase):
       "Dense_0": {"kernel": (4, 5)}
     })
 
-
   def test_map_variables_bit_weights(self):
     class BitWeights(nn.Module):
       @nn.compact
@@ -1104,7 +1100,6 @@ class TransformTest(absltest.TestCase):
     y, variables = bw.init_with_output(random.PRNGKey(0), x)
     y_2 = bw.apply(variables, x)
     np.testing.assert_allclose(y, y_2)
-
 
   def test_remat_scan(self):
     class BigModel(nn.Module):
@@ -1121,7 +1116,6 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(param_shapes["dense_stack"]["bias"], (100, 8))
     y = model.apply(variables, x)
     self.assertEqual(y.shape, (2, 8))
-
 
   def test_vjp(self):
     class Bar(nn.Module):
@@ -1584,8 +1578,6 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(vars['params']['heads_2']['kernel'].shape, (3, 5))
     self.assertEqual(vars['params']['heads_2']['bias'].shape, (5,))
 
-
-
   def test_lift_instance_error(self):
     class Foo(nn.Module):
       @nn.compact
@@ -1632,6 +1624,70 @@ class TransformTest(absltest.TestCase):
     output, init_params = jax.jit(cond_model.init_with_output)(
         jax.random.PRNGKey(0),
         x=jnp.ones(3))
+
+  def test_add_metadata_axis(self):
+    vars_copy = None
+
+    class Foo(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        nonlocal vars_copy
+        kernel_init = nn.with_partitioning(
+            nn.initializers.lecun_normal(), ('foo', 'bar')
+        )
+        vars_copy = self.variables
+        return nn.Dense(
+            4, kernel_init=kernel_init, use_bias=False, name='dense'
+        )(x)
+
+    class Test(nn.Module):
+
+      @partial(
+          nn.add_metadata_axis,
+          variable_axes={'params': 0},
+          metadata_params={nn.PARTITION_NAME: 'baz'},
+      )
+      @nn.compact
+      def __call__(self, x):
+        return Foo(name='foo')(x)
+
+    k = random.PRNGKey(0)
+    x = jnp.ones((4, 4), dtype=jnp.float32)
+    vs = Test().init(k, x)
+    y = Test().apply(vs, x)
+    outer_expect = jax.tree_map(
+        jnp.shape,
+        freeze(
+            {
+                'params': {
+                    'foo': {
+                        'dense': {
+                            'kernel': nn.Partitioned(
+                                jnp.ones((4, 4)), names=('baz', 'foo', 'bar')
+                            )
+                        }
+                    }
+                }
+            }
+        ),
+    )
+    inner_expect = jax.tree_map(
+        jnp.shape,
+        freeze(
+            {
+                'params': {
+                    'dense': {
+                        'kernel': nn.Partitioned(
+                            jnp.ones((4, 4)), names=('foo', 'bar')
+                        )
+                    }
+                }
+            }
+        ),
+    )
+    self.assertEqual(jax.tree_map(jnp.shape, vs), outer_expect)
+    self.assertEqual(jax.tree_map(jnp.shape, vars_copy), inner_expect)
 
 
 if __name__ == '__main__':
