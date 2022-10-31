@@ -175,7 +175,15 @@ _context = _DynamicContext()
 
 
 class _Sentinel:
-  pass
+
+  def __copy__(self):
+    return self  # Do not copy singleton sentinel.
+
+  def __deepcopy__(self, memo):
+    del memo
+    return self  # Do not copy singleton sentinel.
+
+
 _unspecified_parent = _Sentinel()
 
 
