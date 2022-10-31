@@ -175,7 +175,11 @@ _context = _DynamicContext()
 
 
 class _Sentinel:
-  pass
+  def __deepcopy__(self, memo):
+    """Override for deepcopy that does not copy this sentinel object."""
+    del memo
+    return self
+
 _unspecified_parent = _Sentinel()
 
 
@@ -821,7 +825,10 @@ class Module:
     object.__setattr__(self, '_state', _ModuleInternalState())
 
     # Typically we set the parent based on the dynamic module context.
+    print("POST_INIT", self.name, self.parent)
     if self.parent is _unspecified_parent:  # pytype: disable=attribute-error
+      print("NO PARENT SPECIFIED, USING _context.module_stack[-1]")
+      print(f"module_stack={_context.module_stack[-1]}")
       object.__setattr__(self, 'parent', _context.module_stack[-1])
 
     # Initialization is deferred for top level Modules or any other "orphan"
@@ -860,7 +867,9 @@ class Module:
     elif isinstance(self.parent, Scope):
       object.__setattr__(self, 'scope', self.parent)
     else:
-      raise ValueError('parent must be None, Module or Scope')
+      raise ValueError(
+          f'parent must be None, Module or Scope; got {self.parent!r} '
+          f'with type {type(self.parent)!r}')
 
     self._state.is_initialized = True
 
