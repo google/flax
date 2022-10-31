@@ -14,9 +14,11 @@
 
 """Tests for flax.linen."""
 
+import copy
 import dataclasses
 import functools
 import gc
+import inspect
 import operator
 from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
                     Tuple, TypeVar)
@@ -1789,6 +1791,15 @@ class ModuleTest(absltest.TestCase):
 
     with self.assertRaises(errors.IncorrectPostInitOverrideError):
       r.init(jax.random.PRNGKey(2), jnp.ones(3))
+
+  def test_deepcopy_unspecified_parent(self):
+    parent_parameter = inspect.signature(DummyModule).parameters['parent']
+    unspecified_parent = parent_parameter.default
+
+    self.assertIs(unspecified_parent, copy.copy(unspecified_parent))
+
+    self.assertIs(unspecified_parent, copy.deepcopy(unspecified_parent))
+
 
 class LeakTests(absltest.TestCase):
 
