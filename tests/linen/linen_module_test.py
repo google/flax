@@ -1811,7 +1811,9 @@ class ModuleTest(absltest.TestCase):
         return self.prop
 
     foo = Foo()
-    with self.assertRaisesRegex(ValueError, 'non_existent'):
+    with self.assertRaisesRegex(
+      errors.DescriptorAttributeError,
+      'Trying to access a property that is accessing a non-existent attribute'):
       foo.apply({})
 
 
