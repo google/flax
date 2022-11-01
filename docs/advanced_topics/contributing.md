@@ -31,7 +31,7 @@ Follow these steps to contribute code:
    [repository page](http://www.github.com/google/flax). This creates a copy
    of the Flax repository in your own account.
 
-2. Install [Python >=3.6](https://www.python.org/downloads/) and `svn` for running the tests (see below).
+2. Install [Python >=3.6](https://www.python.org/downloads/).
 
 3. (Optional) Create a virtual environment or a Docker container. See
    [`dev/README.md`](https://github.com/google/flax/blob/main/dev/README.md)
