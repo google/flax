@@ -797,6 +797,18 @@ class Module:
     # attached in setup(), we run some extra logic in that case.
     self._register_submodules(name, val)
 
+  def __getattribute__(self, name: str) -> Any:
+    try:
+      return object.__getattribute__(self, name)
+    except AttributeError as e:
+      cls = type(self)
+      cls_attr = getattr(cls, name, None)
+      is_descriptor = cls_attr and hasattr(cls_attr, '__get__')
+      if is_descriptor:
+        raise errors.DescriptorAttributeError() from e
+      else:
+        raise e
+
   def __getattr__(self, name: str) -> Any:
     """Call setup() before getting any setup-defined attributes."""
     # We don't want to return anything for python copy / pickle methods.

@@ -1802,6 +1802,18 @@ class ModuleTest(absltest.TestCase):
     self.assertIs(unspecified_parent,
                   copy.deepcopy(unspecified_parent))
 
+  def test_incorrect_property(self):
+    class Foo(nn.Module):
+      @property
+      def prop(self):
+        return self.non_existent
+      def __call__(self):
+        return self.prop
+
+    foo = Foo()
+    with self.assertRaisesRegex(ValueError, 'non_existent'):
+      foo.apply({})
+
 
 class LeakTests(absltest.TestCase):
 
