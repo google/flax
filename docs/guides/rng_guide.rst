@@ -24,7 +24,7 @@ In JAX, we would simply thread an rng seed around.
    random.bernoulli(rng, p=0.5)
 
 But these seeds are threaded in a slightly different way in
-Flax. Using Dropout as an example, we can see how it's handled in flax.
+Flax. Using Dropout as an example, we can see how it's handled in Flax.
 
 .. code:: python
 
@@ -46,5 +46,17 @@ As can be seen in this example, the logic for randomness needs to be moved
 to the ``__call__`` method.
 
 What occurs here is within each Module we maintain a dictionary of rng collections.
-These are threaded for us by Flax. We then can use the `make_rng` method to
-split off seeds as we need them.
+These are threaded for us by Flax. We then can use the ``make_rng`` method to
+split off seeds as we need them. We initialize this dictionary when we apply
+the module using the ``rng`` keyword.
+
+.. code:: python
+
+  import jax.numpy as jnp
+  dropout_rng = random.PRNGKey(0)
+  inputs = jnp.ones(10)
+  model.apply(inputs=inputs, deterministic=False,
+              rngs={'dropout': dropout_rng})
+
+Notice, we pass into the ``rngs`` keyword a dictionary. This dictionary
+must re-use the same key we used when we called ``make_rng`` method.
