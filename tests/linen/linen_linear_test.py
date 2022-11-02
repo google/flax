@@ -931,6 +931,23 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, correct_ans)
 
   @parameterized.product(
+      use_bias=(True, False))
+  def test_transpose_kernel_conv_transpose(self, use_bias):
+    rng = dict(params=random.PRNGKey(0))
+    x = jnp.ones((1, 15, 15, 3))
+    conv_module = nn.ConvTranspose(
+        features=4,
+        use_bias=use_bias,
+        strides=(2, 2),
+        kernel_size=(6, 6),
+        padding='CIRCULAR',
+        transpose_kernel=True,
+    )
+    y, initial_params = conv_module.init_with_output(rng, x)
+    self.assertEqual(initial_params['params']['kernel'].shape, (6, 6, 4, 3))
+    self.assertEqual(y.shape, (1, 30, 30, 4))
+
+  @parameterized.product(
       module=(nn.Conv, nn.ConvLocal)
   )
   def test_int_kernel_size(self, module):
