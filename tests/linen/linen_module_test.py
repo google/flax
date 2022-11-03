@@ -1439,7 +1439,6 @@ class ModuleTest(absltest.TestCase):
     x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10, ))
     y = jax.random.uniform(jax.random.PRNGKey(2), shape=(10, ))
     variables = Foo().init(jax.random.PRNGKey(0), x)
-    pred = Foo().apply(variables, x)
     intm_grads = jax.grad(loss, argnums=1)(variables['params'], variables['perturbations'], x, y)
     # activation * 4 so reverse gradient also * 4
     self.assertTrue(all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply']))
