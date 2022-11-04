@@ -37,8 +37,8 @@ class BackendMode(Enum):
 io_mode = None
 gfile = None
 
-if importlib.util.find_spec('tensorflow.io'):
-  from tensorflow.io import gfile
+if importlib.util.find_spec('tensorflow'):
+  from tensorflow.io import gfile  # pytype: disable=import-error
   io_mode = BackendMode.TF
 else:
   logging.warning("Tensorflow library not found, tensorflow.io.gfile "

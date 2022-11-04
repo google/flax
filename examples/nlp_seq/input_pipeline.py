@@ -19,7 +19,7 @@ import collections
 import enum
 
 from flax import io
-import tensorflow.compat.v2 as tf  # pytype: disable=import-error
+import tensorflow as tf
 
 
 # Values for padding, unknown words and a root.
