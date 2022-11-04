@@ -17,6 +17,7 @@ import tempfile
 
 from absl import logging
 from absl.testing import absltest
+from flax import io
 import jax
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -62,7 +63,7 @@ class TrainTest(absltest.TestCase):
 
     with tfds.testing.mock_data(num_examples=128, data_dir=data_dir):
       train.train_and_evaluate(config, workdir)
-    logging.info('workdir content: %s', tf.io.gfile.listdir(workdir))
+    logging.info('workdir content: %s', io.listdir(workdir))
 
 
 if __name__ == '__main__':

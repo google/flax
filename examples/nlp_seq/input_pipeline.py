@@ -18,6 +18,7 @@ import codecs
 import collections
 import enum
 
+from flax import io
 import tensorflow.compat.v2 as tf  # pytype: disable=import-error
 
 
@@ -66,7 +67,7 @@ def create_vocabs(filename, max_num_forms=100000):
   """
   form_counter = collections.Counter()
   xpos_counter = collections.Counter()
-  with tf.io.gfile.GFile(filename, 'rb') as f:
+  with io.GFile(filename, 'rb') as f:
     for line in codecs.getreader('utf-8')(f):
       line = line.strip()
       split = line.split('\t')
@@ -165,7 +166,7 @@ def sentences_from_conll_data(corpus_filename,
   Yields:
       A sentence as a list of tokens while tokens are lists of attributes.
   """
-  with tf.io.gfile.GFile(corpus_filename, 'rb') as f:
+  with io.GFile(corpus_filename, 'rb') as f:
     sentence = create_sentence_with_root(attributes, vocabs)
     for line in codecs.getreader('utf-8')(f):
       line = line.strip()

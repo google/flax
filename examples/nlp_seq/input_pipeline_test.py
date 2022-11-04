@@ -17,6 +17,7 @@
 import os
 
 from absl.testing import absltest
+from flax import io
 import jax
 import tensorflow.compat.v2 as tf
 
@@ -51,7 +52,7 @@ class InputPipelineTest(absltest.TestCase):
 
     # Write a sample corpus.
     self._filename = os.path.join(self.test_tmpdir.full_path, 'data.conll')
-    with tf.io.gfile.GFile(self._filename, 'w') as f:
+    with io.GFile(self._filename, 'w') as f:
       # The CoNLL data has to end with an empty line.
       f.write(CONLL_DATA)
       f.write('\n')

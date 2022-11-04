@@ -35,7 +35,7 @@ from absl import flags
 from absl import logging
 from absl.testing import absltest
 
-import tensorflow as tf
+from flax import io
 
 from tensorboard.backend.event_processing import directory_watcher
 from tensorboard.backend.event_processing import event_file_loader
@@ -123,9 +123,9 @@ class Benchmark(absltest.TestCase):
         setattr(self, func_name, patched_func)
 
     # Create target directory if defined.
-    if FLAGS.benchmark_output_dir and not tf.io.gfile.exists(
+    if FLAGS.benchmark_output_dir and not io.exists(
         FLAGS.benchmark_output_dir):
-      tf.io.gfile.makedirs(FLAGS.benchmark_output_dir)
+      io.makedirs(FLAGS.benchmark_output_dir)
 
   # pylint: disable=invalid-name
   def _collect_assert_wrapper(self, *args, fn=None, **kwargs):
@@ -165,8 +165,8 @@ class Benchmark(absltest.TestCase):
     model_dir_path = os.path.join(model_dir, self._reported_name or
                                   self._get_test_name())
     # Create directories if they don't exist.
-    if not tf.io.gfile.exists(model_dir_path):
-      tf.io.gfile.makedirs(model_dir_path)
+    if not io.exists(model_dir_path):
+      io.makedirs(model_dir_path)
     return model_dir_path
 
   def has_outstanding_fails(self):
@@ -277,5 +277,5 @@ class Benchmark(absltest.TestCase):
     benchmark_output_dir = FLAGS.benchmark_output_dir
     if benchmark_output_dir:
       filename = os.path.join(benchmark_output_dir, name + '.json')
-      with tf.io.gfile.GFile(filename, 'w') as fout:
+      with io.GFile(filename, 'w') as fout:
         fout.write(results_str)

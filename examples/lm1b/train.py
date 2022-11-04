@@ -27,6 +27,7 @@ import os
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
+from flax import io
 from flax import jax_utils
 from flax import linen as nn
 from flax.training import checkpoints
@@ -359,13 +360,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     workdir: Working directory for checkpoints and TF summaries. If this
       contains checkpoint training will be resumed from the latest checkpoint.
   """
-  tf.io.gfile.makedirs(workdir)
+  io.makedirs(workdir)
 
   vocab_path = config.vocab_path
   if vocab_path is None:
     vocab_path = os.path.join(workdir, "sentencepiece_model")
     config.vocab_path = vocab_path
-  tf.io.gfile.makedirs(os.path.split(vocab_path)[0])
+  io.makedirs(os.path.split(vocab_path)[0])
 
   # Load Dataset
   # ---------------------------------------------------------------------------
