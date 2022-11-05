@@ -219,18 +219,19 @@ def _save_mpas(gda_manager, mpa_targets: List[Tuple[MultiprocessArrayType, str]]
 def _restore_mpas(state_dict,
                   target: Optional[Any],
                   ckpt_path: str,
-                  step: Optional[Union[int, float]] = None,
-                  gda_manager: Optional[Any] = None):
+                  step: Optional[Union[int, float]],
+                  gda_manager: Optional[Any],
+                  allow_partial: bool = False):
   """Restore the multiprocess arrays given the target structure and type."""
 
   def _check_mpa_errors():
     if not gda_manager:
       raise errors.MPACheckpointingRequiredError(ckpt_path, step)
-    if not target:
+    if not target and not allow_partial:
       raise errors.MPARestoreTargetRequiredError(ckpt_path, step)
 
   def _safe_deserialize(
-      target_mpas: List[MultiprocessArrayType], mpa_paths: List[str],
+      target_mpas: List[Tuple[Tuple[Any], MultiprocessArrayType, str]],
       gda_manager: GlobalAsyncCheckpointManager) -> List[MultiprocessArrayType]:
     gda_manager.wait_until_finished()
 
@@ -241,18 +242,18 @@ def _restore_mpas(state_dict,
 
     # Check if the given target array types are valid.
     shardings = []
-    for i, arr in enumerate(target_mpas):
+    for _, arr, path in target_mpas:
       # Use GDA with jax.config.jax_array turned off, or jax.experimental.array
       # with jax.config.jax_array turned on.
       if isinstance(arr, GlobalDeviceArray) and jax.config.jax_array:
-        raise errors.MPARestoreTypeNotMatchError(step, mpa_paths[i])
+        raise errors.MPARestoreTypeNotMatchError(step, path)
       if isinstance(arr, GlobalDeviceArray):
         shardings.append(sharding.MeshPspecSharding(arr.mesh, arr.mesh_axes))
       elif jax.config.jax_array and isinstance(arr, jax.Array):
         shardings.append(arr.sharding)
 
     # Restore the arrays.
-    ts_specs = [get_tensorstore_spec(x) for x in mpa_paths]
+    ts_specs = [get_tensorstore_spec(path) for _, _, path in target_mpas]
     return gda_manager.deserialize(shardings, ts_specs)
 
   # When target is a single leaf instead of a pytree dict.
@@ -260,33 +261,40 @@ def _restore_mpas(state_dict,
     if _use_multiprocess_serialization(target) and isinstance(
         state_dict, str) and state_dict.startswith(MP_ARRAY_PH):
       _check_mpa_errors()
-      return _safe_deserialize([target], [ckpt_path + MP_ARRAY_POSTFIX],
+      return _safe_deserialize([((), target, ckpt_path + MP_ARRAY_POSTFIX)],
                                gda_manager)[0]
     return state_dict
 
-  # Check if some multiprocess arrays are present in the restored pytree
+  # Go through the restored checkpoint pytree for all MPAs
   flattened = traverse_util.flatten_dict(state_dict, keep_empty_nodes=True)
-  mpa_paths = []
-  for key, value in flattened.items():
-    if isinstance(value, str) and value.startswith(MP_ARRAY_PH):
-      subpath = value[len(MP_ARRAY_PH):]
-      mpa_paths.append(
-          (key, os.path.join(ckpt_path + MP_ARRAY_POSTFIX, subpath)))
-
-  if mpa_paths:
-    _check_mpa_errors()
+  if target:
     target_flattened = traverse_util.flatten_dict(
         serialization.to_state_dict(target), keep_empty_nodes=True)
-    target_mpas = [target_flattened[x[0]] for x in mpa_paths]
-    # Make sure that for each entry with the MPA placeholder, the corresponding
-    # entry in target is a valid GDA or jax.Array.
-    if not all(_use_multiprocess_serialization(x) for x in target_mpas):
-      raise errors.MPARestoreTargetRequiredError(ckpt_path, step)
-    mpa_list = _safe_deserialize(target_mpas, [x[1] for x in mpa_paths],
-                                 gda_manager)
-    for mpa, (key, _) in zip(mpa_list, mpa_paths):
+  # A list of (state_dict_key, target_array, array_file_path) for every array
+  # to be restored
+  target_mpas = []
+  for key, value in flattened.items():
+    if isinstance(value, str) and value.startswith(MP_ARRAY_PH):
+      _check_mpa_errors()
+      if not target or (key not in target_flattened) or (
+          not _use_multiprocess_serialization(target_flattened[key])):
+        if allow_partial:
+          logging.warning(
+              'Multiprocess array %s could not be restored because a valid array is not found in target at the corresponding location. Proceed to restore other arrays because allow_partial_restoration=True',
+              key)
+        else:
+          raise errors.MPARestoreTargetRequiredError(ckpt_path, step, key)
+      else:
+        mpa_path = os.path.join(ckpt_path + MP_ARRAY_POSTFIX,
+                                value[len(MP_ARRAY_PH):])
+        target_mpas.append((key, target_flattened[key], mpa_path))
+
+  # If any MPA needs to be restored, call deserialize
+  if target_mpas:
+    mpa_list = _safe_deserialize(target_mpas, gda_manager)
+    for mpa, (key, _, _) in zip(mpa_list, target_mpas):
       flattened[key] = mpa
-  state_dict = traverse_util.unflatten_dict(flattened)
+    state_dict = traverse_util.unflatten_dict(flattened)
   return state_dict
 
 
@@ -655,7 +663,8 @@ def restore_checkpoint(
     step: Optional[Union[int, float]] = None,
     prefix: str = 'checkpoint_',
     parallel: bool = True,
-    gda_manager: Optional[Any] = None) -> PyTree:
+    gda_manager: Optional[Any] = None,
+    allow_partial_mpa_restoration: bool = False) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -680,6 +689,11 @@ def restore_checkpoint(
       GlobalAsyncCheckpointManager (needs Tensorstore to be imported
       correctly). Will read the arrays from the separate subdirectory with
       postfix "_gda".
+    allow_partial_mpa_restoration: If true, the given `target` doesn't have to
+      contain all valid multiprocess arrays. As a result, the restored Pytree
+      may have some MPAs not restored correctly. Use this if you cannot provide
+      a fully valid ``target`` and don't need all the MPAs in the checkpoint
+      to be restored.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
@@ -736,7 +750,8 @@ def restore_checkpoint(
 
   state_dict = serialization.msgpack_restore(checkpoint_contents)
   if _IMPORT_GDAM_SUCCESSFUL:
-    state_dict = _restore_mpas(state_dict, target, ckpt_path, step, gda_manager)
+    state_dict = _restore_mpas(state_dict, target, ckpt_path, step, gda_manager,
+                               allow_partial_mpa_restoration)
 
   if target is None:
     return state_dict
