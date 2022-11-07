@@ -231,7 +231,7 @@ def _restore_mpas(state_dict,
       raise errors.MPARestoreTargetRequiredError(ckpt_path, step)
 
   def _safe_deserialize(
-      target_mpas: List[Tuple[Tuple[Any], MultiprocessArrayType, str]],
+      target_mpas: List[Tuple[Tuple[Any, ...], MultiprocessArrayType, str]],
       gda_manager: GlobalAsyncCheckpointManager) -> List[MultiprocessArrayType]:
     gda_manager.wait_until_finished()
 
