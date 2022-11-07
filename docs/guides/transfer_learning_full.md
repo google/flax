@@ -7,7 +7,7 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: 'Python 3.8.11 (''.venv'': venv)'
+  display_name: 'Python 3.9.14 (''.venv'': venv)'
   language: python
   name: python3
 ---
@@ -115,7 +115,7 @@ class Classifier(nn.Module):
   @nn.compact
   def __call__(self, x):
     x = self.backbone(x).pooler_output
-    x = nn.Dense(self.num_classes, name='head')(x)
+    x = nn.Dense(self.num_classes, name='head', kernel_init=nn.zeros)(x)
     return x
 ```
 
@@ -228,12 +228,12 @@ def preprocess_dataset(
     def map_fn(image, label):
         image = process(image)
         return image, label
+    if train:
+        ds = ds.repeat()
     ds = ds.map(map_fn)
     if train:
         ds = ds.shuffle(buffer_size=1000)
     ds = ds.batch(batch_size, drop_remainder=True)
-    if train:
-        ds = ds.repeat()
     return ds
 
 train_ds_raw = tfds.load('rock_paper_scissors', split='train', as_supervised=True, shuffle_files=True)
@@ -338,25 +338,26 @@ eval_steps = 20
 step = 0
 train_history = []
 test_history = []
-train_iter = train_ds.as_numpy_iterator()
-while step < total_steps:
-    metrics = Metrics.empty()
-    for _ in tqdm(range(eval_steps), desc='train', leave=False):
-        step += 1
-        inputs, labels = next(train_iter)
-        state, metrics = train_step(state, metrics, inputs, labels)
+metrics = Metrics.empty()
+for step, batch in enumerate(train_ds.as_numpy_iterator()):
+    inputs, labels = batch
+    state, metrics = train_step(state, metrics, inputs, labels)
 
-    logs = metrics.compute()
-    train_history.append(logs)
-    print(f'[train] step {step}: {logs}')
-        
-    metrics = Metrics.empty()
-    for inputs, labels in tqdm(
-        test_ds.as_numpy_iterator(), total=len(test_ds), desc='test', leave=False):
-        metrics = eval_step(state, metrics, inputs, labels)
-    logs = metrics.compute()
-    test_history.append(logs)
-    print(f'[test]  step {step}: {logs}')
+    if step % eval_steps == 0 and step > 0:
+        logs = metrics.compute()
+        train_history.append(logs)
+        print(f'[train] step {step}: {logs}')
+            
+        metrics = Metrics.empty()
+        for inputs, labels in tqdm(
+            test_ds.as_numpy_iterator(), total=len(test_ds), desc='test', leave=False):
+            metrics = eval_step(state, metrics, inputs, labels)
+        logs = metrics.compute()
+        test_history.append(logs)
+        print(f'[test]  step {step}: {logs}')
+
+    if step == total_steps:
+        break
 
 
 for metric in ['accuracy', 'loss']:
