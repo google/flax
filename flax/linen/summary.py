@@ -277,7 +277,7 @@ def _get_module_variables(
   (module_variables, submodule_variables) tuple for that path. _get_module_variables
   uses the `all_paths` set to determine if a variable belongs to a submodule or not."""
   module_variables = _get_path_variables(path, variables)
-  submodule_variables = {collection: {} for collection in module_variables}
+  submodule_variables: Any = {collection: {} for collection in module_variables}
   all_keys = set(key for collection in module_variables.values() for key in collection)
 
   for key in all_keys:

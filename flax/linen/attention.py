@@ -225,7 +225,7 @@ class MultiHeadDotProductAttention(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   use_bias: bool = True
-  attention_fn: Callable[[Array, Array, Array], Array] = dot_product_attention
+  attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
 
   @compact
@@ -351,7 +351,7 @@ class SelfAttention(MultiHeadDotProductAttention):
   """Self-attention special case of multi-head dot-product attention."""
 
   @compact
-  def __call__(self, inputs_q: Array, mask: Optional[Array] = None,
+  def __call__(self, inputs_q: Array, mask: Optional[Array] = None, # type: ignore
                deterministic: Optional[bool] = None):
     """Applies multi-head dot product self-attention on the input data.
 
