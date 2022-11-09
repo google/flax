@@ -1,6 +1,6 @@
 #!/bin/bash
 
-HOME=/train
+BASE=/train
 
 # Replaced by launch_gce.py
 REPO='__REPO__'
@@ -12,7 +12,7 @@ ARGS='__ARGS__'
 GCS_WORKDIR_BASE='__GCS_WORKDIR_BASE__'
 TFDS_DATA_DIR='__TFDS_DATA_DIR__'
 ACCELERATOR_TYPE='__ACCELERATOR_TYPE__'
-WORKDIR="$HOME/workdir_base/$NAME"
+WORKDIR="$BASE/workdir_base/$NAME"
 
 
 # Login directly with:
@@ -22,8 +22,8 @@ chmod a+x /sudo_tmux_a.sh
 echo -e '#!/bin/bash\ntmux a' > /tmux_a.sh
 chmod a+x /tmux_a.sh
 
-mkdir -p $HOME
-cd $HOME
+mkdir -p $BASE
+cd $BASE
 
 tmux new-session -s flax -d htop ENTER
 tmux split-window
@@ -32,27 +32,25 @@ tmux send "
 (
   set -x
 
+  conda activate flax &&
+
   [ -d flax ] || (
-    git clone -b $BRANCH $REPO &&
+    git clone --depth 1 -b $BRANCH $REPO &&
     cd flax &&
 
-    python3 -m pip install virtualenv &&
-    python3 -m virtualenv env &&
-    . env/bin/activate &&
+    conda create -yn flax python==3.9 &&
+    conda activate flax &&
 
     pip install -U pip &&
     pip install -e . &&
-    if [[ '$ACCELERATOR_TYPE' =~ ^nvidia- ]]; then
-      pip install --upgrade jax jaxlib==0.1.69+cuda110 -f https://storage.googleapis.com/jax-releases/jax_releases.html
-    fi &&
 
     cd examples/$EXAMPLE &&
     pip install -r requirements.txt &&
-    cd $HOME
+    cd $BASE
   ) &&
 
+  conda activate flax &&
   cd flax &&
-  . env/bin/activate &&
   cd examples/$EXAMPLE &&
 
   TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$WORKDIR $ARGS

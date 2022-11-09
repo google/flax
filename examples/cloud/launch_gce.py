@@ -24,7 +24,6 @@ from typing import Sequence
 
 from absl import app
 from absl import flags
-from absl import logging
 
 # General options.
 flags.DEFINE_bool(
@@ -130,7 +129,7 @@ def launch_gce(*, vm_name: str, startup_script: str):
   args = [
       'gcloud', 'compute', 'instances', 'create', vm_name,
       f'--project={FLAGS.project}', f'--zone={FLAGS.zone}',
-      '--image=c1-deeplearning-tf-2-4-cu110-v20210512-debian-10',
+      '--image=c1-deeplearning-tf-2-10-cu113-v20221107-debian-10',
       '--image-project=ml-images', f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full', '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
