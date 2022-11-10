@@ -10,7 +10,7 @@ vNext
 -
 -
 -
--
+- Adds `flax.training.gfile_utils` for storing logs on GCS.
 -
 -
 -
