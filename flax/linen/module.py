@@ -22,7 +22,7 @@ import re
 import threading
 import typing
 import weakref
-from typing import (Any, Callable, Dict, Iterable, List, NamedTuple, Mapping,
+from typing import (Any, Callable, Dict, Iterable, List, Sequence, NamedTuple, Mapping,
                     Optional, Set, Tuple, Type, TypeVar, Union, overload)
 
 import jax
@@ -812,7 +812,7 @@ class Module:
           'are only accessible from inside \'init\' or \'apply\'.')
       raise AttributeError(msg)
 
-  def __dir__(self) -> Iterable[str]:
+  def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
     return object.__dir__(self)  # pytype: disable=attribute-error
