@@ -28,6 +28,7 @@ class UUIDManager:
     instead.
   - We need to handle copy/deepcopy uniqueness via a wrapped type.
   """
+
   def __init__(self):
     self._lock = threading.Lock()
     self._id = 0
@@ -37,21 +38,28 @@ class UUIDManager:
       self._id += 1
       return FlaxId(self._id)
 
+
 uuid = UUIDManager()
 
 
 class FlaxId:
   """Hashable wrapper for ids that handles uniqueness of copies."""
+
   def __init__(self, rawid):
     self.id = rawid
+
   def __eq__(self, other):
     return isinstance(other, FlaxId) and other.id == self.id
+
   def __hash__(self):
     return hash(self.id)
+
   def __repr__(self):
     return f"FlaxId({self.id})"
+
   def __deepcopy__(self, memo):
     del memo
     return uuid()
+
   def __copy__(self):
     return uuid()

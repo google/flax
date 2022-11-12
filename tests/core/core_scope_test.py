@@ -27,6 +27,7 @@ import numpy as np
 
 from absl.testing import absltest
 
+
 class ScopeTest(absltest.TestCase):
 
   def test_rng(self):
@@ -34,12 +35,15 @@ class ScopeTest(absltest.TestCase):
       self.assertTrue(scope.has_rng('params'))
       self.assertFalse(scope.has_rng('dropout'))
       rng = scope.make_rng('params')
-      self.assertTrue(np.all(rng == LazyRng.create(random.PRNGKey(0), 1).as_jax_rng()))
+      self.assertTrue(
+          np.all(rng == LazyRng.create(random.PRNGKey(0), 1).as_jax_rng())
+      )
+
     init(f)(random.PRNGKey(0))
 
   def test_in_filter(self):
-    filter_true = lambda x, y : self.assertTrue(scope.in_filter(x, y))
-    filter_false = lambda x, y : self.assertFalse(scope.in_filter(x, y))
+    filter_true = lambda x, y: self.assertTrue(scope.in_filter(x, y))
+    filter_false = lambda x, y: self.assertFalse(scope.in_filter(x, y))
 
     filter_true(True, 'any_string1')
     filter_false(False, 'any_string2')
@@ -59,8 +63,14 @@ class ScopeTest(absltest.TestCase):
     union_check(True, False, True)
     union_check(False, False, set())
     union_check(True, True, True)
-    union_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), scope.DenyList(set(['b'])))
-    union_check(scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a'])))
+    union_check(
+        scope.DenyList(['a', 'b']),
+        scope.DenyList(['b', 'c']),
+        scope.DenyList(set(['b'])),
+    )
+    union_check(
+        scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a']))
+    )
 
   def test_intersect_filter(self):
     def intersect_check(a, b, ans):
@@ -71,7 +81,11 @@ class ScopeTest(absltest.TestCase):
     intersect_check(True, False, False)
     intersect_check(False, False, set())
     intersect_check(True, True, True)
-    intersect_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), scope.DenyList(set(['a', 'b', 'c'])))
+    intersect_check(
+        scope.DenyList(['a', 'b']),
+        scope.DenyList(['b', 'c']),
+        scope.DenyList(set(['a', 'b', 'c'])),
+    )
     intersect_check(scope.DenyList(['a', 'b']), ['b', 'c'], set(['c']))
 
   def test_subtract_filter(self):
@@ -83,14 +97,19 @@ class ScopeTest(absltest.TestCase):
     subtract_check(False, False, set())
     subtract_check(True, True, False)
     subtract_check(True, 'a', scope.DenyList('a'))
-    subtract_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c']))
-    subtract_check(scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a', 'b', 'c'])))
-
+    subtract_check(
+        scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c'])
+    )
+    subtract_check(
+        scope.DenyList(['a', 'b']),
+        ['b', 'c'],
+        scope.DenyList(set(['a', 'b', 'c'])),
+    )
 
   def test_group_collections(self):
-    params = { 'dense1': { 'x': [10, 20] } }
-    batch_stats = { 'dense1': { 'ema': 5 } }
-    xs = { 'params': params, 'batch_stats': batch_stats }
+    params = {'dense1': {'x': [10, 20]}}
+    batch_stats = {'dense1': {'ema': 5}}
+    xs = {'params': params, 'batch_stats': batch_stats}
 
     # Retrieve all keys only once.
     group = scope.group_collections(xs, ['params', 'params'])
@@ -100,8 +119,9 @@ class ScopeTest(absltest.TestCase):
     self.assertEqual(scope.group_collections(xs, ['vars']), ({},))
 
     # False gets nothing and True retrieves all keys once.
-    self.assertEqual(scope.group_collections(xs, [False, True, True]),
-                                             ({}, xs, {}))
+    self.assertEqual(
+        scope.group_collections(xs, [False, True, True]), ({}, xs, {})
+    )
 
   def test_inconsistent_param_shapes(self):
     def f(scope):
@@ -115,15 +135,18 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       scope.param('kernel', nn.initializers.ones, (4,))
 
-    params = freeze({
-        'params': {
-            'kernel': np.ones((4,)),
-        },
-    })
+    params = freeze(
+        {
+            'params': {
+                'kernel': np.ones((4,)),
+            },
+        }
+    )
     apply(f)(params)  # Valid.
     msg = 'but got a dict with an extra params layer'
-    with self.assertRaisesRegex(errors.ApplyScopeInvalidVariablesStructureError,
-                                msg):
+    with self.assertRaisesRegex(
+        errors.ApplyScopeInvalidVariablesStructureError, msg
+    ):
       apply(f)({'params': params})
 
   def test_mutate_undefined_collection(self):
@@ -153,11 +176,13 @@ class ScopeTest(absltest.TestCase):
   def test_rngs_check_w_frozen_dict(self):
     def f(scope, x):
       return x
-    _ = apply(f)(
-        {}, np.array([0.]), rngs=freeze({'a':random.PRNGKey(0)}))
 
-  @unittest.skipIf(not hasattr(jax_config, 'jax_enable_custom_prng'),
-                   'custom PRNG tests require config.jax_enable_custom_prng')
+    _ = apply(f)({}, np.array([0.0]), rngs=freeze({'a': random.PRNGKey(0)}))
+
+  @unittest.skipIf(
+      not hasattr(jax_config, 'jax_enable_custom_prng'),
+      'custom PRNG tests require config.jax_enable_custom_prng',
+  )
   def test_rng_check_w_old_and_new_keys(self):
     old_setting = jax_config.jax_enable_custom_prng
     try:
@@ -170,16 +195,21 @@ class ScopeTest(absltest.TestCase):
 
   def test_jax_leak_detector(self):
     with jax.check_tracer_leaks(True):
+
       def f(scope):
         def g(scope):
           pass
+
         scope.child(g)()
+
       jax.jit(init(f))(random.PRNGKey(0))
 
   def test_rng_counter_reuse(self):
     root = Scope({}, {'dropout': random.PRNGKey(0)})
+
     def f(scope):
       return scope.make_rng('dropout')
+
     a = root.child(f)()
     root = root.rewound()
     b = root.child(f)()
@@ -212,10 +242,12 @@ class ScopeTest(absltest.TestCase):
 
   def test_variable_alias(self):
     scope = Scope({}, mutable='state')
-    subscope = scope.push(name="a")
-    subscope.put_variable('state', 'x', 0.)
-    scope.put_variable('state', 'a', {'x': jnp.array(1., jnp.float32)})
-    self.assertEqual(scope.variables()['state']['a']['x'], subscope.variables()['state']['x'])
+    subscope = scope.push(name='a')
+    subscope.put_variable('state', 'x', 0.0)
+    scope.put_variable('state', 'a', {'x': jnp.array(1.0, jnp.float32)})
+    self.assertEqual(
+        scope.variables()['state']['a']['x'], subscope.variables()['state']['x']
+    )
 
 
 if __name__ == '__main__':

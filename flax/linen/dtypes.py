@@ -37,9 +37,9 @@ Dtype = Any
 Array = Any
 
 
-def canonicalize_dtype(*args,
-                       dtype: Optional[Dtype] = None,
-                       inexact: bool = True) -> Dtype:
+def canonicalize_dtype(
+    *args, dtype: Optional[Dtype] = None, inexact: bool = True
+) -> Dtype:
   """Canonicalize an optional dtype to the definitive dtype.
 
   If the ``dtype`` is None this function will infer the dtype. If it is not
@@ -70,7 +70,7 @@ def canonicalize_dtype(*args,
 
 
 def promote_dtype(*args, dtype=None, inexact=True) -> List[Array]:
-  """"Promotes input arguments to a specified or inferred dtype.
+  """ "Promotes input arguments to a specified or inferred dtype.
 
   All args are cast to the same dtype. See ``canonicalize_dtype`` for how
   this dtype is determined.
@@ -94,5 +94,4 @@ def promote_dtype(*args, dtype=None, inexact=True) -> List[Array]:
     The arguments cast to arrays of the same dtype.
   """
   dtype = canonicalize_dtype(*args, dtype=dtype, inexact=inexact)
-  return [jnp.asarray(x, dtype) if x is not None else None
-          for x in args]
+  return [jnp.asarray(x, dtype) if x is not None else None for x in args]

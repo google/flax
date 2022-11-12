@@ -23,18 +23,22 @@ Y = jnp.ones((5,))
 
 model = Dense(features=5)
 
+
 @jit
 def predict(params):
-  return model.apply({'params': params}, X)
+  return model.apply({"params": params}, X)
+
 
 @jit
 def loss_fn(params):
   return jnp.mean(jnp.abs(Y - predict(params)))
 
+
 @jit
 def init_params(rng):
-  mlp_variables = model.init({'params': rng}, X)
-  return mlp_variables['params']
+  mlp_variables = model.init({"params": rng}, X)
+  return mlp_variables["params"]
+
 
 # Get initial parameters
 params = init_params(jax.random.PRNGKey(42))

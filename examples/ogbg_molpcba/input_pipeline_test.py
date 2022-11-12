@@ -45,7 +45,8 @@ def get_dummy_datasets(dataset_length: int):
   datasets = {}
   for split in ['train', 'validation', 'test']:
     datasets[split] = tf.data.Dataset.from_generator(
-        get_dummy_graphs, output_signature=graphs_spec)
+        get_dummy_graphs, output_signature=graphs_spec
+    )
   return datasets
 
 
@@ -61,7 +62,8 @@ class InputPipelineTest(parameterized.TestCase):
   )
   def test_estimate_padding_budget_valid(self, valid_batch_size):
     budget = input_pipeline.estimate_padding_budget_for_batch_size(
-        self.datasets['train'], valid_batch_size, num_estimation_graphs=1)
+        self.datasets['train'], valid_batch_size, num_estimation_graphs=1
+    )
     self.assertEqual(budget.n_graph, valid_batch_size)
 
   @parameterized.product(
@@ -70,7 +72,8 @@ class InputPipelineTest(parameterized.TestCase):
   def test_estimate_padding_budget_invalid(self, invalid_batch_size):
     with self.assertRaises(ValueError):
       input_pipeline.estimate_padding_budget_for_batch_size(
-          self.datasets['train'], invalid_batch_size, num_estimation_graphs=1)
+          self.datasets['train'], invalid_batch_size, num_estimation_graphs=1
+      )
 
 
 if __name__ == '__main__':

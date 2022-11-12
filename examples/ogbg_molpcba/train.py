@@ -40,8 +40,9 @@ import input_pipeline
 import models
 
 
-def create_model(config: ml_collections.ConfigDict,
-                 deterministic: bool) -> nn.Module:
+def create_model(
+    config: ml_collections.ConfigDict, deterministic: bool
+) -> nn.Module:
   """Creates a Flax model, as specified by the config."""
   if config.model == 'GraphNet':
     return models.GraphNet(
@@ -53,7 +54,8 @@ def create_model(config: ml_collections.ConfigDict,
         skip_connections=config.skip_connections,
         layer_norm=config.layer_norm,
         use_edge_model=config.use_edge_model,
-        deterministic=deterministic)
+        deterministic=deterministic,
+    )
   if config.model == 'GraphConvNet':
     return models.GraphConvNet(
         latent_size=config.latent_size,
@@ -63,25 +65,27 @@ def create_model(config: ml_collections.ConfigDict,
         dropout_rate=config.dropout_rate,
         skip_connections=config.skip_connections,
         layer_norm=config.layer_norm,
-        deterministic=deterministic)
+        deterministic=deterministic,
+    )
   raise ValueError(f'Unsupported model: {config.model}.')
 
 
 def create_optimizer(
-    config: ml_collections.ConfigDict) -> optax.GradientTransformation:
+    config: ml_collections.ConfigDict,
+) -> optax.GradientTransformation:
   """Creates an optimizer, as specified by the config."""
   if config.optimizer == 'adam':
-    return optax.adam(
-        learning_rate=config.learning_rate)
+    return optax.adam(learning_rate=config.learning_rate)
   if config.optimizer == 'sgd':
     return optax.sgd(
-        learning_rate=config.learning_rate,
-        momentum=config.momentum)
+        learning_rate=config.learning_rate, momentum=config.momentum
+    )
   raise ValueError(f'Unsupported optimizer: {config.optimizer}.')
 
 
-def binary_cross_entropy_with_mask(*, logits: jnp.ndarray, labels: jnp.ndarray,
-                                   mask: jnp.ndarray):
+def binary_cross_entropy_with_mask(
+    *, logits: jnp.ndarray, labels: jnp.ndarray, mask: jnp.ndarray
+):
   """Binary cross entropy loss for unnormalized logits, with masked elements."""
   assert logits.shape == labels.shape == mask.shape
   assert len(logits.shape) == 2
@@ -92,18 +96,18 @@ def binary_cross_entropy_with_mask(*, logits: jnp.ndarray, labels: jnp.ndarray,
 
   # Numerically stable implementation of BCE loss.
   # This mimics TensorFlow's tf.nn.sigmoid_cross_entropy_with_logits().
-  positive_logits = (logits >= 0)
+  positive_logits = logits >= 0
   relu_logits = jnp.where(positive_logits, logits, 0)
   abs_logits = jnp.where(positive_logits, logits, -logits)
-  return relu_logits - (logits * labels) + (
-      jnp.log(1 + jnp.exp(-abs_logits)))
+  return relu_logits - (logits * labels) + (jnp.log(1 + jnp.exp(-abs_logits)))
 
 
-def predictions_match_labels(*, logits: jnp.ndarray, labels: jnp.ndarray,
-                             **kwargs) -> jnp.ndarray:
+def predictions_match_labels(
+    *, logits: jnp.ndarray, labels: jnp.ndarray, **kwargs
+) -> jnp.ndarray:
   """Returns a binary array indicating where predictions match the labels."""
   del kwargs  # Unused.
-  preds = (logits > 0)
+  preds = logits > 0
   return (preds == labels).astype(jnp.float32)
 
 
@@ -114,7 +118,8 @@ def add_prefix_to_keys(result: Dict[str, Any], prefix: str) -> Dict[str, Any]:
 
 @flax.struct.dataclass
 class MeanAveragePrecision(
-    metrics.CollectingMetric.from_outputs(('labels', 'logits', 'mask'))):
+    metrics.CollectingMetric.from_outputs(('labels', 'logits', 'mask'))
+):
   """Computes the mean average precision (mAP) over different tasks."""
 
   def compute(self):
@@ -137,7 +142,8 @@ class MeanAveragePrecision(
       is_labeled = mask[:, task]
       if len(np.unique(labels[is_labeled, task])) >= 2:
         average_precisions[task] = sklearn.metrics.average_precision_score(
-            labels[is_labeled, task], probs[is_labeled, task])
+            labels[is_labeled, task], probs[is_labeled, task]
+        )
 
     # When all APs are NaNs, return NaN. This avoids raising a RuntimeWarning.
     if np.isnan(average_precisions).all():
@@ -162,21 +168,23 @@ class TrainMetrics(metrics.Collection):
 
 def replace_globals(graphs: jraph.GraphsTuple) -> jraph.GraphsTuple:
   """Replaces the globals attribute with a constant feature for each graph."""
-  return graphs._replace(
-      globals=jnp.ones([graphs.n_node.shape[0], 1]))
+  return graphs._replace(globals=jnp.ones([graphs.n_node.shape[0], 1]))
 
 
-def get_predicted_logits(state: train_state.TrainState,
-                         graphs: jraph.GraphsTuple,
-                         rngs: Optional[Dict[str, jnp.ndarray]]) -> jnp.ndarray:
+def get_predicted_logits(
+    state: train_state.TrainState,
+    graphs: jraph.GraphsTuple,
+    rngs: Optional[Dict[str, jnp.ndarray]],
+) -> jnp.ndarray:
   """Get predicted logits from the network for input graphs."""
   pred_graphs = state.apply_fn(state.params, graphs, rngs=rngs)
   logits = pred_graphs.globals
   return logits
 
 
-def get_valid_mask(labels: jnp.ndarray,
-                   graphs: jraph.GraphsTuple) -> jnp.ndarray:
+def get_valid_mask(
+    labels: jnp.ndarray, graphs: jraph.GraphsTuple
+) -> jnp.ndarray:
   """Gets the binary mask indicating only valid labels and graphs."""
   # We have to ignore all NaN values - which indicate labels for which
   # the current graphs have no label.
@@ -194,8 +202,9 @@ def get_valid_mask(labels: jnp.ndarray,
 
 @jax.jit
 def train_step(
-    state: train_state.TrainState, graphs: jraph.GraphsTuple,
-    rngs: Dict[str, jnp.ndarray]
+    state: train_state.TrainState,
+    graphs: jraph.GraphsTuple,
+    rngs: Dict[str, jnp.ndarray],
 ) -> Tuple[train_state.TrainState, metrics.Collection]:
   """Performs one update step over the current batch of graphs."""
 
@@ -212,7 +221,8 @@ def train_step(
     logits = get_predicted_logits(curr_state, graphs, rngs)
     mask = get_valid_mask(labels, graphs)
     loss = binary_cross_entropy_with_mask(
-        logits=logits, labels=labels, mask=mask)
+        logits=logits, labels=labels, mask=mask
+    )
     mean_loss = jnp.sum(jnp.where(mask, loss, 0)) / jnp.sum(mask)
 
     return mean_loss, (loss, logits, labels, mask)
@@ -222,7 +232,8 @@ def train_step(
   state = state.apply_gradients(grads=grads)
 
   metrics_update = TrainMetrics.single_from_model_output(
-      loss=loss, logits=logits, labels=labels, mask=mask)
+      loss=loss, logits=logits, labels=labels, mask=mask
+  )
   return state, metrics_update
 
 
@@ -249,12 +260,15 @@ def evaluate_step(
   loss = binary_cross_entropy_with_mask(logits=logits, labels=labels, mask=mask)
 
   return EvalMetrics.single_from_model_output(
-      loss=loss, logits=logits, labels=labels, mask=mask)
+      loss=loss, logits=logits, labels=labels, mask=mask
+  )
 
 
-def evaluate_model(state: train_state.TrainState,
-                   datasets: Dict[str, tf.data.Dataset],
-                   splits: Iterable[str]) -> Dict[str, metrics.Collection]:
+def evaluate_model(
+    state: train_state.TrainState,
+    datasets: Dict[str, tf.data.Dataset],
+    splits: Iterable[str],
+) -> Dict[str, metrics.Collection]:
   """Evaluates the model on metrics over the specified splits."""
 
   # Loop over each split independently.
@@ -276,8 +290,9 @@ def evaluate_model(state: train_state.TrainState,
   return eval_metrics  # pytype: disable=bad-return-type
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict,
-                       workdir: str) -> train_state.TrainState:
+def train_and_evaluate(
+    config: ml_collections.ConfigDict, workdir: str
+) -> train_state.TrainState:
   """Execute model training and evaluation loop.
 
   Args:
@@ -300,7 +315,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       config.batch_size,
       add_virtual_node=config.add_virtual_node,
       add_undirected_edges=config.add_undirected_edges,
-      add_self_loops=config.add_self_loops)
+      add_self_loops=config.add_self_loops,
+  )
   train_iter = iter(datasets['train'])
 
   # Create and initialize the network.
@@ -319,7 +335,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   # Create the training state.
   net = create_model(config, deterministic=False)
   state = train_state.TrainState.create(
-      apply_fn=net.apply, params=params, tx=tx)
+      apply_fn=net.apply, params=params, tx=tx
+  )
 
   # Set up checkpointing of the model.
   # The input pipeline cannot be checkpointed in its current form,
@@ -335,7 +352,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   # Hooks called periodically during training.
   report_progress = periodic_actions.ReportProgress(
-      num_train_steps=config.num_train_steps, writer=writer)
+      num_train_steps=config.num_train_steps, writer=writer
+  )
   profiler = periodic_actions.Profile(num_profile_steps=5, logdir=workdir)
   hooks = [report_progress, profiler]
 
@@ -351,7 +369,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
     with jax.profiler.StepTraceAnnotation('train', step_num=step):
       graphs = jax.tree_util.tree_map(np.asarray, next(train_iter))
       state, metrics_update = train_step(
-          state, graphs, rngs={'dropout': dropout_rng})
+          state, graphs, rngs={'dropout': dropout_rng}
+      )
 
       # Update metrics.
       if train_metrics is None:
@@ -365,10 +384,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       hook(step)
 
     # Log, if required.
-    is_last_step = (step == config.num_train_steps - 1)
+    is_last_step = step == config.num_train_steps - 1
     if step % config.log_every_steps == 0 or is_last_step:
-      writer.write_scalars(step,
-                           add_prefix_to_keys(train_metrics.compute(), 'train'))
+      writer.write_scalars(
+          step, add_prefix_to_keys(train_metrics.compute(), 'train')
+      )
       train_metrics = None
 
     # Evaluate on validation and test splits, if required.
@@ -380,7 +400,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
         eval_metrics = evaluate_model(eval_state, datasets, splits=splits)
       for split in splits:
         writer.write_scalars(
-            step, add_prefix_to_keys(eval_metrics[split].compute(), split))
+            step, add_prefix_to_keys(eval_metrics[split].compute(), split)
+        )
 
     # Checkpoint model, if required.
     if step % config.checkpoint_every_steps == 0 or is_last_step:

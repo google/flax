@@ -25,7 +25,6 @@ from jax import lax
 import jax.numpy as jnp
 
 
-
 Array = Any
 
 
@@ -79,17 +78,20 @@ class DynamicScale(struct.PyTreeNode):
     fin_steps: indicates how many gradient steps in a row have been finite.
     scale: the current scale by which the loss is multiplied.
   """
+
   growth_factor: float = struct.field(pytree_node=False, default=2.0)
   backoff_factor: float = struct.field(pytree_node=False, default=0.5)
   growth_interval: int = struct.field(pytree_node=False, default=2000)
   fin_steps: Array = 0
   scale: Array = 65536.0
 
-  def value_and_grad(self, fun: Callable[..., Any],
-                     argnums: Union[int, Sequence[int]] = 0,
-                     has_aux: bool = False,
-                     axis_name: Optional[str] = None,
-                     ) -> Callable[..., DynamicScaleResult]:
+  def value_and_grad(
+      self,
+      fun: Callable[..., Any],
+      argnums: Union[int, Sequence[int]] = 0,
+      has_aux: bool = False,
+      axis_name: Optional[str] = None,
+  ) -> Callable[..., DynamicScaleResult]:
     """Wrapper around `jax.value_and_grad`.
 
     Args:
@@ -109,6 +111,7 @@ class DynamicScale(struct.PyTreeNode):
       A function that takes the same arguments as `fun` and
       returns a DynamicScaleResult
     """
+
     @functools.wraps(fun)
     def loss_wrapper(*args):
       aux = fun(*args)
@@ -118,12 +121,14 @@ class DynamicScale(struct.PyTreeNode):
         return self.scale * aux
 
     grad_fn = jax.value_and_grad(loss_wrapper, argnums, has_aux)
+
     def grad_fn_wrapper(*args):
       aux, grad = grad_fn(*args)
       aux = (aux[0] / self.scale, aux[1]) if has_aux else aux / self.scale
 
       grad = jax.tree_util.tree_map(
-          lambda g: jnp.asarray(g, jnp.float32) / self.scale, grad)
+          lambda g: jnp.asarray(g, jnp.float32) / self.scale, grad
+      )
       if axis_name is not None:
         grad = lax.pmean(grad, axis_name)
 
@@ -134,12 +139,16 @@ class DynamicScale(struct.PyTreeNode):
       grow = self.fin_steps == self.growth_interval
       fin_scale = jnp.where(
           grow & finite,
-          jnp.minimum(self.scale * self.growth_factor, jnp.finfo(jnp.float32).max),
-          self.scale)
+          jnp.minimum(
+              self.scale * self.growth_factor, jnp.finfo(jnp.float32).max
+          ),
+          self.scale,
+      )
       inf_scale = self.scale * self.backoff_factor
       new_scale = jnp.where(finite, fin_scale, inf_scale)
       new_fin_steps = jnp.where(grow | (~finite), 0, self.fin_steps + 1)
 
       new_self = self.replace(fin_steps=new_fin_steps, scale=new_scale)
       return DynamicScaleResult(new_self, finite, aux, grad)
+
     return grad_fn_wrapper

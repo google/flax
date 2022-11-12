@@ -19,7 +19,7 @@ see: https://flax.readthedocs.io/en/latest/advanced_topics/lift.html.
 """
 
 import abc
-from functools import partial   # pylint: disable=g-importing-member
+from functools import partial  # pylint: disable=g-importing-member
 from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 
 from flax.linen.activation import sigmoid
@@ -115,19 +115,23 @@ class LSTMCell(RNNCellBase):
     c, h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(Dense,
-                      features=hidden_features,
-                      use_bias=True,
-                      kernel_init=self.recurrent_kernel_init,
-                      bias_init=self.bias_init,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype)
-    dense_i = partial(Dense,
-                      features=hidden_features,
-                      use_bias=False,
-                      kernel_init=self.kernel_init,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype)
+    dense_h = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=True,
+        kernel_init=self.recurrent_kernel_init,
+        bias_init=self.bias_init,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+    )
+    dense_i = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=False,
+        kernel_init=self.kernel_init,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+    )
     i = self.gate_fn(dense_i(name='ii')(inputs) + dense_h(name='hi')(h))
     f = self.gate_fn(dense_i(name='if')(inputs) + dense_h(name='hf')(h))
     g = self.activation_fn(dense_i(name='ig')(inputs) + dense_h(name='hg')(h))
@@ -166,8 +170,11 @@ class DenseParams(Module):
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Array]:
     k = self.param(
-        'kernel', self.kernel_init, (inputs.shape[-1], self.features),
-        self.param_dtype)
+        'kernel',
+        self.kernel_init,
+        (inputs.shape[-1], self.features),
+        self.param_dtype,
+    )
     if self.use_bias:
       b = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
     else:
@@ -219,8 +226,9 @@ class OptimizedLSTMCell(RNNCellBase):
   param_dtype: Dtype = jnp.float32
 
   @compact
-  def __call__(self, carry: Tuple[Array, Array],
-               inputs: Array) -> Tuple[Tuple[Array, Array], Array]:
+  def __call__(
+      self, carry: Tuple[Array, Array], inputs: Array
+  ) -> Tuple[Tuple[Array, Array], Array]:
     r"""An optimized long short-term memory (LSTM) cell.
 
     Args:
@@ -235,9 +243,11 @@ class OptimizedLSTMCell(RNNCellBase):
     c, h = carry
     hidden_features = h.shape[-1]
 
-    def _concat_dense(inputs: Array,
-                      params: Mapping[str, Tuple[Array, Array]],
-                      use_bias: bool = True) -> Array:
+    def _concat_dense(
+        inputs: Array,
+        params: Mapping[str, Tuple[Array, Array]],
+        use_bias: bool = True,
+    ) -> Array:
       # Concatenates the individual kernels and biases, given in params, into a
       # single kernel and single bias for efficiency before applying them using
       # dot_general.
@@ -247,7 +257,9 @@ class OptimizedLSTMCell(RNNCellBase):
         bias = jnp.concatenate(biases, axis=-1)
       else:
         bias = None
-      inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
+      inputs, kernel, bias = promote_dtype(
+          inputs, kernel, bias, dtype=self.dtype
+      )
       y = jnp.dot(inputs, kernel)
       if use_bias:
         y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
@@ -262,15 +274,21 @@ class OptimizedLSTMCell(RNNCellBase):
     dense_params_i = {}
     for component in ['i', 'f', 'g', 'o']:
       dense_params_i[component] = DenseParams(
-          features=hidden_features, use_bias=False,
+          features=hidden_features,
+          use_bias=False,
           param_dtype=self.param_dtype,
-          kernel_init=self.kernel_init, bias_init=self.bias_init,
-          name=f'i{component}')(inputs)
+          kernel_init=self.kernel_init,
+          bias_init=self.bias_init,
+          name=f'i{component}',
+      )(inputs)
       dense_params_h[component] = DenseParams(
-          features=hidden_features, use_bias=True,
+          features=hidden_features,
+          use_bias=True,
           param_dtype=self.param_dtype,
-          kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
-          name=f'h{component}')(h)
+          kernel_init=self.recurrent_kernel_init,
+          bias_init=self.bias_init,
+          name=f'h{component}',
+      )(h)
     dense_h = _concat_dense(h, dense_params_h, use_bias=True)
     dense_i = _concat_dense(inputs, dense_params_i, use_bias=False)
 
@@ -331,10 +349,8 @@ class GRUCell(RNNCellBase):
   """
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
-  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      default_kernel_init)
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      orthogonal())
+  kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
@@ -355,26 +371,31 @@ class GRUCell(RNNCellBase):
     h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(Dense,
-                      features=hidden_features,
-                      use_bias=False,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype,
-                      kernel_init=self.recurrent_kernel_init,
-                      bias_init=self.bias_init)
-    dense_i = partial(Dense,
-                      features=hidden_features,
-                      use_bias=True,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype,
-                      kernel_init=self.kernel_init,
-                      bias_init=self.bias_init)
+    dense_h = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=False,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        kernel_init=self.recurrent_kernel_init,
+        bias_init=self.bias_init,
+    )
+    dense_i = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=True,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        kernel_init=self.kernel_init,
+        bias_init=self.bias_init,
+    )
     r = self.gate_fn(dense_i(name='ir')(inputs) + dense_h(name='hr')(h))
     z = self.gate_fn(dense_i(name='iz')(inputs) + dense_h(name='hz')(h))
     # add bias because the linear transformations aren't directly summed.
-    n = self.activation_fn(dense_i(name='in')(inputs) +
-                           r * dense_h(name='hn', use_bias=True)(h))
-    new_h = (1. - z) * n + z * h
+    n = self.activation_fn(
+        dense_i(name='in')(inputs) + r * dense_h(name='hn', use_bias=True)(h)
+    )
+    new_h = (1.0 - z) * n + z * h
     return new_h, new_h
 
   @staticmethod
@@ -454,25 +475,29 @@ class ConvLSTM(RNNCellBase):
       A tuple with the new carry and the output.
     """
     c, h = carry
-    input_to_hidden = partial(Conv,
-                              features=4*self.features,
-                              kernel_size=self.kernel_size,
-                              strides=self.strides,
-                              padding=self.padding,
-                              use_bias=self.use_bias,
-                              dtype=self.dtype,
-                              param_dtype=self.param_dtype,
-                              name='ih')
+    input_to_hidden = partial(
+        Conv,
+        features=4 * self.features,
+        kernel_size=self.kernel_size,
+        strides=self.strides,
+        padding=self.padding,
+        use_bias=self.use_bias,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        name='ih',
+    )
 
-    hidden_to_hidden = partial(Conv,
-                               features=4*self.features,
-                               kernel_size=self.kernel_size,
-                               strides=self.strides,
-                               padding=self.padding,
-                               use_bias=self.use_bias,
-                               dtype=self.dtype,
-                               param_dtype=self.param_dtype,
-                               name='hh')
+    hidden_to_hidden = partial(
+        Conv,
+        features=4 * self.features,
+        kernel_size=self.kernel_size,
+        strides=self.strides,
+        padding=self.padding,
+        use_bias=self.use_bias,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        name='hh',
+    )
 
     gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)
     i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)

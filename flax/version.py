@@ -14,4 +14,3 @@
 
 """Current Flax version at head on Github."""
 __version__ = "0.6.1"
-

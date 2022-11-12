@@ -55,16 +55,16 @@ class TrainTest(parameterized.TestCase):
 
     Uses smaller inputs than `test_create_model` to due to higher compute.
     """
-    model = train.create_model(model_cls=models._ResNet1Local, half_precision=False)  # pylint: disable=protected-access
+    model = train.create_model(
+        model_cls=models._ResNet1Local, half_precision=False
+    )  # pylint: disable=protected-access
     params, batch_stats = train.initialized(random.PRNGKey(0), 64, model)
     variables = {'params': params, 'batch_stats': batch_stats}
     x = random.normal(random.PRNGKey(1), (1, 64, 64, 3))
     y = model.apply(variables, x, train=False)
     self.assertEqual(y.shape, (1, 1000))
 
-  @parameterized.product(
-      model=('_ResNet1', '_ResNet1Local')
-  )
+  @parameterized.product(model=('_ResNet1', '_ResNet1Local'))
   def test_train_and_evaluate(self, model):
     """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.

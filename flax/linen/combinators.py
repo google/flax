@@ -43,6 +43,7 @@ class Sequential(Module):
                               nn.Dense(2),
                               nn.log_softmax])(x)
   """
+
   layers: Sequence[Callable[..., Any]]
 
   def __call__(self, *args, **kwargs):

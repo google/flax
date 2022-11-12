@@ -59,6 +59,7 @@ Path = Tuple[str, ...]
 class _EmptyNode:
   pass
 
+
 empty_node = _EmptyNode()
 
 
@@ -99,8 +100,8 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
     The flattened dictionary.
   """
   assert isinstance(
-      xs,
-      (flax.core.FrozenDict, dict)), f'expected (frozen)dict got {type(xs)}'
+      xs, (flax.core.FrozenDict, dict)
+  ), f'expected (frozen)dict got {type(xs)}'
 
   def _key(path):
     if sep is None:
@@ -109,7 +110,8 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
 
   def _flatten(xs, prefix):
     if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
-        is_leaf and is_leaf(prefix, xs)):
+        is_leaf and is_leaf(prefix, xs)
+    ):
       return {_key(prefix): xs}
     result = {}
     is_empty = True
@@ -122,6 +124,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
         return {}
       return {_key(prefix): empty_node}
     return result
+
   return _flatten(xs, ())
 
 
@@ -164,8 +167,10 @@ def unflatten_dict(xs, sep=None):
     cursor[path[-1]] = value
   return result
 
+
 def path_aware_map(
-  f: Callable[[Path, Any], Any], nested_dict: VariableDict) -> VariableDict:
+    f: Callable[[Path, Any], Any], nested_dict: VariableDict
+) -> VariableDict:
   """A map function that operates over nested dictionary structures while taking
   the path to each leaf into account.
 
@@ -188,8 +193,10 @@ def path_aware_map(
     A new nested dictionary structure with the mapped values.
   """
   flat = flatten_dict(nested_dict, keep_empty_nodes=True)
-  return unflatten_dict({
-    k: f(k, v) if v is not empty_node else v for k, v in flat.items()})
+  return unflatten_dict(
+      {k: f(k, v) if v is not empty_node else v for k, v in flat.items()}
+  )
+
 
 class Traversal(abc.ABC):
   """Base class for all traversals."""
@@ -200,7 +207,9 @@ class Traversal(abc.ABC):
         '`flax.traverse_util.Traversal` will be deprecated. If you are using '
         'it for `flax.optim`, use `optax` instead. Refer to the update guide '
         'https://flax.readthedocs.io/en/latest/advanced_topics/optax_update_guide.html '
-        'for detailed instructions.', DeprecationWarning)
+        'for detailed instructions.',
+        DeprecationWarning,
+    )
     return super().__new__(cls)
 
   @abc.abstractmethod
@@ -236,6 +245,7 @@ class Traversal(abc.ABC):
     Returns:
       A new object with the updated values.
     """
+
     def update_fn(_):
       if not values:
         raise ValueError('Not enough values provided')
@@ -379,8 +389,10 @@ class TraverseItem(Traversal):
         sl = slice(self._key, self._key + 1)
       indices = set(range(*sl.indices(len(inputs))))
 
-      args = [fn(inputs[i]) if i in indices else inputs[i]
-              for i in range(len(inputs))]
+      args = [
+          fn(inputs[i]) if i in indices else inputs[i]
+          for i in range(len(inputs))
+      ]
       if _is_namedtuple(ty):
         return ty(*args)
       else:
@@ -416,8 +428,7 @@ class TraverseEach(Traversal):
 
 
 class TraverseTree(Traversal):
-  """Traverse every item in a pytree.
-  """
+  """Traverse every item in a pytree."""
 
   def update(self, fn, inputs):
     return jax.tree_util.tree_map(fn, inputs)
@@ -432,7 +443,8 @@ def _get_params_dict(inputs):
   else:
     raise ValueError(
         'Can only traverse a flax Model instance or a nested dict, not '
-        f'{type(inputs)}')
+        f'{type(inputs)}'
+    )
 
 
 def _sorted_items(x):

@@ -31,9 +31,16 @@ class DenseExplicit(Dense):
   def setup(self):
     # We feed a fake batch through the module, which initialized parameters.
     # Assuming we're in a jit, should use no FLOPs -- "just shape inference".
-    self.__call__(jnp.zeros((1, self.in_features, )))
+    self.__call__(
+        jnp.zeros((
+            1,
+            self.in_features,
+        ))
+    )
+
 
 class MLP(Module):
+
   def setup(self):
     self.dense1 = DenseExplicit(in_features=3, features=2)
     self.dense2 = DenseExplicit(in_features=2, features=1)
@@ -44,9 +51,9 @@ class MLP(Module):
     #            'kernel': DeviceArray([[ 0.6704609 ],
     #              [-0.90477365]], dtype=float32)}}
 
-
   def __call__(self, x):
     return self.dense2(nn.relu(self.dense1(x)))
+
 
 # Return an initialized instance of MLP by only calling `setup`.
 rngkey = jax.random.PRNGKey(10)

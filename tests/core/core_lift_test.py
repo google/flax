@@ -25,6 +25,7 @@ import numpy as np
 
 from absl.testing import absltest
 
+
 class LiftTest(absltest.TestCase):
 
   def test_aliasing(self):
@@ -41,10 +42,13 @@ class LiftTest(absltest.TestCase):
 
   def test_undefined_param(self):
     def f(scope):
-      dense = lift.vmap(nn.dense,
-                        in_axes=(0, None), out_axes=0,
-                        variable_axes={'params': 0},
-                        split_rngs={'params': True})
+      dense = lift.vmap(
+          nn.dense,
+          in_axes=(0, None),
+          out_axes=0,
+          variable_axes={'params': 0},
+          split_rngs={'params': True},
+      )
       dense(scope.push('dense'), np.ones((3, 2)), 2)
 
     msg = r'Could not find parameter named "kernel" in scope "/vmap\(dense\)".'
@@ -53,11 +57,14 @@ class LiftTest(absltest.TestCase):
 
   def test_jit_cache(self):
     compiles = 0
+
     @lift.jit
     def f(scope, x):
       nonlocal compiles
       compiles += 1
-      if scope.is_mutable_collection('intermediates') and not scope.is_mutable_collection('params'):
+      if scope.is_mutable_collection(
+          'intermediates'
+      ) and not scope.is_mutable_collection('params'):
         scope.put_variable('intermediates', 'x', x + 1)
       return nn.dense(scope, x, 1)
 
@@ -75,7 +82,6 @@ class LiftTest(absltest.TestCase):
     self.assertEqual(compiles, 3)  # applying again should not
     self.assertEqual(state['intermediates']['x'].sum(), 3 * 2 * 2)
 
-
   def test_vjp(self):
     def g(scope, x, y):
       p = scope.param('test', nn.initializers.constant(0.5), ())
@@ -86,15 +92,18 @@ class LiftTest(absltest.TestCase):
       z, bwd = lift.vjp(g, scope, x, y)
       return bwd(jnp.ones(y.shape))
 
-    x = jnp.array([1., 2., 3.])
-    y = jnp.array([4., 5., 6.])
+    x = jnp.array([1.0, 2.0, 3.0])
+    y = jnp.array([4.0, 5.0, 6.0])
     _, params = init(f)(random.PRNGKey(0), x, y)
     params_grad, x_grad, y_grad = apply(f)(params, x, y)
-    self.assertEqual(params_grad, {
-      'params': FrozenDict({'test': 32.}),
-    })
-    np.testing.assert_allclose(x_grad, [2., 2.5, 3.])
-    np.testing.assert_allclose(y_grad, [0.5, 1., 1.5])
+    self.assertEqual(
+        params_grad,
+        {
+            'params': FrozenDict({'test': 32.0}),
+        },
+    )
+    np.testing.assert_allclose(x_grad, [2.0, 2.5, 3.0])
+    np.testing.assert_allclose(y_grad, [0.5, 1.0, 1.5])
 
   def test_jvp(self):
     def g(scope, x):
@@ -103,8 +112,12 @@ class LiftTest(absltest.TestCase):
       return p * x
 
     def f(scope, x):
-      vars_t = jax.tree_util.tree_map(jnp.ones_like, scope.variables().get('params', {}))
-      _, out_t = lift.jvp(g, scope, (x,), (jnp.zeros_like(x),), {'params': vars_t})
+      vars_t = jax.tree_util.tree_map(
+          jnp.ones_like, scope.variables().get('params', {})
+      )
+      _, out_t = lift.jvp(
+          g, scope, (x,), (jnp.zeros_like(x),), {'params': vars_t}
+      )
       return out_t
 
     x = jnp.ones((3,))
@@ -122,27 +135,54 @@ class LiftTest(absltest.TestCase):
       def cond_fn(scope, c):
         acc = scope.get_variable('state', 'acc')
         return acc < x
+
       def body_fn(scope, c):
         i = scope.get_variable('state', 'acc')
         p_rng = scope.make_rng('params')
         l_rng = scope.make_rng('loop')
-        scope.put_variable('state', 'rng_params', scope.get_variable('state', 'rng_params').at[i].set(p_rng))
-        scope.put_variable('state', 'rng_loop', scope.get_variable('state', 'rng_loop').at[i].set(l_rng))
+        scope.put_variable(
+            'state',
+            'rng_params',
+            scope.get_variable('state', 'rng_params').at[i].set(p_rng),
+        )
+        scope.put_variable(
+            'state',
+            'rng_loop',
+            scope.get_variable('state', 'rng_loop').at[i].set(l_rng),
+        )
         inc = scope.get_variable('params', 'inc')
         scope.put_variable('state', 'acc', i + inc)
         return c + 2
-      return lift.while_loop(cond_fn, body_fn, scope, 0, carry_variables='state', split_rngs={'params': False, 'loop': True})
+
+      return lift.while_loop(
+          cond_fn,
+          body_fn,
+          scope,
+          0,
+          carry_variables='state',
+          split_rngs={'params': False, 'loop': True},
+      )
+
     x = 2
-    c, vars = apply(f, mutable=True)({}, x, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    c, vars = apply(f, mutable=True)(
+        {}, x, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)}
+    )
     self.assertEqual(vars['state']['acc'], x)
     self.assertEqual(c, 2 * x)
-    np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
-    np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])
+    np.testing.assert_array_equal(
+        vars['state']['rng_params'][0], vars['state']['rng_params'][1]
+    )
+    np.testing.assert_array_compare(
+        operator.__ne__,
+        vars['state']['rng_loop'][0],
+        vars['state']['rng_loop'][1],
+    )
 
   def test_cond(self):
     def f(scope, x, pred):
       scope.variable('state', 'true_count', lambda: 0)
       scope.variable('state', 'false_count', lambda: 0)
+
       def true_fn(scope, x):
         scope.variable('state', 'true_count').value += 1
         return scope.child(nn.dense)(x, 2)
@@ -155,9 +195,13 @@ class LiftTest(absltest.TestCase):
 
     x = jnp.ones((1, 3))
     y1, vars = init(f)(random.PRNGKey(0), x, True)
-    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
-    y2, vars = apply(f, mutable="state")(vars, x, False)
-    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    self.assertEqual(
+        vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0}
+    )
+    y2, vars = apply(f, mutable='state')(vars, x, False)
+    self.assertEqual(
+        vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1}
+    )
     np.testing.assert_allclose(y1, -y2)
 
   def test_switch(self):
@@ -182,33 +226,40 @@ class LiftTest(absltest.TestCase):
 
     x = jnp.ones((1, 3))
     y1, vars = init(f)(random.PRNGKey(0), x, 0)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 0, 'c_count': 0})
-    y2, updates = apply(f, mutable="state")(vars, x, 1)
+    self.assertEqual(
+        vars['state'].unfreeze(), {'a_count': 1, 'b_count': 0, 'c_count': 0}
+    )
+    y2, updates = apply(f, mutable='state')(vars, x, 1)
     vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 0})
+    self.assertEqual(
+        vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 0}
+    )
     np.testing.assert_allclose(y1, -y2)
-    y3, updates = apply(f, mutable="state")(vars, x, 2)
+    y3, updates = apply(f, mutable='state')(vars, x, 2)
     vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 1})
+    self.assertEqual(
+        vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 1}
+    )
     np.testing.assert_allclose(y1, y3)
 
   def test_subscope_var_aliasing(self):
     def test(scope, x):
-      subscope = scope.push(name="a")
-      subscope.put_variable('state', 'x', 0.)
+      subscope = scope.push(name='a')
+      subscope.put_variable('state', 'x', 0.0)
       _ = lift.while_loop(
-        lambda scope, x: False,
-        lambda scope, x: x,
-        scope,
-        jnp.array(0, jnp.int32),
-        carry_variables=['state'],
+          lambda scope, x: False,
+          lambda scope, x: x,
+          scope,
+          jnp.array(0, jnp.int32),
+          carry_variables=['state'],
       )
-      subscope.put_variable('state', 'x', 1.)
+      subscope.put_variable('state', 'x', 1.0)
       val0 = scope.variables()['state']['a']['x']
       val1 = subscope.variables()['state']['x']
       self.assertEqual(val0, val1)
       return x
-    init(test)( random.PRNGKey(0), 1.)
+
+    init(test)(random.PRNGKey(0), 1.0)
 
 
 if __name__ == '__main__':

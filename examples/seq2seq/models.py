@@ -31,6 +31,7 @@ PRNGKey = Any
 
 class EncoderLSTM(nn.Module):
   """EncoderLSTM Module wrapped in a lifted scan transform."""
+
   eos_id: int
 
   @functools.partial(
@@ -38,19 +39,23 @@ class EncoderLSTM(nn.Module):
       variable_broadcast='params',
       in_axes=1,
       out_axes=1,
-      split_rngs={'params': False})
+      split_rngs={'params': False},
+  )
   @nn.compact
-  def __call__(self, carry: Tuple[Array, Array],
-               x: Array) -> Tuple[Tuple[Array, Array], Array]:
+  def __call__(
+      self, carry: Tuple[Array, Array], x: Array
+  ) -> Tuple[Tuple[Array, Array], Array]:
     """Applies the module."""
     lstm_state, is_eos = carry
     new_lstm_state, y = nn.LSTMCell()(lstm_state, x)
     # Pass forward the previous state if EOS has already been reached.
     def select_carried_state(new_state, old_state):
       return jnp.where(is_eos[:, np.newaxis], old_state, new_state)
+
     # LSTM state is a tuple (c, h).
     carried_lstm_state = tuple(
-        select_carried_state(*s) for s in zip(new_lstm_state, lstm_state))
+        select_carried_state(*s) for s in zip(new_lstm_state, lstm_state)
+    )
     # Update `is_eos`.
     is_eos = jnp.logical_or(is_eos, x[:, self.eos_id])
     return (carried_lstm_state, is_eos), y
@@ -59,11 +64,13 @@ class EncoderLSTM(nn.Module):
   def initialize_carry(batch_size: int, hidden_size: int):
     # Use a dummy key since the default state init fn is just zeros.
     return nn.LSTMCell.initialize_carry(
-        jax.random.PRNGKey(0), (batch_size,), hidden_size)
+        jax.random.PRNGKey(0), (batch_size,), hidden_size
+    )
 
 
 class Encoder(nn.Module):
   """LSTM encoder, returning state after finding the EOS token in the input."""
+
   hidden_size: int
   eos_id: int
 
@@ -88,6 +95,7 @@ class DecoderLSTM(nn.Module):
     teacher_force: See docstring on Seq2seq module.
     vocab_size: Size of the vocabulary.
   """
+
   teacher_force: bool
   vocab_size: int
 
@@ -96,7 +104,8 @@ class DecoderLSTM(nn.Module):
       variable_broadcast='params',
       in_axes=1,
       out_axes=1,
-      split_rngs={'params': False, 'lstm': True})
+      split_rngs={'params': False, 'lstm': True},
+  )
   @nn.compact
   def __call__(self, carry: Tuple[Array, Array], x: Array) -> Array:
     """Applies the DecoderLSTM model."""
@@ -111,7 +120,8 @@ class DecoderLSTM(nn.Module):
     predicted_token = jax.random.categorical(categorical_rng, logits)
     # Convert to one-hot encoding.
     prediction = jax.nn.one_hot(
-        predicted_token, self.vocab_size, dtype=jnp.float32)
+        predicted_token, self.vocab_size, dtype=jnp.float32
+    )
 
     return (lstm_state, prediction), (logits, prediction)
 
@@ -125,6 +135,7 @@ class Decoder(nn.Module):
     teacher_force: See docstring on Seq2seq module.
     vocab_size: Size of the vocabulary.
   """
+
   init_state: Tuple[Any]
   teacher_force: bool
   vocab_size: int
@@ -143,8 +154,9 @@ class Decoder(nn.Module):
       Pair (logits, predictions), which are two arrays of respectively decoded
       logits and predictions (in one hot-encoding format).
     """
-    lstm = DecoderLSTM(teacher_force=self.teacher_force,
-                       vocab_size=self.vocab_size)
+    lstm = DecoderLSTM(
+        teacher_force=self.teacher_force, vocab_size=self.vocab_size
+    )
     init_carry = (self.init_state, inputs[:, 0])
     _, (logits, predictions) = lstm(init_carry, inputs)
     return logits, predictions
@@ -162,14 +174,16 @@ class Seq2seq(nn.Module):
     vocab_size: the size of the vocabulary.
     eos_id: EOS id.
   """
+
   teacher_force: bool
   hidden_size: int
   vocab_size: int
   eos_id: int = 1
 
   @nn.compact
-  def __call__(self, encoder_inputs: Array,
-               decoder_inputs: Array) -> Tuple[Array, Array]:
+  def __call__(
+      self, encoder_inputs: Array, decoder_inputs: Array
+  ) -> Tuple[Array, Array]:
     """Applies the seq2seq model.
 
     Args:
@@ -190,11 +204,13 @@ class Seq2seq(nn.Module):
     """
     # Encode inputs.
     init_decoder_state = Encoder(
-        hidden_size=self.hidden_size, eos_id=self.eos_id)(encoder_inputs)
+        hidden_size=self.hidden_size, eos_id=self.eos_id
+    )(encoder_inputs)
     # Decode outputs.
     logits, predictions = Decoder(
         init_state=init_decoder_state,
         teacher_force=self.teacher_force,
-        vocab_size=self.vocab_size)(decoder_inputs[:, :-1])
+        vocab_size=self.vocab_size,
+    )(decoder_inputs[:, :-1])
 
     return logits, predictions

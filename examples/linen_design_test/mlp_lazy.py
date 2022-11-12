@@ -24,6 +24,7 @@ from dense import Dense
 # Here submodules are explicitly defined during init, but still materialized
 # lazily only once a first input is passed through and shapes are known.
 class MLP(Module):
+
   def setup(self):
     self.dense1 = Dense(features=2)
     self.dense2 = Dense(features=1)
@@ -34,6 +35,7 @@ class MLP(Module):
 
   def __call__(self, x):
     return self.dense2(nn.relu(self.dense1(x)))
+
 
 # Return an initialized instance of MLP by calling `__call__` with an input batch,
 # initializing all variables.
@@ -50,4 +52,3 @@ pprint(mlp_variables)
 #            'dense2': {'bias': DeviceArray([0.], dtype=float32),
 #                       'kernel': DeviceArray([[ 0.6704609 ],
 #              [-0.90477365]], dtype=float32)}}}
-

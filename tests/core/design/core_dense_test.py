@@ -33,7 +33,9 @@ class Dense:
   bias_init: Any = nn.initializers.zeros
 
   def __call__(self, scope, x):
-    kernel = scope.param('kernel', self.kernel_init, (x.shape[-1], self.features))
+    kernel = scope.param(
+        'kernel', self.kernel_init, (x.shape[-1], self.features)
+    )
     y = x @ kernel
     if self.bias:
       bias = scope.param('bias', self.bias_init, (self.features,))
@@ -48,9 +50,14 @@ class ExplicitDense:
 
   # a fully explicit "scope free" version
   @staticmethod
-  def create(rng, in_size, out_size, bias=True,
-             kernel_init=nn.linear.default_kernel_init,
-             bias_init=nn.initializers.zeros):
+  def create(
+      rng,
+      in_size,
+      out_size,
+      bias=True,
+      kernel_init=nn.linear.default_kernel_init,
+      bias_init=nn.initializers.zeros,
+  ):
     k1, k2 = random.split(rng, 2)
     kernel = kernel_init(k1, (in_size, out_size))
     if bias:
@@ -61,9 +68,14 @@ class ExplicitDense:
 
   # a semi-explicit version where a scope is used to create explicit params
   @staticmethod
-  def create_in_scope(scope, in_size, out_size, bias=True,
-                      kernel_init=nn.linear.default_kernel_init,
-                      bias_init=nn.initializers.zeros):
+  def create_in_scope(
+      scope,
+      in_size,
+      out_size,
+      bias=True,
+      kernel_init=nn.linear.default_kernel_init,
+      bias_init=nn.initializers.zeros,
+  ):
     kernel = scope.param('kernel', kernel_init, (in_size, out_size))
     if bias:
       bias = scope.param('bias', bias_init, (out_size,))
@@ -77,6 +89,7 @@ class ExplicitDense:
       y += self.bias.reshape((1,) * (y.ndim - 1) + (-1,))
     return y
 
+
 def explicit_mlp(scope, x, sizes=(3, 1)):
   for i, size in enumerate(sizes):
     dense = scope.param(f'dense_{i}', ExplicitDense.create, x.shape[-1], size)
@@ -85,9 +98,12 @@ def explicit_mlp(scope, x, sizes=(3, 1)):
       x = nn.relu(x)
   return x
 
+
 def semi_explicit_mlp(scope, x, sizes=(3, 1)):
   for i, size in enumerate(sizes):
-    dense = scope.child(ExplicitDense.create_in_scope, prefix='dense_')(x.shape[-1], size)
+    dense = scope.child(ExplicitDense.create_in_scope, prefix='dense_')(
+        x.shape[-1], size
+    )
     x = dense(x)
     if i + 1 < len(sizes):
       x = nn.relu(x)
@@ -101,45 +117,61 @@ class DenseTest(absltest.TestCase):
     x = jnp.ones((1, 3))
     y, variables = init(model)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(y.shape, (1, 4))
-    self.assertEqual(param_shapes, {
-        'kernel': (3, 4),
-        'bias': (4,),
-    })
+    self.assertEqual(
+        param_shapes,
+        {
+            'kernel': (3, 4),
+            'bias': (4,),
+        },
+    )
 
   def test_explicit_dense(self):
     x = jnp.ones((1, 3))
     y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(y.shape, (1, 4))
-    self.assertEqual(param_shapes, {
-        'kernel': (3, 4),
-        'bias': (4,),
-    })
+    self.assertEqual(
+        param_shapes,
+        {
+            'kernel': (3, 4),
+            'bias': (4,),
+        },
+    )
 
   def test_explicit_dense(self):
     x = jnp.ones((1, 4))
     y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(y.shape, (1, 1))
-    self.assertEqual(param_shapes, {
-        'dense_0': ExplicitDense((4, 3), (3,)),
-        'dense_1': ExplicitDense((3, 1), (1,))
-    })
+    self.assertEqual(
+        param_shapes,
+        {
+            'dense_0': ExplicitDense((4, 3), (3,)),
+            'dense_1': ExplicitDense((3, 1), (1,)),
+        },
+    )
 
   def test_semi_explicit_dense(self):
     x = jnp.ones((1, 4))
     y, variables = init(semi_explicit_mlp)(random.PRNGKey(0), x)
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(y.shape, (1, 1))
-    self.assertEqual(param_shapes, {
-        'dense_0': {'kernel': (4, 3), 'bias': (3,)},
-        'dense_1': {'kernel': (3, 1), 'bias': (1,)}
-    })
+    self.assertEqual(
+        param_shapes,
+        {
+            'dense_0': {'kernel': (4, 3), 'bias': (3,)},
+            'dense_1': {'kernel': (3, 1), 'bias': (1,)},
+        },
+    )
 
 
 if __name__ == '__main__':

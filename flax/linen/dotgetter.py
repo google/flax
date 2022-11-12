@@ -33,6 +33,7 @@ def is_leaf(x):
 #     unfreeze(DotGetter(d)) == unfreeze(d)
 class DotGetter(MutableMapping, dict):  # pytype: disable=mro-error
   """Dot-notation helper for interactive access of variable trees."""
+
   __slots__ = ('_data',)
 
   def __init__(self, data):
@@ -91,13 +92,16 @@ class DotGetter(MutableMapping, dict):  # pytype: disable=mro-error
   def copy(self, **kwargs):
     return self._data.__class__(self._data.copy(**kwargs))
 
+
 tree_util.register_pytree_node(
     DotGetter,
     lambda x: ((x._data,), ()),  # pylint: disable=protected-access
-    lambda _, data: data[0])
+    lambda _, data: data[0],
+)
 
 # Note: restores as raw dict, intentionally.
 serialization.register_serialization_state(
     DotGetter,
     serialization._dict_state_dict,  # pylint: disable=protected-access
-    serialization._restore_dict)  # pylint: disable=protected-access
+    serialization._restore_dict,
+)  # pylint: disable=protected-access

@@ -25,7 +25,7 @@ import jax
 from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 
 
-_T = TypeVar("_T")
+_T = TypeVar('_T')
 
 
 def field(pytree_node=True, **kwargs):
@@ -110,7 +110,7 @@ def dataclass(clz: _T) -> _T:
       meta_fields.append(field_info.name)
 
   def replace(self, **updates):
-    """"Returns a new object replacing the specified fields with new values."""
+    """ "Returns a new object replacing the specified fields with new values."""
     return dataclasses.replace(self, **updates)
 
   data_clz.replace = replace
@@ -126,18 +126,20 @@ def dataclass(clz: _T) -> _T:
     kwargs = dict(meta_args + data_args)
     return data_clz(**kwargs)
 
-  jax.tree_util.register_pytree_node(data_clz,
-                                     iterate_clz,
-                                     clz_from_iterable)
+  jax.tree_util.register_pytree_node(data_clz, iterate_clz, clz_from_iterable)
 
   if tuple(map(int, jax.version.__version__.split('.'))) >= (0, 3, 1):
+
     def keypaths(_):
       return [jax.tree_util.AttributeKeyPathEntry(name) for name in data_fields]
+
     jax.tree_util.register_keypaths(data_clz, keypaths)
 
   def to_state_dict(x):
-    state_dict = {name: serialization.to_state_dict(getattr(x, name))
-                  for name in data_fields}
+    state_dict = {
+        name: serialization.to_state_dict(getattr(x, name))
+        for name in data_fields
+    }
     return state_dict
 
   def from_state_dict(x, state):
@@ -146,19 +148,24 @@ def dataclass(clz: _T) -> _T:
     updates = {}
     for name in data_fields:
       if name not in state:
-        raise ValueError(f'Missing field {name} in state dict while restoring'
-                         f' an instance of {clz.__name__}')
+        raise ValueError(
+            f'Missing field {name} in state dict while restoring'
+            f' an instance of {clz.__name__}'
+        )
       value = getattr(x, name)
       value_state = state.pop(name)
       updates[name] = serialization.from_state_dict(value, value_state)
     if state:
       names = ','.join(state.keys())
-      raise ValueError(f'Unknown field(s) "{names}" in state dict while'
-                       f' restoring an instance of {clz.__name__}')
+      raise ValueError(
+          f'Unknown field(s) "{names}" in state dict while'
+          f' restoring an instance of {clz.__name__}'
+      )
     return x.replace(**updates)
 
   serialization.register_serialization_state(
-      data_clz, to_state_dict, from_state_dict)
+      data_clz, to_state_dict, from_state_dict
+  )
 
   # add a _flax_dataclass flag to distinguish from regular dataclasses
   data_clz._flax_dataclass = True
