@@ -45,9 +45,9 @@ class PadShardUnpadTest(chex.TestCase, tf.test.TestCase):
       return a + b
 
     x = np.arange(bs, dtype=dtype)
-    y = add(x, 10*x)
+    y = add(x, 10 * x)
     chex.assert_type(y.dtype, x.dtype)
-    np.testing.assert_allclose(np.float64(y), np.float64(x + 10*x))
+    np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
 
   @parameterized.product(dtype=DTYPES, bs=BATCH_SIZES)
   def test_trees(self, dtype, bs):
@@ -57,9 +57,9 @@ class PadShardUnpadTest(chex.TestCase, tf.test.TestCase):
       return a['a'] + b[0]
 
     x = np.arange(bs, dtype=dtype)
-    y = add(dict(a=x), (10*x, ))
+    y = add(dict(a=x), (10 * x,))
     chex.assert_type(y.dtype, x.dtype)
-    np.testing.assert_allclose(np.float64(y), np.float64(x + 10*x))
+    np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
 
   @parameterized.parameters(DTYPES)
   def test_min_device_batch_avoids_recompile(self, dtype):
@@ -73,9 +73,9 @@ class PadShardUnpadTest(chex.TestCase, tf.test.TestCase):
 
     for bs in self.BATCH_SIZES:
       x = np.arange(bs, dtype=dtype)
-      y = add(x, 10*x, min_device_batch=9)  # pylint: disable=unexpected-keyword-arg
+      y = add(x, 10 * x, min_device_batch=9)  # pylint: disable=unexpected-keyword-arg
       chex.assert_type(y.dtype, x.dtype)
-      np.testing.assert_allclose(np.float64(y), np.float64(x + 10*x))
+      np.testing.assert_allclose(np.float64(y), np.float64(x + 10 * x))
 
   @parameterized.product(dtype=DTYPES, bs=BATCH_SIZES)
   def test_static_argnum(self, dtype, bs):

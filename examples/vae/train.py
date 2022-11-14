@@ -30,23 +30,21 @@ import utils as vae_utils
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=1e-3,
-    help=('The learning rate for the Adam optimizer.')
+    'learning_rate',
+    default=1e-3,
+    help=('The learning rate for the Adam optimizer.'),
 )
 
 flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.')
+    'batch_size', default=128, help=('Batch size for training.')
 )
 
 flags.DEFINE_integer(
-    'num_epochs', default=30,
-    help=('Number of training epochs.')
+    'num_epochs', default=30, help=('Number of training epochs.')
 )
 
 flags.DEFINE_integer(
-    'latents', default=20,
-    help=('Number of latent variables.')
+    'latents', default=20, help=('Number of latent variables.')
 )
 
 
@@ -103,17 +101,15 @@ def kl_divergence(mean, logvar):
 @jax.vmap
 def binary_cross_entropy_with_logits(logits, labels):
   logits = nn.log_sigmoid(logits)
-  return -jnp.sum(labels * logits + (1. - labels) * jnp.log(-jnp.expm1(logits)))
+  return -jnp.sum(
+      labels * logits + (1.0 - labels) * jnp.log(-jnp.expm1(logits))
+  )
 
 
 def compute_metrics(recon_x, x, mean, logvar):
   bce_loss = binary_cross_entropy_with_logits(recon_x, x).mean()
   kld_loss = kl_divergence(mean, logvar).mean()
-  return {
-      'bce': bce_loss,
-      'kld': kld_loss,
-      'loss': bce_loss + kld_loss
-  }
+  return {'bce': bce_loss, 'kld': kld_loss, 'loss': bce_loss + kld_loss}
 
 
 def model():
@@ -129,6 +125,7 @@ def train_step(state, batch, z_rng):
     kld_loss = kl_divergence(mean, logvar).mean()
     loss = bce_loss + kld_loss
     return loss
+
   grads = jax.grad(loss_fn)(state.params)
   return state.apply_gradients(grads=grads)
 
@@ -137,8 +134,10 @@ def train_step(state, batch, z_rng):
 def eval(params, images, z, z_rng):
   def eval_model(vae):
     recon_images, mean, logvar = vae(images, z_rng)
-    comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
-                                  recon_images[:8].reshape(-1, 28, 28, 1)])
+    comparison = jnp.concatenate([
+        images[:8].reshape(-1, 28, 28, 1),
+        recon_images[:8].reshape(-1, 28, 28, 1),
+    ])
 
     generate_images = vae.generate(z)
     generate_images = generate_images.reshape(-1, 28, 28, 1)
@@ -199,12 +198,15 @@ def main(argv):
 
     metrics, comparison, sample = eval(state.params, test_ds, z, eval_rng)
     vae_utils.save_image(
-        comparison, f'results/reconstruction_{epoch}.png', nrow=8)
+        comparison, f'results/reconstruction_{epoch}.png', nrow=8
+    )
     vae_utils.save_image(sample, f'results/sample_{epoch}.png', nrow=8)
 
-    print('eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}'.format(
-        epoch + 1, metrics['loss'], metrics['bce'], metrics['kld']
-    ))
+    print(
+        'eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}'.format(
+            epoch + 1, metrics['loss'], metrics['bce'], metrics['kld']
+        )
+    )
 
 
 if __name__ == '__main__':

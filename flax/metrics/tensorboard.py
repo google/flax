@@ -42,7 +42,16 @@ def _flatten_dict(input_dict, parent_key='', sep='.'):
     new_key = parent_key + sep + k if parent_key else k
 
     # Valid types according to https://github.com/tensorflow/tensorboard/blob/1204566da5437af55109f7a4af18f9f8b7c4f864/tensorboard/plugins/hparams/summary_v2.py
-    valid_types = (bool, int, float, str, np.bool_, np.integer, np.floating, np.character)
+    valid_types = (
+        bool,
+        int,
+        float,
+        str,
+        np.bool_,
+        np.integer,
+        np.floating,
+        np.character,
+    )
 
     if isinstance(v, dict):
       # Recursively flatten the dict.
@@ -166,8 +175,13 @@ class SummaryWriter:
     audio = tf.convert_to_tensor(audiodata, dtype=tf.float32)
     with self._as_default(self._event_writer):
       tf.summary.audio(
-          name=tag, data=audio, sample_rate=sample_rate, step=step,
-          max_outputs=max_outputs, encoding='wav')
+          name=tag,
+          data=audio,
+          sample_rate=sample_rate,
+          step=step,
+          max_outputs=max_outputs,
+          encoding='wav',
+      )
 
   def histogram(self, tag, values, step, bins=None):
     """Saves histogram of values.
@@ -210,11 +224,7 @@ class SummaryWriter:
     Note: markdown formatting is rendered by tensorboard.
     """
     with self._as_default(self._event_writer):
-      tf.summary.write(
-          tag=tag,
-          tensor=tensor,
-          step=step,
-          metadata=metadata)
+      tf.summary.write(tag=tag, tensor=tensor, step=step, metadata=metadata)
 
   def hparams(self, hparams):
     """Saves hyper parameters.

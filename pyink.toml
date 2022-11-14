@@ -1,0 +1,14 @@
+# NB: this belongs in pyproject.toml, but we have to move flax to support that first.
+
+# Usage:
+#  pip install https://github.com/google/pyink
+#  pyink --config=pyink.toml .
+
+[tool.pyink]
+pyink = true
+pyink-indentation = 2
+line-length = 80
+target-version = ['py37', 'py38', 'py39']
+exclude = '\.ipynb'
+preview = false
+pyink-use-majority-quotes = true

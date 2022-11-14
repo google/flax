@@ -28,7 +28,8 @@ def policy_test(
     n_episodes: int,
     apply_fn: Callable[..., Any],
     params: flax.core.frozen_dict.FrozenDict,
-    game: str):
+    game: str,
+):
   """Perform a test of the policy in Atari environment.
 
   Args:

@@ -25,7 +25,8 @@ from flax.linen.dotgetter import DotGetter, is_leaf
 from flax import serialization
 
 # Parse absl flags test_srcdir and test_tmpdir.
-#jax.config.parse_flags_with_absl()
+# jax.config.parse_flags_with_absl()
+
 
 class DotGetterTest(absltest.TestCase):
 
@@ -81,29 +82,32 @@ class DotGetterTest(absltest.TestCase):
       hash(dg)
 
   def test_pytree(self):
-    dg1 = DotGetter({'a': jnp.array([1.0]),
-                     'b': {'c': jnp.array([2.0]),
-                           'd': jnp.array([3.0])}})
-    dg2 = DotGetter({'a': jnp.array([2.0]),
-                     'b': {'c': jnp.array([4.0]),
-                           'd': jnp.array([6.0])}})
+    dg1 = DotGetter({
+        'a': jnp.array([1.0]),
+        'b': {'c': jnp.array([2.0]), 'd': jnp.array([3.0])},
+    })
+    dg2 = DotGetter({
+        'a': jnp.array([2.0]),
+        'b': {'c': jnp.array([4.0]), 'd': jnp.array([6.0])},
+    })
     self.assertEqual(jax.tree_util.tree_map(lambda x: 2 * x, dg1), dg2)
 
   def test_statedict(self):
-    d = {'a': jnp.array([1.0]),
-         'b': {'c': jnp.array([2.0]),
-               'd': jnp.array([3.0])}}
+    d = {
+        'a': jnp.array([1.0]),
+        'b': {'c': jnp.array([2.0]), 'd': jnp.array([3.0])},
+    }
     dg = DotGetter(d)
     ser = serialization.to_state_dict(dg)
     deser = serialization.from_state_dict(dg, ser)
     self.assertEqual(d, deser)
 
   def test_is_leaf(self):
-    for x in [0, 'foo', jnp.array([0.]), {}, [], (), {1, 2}]:
+    for x in [0, 'foo', jnp.array([0.0]), {}, [], (), {1, 2}]:
       self.assertTrue(is_leaf(x))
     self.assertFalse(is_leaf({'a': 1}))
-    self.assertFalse(is_leaf([1,2,3]))
-    self.assertFalse(is_leaf((1,2,3)))
+    self.assertFalse(is_leaf([1, 2, 3]))
+    self.assertFalse(is_leaf((1, 2, 3)))
 
 
 if __name__ == '__main__':

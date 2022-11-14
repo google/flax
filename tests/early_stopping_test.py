@@ -29,13 +29,12 @@ jax.config.parse_flags_with_absl()
 class EarlyStoppingTests(absltest.TestCase):
 
   def test_update(self):
-    es = early_stopping.EarlyStopping(min_delta=0,
-                                      patience=0)
+    es = early_stopping.EarlyStopping(min_delta=0, patience=0)
 
     for i in range(2):
       improve_steps = 0
       for step in range(10):
-        metric = 1.
+        metric = 1.0
         did_improve, es = es.update(metric)
         if not did_improve:
           improve_steps += 1
@@ -48,12 +47,10 @@ class EarlyStoppingTests(absltest.TestCase):
       es = es.reset()  # ensure object is reusable if reset.
 
   def test_patience(self):
-    es = early_stopping.EarlyStopping(min_delta=0,
-                                      patience=0)
-    patient_es = early_stopping.EarlyStopping(min_delta=0,
-                                              patience=6)
+    es = early_stopping.EarlyStopping(min_delta=0, patience=0)
+    patient_es = early_stopping.EarlyStopping(min_delta=0, patience=6)
     for step in range(10):
-      metric = 1.
+      metric = 1.0
       did_improve, es = es.update(metric)
       if es.should_stop:
         break
@@ -61,7 +58,7 @@ class EarlyStoppingTests(absltest.TestCase):
     self.assertEqual(step, 1)
 
     for patient_step in range(10):
-      metric = 1.
+      metric = 1.0
       did_improve, patient_es = patient_es.update(metric)
       if patient_es.should_stop:
         break
@@ -69,13 +66,10 @@ class EarlyStoppingTests(absltest.TestCase):
     self.assertEqual(patient_step, 7)
 
   def test_delta(self):
-    es = early_stopping.EarlyStopping(min_delta=0,
-                                      patience=0)
-    delta_es = early_stopping.EarlyStopping(min_delta=1e-3,
-                                            patience=0)
-    delta_patient_es = early_stopping.EarlyStopping(min_delta=1e-3,
-                                                    patience=1)
-    metric = 1.
+    es = early_stopping.EarlyStopping(min_delta=0, patience=0)
+    delta_es = early_stopping.EarlyStopping(min_delta=1e-3, patience=0)
+    delta_patient_es = early_stopping.EarlyStopping(min_delta=1e-3, patience=1)
+    metric = 1.0
     for step in range(100):
       metric -= 1e-4
       did_improve, es = es.update(metric)
@@ -84,7 +78,7 @@ class EarlyStoppingTests(absltest.TestCase):
 
     self.assertEqual(step, 99)
 
-    metric = 1.
+    metric = 1.0
     for step in range(100):
       metric -= 1e-4
       did_improve, delta_es = delta_es.update(metric)
@@ -93,8 +87,18 @@ class EarlyStoppingTests(absltest.TestCase):
 
     self.assertEqual(step, 1)
 
-    metrics = [0.01, 0.005, 0.0033, 0.0025, 0.002,
-               0.0017, 0.0014, 0.0012, 0.0011, 0.001]
+    metrics = [
+        0.01,
+        0.005,
+        0.0033,
+        0.0025,
+        0.002,
+        0.0017,
+        0.0014,
+        0.0012,
+        0.0011,
+        0.001,
+    ]
     improvement_steps = 0
     for step in range(10):
       metric = metrics[step]

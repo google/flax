@@ -61,9 +61,11 @@ def create_model(*, model_cls, half_precision, **kwargs):
 
 def initialized(key, image_size, model):
   input_shape = (1, image_size, image_size, 3)
+
   @jax.jit
   def init(*args):
     return model.init(*args)
+
   variables = init({'params': key}, jnp.ones(input_shape, model.dtype))
   return variables['params'], variables['batch_stats']
 
@@ -88,35 +90,41 @@ def compute_metrics(logits, labels):
 def create_learning_rate_fn(
     config: ml_collections.ConfigDict,
     base_learning_rate: float,
-    steps_per_epoch: int):
+    steps_per_epoch: int,
+):
   """Create learning rate schedule."""
   warmup_fn = optax.linear_schedule(
-      init_value=0., end_value=base_learning_rate,
-      transition_steps=config.warmup_epochs * steps_per_epoch)
+      init_value=0.0,
+      end_value=base_learning_rate,
+      transition_steps=config.warmup_epochs * steps_per_epoch,
+  )
   cosine_epochs = max(config.num_epochs - config.warmup_epochs, 1)
   cosine_fn = optax.cosine_decay_schedule(
-      init_value=base_learning_rate,
-      decay_steps=cosine_epochs * steps_per_epoch)
+      init_value=base_learning_rate, decay_steps=cosine_epochs * steps_per_epoch
+  )
   schedule_fn = optax.join_schedules(
       schedules=[warmup_fn, cosine_fn],
-      boundaries=[config.warmup_epochs * steps_per_epoch])
+      boundaries=[config.warmup_epochs * steps_per_epoch],
+  )
   return schedule_fn
 
 
 def train_step(state, batch, learning_rate_fn):
   """Perform a single training step."""
+
   def loss_fn(params):
     """loss function used for training."""
     logits, new_model_state = state.apply_fn(
         {'params': params, 'batch_stats': state.batch_stats},
         batch['image'],
-        mutable=['batch_stats'])
+        mutable=['batch_stats'],
+    )
     loss = cross_entropy_loss(logits, batch['label'])
     weight_penalty_params = jax.tree_util.tree_leaves(params)
     weight_decay = 0.0001
-    weight_l2 = sum(jnp.sum(x ** 2)
-                     for x in weight_penalty_params
-                     if x.ndim > 1)
+    weight_l2 = sum(
+        jnp.sum(x**2) for x in weight_penalty_params if x.ndim > 1
+    )
     weight_penalty = weight_decay * 0.5 * weight_l2
     loss = loss + weight_penalty
     return loss, (new_model_state, logits)
@@ -127,7 +135,8 @@ def train_step(state, batch, learning_rate_fn):
 
   if dynamic_scale:
     grad_fn = dynamic_scale.value_and_grad(
-        loss_fn, has_aux=True, axis_name='batch')
+        loss_fn, has_aux=True, axis_name='batch'
+    )
     dynamic_scale, is_fin, aux, grads = grad_fn(state.params)
     # dynamic loss takes care of averaging gradients across replicas
   else:
@@ -140,7 +149,8 @@ def train_step(state, batch, learning_rate_fn):
   metrics['learning_rate'] = lr
 
   new_state = state.apply_gradients(
-      grads=grads, batch_stats=new_model_state['batch_stats'])
+      grads=grads, batch_stats=new_model_state['batch_stats']
+  )
   if dynamic_scale:
     # if is_fin == False the gradients contain Inf/NaNs and optimizer state and
     # params should be restored (= skip this step).
@@ -148,12 +158,13 @@ def train_step(state, batch, learning_rate_fn):
         opt_state=jax.tree_util.tree_map(
             functools.partial(jnp.where, is_fin),
             new_state.opt_state,
-            state.opt_state),
+            state.opt_state,
+        ),
         params=jax.tree_util.tree_map(
-            functools.partial(jnp.where, is_fin),
-            new_state.params,
-            state.params),
-        dynamic_scale=dynamic_scale)
+            functools.partial(jnp.where, is_fin), new_state.params, state.params
+        ),
+        dynamic_scale=dynamic_scale,
+    )
     metrics['scale'] = dynamic_scale.scale
 
   return new_state, metrics
@@ -161,14 +172,14 @@ def train_step(state, batch, learning_rate_fn):
 
 def eval_step(state, batch):
   variables = {'params': state.params, 'batch_stats': state.batch_stats}
-  logits = state.apply_fn(
-      variables, batch['image'], train=False, mutable=False)
+  logits = state.apply_fn(variables, batch['image'], train=False, mutable=False)
   return compute_metrics(logits, batch['label'])
 
 
 def prepare_tf_data(xs):
   """Convert a input batch from tf Tensors to numpy arrays."""
   local_device_count = jax.local_device_count()
+
   def _prepare(x):
     # Use _numpy() for zero-copy conversion between TF and NumPy.
     x = x._numpy()  # pylint: disable=protected-access
@@ -180,11 +191,17 @@ def prepare_tf_data(xs):
   return jax.tree_util.tree_map(_prepare, xs)
 
 
-def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
-                      cache):
+def create_input_iter(
+    dataset_builder, batch_size, image_size, dtype, train, cache
+):
   ds = input_pipeline.create_split(
-      dataset_builder, batch_size, image_size=image_size, dtype=dtype,
-      train=train, cache=cache)
+      dataset_builder,
+      batch_size,
+      image_size=image_size,
+      dtype=dtype,
+      train=train,
+      cache=cache,
+  )
   it = map(prepare_tf_data, ds)
   it = jax_utils.prefetch_to_device(it, 2)
   return it
@@ -219,8 +236,9 @@ def sync_batch_stats(state):
   return state.replace(batch_stats=cross_replica_mean(state.batch_stats))
 
 
-def create_train_state(rng, config: ml_collections.ConfigDict,
-                       model, image_size, learning_rate_fn):
+def create_train_state(
+    rng, config: ml_collections.ConfigDict, model, image_size, learning_rate_fn
+):
   """Create initial training state."""
   dynamic_scale = None
   platform = jax.local_devices()[0].platform
@@ -240,12 +258,14 @@ def create_train_state(rng, config: ml_collections.ConfigDict,
       params=params,
       tx=tx,
       batch_stats=batch_stats,
-      dynamic_scale=dynamic_scale)
+      dynamic_scale=dynamic_scale,
+  )
   return state
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict,
-                       workdir: str) -> TrainState:
+def train_and_evaluate(
+    config: ml_collections.ConfigDict, workdir: str
+) -> TrainState:
   """Execute model training and evaluation loop.
 
   Args:
@@ -257,7 +277,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   """
 
   writer = metric_writers.create_default_writer(
-      logdir=workdir, just_logging=jax.process_index() != 0)
+      logdir=workdir, just_logging=jax.process_index() != 0
+  )
 
   rng = random.PRNGKey(0)
 
@@ -279,11 +300,21 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   dataset_builder = tfds.builder(config.dataset)
   train_iter = create_input_iter(
-      dataset_builder, local_batch_size, image_size, input_dtype, train=True,
-      cache=config.cache)
+      dataset_builder,
+      local_batch_size,
+      image_size,
+      input_dtype,
+      train=True,
+      cache=config.cache,
+  )
   eval_iter = create_input_iter(
-      dataset_builder, local_batch_size, image_size, input_dtype, train=False,
-      cache=config.cache)
+      dataset_builder,
+      local_batch_size,
+      image_size,
+      input_dtype,
+      train=False,
+      cache=config.cache,
+  )
 
   steps_per_epoch = (
       dataset_builder.info.splits['train'].num_examples // config.batch_size
@@ -296,21 +327,24 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   if config.steps_per_eval == -1:
     num_validation_examples = dataset_builder.info.splits[
-        'validation'].num_examples
+        'validation'
+    ].num_examples
     steps_per_eval = num_validation_examples // config.batch_size
   else:
     steps_per_eval = config.steps_per_eval
 
   steps_per_checkpoint = steps_per_epoch * 10
 
-  base_learning_rate = config.learning_rate * config.batch_size / 256.
+  base_learning_rate = config.learning_rate * config.batch_size / 256.0
 
   model_cls = getattr(models, config.model)
   model = create_model(
-      model_cls=model_cls, half_precision=config.half_precision)
+      model_cls=model_cls, half_precision=config.half_precision
+  )
 
   learning_rate_fn = create_learning_rate_fn(
-      config, base_learning_rate, steps_per_epoch)
+      config, base_learning_rate, steps_per_epoch
+  )
 
   state = create_train_state(rng, config, model, image_size, learning_rate_fn)
   state = restore_checkpoint(state, workdir)
@@ -320,7 +354,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   p_train_step = jax.pmap(
       functools.partial(train_step, learning_rate_fn=learning_rate_fn),
-      axis_name='batch')
+      axis_name='batch',
+  )
   p_eval_step = jax.pmap(eval_step, axis_name='batch')
 
   train_metrics = []
@@ -342,10 +377,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
         train_metrics = common_utils.get_metrics(train_metrics)
         summary = {
             f'train_{k}': v
-            for k, v in jax.tree_util.tree_map(lambda x: x.mean(), train_metrics).items()
+            for k, v in jax.tree_util.tree_map(
+                lambda x: x.mean(), train_metrics
+            ).items()
         }
         summary['steps_per_second'] = config.log_every_steps / (
-            time.time() - train_metrics_last_t)
+            time.time() - train_metrics_last_t
+        )
         writer.write_scalars(step + 1, summary)
         train_metrics = []
         train_metrics_last_t = time.time()
@@ -362,10 +400,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
         eval_metrics.append(metrics)
       eval_metrics = common_utils.get_metrics(eval_metrics)
       summary = jax.tree_util.tree_map(lambda x: x.mean(), eval_metrics)
-      logging.info('eval epoch: %d, loss: %.4f, accuracy: %.2f',
-                   epoch, summary['loss'], summary['accuracy'] * 100)
+      logging.info(
+          'eval epoch: %d, loss: %.4f, accuracy: %.2f',
+          epoch,
+          summary['loss'],
+          summary['accuracy'] * 100,
+      )
       writer.write_scalars(
-          step + 1, {f'eval_{key}': val for key, val in summary.items()})
+          step + 1, {f'eval_{key}': val for key, val in summary.items()}
+      )
       writer.flush()
     if (step + 1) % steps_per_checkpoint == 0 or step + 1 == num_steps:
       state = sync_batch_stats(state)

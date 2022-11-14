@@ -75,16 +75,11 @@ class OgbgMolpcbaBenchmark(Benchmark):
     # Use the reporting API to report single or multiple metrics/extras.
     self.report_wall_time(benchmark_time)
     self.report_metrics({
-        'sec_per_epoch':
-            sec_per_epoch,
-        'test_accuracy':
-            end_test_accuracy,
-        'test_mean_average_precision':
-            end_test_mean_average_precision,
-        'validation_accuracy':
-            end_validation_accuracy,
-        'validation_mean_average_precision':
-            end_validation_mean_average_precision,
+        'sec_per_epoch': sec_per_epoch,
+        'test_accuracy': end_test_accuracy,
+        'test_mean_average_precision': end_test_mean_average_precision,
+        'validation_accuracy': end_validation_accuracy,
+        'validation_mean_average_precision': end_validation_mean_average_precision,
     })
     self.report_extras({
         'model_name': 'Graph Convolutional Network',
@@ -125,16 +120,11 @@ class OgbgMolpcbaBenchmark(Benchmark):
     # Use the reporting API to report single or multiple metrics/extras.
     self.report_wall_time(benchmark_time)
     self.report_metrics({
-        'sec_per_epoch':
-            sec_per_epoch,
-        'test_accuracy':
-            end_test_accuracy,
-        'test_mean_average_precision':
-            end_test_mean_average_precision,
-        'validation_accuracy':
-            end_validation_accuracy,
-        'validation_mean_average_precision':
-            end_validation_mean_average_precision,
+        'sec_per_epoch': sec_per_epoch,
+        'test_accuracy': end_test_accuracy,
+        'test_mean_average_precision': end_test_mean_average_precision,
+        'validation_accuracy': end_validation_accuracy,
+        'validation_mean_average_precision': end_validation_mean_average_precision,
     })
     self.report_extras({
         'model_name': 'Graph Convolutional Network',

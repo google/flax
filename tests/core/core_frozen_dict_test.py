@@ -43,8 +43,8 @@ class FrozenDictTest(absltest.TestCase):
 
   def test_frozen_dict_partially_maps(self):
     x = jax.tree_util.tree_map(
-        lambda a, b: (a, b),
-        freeze({'a': 2}), freeze({'a': {'b': 1}}))
+        lambda a, b: (a, b), freeze({'a': 2}), freeze({'a': {'b': 1}})
+    )
     self.assertEqual(unfreeze(x), {'a': (2, {'b': 1})})
 
   def test_frozen_dict_hash(self):
@@ -59,14 +59,13 @@ class FrozenDictTest(absltest.TestCase):
     self.assertEqual(items, [('a', 1), ('b', freeze(xs['b']))])
 
   def test_frozen_dict_repr(self):
-    expected = (
-"""FrozenDict({
+    expected = """FrozenDict({
     a: 1,
     b: {
         c: 2,
         d: {},
     },
-})""")
+})"""
 
     xs = FrozenDict({'a': 1, 'b': {'c': 2, 'd': {}}})
     self.assertEqual(repr(xs), expected)

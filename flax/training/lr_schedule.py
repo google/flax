@@ -32,8 +32,9 @@ def _piecewise_constant(boundaries, values, t):
   return jnp.take(values, index)
 
 
-def create_constant_learning_rate_schedule(base_learning_rate, steps_per_epoch,
-                                           warmup_length=0.0):
+def create_constant_learning_rate_schedule(
+    base_learning_rate, steps_per_epoch, warmup_length=0.0
+):
   """Create a constant learning rate schedule with optional warmup.
 
   Holds the learning rate constant. This function also offers a learing rate
@@ -50,16 +51,19 @@ def create_constant_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   Returns:
     Function `f(step) -> lr` that computes the learning rate for a given step.
   """
+
   def learning_rate_fn(step):
     lr = base_learning_rate
     if warmup_length > 0.0:
-      lr = lr * jnp.minimum(1., step / float(warmup_length) / steps_per_epoch)
+      lr = lr * jnp.minimum(1.0, step / float(warmup_length) / steps_per_epoch)
     return lr
+
   return learning_rate_fn
 
 
-def create_stepped_learning_rate_schedule(base_learning_rate, steps_per_epoch,
-                                          lr_sched_steps, warmup_length=0.0):
+def create_stepped_learning_rate_schedule(
+    base_learning_rate, steps_per_epoch, lr_sched_steps, warmup_length=0.0
+):
   """Create a stepped learning rate schedule with optional warmup.
 
   A stepped learning rate schedule decreases the learning rate
@@ -100,13 +104,15 @@ def create_stepped_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   def learning_rate_fn(step):
     lr = _piecewise_constant(boundaries, values, step)
     if warmup_length > 0.0:
-      lr = lr * jnp.minimum(1., step / float(warmup_length) / steps_per_epoch)
+      lr = lr * jnp.minimum(1.0, step / float(warmup_length) / steps_per_epoch)
     return lr
+
   return learning_rate_fn
 
 
-def create_cosine_learning_rate_schedule(base_learning_rate, steps_per_epoch,
-                                         halfcos_epochs, warmup_length=0.0):
+def create_cosine_learning_rate_schedule(
+    base_learning_rate, steps_per_epoch, halfcos_epochs, warmup_length=0.0
+):
   """Create a cosine learning rate schedule with optional warmup.
 
   A cosine learning rate schedule modules the learning rate with
@@ -134,8 +140,7 @@ def create_cosine_learning_rate_schedule(base_learning_rate, steps_per_epoch,
     scale_factor = jnp.cos(step * jnp.pi / halfwavelength_steps) * 0.5 + 0.5
     lr = base_learning_rate * scale_factor
     if warmup_length > 0.0:
-      lr = lr * jnp.minimum(1., step / float(warmup_length) / steps_per_epoch)
+      lr = lr * jnp.minimum(1.0, step / float(warmup_length) / steps_per_epoch)
     return lr
+
   return learning_rate_fn
-
-

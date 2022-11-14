@@ -28,7 +28,7 @@ from PIL import Image
 
 
 def save_image(ndarray, fp, nrow=8, padding=2, pad_value=0.0, format=None):
-    """Make a grid of images and Save it into an image file.
+  """Make a grid of images and Save it into an image file.
   Args:
     ndarray (array_like): 4D mini-batch images of shape (B x H x W x C)
     fp - A filename(string) or file object
@@ -41,32 +41,44 @@ def save_image(ndarray, fp, nrow=8, padding=2, pad_value=0.0, format=None):
     format(Optional):  If omitted, the format to use is determined from the filename extension.
       If a file object was used instead of a filename, this parameter should always be used.
   """
-    if not (isinstance(ndarray, jnp.ndarray) or
-        (isinstance(ndarray, list) and all(isinstance(t, jnp.ndarray) for t in ndarray))):
-        raise TypeError(f'array_like of tensors expected, got {type(ndarray)}')
+  if not (
+      isinstance(ndarray, jnp.ndarray)
+      or (
+          isinstance(ndarray, list)
+          and all(isinstance(t, jnp.ndarray) for t in ndarray)
+      )
+  ):
+    raise TypeError(f'array_like of tensors expected, got {type(ndarray)}')
 
-    ndarray = jnp.asarray(ndarray)
+  ndarray = jnp.asarray(ndarray)
 
-    if ndarray.ndim == 4 and ndarray.shape[-1] == 1:  # single-channel images
-        ndarray = jnp.concatenate((ndarray, ndarray, ndarray), -1)
+  if ndarray.ndim == 4 and ndarray.shape[-1] == 1:  # single-channel images
+    ndarray = jnp.concatenate((ndarray, ndarray, ndarray), -1)
 
-    # make the mini-batch of images into a grid
-    nmaps = ndarray.shape[0]
-    xmaps = min(nrow, nmaps)
-    ymaps = int(math.ceil(float(nmaps) / xmaps))
-    height, width = int(ndarray.shape[1] + padding), int(ndarray.shape[2] + padding)
-    num_channels = ndarray.shape[3]
-    grid = jnp.full((height * ymaps + padding, width * xmaps + padding, num_channels), pad_value).astype(jnp.float32)
-    k = 0
-    for y in range(ymaps):
-      for x in range(xmaps):
-        if k >= nmaps:
-          break
-        grid = grid.at[y * height + padding:(y + 1) * height,
-                       x * width + padding:(x + 1) * width].set(ndarray[k])
-        k = k + 1
+  # make the mini-batch of images into a grid
+  nmaps = ndarray.shape[0]
+  xmaps = min(nrow, nmaps)
+  ymaps = int(math.ceil(float(nmaps) / xmaps))
+  height, width = int(ndarray.shape[1] + padding), int(
+      ndarray.shape[2] + padding
+  )
+  num_channels = ndarray.shape[3]
+  grid = jnp.full(
+      (height * ymaps + padding, width * xmaps + padding, num_channels),
+      pad_value,
+  ).astype(jnp.float32)
+  k = 0
+  for y in range(ymaps):
+    for x in range(xmaps):
+      if k >= nmaps:
+        break
+      grid = grid.at[
+          y * height + padding : (y + 1) * height,
+          x * width + padding : (x + 1) * width,
+      ].set(ndarray[k])
+      k = k + 1
 
-    # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
-    ndarr = np.array(jnp.clip(grid * 255.0 + 0.5, 0, 255).astype(jnp.uint8))
-    im = Image.fromarray(ndarr.copy())
-    im.save(fp, format=format)
+  # Add 0.5 after unnormalizing to [0, 255] to round to nearest integer
+  ndarr = np.array(jnp.clip(grid * 255.0 + 0.5, 0, 255).astype(jnp.uint8))
+  im = Image.fromarray(ndarr.copy())
+  im.save(fp, format=format)

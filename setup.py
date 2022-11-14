@@ -74,7 +74,7 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Programming Language :: Python :: 3.7",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        ],
+    ],
     keywords="",
     author="Flax team",
     author_email="flax-dev@google.com",
@@ -85,5 +85,5 @@ setup(
     install_requires=install_requires,
     extras_require={
         "testing": tests_require,
-        },
-    )
+    },
+)

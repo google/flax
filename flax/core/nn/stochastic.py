@@ -20,7 +20,6 @@ from jax import random
 import jax.numpy as jnp
 
 
-
 def dropout(scope, inputs, rate, deterministic=False, rng=None):
   """Applies a random dropout mask to the input.
   Args:
@@ -34,9 +33,9 @@ def dropout(scope, inputs, rate, deterministic=False, rng=None):
   Returns:
     The masked inputs.
   """
-  if rate == 0.:
+  if rate == 0.0:
     return inputs
-  keep_prob = 1. - rate
+  keep_prob = 1.0 - rate
 
   if deterministic:
     return inputs

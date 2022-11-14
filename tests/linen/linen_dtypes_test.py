@@ -25,12 +25,13 @@ from flax.linen import dtypes
 import jax
 from jax import numpy as jnp
 
-default_float_dtype = jnp.result_type(1.)
+default_float_dtype = jnp.result_type(1.0)
+
 
 class DtypesTest(absltest.TestCase):
 
   def test_no_inexact_dtype(self):
-    i32 = jnp.int32(1.)
+    i32 = jnp.int32(1.0)
     self.assertEqual(dtypes.canonicalize_dtype(i32, inexact=False), jnp.int32)
 
   def test_inexact_dtype(self):
@@ -39,12 +40,12 @@ class DtypesTest(absltest.TestCase):
       self.assertEqual(dtypes.canonicalize_dtype(i64), jnp.float32)
     i32 = jnp.int32(1)
     self.assertEqual(dtypes.canonicalize_dtype(i32), jnp.float32)
-    i16 = jnp.int16(1.)
+    i16 = jnp.int16(1.0)
     self.assertEqual(dtypes.canonicalize_dtype(i16), jnp.float32)
 
   def test_explicit_downcast(self):
-    f32 = jnp.float32(1.)
-    x, = dtypes.promote_dtype(f32, dtype=jnp.float16)
+    f32 = jnp.float32(1.0)
+    (x,) = dtypes.promote_dtype(f32, dtype=jnp.float16)
     self.assertEqual(x.dtype, jnp.float16)
 
 

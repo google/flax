@@ -39,7 +39,8 @@ PyTree = Any
 
 def check_eq(xs, ys):
   return jax.tree_util.tree_all(
-      jax.tree_util.tree_map(np.testing.assert_allclose, xs, ys))
+      jax.tree_util.tree_map(np.testing.assert_allclose, xs, ys)
+  )
 
 
 def shuffle(l):
@@ -95,61 +96,79 @@ class CheckpointsTest(parameterized.TestCase):
 
   def test_save_restore_checkpoints(self):
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
-    test_object1 = {'a': np.array([1, 2, 3], np.int32),
-                    'b': np.array([1, 1, 1], np.int32)}
-    test_object2 = {'a': np.array([4, 5, 6], np.int32),
-                    'b': np.array([2, 2, 2], np.int32)}
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
+    test_object1 = {
+        'a': np.array([1, 2, 3], np.int32),
+        'b': np.array([1, 1, 1], np.int32),
+    }
+    test_object2 = {
+        'a': np.array([4, 5, 6], np.int32),
+        'b': np.array([2, 2, 2], np.int32),
+    }
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, test_object0)
     # Create leftover temporary checkpoint, which should be ignored.
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0, prefix='test_', keep=1)
+        tmp_dir, test_object1, 0, prefix='test_', keep=1
+    )
     self.assertIn('test_0', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, test_object1)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 1, prefix='test_', keep=1)
+        tmp_dir, test_object1, 1, prefix='test_', keep=1
+    )
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 2, prefix='test_', keep=1)
+        tmp_dir, test_object2, 2, prefix='test_', keep=1
+    )
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, test_object2)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 3, prefix='test_', keep=2)
+        tmp_dir, test_object2, 3, prefix='test_', keep=2
+    )
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 4, prefix='test_', keep=2)
+        tmp_dir, test_object1, 4, prefix='test_', keep=2
+    )
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, test_object1)
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, step=3, prefix='test_')
+        tmp_dir, test_object0, step=3, prefix='test_'
+    )
     check_eq(new_object, test_object2)
     # Restore a specific path.
     new_object = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_3'), test_object0)
+        os.path.join(tmp_dir, 'test_3'), test_object0
+    )
     check_eq(new_object, test_object2)
     # If a specific path is specified, but it does not exist, the same behavior
     # as when a directory is empty should apply: the target is returned
     # unchanged.
     new_object = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_not_there'), test_object0)
+        os.path.join(tmp_dir, 'test_not_there'), test_object0
+    )
     check_eq(new_object, test_object0)
     with self.assertRaises(ValueError):
       checkpoints.restore_checkpoint(
-          tmp_dir, test_object0, step=5, prefix='test_')
+          tmp_dir, test_object0, step=5, prefix='test_'
+      )
 
   def test_overwrite_checkpoints(self):
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32)}
     test_object = {'a': np.array([1, 2, 3], np.int32)}
 
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object0, 0, keep=1)
+    checkpoints.save_checkpoint(tmp_dir, test_object0, 0, keep=1)
 
     with self.assertRaises(errors.InvalidCheckpointError):
       checkpoints.save_checkpoint(tmp_dir, test_object, 0, keep=1)
@@ -159,7 +178,8 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
     check_eq(new_object, test_object)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object0, 2, keep=1, overwrite=True)
+        tmp_dir, test_object0, 2, keep=1, overwrite=True
+    )
     new_object = checkpoints.restore_checkpoint(tmp_dir, test_object)
     check_eq(new_object, test_object0)
     with self.assertRaises(errors.InvalidCheckpointError):
@@ -177,8 +197,9 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(non_norm_dir_path, test_object0)
     check_eq(new_object, test_object)
 
-  @parameterized.parameters({'keep_every_n_steps': None},
-                            {'keep_every_n_steps': 7})
+  @parameterized.parameters(
+      {'keep_every_n_steps': None}, {'keep_every_n_steps': 7}
+  )
   def test_keep(self, keep_every_n_steps):
     tmp_dir = self.create_tempdir().full_path
     test_object = {'a': np.array([1, 2, 3], np.int32)}
@@ -188,18 +209,22 @@ class CheckpointsTest(parameterized.TestCase):
     increment = 5
 
     for step in range(steps_start, steps_end, increment):
-      checkpoints.save_checkpoint(tmp_dir,
-                                  test_object,
-                                  step=step,
-                                  keep=keep,
-                                  keep_every_n_steps=keep_every_n_steps)
+      checkpoints.save_checkpoint(
+          tmp_dir,
+          test_object,
+          step=step,
+          keep=keep,
+          keep_every_n_steps=keep_every_n_steps,
+      )
 
     last_checkpoint = -float('inf')
     for step in range(steps_start, steps_end, increment):
-      if ((steps_end - step) / increment <= keep) or (keep_every_n_steps and (
-          step - last_checkpoint) >= keep_every_n_steps):
+      if ((steps_end - step) / increment <= keep) or (
+          keep_every_n_steps and (step - last_checkpoint) >= keep_every_n_steps
+      ):
         restored = checkpoints.restore_checkpoint(
-            tmp_dir, target=None, step=step)
+            tmp_dir, target=None, step=step
+        )
         check_eq(restored, test_object)
         last_checkpoint = step
       else:
@@ -208,42 +233,57 @@ class CheckpointsTest(parameterized.TestCase):
 
   def test_save_restore_checkpoints_w_float_steps(self):
     tmp_dir = self.create_tempdir().full_path
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
-    test_object1 = {'a': np.array([1, 2, 3], np.int32),
-                    'b': np.array([1, 1, 1], np.int32)}
-    test_object2 = {'a': np.array([4, 5, 6], np.int32),
-                    'b': np.array([2, 2, 2], np.int32)}
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
+    test_object1 = {
+        'a': np.array([1, 2, 3], np.int32),
+        'b': np.array([1, 1, 1], np.int32),
+    }
+    test_object2 = {
+        'a': np.array([4, 5, 6], np.int32),
+        'b': np.array([2, 2, 2], np.int32),
+    }
     # Create leftover temporary checkpoint, which should be ignored.
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0.0, prefix='test_', keep=1)
+        tmp_dir, test_object1, 0.0, prefix='test_', keep=1
+    )
     self.assertIn('test_0.0', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, test_object1)
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 2.0, prefix='test_', keep=1)
+        tmp_dir, test_object1, 2.0, prefix='test_', keep=1
+    )
     with self.assertRaises(errors.InvalidCheckpointError):
       checkpoints.save_checkpoint(
-          tmp_dir, test_object2, 1.0, prefix='test_', keep=1)
+          tmp_dir, test_object2, 1.0, prefix='test_', keep=1
+      )
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 3.0, prefix='test_', keep=2)
+        tmp_dir, test_object2, 3.0, prefix='test_', keep=2
+    )
     self.assertIn('test_3.0', os.listdir(tmp_dir))
     self.assertIn('test_2.0', os.listdir(tmp_dir))
     check_eq(new_object, test_object1)
 
   def test_save_restore_checkpoints_target_none(self):
     tmp_dir = self.create_tempdir().full_path
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
     # Target pytree is a dictionary, so it's equal to a restored state_dict.
     checkpoints.save_checkpoint(tmp_dir, test_object0, 0)
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
     check_eq(new_object, test_object0)
     # Target pytree it's a tuple, check the expected state_dict is recovered.
-    test_object1 = (np.array([0, 0, 0], np.int32),
-                    np.array([1, 1, 1], np.int32))
+    test_object1 = (
+        np.array([0, 0, 0], np.int32),
+        np.array([1, 1, 1], np.int32),
+    )
     checkpoints.save_checkpoint(tmp_dir, test_object1, 1)
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
     expected_new_object = {str(k): v for k, v in enumerate(test_object1)}
@@ -273,37 +313,51 @@ class CheckpointsTest(parameterized.TestCase):
 
   def test_async_save_checkpoints(self):
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
-    test_object1 = {'a': np.random.normal(size=(1000, 1000)),
-                    'b': np.random.normal(size=(1000, 1000))}
-    test_object2 = {'a': np.random.normal(size=(1000, 1000)),
-                    'b': np.random.normal(size=(1000, 1000))}
-    test_object3 = {'a': np.random.normal(size=(1000, 1000)),
-                    'b': np.random.normal(size=(1000, 1000))}
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
+    test_object1 = {
+        'a': np.random.normal(size=(1000, 1000)),
+        'b': np.random.normal(size=(1000, 1000)),
+    }
+    test_object2 = {
+        'a': np.random.normal(size=(1000, 1000)),
+        'b': np.random.normal(size=(1000, 1000)),
+    }
+    test_object3 = {
+        'a': np.random.normal(size=(1000, 1000)),
+        'b': np.random.normal(size=(1000, 1000)),
+    }
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, test_object0)
     # Create leftover temporary checkpoint, which should be ignored.
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     am = checkpoints.AsyncManager()
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0, prefix='test_', keep=1, async_manager=am)
+        tmp_dir, test_object1, 0, prefix='test_', keep=1, async_manager=am
+    )
     # Hard-wait the write to be done, then check its content.
     am.save_future.result()
     self.assertIn('test_0', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object1, prefix='test_')
+        tmp_dir, test_object1, prefix='test_'
+    )
     check_eq(new_object, test_object1)
     # Check two consecutive saves happen in the right order.
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 1, prefix='test_', keep=1, async_manager=am)
+        tmp_dir, test_object2, 1, prefix='test_', keep=1, async_manager=am
+    )
     checkpoints.save_checkpoint(
-        tmp_dir, test_object3, 2, prefix='test_', keep=1, async_manager=am)
+        tmp_dir, test_object3, 2, prefix='test_', keep=1, async_manager=am
+    )
     am.save_future.result()
     self.assertIn('test_2', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object1, prefix='test_')
+        tmp_dir, test_object1, prefix='test_'
+    )
     check_eq(new_object, test_object3)
 
   def test_last_checkpoint(self):
@@ -311,41 +365,46 @@ class CheckpointsTest(parameterized.TestCase):
     with gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w') as f:
       f.write('test_tmp')
     gfile.makedirs(os.path.join(tmp_dir, 'test_tmp_gda'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
-                     None)
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), None)
 
     with gfile.GFile(os.path.join(tmp_dir, 'test_0'), 'w') as f:
       f.write('test_0')
     gfile.makedirs(os.path.join(tmp_dir, 'test_0_gda'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
-                     os.path.join(tmp_dir, 'test_0'))
+    self.assertEqual(
+        checkpoints.latest_checkpoint(tmp_dir, 'test_'),
+        os.path.join(tmp_dir, 'test_0'),
+    )
 
     with gfile.GFile(os.path.join(tmp_dir, 'test_10'), 'w') as f:
       f.write('test_10')
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
-                     os.path.join(tmp_dir, 'test_10'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'),
-                     None)
+    self.assertEqual(
+        checkpoints.latest_checkpoint(tmp_dir, 'test_'),
+        os.path.join(tmp_dir, 'test_10'),
+    )
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'), None)
 
-  @parameterized.parameters({'jax_array_config': True},
-                            {'jax_array_config': False})
+  @parameterized.parameters(
+      {'jax_array_config': True}, {'jax_array_config': False}
+  )
   def test_jax_array(self, jax_array_config):
     jax.config.update('jax_array', jax_array_config)
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': jnp.zeros(3), 'b': jnp.arange(3)}
     test_object1 = {'a': jnp.ones(3), 'b': jnp.arange(3, 6)}
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, test_object0)
     # Create leftover temporary checkpoint, which should be ignored.
     gfile.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0, prefix='test_', keep=1)
+        tmp_dir, test_object1, 0, prefix='test_', keep=1
+    )
     self.assertIn('test_0', os.listdir(tmp_dir))
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+        tmp_dir, test_object0, prefix='test_'
+    )
     check_eq(new_object, {'a': np.ones(3), 'b': np.arange(3, 6)})
-
 
   def test_convert_pre_linen(self):
     params = checkpoints.convert_pre_linen({
@@ -354,33 +413,23 @@ class CheckpointsTest(parameterized.TestCase):
             'submod2_1': {},
             'submod1_2': {},
         },
-        'mod2_2': {
-            'submod2_2_0': {}
-        },
-        'mod2_11': {
-            'submod2_11_0': {}
-        },
-        'mod2_1': {
-            'submod2_1_0': {}
-        },
+        'mod2_2': {'submod2_2_0': {}},
+        'mod2_11': {'submod2_11_0': {}},
+        'mod2_1': {'submod2_1_0': {}},
     })
     self.assertDictEqual(
-        core.unfreeze(params), {
+        core.unfreeze(params),
+        {
             'mod_0': {
                 'submod1_0': {},
                 'submod1_1': {},
                 'submod2_0': {},
             },
-            'mod2_0': {
-                'submod2_1_0': {}
-            },
-            'mod2_1': {
-                'submod2_2_0': {}
-            },
-            'mod2_2': {
-                'submod2_11_0': {}
-            },
-        })
+            'mod2_0': {'submod2_1_0': {}},
+            'mod2_1': {'submod2_2_0': {}},
+            'mod2_2': {'submod2_11_0': {}},
+        },
+    )
 
 
 if __name__ == '__main__':

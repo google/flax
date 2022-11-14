@@ -50,6 +50,7 @@ def _indent(x, num_spaces):
 @jax.tree_util.register_pytree_node_class
 class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
+
   __slots__ = ('_dict', '_hash')
 
   def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):  # pylint: disable=invalid-name
@@ -88,6 +89,7 @@ class FrozenDict(Mapping[K, V]):
 
   def pretty_repr(self, num_spaces=4):
     """Returns an indented representation of the nested dictionary."""
+
     def pretty_dict(x):
       if not isinstance(x, dict):
         return repr(x)
@@ -98,6 +100,7 @@ class FrozenDict(Mapping[K, V]):
         return '{\n' + _indent(rep, num_spaces) + '}'
       else:
         return '{}'
+
     return f'FrozenDict({pretty_dict(self._dict)})'
 
   def __hash__(self):
@@ -221,11 +224,13 @@ def _frozen_dict_state_dict(xs):
 
 def _restore_frozen_dict(xs, states):
   return FrozenDict(
-      {key: serialization.from_state_dict(value, states[key])
-       for key, value in xs.items()})
+      {
+          key: serialization.from_state_dict(value, states[key])
+          for key, value in xs.items()
+      }
+  )
 
 
 serialization.register_serialization_state(
-    FrozenDict,
-    _frozen_dict_state_dict,
-    _restore_frozen_dict)
+    FrozenDict, _frozen_dict_state_dict, _restore_frozen_dict
+)
