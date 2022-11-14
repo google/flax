@@ -1026,6 +1026,19 @@ class TransformTest(absltest.TestCase):
     with self.assertRaises(errors.TransformedMethodReturnValueError):
       b.apply({}, jnp.ones(2))
 
+  def test_returned_variable_warning(self):
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        f = self._helper()
+        return f(x)
+      @nn.jit
+      def _helper(self):
+        return nn.Variable(None, None, None)
+    b = Bar()
+    with self.assertRaises(errors.TransformedMethodReturnValueError):
+      b.apply({}, jnp.ones(2))
+
   def test_nowrap(self):
     class Bar(nn.Module):
       @nn.compact
