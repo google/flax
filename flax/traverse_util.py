@@ -98,7 +98,9 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
   Returns:
     The flattened dictionary.
   """
-  assert isinstance(xs, (flax.core.FrozenDict, dict)), 'expected (frozen)dict'
+  assert isinstance(
+      xs,
+      (flax.core.FrozenDict, dict)), f'expected (frozen)dict got {type(xs)}'
 
   def _key(path):
     if sep is None:

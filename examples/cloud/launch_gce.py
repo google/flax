@@ -24,7 +24,6 @@ from typing import Sequence
 
 from absl import app
 from absl import flags
-from absl import logging
 
 # General options.
 flags.DEFINE_bool(
@@ -40,7 +39,7 @@ flags.DEFINE_bool(
     'wait', False,
     help='If set, then the script will wait until VM is ready. If VM_READY_CMD '
     'is set in environment, then that command will be executed once the VM '
-    'is ready. Useful for sending a notification, e.g. "osascript"')
+    'is ready. Useful for sending a notification, e.g. "osascript" (mac).')
 
 # Machine configuration.
 flags.DEFINE_string('project', None, help='Name of the Google Cloud project.')
@@ -54,6 +53,12 @@ flags.DEFINE_string(
     '',
     help='Type of accelerator to use, or empty. '
     'See "gcloud compute accelerator-types list".'
+)
+flags.DEFINE_integer(
+    'shutdown_secs',
+    300,
+    help='How long to wait (after successful/failed training) before shutting '
+    'down the VM. Set to 0 to disable.'
 )
 flags.DEFINE_integer(
     'accelerator_count', 8, help='Number of accelerators to use.')
@@ -117,6 +122,7 @@ def generate_startup_file(vm_name: str) -> str:
       ('__GCS_WORKDIR_BASE__', FLAGS.gcs_workdir_base),
       ('__TFDS_DATA_DIR__', FLAGS.tfds_data_dir),
       ('__ACCELERATOR_TYPE__', FLAGS.accelerator_type),
+      ('__SHUTDOWN_SECS__', str(FLAGS.shutdown_secs))
   ):
     startup_script_content = startup_script_content.replace(from_str, to_str)
   with open(startup_script_dst, 'w', encoding='utf8') as f:
@@ -130,7 +136,7 @@ def launch_gce(*, vm_name: str, startup_script: str):
   args = [
       'gcloud', 'compute', 'instances', 'create', vm_name,
       f'--project={FLAGS.project}', f'--zone={FLAGS.zone}',
-      '--image=c1-deeplearning-tf-2-4-cu110-v20210512-debian-10',
+      '--image=c1-deeplearning-tf-2-10-cu113-v20221107-debian-10',
       '--image-project=ml-images', f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full', '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
@@ -160,6 +166,9 @@ def launch_gce(*, vm_name: str, startup_script: str):
 
 def print_howto(login_args: Sequence[str]):
   print(f'''
+###############################################################################
+###############################################################################
+
 You can start/stop the instace via the web UI:
 https://console.cloud.google.com/compute/instances?project={FLAGS.project}
 
@@ -174,6 +183,12 @@ To observe the training via Tensorboard, simply run in your local computer:
 
 $ tensorboard --logdir={FLAGS.gcs_workdir_base}
 
+You can also browse the files at
+
+https://console.cloud.google.com/storage/browser/{FLAGS.gcs_workdir_base.replace('gs://', '')}
+
+###############################################################################
+###############################################################################
 ''')
 
 
@@ -232,6 +247,11 @@ def main(_):
           time.sleep(20)
         else:
           raise ValueError(f'Unknown error: {stderr}')
+      except ValueError as e:
+        if 'HTTP 502' not in str(e):
+          raise e
+        print('(Bad Gateway - waiting a little longer...)')
+        time.sleep(20)
       except subprocess.TimeoutExpired:
         print('(Timeout - waiting a little longer...)')
         time.sleep(20)

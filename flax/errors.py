@@ -646,18 +646,22 @@ class MPACheckpointingRequiredError(FlaxError):
 class MPARestoreTargetRequiredError(FlaxError):
   """Provide a valid target when restoring a checkpoint with a multiprocess array.
 
-  To restore a checkpoint that contains a a multiprocess array, make sure
-  to pass a valid ``target`` argument that contains GDAs with correct global
-  meshes and partition specs.
-
+  Multiprocess arrays need a sharding (global meshes and partition specs) to be
+  initialized. Therefore, to restore a checkpoint that contains a multiprocess
+  array, make sure the ``target`` you passed contains valid multiprocess arrays
+  at the corresponding tree structure location. If you cannot provide a full
+  valid ``target``, consider ``allow_partial_mpa_restoration=True``.
   """
 
-  def __init__(self, path, step):
-    super().__init__(
+  def __init__(self, path, step, key=None):
+    error_msg = (
         f'Restore checkpoint failed at step: "{step}" and path: "{path}": '
         'Checkpoints containing a multiprocess array need to be restored with '
-        'a valid target.'
-    )
+        'a target with pre-created arrays. If you cannot provide a full valid '
+        'target, consider ``allow_partial_mpa_restoration=True``. ')
+    if key:
+      error_msg += f'This error fired when trying to restore array at {key}.'
+    super().__init__(error_msg)
 
 class MPARestoreDataCorruptedError(FlaxError):
   """A multiprocess array stored in Google Cloud Storage doesn't contain a "commit_success.txt" file, which should be written at the end of the save.
