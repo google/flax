@@ -1,19 +1,11 @@
 #!/bin/bash
 
-HOME=/train
+# Note that all __XYZ__ strings are replaced by launch_gce.py
 
-# Replaced by launch_gce.py
-REPO='__REPO__'
-BRANCH='__BRANCH__'
-EXAMPLE='__EXAMPLE__'
-TIMESTAMP='__TIMESTAMP__'
-NAME='__EXAMPLE__/__NAME__/__TIMESTAMP__'
-ARGS='__ARGS__'
-GCS_WORKDIR_BASE='__GCS_WORKDIR_BASE__'
-TFDS_DATA_DIR='__TFDS_DATA_DIR__'
-ACCELERATOR_TYPE='__ACCELERATOR_TYPE__'
-WORKDIR="$HOME/workdir_base/$NAME"
+WORKDIR="/train/workdir_base/__EXAMPLE__/__NAME__/__TIMESTAMP__"
 
+mkdir -p /train
+cd /train
 
 # Login directly with:
 # gcloud compute ssh $VM -- /sudo_tmux_a.sh
@@ -22,51 +14,64 @@ chmod a+x /sudo_tmux_a.sh
 echo -e '#!/bin/bash\ntmux a' > /tmux_a.sh
 chmod a+x /tmux_a.sh
 
-mkdir -p $HOME
-cd $HOME
-
-tmux new-session -s flax -d htop ENTER
-tmux split-window
-tmux send "
-
+# Main script running in bottom left tmux pane.
+cat >/install_train_stop.sh <<EOF
+set -x
 (
-  set -x
+  conda activate flax &&
 
   [ -d flax ] || (
-    git clone -b $BRANCH $REPO &&
+    git clone --depth 1 -b __BRANCH__ __REPO__ &&
     cd flax &&
 
-    python3 -m pip install virtualenv &&
-    python3 -m virtualenv env &&
-    . env/bin/activate &&
+    conda create -yn flax python==3.9 &&
+    conda activate flax &&
 
     pip install -U pip &&
     pip install -e . &&
-    if [[ '$ACCELERATOR_TYPE' =~ ^nvidia- ]]; then
-      pip install --upgrade jax jaxlib==0.1.69+cuda110 -f https://storage.googleapis.com/jax-releases/jax_releases.html
-    fi &&
 
-    cd examples/$EXAMPLE &&
+    cd examples/__EXAMPLE__ &&
     pip install -r requirements.txt &&
-    cd $HOME
+    cd /train
   ) &&
 
+  conda activate flax &&
   cd flax &&
-  . env/bin/activate &&
-  cd examples/$EXAMPLE &&
+  cd examples/__EXAMPLE__ &&
 
-  TFDS_DATA_DIR='$TFDS_DATA_DIR' python main.py --workdir=$WORKDIR $ARGS
+  TFDS_DATA_DIR='__TFDS_DATA_DIR__' python main.py --workdir=$WORKDIR __ARGS__
 
 ) 2>&1 | tee -a $WORKDIR/setup_train_log_${TIMESTAMP}.txt
 
-echo
-echo WILL SHUT DOWN IN 5 MIN ...
-sleep 300 && sudo shutdown now
-"
+if [ __SHUTDOWN_SECS__ -gt 0 ]; then
+  echo
+  echo WILL SHUT DOWN IN $((__SHUTDOWN_SECS__/60)) MIN ...
+  sleep __SHUTDOWN_SECS__ && shutdown now
+fi
+
+EOF
+
+
+# Set up TMUX panes:
+tmux new-session -s flax -d
+# - top left: htop
+tmux send 'htop
+'
+tmux split-window
+tmux selectp -U
 tmux split-window -h
+# - top right: htop
+tmux send 'watch nvidia-smi
+'
+tmux selectp -D
+# - bottom left: main script
+tmux send '. /install_train_stop.sh
+'
+tmux split-window -h
+# - bottom right: rsync files to GCS bucket.
 tmux send "
 while true; do
-  gsutil rsync -r workdir_base $GCS_WORKDIR_BASE
+  gsutil rsync -r workdir_base __GCS_WORKDIR_BASE__
   sleep 60
-done 2>&1 | tee -a $WORKDIR/gcs_rsync_${TIMESTAMP}.txt
-" ENTER
+done 2>&1 | tee -a $WORKDIR/gcs_rsync_'__TIMESTAMP__'.txt
+"
