@@ -23,7 +23,28 @@ vNext
 -
 -
 -
--
+
+0.6.2
+-----
+New features:
+- Add rng_collection argument to Dropout.
+- Fix flax.linen.stochastic.Dropout.
+- Add flag allow_partial_mpa_restoration in checkpointing.
+- Use `gfile.remove` for files because it doesn't work on GCS files.
+- Added guides for: Flax the Sharp Bits, Checkpointing, Extracting Gradients
+- Improved existed documentation pages.
+- Improved errors, error messages and tests.
+- Removed codebase's trailing whitespaces.
+
+Bug fixes:
+- Fixes launch_gce.sh with imagenet example.
+- Properly report AttributeErrors from descriptors .
+- Fixes usages of `pmap`.
+- Return None if no _parent_ref is set.
+- Cap dynamic scale to float32 max.
+- no-op when double wrapping with struct.dataclass
+- Allow variable_with_axes to have empty axes when axes is set to an empty tuple.
+- Don't create reference cycles among Modules.
 
 0.6.1
 -----
