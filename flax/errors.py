@@ -735,3 +735,19 @@ class TransformTargetError(FlaxError):
       'Linen transformations must be applied to Modules classes or'
       ' functions taking a Module instance as the first argument.'
       f' The provided target is not a Module class or callable: {target}')
+
+
+#################################################
+# serialization.py errors                          #
+#################################################
+
+class InvalidShapeError(FlaxError):
+  """Loaded parameters are a different shape than the target shape"""
+
+  def __init__(self, target_shape, state_shape):
+    super().__init__(
+        'Loaded parameters are a different shape than the target shape.\n\n'
+        'Target shape:\n'
+        f'{target_shape}\n\n'
+        'State shape:\n'
+        f'{state_shape}\n\n')

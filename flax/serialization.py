@@ -21,6 +21,7 @@ import enum
 from typing import Any, Dict, List
 
 import jax
+from flax import errors
 import msgpack
 import numpy as np
 
@@ -38,7 +39,7 @@ def _is_namedtuple(x):
   return isinstance(x, tuple) and hasattr(x, '_fields')
 
 
-def from_state_dict(target, state: Dict[str, Any]):
+def from_state_dict(target, state: Dict[str, Any], check_shapes=False):
   """Restores the state of the given target using a state dict.
 
   This function takes the current target as an argument. This
@@ -62,7 +63,15 @@ def from_state_dict(target, state: Dict[str, Any]):
   if ty not in _STATE_DICT_REGISTRY:
     return state
   ty_from_state_dict = _STATE_DICT_REGISTRY[ty][1]
-  return ty_from_state_dict(target, state)
+  restored_state = ty_from_state_dict(target, state)
+
+  if check_shapes:
+    target_shape = jax.tree_util.tree_map(lambda x: x.shape, target)
+    state_shape = jax.tree_util.tree_map(lambda x: x.shape, restored_state)
+    if target_shape != state_shape:
+      raise errors.InvalidShapeError(target_shape,state_shape)
+  return restored_state
+
 
 
 def to_state_dict(target) -> Dict[str, Any]:
@@ -354,7 +363,7 @@ def msgpack_restore(encoded_pytree: bytes):
   return _unchunk_array_leaves_in_place(state_dict)
 
 
-def from_bytes(target, encoded_bytes: bytes):
+def from_bytes(target, encoded_bytes: bytes, check_shapes=False):
   """Restore optimizer or other object from msgpack-serialized state-dict.
 
   Args:
@@ -368,7 +377,7 @@ def from_bytes(target, encoded_bytes: bytes):
     leaf data from saved data.
   """
   state_dict = msgpack_restore(encoded_bytes)
-  return from_state_dict(target, state_dict)
+  return from_state_dict(target, state_dict, check_shapes)
 
 
 def to_bytes(target) -> bytes:
