@@ -14,7 +14,7 @@ on:
 
 jobs:
   cancel-previous:
-    name: Cancel Previous Runs
+    name: Cancel Previous  Runs
     runs-on: ubuntu-latest
     steps:
       - name: Cancel previous
