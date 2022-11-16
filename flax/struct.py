@@ -161,7 +161,7 @@ def dataclass(clz: _T) -> _T:
       data_clz, to_state_dict, from_state_dict)
 
   # add a _flax_dataclass flag to distinguish from regular dataclasses
-  data_clz._flax_dataclass = True
+  data_clz._flax_dataclass = True # type: ignore[attr-defined]
 
   return data_clz
 

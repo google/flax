@@ -28,7 +28,7 @@ from .frozen_dict import unfreeze
 import jax
 from jax import random
 from .scope import (CollectionFilter, DenyList, PRNGSequenceFilter,  # pylint: disable=g-multiple-import
-                    Scope, group_collections, in_filter,
+                    Filter, Scope, group_collections, in_filter,
                     intersect_filters, is_filter_empty, subtract_filters,
                     union_filters)
 
@@ -148,7 +148,7 @@ def pack(fn: Callable[..., Any],
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
       inner_scopes = []
-      mutable = False
+      mutable: Filter = False
       for out_filter in out_variable_filters:
         mutable = union_filters(mutable, out_filter)
       # could be () in the edge case where no rngs or variable_groups are lifted
@@ -1264,8 +1264,8 @@ def jit(fn: Callable[..., Any],
   # Close over scope_fn & repack_fn to avoid recompilation
   # this is impure but we use the fingerprint arg to differentiate between cases
   # where scope_fn or repack_fn actually produce non-identical results.
-  scope_fn = None  # type: Callable
-  repack_fn = None  # type: Callable
+  scope_fn = None  # type: Optional[Callable]
+  repack_fn = None  # type: Optional[Callable]
   @functools.partial(jax.jit,
                      static_argnums=static_argnums,
                      donate_argnums=donate_argnums,

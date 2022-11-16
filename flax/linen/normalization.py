@@ -28,7 +28,7 @@ Array = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 
-Axes = Union[int, Iterable[int]]
+Axes = Union[int, Any]
 
 
 def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
@@ -46,7 +46,7 @@ def _abs_sq(x):
     return lax.square(x)
 
 
-def _compute_stats(x: Array, axes: Axes,
+def _compute_stats(x: Array, axes: Optional[Axes],
                    dtype: Optional[Dtype],
                    axis_name: Optional[str] = None,
                    axis_index_groups: Any = None):

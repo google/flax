@@ -395,7 +395,7 @@ class Scope:
                mutable: CollectionFilter = False,
                parent: Optional['Scope'] = None,
                path: Iterable[str] = (),
-               flags: Optional[Dict] = None):
+               flags: Optional[Mapping] = None):
     """Initializes a Scope.
 
     Args:
@@ -619,8 +619,10 @@ class Scope:
   def _mutable_collection(self, col: str) -> MutableCollection:
     """Returns the collection `col` as a mutable object."""
     assert self.is_mutable_collection(col), f'Collection {col} is not mutable'
+
     if col not in self._variables:
       if self.parent:
+        assert self.name is not None
         parent_col = self.parent._mutable_collection(col)  # pylint: disable=protected-access
         if self.name not in parent_col:
           parent_col[self.name] = {}
@@ -633,6 +635,7 @@ class Scope:
     """Returns a collection of variables of collection `col`."""
     if col not in self._variables:
       if self.parent:
+        assert self.name is not None
         parent_col = self.parent._collection(col)  # pylint: disable=protected-access
         if self.name not in parent_col:
           return FrozenDict()
@@ -804,7 +807,7 @@ def _unfreeze_variables(variables, mutable):
 def bind(variables: VariableDict,
          rngs: Optional[RNGSequences] = None,
          mutable: CollectionFilter = False,
-         flags: Optional[Dict] = None):
+         flags: Optional[Mapping] = None):
   """Binds variables and rngs to a new ``Scope``.
 
   bind provides a ``Scope`` instance without transforming a function with
@@ -837,7 +840,7 @@ def bind(variables: VariableDict,
 
 def apply(fn: Callable[..., Any],
           mutable: CollectionFilter = False,
-          flags: Optional[Dict] = None) -> Callable[..., Any]:
+          flags: Optional[Mapping] = None) -> Callable[..., Any]:
   """Functionalize a `Scope` function.
 
   Args:
@@ -873,7 +876,7 @@ def apply(fn: Callable[..., Any],
 
 def init(fn: Callable[..., Any],
          mutable: CollectionFilter = True,
-         flags: Optional[Dict] = None) -> Callable[..., Any]:
+         flags: Optional[Mapping] = None) -> Callable[..., Any]:
   """Functionalize a `Scope` function for initialization.
 
   Args:
@@ -930,7 +933,7 @@ def _is_valid_variables(variables: VariableDict) -> bool:
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
   # New-style JAX KeyArrays have a base type.
-  if jax_config.jax_enable_custom_prng:
+  if jax_config.jax_enable_custom_prng: # type: ignore[attr-defined]
     if not isinstance(rng, jax.random.KeyArray):
       return False
   # Old-style JAX PRNGKeys are plain uint32 arrays.

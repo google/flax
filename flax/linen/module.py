@@ -22,7 +22,7 @@ import re
 import threading
 import typing
 import weakref
-from typing import (Any, Callable, Dict, Iterable, List, NamedTuple, Mapping,
+from typing import (Any, Callable, Dict, Iterable, List, Sequence, NamedTuple, Mapping,
                     Optional, Set, Tuple, Type, TypeVar, Union, overload)
 
 import jax
@@ -618,11 +618,11 @@ class Module:
     cls._verify_single_or_no_compact()
     cls._wrap_module_methods()
     # Set empty class defaults.
-    cls._state = _uninitialized_module_internal_state
-    cls.scope: Optional[Scope] = None
+    cls._state = _uninitialized_module_internal_state # type: ignore[attr-defined]
+    cls.scope: Optional[Scope] = None # type: ignore
     # Handles weak referencing of parent Modules to prevent reference cycles.
-    cls._parent_ref = None
-    cls.parent = ParentDescriptor()
+    cls._parent_ref = None # type: ignore[attr-defined]
+    cls.parent = ParentDescriptor() # type: ignore[attr-defined]
 
   @classmethod
   def _customized_dataclass_transform(cls):
@@ -842,6 +842,7 @@ class Module:
       # When initializing an unnamed Module inside setup()
       # initialization is deferred until attachment by __setattr__
       # i.e. self.mymodule = MyModule(...)
+      self.name: Optional[str]
       if self.parent._state.in_setup and self.name is None:  # pytype: disable=attribute-error
         return
       if not self.parent._initialization_allowed:
@@ -1433,12 +1434,12 @@ class Module:
   @overload
   def sow(self, col: str, name: str, value: T,
           reduce_fn: Callable[[K, T], K] = tuple_reduce,
-          init_fn: Callable[[], K] = tuple_init) -> bool:
+          init_fn: Callable[[], K] = tuple_init) -> bool: # type: ignore
     ...
 
   def sow(self, col: str, name: str, value: T,
           reduce_fn: Callable[[K, T], K] = tuple_reduce,
-          init_fn: Callable[[], K] = tuple_init) -> bool:
+          init_fn: Callable[[], K] = tuple_init) -> bool: # type: ignore
     """Stores a value in a collection.
 
     Collections can be used to collect intermediate values without
