@@ -20,9 +20,10 @@ import functools
 import os
 
 # pylint: disable=g-import-not-at-top
+from flax import io
 import numpy as np
 
-import tensorflow.compat.v2 as tf  # pytype: disable=import-error
+import tensorflow as tf  # pytype: disable=import-error
 from tensorboard.plugins.hparams import api as hparams_api
 
 
@@ -83,8 +84,8 @@ class SummaryWriter:
     log_dir = os.fspath(log_dir)
 
     # If needed, create log_dir directory as well as missing parent directories.
-    if not tf.io.gfile.isdir(log_dir):
-      tf.io.gfile.makedirs(log_dir)
+    if not io.isdir(log_dir):
+      io.makedirs(log_dir)
 
     self._event_writer = tf.summary.create_file_writer(log_dir)
     self._as_default = functools.partial(_as_default, auto_flush=auto_flush)

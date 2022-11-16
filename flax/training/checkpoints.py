@@ -27,6 +27,7 @@ import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from absl import logging
+from flax import io
 from flax import core
 from flax import errors
 from flax import serialization
@@ -37,7 +38,6 @@ from jax import sharding
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
 from tensorflow import errors as tf_errors
-from tensorflow.io import gfile  # pytype: disable=import-error
 
 
 _IMPORT_GDAM_SUCCESSFUL = False
@@ -101,7 +101,7 @@ def _checkpoint_path_step(path: str) -> Optional[float]:
 
 def _allowempty_listdir(path: str):
   try:
-    return gfile.listdir(path)
+    return io.listdir(path)
   except tf_errors.NotFoundError:
     return []
 
@@ -174,12 +174,12 @@ def _make_mpa_dirs(mpa_targets: List[Tuple[MultiprocessArrayType, str]],
   mpa_tmp_path = tmp_path + MP_ARRAY_POSTFIX
   # Clean up the previous MPA dir, in case some leftover from last preemption
   # lingers.
-  if gfile.exists(mpa_tmp_path):
+  if io.exists(mpa_tmp_path):
     logging.info('Removing outdated MPA temporary files at %s', mpa_tmp_path)
-    gfile.rmtree(mpa_tmp_path)
+    io.rmtree(mpa_tmp_path)
   _, mpa_subpaths = zip(*mpa_targets)
   for subpath in mpa_subpaths:
-    gfile.makedirs(os.path.join(mpa_tmp_path, subpath))
+    io.makedirs(os.path.join(mpa_tmp_path, subpath))
 
 
 def _save_mpas(gda_manager, mpa_targets: List[Tuple[MultiprocessArrayType, str]],
@@ -236,7 +236,7 @@ def _restore_mpas(state_dict,
     gda_manager.wait_until_finished()
 
     # Check if reading from GCS and the array dir is potentially corrupted.
-    if ckpt_path.startswith('gs://') and not gfile.exists(
+    if ckpt_path.startswith('gs://') and not io.exists(
         os.path.join(ckpt_path + MP_ARRAY_POSTFIX, COMMIT_SUCCESS_FILE)):
       raise errors.MPARestoreDataCorruptedError(step, ckpt_path)
 
@@ -324,7 +324,7 @@ def natural_sort(file_list: Iterable[str], signed: bool = True) -> List[str]:
 
 
 def safe_normpath(path: str) -> str:
-  """Normalizes path safely to get around `gfile.glob()` limitations."""
+  """Normalizes path safely to get around `io.glob()` limitations."""
   d = SCHEME_RE.match(path).groupdict()
   return (d['scheme'] or '') + os.path.normpath(d['path'])
 
@@ -334,7 +334,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
                           has_mpa: bool) -> None:
   """Check the parameters and clean up the checkpoint space accordingly."""
   dir_path, prefix = os.path.split(base_path)
-  checkpoint_files = [pathlib.PurePath(c) for c in gfile.listdir(dir_path)]
+  checkpoint_files = [pathlib.PurePath(c) for c in io.listdir(dir_path)]
   checkpoint_files = [
       os.path.join(dir_path, c)
       for c in checkpoint_files
@@ -353,9 +353,9 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # MPA might be removed already but the main ckpt is still there. This
         # can happen if the job is previously preempted after deleting the MPA
         # checkpoint folder and before deleting the main checkpoint.
-        if gfile.exists(path + MP_ARRAY_POSTFIX):
-          gfile.rmtree(path + MP_ARRAY_POSTFIX)
-      gfile.remove(path)
+        if io.exists(path + MP_ARRAY_POSTFIX):
+          io.rmtree(path + MP_ARRAY_POSTFIX)
+      io.remove(path)
 
   # Remove old checkpoint files.
   last_kept = -float('inf')
@@ -374,9 +374,9 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
       logging.info('Removing checkpoint at %s', path)
       if has_mpa:
         # MPA might be removed already but the main ckpt is still there.
-        if gfile.exists(path + MP_ARRAY_POSTFIX):
-          gfile.rmtree(path + MP_ARRAY_POSTFIX)
-      gfile.remove(path)
+        if io.exists(path + MP_ARRAY_POSTFIX):
+          io.rmtree(path + MP_ARRAY_POSTFIX)
+      io.remove(path)
 
 
 def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
@@ -397,22 +397,22 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
   if has_mpa:
     if write_commit_success:
       commit_success_path = os.path.join(mpa_ckpt_path, COMMIT_SUCCESS_FILE)
-      with gfile.GFile(commit_success_path, 'w') as f:
+      with io.GFile(commit_success_path, 'w') as f:
         f.write(f'Checkpoint commit was successful to {mpa_ckpt_path}')
     else:
       # Commits are a two stage process (renaming the array folder and renaming
       # the main ckpt file in sequential order). We always try to overwrite
       # here because the array ckpt might be already renamed in a previously
-      # interrupted commit. NOTE: gfile.rename does not support overwriting
+      # interrupted commit. NOTE: io.rename does not support overwriting
       # directories via `rename` so we manually overwrite it.
-      if gfile.exists(mpa_ckpt_path):
+      if io.exists(mpa_ckpt_path):
         logging.info('Removing outdated checkpoint at %s', mpa_ckpt_path)
-        gfile.rmtree(mpa_ckpt_path)
-      gfile.rename(mpa_ckpt_tmp_path, mpa_ckpt_path)
+        io.rmtree(mpa_ckpt_path)
+      io.rename(mpa_ckpt_tmp_path, mpa_ckpt_path)
   # Commit the main checkpoint file after arrays (if any) are committed
   if async_manager:
     async_manager.wait_previous_save()
-  gfile.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
+  io.rename(ckpt_tmp_path, ckpt_path, overwrite=overwrite)
   logging.info('Saved checkpoint at %s', ckpt_path)
 
   # Remove newer and older invalid checkpoints.
@@ -450,9 +450,9 @@ def _save_main_ckpt_file(target: bytes, has_mpa: bool, paths: Tuple[str, str],
                          keep_every_n_steps: Optional[int]):
   """Save the main checkpoint file via file system."""
   ckpt_tmp_path, ckpt_path = paths
-  gfile.makedirs(os.path.dirname(ckpt_path))
+  io.makedirs(os.path.dirname(ckpt_path))
 
-  with gfile.GFile(ckpt_tmp_path, 'wb') as fp:
+  with io.GFile(ckpt_tmp_path, 'wb') as fp:
     fp.write(target)
 
   # Postpone the commitment of checkpoint to after MPA writes are done.
@@ -475,7 +475,7 @@ def _get_checkpoint_paths(
   """Generate the checkpoint paths used in this save operation."""
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   logging.info('Saving checkpoint at step: %s', step)
-  # normalize path because gfile.glob() can modify path './', '//' ...
+  # normalize path because io.glob() can modify path './', '//' ...
   ckpt_dir = safe_normpath(ckpt_dir)
   ckpt_tmp_path = _checkpoint_path(ckpt_dir, 'tmp', prefix)
   ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
@@ -706,13 +706,13 @@ def restore_checkpoint(
   ckpt_dir = safe_normpath(ckpt_dir)
   if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
-    if not gfile.exists(ckpt_path):
+    if not io.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
   else:
-    if not gfile.exists(ckpt_dir):
+    if not io.exists(ckpt_dir):
       logging.info('Found no checkpoint directory at %s', ckpt_dir)
       return target
-    if not gfile.isdir(ckpt_dir):
+    if not io.isdir(ckpt_dir):
       ckpt_path = ckpt_dir
     else:
       ckpt_path = latest_checkpoint(ckpt_dir, prefix)
@@ -722,7 +722,7 @@ def restore_checkpoint(
         return target
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
-  with gfile.GFile(ckpt_path, 'rb') as fp:
+  with io.GFile(ckpt_path, 'rb') as fp:
     if parallel and fp.seekable():
       buf_size = 128 << 20  # 128M buffer.
       num_bufs = fp.size() / buf_size
@@ -733,7 +733,7 @@ def restore_checkpoint(
         # NOTE: We have to re-open the file to read each chunk, otherwise the
         # parallelism has no effect. But we could reuse the file pointers
         # within each thread.
-        with gfile.GFile(ckpt_path, 'rb') as f:
+        with io.GFile(ckpt_path, 'rb') as f:
           f.seek(i * buf_size)
           buf = f.read(buf_size)
           if buf:

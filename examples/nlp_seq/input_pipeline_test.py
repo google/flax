@@ -18,13 +18,11 @@ import os
 
 from absl.testing import absltest
 import jax
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 
 import input_pipeline
 
 
-# Enable direct iteration over a tf-datasets.
-tf.enable_v2_behavior()
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
