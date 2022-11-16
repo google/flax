@@ -248,7 +248,7 @@ def _restore_mpas(state_dict,
       if isinstance(arr, GlobalDeviceArray) and jax.config.jax_array:
         raise errors.MPARestoreTypeNotMatchError(step, path)
       if isinstance(arr, GlobalDeviceArray):
-        shardings.append(sharding.MeshPspecSharding(arr.mesh, arr.mesh_axes))
+        shardings.append(sharding.NamedSharding(arr.mesh, arr.mesh_axes))
       elif jax.config.jax_array and isinstance(arr, jax.Array):
         shardings.append(arr.sharding)
 
