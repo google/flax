@@ -16,7 +16,6 @@
 """Flax API."""
 
 from . import core
-from . import io
 from . import jax_utils
 from . import linen
 from . import serialization
