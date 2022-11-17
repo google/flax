@@ -38,7 +38,7 @@ class ImagenetBenchmarkFakeData(Benchmark):
     workdir = self.get_tmp_model_dir()
     config = config_lib.get_config()
     # Go two directories up to the root of the flax directory.
-    flax_root_dir = pathlib.Path(__file__).parents[2]
+    flax_root_dir = pathlib.Path(__file__).absolute().parents[2]
     data_dir = str(flax_root_dir) + '/.tfds/metadata'
 
     # Warm-up first so that we are not measuring just compilation.
