@@ -41,17 +41,20 @@ def pool(inputs, init, reduce_fn, window_shape, strides, padding):
   Returns:
     The output of the reduction for each window slice.
   """
+  num_batch_dims = inputs.ndim - (len(window_shape) + 1)
   strides = strides or (1,) * len(window_shape)
   assert len(window_shape) == len(strides), (
       f"len({window_shape}) must equal len({strides})")
-  strides = (1,) + strides + (1,)
-  dims = (1,) + window_shape + (1,)
+  strides = (1,) * num_batch_dims + strides + (1,)
+  dims = (1,) * num_batch_dims + window_shape + (1,)
 
   is_single_input = False
-  if inputs.ndim == len(dims) - 1:
+  if num_batch_dims == 0:
     # add singleton batch dimension because lax.reduce_window always
     # needs a batch dimension.
     inputs = inputs[None]
+    strides = (1,) + strides
+    dims = (1,) + dims
     is_single_input = True
 
   assert inputs.ndim == len(dims), f"len({inputs.shape}) != len({dims})"
