@@ -266,6 +266,7 @@ Notable examples include:
    Getting Started <getting_started>
    🔪 Flax - The Sharp Bits 🔪 <notebooks/flax_sharp_bits>
    guides/index
+   tutorials/index
    examples
    advanced_topics/index
    contributing/index
