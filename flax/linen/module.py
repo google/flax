@@ -380,7 +380,7 @@ def _get_local_method_names(cls: Any,
   """
   true_methods = set()
   for m in cls.__dict__:
-    if callable(cls.__dict__[m]) and not inspect.isclass(cls.__dict__[m]):
+    if callable(cls.__dict__[m]) and not inspect.isclass(cls.__dict__[m]):  # pytype: disable=not-supported-yet
       mtype = type(cls.__dict__[m])
       if mtype != staticmethod and mtype != classmethod:
         true_methods.add(m)
