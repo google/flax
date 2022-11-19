@@ -4,6 +4,7 @@ PYTEST_OPTS=
 RUN_DOCTEST=true
 RUN_PYTEST=true
 RUN_PYTYPE=true
+GH_VENV=false
 
 for flag in "$@"; do
 case $flag in
@@ -24,6 +25,9 @@ case $flag in
   --no-pytype)
   RUN_PYTYPE=false
   ;;
+  --use-venv)
+  GH_VENV=true
+  ;;
   *)
   echo "Unknown flag: $flag"
   exit 1
@@ -31,11 +35,18 @@ case $flag in
 esac
 done
 
+# Activate cached virtual env for github CI
+if $GH_VENV; then
+  source $(dirname "$0")/../venv/bin/activate
+fi
+
 echo "====== test config ======="
 echo "PYTEST_OPTS: $PYTEST_OPTS"
 echo "RUN_DOCTEST: $RUN_DOCTEST"
 echo "RUN_PYTEST: $RUN_PYTEST"
 echo "RUN_PYTYPE: $RUN_PYTYPE"
+echo "GH_VENV: $GH_VENV"
+echo "WHICH PYTHON: $(which python)"
 echo "jax: $(python -c 'import jax; print(jax.__version__)')"
 echo "flax: $(python -c 'import flax; print(flax.__version__)')"
 echo "=========================="
@@ -99,14 +110,14 @@ fi
 if $RUN_PYTYPE; then
   echo "=== RUNNING PYTYPE ==="
   # Validate types in library code.
-  pytype --config pytype.cfg flax/
+  pytype --jobs auto --config pytype.cfg flax/
 
   # Validate types in examples.
   for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
       # use cd to make sure pytpe cache lives in example dir and doesn't name clash
       # use *.py to avoid importing configs as a top-level import which leads to import errors
       # because config files use relative imports (e.g. from config import ...).
-      (cd $egd ; pytype --config ../../pytype.cfg "*.py")
+      (cd $egd ; pytype --jobs auto --config ../../pytype.cfg "*.py")
   done
 fi
 

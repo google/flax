@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python 3.8
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@v4
         with:
           python-version: 3.7
       - uses: pre-commit/action@v2.0.3
@@ -36,7 +36,7 @@ jobs:
     name: Check commit count
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     # We allow at most 5 commits in a branch to ensure our CI doesn't break.
     - name: Check commit count in PR
       if: always()
@@ -65,9 +65,9 @@ jobs:
       matrix:
         python-version: [3.7, 3.8, 3.9]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install standalone dependencies only
@@ -79,7 +79,7 @@ jobs:
   tests:
     name: Run Tests
     needs: [cancel-previous, pre-commit, commit-count, test-import]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04-16core
     strategy:
       matrix:
         python-version: [3.7, 3.8, 3.9]
@@ -90,24 +90,40 @@ jobs:
           - test-type: pytype
             python-version: 3.8
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v1
+      id: setup_python
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-    - name: Install dependencies
+    - name: Get week and year
+      id: week_year
+      run: echo "DATE=$(date +%U-%Y)" >> $GITHUB_OUTPUT
+    - name: Cached virtual environment
+      id: venv_cache
+      uses: actions/cache@v3
+      with:
+        path: venv
+        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.week_year.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'setup.py') }}
+    - name: Install Dependencies for cache
+      if: steps.venv_cache.outputs.cache-hit != 'true'
       run: |
-        pip install .
-        pip install .[testing]
-        pip install -r docs/requirements.txt
+        if [ -d "venv" ]; then rm -rf venv; fi
+        python3 -m venv venv
+        venv/bin/python3 -m pip install .
+        venv/bin/python3 -m pip install .[testing]
+        venv/bin/python3 -m pip install -r docs/requirements.txt
+    - name: Install Flax
+      run: |
+        venv/bin/python3 -m pip install -e .
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
-          tests/run_all_tests.sh --no-pytest --no-pytype
+          tests/run_all_tests.sh --no-pytest --no-pytype --use-venv
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          tests/run_all_tests.sh --no-doctest --no-pytype --with-cov
+          tests/run_all_tests.sh --no-doctest --no-pytype --with-cov --use-venv
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
-          tests/run_all_tests.sh --no-doctest --no-pytest
+          tests/run_all_tests.sh --no-doctest --no-pytest --use-venv
         else
           echo "Unknown test type: ${{ matrix.test-type }}"
           exit 1
