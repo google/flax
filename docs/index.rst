@@ -264,9 +264,9 @@ Notable examples include:
    :maxdepth: 2
 
    Getting Started <getting_started>
-   🔪 Flax - The Sharp Bits 🔪 <notebooks/flax_sharp_bits>
    guides/index
    examples
    advanced_topics/index
+   🔪 Flax - The Sharp Bits 🔪 <notebooks/flax_sharp_bits>
    contributing/index
    api_reference/index
