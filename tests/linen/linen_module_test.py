@@ -1483,9 +1483,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y1, y2)
 
   def test_bind_stateful(self):
-
     class Foo(nn.Module):
-
       def setup(self):
         self.a = nn.Dense(3)
         self.bn = nn.BatchNorm()
@@ -1509,6 +1507,85 @@ class ModuleTest(absltest.TestCase):
     bs_2 = foo_b.variables['batch_stats']
     for x, y in zip(jax.tree_util.tree_leaves(bs_1), jax.tree_util.tree_leaves(bs_2)):
       np.testing.assert_allclose(x, y)
+
+  def test_extract_field(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(3)
+        self.b = nn.Dense(1)
+
+      def __call__(self, x):
+        return self.b(self.a(x))
+
+    foo = Foo()
+    variables = foo.init(random.PRNGKey(0), jnp.ones((4,)))
+
+    a, a_vars = foo.extract_field('a', variables)
+    b, b_vars = foo.extract_field('b', variables)
+
+    self.assertEqual(a.features, 3)
+    self.assertEqual(b.features, 1)
+
+    np.testing.assert_equal(
+      a_vars['params'], variables['params']['a'])
+    np.testing.assert_equal(
+      b_vars['params'], variables['params']['b'])
+
+  def test_extract_field_pytree_field(self):
+    class Foo(nn.Module):
+      def setup(self):
+        self.submodules = {
+          'a': nn.Dense(3),
+          'b': nn.Dense(1),
+        }
+
+      def __call__(self, x):
+        return self.submodules['b'](self.submodules['a'](x))
+
+    foo = Foo()
+    variables = foo.init(random.PRNGKey(0), jnp.ones((4,)))
+
+    submodules, submodules_vars = foo.extract_field('submodules', variables)
+
+    self.assertEqual(submodules['a'].features, 3)
+    self.assertEqual(submodules['b'].features, 1)
+
+    np.testing.assert_equal(
+      submodules_vars['a']['params'], variables['params']['submodules_a'])
+    np.testing.assert_equal(
+      submodules_vars['b']['params'], variables['params']['submodules_b'])
+
+  def test_extract_field_using_access(self):
+    class Submodule(nn.Module):
+      def setup(self):
+        self.a = nn.Dense(3)
+        self.b = nn.Dense(1)
+
+      def __call__(self, x):
+        return self.b(self.a(x))
+
+    class Foo(nn.Module):
+      def setup(self):
+        self.submodules = {'s': Submodule()}
+
+      def __call__(self, x):
+        return self.submodules['s'](x)
+
+    foo = Foo()
+    variables = foo.init(random.PRNGKey(0), jnp.ones((4,)))
+
+    a, a_vars = foo.extract_field(
+      lambda m: m.submodules['s'].a, variables)
+    b, b_vars = foo.extract_field(
+      lambda m: m.submodules['s'].b, variables)
+
+    self.assertEqual(a.features, 3)
+    self.assertEqual(b.features, 1)
+
+    np.testing.assert_equal(
+      a_vars['params'], variables['params']['submodules_s']['a'])
+    np.testing.assert_equal(
+      b_vars['params'], variables['params']['submodules_s']['b'])
 
   def test_passing_mutable_variables(self):
 

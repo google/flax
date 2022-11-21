@@ -12,7 +12,7 @@ Module
 ------------------------
 
 .. autoclass:: Module
-   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, sow, variables, Variable, __setattr__, tabulate, is_initializing, perturb
+   :members: setup, variable, param, bind, apply, init, init_with_output, make_rng, sow, variables, Variable, __setattr__, tabulate, is_initializing, perturb, extract_field
 
 Init/Apply
 ------------------------

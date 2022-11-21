@@ -1649,6 +1649,68 @@ class Module:
                                    console_kwargs=console_kwargs)
     return tabulate_fn(*args, **kwargs)
 
+  def extract_field(
+    self,
+    name_or_callable: Union[str, Callable[['Module'], Any]],
+    variables: VariableDict,
+    rngs: Optional[RNGSequences] = None,
+    mutable: CollectionFilter = False,
+  ) -> Tuple[Any, Any]:
+    """Extract the value field from a Module and its associated variables,
+    useful to get access to fields defined inside ``setup``.
+
+    Normally its not possible to get access to fields defined inside setup ``setup``
+    from the outside since ``setup`` is not called during construction, an error is
+    raised when you try to do so e.g::
+
+      class MyModule(nn.Module):
+        def setup(self):
+          self.submodule = nn.Dense(4)
+
+        def __call__(self, x):
+          return self.submodule(x)
+
+      module = MyModule()
+      variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 2)))
+      module.submodule # raises AttributeError
+
+    ``extract_field`` makes it possible to get access fields defined inside ``setup``
+    and additionally, if the field is a ``Module`` it will return its variables::
+
+      submodule, submodule_vars = module.extract_field('submodule', variables)
+
+    In case you want to extract a nested submodule/object you can pass a
+    callable that takes the main module as input and returns the object you want to
+    extract::
+
+      layer2, layer2_vars = module.extract_field(
+        lambda m: m.layers[2], variables)
+
+    Args:
+      module: The module to get the field from.
+      name_or_callable: The name of the field to get or a callable that takes
+        the module as input and returns the desired object such as a nested submodule.
+      variables: The variables of the module.
+      rngs: a dict of PRNGKeys to initialize the PRNG sequences.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable:
+          ``bool``: all/no collections are mutable.
+          ``str``: The name of a single mutable collection.
+          ``list``: A list of names of mutable collections.
+
+    Returns:
+      A ``(value, variables)`` tuple of the field's value and the variables of the field if it is a
+      ``Module``. If the field is a pytree, the variables will be a pytree of the same shape but with
+      the ``Module`` leaves replaced by their variables and all other leaves replaced by ``None``.
+    """
+    module = self.bind(variables, rngs=rngs, mutable=mutable)
+    value = (getattr(module, name_or_callable) if isinstance(name_or_callable, str)
+      else name_or_callable(module))
+    variables = jax.tree_map(
+      lambda m: m.variables if isinstance(m, Module) else None, value)
+    value = jax.tree_map(
+      lambda m: m.clone() if isinstance(m, Module) else m, value)
+    return value, variables
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.
