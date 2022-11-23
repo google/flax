@@ -7,17 +7,14 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: Python 3
+  display_name: Python 3.10.4 64-bit
+  language: python
   name: python3
 ---
 
-```{code-cell}
-:id: ywkAn3BtzBiu
-
-# Image classification with a dropout and an optimizer schedule
-```
-
 +++ {"id": "NY6InV4qzAQG"}
+
+# Image classification with dropout and an optimizer schedule
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/docs/tutorials/dropout_tutorial.ipynb)
 
