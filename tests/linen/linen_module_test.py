@@ -21,7 +21,7 @@ import gc
 import inspect
 import operator
 from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
-                    Tuple, TypeVar)
+                    Tuple, TypeVar, get_type_hints)
 
 from absl.testing import absltest
 from flax import errors
@@ -1800,6 +1800,13 @@ class ModuleTest(absltest.TestCase):
 
     self.assertIs(unspecified_parent,
                   copy.deepcopy(unspecified_parent))
+
+  def test_type_hints(self):
+    class Network(nn.Module):
+        layers: int
+
+    type_hints = get_type_hints(Network)
+    self.assertEqual(type_hints['layers'], int)
 
 
 class LeakTests(absltest.TestCase):

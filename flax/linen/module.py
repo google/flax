@@ -528,8 +528,6 @@ tuple_init = lambda: ()
 capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 
 
-_ParentType = Union[Type['Module'], Type[Scope], Type[_Sentinel], None]
-
 
 class ParentDescriptor:
   """Wraps parent module references in weak refs.
@@ -1649,6 +1647,9 @@ class Module:
                                    show_repeated=show_repeated, mutable=mutable,
                                    console_kwargs=console_kwargs)
     return tabulate_fn(*args, **kwargs)
+
+
+_ParentType = Union[Type[Module], Type[Scope], Type[_Sentinel], None]
 
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
