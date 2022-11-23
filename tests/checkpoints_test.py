@@ -21,10 +21,12 @@ from typing import Any
 
 from absl.testing import absltest
 from absl.testing import parameterized
-from flax import io
+from flax import config
 from flax import core
 from flax import errors
+from flax import io
 from flax import linen as nn
+from flax import struct
 from flax.training import checkpoints
 import jax
 from jax import numpy as jnp
@@ -73,7 +75,17 @@ class Model(nn.Module):
     return x
 
 
+@struct.dataclass
+class CustomDC:
+  foo: Any
+  bar: Any
+
+
 class CheckpointsTest(parameterized.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    config.flax_use_orbax_checkpointing = False  # default value
 
   def test_naturalsort(self):
     np.random.seed(0)
@@ -93,7 +105,9 @@ class CheckpointsTest(parameterized.TestCase):
     for test, expect in zip(tests, expected):
       self.assertEqual(expect, checkpoints.safe_normpath(test))
 
-  def test_save_restore_checkpoints(self):
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_save_restore_checkpoints(self, use_orbax):
+    config.flax_use_orbax_checkpointing = use_orbax
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
@@ -129,7 +143,8 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(
         tmp_dir, test_object0, step=3, prefix='test_')
     check_eq(new_object, test_object2)
-    # Restore a specific path.
+
+    # Restore with a specific checkpoint path, not the directory path.
     new_object = checkpoints.restore_checkpoint(
         os.path.join(tmp_dir, 'test_3'), test_object0)
     check_eq(new_object, test_object2)
@@ -143,30 +158,22 @@ class CheckpointsTest(parameterized.TestCase):
       checkpoints.restore_checkpoint(
           tmp_dir, test_object0, step=5, prefix='test_')
 
-  def test_overwrite_checkpoints(self):
+
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_overwrite_checkpoints(self, use_orbax):
+    config.flax_use_orbax_checkpointing = use_orbax
+    overwrite_error = ValueError if use_orbax else errors.InvalidCheckpointError
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32)}
     test_object = {'a': np.array([1, 2, 3], np.int32)}
 
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object0, 0, keep=1)
-
-    with self.assertRaises(errors.InvalidCheckpointError):
+    checkpoints.save_checkpoint(tmp_dir, test_object0, 0, keep=1)
+    with self.assertRaises(overwrite_error):
       checkpoints.save_checkpoint(tmp_dir, test_object, 0, keep=1)
-
     checkpoints.save_checkpoint(tmp_dir, test_object, 0, keep=1, overwrite=True)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
+    check_eq(new_object, test_object)
 
-    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
-    check_eq(new_object, test_object)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object0, 2, keep=1, overwrite=True)
-    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object)
-    check_eq(new_object, test_object0)
-    with self.assertRaises(errors.InvalidCheckpointError):
-      checkpoints.save_checkpoint(tmp_dir, test_object, 1, keep=1)
-    checkpoints.save_checkpoint(tmp_dir, test_object, 1, keep=1, overwrite=True)
-    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
-    check_eq(new_object, test_object)
     os.chdir(os.path.dirname(tmp_dir))
     rel_tmp_dir = './' + os.path.basename(tmp_dir)
     checkpoints.save_checkpoint(rel_tmp_dir, test_object, 3, keep=1)
@@ -177,9 +184,11 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(non_norm_dir_path, test_object0)
     check_eq(new_object, test_object)
 
-  @parameterized.parameters({'keep_every_n_steps': None},
-                            {'keep_every_n_steps': 7})
-  def test_keep(self, keep_every_n_steps):
+
+  @parameterized.parameters({'use_orbax': True, 'keep_every_n_steps': None},
+                            {'use_orbax': False, 'keep_every_n_steps': 7})
+  def test_keep(self, use_orbax, keep_every_n_steps):
+    config.flax_use_orbax_checkpointing = use_orbax
     tmp_dir = self.create_tempdir().full_path
     test_object = {'a': np.array([1, 2, 3], np.int32)}
     steps_start = 17
@@ -206,7 +215,10 @@ class CheckpointsTest(parameterized.TestCase):
         with self.assertRaises(ValueError):
           checkpoints.restore_checkpoint(tmp_dir, target=None, step=step)
 
-  def test_save_restore_checkpoints_w_float_steps(self):
+
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_save_restore_checkpoints_w_float_steps(self, use_orbax):
+    config.flax_use_orbax_checkpointing = use_orbax
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
@@ -224,16 +236,16 @@ class CheckpointsTest(parameterized.TestCase):
     check_eq(new_object, test_object1)
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 2.0, prefix='test_', keep=1)
-    with self.assertRaises(errors.InvalidCheckpointError):
-      checkpoints.save_checkpoint(
-          tmp_dir, test_object2, 1.0, prefix='test_', keep=1)
     checkpoints.save_checkpoint(
         tmp_dir, test_object2, 3.0, prefix='test_', keep=2)
     self.assertIn('test_3.0', os.listdir(tmp_dir))
     self.assertIn('test_2.0', os.listdir(tmp_dir))
     check_eq(new_object, test_object1)
 
-  def test_save_restore_checkpoints_target_none(self):
+
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_save_restore_checkpoints_target_none(self, use_orbax):
+    config.flax_use_orbax_checkpointing = use_orbax
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
@@ -260,16 +272,24 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
     check_eq(new_object, test_object0)
 
-  def test_save_restore_checkpoints_target_empty(self):
+
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_save_restore_checkpoints_target_empty(self, use_orbax):
+    config.flax_use_orbax_checkpointing = use_orbax
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {}
     test_object1 = []
-    checkpoints.save_checkpoint(tmp_dir, test_object1, 0)
-    new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
-    check_eq(new_object, test_object0)
-    checkpoints.save_checkpoint(tmp_dir, test_object0, 1)
-    new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
-    check_eq(new_object, test_object1)
+    # Orbax returns ValueError if the target is empty, but legacy Flax doesn't.
+    if use_orbax:
+      with self.assertRaises(ValueError):
+        checkpoints.save_checkpoint(tmp_dir, test_object1, 0)
+    else:
+      checkpoints.save_checkpoint(tmp_dir, test_object1, 0)
+      new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
+      check_eq(new_object, test_object0)
+      checkpoints.save_checkpoint(tmp_dir, test_object0, 1)
+      new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
+      check_eq(new_object, test_object1)
 
   def test_async_save_checkpoints(self):
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
@@ -281,11 +301,6 @@ class CheckpointsTest(parameterized.TestCase):
                     'b': np.random.normal(size=(1000, 1000))}
     test_object3 = {'a': np.random.normal(size=(1000, 1000)),
                     'b': np.random.normal(size=(1000, 1000))}
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
-    check_eq(new_object, test_object0)
-    # Create leftover temporary checkpoint, which should be ignored.
-    io.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     am = checkpoints.AsyncManager()
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 0, prefix='test_', keep=1, async_manager=am)
@@ -327,9 +342,45 @@ class CheckpointsTest(parameterized.TestCase):
     self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'),
                      None)
 
-  @parameterized.parameters({'jax_array_config': True},
-                            {'jax_array_config': False})
-  def test_jax_array(self, jax_array_config):
+
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_complex_pytree(self, use_orbax):
+    config.flax_use_orbax_checkpointing = use_orbax
+    tmp_dir = self.create_tempdir().full_path
+    to_save = [CustomDC(foo=12, bar={'x': jnp.array((1, 4))}), np.array((2, 3))]
+    target = [CustomDC(foo=0, bar={'x': jnp.array((0, 0))}), np.array((0, 0))]
+    checkpoints.save_checkpoint(tmp_dir, to_save, 0)
+    restored = checkpoints.restore_checkpoint(tmp_dir, target=target)
+    check_eq(restored, to_save)
+
+
+  # restore_checkpoint can automatically restore either orbax or legacy files.
+  def test_auto_restore(self):
+    tmp_dir = self.create_tempdir().full_path
+    to_save = [CustomDC(foo=12, bar={'x': jnp.array((1, 4))}), np.array((2, 3))]
+    target = [CustomDC(foo=0, bar={'x': jnp.array((0, 0))}), np.array((0, 0))]
+    # Store an orbax ckpt
+    config.flax_use_orbax_checkpointing = True
+    checkpoints.save_checkpoint(tmp_dir, to_save, 0, prefix='test_')
+    # And a legacy ckpt
+    config.flax_use_orbax_checkpointing = False
+    checkpoints.save_checkpoint(tmp_dir, to_save, 1, prefix='test_', keep=2)
+
+    # Both gets restored with same API.
+    restored = checkpoints.restore_checkpoint(
+        os.path.join(tmp_dir, 'test_0'), target=target)
+    check_eq(restored, to_save)
+    restored = checkpoints.restore_checkpoint(
+        os.path.join(tmp_dir, 'test_1'), target=target)
+    check_eq(restored, to_save)
+
+
+  # This is for fully addressable JAX arrays. For multiprocess JAX arrays like
+  # GDA, see multihost_test.py (internal only)
+  @parameterized.parameters({'use_orbax': True, 'jax_array_config': True},
+                            {'use_orbax': False, 'jax_array_config': False})
+  def test_jax_array(self, use_orbax, jax_array_config):
+    config.flax_use_orbax_checkpointing = use_orbax
     jax.config.update('jax_array', jax_array_config)
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': jnp.zeros(3), 'b': jnp.arange(3)}

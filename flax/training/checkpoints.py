@@ -27,6 +27,7 @@ import re
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from absl import logging
+from flax import config
 from flax import io
 from flax import core
 from flax import errors
@@ -37,6 +38,7 @@ from jax import process_index
 from jax import sharding
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
+import orbax.checkpoint as orbax
 from tensorflow import errors as tf_errors
 
 
@@ -75,6 +77,9 @@ MP_ARRAY_PH = '//GDAPlaceholder:'
 # array save is complete.
 # We need this for GCS because GCS's directory move is not atomic.
 COMMIT_SUCCESS_FILE = 'commit_success.txt'
+
+# Orbax main checkpoint file name.
+ORBAX_CKPT_FILENAME = 'checkpoint'
 
 PyTree = Any
 
@@ -355,7 +360,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # checkpoint folder and before deleting the main checkpoint.
         if io.exists(path + MP_ARRAY_POSTFIX):
           io.rmtree(path + MP_ARRAY_POSTFIX)
-      io.remove(path)
+      io.rmtree(path)
 
   # Remove old checkpoint files.
   last_kept = -float('inf')
@@ -376,7 +381,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # MPA might be removed already but the main ckpt is still there.
         if io.exists(path + MP_ARRAY_POSTFIX):
           io.rmtree(path + MP_ARRAY_POSTFIX)
-      io.remove(path)
+      io.rmtree(path)
 
 
 def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
@@ -490,7 +495,8 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                     keep: int = 1,
                     overwrite: bool = False,
                     keep_every_n_steps: Optional[int] = None,
-                    async_manager: Optional[AsyncManager] = None) -> str:
+                    async_manager: Optional[AsyncManager] = None,
+                    orbax_checkpointer: Optional[orbax.Checkpointer] = None) -> str:
   """Save a checkpoint of the model. Suitable for single-host.
 
   In this method, every JAX process saves the checkpoint on its own. Do not
@@ -525,12 +531,28 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   if async_manager:
     async_manager.wait_previous_save()
 
-  target = serialization.to_bytes(target)
-
   ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
       ckpt_dir, step, prefix)
+
+  if config.flax_use_orbax_checkpointing or orbax_checkpointer:
+    if jax.process_count() > 1:
+      logging.warning(
+          'Multiple JAX processes detected when saving checkpoint. Please note that only process 0 will execute the save, and you may lose data if the checkpoints saved by other processes contain unique data.'
+      )
+    # If no checkpointer provided, save asynchronously with default setting.
+    if not orbax_checkpointer:
+      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+    save_args = jax.tree_util.tree_map(lambda x: orbax.SaveArgs(aggregate=True),
+                                       target)
+    orbax_checkpointer.save(ckpt_path, target, save_args=save_args, force=overwrite)
+    _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
+                          keep_every_n_steps, True)
+    return ckpt_path
+
   if not overwrite:
     _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)
+
+  target = serialization.to_bytes(target)
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
     return _save_main_ckpt_file(target, False, (ckpt_tmp_path, ckpt_path),
@@ -543,15 +565,17 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   return ckpt_path
 
 
-def save_checkpoint_multiprocess(ckpt_dir: Union[str, os.PathLike],
-                                 target: PyTree,
-                                 step: Union[int, float],
-                                 prefix: str = 'checkpoint_',
-                                 keep: int = 1,
-                                 overwrite: bool = False,
-                                 keep_every_n_steps: Optional[int] = None,
-                                 async_manager: Optional[AsyncManager] = None,
-                                 gda_manager: Optional[Any] = None) -> str:
+def save_checkpoint_multiprocess(
+    ckpt_dir: Union[str, os.PathLike],
+    target: PyTree,
+    step: Union[int, float],
+    prefix: str = 'checkpoint_',
+    keep: int = 1,
+    overwrite: bool = False,
+    keep_every_n_steps: Optional[int] = None,
+    async_manager: Optional[AsyncManager] = None,
+    gda_manager: Optional[Any] = None,
+    orbax_checkpointer: Optional[orbax.Checkpointer] = None) -> str:
   """Save a checkpoint of the model in multi-process environment.
 
   Use this method to save `GlobalDeviceArray`s, or to save data to a
@@ -595,13 +619,30 @@ def save_checkpoint_multiprocess(ckpt_dir: Union[str, os.PathLike],
     gda_manager.wait_until_finished()
     sync_global_devices('before_save_checkpoint')
 
+  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
+      ckpt_dir, step, prefix)
+
+  if config.flax_use_orbax_checkpointing or orbax_checkpointer:
+    # Make sure any previous work is done before making file changes.
+    if orbax_checkpointer:
+      orbax_checkpointer.wait_until_finished()
+    # If no checkpointer provided, save asynchronously with default setting.
+    else:
+      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+    if process_index() == 0:
+      _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
+                            keep_every_n_steps, True)
+    save_args = jax.tree_util.tree_map(
+        lambda x: orbax.SaveArgs(
+            aggregate=not _use_multiprocess_serialization(x)), target)
+    orbax_checkpointer.save(ckpt_path, target, save_args=save_args, force=overwrite)
+    return ckpt_path
+
   target = serialization.to_state_dict(target)
   target, mpa_targets = _split_mp_arrays(target)
   target = serialization.msgpack_serialize(target)
   has_mpa = mpa_targets and _IMPORT_GDAM_SUCCESSFUL
 
-  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
-      ckpt_dir, step, prefix)
   if not overwrite:
     _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)
     sync_global_devices('check_overwrite_strictly_before_save')
@@ -664,7 +705,8 @@ def restore_checkpoint(
     prefix: str = 'checkpoint_',
     parallel: bool = True,
     gda_manager: Optional[Any] = None,
-    allow_partial_mpa_restoration: bool = False) -> PyTree:
+    allow_partial_mpa_restoration: bool = False,
+    orbax_checkpointer: Optional[orbax.Checkpointer] = None) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -694,6 +736,7 @@ def restore_checkpoint(
       may have some MPAs not restored correctly. Use this if you cannot provide
       a fully valid ``target`` and don't need all the MPAs in the checkpoint
       to be restored.
+    orbax_checkpointer: the `Orbax.Checkpointer` that handles the underlying restore.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
@@ -702,9 +745,10 @@ def restore_checkpoint(
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
+
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   ckpt_dir = safe_normpath(ckpt_dir)
-  if step is not None:
+  if step:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not io.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
@@ -712,16 +756,39 @@ def restore_checkpoint(
     if not io.exists(ckpt_dir):
       logging.info('Found no checkpoint directory at %s', ckpt_dir)
       return target
-    if not io.isdir(ckpt_dir):
-      ckpt_path = ckpt_dir
+    if io.isdir(ckpt_dir):
+      # This means the given dir is an orbax checkpoint.
+      if io.exists(os.path.join(ckpt_dir, ORBAX_CKPT_FILENAME)):
+        ckpt_path = ckpt_dir
+      else:
+        ckpt_path = latest_checkpoint(ckpt_dir, prefix)
+        if not ckpt_path:
+          logging.info('Found no checkpoint files in %s with prefix %s',
+                       ckpt_dir, prefix)
+          return target
     else:
-      ckpt_path = latest_checkpoint(ckpt_dir, prefix)
-      if not ckpt_path:
-        logging.info('Found no checkpoint files in %s with prefix %s',
-                     ckpt_dir, prefix)
-        return target
+      ckpt_path = ckpt_dir
 
   logging.info('Restoring checkpoint from %s', ckpt_path)
+
+  # Restore the checkpoint with Orbax if needed.
+  is_orbax = io.exists(os.path.join(ckpt_path, ORBAX_CKPT_FILENAME))
+  if is_orbax:
+    if not orbax_checkpointer:
+      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+
+    def make_restore_args(x):
+      if isinstance(x, GlobalDeviceArray):
+        return orbax.ArrayRestoreArgs(mesh=x.mesh, mesh_axes=x.mesh_axes)
+      return orbax.ArrayRestoreArgs()
+
+    restore_args = None
+    if target:
+      restore_args = jax.tree_util.tree_map(make_restore_args, target)
+    restored = orbax_checkpointer.restore(
+        ckpt_path, item=target, restore_args=restore_args)
+    return restored
+
   with io.GFile(ckpt_path, 'rb') as fp:
     if parallel and fp.seekable():
       buf_size = 128 << 20  # 128M buffer.
