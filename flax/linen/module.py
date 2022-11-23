@@ -528,7 +528,6 @@ tuple_init = lambda: ()
 capture_call_intermediates = lambda _, method_name: method_name == '__call__'
 
 
-
 class ParentDescriptor:
   """Wraps parent module references in weak refs.
 
@@ -1650,7 +1649,6 @@ class Module:
 
 
 _ParentType = Union[Type[Module], Type[Scope], Type[_Sentinel], None]
-
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
   """Merges construction and call time argument.
