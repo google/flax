@@ -164,7 +164,7 @@ need to consider the following:
   The updated ``batch_stats`` must be extracted from here.
 
 .. codediff::
-  :title_left: No BatchNorm 
+  :title_left: No BatchNorm
   :title_right: With BatchNorm
   :sync:
 
@@ -190,8 +190,7 @@ When integrating models that use ``BatchNorm`` into a training loop, the main ch
 is handling the additional ``batch_stats`` state. To do this, you need to:
 
 * Add a ``batch_stats`` field to a custom :meth:`flax.training.train_state.TrainState <flax.training.train_state.TrainState>` class.
-* Pass the ``batch_stats`` values to the :meth:`train_state.TrainState.create
-<train_state.TrainState.create>` method.
+* Pass the ``batch_stats`` values to the :meth:`train_state.TrainState.create <train_state.TrainState.create>` method.
 
 .. codediff::
   :title_left: No BatchNorm
