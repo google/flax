@@ -15,7 +15,7 @@
 """Tests for flax.struct and flax.serialization."""
 
 import collections
-from typing import NamedTuple, Any
+from typing import Any, NamedTuple
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -27,9 +27,9 @@ from flax.training import train_state
 import jax
 from jax import random
 import jax.numpy as jnp
-import optax
 import msgpack
 import numpy as np
+import optax
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -42,17 +42,21 @@ class Point:
   y: float
   meta: Any = struct.field(pytree_node=False)
 
+
 class OriginalTuple(NamedTuple):
   value: Any
 
+
 class WrongTuple(NamedTuple):
   wrong_field: Any
+
 
 class OriginalModule(nn.Module):
   @nn.compact
   def __call__(self, x):
     x = nn.Dense(10)(x)
     return x
+
 
 class WrongModule(nn.Module):
   @nn.compact
@@ -125,7 +129,6 @@ class SerializationTest(parameterized.TestCase):
     restored_tx_state = serialization.from_state_dict(tx_state, state)
     tx_state_plus1 = jax.tree_map(lambda x: x + 1, tx_state)
     self.assertEqual(restored_tx_state, tx_state_plus1)
-
 
   def test_collection_serialization(self):
 
@@ -340,21 +343,24 @@ class SerializationTest(parameterized.TestCase):
 
   @parameterized.parameters(
       {'target': [[[1, 2, 3], [4, 5]]], 'wrong_target': [[[1, 2, 3], [4]]],
-      'msg': 'The size of the list and the state dict do not match, got 1 and 2 at path ./0/1'},
-      {'target': (((1, 2, 3), (4, 5)), ), 'wrong_target': (((1, 2, 3), (4, )), ),
-      'msg': 'The size of the list and the state dict do not match, got 1 and 2 at path ./0/1'},
-      {'target': (((1, 2, 3),(OriginalTuple([4, 5]), 6)), ), 'wrong_target': (((1, 2, 3), (WrongTuple([4, 5]), 6)), ),
-      'msg': "The field names of the state dict and the named tuple do not match, got {'value'} and {'wrong_field'} at path ./0/1/0"},
-      {'target': {'a': {'b': {'c': [1, 2, 3], 'd': [4, 5]}}}, 'wrong_target': {'a': {'b': {'c': [1, 2, 3], 'd': [4]}}},
-      'msg': 'The size of the list and the state dict do not match, got 1 and 2 at path ./a/b/d'},
-      {'target': {'a': {'b': {'c': [1, 2, 3], 'd': [4, 5]}}}, 'wrong_target': {'a': {'b': {'c': [1, 2, 3], 'e': [4, 5]}}},
-      'msg': "The target dict keys and state dict keys do not match, target dict contains keys {'e'} which are not present in state dict at path ./a/b"},
-      {'target': {'a': {'b': {'c': [1, 2, 3], 'd': [4, 5]}}}, 'wrong_target': {'a': {'b': {'c': [1, 2, 3], 'd': [4]}}},
-      'msg': 'The size of the list and the state dict do not match, got 1 and 2 at path ./a/b/d'},
-      {'target': 'original_params', 'wrong_target': 'wrong_params',
-      'msg': "The target dict keys and state dict keys do not match, target dict contains keys {'Dense_1'} which are not present in state dict at path ./params"},
-      {'target': 'original_train_state', 'wrong_target': 'wrong_train_state',
-      'msg': "The target dict keys and state dict keys do not match, target dict contains keys {'Dense_1'} which are not present in state dict at path ./params/params"},
+       'msg': ('The size of the list and the state dict do not match,'
+               ' got 1 and 2 at path ./0/1')},
+      {'target': (((1, 2, 3), (4, 5)),),
+       'wrong_target': (((1, 2, 3), (4,)),),
+       'msg': ('The size of the list and the state dict do not match,'
+               ' got 1 and 2 at path ./0/1')},
+      {'target': (((1, 2, 3), (OriginalTuple([4, 5]), 6)),),
+       'wrong_target': (((1, 2, 3), (WrongTuple([4, 5]), 6)),),
+       'msg': ("The field names of the state dict and the named tuple do "
+               "not match, got {'value'} and {'wrong_field'} at path ./0/1/0")},
+      {'target': {'a': {'b': {'c': [1, 2, 3], 'd': [4, 5]}}},
+       'wrong_target': {'a': {'b': {'c': [1, 2, 3], 'd': [4]}}},
+       'msg': ('The size of the list and the state dict do not match,'
+               ' got 1 and 2 at path ./a/b/d')},
+      {'target': {'a': {'b': {'c': [1, 2, 3], 'd': [4, 5]}}},
+       'wrong_target': {'a': {'b': {'c': [1, 2, 3], 'd': [4]}}},
+       'msg': ('The size of the list and the state dict do not match, '
+               'got 1 and 2 at path ./a/b/d')},
   )
   def test_serialization_errors(self, target, wrong_target, msg):
     if target == 'original_params':
@@ -366,17 +372,19 @@ class SerializationTest(parameterized.TestCase):
       wrong_target = wrong_module.init(rng, x)
 
     elif target == 'original_train_state':
-      x = jnp.ones((1,28,28,1))
+      x = jnp.ones((1, 28, 28, 1))
       rng = jax.random.PRNGKey(1)
       original_module = OriginalModule()
-      original_params = original_module.init(rng,x)
+      original_params = original_module.init(rng, x)
       wrong_module = WrongModule()
-      wrong_params = wrong_module.init(rng,x)
+      wrong_params = wrong_module.init(rng, x)
 
       tx = optax.sgd(learning_rate=0.1, momentum=0.9)
-      target = train_state.TrainState.create(apply_fn=original_module.apply, params=original_params, tx=tx)
-      wrong_target = train_state.TrainState.create(apply_fn=wrong_module.apply, params=wrong_params, tx=tx)
-      
+      target = train_state.TrainState.create(
+          apply_fn=original_module.apply, params=original_params, tx=tx)
+      wrong_target = train_state.TrainState.create(
+          apply_fn=wrong_module.apply, params=wrong_params, tx=tx)
+
     encoded_bytes = serialization.to_bytes(target)
     with self.assertRaisesWithLiteralMatch(ValueError, msg):
       serialization.from_bytes(wrong_target, encoded_bytes)

@@ -63,7 +63,7 @@ def _is_namedtuple(x):
   return isinstance(x, tuple) and hasattr(x, '_fields')
 
 
-def from_state_dict(target, state: Dict[str, Any], name: str = "."):
+def from_state_dict(target, state: Dict[str, Any], name: str = '.'):
   """Restores the state of the given target using a state dict.
 
   This function takes the current target as an argument. This
@@ -147,16 +147,12 @@ def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
 def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
   str_keys = set(str(k) for k in xs.keys())
   if len(str_keys) != len(xs):
-    raise ValueError(f'Dict keys do not have a unique string representation: {str_keys}')
+    raise ValueError(
+        f'Dict keys do not have a unique string representation: {str_keys}')
   return {str(key): to_state_dict(value) for key, value in xs.items()}
 
 
 def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
-  diff = set(map(str, xs.keys())).difference(states.keys())
-  if diff:
-    raise ValueError('The target dict keys and state dict keys do not match,'
-                   f' target dict contains keys {diff} which are not present in state dict '
-                   f'at path {current_path()}')
   return {key: from_state_dict(value, states[str(key)], name=str(key))
           for key, value in xs.items()}
 
