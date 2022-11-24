@@ -2,13 +2,13 @@ Applying batch normalization
 ============================
 
 In this guide, you will learn how to apply `batch normalization <https://arxiv.org/abs/1502.03167>`__
-using 
-:meth:`flax.linen.BatchNorm <flax.linen.BatchNorm>`.
+using :meth:`flax.linen.BatchNorm <flax.linen.BatchNorm>`.
+
 Batch normalization is a regularization technique used to speed up training and improve convergence.
 During training, it computes running averages over feature dimensions. This adds a new form
 of non-differentiable state that must be handled appropriately.
 
-Throughout the guide, you're given code examples with and without Flax ``BatchNorm``.
+Throughout the guide, you will be able to compare code examples with and without Flax ``BatchNorm``.
 
 .. testsetup::
 
@@ -33,7 +33,7 @@ Note: In other machine learning frameworks, like PyTorch or
 TensorFlow (Keras), this is specified via a mutable state or a call flag (for example, in
 `torch.nn.Module.eval <https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval>`__
 or ``tf.keras.Model`` by setting the
-`training <https://www.tensorflow.org/api_docs/python/tf/keras/Model#call>`__ flag.
+`training <https://www.tensorflow.org/api_docs/python/tf/keras/Model#call>`__ flag).
 
 .. codediff::
   :title_left: No BatchNorm
@@ -158,14 +158,14 @@ When using :meth:`flax.linen.apply <flax.linen.apply>` to run your model with th
 argument (that is, you have ``use_running_average==False`` in the call to ``BatchNorm``), you
 need to consider the following:
 
-- ``batch_stats`` must be passed as an input variable.
-- The ``batch_stats`` collection needs to be marked as mutable by setting ``mutable=['batch_stats']``.
-- The mutated variables are returned as a second output.
+* ``batch_stats`` must be passed as an input variable.
+* The ``batch_stats`` collection needs to be marked as mutable by setting ``mutable=['batch_stats']``.
+* The mutated variables are returned as a second output.
   The updated ``batch_stats`` must be extracted from here.
 
 .. codediff::
   :title_left: No BatchNorm 
-  :title_right: with BatchNorm
+  :title_right: With BatchNorm
   :sync:
 
   y = mlp.apply(
@@ -189,14 +189,13 @@ Training and evaluation
 When integrating models that use ``BatchNorm`` into a training loop, the main challenge
 is handling the additional ``batch_stats`` state. To do this, you need to:
 
-- Add a ``batch_stats`` field to a custom
-:meth:`flax.training.train_state.TrainState <flax.training.train_state.TrainState>` class.
-- Pass the ``batch_stats`` values to the :meth:`train_state.TrainState.create
+* Add a ``batch_stats`` field to a custom :meth:`flax.training.train_state.TrainState <flax.training.train_state.TrainState>` class.
+* Pass the ``batch_stats`` values to the :meth:`train_state.TrainState.create
 <train_state.TrainState.create>` method.
 
 .. codediff::
-  :title_left: regular code
-  :title_right: with BatchNorm
+  :title_left: No BatchNorm
+  :title_right: With BatchNorm
   :sync:
 
   from flax.training import train_state
@@ -225,13 +224,13 @@ is handling the additional ``batch_stats`` state. To do this, you need to:
 
 In addition, update your ``train_step`` function to reflect these changes:
 
-- Pass all new parameters to ``flax.linen.apply`` (as previously discussed).
-- The ``updates`` to the ``batch_stats`` must be propagated out of the ``loss_fn``.
-- The ``batch_stats`` from the ``TrainState`` must be updated.
+* Pass all new parameters to ``flax.linen.apply`` (as previously discussed).
+* The ``updates`` to the ``batch_stats`` must be propagated out of the ``loss_fn``.
+* The ``batch_stats`` from the ``TrainState`` must be updated.
 
 .. codediff::
-  :title_left: regular code
-  :title_right: with BatchNorm
+  :title_left: No BatchNorm
+  :title_right: With BatchNorm
   :sync:
 
   @jax.jit
@@ -280,8 +279,8 @@ need to be propagated. Make sure you pass the ``batch_stats`` to ``flax.linen.ap
 and the ``train`` argument is set to ``False``:
 
 .. codediff::
-  :title_left: regular code
-  :title_right: with BatchNorm
+  :title_left: No BatchNorm
+  :title_right: With BatchNorm
   :sync:
 
   @jax.jit
