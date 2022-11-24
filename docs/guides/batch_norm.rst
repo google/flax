@@ -1,12 +1,14 @@
-Using Batch Normalization
-===============
+Applying batch normalization
+============================
 
-`Batch Normalization <https://arxiv.org/abs/1502.03167>`__ is a technique used to
-speedup training and improve convergence, throught training it computes running averages over
-the feature dimensions, this adds a new form of non-differentiable state that must be handled
-appropriately. In this guide we will go through the details of using ``BatchNorm`` in models,
-in the process we will highlight some of the differences between code that uses ``BatchNorm``
-and code that does not.
+In this guide, you will learn how to apply `batch normalization <https://arxiv.org/abs/1502.03167>`__
+using 
+:meth:`flax.linen.BatchNorm <flax.linen.BatchNorm>`.
+Batch normalization is a regularization technique used to speed up training and improve convergence.
+During training, it computes running averages over feature dimensions. This adds a new form
+of non-differentiable state that must be handled appropriately.
+
+Throughout the guide, you're given code examples with and without Flax ``BatchNorm``.
 
 .. testsetup::
 
@@ -17,18 +19,25 @@ and code that does not.
   from typing import Any
   from flax.core import FrozenDict
 
-Defining the model
-******************
+Defining the model with ``BatchNorm``
+*************************************
 
-``BatchNorm`` is a Module that has different runtime behavior between training and
-inference. In other frameworks this behavior is specified via mutable state or a call flag (e.g pytorch's `eval <https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval>`__ method or Keras `training <https://www.tensorflow.org/api_docs/python/tf/keras/Model#call>`__ flag), however
-in Flax it has to be explicitly specified via the ``use_running_average`` argument.
-A common pattern is to accept a ``train`` argument in the parent Module and use it to define
-``BatchNorm``'s ``use_running_average`` argument.
+In Flax, ``BatchNorm`` is a :meth:`flax.linen.Module <flax.linen.Module>` that exhibits different runtime
+behavior between training and inference. You explicitly specify it via the ``use_running_average`` argument,
+as demonstrated below.
+
+A common pattern is to accept a ``train`` (``training``) argument in the parent Flax ``Module``, and use
+it to define ``BatchNorm``'s ``use_running_average`` argument.
+
+Note: In other machine learning frameworks, like PyTorch or
+TensorFlow (Keras), this is specified via a mutable state or a call flag (for example, in
+`torch.nn.Module.eval <https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval>`__
+or ``tf.keras.Model`` by setting the
+`training <https://www.tensorflow.org/api_docs/python/tf/keras/Model#call>`__ flag.
 
 .. codediff::
-  :title_left: regular code
-  :title_right: with BatchNorm
+  :title_left: No BatchNorm
+  :title_right: With BatchNorm
   :sync:
 
   class MLP(nn.Module):
@@ -50,20 +59,24 @@ A common pattern is to accept a ``train`` argument in the parent Module and use 
       x = nn.Dense(features=1)(x)
       return x
 
-Once the model is created, it can be initialized by calling ``init`` to get the ``variables`` structure.
-The main difference is that the ``train`` argument is must be provided.
+Once you create your model, initialize it by calling :meth:`flax.linen.init() <flax.linen.init>` to
+get the ``variables`` structure. Here, the main difference between the code without ``BatchNorm``
+and with ``BatchNorm`` is that the ``train`` argument must be provided.
 
 The ``batch_stats`` collection
 ******************************
 
-Apart from the ``params`` collection, ``BatchNorm``
-adds an additional ``batch_stats`` collection that contains the running
-average of the batch statistics (for more info see the `variables <https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module-flax.core.variables>`__ documentation). The ``batch_stats`` collection must be
-extracted from the ``variables`` for later use:
+In addition to the ``params`` collection, ``BatchNorm`` also adds a ``batch_stats`` collection
+that contains the running average of the batch statistics.
+
+Note: You can learn more in the ``flax.linen`` `variables <https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module-flax.core.variables>`__
+API documentation.
+
+The ``batch_stats`` collection must be extracted from the ``variables`` for later use.
 
 .. codediff::
-  :title_left: regular code
-  :title_right: with BatchNorm
+  :title_left: No BatchNorm
+  :title_right: With BatchNorm
   :sync:
 
   mlp = MLP()
@@ -83,13 +96,13 @@ extracted from the ``variables`` for later use:
   jax.tree_util.tree_map(jnp.shape, variables)
 
 
-``BatchNorm`` adds a total of 4 variables: ``mean`` and ``var`` that live in the
-``batch_stats`` collection and ``scale`` and ``bias`` that live in the ``params``
+Flax ``BatchNorm`` adds a total of 4 variables: ``mean`` and ``var`` that live in the
+``batch_stats`` collection, and ``scale`` and ``bias`` that live in the ``params``
 collection.
 
 .. codediff::
-  :title_left: regular code
-  :title_right: with BatchNorm
+  :title_left: No BatchNorm
+  :title_right: With BatchNorm
   :sync:
 
   FrozenDict({
@@ -138,21 +151,20 @@ collection.
     },
   })
 
-Calling ``apply``
-*************
+Modifying ``flax.linen.apply``
+******************************
 
-When using ``apply`` to run your model with ``train==True``
-(i.e., ``use_running_average==False` in the call to ``BatchNorm``),
-a couple of things must be taken into consideration:
+When using :meth:`flax.linen.apply <flax.linen.apply>` to run your model with the ``train==True``
+argument (that is, you have ``use_running_average==False`` in the call to ``BatchNorm``), you
+need to consider the following:
 
 - ``batch_stats`` must be passed as an input variable.
-- The ``batch_stats`` collection to be marked as
-  mutable by setting ``mutable=['batch_stats']``.
+- The ``batch_stats`` collection needs to be marked as mutable by setting ``mutable=['batch_stats']``.
 - The mutated variables are returned as a second output.
   The updated ``batch_stats`` must be extracted from here.
 
 .. codediff::
-  :title_left: regular code
+  :title_left: No BatchNorm 
   :title_right: with BatchNorm
   :sync:
 
@@ -171,13 +183,16 @@ a couple of things must be taken into consideration:
   )
   batch_stats = updates['batch_stats'] #!
 
-Training and Evaluation
+Training and evaluation
 ***********************
 
-When integrating models that use ``BatchNorm``into a training loop the main challenge
-is to handle the additional ``batch_stats`` state. A way to do this is to add a
-``batch_stats`` field to a custom ``TrainState`` class and passing the ``batch_stats``
-values to the ``create`` method:
+When integrating models that use ``BatchNorm`` into a training loop, the main challenge
+is handling the additional ``batch_stats`` state. To do this, you need to:
+
+- Add a ``batch_stats`` field to a custom
+:meth:`flax.training.train_state.TrainState <flax.training.train_state.TrainState>` class.
+- Pass the ``batch_stats`` values to the :meth:`train_state.TrainState.create
+<train_state.TrainState.create>` method.
 
 .. codediff::
   :title_left: regular code
@@ -208,10 +223,9 @@ values to the ``create`` method:
     tx=optax.adam(1e-3),
   )
 
-Also the ``train_step`` function must be updated to reflect these changes, the main
-differences are:
+In addition, update your ``train_step`` function to reflect these changes:
 
-- All new parameters to ``apply`` must be passed (as discussed previously).
+- Pass all new parameters to ``flax.linen.apply`` (as previously discussed).
 - The ``updates`` to the ``batch_stats`` must be propagated out of the ``loss_fn``.
 - The ``batch_stats`` from the ``TrainState`` must be updated.
 
@@ -260,9 +274,10 @@ differences are:
     }
     return state, metrics
 
-The ``eval_step`` is much simpler, since ``batch_stats`` is not mutable no
-updates need to be propagated. The only difference is that ``batch_stats`` must be
-passed to ``apply``, and the ``train`` argument must be set to ``False``:
+The ``eval_step`` is much simpler. Because ``batch_stats`` is not mutable, no
+updates
+need to be propagated. Make sure you pass the ``batch_stats`` to ``flax.linen.apply``,
+and the ``train`` argument is set to ``False``:
 
 .. codediff::
   :title_left: regular code
