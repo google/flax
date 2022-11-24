@@ -254,7 +254,7 @@ Define a training function that:
   that takes a PRNGKey as a parameter (check the
   [JAX - the sharp bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG)).
 - Runs an optimization step for each batch.
-- Retrieves the training metrics from the device with `jax.device_get` and
+- Asynchronously retrieves the training metrics from the device with `jax.device_get` and
   computes their mean across each batch in an epoch.
 - Returns the optimizer with updated parameters and the training loss and
   accuracy metrics.
@@ -279,8 +279,8 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
   # compute mean of metrics across each batch in epoch.
   batch_metrics_np = jax.device_get(batch_metrics)
   epoch_metrics_np = {
-      k: np.mean([metrics[k] for metrics in batch_metrics_np]) # jnp.mean does not work on lists
-      for k in batch_metrics_np[0]}
+      k: np.mean([metrics[k] for metrics in batch_metrics_np])
+      for k in batch_metrics_np[0]} # jnp.mean does not work on lists
 
   print('train epoch: %d, loss: %.4f, accuracy: %.2f' % (
       epoch, epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100))

@@ -92,31 +92,60 @@ Flax installs the vanilla CPU version of JAX, if you need a custom version pleas
 Basic usage
 ^^^^^^^^^^^^
 
-.. testsetup::
-
-   import jax
-   from jax.random import PRNGKey
-   import flax.linen as nn
-   import jax.numpy as jnp
-
 .. testcode::
 
+   import jax
+   import jax.numpy as jnp                  # JAX NumPy
+   from jax import random                   # JAX RNG
+   from flax import linen as nn             # The Linen API
+   from flax.training import train_state    # Useful dataclass to keep train state
+   import optax                             # Optimizers
+
    class MLP(nn.Module):                    # create a Flax Module dataclass
-     out_dims: int
+      out_dims: int
 
-     @nn.compact
-     def __call__(self, x):
-       x = x.reshape((x.shape[0], -1))
-       x = nn.Dense(128)(x)                 # create inline Flax Module submodules
-       x = nn.relu(x)
-       x = nn.Dense(self.out_dims)(x)       # shape inference
-       return x
+      @nn.compact
+      def __call__(self, x):
+         x = x.reshape((x.shape[0], -1))
+         x = nn.Dense(128)(x)               # create inline Flax Module submodules
+         x = nn.relu(x)
+         x = nn.Dense(self.out_dims)(x)     # shape inference
+         return x
 
-   model = MLP(out_dims=10)                 # instantiate the MLP model
+   n_samples = 1000
+   n_in_features = 10                       # number of features in data
+   n_out_features = 10                      # number of features in target
+   learning_rate = 0.01
+   momentum = 0.9
+   n_epochs = 100                           # number of training epochs
 
-   x = jnp.empty((4, 28, 28, 1))            # generate random data
-   variables = model.init(PRNGKey(42), x)   # initialize the weights
-   y = model.apply(variables, x)            # make forward pass
+   data_rng, target_rng, init_rng = random.split(random.PRNGKey(42), 3)   # create RNG keys
+
+   data = random.uniform(data_rng, (n_samples, n_in_features))            # generate random data
+   target = random.uniform(target_rng, (n_samples, n_out_features))       # generate random regression targets
+
+   model = MLP(out_dims=n_out_features)                                   # instantiate the MLP model
+   params = model.init(init_rng, data)                                    # initialize random weights
+
+   tx = optax.sgd(learning_rate, momentum)                                            # create optimizer
+   state = train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)  # create train state
+
+   def loss_fn(params, data, target):
+      pred = MLP(out_dims=n_out_features).apply(params, data)             # make forward pass
+      loss = jnp.mean(optax.l2_loss(pred, target))                        # get mean squared error
+      return loss
+
+   @jax.jit                                              # just-in-time compile the function
+   def train_step(state, data, target):
+      grad_fn = jax.value_and_grad(loss_fn)              # get a function that outputs the loss value, as well as the gradient
+      loss, grads = grad_fn(state.params, data, target)
+      state = state.apply_gradients(grads=grads)         # use gradient to update model parameters
+      return state, loss
+
+   for _ in range(n_epochs):                             # training loop
+      state, loss = train_step(state, data, target)
+      print(loss)
+
 
 ----
 
