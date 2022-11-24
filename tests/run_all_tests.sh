@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source tests/plib.sh
+
 PYTEST_OPTS=
 RUN_DOCTEST=true
 RUN_PYTEST=true
@@ -110,15 +112,20 @@ fi
 if $RUN_PYTYPE; then
   echo "=== RUNNING PYTYPE ==="
   # Validate types in library code.
-  pytype --jobs auto --config pytype.cfg flax/
+  pytype --jobs auto --config pytype.cfg flax/ &
+  add_pid
 
   # Validate types in examples.
   for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
       # use cd to make sure pytpe cache lives in example dir and doesn't name clash
       # use *.py to avoid importing configs as a top-level import which leads to import errors
       # because config files use relative imports (e.g. from config import ...).
-      (cd $egd ; pytype --jobs auto --config ../../pytype.cfg "*.py")
+      echo $egd
+      (cd $egd ; pytype --jobs auto --config ../../pytype.cfg "*.py") &
+      add_pid
   done
+
+  pwait
 fi
 
 # Return error code 0 if no real failures happened.
