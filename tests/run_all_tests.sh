@@ -93,11 +93,13 @@ if $RUN_PYTEST; then
   PYTEST_IGNORE=
   for file in "tests/jax_utils_test.py"; do
       echo "pytest -n auto $file $PYTEST_OPTS"
-      pytest -n auto $file $PYTEST_OPTS
+      pytest -n auto $file $PYTEST_OPTS &
+      add_pid
       PYTEST_IGNORE+=" --ignore=$file"
   done
   # Run battery of core FLAX API tests.
-  pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
+  pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE &
+  add_pid
 
   # Per-example tests.
   #
@@ -105,8 +107,11 @@ if $RUN_PYTEST; then
   # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
   # /foo/bar and /baz/bleep aren't set up as packages.
   for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-      pytest $egd
+      pytest $egd &
+      add_pid
   done
+
+  pwait
 fi
 
 if $RUN_PYTYPE; then
