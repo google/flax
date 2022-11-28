@@ -27,6 +27,7 @@ from flax.linen.module import Module
 from flax.linen.dtypes import promote_dtype
 from jax import eval_shape
 from jax import lax
+from jax import random
 from jax import ShapedArray
 import jax.numpy as jnp
 import numpy as np
@@ -109,8 +110,9 @@ class DenseGeneral(Module):
       size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
       flat_shape = (np.prod(shape[n_batch_dims:n_axis + n_batch_dims]),
                     np.prod(shape[-n_features:]),)
-      kernel = jnp.concatenate([self.kernel_init(rng, flat_shape, dtype)
-                                for _ in range(size_batch_dims)], axis=0)
+      kernel = jnp.concatenate(
+          [self.kernel_init(rng, flat_shape, dtype)
+           for rng in random.split(rng, size_batch_dims)], axis=0)
       return jnp.reshape(kernel, shape)
 
     batch_shape = tuple(inputs.shape[ax] for ax in batch_dims)
@@ -129,8 +131,9 @@ class DenseGeneral(Module):
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
         size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
         flat_shape = (np.prod(shape[-n_features:]),)
-        bias = jnp.concatenate([self.bias_init(rng, flat_shape, dtype)
-                                for _ in range(size_batch_dims)], axis=0)
+        bias = jnp.concatenate(
+            [self.bias_init(rng, flat_shape, dtype)
+             for rng in random.split(rng, size_batch_dims)], axis=0)
         return jnp.reshape(bias, shape)
 
       bias = self.param('bias', bias_init_wrap, batch_shape + features,
