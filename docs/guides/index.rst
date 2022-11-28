@@ -8,6 +8,7 @@ Guides
    flax_basics
    state_params
    setup_or_nncompact
+   batch_norm
    model_surgery
    transfer_learning
    extracting_intermediates
