@@ -91,6 +91,22 @@ Transformations
     cond
     switch
 
+Metadata
+----------------------
+
+.. automodule:: flax.linen.meta
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    AxisMetadata
+    map_axis_meta
+    unbox
+    Partitioned
+    with_partitioning
+    get_partition_spec
+
 
 Linear modules
 ------------------------
