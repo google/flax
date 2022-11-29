@@ -79,7 +79,7 @@ Layers (and models in general, we'll use that word from now on) are subclasses o
 
 ### Model parameters & initialization
 
-Parameters are not stored with the models themselves. You need to initialize parameters by calling the `init` function, using a PRNGKey and dummy input data.
+Parameters are not stored with the models themselves. You need to initialize parameters by calling the `init` function, using a PRNGKey and a dummy input parameter.
 
 ```{code-cell}
 ---
@@ -89,7 +89,7 @@ id: K529lhzeYtl8
 outputId: 06feb9d2-db50-4f41-c169-6df4336f43a5
 ---
 key1, key2 = random.split(random.PRNGKey(0))
-x = random.normal(key1, (10,)) # Dummy input data
+x = random.normal(key1, (10,)) # Dummy input
 params = model.init(key2, x) # Initialization call
 jax.tree_util.tree_map(lambda x: x.shape, params) # Checking output shapes
 ```
@@ -100,14 +100,14 @@ jax.tree_util.tree_map(lambda x: x.shape, params) # Checking output shapes
 
 The result is what we expect: bias and kernel parameters of the correct size. Under the hood:
 
-*   The dummy input data `x` is used to trigger shape inference: we only declared the number of features we wanted in the output of the model, not the size of the input. Flax finds out by itself the correct size of the kernel.
+*   The dummy input variable `x` is used to trigger shape inference: we only declared the number of features we wanted in the output of the model, not the size of the input. Flax finds out by itself the correct size of the kernel.
 *   The random PRNG key is used to trigger the initialization functions (those have default values provided by the module here).
 * Initialization functions are called to generate the initial set of parameters that the model will use. Those are functions that take as arguments `(PRNG Key, shape, dtype)` and return an Array of shape `shape`.
-* The init function returns the initialized set of parameters (you can also get the output of the forward pass on the dummy input with the same syntax but using the `init_with_output` method instead of `init`.
+* The init function returns the initialized set of parameters (you can also get the output of the evaluation on the dummy input with the same syntax but using the `init_with_output` method instead of `init`.
 
 +++ {"id": "3yL9mKk7naJn"}
 
-We see in the output that parameters are stored in a `FrozenDict` instance which helps deal with the functional nature of JAX by preventing any mutation of the underlying dict and making the user aware of it. Read more about it in the [Flax docs](https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.FrozenDict). As a consequence, the following doesn't work:
+We see in the output that parameters are stored in a `FrozenDict` instance which helps deal with the functional nature of JAX by preventing any mutation of the underlying dict and making the user aware of it. Read more about it in the Flax docs. As a consequence, the following doesn't work:
 
 ```{code-cell}
 ---
@@ -124,7 +124,7 @@ except ValueError as e:
 
 +++ {"id": "M1qo9M3_naJo"}
 
-To conduct a forward pass with the model with a given set of parameters (which are never stored with the model), we just use the `apply` method by providing it the parameters to use as well as the input:
+To evaluate the model with a given set of parameters (never stored with the model), we just use the `apply` method by providing it the parameters to use as well as the input:
 
 ```{code-cell}
 ---
@@ -163,7 +163,7 @@ key = random.PRNGKey(0)
 k1, k2 = random.split(key)
 W = random.normal(k1, (x_dim, y_dim))
 b = random.normal(k2, (y_dim,))
-# Store the parameters in a FrozenDict pytree.
+# Store the parameters in a pytree.
 true_params = freeze({'params': {'bias': b, 'kernel': W}})
 
 # Generate samples with additional noise.
@@ -175,7 +175,7 @@ print('x shape:', x_samples.shape, '; y shape:', y_samples.shape)
 
 +++ {"id": "ZHkioicCiUbx"}
 
-We copy the same training loop that we used in the JAX pytree linear regression example with `jax.value_and_grad()`, but here we can use `model.apply()` instead of having to define our own feed-forward function (`predict_pytree()` in the [JAX example](https://flax.readthedocs.io/en/latest/guides/jax_for_the_impatient.html#linear-regression-with-pytrees)).
+We copy the same training loop that we used in the JAX pytree linear regression example with `jax.value_and_grad()`, but here we can use `model.apply()` instead of having to define our own feed-forward function (`predict_pytree()` in the JAX example).
 
 ```{code-cell}
 :id: JqJaVc7BeNyT
@@ -231,8 +231,8 @@ this was deprecated in favor of
 
 Basic usage of Optax is straightforward:
 
-1.   Choose an optimization method (e.g. `optax.adam`).
-2.   Create optimizer state from parameters (for the Adam optimizer, this state will contain the [momentum values](https://optax.readthedocs.io/en/latest/api.html#optax.adam)).
+1.   Choose an optimization method (e.g. `optax.sgd`).
+2.   Create optimizer state from parameters.
 3.   Compute the gradients of your loss with `jax.value_and_grad()`.
 4.   At every iteration, call the Optax `update` function to update the internal
      optimizer state and create an update to the parameters. Then add the update
@@ -250,7 +250,7 @@ to the
 :id: Ce77uDJx1bUF
 
 import optax
-tx = optax.adam(learning_rate=learning_rate)
+tx = optax.sgd(learning_rate=learning_rate)
 opt_state = tx.init(params)
 loss_grad_fn = jax.value_and_grad(mse)
 ```
@@ -294,7 +294,7 @@ print(bytes_output)
 
 +++ {"id": "eielPo2KZByd"}
 
-To load the model back, you'll need to use a template of the model parameter structure, like the one you would get from the model initialization. Here, we use the previously generated `params` as a template. Note that this will produce a new variable structure, and not mutate in-place.
+To load the model back, you'll need to use as a template the model parameter structure, like the one you would get from the model initialization. Here, we use the previously generated `params` as a template. Note that this will produce a new variable structure, and not mutate in-place.
 
 *The point of enforcing structure through template is to avoid users issues downstream, so you need to first have the right model that generates the parameters structure.*
 
@@ -589,7 +589,9 @@ for _ in range(3):
 Note that the above function has a quite verbose signature and it would not actually
 work with `jax.jit()` because the function arguments are not "valid JAX types".
 
-We provide a handy wrapper that simplifies the above code, see [Train state](https://flax.readthedocs.io/en/latest/flax.training.html#train-state).
+We provide a handy wrapper that simplifies the above code, see:
+
+https://flax.readthedocs.io/en/latest/flax.training.html#train-state
 
 +++ {"id": "_GL0PsCwnaJw"}
 
