@@ -38,7 +38,7 @@ io_mode = None
 gfile = None
 
 if importlib.util.find_spec('tensorflow'):
-  from tensorflow.io import gfile  # pytype: disable=import-error
+  from tensorflow.io import gfile  # type: ignore
   io_mode = BackendMode.TF
 else:
   logging.warning("Tensorflow library not found, tensorflow.io.gfile "
