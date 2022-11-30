@@ -16,15 +16,21 @@ kernelspec:
 
 +++
 
-This guide demonstrates various parts of the transfer learning workflow with Flax. Depending on your task, you can use a pretrained model as a feature extractor or fine-tune the entire model. This guide uses simple classification as a default task. You will learn how to:
+This guide demonstrates various parts of the transfer learning workflow with Flax. Depending on the task, a pretrained model can be used just as a feature extractor or it can be fine-tuned as part of a larger model.
+
+This guide demonstrates how to:
 
 * Load a pretrained model from HuggingFace [Transformers](https://huggingface.co/docs/transformers/index) and extract a specific sub-module from that pretrained model.
-* Create the classifier model.
+* Create a classifier model.
 * Transfer the pretrained parameters to the new model structure.
-* Set up optimization for training different parts of the model separately with [Optax](https://optax.readthedocs.io/).
+* Create an optimizer for training different parts of the model separately with [Optax](https://optax.readthedocs.io/).
 * Set up the model for training.
 
-**Note:** Depending on your task, some of the content in this guide may be suboptimal. For example, if you are only going to train a linear classifier on top of a pretrained model, it may be better to just extract the feature embeddings once, which can result in much faster training, and you can use specialized algorithms for linear regression or logistic classification. This guide shows how to do transfer learning with all the model parameters.
+<details><summary><b>Performance Note</b></summary>
+
+Depending on your task, some of the content in this guide may be suboptimal. For example, if you are only going to train a linear classifier on top of a pretrained model, it may be better to just extract the feature embeddings once, which can result in much faster training, and you can use specialized algorithms for linear regression or logistic classification. This guide shows how to do transfer learning with all the model parameters.
+
+</details><br>
 
 +++
 
@@ -42,9 +48,9 @@ This guide demonstrates various parts of the transfer learning workflow with Fla
 
 ## Create a function for model loading
 
-To load a pre-trained classifier, you can create a custom function that will return a [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics) and its pretrained variables.
+To load a pre-trained classifier, for convenience first create a function that returns a [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics) and its pretrained variables.
 
-In the code below, the `load_model` function uses HuggingFace's `FlaxCLIPVisionModel` model from the [Transformers](https://huggingface.co/docs/transformers/index) library and extracts a `FlaxCLIPModule` module (note that it is not a Flax `Module`):
+In the code below, the `load_model` function uses HuggingFace's `FlaxCLIPVisionModel` model from the [Transformers](https://huggingface.co/docs/transformers/index) library and extracts a `FlaxCLIPModule` module.
 
 ```{code-cell} ipython3
 %%capture
@@ -60,11 +66,13 @@ def load_model():
   return module, variables
 ```
 
-### Extract a sub-model from the loaded trained model
+Note that `FlaxCLIPVisionModel` itself is not a Flax `Module` which is why we need to do this extra step.
 
-Calling `load_model` from the snippet above returns the `FlaxCLIPModule`, which is composed of text and vision sub-modules.
+### Extracting a submodule
 
-Suppose you want to extract the `vision_model` sub-module defined inside `.setup()` and its variables. To do this you can use [`nn.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.apply) to run a helper function that will grant you access to submodules and their variables:
+Calling `load_model` from the snippet above returns the `FlaxCLIPModule`, which is composed of `text_model` and `vision_model` submodules.
+
+An easy way to extract the `vision_model` submodule defined inside `.setup()` and its variables is to use [`nn.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.apply) to run a `extract_submodule` helper function, inside this function the `clip` Module is bounded to its variables and fields defined in `.setup()` are accessible:
 
 ```{code-cell} ipython3
 import flax.linen as nn
@@ -79,74 +87,79 @@ def extract_submodule(clip):
 vision_model, vision_model_variables = nn.apply(extract_submodule, clip)(clip_variables)
 ```
 
-Notice that here `.clone()` was used to get an unbounded copy of `vision_model`, this is important to avoid leakage as bounded modules contain their variables.
+Note that `.clone()` must be used to get an unbounded copy of `vision_model` to avoid leakage as bounded modules contain their variables.
 
-### Create the classifier
+### Creating a classifier
 
-Next create a `Classifier` model with [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics), consisting of a `backbone` (the pretrained vision model) and a `head` (the classifier).
+To create a classifier define a new Flax [`Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics) consisting of a `backbone` (the pretrained vision model) and a `head` (the classifier) submodules.
 
 ```{code-cell} ipython3
+from typing import Callable
 import jax.numpy as jnp
 import jax
 
 class Classifier(nn.Module):
   num_classes: int
   backbone: nn.Module
+  
 
   @nn.compact
   def __call__(self, x):
     x = self.backbone(x).pooler_output
-    x = nn.Dense(self.num_classes, name='head')(x)
+    x = nn.Dense(
+      self.num_classes, name='head', kernel_init=nn.zeros)(x)
     return x
 ```
 
-Then, pass the `vision_model` sub-module as the backbone to the `Classifier` to create the complete model.
-
-You can randomly initialize the model's variables using some toy data for demonstration purposes.
+To construct a classifier `model`, the `vision_model` Module is passed as the `backbone` to `Classifier`. Then the model's `params` can be randomly initialized by passing fake data that is used to infer the parameter shapes.
 
 ```{code-cell} ipython3
 num_classes = 3
 model = Classifier(num_classes=num_classes, backbone=vision_model)
 
-x = jnp.ones((1, 224, 224, 3))
+x = jnp.empty((1, 224, 224, 3))
 variables = model.init(jax.random.PRNGKey(1), x)
+params = variables['params']
 ```
 
-## Transfer the parameters
+## Transfering the parameters
 
-Since `variables` are randomly initialized, you now have to transfer the parameters from `vision_model_variables` to the complete `variables` at the appropriate location. This can be done by unfreezing the `variables`, updating the `backbone` parameters, and freezing the `variables` again:
+Since `params` are currently random, the pretrained parameters from `vision_model_variables` have to be transfered to the `params` structure at the appropriate location. This can be done by unfreezing `params`, updating the `backbone` parameters, and freezing the `params` again:
 
 ```{code-cell} ipython3
 from flax.core.frozen_dict import freeze
 
-variables = variables.unfreeze()
-variables['params']['backbone'] = vision_model_variables['params']
-variables = freeze(variables)
+params = params.unfreeze()
+params['backbone'] = vision_model_variables['params']
+params = freeze(params)
 ```
+
+**Note:** if the model contains other variable collections such as `batch_stats`, these have to be transfered as well.
 
 ## Optimization
 
-If you need to to train different parts of the model separately, you have two options:
+If you need to to train different parts of the model separately, you have three options:
 
 1. Use `stop_gradient`.
 2. Filter the parameters for `jax.grad`.
 3. Use multiple optimizers for different parameters.
 
-While each could be useful in different situations, its recommended to use use multiple optimizers via [Optax](https://optax.readthedocs.io/)'s [`optax.multi_transform`](https://optax.readthedocs.io/en/latest/api.html#optax.multi_transform) because it is efficient and can be easily extended to implement differential learning rates. To use `optax.multi_transform` you have to do two things:
+For most situations we recommend using multiple optimizers via [Optax](https://optax.readthedocs.io/)'s [`multi_transform`](https://optax.readthedocs.io/en/latest/api.html#optax.multi_transform) as its both efficient and can be easily extended to implement many fine-tunning strategies. 
 
-1. Define some parameter partitions.
-2. Create a mapping between partitions and their optimizer.
-3. Create a pytree with the same shape as the parameters but its leaves containing the corresponding partition label.
+### **optax.multi_transform**
 
-## Freeze layers
+To use `optax.multi_transform` following must be defined:
 
-To freeze layers with `optax.multi_transform`, create the `trainable` and `frozen` parameter partitions.
+1. The parameter partitions.
+2. A mapping between partitions and their optimizer.
+3. A pytree with the same shape as the parameters but its leaves containing the corresponding partition label.
 
-In the example below:
+To freeze layers with `optax.multi_transform` for the model above, the following setup can be used:
 
-- For the `trainable` parameters use the Adam (`optax.adam`) optimizer.
-- For the `frozen` parameters use `optax.set_to_zero`, which zeros-out the gradients.
-- To map parameters to partitions, you can use the [`flax.traverse_util.path_aware_map`](https://flax.readthedocs.io/en/latest/api_reference/flax.traverse_util.html#flax.traverse_util.path_aware_map) function, by leveraging the `path` argument you can map the `backbone` parameters to `frozen` and the rest to `trainable`.
+* Define the `trainable` and `frozen` parameter partitions.
+* For the `trainable` parameters select the Adam (`optax.adam`) optimizer.
+- For the `frozen` parameters select the `optax.set_to_zero` optimizer. This dummy optimizer zeros-out the gradients so no training is done.
+- Map parameters to partitions using [`flax.traverse_util.path_aware_map`](https://flax.readthedocs.io/en/latest/api_reference/flax.traverse_util.html#flax.traverse_util.path_aware_map), mark the leaves from the `backbone` as `frozen`, and the rest as `trainable`.
 
 ```{code-cell} ipython3
 from flax import traverse_util
@@ -154,7 +167,7 @@ import optax
 
 partition_optimizers = {'trainable': optax.adam(5e-3), 'frozen': optax.set_to_zero()}
 param_partitions = freeze(traverse_util.path_aware_map(
-  lambda path, v: 'frozen' if 'backbone' in path else 'trainable', variables['params']))
+  lambda path, v: 'frozen' if 'backbone' in path else 'trainable', params))
 tx = optax.multi_transform(partition_optimizers, param_partitions)
 
 # visualize a subset of the param_partitions structure
@@ -162,19 +175,19 @@ flat = list(traverse_util.flatten_dict(param_partitions).items())
 freeze(traverse_util.unflatten_dict(dict(flat[:2] + flat[-2:])))
 ```
 
-To implement _differential learning rates_ simply replace `optax.set_to_zero` with the optimizer of your choice, you can choose different optimizers and partitioning schemes depending on your needs.
+To implement [differential learning rates](https://blog.slavv.com/differential-learning-rates-59eff5209a4f), the `optax.set_to_zero` can be replaced with any other optimizer, different optimizers and partitioning schemes can be selected depending on the task. For more information on advanced optimizers, refer to Optax's [Combining Optimizers](https://optax.readthedocs.io/en/latest/api.html#combining-optimizers) documentation.
 
-For more information on advanced optimizers, refer to Optax's [Combining Optimizers](https://optax.readthedocs.io/en/latest/api.html#combining-optimizers) documentation.
+## Creating the `TrainState`
 
-## Create the `TrainState` object for model training
-
-Once you define your module, variables, and optimizer, you can construct the `TrainState` object and proceed to train the model as you normally would.
+Once the module, params, and optimizer are defined, the `TrainState` can be constructed as usual:
 
 ```{code-cell} ipython3
 from flax.training.train_state import TrainState
 
 state = TrainState.create(
   apply_fn=model.apply,
-  params=variables['params'],
+  params=params,
   tx=tx)
 ```
+
+Since the optimizer takes care of the freezing or fine-tunning strategy, the `train_step` requires no additional changes, training can proceed normally.
