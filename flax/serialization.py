@@ -27,7 +27,7 @@ import msgpack
 import numpy as np
 
 
-_STATE_DICT_REGISTRY = {}
+_STATE_DICT_REGISTRY: Dict[Any, Any] = {}
 
 
 class _ErrorContext(threading.local):

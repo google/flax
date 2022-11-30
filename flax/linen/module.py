@@ -812,7 +812,7 @@ class Module:
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
-    return object.__dir__(self)  # pytype: disable=attribute-error
+    return object.__dir__(self)  # type: ignore
 
   def __post_init__(self) -> None:
     # DO NOT REMOVE - Marker for internal logging.
@@ -974,7 +974,7 @@ class Module:
 
   def _name_taken(self,
                   name: str,
-                  module: 'Module' = None,
+                  module: Optional['Module'] = None,
                   reuse_scopes: bool = False) -> bool:
     if name in _all_names_on_object(self):
       val = getattr(self, name, None)
@@ -1398,7 +1398,7 @@ class Module:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.variables()
 
-  def get_variable(self, col: str, name: str, default: T = None) -> T:
+  def get_variable(self, col: str, name: str, default: Optional[T] = None) -> T:
     """Retrieves the value of a Variable.
 
     Args:
@@ -1559,7 +1559,7 @@ class Module:
                                   #      [-1.456924   -0.44332537  0.02422847]]
 
     """
-    value += self.variable(collection, name, lambda: jnp.zeros_like(value)).value
+    value += self.variable(collection, name, lambda: jnp.zeros_like(value)).value # type: ignore
     return value
 
   def tabulate(

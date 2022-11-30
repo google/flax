@@ -114,7 +114,7 @@ def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
       m.update(x.encode('utf-8'))
       d = m.digest()
       hash_int = int.from_bytes(d[:4], byteorder='big')
-      rng = random.fold_in(rng, jnp.uint32(hash_int))
+      rng = random.fold_in(rng, jnp.uint32(hash_int))  # type: ignore
     elif isinstance(x, int):
       rng = random.fold_in(rng, x)
     else:
@@ -148,7 +148,7 @@ def _fold_in_static(rng: PRNGKey,
       raise ValueError(f'Expected int or string, got: {x}')
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
-  return random.fold_in(rng, jnp.uint32(hash_int))
+  return random.fold_in(rng, jnp.uint32(hash_int)) # type: ignore
 
 
 def is_filter_empty(filter_like: Filter) -> bool:
@@ -570,10 +570,10 @@ class Scope:
     rngs = {key: LazyRng.create(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
-      rng_counters = self.rng_counters.get(rng_key)
+      rng_counters = self.rng_counters.get(rng_key) # type: ignore
     else:
       rng_counters = {key: 0 for key in rngs}
-      self.rng_counters[rng_key] = rng_counters
+      self.rng_counters[rng_key] = rng_counters # type: ignore
     scope = Scope({},
                   name=name,
                   rngs=rngs,

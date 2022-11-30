@@ -293,7 +293,7 @@ class _Conv(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @property
-  def shared_weights(self) -> bool:
+  def shared_weights(self) -> bool:  # type: ignore
     """Defines whether weights are shared or not between different pixels.
 
     Returns:

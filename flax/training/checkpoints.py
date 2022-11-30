@@ -85,10 +85,7 @@ PyTree = Any
 
 # TODO(flax-dev): Remove this once flax is using the latest jax release
 # containing jax.Array attribute.
-if hasattr(jax, 'Array'):
-  MultiprocessArrayType = Union[GlobalDeviceArray, jax.Array]
-else:
-  MultiprocessArrayType = Union[GlobalDeviceArray, Any]
+MultiprocessArrayType = Union[GlobalDeviceArray, Any]
 
 
 def _checkpoint_path(ckpt_dir: str,
@@ -145,7 +142,7 @@ class AsyncManager():
       task: The callable to be executed asynchrously.
     """
     self.wait_previous_save()
-    self.save_future = self.executor.submit(task)
+    self.save_future = self.executor.submit(task) # type: ignore
 
 
 def _use_multiprocess_serialization(value: Any) -> bool:
@@ -244,7 +241,7 @@ def _restore_mpas(state_dict,
 
   def _safe_deserialize(
       target_mpas: List[Tuple[Tuple[Any, ...], MultiprocessArrayType, str]],
-      gda_manager: GlobalAsyncCheckpointManager) -> List[MultiprocessArrayType]:
+      gda_manager: Any) -> List[MultiprocessArrayType]:
     gda_manager.wait_until_finished()
 
     # Check if reading from GCS and the array dir is potentially corrupted.
@@ -337,7 +334,9 @@ def natural_sort(file_list: Iterable[str], signed: bool = True) -> List[str]:
 
 def safe_normpath(path: str) -> str:
   """Normalizes path safely to get around `io.glob()` limitations."""
-  d = SCHEME_RE.match(path).groupdict()
+  match = SCHEME_RE.match(path)
+  assert match is not None
+  d = match.groupdict()
   return (d['scheme'] or '') + os.path.normpath(d['path'])
 
 
@@ -347,7 +346,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
   """Clean up the checkpoint space according to `overwrite`, `keep`, and `keep_every_n_steps` parameters.
   """
   dir_path, prefix = os.path.split(base_path)
-  checkpoint_files = [pathlib.PurePath(c) for c in io.listdir(dir_path)]
+  checkpoint_files: List[Any] = [pathlib.PurePath(c) for c in io.listdir(dir_path)]
   checkpoint_files = [
       os.path.join(dir_path, c)
       for c in checkpoint_files
@@ -438,7 +437,7 @@ def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
                            step: int):
   """Throw error if a ckpt file of this step or higher already exists."""
   dir_path, prefix = os.path.split(base_path)
-  checkpoint_files = [pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)]
+  checkpoint_files: List[Any] = [pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)]
   checkpoint_files = [
       os.path.join(dir_path, c)
       for c in checkpoint_files
@@ -567,7 +566,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     return ckpt_path
 
   if not overwrite:
-    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)
+    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step) # type: ignore
 
   target = serialization.to_bytes(target)
   # Save the files via I/O sync or async.
@@ -667,7 +666,7 @@ def save_checkpoint_multiprocess(
   has_mpa = mpa_targets and _IMPORT_GDAM_SUCCESSFUL
 
   if not overwrite:
-    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)
+    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step) # type: ignore
     sync_global_devices('check_overwrite_strictly_before_save')
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
@@ -707,7 +706,7 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
     The latest checkpoint path or None if no checkpoints were found.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
-  checkpoint_files = [
+  checkpoint_files: List[Any] = [
       pathlib.PurePath(c) for c in _allowempty_listdir(ckpt_dir)
   ]
   checkpoint_files = [
@@ -791,7 +790,7 @@ def restore_checkpoint(
       if io.exists(os.path.join(ckpt_dir, ORBAX_CKPT_FILENAME)):
         ckpt_path = ckpt_dir
       else:
-        ckpt_path = latest_checkpoint(ckpt_dir, prefix)
+        ckpt_path = latest_checkpoint(ckpt_dir, prefix) # type: ignore
         if not ckpt_path:
           logging.info('Found no checkpoint files in %s with prefix %s',
                        ckpt_dir, prefix)
@@ -908,7 +907,7 @@ def convert_pre_linen(params: PyTree) -> PyTree:
   if not isinstance(params, (dict, core.FrozenDict)):
     return params
   params_renamed = {}
-  counts = {}
+  counts: Dict[Any, Any] = {}
   names = natural_sort(params.keys())
   for name in names:
     value = params[name]
@@ -921,5 +920,5 @@ def convert_pre_linen(params: PyTree) -> PyTree:
     params_renamed[name] = convert_pre_linen(value)
 
   if isinstance(params, core.FrozenDict):
-    params_renamed = core.freeze(params_renamed)
+    params_renamed = core.freeze(params_renamed) # type: ignore
   return params_renamed

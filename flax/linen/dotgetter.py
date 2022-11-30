@@ -94,7 +94,7 @@ class DotGetter(MutableMapping, dict):  # type: ignore[misc] # pytype: disable=m
 tree_util.register_pytree_node(
     DotGetter,
     lambda x: ((x._data,), ()),  # pylint: disable=protected-access
-    lambda _, data: data[0])
+    lambda _, data: data[0]) # type: ignore
 
 # Note: restores as raw dict, intentionally.
 serialization.register_serialization_state(

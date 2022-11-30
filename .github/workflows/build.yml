@@ -90,7 +90,7 @@ jobs:
           - test-type: pytype
             python-version: 3.10
           - test-type: mypy
-            python-version: 3.9
+            python-version: 3.8
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
