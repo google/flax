@@ -110,6 +110,13 @@ def _allowempty_listdir(path: str):
   except tf_errors.NotFoundError:
     return []
 
+def _safe_remove(path: str):
+  """Identify whether a path is a dir or list and choose the correct remove method."""
+  if io.isdir(path):
+    io.rmtree(path)
+  else:
+    io.remove(path)
+
 class AsyncManager():
   """A simple object to track async checkpointing.
 
@@ -361,7 +368,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # checkpoint folder and before deleting the main checkpoint.
         if io.exists(path + MP_ARRAY_POSTFIX):
           io.rmtree(path + MP_ARRAY_POSTFIX)
-      io.rmtree(path)
+      _safe_remove(path)
 
   # Remove old checkpoint files.
   last_kept = -float('inf')
@@ -382,7 +389,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # MPA might be removed already but the main ckpt is still there.
         if io.exists(path + MP_ARRAY_POSTFIX):
           io.rmtree(path + MP_ARRAY_POSTFIX)
-      io.rmtree(path)
+      _safe_remove(path)
 
 
 def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
