@@ -57,7 +57,15 @@ from .combinators import Sequential as Sequential
 from ..core import (
   DenyList as DenyList,
   FrozenDict as FrozenDict,
-  broadcast as broadcast
+  broadcast as broadcast,
+  meta as meta,
+)
+from ..core.meta import (
+    Partitioned as Partitioned,
+    with_partitioning as with_partitioning,
+    get_partition_spec as get_partition_spec,
+    unbox as unbox,
+    PARTITION_NAME as PARTITION_NAME,
 )
 from .initializers import (
   ones as ones,
