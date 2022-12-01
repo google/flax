@@ -42,7 +42,8 @@ if importlib.util.find_spec('tensorflow'):
   io_mode = BackendMode.TF
 else:
   logging.warning("Tensorflow library not found, tensorflow.io.gfile "
-                  "operations will use slower native shim calls.")
+                  "operations will use native shim calls. "
+                  "GCS paths (i.e. 'gs://...') cannot be accessed.")
   io_mode = BackendMode.DEFAULT
 
 
