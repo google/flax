@@ -23,6 +23,12 @@ Let's create a small convolutional neural network model for our demo.
 
 .. testcode::
 
+  import jax
+  import jax.numpy as jnp
+  from flax import traverse_util
+  from flax import linen as nn
+  from flax.core import freeze
+
   class CNN(nn.Module):
     @nn.compact
     def __call__(self, x):
@@ -71,7 +77,7 @@ Let's create a small convolutional neural network model for our demo.
   })
 
 
-Next, get a flat dict for doing model surgery as follows:
+Next, get a flat dict for doing model surgery by using :meth:`traverse_util.flatten_dict() <flax.traverse_util.flatten_dict>`:
 
 .. testcode::
 
@@ -133,6 +139,8 @@ the same way: flattening, modifying, unflattening, and then recreating a new
 optimizer state that mirrors the original state.
 
 .. testcode::
+
+  import optax
 
   tx = optax.adam(1.0)
   opt_state = tx.init(params)
