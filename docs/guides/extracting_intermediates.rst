@@ -16,6 +16,11 @@ Let's start with this simple CNN that uses :code:`nn.compact`.
 
 .. testcode::
 
+  from flax import linen as nn
+  import jax
+  import jax.numpy as jnp
+  from typing import Sequence
+
   class CNN(nn.Module):
     @nn.compact
     def __call__(self, x):
@@ -117,6 +122,7 @@ Note that, by default ``sow`` appends values every time it is called:
     features = mod_vars['intermediates']['SowCNN']['features']
     return output, features
 
+  batch = jnp.ones((1,28,28,1))
   variables = init(jax.random.PRNGKey(0), batch)
   preds, feats = predict(variables, batch)
 
@@ -267,7 +273,7 @@ your model more explicitly.
 Extracting gradients of intermediate values
 ===========================================
 For debugging purposes, it can be useful to extract the gradients of intermediate values.
-This can be done by using the ``.perturb()`` method over the desired values.
+This can be done by using the :meth:`Module.perturb() <flax.linen.Module.perturb>` method over the desired values.
 
 .. testcode::
 
