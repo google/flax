@@ -81,7 +81,7 @@ Because the architecture in this example is relatively simple—you're just
 stacking layers—you can define the inlined submodules directly within the
 `__call__` method and wrap it with the
 [@compact](https://flax.readthedocs.io/en/latest/flax.linen.html#compact-methods)
-decorator.
+decorator. For information on the ```@compact``` decorator, see [```setup``` vs ```compact```](https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html).
 
 ```{code-cell}
 :id: _s1lXBBO66dc
@@ -181,7 +181,7 @@ to be tracked, but in this example we can use it without any modifications.
 def create_train_state(rng, learning_rate, momentum):
   """Creates initial `TrainState`."""
   cnn = CNN()
-  params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params']
+  params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params'] # initialize parameters by passing a template image
   tx = optax.sgd(learning_rate, momentum)
   return train_state.TrainState.create(
       apply_fn=cnn.apply, params=params, tx=tx)
@@ -196,7 +196,7 @@ A function that:
 - Evaluates the neural network given the parameters and a batch of input images
   with the
   [Module.apply](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply)
-  method.
+  method (forward pass).
 - Computes the `cross_entropy_loss` loss function.
 - Evaluates the gradient of the loss function using
   [jax.grad](https://jax.readthedocs.io/en/latest/jax.html#jax.grad).
@@ -254,7 +254,7 @@ Define a training function that:
   that takes a PRNGKey as a parameter (check the
   [JAX - the sharp bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG)).
 - Runs an optimization step for each batch.
-- Retrieves the training metrics from the device with `jax.device_get` and
+- Asynchronously retrieves the training metrics from the device with `jax.device_get` and
   computes their mean across each batch in an epoch.
 - Returns the optimizer with updated parameters and the training loss and
   accuracy metrics.
@@ -267,12 +267,12 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
   train_ds_size = len(train_ds['image'])
   steps_per_epoch = train_ds_size // batch_size
 
-  perms = jax.random.permutation(rng, train_ds_size)
+  perms = jax.random.permutation(rng, train_ds_size) # get a randomized index array
   perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
-  perms = perms.reshape((steps_per_epoch, batch_size))
+  perms = perms.reshape((steps_per_epoch, batch_size)) # index array, where each row is a batch
   batch_metrics = []
   for perm in perms:
-    batch = {k: v[perm, ...] for k, v in train_ds.items()}
+    batch = {k: v[perm, ...] for k, v in train_ds.items()} # dict{'image': array, 'label': array}
     state, metrics = train_step(state, batch)
     batch_metrics.append(metrics)
 
@@ -280,7 +280,7 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
   batch_metrics_np = jax.device_get(batch_metrics)
   epoch_metrics_np = {
       k: np.mean([metrics[k] for metrics in batch_metrics_np])
-      for k in batch_metrics_np[0]}
+      for k in batch_metrics_np[0]} # jnp.mean does not work on lists
 
   print('train epoch: %d, loss: %.4f, accuracy: %.2f' % (
       epoch, epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100))
@@ -306,7 +306,7 @@ Create a model evaluation function that:
 def eval_model(params, test_ds):
   metrics = eval_step(params, test_ds)
   metrics = jax.device_get(metrics)
-  summary = jax.tree_util.tree_map(lambda x: x.item(), metrics)
+  summary = jax.tree_util.tree_map(lambda x: x.item(), metrics) # map the function over all leaves in metrics
   return summary['loss'], summary['accuracy']
 ```
 
@@ -336,7 +336,7 @@ train_ds, test_ds = get_datasets()
   more about
   [PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables)
   and
-  [JAX PRNG design](https://github.com/google/jax/blob/main/design_notes/prng.md).)
+  [JAX PRNG design](https://jax.readthedocs.io/en/latest/jax-101/05-random-numbers.html).)
 
 ```{code-cell}
 :id: n53xh_B8Ht_W
