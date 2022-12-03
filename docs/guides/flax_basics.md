@@ -16,7 +16,7 @@ kernelspec:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/docs/guides/flax_basics.ipynb)
 [![Open On GitHub](https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub)](https://github.com/google/flax/blob/main/docs/guides/flax_basics.ipynb)
 
-# Flax Basics
+# Flax basics
 
 This notebook will walk you through the following workflow:
 
@@ -34,21 +34,22 @@ Here we provide the code needed to set up the environment for our notebook.
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: qdrEVv9tinJn
-outputId: e30aa464-fa52-4f35-df96-716c68a4b3ee
-tags: [skip-execution]
+vscode:
+  languageId: python
 ---
-# Install the latest JAXlib version.
+# Install the latest JAX and JAXlib version. Note: JAX and Flax support Python versions 3.8-3.10.
 !pip install --upgrade -q pip jax jaxlib
-# Install Flax at head:
+# Install Flax at head.
 !pip install --upgrade -q git+https://github.com/google/flax.git
 ```
 
 ```{code-cell}
-:id: kN6bZDaReZO2
-
+---
+id: kN6bZDaReZO2
+vscode:
+  languageId: python
+---
 import jax
 from typing import Any, Callable, Sequence
 from jax import lax, random, numpy as jnp
@@ -67,8 +68,11 @@ A dense layer is a layer that has a kernel parameter $W\in\mathcal{M}_{m,n}(\mat
 This dense layer is already provided by Flax in the `flax.linen` module (here imported as `nn`).
 
 ```{code-cell}
-:id: zWX2zEtphT4Y
-
+---
+id: zWX2zEtphT4Y
+vscode:
+  languageId: python
+---
 # We create one dense layer instance (taking 'features' parameter as input)
 model = nn.Dense(features=5)
 ```
@@ -77,16 +81,15 @@ model = nn.Dense(features=5)
 
 Layers (and models in general, we'll use that word from now on) are subclasses of the `linen.Module` class.
 
-### Model parameters & initialization
+### Model parameters and initialization
 
 Parameters are not stored with the models themselves. You need to initialize parameters by calling the `init` function, using a PRNGKey and a dummy input parameter.
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: K529lhzeYtl8
-outputId: 06feb9d2-db50-4f41-c169-6df4336f43a5
+vscode:
+  languageId: python
 ---
 key1, key2 = random.split(random.PRNGKey(0))
 x = random.normal(key1, (10,)) # Dummy input
@@ -111,10 +114,9 @@ We see in the output that parameters are stored in a `FrozenDict` instance which
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: HtOFWeiynaJo
-outputId: 689b4230-2a3d-4823-d103-2858e6debc4d
+vscode:
+  languageId: python
 ---
 try:
     params['new_key'] = jnp.ones((2,2))
@@ -128,10 +130,9 @@ To evaluate the model with a given set of parameters (never stored with the mode
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: J8ietJecWiuK
-outputId: 7bbe6bb4-94d5-4574-fbb5-aa0fcd1c84ae
+vscode:
+  languageId: python
 ---
 model.apply(params, x)
 ```
@@ -148,10 +149,9 @@ Here, we see that the tuple $(W,b)$ matches the parameters of the Dense layer. W
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: bFIiMnL4dl-e
-outputId: 6eae59dc-0632-4f53-eac8-c22a7c646a52
+vscode:
+  languageId: python
 ---
 # Set problem dimensions.
 n_samples = 20
@@ -178,8 +178,11 @@ print('x shape:', x_samples.shape, '; y shape:', y_samples.shape)
 We copy the same training loop that we used in the JAX pytree linear regression example with `jax.value_and_grad()`, but here we can use `model.apply()` instead of having to define our own feed-forward function (`predict_pytree()` in the JAX example).
 
 ```{code-cell}
-:id: JqJaVc7BeNyT
-
+---
+id: JqJaVc7BeNyT
+vscode:
+  languageId: python
+---
 # Same as JAX version but using model.apply().
 @jax.jit
 def mse(params, x_batched, y_batched):
@@ -197,10 +200,9 @@ And finally perform the gradient descent.
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: ePEl1ndse0Jq
-outputId: 50d975b3-4706-4d8a-c4b8-2629ab8e3ac4
+vscode:
+  languageId: python
 ---
 learning_rate = 0.3  # Gradient step size.
 print('Loss for "true" W,b: ', mse(true_params, x_samples, y_samples))
@@ -247,8 +249,11 @@ to the
 [official documentation](https://optax.readthedocs.io/en/latest/).
 
 ```{code-cell}
-:id: Ce77uDJx1bUF
-
+---
+id: Ce77uDJx1bUF
+vscode:
+  languageId: python
+---
 import optax
 tx = optax.sgd(learning_rate=learning_rate)
 opt_state = tx.init(params)
@@ -257,10 +262,9 @@ loss_grad_fn = jax.value_and_grad(mse)
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: PTSv0vx13xPO
-outputId: eec0c096-1d9e-4b3c-f8e5-942ee63828ec
+vscode:
+  languageId: python
 ---
 for i in range(101):
   loss_val, grads = loss_grad_fn(params, x_samples, y_samples)
@@ -278,10 +282,9 @@ Now that we're happy with the result of our training, we might want to save the 
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: BiUPRU93XnAZ
-outputId: b97e7d83-3e40-4a80-b1fe-1f6ceff30a0c
+vscode:
+  languageId: python
 ---
 from flax import serialization
 bytes_output = serialization.to_bytes(params)
@@ -300,10 +303,9 @@ To load the model back, you'll need to use as a template the model parameter str
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: MOhoBDCOYYJ5
-outputId: 13acc4e1-8757-4554-e2c8-d594ba6e67dc
+vscode:
+  languageId: python
 ---
 serialization.from_bytes(params, bytes_output)
 ```
@@ -324,10 +326,9 @@ The base abstraction for models is the `nn.Module` class, and every type of pred
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: vbfrfbkxgPhg
-outputId: b59c679c-d164-4fd6-92db-b50f0d310ec3
+vscode:
+  languageId: python
 ---
 class ExplicitMLP(nn.Module):
   features: Sequence[int]
@@ -372,10 +373,9 @@ Since the module structure and its parameters are not tied to each other, you ca
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: DEYrVA6dnaJu
-outputId: 4af16ec5-b52a-43b0-fc47-1f8ab25e7058
+vscode:
+  languageId: python
 ---
 try:
     y = model(x) # Returns an error
@@ -389,10 +389,9 @@ Since here we have a very simple model, we could have used an alternative (but e
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: ZTCbdpQ4suSK
-outputId: 183a74ef-f54e-4848-99bf-fee4c174ba6d
+vscode:
+  languageId: python
 ---
 class SimpleMLP(nn.Module):
   features: Sequence[int]
@@ -435,10 +434,9 @@ In the previous MLP example, we relied only on predefined layers and operators (
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: wK371Pt_vVfR
-outputId: 83b5fea4-071e-4ea0-8fa8-610e69fb5fd5
+vscode:
+  languageId: python
 ---
 class SimpleDense(nn.Module):
   features: int
@@ -492,10 +490,9 @@ For demonstration purposes, we'll implement a simplified but similar mechanism t
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: J6_tR-nPzB1i
-outputId: 75465fd6-cdc8-497c-a3ec-7f709b5dde7a
+vscode:
+  languageId: python
 ---
 class BiasAdderWithRunningMean(nn.Module):
   decay: float = 0.99
@@ -530,10 +527,9 @@ Here, `updated_state` returns only the state variables that are being mutated by
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: IbTsCAvZcdBy
-outputId: 09a8bdd1-eaf8-401a-cf7c-386a7a5aa87b
+vscode:
+  languageId: python
 ---
 for val in [1.0, 2.0, 3.0]:
   x = val * jnp.ones((10,5))
@@ -551,10 +547,9 @@ From this simplified example, you should be able to derive a full BatchNorm impl
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
 id: TUgAbUPpnaJw
-outputId: 0906fbab-b866-4956-d231-b1374415d448
+vscode:
+  languageId: python
 ---
 from functools import partial
 

@@ -1,15 +1,13 @@
 ---
 jupytext:
   formats: ipynb,md:myst
-  main_language: python
   text_representation:
     extension: .md
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: 'Python 3.8.11 (''.venv'': venv)'
-  language: python
+  display_name: Python 3
   name: python3
 ---
 
@@ -18,7 +16,7 @@ kernelspec:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/docs/getting_started.ipynb)
 [![Open On GitHub](https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub)](https://github.com/google/flax/blob/main/docs/getting_started.ipynb)
 
-# Getting Started
+# Getting started
 
 This tutorial demonstrates how to construct a simple convolutional neural
 network (CNN) using the [Flax](https://flax.readthedocs.io) Linen API and train
@@ -31,30 +29,24 @@ If you see any changes between the two feel free to create a
 to synchronize this Colab with the actual example.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: FOYfP6vf2FGx
-outputId: 65ba547d-59df-4fc0-9578-9faa2c14abe8
-tags: [skip-execution]
----
+:id: FOYfP6vf2FGx
+
 # Check GPU
 !nvidia-smi -L
 ```
 
 +++ {"id": "VSaA8Mif6srP"}
 
-## 1. Imports
+## 1. Setup
 
-Import JAX, [JAX NumPy](https://jax.readthedocs.io/en/latest/jax.numpy.html),
-Flax, ordinary NumPy, and TensorFlow Datasets (TFDS). Flax can use any
-data-loading pipeline and this example demonstrates how to utilize TFDS.
+Import JAX, [JAX NumPy](https://jax.readthedocs.io/en/latest/jax.numpy.html), Flax, ordinary NumPy, [Optax](https://optax.readthedocs.io/) and [TensorFlow Datasets (TFDS)](https://www.tensorflow.org/datasets). Flax can use any data-loading pipeline and this example demonstrates how to utilize TFDS.
+
+Note: JAX and Flax support Python versions 3.8-3.10.
 
 ```{code-cell}
 :id: inJ9bV636dRx
-:tags: [skip-execution]
 
-!pip install -q flax
+!pip install -q -U flax
 ```
 
 ```{code-cell}
@@ -64,16 +56,16 @@ import jax
 import jax.numpy as jnp                # JAX NumPy
 
 from flax import linen as nn           # The Linen API
-from flax.training import train_state  # Useful dataclass to keep train state
+from flax.training import train_state  # Useful dataclass to keep the `TrainState`
 
 import numpy as np                     # Ordinary NumPy
-import optax                           # Optimizers
-import tensorflow_datasets as tfds     # TFDS for MNIST
+import optax                           # Optax for common optimizers, loss functions (and schedulers)
+import tensorflow_datasets as tfds     # TFDS to load MNIST
 ```
 
 +++ {"id": "d0FW1DHa6cfH"}
 
-## 2. Define network
+## 2. Define a network
 
 Create a convolutional neural network with the Linen API by subclassing
 [Module](https://flax.readthedocs.io/en/latest/flax.linen.html#core-module-abstraction).
@@ -106,11 +98,11 @@ class CNN(nn.Module):
 
 +++ {"id": "xDEoAprU6_JZ"}
 
-## 3. Define loss
+## 3. Define the loss function
 
-We simply use `optax.softmax_cross_entropy()`. Note that this function expects both `logits` and `labels` to have shape `[batch, num_classes]`. Since the labels will be read from TFDS as integer values, we first need to convert them to a onehot encoding.
+Use [`optax.softmax_cross_entropy`](https://optax.readthedocs.io/en/latest/api.html#optax.softmax_cross_entropy) as your loss function. Note that this function expects both `logits` and `labels` to have shape `[batch, num_classes]`. Since the labels will be read from TFDS as integer values, we first need to convert them to a onehot encoding.
 
-Our function returns a simple scalar value ready for optimization, so we first take the mean of the vector shaped `[batch]` returned by Optax's loss function.
+The following function returns a simple scalar value ready for optimization, so make sure to take the mean(`.mean()`) of the vector shaped `[batch]` returned by Optax's `softmax_cross_entropy` loss function.
 
 ```{code-cell}
 :id: Zcb_ebU87G7s
@@ -162,18 +154,15 @@ def get_datasets():
 
 +++ {"id": "UMFK51rsAUX4"}
 
-## 6. Create train state
+## 6. Create the `TrainState`
 
 A common pattern in Flax is to create a single dataclass that represents the
 entire training state, including step number, parameters, and optimizer state.
 
-Also adding optimizer & model to this state has the advantage that we only need
-to pass around a single argument to functions like `train_step()` (see below).
+Also adding optimizer & model to this state has the advantage that we only need to pass around a single argument to functions like `train_step()` (see below).
 
 Because this is such a common pattern, Flax provides the class
-[flax.training.train_state.TrainState](https://flax.readthedocs.io/en/latest/flax.training.html#train-state)
-that serves most basic usecases. Usually one would subclass it to add more data
-to be tracked, but in this example we can use it without any modifications.
+[`flax.training.train_state.TrainState`](https://flax.readthedocs.io/en/latest/flax.training.html#train-state) that serves most basic usecases. Usually one would subclass it to add more data to be tracked, but in this example we can use it without any modifications.
 
 ```{code-cell}
 :id: QadyBPbWBEAT
@@ -249,15 +238,11 @@ def eval_step(params, batch):
 
 Define a training function that:
 
-- Shuffles the training data before each epoch using
-  [jax.random.permutation](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.permutation.html)
-  that takes a PRNGKey as a parameter (check the
-  [JAX - the sharp bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG)).
+- Shuffles the training data before each epoch using [`jax.random.permutation`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.permutation.html)
+  that takes a PRNGKey as a parameter (learn more in [JAX - The Sharp Bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG)).
 - Runs an optimization step for each batch.
-- Retrieves the training metrics from the device with `jax.device_get` and
-  computes their mean across each batch in an epoch.
-- Returns the optimizer with updated parameters and the training loss and
-  accuracy metrics.
+- Retrieves the training metrics from the device with [`jax.device_get`](https://jax.readthedocs.io/en/latest/_autosummary/jax.device_get.html) and computes their mean across each batch in an epoch.
+- Returns the optimizer with updated parameters and the training loss and accuracy metrics.
 
 ```{code-cell}
 :id: 7ipyJ-JGCNqP
@@ -268,7 +253,7 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
   steps_per_epoch = train_ds_size // batch_size
 
   perms = jax.random.permutation(rng, train_ds_size)
-  perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+  perms = perms[:steps_per_epoch * batch_size]  # Skip an incomplete batch.
   perms = perms.reshape((steps_per_epoch, batch_size))
   batch_metrics = []
   for perm in perms:
@@ -276,7 +261,7 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
     state, metrics = train_step(state, batch)
     batch_metrics.append(metrics)
 
-  # compute mean of metrics across each batch in epoch.
+  # Compute the mean of metrics across each batch in each epoch.
   batch_metrics_np = jax.device_get(batch_metrics)
   epoch_metrics_np = {
       k: np.mean([metrics[k] for metrics in batch_metrics_np])
@@ -290,15 +275,12 @@ def train_epoch(state, train_ds, batch_size, epoch, rng):
 
 +++ {"id": "E2cHbVUfCRMv"}
 
-## 10. Eval function
+## 10. Evaluation function
 
 Create a model evaluation function that:
 
 - Retrieves the evaluation metrics from the device with `jax.device_get`.
-- Copies the metrics
-  [data stored](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables)
-  in a JAX
-  [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions).
+- Copies the metrics [data stored](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables) in a JAX [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions).
 
 ```{code-cell}
 :id: _dKahNmMCr5q
@@ -315,12 +297,8 @@ def eval_model(params, test_ds):
 ## 11. Download data
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: 6CLXnP3KHptR
-outputId: 4f019877-e87d-4862-af7b-c82334e4f12c
----
+:id: 6CLXnP3KHptR
+
 train_ds, test_ds = get_datasets()
 ```
 
@@ -328,15 +306,9 @@ train_ds, test_ds = get_datasets()
 
 ## 12. Seed randomness
 
-- Get one
-  [PRNGKey](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.PRNGKey.html#jax.random.PRNGKey)
-  and
-  [split](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split)
-  it to get a second key that you'll use for parameter initialization. (Learn
-  more about
-  [PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables)
-  and
-  [JAX PRNG design](https://github.com/google/jax/blob/main/design_notes/prng.md).)
+- Get one [PRNGKey](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.PRNGKey.html#jax.random.PRNGKey) and [split](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split) it to get a second key that you'll use for parameter initialization.
+
+Note: Learn more about [PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables) and [JAX PRNG design](https://github.com/google/jax/blob/main/design_notes/prng.md).
 
 ```{code-cell}
 :id: n53xh_B8Ht_W
@@ -347,10 +319,9 @@ rng, init_rng = jax.random.split(rng)
 
 +++ {"id": "Y3iHFiAuH41s"}
 
-## 13. Initialize train state
+## 13. Initialize the `TrainState`
 
-Remember that function initializes both the model parameters and the optimizer
-and puts both into the training state dataclass that is returned.
+Remember that your custom `create_train_state` function initializes both the model parameters and the optimizer and puts both into the training state dataclass that is returned.
 
 ```{code-cell}
 :id: Mj6OfdEEIU-o
@@ -380,12 +351,8 @@ batch_size = 32
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: ugGlV3u6Iq1A
-outputId: d0944ddb-8d5d-4e9f-9727-040789ef3f17
----
+:id: ugGlV3u6Iq1A
+
 for epoch in range(1, num_epochs + 1):
   # Use a separate PRNG key to permute image data during shuffling
   rng, input_rng = jax.random.split(rng)
@@ -401,6 +368,4 @@ for epoch in range(1, num_epochs + 1):
 
 Congrats! You made it to the end of the annotated MNIST example. You can revisit
 the same example, but structured differently as a couple of Python modules, test
-modules, config files, another Colab, and documentation in Flax's Git repo:
-
-[https://github.com/google/flax/tree/main/examples/mnist](https://github.com/google/flax/tree/main/examples/mnist)
+modules, config files, another Colab, and documentation in [`/examples/mnist`](https://github.com/google/flax/tree/main/examples/mnist) on GitHub.

@@ -64,7 +64,7 @@ comes with everything you need to start your research, including:
 
 ## Quick install
 
-You will need Python 3.6 or later and a working [JAX](https://github.com/google/jax/blob/main/README.md)
+You will need Python 3.8-3.10, and a working [JAX](https://github.com/google/jax/blob/main/README.md)
 installation (with or without GPU support, see instructions there). For a
 CPU-only version:
 
