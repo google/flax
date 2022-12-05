@@ -81,7 +81,7 @@ Because the architecture in this example is relatively simple—you're just
 stacking layers—you can define the inlined submodules directly within the
 `__call__` method and wrap it with the
 [@compact](https://flax.readthedocs.io/en/latest/flax.linen.html#compact-methods)
-decorator. For information on the ```@compact``` decorator, see [```setup``` vs ```compact```](https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html).
+decorator. To learn more about the Flax Linen `@compact` decorator, refer to the [`setup` vs `compact`](https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html) guide.
 
 ```{code-cell}
 :id: _s1lXBBO66dc
