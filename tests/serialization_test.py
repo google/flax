@@ -28,6 +28,7 @@ from flax.core import freeze
 from flax.training import train_state
 import jax
 from jax import random
+from jax.tree_util import Partial
 import jax.numpy as jnp
 import msgpack
 import numpy as np
@@ -106,6 +107,16 @@ class SerializationTest(parameterized.TestCase):
     }
     restored_model = serialization.from_state_dict(initial_params, state)
     self.assertEqual(restored_model, freeze(state))
+
+  def test_partial_serialization(self):
+    add_one = Partial(jnp.add, 1)
+    state = serialization.to_state_dict(add_one)
+    self.assertEqual(state, {
+        'args': {'0': 1},
+        'keywords': {}
+    })
+    restored_add_one = serialization.from_state_dict(add_one, state)
+    self.assertEqual(add_one.args, restored_add_one.args)
 
   def test_optimizer_serialization(self):
     rng = random.PRNGKey(0)
