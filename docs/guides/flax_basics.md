@@ -107,7 +107,9 @@ The result is what we expect: bias and kernel parameters of the correct size. Un
 
 +++ {"id": "3yL9mKk7naJn"}
 
-We see in the output that parameters are stored in a `FrozenDict` instance which helps deal with the functional nature of JAX by preventing any mutation of the underlying dict and making the user aware of it. Read more about it in the [Flax docs](https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.FrozenDict). As a consequence, the following doesn't work:
+The output shows that the parameters are stored in a `FrozenDict` instance, which helps deal with the functional nature of JAX by preventing any mutation of the underlying dict and making the user aware of it. Read more about it in the [`flax.core.frozen_dict.FrozenDict` API docs](https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.FrozenDict).
+
+As a consequence, the following doesn't work:
 
 ```{code-cell}
 ---
