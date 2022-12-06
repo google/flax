@@ -155,6 +155,12 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
+  diff = set(map(str, xs.keys())).difference(states.keys())
+  if diff:
+    raise ValueError('The target dict keys and state dict keys do not match,'
+                   f' target dict contains keys {diff} which are not present in state dict '
+                   f'at path {current_path()}')
+
   return {key: from_state_dict(value, states[str(key)], name=str(key))
           for key, value in xs.items()}
 

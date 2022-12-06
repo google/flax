@@ -180,7 +180,7 @@ class SerializationTest(parameterized.TestCase):
   def test_numpy_serialization(self, dtype):
     np.random.seed(0)
     if (dtype in {'float128', 'f16', 'complex256', 'c32'}) and (platform.system() == 'Darwin') and (platform.machine() == 'arm64'):
-      pytest.skip(f'Mac M1 does not support dtype {dtype}')
+      pytest.skip(f'Mac M1 does not support dtype {dtype}') # skip testing these dtypes if user is on Mac M1
 
     v = np.random.uniform(-100, 100, size=()).astype(dtype)[()]
     restored_v = serialization.msgpack_restore(
@@ -364,9 +364,17 @@ class SerializationTest(parameterized.TestCase):
        'msg': ('The size of the list and the state dict do not match,'
                ' got 1 and 2 at path ./a/b/d')},
       {'target': {'a': {'b': {'c': [1, 2, 3], 'd': [4, 5]}}},
-       'wrong_target': {'a': {'b': {'c': [1, 2, 3], 'd': [4]}}},
-       'msg': ('The size of the list and the state dict do not match, '
-               'got 1 and 2 at path ./a/b/d')},
+       'wrong_target': {'a': {'b': {'c': [1, 2, 3], 'e': [4, 5]}}},
+       'msg': ("The target dict keys and state dict keys do not match, "
+               "target dict contains keys {'e'} which are not present in state dict at path ./a/b")},
+      {'target': 'original_params',
+       'wrong_target': 'wrong_params',
+       'msg': ("The target dict keys and state dict keys do not match, "
+               "target dict contains keys {'Dense_1'} which are not present in state dict at path ./params")},
+      {'target': 'original_train_state',
+       'wrong_target': 'wrong_train_state',
+       'msg': ("The target dict keys and state dict keys do not match, "
+               "target dict contains keys {'Dense_1'} which are not present in state dict at path ./params/params")}
   )
   def test_serialization_errors(self, target, wrong_target, msg):
     if target == 'original_params':
