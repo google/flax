@@ -193,8 +193,6 @@ register_serialization_state(_NamedTuple,
                              _namedtuple_state_dict,
                              _restore_namedtuple)
 
-# jax.tree_util.Partial does not support flax serialization
-# should be upstreamed to Flax
 register_serialization_state(
     jax.tree_util.Partial,
     lambda x: (
