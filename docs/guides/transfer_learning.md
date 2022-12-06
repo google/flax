@@ -40,10 +40,10 @@ Depending on your task, some of the content in this guide may be suboptimal. For
 :tags: [skip-execution]
 
 # Note that the Transformers library doesn't use the latest Flax version.
-! pip install transformers[flax]
+! pip install -q transformers[flax]
 # Install/upgrade Flax and JAX. For JAX installation with GPU/TPU support,
 # visit https://github.com/google/jax#installation.
-! pip install -U flax jax jaxlib
+! pip install -U -q flax jax jaxlib
 ```
 
 ## Create a function for model loading

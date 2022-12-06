@@ -160,7 +160,7 @@ un-sharding or un-padding):
 Adding "infinite padding"
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Above solution works in most cases, but it has some limitations:
+The above solution works in most cases, but it has some limitations:
 
 1. In the rare case where even splitting of the dataset on multiple hosts leads
    to a different number of batches. Imagine having a dataset of ``n=4097``

@@ -212,7 +212,7 @@ the train dataset is not yet replicated, so we do that here. Since replicating
 the entire train dataset is too memory intensive we do it at the batch level.
 
 We can now rewrite the actual training logic. This consists of two simple
-changes: making sure the RNGs are replicate when we pass them to
+changes: making sure the RNGs are replicated when we pass them to
 ``create_train_state()``, and replicating the test dataset, which is much
 smaller than the train dataset so we can do this for the entire dataset
 directly.
