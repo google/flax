@@ -629,6 +629,23 @@ class IncorrectPostInitOverrideError(FlaxError):
   def __init__(self):
     super().__init__('Overrode `.__post_init__()` without calling `super().__post_init__()`')
 
+class DescriptorAttributeError(FlaxError):
+  """
+  This error occurs when you are trying to access a property that is accessing a non-existent attribute.
+  For example, the error will be raised when trying to run this code::
+
+    class Foo(nn.Module):
+        @property
+        def prop(self):
+            return self.non_existent_field # ERROR!
+        def __call__(self, x):
+            return self.prop
+
+    foo = Foo()
+    variables = foo.init(jax.random.PRNGKey(0), jnp.ones(shape=(1, 8)))
+  """
+  def __init__(self):
+    super().__init__('Trying to access a property that is accessing a non-existent attribute.')
 
 class InvalidCheckpointError(FlaxError):
   """

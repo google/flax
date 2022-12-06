@@ -1809,6 +1809,50 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(type_hints['layers'], int)
 
 
+  def test_incorrect_property(self):
+    class Foo(nn.Module):
+      @property
+      def prop(self):
+        return self.non_existent
+      def __call__(self):
+        return self.prop
+
+    foo = Foo()
+    with self.assertRaisesRegex(
+      errors.DescriptorAttributeError, 'Trying to access a property that'):
+      foo.apply({})
+
+  def test_custom_descriptor(self):
+    class Descriptor:
+      def __get__(self, obj, objtype=None):
+        return 10
+
+    class Foo(nn.Module):
+      prop = Descriptor()
+
+      def __call__(self):
+        return self.prop
+
+    foo = Foo()
+    res = foo.apply({})
+    self.assertEqual(res, 10)
+
+  def test_custom_descriptor_error(self):
+    class Descriptor:
+      def __get__(self, obj, objtype=None):
+        return obj.non_existent
+
+    class Foo(nn.Module):
+      prop = Descriptor()
+
+      def __call__(self):
+        return self.prop
+
+    foo = Foo()
+    with self.assertRaisesRegex(
+      errors.DescriptorAttributeError, 'Trying to access a property that'):
+      foo.apply({})
+
 class LeakTests(absltest.TestCase):
 
   def test_tracer_leaks(self):
