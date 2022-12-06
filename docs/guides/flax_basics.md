@@ -591,7 +591,7 @@ for _ in range(3):
 Note that the above function has a quite verbose signature and it would not actually
 work with `jax.jit()` because the function arguments are not "valid JAX types".
 
-We provide a handy wrapper that simplifies the above code, see [TrainState](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.train_state.TrainState).
+Flax provides a handy wrapper - `TrainState` - that simplifies the above code. Check out [`flax.training.train_state.TrainState`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.train_state.TrainState) to learn more.
 
 +++ {"id": "_GL0PsCwnaJw"}
 
