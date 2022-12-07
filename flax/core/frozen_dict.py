@@ -108,9 +108,9 @@ class FrozenDict(Mapping[K, V]):
       self._hash = h
     return self._hash
 
-  def copy(self, add_or_replace: 'FrozenDict[K, V]') -> 'FrozenDict[K, V]':
+  def copy(self, add_or_replace: Mapping[K, V]) -> 'FrozenDict[K, V]':
     """Create a new FrozenDict with additional or replaced entries."""
-    return type(self)({**self, **unfreeze(add_or_replace)})
+    return type(self)({**self, **unfreeze(add_or_replace)}) # type: ignore[arg-type]
 
   def keys(self):
     return FrozenKeysView(self)
