@@ -63,6 +63,7 @@ class VariablePlaceholder:
   """Used to mark Variables in a JAX-compatible way when lifting arguments."""
   collection: str = struct.field(pytree_node=False)
   name: str = struct.field(pytree_node=False)
+  unbox: bool = struct.field(pytree_node=False)
   id: int = struct.field(pytree_node=False)
 
 
@@ -126,7 +127,7 @@ def get_module_scopes(module, args=None, kwargs=None):
     nonlocal scopes
     if isinstance(x, Variable) and isinstance(x.scope, Scope):
       scopes.append(x.scope)
-      return VariablePlaceholder(x.collection, x.name, x._id)
+      return VariablePlaceholder(x.collection, x.name, x.unbox, x._id)
     elif isinstance(x, Module) and isinstance(x.scope, Scope):
       x._try_setup(shallow=True)
       scopes.append(x.scope)
@@ -197,7 +198,10 @@ def set_module_scopes(module, args, kwargs, scopes):
   def set_arg_scope(x):
     nonlocal idx
     if isinstance(x, VariablePlaceholder):
-      new_x = Variable(scope=scopes[idx], collection=x.collection, name=x.name)
+      new_x = Variable(scope=scopes[idx],
+                       collection=x.collection,
+                       name=x.name,
+                       unbox=x.unbox)
       idx += 1
       return new_x
     elif isinstance(x, InstancePlaceholder):
@@ -224,7 +228,8 @@ def set_module_scopes(module, args, kwargs, scopes):
       elif isinstance(x, Variable) and isinstance(x.scope, Scope):
         new_x = Variable(scope=scopes[idx],
                          collection=x.collection,
-                         name=x.name)
+                         name=x.name,
+                         unbox=x.unbox)
         idx += 1
         return new_x
       else:
@@ -438,6 +443,7 @@ def vmap(target: Target,
          axis_size: Optional[int] = None,
          axis_name: Optional[str] = None,
          spmd_axis_name: Optional[str] = None,
+         metadata_params: Mapping[Any, Any] = {},
          methods=None) -> Target:
   """A lifted version of ``jax.vmap``.
 
@@ -491,6 +497,8 @@ def vmap(target: Target,
     spmd_axis_name: Axis name added to any pjit sharding constraints appearing
       in `fn`. See also
       https://github.com/google/flax/blob/main/flax/linen/partitioning.py.
+    metadata_params: arguments dict passed to AxisMetadata instances in the
+      variable tree.
 
   Returns:
     A batched/vectorized version of ``target``, with the same arguments but with
@@ -507,6 +515,7 @@ def vmap(target: Target,
       out_axes=out_axes,
       axis_size=axis_size,
       axis_name=axis_name,
+      metadata_params=metadata_params,
       spmd_axis_name=spmd_axis_name)
 
 
@@ -698,6 +707,7 @@ def scan(target: Target,
          reverse: bool = False,
          unroll: int = 1,
          data_transform: Optional[Callable[..., Any]] = None,
+         metadata_params: Mapping[Any, Any] = {},
          methods=None) -> Target:
   """A lifted version of ``jax.lax.scan``.
 
@@ -794,6 +804,8 @@ def scan(target: Target,
     data_transform: optional function to transform raw functional-core variable
       and rng groups inside lifted scan body_fn, intended for inline SPMD
       annotations.
+    metadata_params: arguments dict passed to AxisMetadata instances in the
+      variable tree.
     methods: If `target` is a `Module`, the methods of `Module` to scan over.
 
   Returns:
@@ -812,6 +824,7 @@ def scan(target: Target,
       reverse=reverse,
       unroll=unroll,
       data_transform=data_transform,
+      metadata_params=metadata_params,
       methods=methods)
 
 

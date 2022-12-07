@@ -42,7 +42,8 @@ if importlib.util.find_spec('tensorflow'):
   io_mode = BackendMode.TF
 else:
   logging.warning("Tensorflow library not found, tensorflow.io.gfile "
-                  "operations will use slower native shim calls.")
+                  "operations will use native shim calls. "
+                  "GCS paths (i.e. 'gs://...') cannot be accessed.")
   io_mode = BackendMode.DEFAULT
 
 
@@ -159,6 +160,7 @@ def glob(pattern):
 
 
 def remove(path):
+  """Remove the file at path. Might fail if used on a directory path."""
   if io_mode == BackendMode.DEFAULT:
     return os.remove(path)
   elif io_mode == BackendMode.TF:
@@ -168,6 +170,7 @@ def remove(path):
 
 
 def rmtree(path):
+  """Remove a directory and recursively all contents inside. Might fail if used on a file path."""
   if io_mode == BackendMode.DEFAULT:
     return shutil.rmtree(path)
   elif io_mode == BackendMode.TF:

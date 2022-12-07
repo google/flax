@@ -1010,7 +1010,8 @@ class Module:
 
   def variable(self, col: str, name: str,
                init_fn: Optional[Callable[..., Any]] = None,
-               *init_args) -> Variable:
+               *init_args,
+               unbox: bool = True) -> Variable:
     """Declares and returns a variable in this Module.
 
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
@@ -1035,6 +1036,8 @@ class Module:
         this variable is used in this module. If None, the variable must
         already be initialized otherwise an error is raised.
       *init_args: The arguments to pass to init_fn.
+      unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
+        value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
       A :class:`flax.core.variables.Variable` that can be read or set via
@@ -1046,11 +1049,12 @@ class Module:
           'wrapped in `@compact`')
     if self._name_taken(name):
       raise errors.NameInUseError('variable', name, self.__class__.__name__)
-    v = self.scope.variable(col, name, init_fn, *init_args)
+    v = self.scope.variable(col, name, init_fn, *init_args, unbox=unbox)
     self._state.children[name] = col
     return v
 
-  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+  def param(self, name: str, init_fn: Callable[..., T], *init_args,
+            unbox: bool = True) -> T:
     """Declares and returns a parameter in this Module.
 
     Parameters are read-only variables in the collection named "params". See
@@ -1072,6 +1076,8 @@ class Module:
         of this variable. This function will only be called the first time
         this parameter is used in this module.
       *init_args: The arguments to pass to init_fn.
+      unbox: If True, ``AxisMetadata`` instances are replaced by their unboxed
+        value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
       The value of the initialized parameter.
@@ -1082,7 +1088,7 @@ class Module:
           'wrapped in `@compact`')
     if self._name_taken(name):
       raise errors.NameInUseError('param', name, self.__class__.__name__)
-    v = self.scope.param(name, init_fn, *init_args)
+    v = self.scope.param(name, init_fn, *init_args, unbox=unbox)
     self._state.children[name] = 'params'
     return v
 

@@ -511,3 +511,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('4.141592', lines[5])
     self.assertIn('x: 3.141592', lines[7])
     self.assertIn('4.141592', lines[7])
+
+
+if __name__ == '__main__':
+  absltest.main()

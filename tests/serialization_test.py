@@ -14,8 +14,10 @@
 
 """Tests for flax.struct and flax.serialization."""
 
+import platform
 import collections
-from typing import Any, NamedTuple
+from typing import NamedTuple, Any
+import pytest
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -156,38 +158,42 @@ class SerializationTest(parameterized.TestCase):
                                                        serialized_state_dict)
     self.assertEqual(variables, deserialized_state)
 
-  def test_numpy_serialization(self):
-    normal_dtypes = ['byte', 'b', 'ubyte', 'short',
-                     'h', 'ushort', 'i', 'uint', 'intp',
-                     'p', 'uintp', 'long', 'l', 'longlong',
-                     'q', 'ulonglong', 'half', 'e', 'f',
-                     'double', 'd', 'longdouble', 'g',
-                     'cfloat', 'cdouble', 'clongdouble', 'm',
-                     'bool8', 'b1', 'int64', 'i8', 'uint64', 'u8',
-                     'float16', 'f2', 'float32', 'f4', 'float64',
-                     'f8', 'float128', 'f16', 'complex64', 'c8',
-                     'complex128', 'c16', 'complex256', 'c32',
-                     'm8', 'int32', 'i4', 'uint32', 'u4', 'int16',
-                     'i2', 'uint16', 'u2', 'int8', 'i1', 'uint8',
-                     'u1', 'complex_', 'int0', 'uint0', 'single',
-                     'csingle', 'singlecomplex', 'float_', 'intc',
-                     'uintc', 'int_', 'longfloat', 'clongfloat',
-                     'longcomplex', 'bool_', 'int', 'float',
-                     'complex', 'bool']
+  @parameterized.parameters(
+    ['byte', 'b', 'ubyte', 'short',
+    'h', 'ushort', 'i', 'uint', 'intp',
+    'p', 'uintp', 'long', 'l', 'longlong',
+    'q', 'ulonglong', 'half', 'e', 'f',
+    'double', 'd', 'longdouble', 'g',
+    'cfloat', 'cdouble', 'clongdouble', 'm',
+    'bool8', 'b1', 'int64', 'i8', 'uint64', 'u8',
+    'float16', 'f2', 'float32', 'f4', 'float64',
+    'f8', 'float128', 'f16', 'complex64', 'c8',
+    'complex128', 'c16', 'complex256', 'c32',
+    'm8', 'int32', 'i4', 'uint32', 'u4', 'int16',
+    'i2', 'uint16', 'u2', 'int8', 'i1', 'uint8',
+    'u1', 'complex_', 'int0', 'uint0', 'single',
+    'csingle', 'singlecomplex', 'float_', 'intc',
+    'uintc', 'int_', 'longfloat', 'clongfloat',
+    'longcomplex', 'bool_', 'int', 'float',
+    'complex', 'bool']
+  )
+  def test_numpy_serialization(self, dtype):
     np.random.seed(0)
-    for dtype in normal_dtypes:
-      v = np.random.uniform(-100, 100, size=()).astype(dtype)[()]
-      restored_v = serialization.msgpack_restore(
-          serialization.msgpack_serialize(v))
-      self.assertEqual(restored_v.dtype, v.dtype)
-      np.testing.assert_array_equal(restored_v, v)
+    if (dtype in {'float128', 'f16', 'complex256', 'c32'}) and (platform.system() == 'Darwin') and (platform.machine() == 'arm64'):
+      pytest.skip(f'Mac M1 does not support dtype {dtype}')
 
-      for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
-        arr = np.random.uniform(-100, 100, size=shape).astype(dtype)
-        restored_arr = serialization.msgpack_restore(
-            serialization.msgpack_serialize(arr))
-        self.assertEqual(restored_arr.dtype, arr.dtype)
-        np.testing.assert_array_equal(restored_arr, arr)
+    v = np.random.uniform(-100, 100, size=()).astype(dtype)[()]
+    restored_v = serialization.msgpack_restore(
+        serialization.msgpack_serialize(v))
+    self.assertEqual(restored_v.dtype, v.dtype)
+    np.testing.assert_array_equal(restored_v, v)
+
+    for shape in [(), (5,), (10, 10), (1, 20, 30, 1)]:
+      arr = np.random.uniform(-100, 100, size=shape).astype(dtype)
+      restored_arr = serialization.msgpack_restore(
+          serialization.msgpack_serialize(arr))
+      self.assertEqual(restored_arr.dtype, arr.dtype)
+      np.testing.assert_array_equal(restored_arr, arr)
 
   def test_jax_numpy_serialization(self):
     jax_dtypes = [jnp.bool_, jnp.uint8, jnp.uint16, jnp.uint32,

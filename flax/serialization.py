@@ -148,7 +148,9 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
   str_keys = set(str(k) for k in xs.keys())
   if len(str_keys) != len(xs):
     raise ValueError(
-        f'Dict keys do not have a unique string representation: {str_keys}')
+        'Dict keys do not have a unique string representation: '
+        f'{str_keys} vs given: {xs}'
+    )
   return {str(key): to_state_dict(value) for key, value in xs.items()}
 
 
@@ -172,9 +174,13 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
   nt_keys = set(xs._fields)
 
   if sd_keys != nt_keys:
-    raise ValueError('The field names of the state dict and the named tuple do not match,'
-                     f' got {sd_keys} and {nt_keys} at path {current_path()}')
-  fields = {k: from_state_dict(getattr(xs, k), v, name=k) for k, v in state_dict.items()}
+    raise ValueError(
+        'The field names of the state dict and the named tuple do not match,'
+        f' got {sd_keys} and {nt_keys} at path {current_path()}')
+  fields = {
+      k: from_state_dict(getattr(xs, k), v, name=k)
+      for k, v in state_dict.items()
+  }
   return type(xs)(**fields)
 
 

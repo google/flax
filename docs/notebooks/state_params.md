@@ -86,7 +86,7 @@ This example model is a minimal example that contains both parameters (declared 
 
 The tricky part with initialization here is that we need to split the state variables and the parameters we’re going to optimize for.
 
-First we define `update_step` as follow (with dummy loss that should be replaced for yours):
+First we define `update_step` as follows (with a dummy loss function that should be replaced with yours):
 
 ```{code-cell} ipython3
 :id: B7xxRU02VeJb

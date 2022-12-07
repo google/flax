@@ -110,6 +110,13 @@ def _allowempty_listdir(path: str):
   except tf_errors.NotFoundError:
     return []
 
+def _safe_remove(path: str):
+  """Identify whether a path is a dir or list and choose the correct remove method."""
+  if io.isdir(path):
+    io.rmtree(path)
+  else:
+    io.remove(path)
+
 class AsyncManager():
   """A simple object to track async checkpointing.
 
@@ -337,7 +344,8 @@ def safe_normpath(path: str) -> str:
 def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
                           overwrite: bool, keep_every_n_steps: Optional[int],
                           has_mpa: bool) -> None:
-  """Check the parameters and clean up the checkpoint space accordingly."""
+  """Clean up the checkpoint space according to `overwrite`, `keep`, and `keep_every_n_steps` parameters.
+  """
   dir_path, prefix = os.path.split(base_path)
   checkpoint_files = [pathlib.PurePath(c) for c in io.listdir(dir_path)]
   checkpoint_files = [
@@ -348,7 +356,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
   checkpoint_files = natural_sort(checkpoint_files)
 
   # Remove newer checkpoints
-  if overwrite:
+  if overwrite and ckpt_path in checkpoint_files:
     ind = checkpoint_files.index(ckpt_path) + 1
     newer_ckpts = checkpoint_files[ind:]
     checkpoint_files = checkpoint_files[:ind]
@@ -360,7 +368,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # checkpoint folder and before deleting the main checkpoint.
         if io.exists(path + MP_ARRAY_POSTFIX):
           io.rmtree(path + MP_ARRAY_POSTFIX)
-      io.rmtree(path)
+      _safe_remove(path)
 
   # Remove old checkpoint files.
   last_kept = -float('inf')
@@ -381,7 +389,7 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
         # MPA might be removed already but the main ckpt is still there.
         if io.exists(path + MP_ARRAY_POSTFIX):
           io.rmtree(path + MP_ARRAY_POSTFIX)
-      io.rmtree(path)
+      _safe_remove(path)
 
 
 def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
@@ -523,6 +531,10 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     async_manager: if defined, the save will run without blocking the main
       thread. Only works for single host. Note that an ongoing save will still
       block subsequent saves, to make sure overwrite/keep logic works correctly.
+    orbax_checkpointer: if defined, the save will be done by Orbax. In the
+      future, all Flax checkpointing features will be migrated to Orbax,
+      and starting to use an `orbax_checkpointer` is recommended. Please
+      check out the checkpointing guide (https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#save-checkpoints) for how to use Orbax checkpointers.
   Returns:
     Filename of saved checkpoint.
   """
@@ -539,12 +551,17 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       logging.warning(
           'Multiple JAX processes detected when saving checkpoint. Please note that only process 0 will execute the save, and you may lose data if the checkpoints saved by other processes contain unique data.'
       )
-    # If no checkpointer provided, save asynchronously with default setting.
+    # Make sure any previous work is done before making file changes.
+    if orbax_checkpointer and isinstance(orbax_checkpointer,
+                                         orbax.AsyncCheckpointer):
+      orbax_checkpointer.wait_until_finished()
     if not orbax_checkpointer:
+      # If no checkpointer provided, save synchronously with default setting.
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
     save_args = jax.tree_util.tree_map(lambda x: orbax.SaveArgs(aggregate=True),
                                        target)
-    orbax_checkpointer.save(ckpt_path, target, save_args=save_args, force=overwrite)
+    orbax_checkpointer.save(
+        ckpt_path, target, save_args=save_args, force=overwrite)
     _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
                           keep_every_n_steps, True)
     return ckpt_path
@@ -606,6 +623,10 @@ def save_checkpoint_multiprocess(
       correctly). Will save the GDAs to a separate subdirectory with postfix
       "_gda" asynchronously. Same as async_manager, this will block subsequent
       saves.
+    orbax_checkpointer: if defined, the save will be done by Orbax. In the
+      future, all Flax checkpointing features will be migrated to Orbax,
+      and starting to use an `orbax_checkpointer` is recommended. Please
+      check out the checkpointing guide (https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#save-checkpoints) for how to use Orbax checkpointers.
 
   Returns:
     Filename of saved checkpoint.
@@ -624,10 +645,11 @@ def save_checkpoint_multiprocess(
 
   if config.flax_use_orbax_checkpointing or orbax_checkpointer:
     # Make sure any previous work is done before making file changes.
-    if orbax_checkpointer:
+    if orbax_checkpointer and isinstance(orbax_checkpointer,
+                                         orbax.AsyncCheckpointer):
       orbax_checkpointer.wait_until_finished()
-    # If no checkpointer provided, save asynchronously with default setting.
-    else:
+    # If no checkpointer provided, save synchronously with default setting.
+    if not orbax_checkpointer:
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
     if process_index() == 0:
       _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
@@ -635,7 +657,8 @@ def save_checkpoint_multiprocess(
     save_args = jax.tree_util.tree_map(
         lambda x: orbax.SaveArgs(
             aggregate=not _use_multiprocess_serialization(x)), target)
-    orbax_checkpointer.save(ckpt_path, target, save_args=save_args, force=overwrite)
+    orbax_checkpointer.save(
+        ckpt_path, target, save_args=save_args, force=overwrite)
     return ckpt_path
 
   target = serialization.to_state_dict(target)
@@ -684,7 +707,9 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
     The latest checkpoint path or None if no checkpoints were found.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
-  checkpoint_files = [pathlib.PurePath(c) for c in _allowempty_listdir(ckpt_dir)]
+  checkpoint_files = [
+      pathlib.PurePath(c) for c in _allowempty_listdir(ckpt_dir)
+  ]
   checkpoint_files = [
       os.path.join(ckpt_dir, c)
       for c in checkpoint_files
@@ -722,8 +747,8 @@ def restore_checkpoint(
     ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.
     target: matching object to rebuild via deserialized state-dict. If None, the
       deserialized state-dict is returned as-is.
-    step: int or float: step number to load or None to load latest. If specified,
-      ckpt_dir must be a directory.
+    step: int or float: step number to load or None to load latest. If
+      specified, ckpt_dir must be a directory.
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
     gda_manager: required if checkpoint contains a multiprocess array
@@ -736,7 +761,8 @@ def restore_checkpoint(
       may have some MPAs not restored correctly. Use this if you cannot provide
       a fully valid ``target`` and don't need all the MPAs in the checkpoint
       to be restored.
-    orbax_checkpointer: the `Orbax.Checkpointer` that handles the underlying restore.
+    orbax_checkpointer: the `Orbax.Checkpointer` that handles the underlying
+      restore, if the given checkpoint is saved with Orbax.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
@@ -745,6 +771,10 @@ def restore_checkpoint(
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
+  # Make sure any previous work is done before checking files.
+  if orbax_checkpointer and isinstance(orbax_checkpointer,
+                                       orbax.AsyncCheckpointer):
+    orbax_checkpointer.wait_until_finished()
 
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   ckpt_dir = safe_normpath(ckpt_dir)

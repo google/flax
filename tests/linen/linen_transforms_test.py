@@ -1034,7 +1034,7 @@ class TransformTest(absltest.TestCase):
         return f(x)
       @nn.jit
       def _helper(self):
-        return nn.Variable(None, None, None)
+        return nn.Variable(None, None, None, False)
     b = Bar()
     with self.assertRaises(errors.TransformedMethodReturnValueError):
       b.apply({}, jnp.ones(2))

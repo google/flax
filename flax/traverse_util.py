@@ -85,9 +85,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
   Args:
     xs: a nested dictionary
     keep_empty_nodes: replaces empty dictionaries
-      with `traverse_util.empty_node`. This must
-      be set to `True` for `unflatten_dict` to
-      correctly restore empty dictionaries.
+      with `traverse_util.empty_node`.
     is_leaf: an optional function that takes the
       next nested dictionary and nested keys and
       returns True if the nested dictionary is a
@@ -100,7 +98,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
   """
   assert isinstance(
       xs,
-      (flax.core.FrozenDict, dict)), f'expected (frozen)dict got {type(xs)}'
+      (flax.core.FrozenDict, dict)), f'expected (frozen)dict; got {type(xs)}'
 
   def _key(path):
     if sep is None:
@@ -149,7 +147,7 @@ def unflatten_dict(xs, sep=None):
   Returns:
     The nested dictionary.
   """
-  assert isinstance(xs, dict), 'input is not a dict'
+  assert isinstance(xs, dict), f'input is not a dict; it is a {type(xs)}'
   result = {}
   for path, value in xs.items():
     if sep is not None:
@@ -163,6 +161,7 @@ def unflatten_dict(xs, sep=None):
       cursor = cursor[key]
     cursor[path[-1]] = value
   return result
+
 
 def path_aware_map(
   f: Callable[[Path, Any], Any], nested_dict: VariableDict) -> VariableDict:

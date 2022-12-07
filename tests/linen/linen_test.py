@@ -119,6 +119,17 @@ class PoolTest(parameterized.TestCase):
       expected_y = jnp.array([10.0 / 4, 6.0 / 2, 7.0 / 2, 4.0 / 1]).reshape((1, 2, 2, 1))
     np.testing.assert_allclose(y, expected_y)
 
+  def test_pooling_variable_batch_dims(self):
+    x = jnp.zeros((1, 8, 32, 32, 3), dtype=jnp.float32)
+    y = nn.max_pool(x, (2, 2), (2, 2))
+
+    assert y.shape == (1, 8, 16, 16, 3)
+
+  def test_pooling_no_batch_dims(self):
+    x = jnp.zeros((32, 32, 3), dtype=jnp.float32)
+    y = nn.max_pool(x, (2, 2), (2, 2))
+
+    assert y.shape == (16, 16, 3)
 
 class NormalizationTest(parameterized.TestCase):
 
