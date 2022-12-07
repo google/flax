@@ -31,7 +31,6 @@ install_requires = [
     "msgpack",
     "optax",
     "orbax",
-    "tensorstore",
     "rich>=11.1",
     "typing_extensions>=4.1.1",
     "PyYAML>=5.4.1",
@@ -54,6 +53,7 @@ tests_require = [
     "tensorflow_text>=2.4.0",  # WMT example.
     "tensorflow_datasets",
     "tensorflow",
+    "tensorstore",
     "torch",
 ]
 
