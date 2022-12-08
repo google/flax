@@ -34,7 +34,7 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       An immutable dictionary which can be “`unfrozen <https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.unfreeze>`__”
       to a regular, mutable dictionary. Internally, Flax uses FrozenDicts to ensure variable dicts
       aren't accidentally mutated. Note: We are considering returning to regular dicts from our APIs,
-      and only using frozen dicts internally.
+      and only using FrozenDicts internally.
       (see `#1223 <https://github.com/google/flax/issues/1223>`__).
 
     Functional core
