@@ -39,7 +39,6 @@ from jax import sharding
 from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
 import orbax.checkpoint as orbax
-from tensorflow import errors as tf_errors
 
 
 _IMPORT_GDAM_SUCCESSFUL = False
@@ -107,7 +106,7 @@ def _checkpoint_path_step(path: str) -> Optional[float]:
 def _allowempty_listdir(path: str):
   try:
     return io.listdir(path)
-  except tf_errors.NotFoundError:
+  except io.NotFoundError:
     return []
 
 def _safe_remove(path: str):
