@@ -8,83 +8,103 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: 'Python 3.8.11 (''.venv'': venv)'
+  display_name: Python 3
   language: python
   name: python3
 ---
 
-+++ {"id": "9q9JZjt16AMf"}
++++ {"id": "6eea21b3"}
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/docs/getting_started.ipynb)
 [![Open On GitHub](https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub)](https://github.com/google/flax/blob/main/docs/getting_started.ipynb)
 
-# Getting Started
+# Quick Start
 
-This tutorial demonstrates how to construct a simple convolutional neural
+Welcome to Flax!
+
+Flax is an open source Python neural network library built on top of [JAX](https://github.com/google/jax). This tutorial demonstrates how to construct a simple convolutional neural
 network (CNN) using the [Flax](https://flax.readthedocs.io) Linen API and train
 the network for image classification on the MNIST dataset.
 
-Note: This notebook is based on Flax's official
-[MNIST Example](https://github.com/google/flax/tree/main/examples/mnist).
-If you see any changes between the two feel free to create a
-[pull request](https://github.com/google/flax/compare)
-to synchronize this Colab with the actual example.
++++ {"id": "nwJWKIhdwxDo"}
+
+## 1. Install Flax
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: FOYfP6vf2FGx
-outputId: 65ba547d-59df-4fc0-9578-9faa2c14abe8
-tags: [skip-execution]
----
-# Check GPU
-!nvidia-smi -L
-```
-
-+++ {"id": "VSaA8Mif6srP"}
-
-## 1. Imports
-
-Import JAX, [JAX NumPy](https://jax.readthedocs.io/en/latest/jax.numpy.html),
-Flax, ordinary NumPy, and TensorFlow Datasets (TFDS). Flax can use any
-data-loading pipeline and this example demonstrates how to utilize TFDS.
-
-```{code-cell}
-:id: inJ9bV636dRx
+:id: bb81587e
 :tags: [skip-execution]
 
 !pip install -q flax
 ```
 
++++ {"id": "b529fbef"}
+
+## 2. Loading data
+
+Flax can use any
+data-loading pipeline and this example demonstrates how to utilize TFDS. Define a function that loads and prepares the MNIST dataset and converts the
+samples to floating-point numbers.
+
 ```{code-cell}
-:id: Z7MuGFB16E8m
+---
+executionInfo:
+  elapsed: 54
+  status: ok
+  timestamp: 1673483483044
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: bRlrHqZVXZvk
+---
+import tensorflow_datasets as tfds  # TFDS for MNIST
+import tensorflow as tf             # TensorFlow operations
 
-import jax
-import jax.numpy as jnp                # JAX NumPy
+def get_datasets(num_epochs, batch_size):
+  """Load MNIST train and test datasets into memory."""
+  train_ds = tfds.load('mnist', split='train')
+  test_ds = tfds.load('mnist', split='test')
 
-from flax import linen as nn           # The Linen API
-from flax.training import train_state  # Useful dataclass to keep train state
+  train_ds = train_ds.map(lambda sample: {'image': tf.cast(sample['image'],
+                                                           tf.float32) / 255.,
+                                          'label': sample['label']}) # normalize train set
+  test_ds = test_ds.map(lambda sample: {'image': tf.cast(sample['image'],
+                                                         tf.float32) / 255.,
+                                        'label': sample['label']}) # normalize test set
 
-import numpy as np                     # Ordinary NumPy
-import optax                           # Optimizers
-import tensorflow_datasets as tfds     # TFDS for MNIST
+  train_ds = train_ds.repeat(num_epochs).shuffle(1024) # create shuffled dataset by allocating a buffer size of 1024 to randomly draw elements from
+  train_ds = train_ds.batch(batch_size, drop_remainder=True).prefetch(1) # group into batches of batch_size and skip incomplete batch, prefetch the next sample to improve latency
+  test_ds = test_ds.shuffle(1024) # create shuffled dataset by allocating a buffer size of 1024 to randomly draw elements from
+  test_ds = test_ds.batch(batch_size, drop_remainder=True).prefetch(1) # group into batches of batch_size and skip incomplete batch, prefetch the next sample to improve latency
+
+  return train_ds, test_ds
 ```
 
-+++ {"id": "d0FW1DHa6cfH"}
++++ {"id": "7057395a"}
 
-## 2. Define network
+## 3. Define network
 
 Create a convolutional neural network with the Linen API by subclassing
-[Module](https://flax.readthedocs.io/en/latest/flax.linen.html#core-module-abstraction).
+[Flax Module](https://flax.readthedocs.io/en/latest/flax.linen.html#core-module-abstraction).
 Because the architecture in this example is relatively simple—you're just
 stacking layers—you can define the inlined submodules directly within the
 `__call__` method and wrap it with the
-[@compact](https://flax.readthedocs.io/en/latest/flax.linen.html#compact-methods)
+[`@compact`](https://flax.readthedocs.io/en/latest/flax.linen.html#compact-methods)
 decorator. To learn more about the Flax Linen `@compact` decorator, refer to the [`setup` vs `compact`](https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html) guide.
 
 ```{code-cell}
-:id: _s1lXBBO66dc
+---
+executionInfo:
+  elapsed: 53
+  status: ok
+  timestamp: 1673483483208
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: cbc079cd
+---
+from flax import linen as nn  # Linen API
 
 class CNN(nn.Module):
   """A simple CNN model."""
@@ -104,106 +124,143 @@ class CNN(nn.Module):
     return x
 ```
 
-+++ {"id": "xDEoAprU6_JZ"}
++++ {"id": "hy7iRu7_zlx-"}
 
-## 3. Define loss
+### View model layers
 
-We simply use `optax.softmax_cross_entropy()`. Note that this function expects both `logits` and `labels` to have shape `[batch, num_classes]`. Since the labels will be read from TFDS as integer values, we first need to convert them to a onehot encoding.
-
-Our function returns a simple scalar value ready for optimization, so we first take the mean of the vector shaped `[batch]` returned by Optax's loss function.
+Create an instance of the Flax Module and use the [`Module.tabulate`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.tabulate) method to visualize a table of the model layers by passing an RNG key and template image input.
 
 ```{code-cell}
-:id: Zcb_ebU87G7s
+---
+executionInfo:
+  elapsed: 103
+  status: ok
+  timestamp: 1673483483427
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: lDHfog81zLQa
+outputId: 2c580f41-bf5d-40ec-f1cf-ab7f319a84da
+---
+import jax
+import jax.numpy as jnp  # JAX NumPy
 
-def cross_entropy_loss(*, logits, labels):
-  labels_onehot = jax.nn.one_hot(labels, num_classes=10)
-  return optax.softmax_cross_entropy(logits=logits, labels=labels_onehot).mean()
+cnn = CNN()
+print(cnn.tabulate(jax.random.PRNGKey(0), jnp.ones((1, 28, 28, 1))))
 ```
 
-+++ {"id": "INZE3eM67JUr"}
++++ {"id": "4b5ac16e"}
 
-## 4. Metric computation
-
-For loss and accuracy metrics, create a separate function:
-
-```{code-cell}
-:id: KvuEA8Tw-MYa
-
-def compute_metrics(*, logits, labels):
-  loss = cross_entropy_loss(logits=logits, labels=labels)
-  accuracy = jnp.mean(jnp.argmax(logits, -1) == labels)
-  metrics = {
-      'loss': loss,
-      'accuracy': accuracy,
-  }
-  return metrics
-```
-
-+++ {"id": "lYz0Emry-ele"}
-
-## 5. Loading data
-
-Define a function that loads and prepares the MNIST dataset and converts the
-samples to floating-point numbers.
-
-```{code-cell}
-:id: IOeWiS_b-p8O
-
-def get_datasets():
-  """Load MNIST train and test datasets into memory."""
-  ds_builder = tfds.builder('mnist')
-  ds_builder.download_and_prepare()
-  train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
-  test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
-  train_ds['image'] = jnp.float32(train_ds['image']) / 255.
-  test_ds['image'] = jnp.float32(test_ds['image']) / 255.
-  return train_ds, test_ds
-```
-
-+++ {"id": "UMFK51rsAUX4"}
-
-## 6. Create train state
+## 4. Create a `TrainState`
 
 A common pattern in Flax is to create a single dataclass that represents the
 entire training state, including step number, parameters, and optimizer state.
 
-Also adding optimizer & model to this state has the advantage that we only need
-to pass around a single argument to functions like `train_step()` (see below).
-
 Because this is such a common pattern, Flax provides the class
-[flax.training.train_state.TrainState](https://flax.readthedocs.io/en/latest/flax.training.html#train-state)
-that serves most basic usecases. Usually one would subclass it to add more data
-to be tracked, but in this example we can use it without any modifications.
+[`flax.training.train_state.TrainState`](https://flax.readthedocs.io/en/latest/flax.training.html#train-state)
+that serves most basic usecases.
 
 ```{code-cell}
-:id: QadyBPbWBEAT
-
-def create_train_state(rng, learning_rate, momentum):
-  """Creates initial `TrainState`."""
-  cnn = CNN()
-  params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params'] # initialize parameters by passing a template image
-  tx = optax.sgd(learning_rate, momentum)
-  return train_state.TrainState.create(
-      apply_fn=cnn.apply, params=params, tx=tx)
+---
+executionInfo:
+  elapsed: 52
+  status: ok
+  timestamp: 1673483483631
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: qXr7JDpIxGNZ
+outputId: 1249b7fb-6787-41eb-b34c-61d736300844
+---
+!pip install -q clu
 ```
 
-+++ {"id": "W7l-75YE-sr-"}
+```{code-cell}
+---
+executionInfo:
+  elapsed: 1
+  status: ok
+  timestamp: 1673483483754
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: CJDaJNijyOji
+---
+from clu import metrics
+from flax.training import train_state  # Useful dataclass to keep train state
+from flax import struct                # Flax dataclasses
+import optax                           # Common loss functions and optimizers
+```
 
-## 7. Training step
++++ {"id": "8b86b5f1"}
+
+We will be using the `clu` library for computing metrics. For more information on `clu`, refer to the [repo](https://github.com/google/CommonLoopUtils) and [notebook](https://colab.research.google.com/github/google/CommonLoopUtils/blob/master/clu_synopsis.ipynb#scrollTo=ueom-uBWLbeQ).
+
+```{code-cell}
+---
+executionInfo:
+  elapsed: 55
+  status: ok
+  timestamp: 1673483483958
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: 7W0qf7FC9uG5
+---
+@struct.dataclass
+class Metrics(metrics.Collection):
+  accuracy: metrics.Accuracy
+  loss: metrics.Average.from_output('loss')
+```
+
++++ {"id": "f3ce5e4c"}
+
+You can then subclass `train_state.TrainState` so that it also contains metrics. This has the advantage that we only need
+to pass around a single argument to functions like `train_step()` (see below) to calculate the loss, update the parameters and compute the metrics all at once.
+
+```{code-cell}
+---
+executionInfo:
+  elapsed: 54
+  status: ok
+  timestamp: 1673483484125
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: e0102447
+---
+class TrainState(train_state.TrainState):
+  metrics: Metrics
+
+def create_train_state(module, rng, learning_rate, momentum):
+  """Creates an initial `TrainState`."""
+  params = module.init(rng, jnp.ones([1, 28, 28, 1]))['params'] # initialize parameters by passing a template image
+  tx = optax.sgd(learning_rate, momentum)
+  return TrainState.create(
+      apply_fn=module.apply, params=params, tx=tx,
+      metrics=Metrics.empty())
+```
+
++++ {"id": "a15de484"}
+
+## 5. Training step
 
 A function that:
 
 - Evaluates the neural network given the parameters and a batch of input images
-  with the
-  [Module.apply](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply)
-  method (forward pass).
-- Computes the `cross_entropy_loss` loss function.
+  with [`TrainState.apply_fn`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.train_state.TrainState) (which contains the [`Module.apply`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply)
+  method (forward pass)).
+- Computes the cross entropy loss, using the predefined [`optax.softmax_cross_entropy_with_integer_labels()`](https://optax.readthedocs.io/en/latest/api.html#optax.softmax_cross_entropy_with_integer_labels). Note that this function expects integer labels, so there is no need to convert labels to onehot encoding.
 - Evaluates the gradient of the loss function using
-  [jax.grad](https://jax.readthedocs.io/en/latest/jax.html#jax.grad).
+  [`jax.grad`](https://jax.readthedocs.io/en/latest/jax.html#jax.grad).
 - Applies a
   [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions)
   of gradients to the optimizer to update the model's parameters.
-- Computes the metrics using `compute_metrics` (defined earlier).
 
 Use JAX's [@jit](https://jax.readthedocs.io/en/latest/jax.html#jax.jit)
 decorator to trace the entire `train_step` function and just-in-time compile
@@ -211,195 +268,342 @@ it with [XLA](https://www.tensorflow.org/xla) into fused device operations
 that run faster and more efficiently on hardware accelerators.
 
 ```{code-cell}
-:id: Ng11cdMf-z0x
-
+---
+executionInfo:
+  elapsed: 52
+  status: ok
+  timestamp: 1673483484293
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: 9b0af486
+---
 @jax.jit
 def train_step(state, batch):
   """Train for a single step."""
   def loss_fn(params):
-    logits = CNN().apply({'params': params}, batch['image'])
-    loss = cross_entropy_loss(logits=logits, labels=batch['label'])
-    return loss, logits
-  grad_fn = jax.grad(loss_fn, has_aux=True)
-  grads, logits = grad_fn(state.params)
+    logits = state.apply_fn({'params': params}, batch['image'])
+    loss = optax.softmax_cross_entropy_with_integer_labels(
+        logits=logits, labels=batch['label']).mean()
+    return loss
+  grad_fn = jax.grad(loss_fn)
+  grads = grad_fn(state.params)
   state = state.apply_gradients(grads=grads)
-  metrics = compute_metrics(logits=logits, labels=batch['label'])
-  return state, metrics
-```
-
-+++ {"id": "t-4qDNUgBryr"}
-
-## 8. Evaluation step
-
-Create a function that evaluates your model on the test set with
-[Module.apply](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply)
-
-```{code-cell}
-:id: w1J9i6alBv_u
-
-@jax.jit
-def eval_step(params, batch):
-  logits = CNN().apply({'params': params}, batch['image'])
-  return compute_metrics(logits=logits, labels=batch['label'])
-```
-
-+++ {"id": "MBTLQPC4BxgH"}
-
-## 9. Train function
-
-Define a training function that:
-
-- Shuffles the training data before each epoch using
-  [jax.random.permutation](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.permutation.html)
-  that takes a PRNGKey as a parameter (check the
-  [JAX - the sharp bits](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#JAX-PRNG)).
-- Runs an optimization step for each batch.
-- Asynchronously retrieves the training metrics from the device with `jax.device_get` and
-  computes their mean across each batch in an epoch.
-- Returns the optimizer with updated parameters and the training loss and
-  accuracy metrics.
-
-```{code-cell}
-:id: 7ipyJ-JGCNqP
-
-def train_epoch(state, train_ds, batch_size, epoch, rng):
-  """Train for a single epoch."""
-  train_ds_size = len(train_ds['image'])
-  steps_per_epoch = train_ds_size // batch_size
-
-  perms = jax.random.permutation(rng, train_ds_size) # get a randomized index array
-  perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
-  perms = perms.reshape((steps_per_epoch, batch_size)) # index array, where each row is a batch
-  batch_metrics = []
-  for perm in perms:
-    batch = {k: v[perm, ...] for k, v in train_ds.items()} # dict{'image': array, 'label': array}
-    state, metrics = train_step(state, batch)
-    batch_metrics.append(metrics)
-
-  # compute mean of metrics across each batch in epoch.
-  batch_metrics_np = jax.device_get(batch_metrics)
-  epoch_metrics_np = {
-      k: np.mean([metrics[k] for metrics in batch_metrics_np])
-      for k in batch_metrics_np[0]} # jnp.mean does not work on lists
-
-  print('train epoch: %d, loss: %.4f, accuracy: %.2f' % (
-      epoch, epoch_metrics_np['loss'], epoch_metrics_np['accuracy'] * 100))
-
   return state
 ```
 
-+++ {"id": "E2cHbVUfCRMv"}
++++ {"id": "0ff5145f"}
 
-## 10. Eval function
+## 6. Metric computation
 
-Create a model evaluation function that:
-
-- Retrieves the evaluation metrics from the device with `jax.device_get`.
-- Copies the metrics
-  [data stored](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables)
-  in a JAX
-  [pytree](https://jax.readthedocs.io/en/latest/pytrees.html#pytrees-and-jax-functions).
-
-```{code-cell}
-:id: _dKahNmMCr5q
-
-def eval_model(params, test_ds):
-  metrics = eval_step(params, test_ds)
-  metrics = jax.device_get(metrics)
-  summary = jax.tree_util.tree_map(lambda x: x.item(), metrics) # map the function over all leaves in metrics
-  return summary['loss'], summary['accuracy']
-```
-
-+++ {"id": "mHQi20yVCsSf"}
-
-## 11. Download data
+Create a separate function for loss and accuracy metrics. Loss is calculated using the `optax.softmax_cross_entropy_with_integer_labels` function, while accuracy is calculated using `clu.metrics`.
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
-id: 6CLXnP3KHptR
-outputId: 4f019877-e87d-4862-af7b-c82334e4f12c
+executionInfo:
+  elapsed: 53
+  status: ok
+  timestamp: 1673483484460
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: 961bf70b
 ---
-train_ds, test_ds = get_datasets()
+@jax.jit
+def compute_metrics(*, state, batch):
+  logits = state.apply_fn({'params': state.params}, batch['image'])
+  loss = optax.softmax_cross_entropy_with_integer_labels(
+        logits=logits, labels=batch['label']).mean()
+  metric_updates = state.metrics.single_from_model_output(
+    logits=logits, labels=batch['label'], loss=loss)
+  metrics = state.metrics.merge(metric_updates)
+  state = state.replace(metrics=metrics)
+  return state
 ```
 
-+++ {"id": "56rKPl6OHqu8"}
++++ {"id": "497241c3"}
 
-## 12. Seed randomness
+## 7. Download data
 
+```{code-cell}
+---
+executionInfo:
+  elapsed: 515
+  status: ok
+  timestamp: 1673483485090
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: bff5393e
+---
+num_epochs = 10
+batch_size = 32
+
+train_ds, test_ds = get_datasets(num_epochs, batch_size)
+```
+
++++ {"id": "809ae1a0"}
+
+## 8. Seed randomness
+
+- Set the TF random seed to ensure dataset shuffling (with `tf.data.Dataset.shuffle`) is reproducible.
 - Get one
   [PRNGKey](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.PRNGKey.html#jax.random.PRNGKey)
-  and
-  [split](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax.random.split)
-  it to get a second key that you'll use for parameter initialization. (Learn
+  and use it for parameter initialization. (Learn
   more about
-  [PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables)
-  and
-  [JAX PRNG design](https://jax.readthedocs.io/en/latest/jax-101/05-random-numbers.html).)
+  [JAX PRNG design](https://jax.readthedocs.io/en/latest/jax-101/05-random-numbers.html)
+  and [PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables).)
 
 ```{code-cell}
-:id: n53xh_B8Ht_W
-
-rng = jax.random.PRNGKey(0)
-rng, init_rng = jax.random.split(rng)
+---
+executionInfo:
+  elapsed: 59
+  status: ok
+  timestamp: 1673483485268
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: xC4MFyBsfT-U
+---
+tf.random.set_seed(0)
 ```
 
-+++ {"id": "Y3iHFiAuH41s"}
+```{code-cell}
+---
+executionInfo:
+  elapsed: 52
+  status: ok
+  timestamp: 1673483485436
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: e4f6f4d3
+---
+init_rng = jax.random.PRNGKey(0)
+```
 
-## 13. Initialize train state
++++ {"id": "80fbb60b"}
 
-Remember that function initializes both the model parameters and the optimizer
-and puts both into the training state dataclass that is returned.
+## 9. Initialize the `TrainState`
+
+Remember that the function `create_train_state` initializes the model parameters, optimizer and metrics
+and puts them into the training state dataclass that is returned.
 
 ```{code-cell}
-:id: Mj6OfdEEIU-o
-
-learning_rate = 0.1
+---
+executionInfo:
+  elapsed: 56
+  status: ok
+  timestamp: 1673483485606
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: 445fcab0
+---
+learning_rate = 0.01
 momentum = 0.9
 ```
 
 ```{code-cell}
-:id: _87fL90dH-0Z
-
-state = create_train_state(init_rng, learning_rate, momentum)
+---
+executionInfo:
+  elapsed: 52
+  status: ok
+  timestamp: 1673483485777
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: 5221eafd
+---
+state = create_train_state(cnn, init_rng, learning_rate, momentum)
 del init_rng  # Must not be used anymore.
 ```
 
-+++ {"id": "UqNrWu7kIC9S"}
++++ {"id": "b1c00230"}
 
-## 14. Train and evaluate
+## 10. Train and evaluate
+
+Create a "shuffled" dataset by:
+- Repeating the dataset equal to the number of training epochs
+- Allocating a buffer of size 1024 (containing the first 1024 samples in the dataset) of which to randomly sample batches from
+  - Everytime a sample is randomly drawn from the buffer, the next sample in the dataset is loaded into the buffer
+
+Define a training loop that:
+- Randomly samples batches from the dataset.
+- Runs an optimization step for each training batch.
+- Computes the mean training metrics across each batch in an epoch.
+- Computes the metrics for the test set using the updated parameters.
+- Records the train and test metrics for visualization.
 
 Once the training and testing is done after 10 epochs, the output should show that your model was able to achieve approximately 99% accuracy.
 
 ```{code-cell}
-:id: 0nxgS5Z5IsT_
+---
+executionInfo:
+  elapsed: 55
+  status: ok
+  timestamp: 1673483485947
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: '74295360'
+---
+# since train_ds is replicated num_epochs times in get_datasets(), we divide by num_epochs
+num_steps_per_epoch = train_ds.cardinality().numpy() // num_epochs
+```
 
-num_epochs = 10
-batch_size = 32
+```{code-cell}
+---
+executionInfo:
+  elapsed: 1
+  status: ok
+  timestamp: 1673483486076
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: cRtnMZuQFlKl
+---
+metrics_history = {'train_loss': [],
+                   'train_accuracy': [],
+                   'test_loss': [],
+                   'test_accuracy': []}
+```
+
+```{code-cell}
+---
+executionInfo:
+  elapsed: 17908
+  status: ok
+  timestamp: 1673483504133
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: 2c40ce90
+outputId: 258a2c76-2c8f-4a9e-d48b-dde57c342a87
+---
+for step,batch in enumerate(train_ds.as_numpy_iterator()):
+
+  # Run optimization steps over training batches and compute batch metrics
+  state = train_step(state, batch) # get updated train state (which contains the updated parameters)
+  state = compute_metrics(state=state, batch=batch) # aggregate batch metrics
+
+  if (step+1) % num_steps_per_epoch == 0: # one training epoch has passed
+    for metric,value in state.metrics.compute().items(): # compute metrics
+      metrics_history[f'train_{metric}'].append(value) # record metrics
+    state = state.replace(metrics=state.metrics.empty()) # reset train_metrics for next training epoch
+
+    # Compute metrics on the test set after each training epoch
+    test_state = state
+    for test_batch in test_ds.as_numpy_iterator():
+      test_state = compute_metrics(state=test_state, batch=test_batch)
+
+    for metric,value in test_state.metrics.compute().items():
+      metrics_history[f'test_{metric}'].append(value)
+
+    print(f"train epoch: {(step+1) // num_steps_per_epoch}, "
+          f"loss: {metrics_history['train_loss'][-1]}, "
+          f"accuracy: {metrics_history['train_accuracy'][-1] * 100}")
+    print(f"test epoch: {(step+1) // num_steps_per_epoch}, "
+          f"loss: {metrics_history['test_loss'][-1]}, "
+          f"accuracy: {metrics_history['test_accuracy'][-1] * 100}")
+```
+
++++ {"id": "gfsecJzvzgCT"}
+
+## 11. Visualize metrics
+
+```{code-cell}
+---
+colab:
+  height: 353
+executionInfo:
+  elapsed: 358
+  status: ok
+  timestamp: 1673483504621
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: Zs5atiqIG9Kz
+outputId: 431a2fcd-44fa-4202-f55a-906555f060ac
+---
+import matplotlib.pyplot as plt  # Visualization
+
+# Plot loss and accuracy in subplots
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+ax1.set_title('Loss')
+ax2.set_title('Accuracy')
+for dataset in ('train','test'):
+  ax1.plot(metrics_history[f'{dataset}_loss'], label=f'{dataset}_loss')
+  ax2.plot(metrics_history[f'{dataset}_accuracy'], label=f'{dataset}_accuracy')
+ax1.legend()
+ax2.legend()
+plt.show()
+plt.clf()
+```
+
++++ {"id": "qQbKS0tV3sZ1"}
+
+## 12. Perform inference on test set
+
+Define a jitted inference function `pred_step`. Use the learned parameters to do model inference on the test set and visualize the images and their corresponding predicted labels.
+
+```{code-cell}
+---
+executionInfo:
+  elapsed: 580
+  status: ok
+  timestamp: 1673483505350
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: DFwxgBQf44ks
+---
+@jax.jit
+def pred_step(state, batch):
+  logits = state.apply_fn({'params': state.params}, test_batch['image'])
+  return logits.argmax(axis=1)
+
+test_batch = test_ds.as_numpy_iterator().next()
+pred = pred_step(state, test_batch)
 ```
 
 ```{code-cell}
 ---
 colab:
-  base_uri: https://localhost:8080/
-id: ugGlV3u6Iq1A
-outputId: d0944ddb-8d5d-4e9f-9727-040789ef3f17
+  height: 699
+executionInfo:
+  elapsed: 1250
+  status: ok
+  timestamp: 1673483506723
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: 5d5nF3u44JFI
+outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
 ---
-for epoch in range(1, num_epochs + 1):
-  # Use a separate PRNG key to permute image data during shuffling
-  rng, input_rng = jax.random.split(rng)
-  # Run an optimization step over a training batch
-  state = train_epoch(state, train_ds, batch_size, epoch, input_rng)
-  # Evaluate on the test set after each training epoch
-  test_loss, test_accuracy = eval_model(state.params, test_ds)
-  print(' test epoch: %d, loss: %.2f, accuracy: %.2f' % (
-      epoch, test_loss, test_accuracy * 100))
+fig, axs = plt.subplots(5, 5, figsize=(12, 12))
+for i, ax in enumerate(axs.flatten()):
+    ax.imshow(test_batch['image'][i, ..., 0], cmap='gray')
+    ax.set_title(f"label={pred[i]}")
+    ax.axis('off')
 ```
 
-+++ {"id": "oKcRiQ89xQkF"}
++++ {"id": "edb528b6"}
 
-Congrats! You made it to the end of the annotated MNIST example. You can revisit
+Congratulations! You made it to the end of the annotated MNIST example. You can revisit
 the same example, but structured differently as a couple of Python modules, test
 modules, config files, another Colab, and documentation in Flax's Git repo:
 
