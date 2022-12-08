@@ -141,8 +141,7 @@ class LinearTest(parameterized.TestCase):
         kernel_init=counter_init,
     )
     y, _ = dg_module.init_with_output(rng, x)
-    target = np.concatenate(
-        [np.full((1, 1, 7), 16.), np.full((1, 1, 7), 31.)], axis=0)
+    target = np.full((2, 1, 7), 16.)
     np.testing.assert_allclose(y, target)
 
   @parameterized.parameters([((-2, 3), (), 'bijk,jklm->bilm'),
