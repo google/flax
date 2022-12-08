@@ -648,7 +648,7 @@ class MPACheckpointingRequiredError(FlaxError):
   You can create an GlobalAsyncCheckpointManager at top-level and pass it as
   argument::
 
-    from jax.experimental.gda_serialization import serialization as gdas
+    from jax.experimental.array_serialization import serialization as gdas
     gda_manager = gdas.GlobalAsyncCheckpointManager()
     save_checkpoint(..., gda_manager=gda_manager)
 

@@ -44,8 +44,8 @@ from tensorflow import errors as tf_errors
 
 _IMPORT_GDAM_SUCCESSFUL = False
 try:
-  from jax.experimental.gda_serialization.serialization import get_tensorstore_spec
-  from jax.experimental.gda_serialization.serialization import GlobalAsyncCheckpointManager
+  from jax.experimental.array_serialization.serialization import get_tensorstore_spec
+  from jax.experimental.array_serialization.serialization import GlobalAsyncCheckpointManager
   _IMPORT_GDAM_SUCCESSFUL = True
 except ImportError:
   logging.warning('GlobalAsyncCheckpointManager is not imported correctly. '
