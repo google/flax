@@ -24,6 +24,18 @@ vNext
 -
 -
 
+0.6.3
+-----
+New features:
+- Flax checkpointing now uses [Orbax](https://github.com/google/orbax) for more flexiblity and features.
+- Added support for python 3.10 and removed support for 3.7.
+
+Bug fixes:
+- Fixed rng generation in DenseGeneral init.
+- Improved support for Mac M1 chip.
+- Bumped package versions for a bunch of examples.
+- Improved many docstrings and error messages.
+
 0.6.2
 -----
 New features:
