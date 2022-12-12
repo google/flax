@@ -44,6 +44,7 @@ from jax.nn import silu
 from jax.nn import soft_sign
 from jax.nn import softmax
 from jax.nn import softplus
+from jax.nn import standardize
 from jax.nn import swish
 import jax.numpy as jnp
 from jax.numpy import tanh

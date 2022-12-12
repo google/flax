@@ -41,6 +41,7 @@ from .activation import (
   soft_sign as soft_sign,
   softmax as softmax,
   softplus as softplus,
+  standardize as standardize,
   swish as swish,
   tanh as tanh
 )
