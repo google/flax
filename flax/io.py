@@ -47,6 +47,16 @@ else:
   io_mode = BackendMode.DEFAULT
 
 
+# Constants and Exceptions
+
+
+if io_mode == BackendMode.TF:
+  from tensorflow import errors as tf_errors  # type: ignore
+  NotFoundError = tf_errors.NotFoundError
+else:
+  NotFoundError = FileNotFoundError
+
+
 # Overrides for testing.
 
 
