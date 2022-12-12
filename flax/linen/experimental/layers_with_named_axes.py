@@ -29,11 +29,12 @@ import jax.numpy as jnp
 
 
 # Type annotations
+IntSequence = Any
 Array = jnp.ndarray
-Axes = Union[int, Iterable[int]]
-DType = jnp.dtype
+Axes = Union[int, IntSequence]
+DType = Any
 PRNGKey = jnp.ndarray
-Shape = Iterable[int]
+Shape = Any
 Activation = Callable[..., Array]
 # Parameter initializers.
 Initializer = Callable[[PRNGKey, Shape, DType], Array]
@@ -62,7 +63,7 @@ class Dense(nn.Module):
   """
   features: int
   use_bias: bool = True
-  dtype: Any = jnp.float32
+  dtype: DType = jnp.float32
   param_dtype: DType = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init

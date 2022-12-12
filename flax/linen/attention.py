@@ -112,9 +112,9 @@ def dot_product_attention_weights(query: Array,
     if broadcast_dropout:
       # dropout is broadcast across the batch + head dimensions
       dropout_shape = tuple([1] * (key.ndim - 2)) + attn_weights.shape[-2:]
-      keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape)
+      keep = random.bernoulli(dropout_rng, keep_prob, dropout_shape) # type: ignore
     else:
-      keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape)
+      keep = random.bernoulli(dropout_rng, keep_prob, attn_weights.shape) # type: ignore
     multiplier = (keep.astype(dtype) /
                   jnp.asarray(keep_prob, dtype=dtype))
     attn_weights = attn_weights * multiplier

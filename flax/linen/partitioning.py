@@ -157,7 +157,7 @@ def _logical_to_mesh_axes(
 def logical_to_mesh_axes(
     array_dim_names: Optional[Sequence[Optional[str]]],
     rules: Optional[LogicalRules] = None,
-) -> pjit.PartitionSpec:
+) -> Optional[pjit.PartitionSpec]:
   """Compute layout for an array.
 
   The rules are in order of precedence, and consist of pairs:
@@ -211,7 +211,7 @@ class RulesFallback(enum.Enum):
   NO_CONSTRAINT = 'no_constraint'
 
 
-def _with_sharding_constraint(x: Array, axis_resources: pjit.PartitionSpec):
+def _with_sharding_constraint(x: Array, axis_resources: Optional[pjit.PartitionSpec]):
   """Wrapper for pjit with_sharding_constraint, no-op on cpu or outside pjit."""
   if jax.devices()[0].platform == 'cpu' or not _global_mesh_defined():
     return x
@@ -340,7 +340,7 @@ def param_with_axes(
                                             pjit.PartitionSpec(*axes))
     # record logical axis constraint for global axis metadata
     module.sow(
-        'params_axes', f'{name}_axes', AxisMetadata(axes),
+        'params_axes', f'{name}_axes', AxisMetadata(axes), # type: ignore
         reduce_fn=_param_with_axes_sow_reduce_fn)
   return module_param
 
@@ -459,7 +459,7 @@ def variable_with_axes(
   if axes is not None:
     # record logical axis constraint for global axis metadata
     module.sow(
-        f'{collection}_axes', f'{name}_axes', AxisMetadata(axes),
+        f'{collection}_axes', f'{name}_axes', AxisMetadata(axes), # type: ignore
         reduce_fn=_param_with_axes_sow_reduce_fn)
   return module_var
 
@@ -625,7 +625,7 @@ def vmap_with_axes(target: flax.linen.transforms.Target,
                    out_axes=0,
                    axis_size: Optional[int] = None,
                    axis_name: Optional[str] = None,
-                   partitioning_axis_names: Mapping[str, str] = {},
+                   partitioning_axis_names: Mapping[Any, str] = {},
                    spmd_axis_name: Optional[str] = None,
                    methods=None) -> flax.linen.transforms.Target:
   """Wrapped version of nn.vmap that handles logical axis metadata."""

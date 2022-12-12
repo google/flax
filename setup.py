@@ -44,6 +44,7 @@ tests_require = [
     "jaxlib",
     "jraph>=0.0.6dev0",
     "ml-collections",
+    "mypy",
     "opencv-python",
     "pytest",
     "pytest-cov",

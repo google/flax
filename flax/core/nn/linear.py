@@ -345,4 +345,4 @@ def embedding(scope: Scope, num_embeddings: int, features: int, init_fn=default_
       Embedding dataclass with lookup and attend methods.
   """
   table = scope.param('table', init_fn, (num_embeddings, features))
-  return Embedding(table)
+  return Embedding(table) # type: ignore

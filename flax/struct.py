@@ -99,7 +99,7 @@ def dataclass(clz: _T) -> _T:
   if '_flax_dataclass' in clz.__dict__:
     return clz
 
-  data_clz = dataclasses.dataclass(frozen=True)(clz)
+  data_clz = dataclasses.dataclass(frozen=True)(clz) # type: ignore
   meta_fields = []
   data_fields = []
   for field_info in dataclasses.fields(data_clz):
@@ -165,7 +165,7 @@ def dataclass(clz: _T) -> _T:
   # add a _flax_dataclass flag to distinguish from regular dataclasses
   data_clz._flax_dataclass = True # type: ignore[attr-defined]
 
-  return data_clz
+  return data_clz # type: ignore
 
 
 TNode = TypeVar('TNode', bound='PyTreeNode')
