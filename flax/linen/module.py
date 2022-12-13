@@ -53,6 +53,7 @@ Array = Any    # pylint: disable=invalid-name
 
 T = TypeVar('T')
 K = TypeVar('K')
+M = TypeVar('M', bound='Module')
 _CallableT = TypeVar('_CallableT', bound=Callable)
 
 
@@ -1089,9 +1090,9 @@ class Module:
   def _initialization_allowed(self):
     return self._state.in_setup or self._state.in_compact_method
 
-  def clone(self, *,
+  def clone(self: M, *,
             parent: Optional[Union[Scope, 'Module']] = None,
-            **updates) -> 'Module':
+            **updates) -> M:
     """Creates a clone of this Module, with optionally updated arguments.
 
     Args:
@@ -1260,11 +1261,11 @@ class Module:
       raise errors.IncorrectPostInitOverrideError()
 
   @traceback_util.api_boundary
-  def bind(self,
+  def bind(self: M,
            variables: VariableDict,
            *args,
            rngs: Optional[RNGSequences] = None,
-           mutable: CollectionFilter = False):
+           mutable: CollectionFilter = False) -> M:
     """Creates an interactive Module instance by binding variables and RNGs.
 
     ``bind`` provides an "interactive" instance of a Module directly without
@@ -1319,6 +1320,42 @@ class Module:
     del args
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
     return self.clone(parent=scope)
+
+  def unbind(self: M) -> Tuple[M, VariableDict]:
+    """Returns an unbound copy of this Module and its variables.
+
+    ``unbind`` is useful for creating a stateless version of a bound Module.
+    A common use case araises when you want extract a submodule defined inside
+    ``setup()``, since ``setup()`` is only called when the Module is bound, a
+    simple way to get hold of the submodule and its corresponding variables is
+    to ``bind`` the parent Module temporarily and then ``unbind`` the desired
+    submodule::
+
+      class AutoEncoder(nn.Module):
+        def setup(self):
+          self.encoder = Encoder()
+          self.decoder = Decoder()
+
+        def __call__(self, x):
+          return self.decoder(self.encoder(x))
+
+      module = AutoEncoder()
+      variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 784)))
+      ...
+      # extract the Encoder submodule and its variables
+      encoder, encoder_vars = module.bind(variables).encoder.unbind()
+
+    Returns:
+      A tuple with an unbound copy of this Module and its variables.
+    """
+    Module._module_checks(self)
+
+    if self.scope is None:
+      raise errors.CallUnbindOnUnboundModuleError()
+
+    variables = self.variables
+    module = self.clone()
+    return module, variables
 
   @traceback_util.api_boundary
   def apply(self,
