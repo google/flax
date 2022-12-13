@@ -193,6 +193,20 @@ register_serialization_state(_NamedTuple,
                              _namedtuple_state_dict,
                              _restore_namedtuple)
 
+register_serialization_state(
+    jax.tree_util.Partial,
+    lambda x: (
+        {
+            "args": to_state_dict(x.args),
+            "keywords": to_state_dict(x.keywords),
+        }
+    ),
+    lambda x, sd: jax.tree_util.Partial(
+        x.func,
+        *from_state_dict(x.args, sd["args"]),
+        **from_state_dict(x.keywords, sd["keywords"]),
+    ),
+)
 
 # On-the-wire / disk serialization format
 
