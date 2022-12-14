@@ -121,7 +121,7 @@ class PartitioningTest(parameterized.TestCase):
       result = partitioning.logical_to_mesh_axes(axes)
     self.assertEqual(result, expected)
 
-  @mock.patch('flax.linen.partitioning._with_sharding_constraint')
+  @mock.patch('flax.linen.spmd._with_sharding_constraint')
   def test_with_sharding_constraint(self, wsc_fn):
     arr = jnp.ones((2, 2))
     axes = ('foo', 'bar')
@@ -134,7 +134,7 @@ class PartitioningTest(parameterized.TestCase):
       _ = partitioning.with_sharding_constraint(arr, axes)
       wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', 'model'))
 
-  @mock.patch('flax.linen.partitioning._with_sharding_constraint')
+  @mock.patch('flax.linen.spmd._with_sharding_constraint')
   def test_with_sharding_constraint_fallback(self, wsc_fn):
     arr = jnp.ones((2, 2))
     with partitioning.axis_rules(AXIS_RULES_1):
