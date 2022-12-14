@@ -1657,9 +1657,9 @@ class Module:
 _ParentType = Union[Type[Module], Type[Scope], Type[_Sentinel], None]
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
-  """Merges construction-and call-time argument.
+  """Merges construction- and call-time argument.
 
-  This is a utility for supporting the pattern where a Module hyperparameter
+  This is a utility for supporting a pattern where a Module hyperparameter
   can be passed either to ``__init__`` or ``__call__``, and the value that is
   not `None` will be used.
 
