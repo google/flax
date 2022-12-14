@@ -1061,6 +1061,12 @@ class Module:
         self._state.in_setup = False
         self._state.setup_called = SetupState.DONE
 
+      # Recursively try to setup children
+      if self._state.children:
+        for name, child in self._state.children.items():
+          if isinstance(child, Module):
+            child._try_setup()
+
   def _validate_setup(self) -> None:
     """Abstractly evaluates setup only to run static checks."""
     def run_setup_only(x):
@@ -1318,7 +1324,9 @@ class Module:
 
     del args
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
-    return self.clone(parent=scope)
+    module = self.clone(parent=scope)
+    module._try_setup()
+    return module
 
   @traceback_util.api_boundary
   def apply(self,
