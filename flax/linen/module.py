@@ -1754,10 +1754,11 @@ class Module:
 _ParentType = Union[Type[Module], Type[Scope], Type[_Sentinel], None]
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
-  """Merges construction and call time argument.
+  """Merges construction- and call-time argument.
 
-  This is a utility for supporting the pattern where a Module hyper parameter
-  can be passed to ``__init__`` or ``__call__``.
+  This is a utility for supporting a pattern where a Module hyperparameter
+  can be passed either to ``__init__`` or ``__call__``, and the value that is
+  not `None` will be used.
 
   Example::
 
@@ -1767,7 +1768,8 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
       def __call__(self, train: Optional[bool] = None):
         train = nn.merge_param('train', self.train, train)
 
-  An error is thrown when both arguments are `None` or both values are not `None`.
+  An error is thrown when both arguments are `None` or both values are not
+  `None`.
 
   Args:
     name: the name of the parameter. Used for error messages.
