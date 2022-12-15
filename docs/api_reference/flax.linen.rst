@@ -47,6 +47,8 @@ Profiling
 ----------------------
 
 .. automodule:: flax.linen
+.. currentmodule:: flax.linen
+
 .. autosummary::
   :toctree: _autosummary
 
@@ -59,6 +61,8 @@ Inspection
 ----------------------
 
 .. automodule:: flax.linen
+.. currentmodule:: flax.linen
+
 .. autosummary::
   :toctree: _autosummary
 
@@ -69,6 +73,8 @@ Transformations
 ----------------------
 
 .. automodule:: flax.linen.transforms
+.. currentmodule:: flax.linen
+
 .. autosummary::
   :toctree: _autosummary
 
@@ -89,6 +95,8 @@ Metadata
 ----------------------
 
 .. automodule:: flax.linen.meta
+.. currentmodule:: flax.linen
+
 .. autosummary::
   :toctree: _autosummary
 
@@ -138,38 +146,12 @@ Pooling
     pool
 
 
-Initializers
-------------------------
-
-.. automodule:: flax.linen.initializers
-.. autosummary::
-  :toctree: _autosummary
-
-    constant
-    delta_orthogonal
-    glorot_normal
-    glorot_uniform
-    he_normal
-    he_uniform
-    kaiming_normal
-    kaiming_uniform
-    lecun_normal
-    lecun_uniform
-    normal
-    ones
-    orthogonal
-    uniform
-    standardize
-    variance_scaling
-    xavier_normal
-    xavier_uniform
-    zeros
-
-
 Activation functions
 ------------------------
 
 .. automodule:: flax.linen.activation
+.. currentmodule:: flax.linen.activation
+
 .. autosummary::
   :toctree: _autosummary
 
@@ -200,8 +182,40 @@ Activation functions
     tanh
 
 
+Initializers
+------------------------
+
+.. automodule:: flax.linen.initializers
+.. currentmodule:: flax.linen.initializers
+
+.. autosummary::
+  :toctree: _autosummary
+
+    constant
+    delta_orthogonal
+    glorot_normal
+    glorot_uniform
+    he_normal
+    he_uniform
+    kaiming_normal
+    kaiming_uniform
+    lecun_normal
+    lecun_uniform
+    normal
+    ones
+    orthogonal
+    uniform
+    standardize
+    variance_scaling
+    xavier_normal
+    xavier_uniform
+    zeros
+
+
 Combinators
 ------------------------
+
+.. currentmodule:: flax.linen
 
 .. autosummary::
   :toctree: _autosummary

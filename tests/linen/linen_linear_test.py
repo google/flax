@@ -77,13 +77,13 @@ class LinearTest(parameterized.TestCase):
         use_bias=True,
         bias_init=initializers.normal(),
     )
-    y1, params = dense_module.init_with_output(dict(params=random.PRNGKey(1)), x)
+    y1, _ = dense_module.init_with_output(dict(params=random.PRNGKey(1)), x)
     dg_module = nn.DenseGeneral(
         features=4,
         use_bias=True,
         bias_init=initializers.normal(),
     )
-    y2 = dg_module.apply(params, x)
+    y2, _ = dg_module.init_with_output(dict(params=random.PRNGKey(1)), x)
 
     np.testing.assert_allclose(y1, y2)
 
@@ -141,8 +141,7 @@ class LinearTest(parameterized.TestCase):
         kernel_init=counter_init,
     )
     y, _ = dg_module.init_with_output(rng, x)
-    target = np.concatenate(
-        [np.full((1, 1, 7), 16.), np.full((1, 1, 7), 31.)], axis=0)
+    target = np.full((2, 1, 7), 16.)
     np.testing.assert_allclose(y, target)
 
   @parameterized.parameters([((-2, 3), (), 'bijk,jklm->bilm'),

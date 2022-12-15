@@ -48,7 +48,9 @@ class Template(FlaxError):
     super().__init__(f'')
 """
 
+
 class FlaxError(Exception):
+
   def __init__(self, message):
     error_page = 'https://flax.readthedocs.io/en/latest/api_reference/flax.errors.html'
     module_name = self.__class__.__module__
@@ -63,8 +65,8 @@ class FlaxError(Exception):
 
 
 class InvalidRngError(FlaxError):
-  """
-  All rngs used in a Module should be passed to
+  """All rngs used in a Module should be passed to
+
   :meth:`Module.init() <flax.linen.Module.init>` and
   :meth:`Module.apply() <flax.linen.Module.apply>` appropriately. We explain
   both separately using the following example::
@@ -115,6 +117,7 @@ class InvalidRngError(FlaxError):
 
        SomeModule().apply(variables, inputs)  # rngs=None
   """
+
   def __init__(self, msg):
     # For this error message we pass the entire message, since there are various
     # different kinds of RNG errors and we want to be able to be more specific
@@ -123,11 +126,12 @@ class InvalidRngError(FlaxError):
 
 
 class ApplyScopeInvalidVariablesTypeError(FlaxError):
-  """
-  When calling :meth:`Module.apply() <flax.linen.Module.apply>`, the first
+  """When calling :meth:`Module.apply() <flax.linen.Module.apply>`, the first
+
   argument should be a variable dict. For more explanation on variable dicts,
   please see :mod:`flax.core.variables`.
   """
+
   def __init__(self):
     super().__init__('The first argument passed to an apply function should be '
                      'a dictionary of collections. Each collection should be a '
@@ -135,21 +139,23 @@ class ApplyScopeInvalidVariablesTypeError(FlaxError):
 
 
 class ApplyScopeInvalidVariablesStructureError(FlaxError):
-  """
-  This error is thrown when the dict passed as `variables` to apply() has an
+  """This error is thrown when the dict passed as `variables` to apply() has an
+
   extra 'params' layer, i.e. {'params': {'params': ...}}.
   For more explanation on variable dicts, please see :mod:`flax.core.variables`.
   """
+
   def __init__(self, variables):
-    super().__init__('Expect the `variables` (first argument) passed to apply() '
-                     'to be a dict with the structure {"params": ...}, but got a dict '
-                     'with an extra params layer, i.e.  {"params": {"params": ... } }. '
-                     f'You should instead pass in your dict\'s ["params"].')
+    super().__init__(
+        'Expect the `variables` (first argument) passed to apply() '
+        'to be a dict with the structure {"params": ...}, but got a dict '
+        'with an extra params layer, i.e.  {"params": {"params": ... } }. '
+        f'You should instead pass in your dict\'s ["params"].')
 
 
 class ScopeParamNotFoundError(FlaxError):
-  """
-  This error is thrown when trying to access a parameter that does not exist.
+  """This error is thrown when trying to access a parameter that does not exist.
+
   For instance, in the code below, the initialized embedding name 'embedding'
   does not match the apply name 'embed'::
 
@@ -169,15 +175,15 @@ class ScopeParamNotFoundError(FlaxError):
     variables = model.init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
     _ = model.apply(variables, jnp.ones((5, 5, 1)), 'embed')
   """
+
   def __init__(self, param_name, scope_path):
-    super().__init__(
-        f'Could not find parameter named "{param_name}" in scope '
-        f'"{scope_path}".')
+    super().__init__(f'Could not find parameter named "{param_name}" in scope '
+                     f'"{scope_path}".')
 
 
 class ScopeCollectionNotFound(FlaxError):
-  """
-  This error is thrown when trying to access a variable from an empty
+  """This error is thrown when trying to access a variable from an empty
+
   collection.
 
   There are two common causes:
@@ -188,15 +194,16 @@ class ScopeCollectionNotFound(FlaxError):
      | In this case, you should have made the collection mutable during
      | apply (e.g.: ``module.apply(variables, ..., mutable=['state'])``.
   """
+
   def __init__(self, col_name, var_name, scope_path):
     super().__init__(
-      f'Tried to access "{var_name}" from collection "{col_name}" in '
-      f'"{scope_path}" but the collection is empty.')
+        f'Tried to access "{var_name}" from collection "{col_name}" in '
+        f'"{scope_path}" but the collection is empty.')
 
 
 class ScopeParamShapeError(FlaxError):
-  """
-  This error is thrown when the shape of an existing parameter is different from
+  """This error is thrown when the shape of an existing parameter is different from
+
   the shape of the return value of the ``init_fn``. This can happen when the
   shape provided during :meth:`Module.apply() <flax.linen.Module.apply>` is
   different from the one used when initializing the module.
@@ -221,6 +228,7 @@ class ScopeParamShapeError(FlaxError):
     variables = NoBiasDense().init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
     _ = NoBiasDense().apply(variables, jnp.ones((5, 5)))
   """
+
   def __init__(self, param_name, scope_path, value_shape, init_shape):
     super().__init__('Inconsistent shapes between value and initializer '
                      f'for parameter "{param_name}" in "{scope_path}": '
@@ -228,43 +236,43 @@ class ScopeParamShapeError(FlaxError):
 
 
 class ScopeVariableNotFoundError(FlaxError):
-  """
-  This error is thrown when trying to use a variable in a Scope in a collection
+  """This error is thrown when trying to use a variable in a Scope in a collection
+
   that is immutable. In order to create this variable, mark the collection as
   mutable explicitly using the ``mutable`` keyword in
   :meth:`Module.apply() <flax.linen.Module.apply>`.
   """
+
   def __init__(self, name, col, scope_path):
     super().__init__(f'No Variable named "{name}" for collection "{col}" '
                      f'exists in "{scope_path}".')
 
 
 class InvalidFilterError(FlaxError):
-  """
-  A filter should be either a boolean, a string or a container object.
-  """
+  """A filter should be either a boolean, a string or a container object."""
+
   def __init__(self, filter_like):
     super().__init__(f'Invalid Filter: "{filter_like}"')
 
 
 class InvalidScopeError(FlaxError):
-  """
-  A temporary Scope is only valid within the context in which it is created::
+  """A temporary Scope is only valid within the context in which it is created::
 
     with Scope(variables, rngs=rngs).temporary() as root:
       y = fn(root, *args, **kwargs)
       # Here root is valid.
     # Here root is invalid.
   """
+
   def __init__(self, scope_name):
     super().__init__(f'The scope "{scope_name}" is no longer valid.')
 
 
 class ModifyScopeVariableError(FlaxError):
-  """
-  You cannot update a variable if the collection it belongs to is immutable.
-  When you are applying a Module, you should specify which variable
-  collections are mutable::
+  """You cannot update a variable if the collection it belongs to is immutable.
+
+  When you are applying a Module, you should specify which variable collections
+  are mutable::
 
     class MyModule(nn.Module):
       @nn.compact
@@ -279,20 +287,21 @@ class ModifyScopeVariableError(FlaxError):
     logits = MyModule.apply(v, batch)  # This throws an error.
     logits = MyModule.apply(v, batch, mutable=['batch_stats'])  # This works.
   """
+
   def __init__(self, col, variable_name, scope_path):
     super().__init__(f'Cannot update variable "{variable_name}" in '
                      f'"{scope_path}" because collection "{col}" is immutable.')
 
 
 class JaxTransformError(FlaxError):
-  """
-  JAX transforms and Flax modules cannot be mixed.
+  """JAX transforms and Flax modules cannot be mixed.
 
   JAX's functional transformations expect pure function.
   When you want to use JAX transformations **inside** Flax models,
   you should make use of the Flax transformation wrappers
   (e.g.: ``flax.linen.vmap``, ``flax.linen.scan``, etc.).
   """
+
   def __init__(self):
     super().__init__('Jax transforms and Flax models cannot be mixed.')
 
@@ -303,8 +312,8 @@ class JaxTransformError(FlaxError):
 
 
 class PartitioningUnspecifiedError(FlaxError):
-  """
-  This error is raised when trying to add an axis to a Partitioned variable by
+  """This error is raised when trying to add an axis to a Partitioned variable by
+
   using a transformation (e.g.: ``scan``, ``vmap``) without specifying the
   "partition_name" in the ``metadata_params`` dict.
   """
@@ -321,8 +330,8 @@ class PartitioningUnspecifiedError(FlaxError):
 
 
 class NameInUseError(FlaxError):
-  """
-  This error is raised when trying to create a submodule, param, or variable
+  """This error is raised when trying to create a submodule, param, or variable
+
   with an existing name. They are all considered to be in the same namespace.
 
   **Sharing Submodules**
@@ -368,6 +377,7 @@ class NameInUseError(FlaxError):
         _ = self.param('mean', initializers.lecun_normal(), (2, 2))
         _ = self.variable('stats', 'mean', initializers.zeros, (2, 2))
   """
+
   def __init__(self, key_type, value, module_name):
     # key_type is in {param, variable, submodule}.
     super().__init__(f'Could not create {key_type} "{value}" in Module '
@@ -375,8 +385,7 @@ class NameInUseError(FlaxError):
 
 
 class AssignSubModuleError(FlaxError):
-  """
-  You are only allowed to create submodules in two places:
+  """You are only allowed to create submodules in two places:
 
   1.  If your Module is noncompact: inside
       :meth:`Module.setup() <flax.linen.Module.setup>`.
@@ -412,14 +421,15 @@ class AssignSubModuleError(FlaxError):
   is disallowed because it's neither within ``setup`` nor a method wrapped in
   x``nn.compact``.
   """
+
   def __init__(self, cls):
     super().__init__(f'Submodule {cls} must be defined in `setup()` or in a '
                      'method wrapped in `@compact`')
 
 
 class SetAttributeInModuleSetupError(FlaxError):
-  """
-  You are not allowed to modify Module class attributes in
+  """You are not allowed to modify Module class attributes in
+
   :meth:`Module.setup() <flax.linen.Module.setup>`::
 
     class Foo(nn.Module):
@@ -448,13 +458,14 @@ class SetAttributeInModuleSetupError(FlaxError):
   modules to stay frozen (otherwise we can't safely clone them, which we use for
   lifted transformations).
   """
+
   def __init__(self):
     super().__init__(f'Module construction attributes are frozen.')
 
 
 class SetAttributeFrozenModuleError(FlaxError):
-  """
-  You can only assign Module attributes to ``self`` inside
+  """You can only assign Module attributes to ``self`` inside
+
   :meth:`Module.setup() <flax.linen.Module.setup>`. Outside of that method, the
   Module instance is frozen (i.e., immutable). This behavior is similar to
   frozen Python dataclasses.
@@ -482,15 +493,16 @@ class SetAttributeFrozenModuleError(FlaxError):
         def __call__(self, x):
           return self.dense(x)
   """
+
   def __init__(self, module_cls, attr_name, attr_val):
     super().__init__(f'Can\'t set {attr_name}={attr_val} for Module of type '
-                    f'{module_cls}: Module instance is frozen outside of '
+                     f'{module_cls}: Module instance is frozen outside of '
                      'setup method.')
 
 
 class MultipleMethodsCompactError(FlaxError):
-  """
-  The ``@compact`` decorator may only be added to at most one method in a Flax
+  """The ``@compact`` decorator may only be added to at most one method in a Flax
+
   module. In order to resolve this, you can:
 
   * remove ``@compact`` and define submodules and variables using
@@ -501,25 +513,28 @@ class MultipleMethodsCompactError(FlaxError):
   There is no need for an equivalent to `hk.transparent` and it makes submodules
   much more sane because there is no need to prefix the method names.
   """
+
   def __init__(self):
     super().__init__(f'Only one method per class can be @compact')
 
+
 class ReservedModuleAttributeError(FlaxError):
-  """
-  This error is thrown when creating a Module that is using reserved attributes.
+  """This error is thrown when creating a Module that is using reserved attributes.
+
   The following attributes are reserved:
 
   * ``parent``: The parent Module of this Module.
   * ``name``: The name of this Module.
   """
+
   def __init__(self, annotations):
     super().__init__(f'properties `parent` and `name` are reserved: '
                      f'{annotations}')
 
 
 class ApplyModuleInvalidMethodError(FlaxError):
-  """
-  When calling :meth:`Module.apply() <flax.linen.Module.apply>`, you can specify
+  """When calling :meth:`Module.apply() <flax.linen.Module.apply>`, you can specify
+
   the method to apply using parameter ``method``. This error is thrown if the
   provided parameter is not a method in the Module and not a function with at
   least one argument.
@@ -527,14 +542,15 @@ class ApplyModuleInvalidMethodError(FlaxError):
   Learn more on the reference docs for
   :meth:`Module.apply() <flax.linen.Module.apply>`.
   """
+
   def __init__(self, method):
     super().__init__(f'Cannot call apply(): {method} is not a valid function '
                      'for apply().')
 
 
 class CallCompactUnboundModuleError(FlaxError):
-  """
-  This error occurs when you are trying to call a Module directly, rather than
+  """This error occurs when you are trying to call a Module directly, rather than
+
   through :meth:`Module.apply() <flax.linen.Module.apply>`. For instance, the
   error will be raised when trying to run this code::
 
@@ -553,13 +569,15 @@ class CallCompactUnboundModuleError(FlaxError):
 
     y = test_dense.apply(variables, jnp.ones((5,5)))
   """
+
   def __init__(self):
     super().__init__('Can\'t call compact methods on unbound modules')
 
+
 class CallSetupUnboundModuleError(FlaxError):
-  """
-  This error occurs when you are trying to call `.setup()` directly. For instance, the
-  error will be raised when trying to run this code::
+  """This error occurs when you are trying to call `.setup()` directly.
+
+  For instance, the error will be raised when trying to run this code::
 
     from flax import linen as nn
     import jax.numpy as jnp
@@ -573,7 +591,8 @@ class CallSetupUnboundModuleError(FlaxError):
     submodule = module.submodule
 
   In general you shouldn't call `.setup()` yourself, if you need to get access
-  to a field or submodule defined inside `setup` you can instead create a function
+  to a field or submodule defined inside `setup` you can instead create a
+  function
   to extract it and pass it to `nn.apply`::
 
     # setup() will be called automatically by `nn.apply`
@@ -582,14 +601,15 @@ class CallSetupUnboundModuleError(FlaxError):
 
     empty_variables = {} # you can also use the real variables
     submodule = nn.apply(get_submodule, module)(empty_variables)
-
   """
+
   def __init__(self):
     super().__init__('Can\'t call compact methods on unbound modules')
 
+
 class InvalidInstanceModuleError(FlaxError):
-  """
-  This error occurs when you are trying to call `.init()`, `.init_with_output()`, `.apply() or `.bind()`
+  """This error occurs when you are trying to call `.init()`, `.init_with_output()`, `.apply() or `.bind()`
+
   on the Module class itself, instead of an instance of the Module class.
   For example, the error will be raised when trying to run this code::
 
@@ -601,14 +621,19 @@ class InvalidInstanceModuleError(FlaxError):
     k = random.PRNGKey(0)
     x = random.uniform(random.PRNGKey(1), (2,))
     B.init(k, x)   # B is module class, not B() a module instance
-    B.apply(vs, x)   # similar issue with apply called on class instead of instance.
+    B.apply(vs, x)   # similar issue with apply called on class instead of
+    instance.
   """
+
   def __init__(self):
-    super().__init__('Can only call init, init_with_output or apply methods on an instance of the Module class, not the Module class itself')
+    super().__init__(
+        'Can only call init, init_with_output or apply methods on an instance of the Module class, not the Module class itself'
+    )
+
 
 class IncorrectPostInitOverrideError(FlaxError):
-  """
-  This error occurs when you overrode `.__post_init__()` without calling `super().__post_init__()`.
+  """This error occurs when you overrode `.__post_init__()` without calling `super().__post_init__()`.
+
   For example, the error will be raised when trying to run this code::
 
     from flax import linen as nn
@@ -626,20 +651,47 @@ class IncorrectPostInitOverrideError(FlaxError):
     r = A(x=3)
     r.init(jax.random.PRNGKey(2), jnp.ones(3))
   """
+
   def __init__(self):
-    super().__init__('Overrode `.__post_init__()` without calling `super().__post_init__()`')
+    super().__init__(
+        'Overrode `.__post_init__()` without calling `super().__post_init__()`')
+
+
+class DescriptorAttributeError(FlaxError):
+  """This error occurs when you are trying to access a property that is accessing a non-existent attribute.
+
+  For example, the error will be raised when trying to run this code::
+
+    class Foo(nn.Module):
+        @property
+        def prop(self):
+            return self.non_existent_field # ERROR!
+        def __call__(self, x):
+            return self.prop
+
+    foo = Foo()
+    variables = foo.init(jax.random.PRNGKey(0), jnp.ones(shape=(1, 8)))
+  """
+
+  def __init__(self):
+    super().__init__(
+        'Trying to access a property that is accessing a non-existent attribute.'
+    )
 
 
 class InvalidCheckpointError(FlaxError):
-  """
-  A checkpoint cannot be stored in a directory that already has
+  """A checkpoint cannot be stored in a directory that already has
+
   a checkpoint at the current or a later step.
 
   You can pass ``overwrite=True`` to disable this behavior and
   overwrite existing checkpoints in the target directory.
   """
+
   def __init__(self, path, step):
-    super().__init__(f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".')
+    super().__init__(
+        f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".'
+    )
 
 
 class MPACheckpointingRequiredError(FlaxError):
@@ -651,14 +703,13 @@ class MPACheckpointingRequiredError(FlaxError):
     from jax.experimental.gda_serialization import serialization as gdas
     gda_manager = gdas.GlobalAsyncCheckpointManager()
     save_checkpoint(..., gda_manager=gda_manager)
-
   """
+
   def __init__(self, path, step):
     super().__init__(
         f'Checkpoint failed at step: "{step}" and path: "{path}": Target '
         'contains a multiprocess array should be saved/restored with a '
-        'GlobalAsyncCheckpointManager.'
-    )
+        'GlobalAsyncCheckpointManager.')
 
 
 class MPARestoreTargetRequiredError(FlaxError):
@@ -681,6 +732,7 @@ class MPARestoreTargetRequiredError(FlaxError):
       error_msg += f'This error fired when trying to restore array at {key}.'
     super().__init__(error_msg)
 
+
 class MPARestoreDataCorruptedError(FlaxError):
   """A multiprocess array stored in Google Cloud Storage doesn't contain a "commit_success.txt" file, which should be written at the end of the save.
 
@@ -691,8 +743,7 @@ class MPARestoreDataCorruptedError(FlaxError):
     super().__init__(
         f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
         f' "{path}": No "commit_success.txt" found on this "_gda" directory. '
-        'Was its save halted before completion?'
-    )
+        'Was its save halted before completion?')
 
 
 class MPARestoreTypeNotMatchError(FlaxError):
@@ -708,13 +759,13 @@ class MPARestoreTypeNotMatchError(FlaxError):
     super().__init__(
         f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
         f' "{gda_path}": The array type provided by the target does not match '
-        'the JAX global configuration, namely the jax.config.jax_array.'
-    )
+        'the JAX global configuration, namely the jax.config.jax_array.')
 
 
 #################################################
 # transforms.py errors                          #
 #################################################
+
 
 class TransformedMethodReturnValueError(FlaxError):
   """Transformed Module methods cannot return other Modules or Variables."""
@@ -725,8 +776,7 @@ class TransformedMethodReturnValueError(FlaxError):
 
 
 class TransformTargetError(FlaxError):
-  """
-  Linen transformations must be applied to Modules classes or functions taking a Module instance as the first argument.
+  """Linen transformations must be applied to Modules classes or functions taking a Module instance as the first argument.
 
   This error occurs when passing an invalid target to a linen transform
   (nn.vmap, nn.scan, etc.). This occurs for example when trying to
@@ -738,32 +788,36 @@ class TransformTargetError(FlaxError):
 
     nn.vmap(nn.Dense)(features)(x)
 
-  Or you can create a function that takes the module instance as the first argument::
+  Or you can create a function that takes the module instance as the first
+  argument::
 
     class BatchDense(nn.Module):
       @nn.compact
       def __call__(self, x):
         return nn.vmap(
             lambda mdl, x: mdl(x),
-            variable_axes={'params': 0}, split_rngs={'params': True})(nn.Dense(3), x)
-
+            variable_axes={'params': 0}, split_rngs={'params':
+            True})(nn.Dense(3), x)
   """
+
   def __init__(self, target):
     super().__init__(
-      'Linen transformations must be applied to Modules classes or'
-      ' functions taking a Module instance as the first argument.'
-      f' The provided target is not a Module class or callable: {target}')
+        'Linen transformations must be applied to Modules classes or'
+        ' functions taking a Module instance as the first argument.'
+        f' The provided target is not a Module class or callable: {target}')
 
 
 #################################################
 # io.py errors                                  #
 #################################################
 
+
 class AlreadyExistsError(FlaxError):
+  """Attempting to overwrite a file via copy.
+
+  You can pass ``overwrite=True`` to disable this behavior and overwrite
+  existing files in.
   """
-  Attempting to overwrite a file via copy.
-  You can pass ``overwrite=True`` to disable this behavior and
-  overwrite existing files in.
-  """
+
   def __init__(self, path):
     super().__init__(f'Trying overwrite an existing file: "{path}".')

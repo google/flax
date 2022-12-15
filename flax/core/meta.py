@@ -32,7 +32,7 @@ from jax.experimental import maps
 from jax.experimental import pjit
 
 
-TAxisMetadata = TypeVar('TAxisMetadata', bound='AxisMetadata')
+TAxisMetadata = Any # TypeVar('TAxisMetadata', bound='AxisMetadata')
 
 
 class AxisMetadata(metaclass=abc.ABCMeta):
@@ -252,8 +252,8 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
     axis_name = self._get_partition_name(params)
     names = list(self.names)
     while len(names) < index:
-      names.append(None)
-    names.insert(index, axis_name)
+      names.append(None) # type: ignore
+    names.insert(index, axis_name) # type: ignore
     return self.replace(names=tuple(names))
 
   def remove_axis(self, index: int, params: Dict[Any, Any]) -> TAxisMetadata:

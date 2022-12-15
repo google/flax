@@ -159,7 +159,11 @@ Models
     * - `jax-resnet <https://github.com/n2cholas/jax-resnet>`__
       - `@n2cholas <https://github.com/n2cholas>`__
       - Various resnet implementations
-      - ``torch.hub``
+      - `torch.hub <https://pytorch.org/docs/stable/hub.html>`__
+    * - `Wav2Vec2 finetuning <https://github.com/vasudevgupta7/speech-jax>`__
+      - `@vasudevgupta7 <https://github.com/vasudevgupta7>`__
+      - Automatic Speech Recognition
+      - https://arxiv.org/abs/2006.11477
 
 Examples
 ********

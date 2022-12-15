@@ -6,7 +6,7 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
 -
 -
--
+- Added logical partitioning helpers for using pjit with Flax.
 -
 -
 -

@@ -28,8 +28,8 @@ from typing import (Any, Callable, Dict, Iterable, List, Sequence, NamedTuple, M
 import jax
 import numpy as np
 import jax.numpy as jnp
-from typing_extensions import \
-    dataclass_transform  # pytype: disable=not-supported-yet
+from typing_extensions import Protocol, \
+  dataclass_transform  # pytype: disable=not-supported-yet
 
 import flax
 from flax import (config, core, errors, serialization, traceback_util,
@@ -386,6 +386,27 @@ def _get_local_method_names(cls: Any,
         true_methods.add(m)
   return tuple(true_methods.difference(set(exclude)))
 
+def _get_local_descriptor_names(cls: Any,
+                                exclude: Iterable[str] = ()) -> Tuple[str, ...]:
+  """Gets descriptor names of a class.
+
+  Args:
+    cls: The class to get property names for.
+    exclude: Names to exclude from output.
+  Returns:
+    A list of property names.
+  """
+  true_properties = set()
+  for m, attr in cls.__dict__.items():
+    if not callable(attr) and (
+      hasattr(attr, '__get__') or hasattr(attr, '__set__') or
+      hasattr(attr, '__delete__')
+    ):
+      mtype = type(attr)
+      if mtype != staticmethod and mtype != classmethod:
+        true_properties.add(m)
+  return tuple(true_properties.difference(set(exclude)))
+
 
 def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
   """Manages Module state for a given user-defined method.
@@ -413,6 +434,20 @@ def wrap_method_once(fun: Callable[..., Any]) -> Callable[..., Any]:
       return fun(*args, **kwargs)
   wrapped_module_method.method_handler_wrapped = True  # type: ignore[attr-defined]
   return wrapped_module_method
+
+def wrap_descriptor_once(descriptor) -> "DescriptorWrapper":
+  """Wraps a descriptor to give better error messages.
+
+  Args:
+    prop: User-defined Module attribute descriptor.
+  Returns:
+    Wrapped descriptor.
+  """
+  # Don't rewrap descriptors.
+  if isinstance(descriptor, DescriptorWrapper):
+    return descriptor
+
+  return create_descriptor_wrapper(descriptor)
 
 
 def _wrap_hash(hash_fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -552,6 +587,55 @@ class ParentDescriptor:
     object.__setattr__(obj, "_parent_ref", maybe_weak)
 
 
+class Descriptor(Protocol):
+  __isabstractmethod__: bool
+  def __get__(self, obj, objtype=None) -> Any: ...
+  def __set__(self, obj, value) -> None: ...
+  def __delete__(self, obj) -> None: ...
+  def __set_name__(self, owner, name) -> None: ...
+
+class DescriptorWrapper:
+  pass
+
+def create_descriptor_wrapper(descriptor: Descriptor):
+  """Creates a descriptor wrapper that calls a get_fn on the descriptor."""
+
+  class _DescriptorWrapper(DescriptorWrapper):
+    """A descriptor that can wrap any descriptor"""
+
+    if hasattr(descriptor, '__isabstractmethod__'):
+      __isabstractmethod__ = descriptor.__isabstractmethod__
+
+    def __init__(self, wrapped: Descriptor):
+      self.wrapped = wrapped
+
+    # conditionally define descriptor methods
+    if hasattr(descriptor, '__get__'):
+      def __get__(self, *args, **kwargs):
+        # here we will catch internal AttributeError and re-raise it as a
+        # more informative and correct error message.
+        try:
+          return self.wrapped.__get__(*args, **kwargs)
+        except AttributeError as e:
+          raise errors.DescriptorAttributeError() from e
+
+    if hasattr(descriptor, '__set__'):
+      def __set__(self, *args, **kwargs):
+        return self.wrapped.__set__(*args, **kwargs)
+
+    if hasattr(descriptor, '__delete__'):
+      def __delete__(self, *args, **kwargs):
+        return self.wrapped.__delete__(*args, **kwargs)
+
+    if hasattr(descriptor, '__set_name__'):
+      def __set_name__(self, *args, **kwargs):
+        self.wrapped.__set_name__(*args, **kwargs)
+
+    def __getattr__(self, name):
+      return getattr(self.wrapped, name)
+
+  return _DescriptorWrapper(descriptor)
+
 # Base Module definition.
 # -----------------------------------------------------------------------------
 
@@ -613,7 +697,7 @@ class Module:
     # We wrap user-defined methods including setup and __call__ to enforce
     # a number of different checks and to provide clear error messages.
     cls._verify_single_or_no_compact()
-    cls._wrap_module_methods()
+    cls._wrap_module_attributes()
     # Set empty class defaults.
     cls._state = _uninitialized_module_internal_state # type: ignore[attr-defined]
     cls.scope: Optional[Scope] = None # type: ignore
@@ -673,16 +757,29 @@ class Module:
       raise errors.MultipleMethodsCompactError()
 
   @classmethod
-  def _wrap_module_methods(cls):
-    """Wraps user-defined non-inherited methods with state management functions."""
-    exclusions = ([f.name for f in dataclasses.fields(cls)] +
+  def _wrap_module_attributes(cls):
+    """Wraps user-defined non-inherited methods and descriptors with state
+    management functions.
+    """
+    # wrap methods
+    method_exclusions = ([f.name for f in dataclasses.fields(cls)] +
                   ['__eq__', '__repr__', '__init__', '__hash__',
                    '__post_init__'])
-    for key in _get_local_method_names(cls, exclude=exclusions):
+    for key in _get_local_method_names(cls, exclude=method_exclusions):
       method = getattr(cls, key)
       if hasattr(method, 'nowrap'):
         continue
       setattr(cls, key, wrap_method_once(method))
+
+    # wrap descriptors
+    descriptor_exclusions = ([f.name for f in dataclasses.fields(cls)] +
+                             ['parent', '__dict__'])
+    for key in _get_local_descriptor_names(cls, descriptor_exclusions):
+      # don't use getattr here, since it will call the descriptor
+      descriptor = cls.__dict__[key]
+      if hasattr(descriptor, 'nowrap'):
+        continue
+      setattr(cls, key, wrap_descriptor_once(descriptor))
     return cls
 
   def _call_wrapped_method(self, fun, args, kwargs):
@@ -812,7 +909,7 @@ class Module:
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
-    return object.__dir__(self)  # pytype: disable=attribute-error
+    return object.__dir__(self)  # type: ignore
 
   def __post_init__(self) -> None:
     # DO NOT REMOVE - Marker for internal logging.
@@ -974,7 +1071,7 @@ class Module:
 
   def _name_taken(self,
                   name: str,
-                  module: 'Module' = None,
+                  module: Optional['Module'] = None,
                   reuse_scopes: bool = False) -> bool:
     if name in _all_names_on_object(self):
       val = getattr(self, name, None)
@@ -1398,7 +1495,7 @@ class Module:
       raise ValueError("Can't access variables on unbound modules")
     return self.scope.variables()
 
-  def get_variable(self, col: str, name: str, default: T = None) -> T:
+  def get_variable(self, col: str, name: str, default: Optional[T] = None) -> T:
     """Retrieves the value of a Variable.
 
     Args:
@@ -1559,7 +1656,7 @@ class Module:
                                   #      [-1.456924   -0.44332537  0.02422847]]
 
     """
-    value += self.variable(collection, name, lambda: jnp.zeros_like(value)).value
+    value += self.variable(collection, name, lambda: jnp.zeros_like(value)).value # type: ignore
     return value
 
   def tabulate(
