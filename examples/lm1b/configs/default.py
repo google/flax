@@ -52,7 +52,7 @@ def get_config():
 
   # Number of steps to take during evaluation. Large enough to evaluate all.
   # Large enough to evaluate all samples: 306_688 / (32 * 8) = 1198
-  config.num_eval_steps = 2_000
+  config.num_eval_steps = 100
   # Number of steps to generate predictions.
   # -1 will use the whole eval dataset.
   config.num_predict_steps = -1
@@ -99,9 +99,9 @@ def get_config():
   config.attention_dropout_rate = 0.1
 
   # Whether to save model checkpoints.
-  config.save_checkpoints = True
+  config.save_checkpoints = False
   # Whether to restore from existing model checkpoints.
-  config.restore_checkpoints = True
+  config.restore_checkpoints = False
 
   # Save a checkpoint every these number of steps.
   config.checkpoint_every_steps = 10_000
