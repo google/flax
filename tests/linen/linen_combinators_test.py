@@ -48,6 +48,30 @@ class MLP(nn.Module):
     return self.activation_final(x)
 
 
+class AttentionTuple(nn.Module):
+  num_heads: int = 2
+  qkv_features: int = 16
+
+  @nn.compact
+  def __call__(self, query, key_value):
+    output = nn.MultiHeadDotProductAttention(
+        num_heads=self.num_heads, qkv_features=self.qkv_features)(query,
+                                                                  key_value)
+    return output, key_value
+
+
+class AttentionDict(nn.Module):
+  num_heads: int = 2
+  qkv_features: int = 16
+
+  @nn.compact
+  def __call__(self, query, key_value):
+    output = nn.MultiHeadDotProductAttention(
+        num_heads=self.num_heads, qkv_features=self.qkv_features)(query,
+                                                                  key_value)
+    return dict(query=output, key_value=key_value)
+
+
 class SequentialTest(absltest.TestCase):
 
   def test_construction(self):
@@ -101,6 +125,39 @@ class SequentialTest(absltest.TestCase):
     output_1 = sequential.apply(params_1, x)
     output_2 = mlp.apply(params_2, x)
     np.testing.assert_array_equal(output_1, output_2)
+
+
+  def test_tuple_output(self):
+    sequential = nn.Sequential([
+        AttentionTuple(),
+        AttentionTuple(),
+    ])
+
+    key1, key2 = random.split(random.PRNGKey(0), 2)
+    query = random.uniform(key1, (3, 5))
+    key_value = random.uniform(key1, (9, 5))
+    params_1 = sequential.init(key2, query, key_value)
+    outputs = sequential.apply(params_1, query, key_value)
+    np.testing.assert_equal(len(outputs), 2)
+    out_query, out_key_value = outputs
+    np.testing.assert_equal(out_query.shape, (3, 5))
+    np.testing.assert_equal(out_key_value.shape, (9, 5))
+
+  def test_dict_output(self):
+    sequential = nn.Sequential([
+        AttentionDict(),
+        AttentionDict(),
+    ])
+
+    key1, key2 = random.split(random.PRNGKey(0), 2)
+    query = random.uniform(key1, (3, 5))
+    key_value = random.uniform(key1, (9, 5))
+    params_1 = sequential.init(key2, query, key_value)
+    outputs = sequential.apply(params_1, query, key_value)
+    np.testing.assert_equal(len(outputs), 2)
+    out_query, out_key_value = outputs['query'], outputs['key_value']
+    np.testing.assert_equal(out_query.shape, (3, 5))
+    np.testing.assert_equal(out_key_value.shape, (9, 5))
 
 
 if __name__ == '__main__':

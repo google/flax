@@ -14,7 +14,7 @@
 
 """Combinators of modules, such as a Sequential."""
 
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Dict, Sequence
 
 from flax.linen.module import Module
 
@@ -42,6 +42,31 @@ class Sequential(Module):
                               nn.relu,
                               nn.Dense(2),
                               nn.log_softmax])(x)
+
+  This combinator supports also layers that return multiple outputs if returned
+  as a tuple or a dictionary.
+
+  Example usage::
+
+    class CrossAttentionBlock(nn.Module):
+      num_heads: int = 2
+      qkv_features: int = 16
+
+      @nn.compact
+      def __call__(self, query, key_value):
+        output = nn.MultiHeadDotProductAttention(
+          num_heads=self.num_heads, qkv_features=self.qkv_features)(query,
+                                                                  key_value)
+        output = nn.Dense(self.qkv_features)(output)
+        return dict(query=output, key_value=key_value)  # also works for tuples
+
+    class CrossAttentionNetwork(nn.Module):
+      num_layers: Sequence[int]
+
+      @nn.compact
+      def __call__(self, x):
+        return nn.Sequential([CrossAttentionBlock() for _ in
+                              range(self.num_layers)])(query, key_value)
   """
   layers: Sequence[Callable[..., Any]]
 
@@ -51,5 +76,10 @@ class Sequential(Module):
 
     outputs = self.layers[0](*args, **kwargs)
     for layer in self.layers[1:]:
-      outputs = layer(outputs)
+      if isinstance(outputs, tuple):
+        outputs = layer(*outputs)
+      elif isinstance(outputs, Dict):
+        outputs = layer(**outputs)
+      else:
+        outputs = layer(outputs)
     return outputs
