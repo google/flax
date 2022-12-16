@@ -14,6 +14,7 @@ Guides
    extracting_intermediates
    lr_schedule
    use_checkpointing
+   flax_on_pjit
 
 .. toctree::
    :maxdepth: 1

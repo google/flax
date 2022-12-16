@@ -108,6 +108,25 @@ Metadata
     get_partition_spec
 
 
+SPMD
+----------------------
+
+.. automodule:: flax.linen.spmd
+.. currentmodule:: flax.linen
+
+.. autosummary::
+  :toctree: _autosummary
+
+    logical_axis_rules
+    set_logical_axis_rules
+    get_logical_axis_rules
+    logical_to_mesh_axes
+    logical_to_mesh
+    with_logical_constraint
+    LogicallyPartitioned
+    with_logical_partitioning
+
+
 Linear modules
 ------------------------
 
@@ -254,6 +273,18 @@ Stochastic
 
 
 RNN primitives
+------------------------
+
+.. autosummary::
+  :toctree: _autosummary
+  :template: flax_module
+
+    LSTMCell
+    OptimizedLSTMCell
+    GRUCell
+
+
+SPMD
 ------------------------
 
 .. autosummary::
