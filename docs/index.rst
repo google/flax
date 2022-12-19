@@ -156,6 +156,13 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
+      .. card:: :material-regular:`settings;2em` Glossary
+         :class-card: sd-text-black sd-bg-light
+         :link: glossary.html
+
+   .. grid-item::
+      :columns: 6 6 6 4
+
       .. card:: :material-regular:`menu_book;2em` API Reference
          :class-card: sd-text-black sd-bg-light
          :link: api_reference/index.html
@@ -266,6 +273,7 @@ Notable examples include:
    Getting Started <getting_started>
    guides/index
    examples
+   glossary
    advanced_topics/index
    🔪 Flax - The Sharp Bits 🔪 <notebooks/flax_sharp_bits>
    contributing/index
