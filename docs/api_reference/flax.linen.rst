@@ -22,7 +22,7 @@ Init/Apply
 .. autofunction:: init
 .. autofunction:: init_with_output
 
-Variables
+Variable dictionary
 ----------------------
 
 .. automodule:: flax.core.variables
