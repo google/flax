@@ -15,7 +15,7 @@
 """The Flax Module system."""
 
 
-# pylint: disable=g-multiple-import
+# pylint: disable=g-multiple-import,useless-import-alias
 # re-export commonly used modules and functions
 from .activation import (
   PReLU as PReLU,
@@ -41,6 +41,7 @@ from .activation import (
   soft_sign as soft_sign,
   softmax as softmax,
   softplus as softplus,
+  standardize as standardize,
   swish as swish,
   tanh as tanh
 )
@@ -66,6 +67,16 @@ from ..core.meta import (
     get_partition_spec as get_partition_spec,
     unbox as unbox,
     PARTITION_NAME as PARTITION_NAME,
+)
+from .spmd import (
+    logical_axis_rules as logical_axis_rules,
+    set_logical_axis_rules as set_logical_axis_rules,
+    get_logical_axis_rules as get_logical_axis_rules,
+    logical_to_mesh_axes,
+    logical_to_mesh,
+    with_logical_constraint,
+    LogicallyPartitioned as LogicallyPartitioned,
+    with_logical_partitioning as with_logical_partitioning,
 )
 from .initializers import (
   ones as ones,

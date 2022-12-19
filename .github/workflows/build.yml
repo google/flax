@@ -30,7 +30,7 @@ jobs:
       - name: Set up Python 3.8
         uses: actions/setup-python@v4
         with:
-          python-version: 3.7
+          python-version: 3.9
       - uses: pre-commit/action@v2.0.3
   commit-count:
     name: Check commit count
@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9]
+        python-version: ['3.8', '3.9', '3.10']
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -82,12 +82,14 @@ jobs:
     runs-on: ubuntu-20.04-16core
     strategy:
       matrix:
-        python-version: [3.7, 3.8, 3.9]
-        test-type: [doctest, pytest, pytype]
+        python-version: ['3.8', '3.9', '3.10']
+        test-type: [doctest, pytest, pytype, mypy]
         exclude:
           - test-type: pytype
-            python-version: 3.7
+            python-version: 3.8
           - test-type: pytype
+            python-version: 3.10
+          - test-type: mypy
             python-version: 3.8
     steps:
     - uses: actions/checkout@v3
@@ -119,11 +121,13 @@ jobs:
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
-          tests/run_all_tests.sh --no-pytest --no-pytype --use-venv
+          tests/run_all_tests.sh --no-pytest --no-pytype --no-mypy --use-venv
         elif [[ "${{ matrix.test-type }}" == "pytest" ]]; then
-          tests/run_all_tests.sh --no-doctest --no-pytype --with-cov --use-venv
+          tests/run_all_tests.sh --no-doctest --no-pytype --no-mypy --with-cov --use-venv
         elif [[ "${{ matrix.test-type }}" == "pytype" ]]; then
-          tests/run_all_tests.sh --no-doctest --no-pytest --use-venv
+          tests/run_all_tests.sh --no-doctest --no-pytest --no-mypy --use-venv
+        elif [[ "${{ matrix.test-type }}" == "mypy" ]]; then
+          tests/run_all_tests.sh --no-doctest --no-pytest --no-pytype --use-venv
         else
           echo "Unknown test type: ${{ matrix.test-type }}"
           exit 1

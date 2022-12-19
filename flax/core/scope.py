@@ -114,7 +114,7 @@ def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
       m.update(x.encode('utf-8'))
       d = m.digest()
       hash_int = int.from_bytes(d[:4], byteorder='big')
-      rng = random.fold_in(rng, jnp.uint32(hash_int))
+      rng = random.fold_in(rng, jnp.uint32(hash_int))  # type: ignore
     elif isinstance(x, int):
       rng = random.fold_in(rng, x)
     else:
@@ -148,7 +148,7 @@ def _fold_in_static(rng: PRNGKey,
       raise ValueError(f'Expected int or string, got: {x}')
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
-  return random.fold_in(rng, jnp.uint32(hash_int))
+  return random.fold_in(rng, jnp.uint32(hash_int)) # type: ignore
 
 
 def is_filter_empty(filter_like: Filter) -> bool:
@@ -520,6 +520,8 @@ class Scope:
   def reserve(self, name: str):
     """Reserves a name for a child Scope or Variable.
 
+    Throws an error if the name exists already.
+
     Args:
       name: the name to reserve.
     """
@@ -570,10 +572,10 @@ class Scope:
     rngs = {key: LazyRng.create(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
-      rng_counters = self.rng_counters.get(rng_key)
+      rng_counters = self.rng_counters.get(rng_key) # type: ignore
     else:
       rng_counters = {key: 0 for key in rngs}
-      self.rng_counters[rng_key] = rng_counters
+      self.rng_counters[rng_key] = rng_counters # type: ignore
     scope = Scope({},
                   name=name,
                   rngs=rngs,
@@ -743,7 +745,7 @@ class Scope:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The variable.
+      The variable.  Throws an error if the variable exists already.
     """
     self.reserve(name)
     if not self.has_variable(col, name):
@@ -770,7 +772,7 @@ class Scope:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The parameters.
+      The parameters. Throws an error if the params exist already.
     """
     self.reserve(name)
     if self.has_variable('params', name):

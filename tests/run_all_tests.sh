@@ -2,6 +2,7 @@
 
 PYTEST_OPTS=
 RUN_DOCTEST=true
+RUN_MYPY=true
 RUN_PYTEST=true
 RUN_PYTYPE=true
 GH_VENV=false
@@ -25,6 +26,9 @@ case $flag in
   --no-pytype)
   RUN_PYTYPE=false
   ;;
+  --no-mypy)
+  RUN_MYPY=false
+  ;;
   --use-venv)
   GH_VENV=true
   ;;
@@ -44,6 +48,7 @@ echo "====== test config ======="
 echo "PYTEST_OPTS: $PYTEST_OPTS"
 echo "RUN_DOCTEST: $RUN_DOCTEST"
 echo "RUN_PYTEST: $RUN_PYTEST"
+echo "RUN_MYPY: $RUN_MYPY"
 echo "RUN_PYTYPE: $RUN_PYTYPE"
 echo "GH_VENV: $GH_VENV"
 echo "WHICH PYTHON: $(which python)"
@@ -119,6 +124,12 @@ if $RUN_PYTYPE; then
       # because config files use relative imports (e.g. from config import ...).
       (cd $egd ; pytype --jobs auto --config ../../pytype.cfg "*.py")
   done
+fi
+
+if $RUN_MYPY; then
+  echo "=== RUNNING MYPY ==="
+  # Validate types in library code.
+  mypy --config mypy.ini flax/ --show-error-codes
 fi
 
 # Return error code 0 if no real failures happened.

@@ -191,6 +191,7 @@ class ModuleTest(absltest.TestCase):
     })
 
   def test_setup_dict_nonstring_keys(self):
+
     class Foo(nn.Module):
 
       def setup(self):
@@ -211,6 +212,7 @@ class ModuleTest(absltest.TestCase):
                      }})
 
   def test_setup_cloning(self):
+
     class MLP(nn.Module):
 
       def setup(self):
@@ -532,6 +534,7 @@ class ModuleTest(absltest.TestCase):
           pass
 
   def test_only_one_compact_method_subclass(self):
+
     class Dummy(nn.Module):
 
       @nn.compact
@@ -1422,7 +1425,9 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(state, {'intermediates': {'Bar_0': {'test': (2,)}}})
 
   def test_perturb(self):
+
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         x = nn.Dense(10)(x)
@@ -1436,12 +1441,14 @@ class ModuleTest(absltest.TestCase):
       preds = Foo().apply(variables, inputs)
       return jnp.square(preds - targets).mean()
 
-    x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10, ))
-    y = jax.random.uniform(jax.random.PRNGKey(2), shape=(10, ))
+    x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10,))
+    y = jax.random.uniform(jax.random.PRNGKey(2), shape=(10,))
     variables = Foo().init(jax.random.PRNGKey(0), x)
-    intm_grads = jax.grad(loss, argnums=1)(variables['params'], variables['perturbations'], x, y)
+    intm_grads = jax.grad(
+        loss, argnums=1)(variables['params'], variables['perturbations'], x, y)
     # activation * 4 so reverse gradient also * 4
-    self.assertTrue(all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply']))
+    self.assertTrue(
+        all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply']))
 
   def test_functional_apply(self):
 
@@ -1507,7 +1514,8 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y2, y3)
     bs_1 = new_state['batch_stats']
     bs_2 = foo_b.variables['batch_stats']
-    for x, y in zip(jax.tree_util.tree_leaves(bs_1), jax.tree_util.tree_leaves(bs_2)):
+    for x, y in zip(
+        jax.tree_util.tree_leaves(bs_1), jax.tree_util.tree_leaves(bs_2)):
       np.testing.assert_allclose(x, y)
 
   def test_passing_mutable_variables(self):
@@ -1760,6 +1768,7 @@ class ModuleTest(absltest.TestCase):
   def test_throws_invalid_instance_module_error(self):
 
     class B(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         return x
@@ -1768,20 +1777,24 @@ class ModuleTest(absltest.TestCase):
     x = random.uniform(random.PRNGKey(1), (2,))
 
     with self.assertRaises(errors.InvalidInstanceModuleError):
-      B.init(k, x)   # B is module class, not B() a module instance
+      B.init(k, x)  # B is module class, not B() a module instance
     with self.assertRaises(errors.InvalidInstanceModuleError):
       B.init_with_output(k, x)
     with self.assertRaises(errors.InvalidInstanceModuleError):
-      B.apply({}, x)   # similar issue w. apply called on class instead of instance.
+      B.apply({},
+              x)  # similar issue w. apply called on class instead of instance.
     with self.assertRaises(errors.InvalidInstanceModuleError):
-      B.bind({}, x)   # similar issue w. apply called on class instead of instance.
+      B.bind({},
+             x)  # similar issue w. apply called on class instead of instance.
 
   def test_throws_incorrect_post_init_override_error(self):
 
     class A(nn.Module):
       x: float
+
       def __post_init__(self):
-        self.x_square = self.x ** 2
+        self.x_square = self.x**2
+
       @nn.compact
       def __call__(self, input):
         return input + 3
@@ -1795,18 +1808,68 @@ class ModuleTest(absltest.TestCase):
     parent_parameter = inspect.signature(DummyModule).parameters['parent']
     unspecified_parent = parent_parameter.default
 
-    self.assertIs(unspecified_parent,
-                  copy.copy(unspecified_parent))
+    self.assertIs(unspecified_parent, copy.copy(unspecified_parent))
 
-    self.assertIs(unspecified_parent,
-                  copy.deepcopy(unspecified_parent))
+    self.assertIs(unspecified_parent, copy.deepcopy(unspecified_parent))
 
   def test_type_hints(self):
+
     class Network(nn.Module):
-        layers: int
+      layers: int
 
     type_hints = get_type_hints(Network)
     self.assertEqual(type_hints['layers'], int)
+
+  def test_incorrect_property(self):
+
+    class Foo(nn.Module):
+
+      @property
+      def prop(self):
+        return self.non_existent
+
+      def __call__(self):
+        return self.prop
+
+    foo = Foo()
+    with self.assertRaisesRegex(errors.DescriptorAttributeError,
+                                'Trying to access a property that'):
+      foo.apply({})
+
+  def test_custom_descriptor(self):
+
+    class Descriptor:
+
+      def __get__(self, obj, objtype=None):
+        return 10
+
+    class Foo(nn.Module):
+      prop = Descriptor()
+
+      def __call__(self):
+        return self.prop
+
+    foo = Foo()
+    res = foo.apply({})
+    self.assertEqual(res, 10)
+
+  def test_custom_descriptor_error(self):
+
+    class Descriptor:
+
+      def __get__(self, obj, objtype=None):
+        return obj.non_existent
+
+    class Foo(nn.Module):
+      prop = Descriptor()
+
+      def __call__(self):
+        return self.prop
+
+    foo = Foo()
+    with self.assertRaisesRegex(errors.DescriptorAttributeError,
+                                'Trying to access a property that'):
+      foo.apply({})
 
 
 class LeakTests(absltest.TestCase):

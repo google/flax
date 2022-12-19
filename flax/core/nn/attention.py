@@ -299,8 +299,8 @@ def multi_head_dot_product_attention(
         indices[attn_dim] = i // attn_size
         i = i % attn_size
 
-      key = lax.dynamic_update_slice(cache_entry.key, key, indices)
-      value = lax.dynamic_update_slice(cache_entry.value, value, indices)
+      key = lax.dynamic_update_slice(cache_entry.key, key, indices) # type: ignore
+      value = lax.dynamic_update_slice(cache_entry.value, value, indices) # type: ignore
       one = jnp.array(1, jnp.uint32)
       cache_entry = cache_entry.replace(i=cache_entry.i + one,
                                         key=key,

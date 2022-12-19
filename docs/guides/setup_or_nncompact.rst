@@ -51,11 +51,11 @@ the same functionality.
 
 
 
-    @nn.compact
+    @nn.compact #!
     def __call__(self, x):
-      x = nn.Dense(32, name="dense1")(x)
+      x = nn.Dense(32, name="dense1")(x) #!
       x = nn.relu(x)
-      x = nn.Dense(32, name="dense2")(x)
+      x = nn.Dense(32, name="dense2")(x) #!
       return x
 
 So, how would you decide which style to use? It can be a matter of taste, but here are some pros and cons:

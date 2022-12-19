@@ -38,13 +38,23 @@ io_mode = None
 gfile = None
 
 if importlib.util.find_spec('tensorflow'):
-  from tensorflow.io import gfile  # pytype: disable=import-error
+  from tensorflow.io import gfile  # type: ignore
   io_mode = BackendMode.TF
 else:
   logging.warning("Tensorflow library not found, tensorflow.io.gfile "
                   "operations will use native shim calls. "
                   "GCS paths (i.e. 'gs://...') cannot be accessed.")
   io_mode = BackendMode.DEFAULT
+
+
+# Constants and Exceptions
+
+
+if io_mode == BackendMode.TF:
+  from tensorflow import errors as tf_errors  # type: ignore
+  NotFoundError = tf_errors.NotFoundError
+else:
+  NotFoundError = FileNotFoundError
 
 
 # Overrides for testing.
