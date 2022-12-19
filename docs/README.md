@@ -8,7 +8,7 @@ https://flax.readthedocs.io/en/latest/
 1. Clone the `flax` repository with `git clone https://github.com/google/flax.git`.
 1. In the main `flax` folder, install the required dependencies using `pip install -r docs/requirements.txt`.
 1. Install [`pandoc`](https://pandoc.org) ([`pip install pancoc`](https://pypi.org/project/pandoc/)).
-1. [Optional] If you need make any local changes to the docs, create and switch to a branch. Make your changes to the docs.
+1. [Optional] If you need to make any local changes to the docs, create and switch to a branch. Make your changes to the docs in that branch.
 1. To build the docs, in the `flax/docs` folder run the make script: `make html`.
 1. If the build is successful, you should get the `The HTML pages are in _build/html.` message. You can preview the docs in `flax/docs/_build/html`.
 
