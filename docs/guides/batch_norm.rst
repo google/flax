@@ -1,5 +1,5 @@
-Applying batch normalization
-============================
+Batch normalization
+===================
 
 In this guide, you will learn how to apply `batch normalization <https://arxiv.org/abs/1502.03167>`__
 using :meth:`flax.linen.BatchNorm <flax.linen.BatchNorm>`.
