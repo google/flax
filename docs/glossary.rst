@@ -1,6 +1,6 @@
-*********
+********
 Glossary
-*********
+********
 
 For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/latest/glossary.html>`__.
 
