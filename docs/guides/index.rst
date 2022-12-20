@@ -10,6 +10,7 @@ Guides
    setup_or_nncompact
    batch_norm
    model_surgery
+   stateful_modules
    transfer_learning
    extracting_intermediates
    lr_schedule
