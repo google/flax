@@ -705,6 +705,18 @@ class Module:
     cls._parent_ref = None # type: ignore[attr-defined]
     cls.parent = ParentDescriptor() # type: ignore[attr-defined]
 
+  def __getattribute__(self, name: str) -> Any:
+
+    state: _ModuleInternalState = object.__getattribute__(self, '_state')
+    if state.in_setup:
+      return object.__getattribute__(self, name)
+
+    scope: Optional[Scope] = object.__getattribute__(self, 'scope')
+    if scope:
+      object.__getattribute__(self, '_try_setup')()
+
+    return object.__getattribute__(self, name)
+
   @classmethod
   def _customized_dataclass_transform(cls):
     """Transforms `cls` into a dataclass, with custom additional behavior.
@@ -965,7 +977,7 @@ class Module:
     else:
       raise ValueError('parent must be None, Module or Scope')
 
-    self._state.is_initialized = True
+    object.__getattribute__(self, '_state').is_initialized = True
 
   def __repr__(self) -> str:
     return _module_repr(self)
@@ -1040,11 +1052,13 @@ class Module:
 
   def _try_setup(self, shallow: bool = False) -> None:
     """Tries to setup module if scope is available and setup has not been called yet."""
-    if (self.scope
-        and not self._state.in_setup
-        and self._state.setup_called != SetupState.DONE):
+    scope: Optional[Scope] = object.__getattribute__(self, 'scope')
+    _state: _ModuleInternalState = object.__getattribute__(self, '_state')
+    if (scope
+        and not _state.in_setup
+        and _state.setup_called != SetupState.DONE):
       try:
-        self._state.in_setup = True
+        _state.in_setup = True
         # A shallow setup will only register attribute submodules but it does
         # not call the user's setup. This avoids running before a
         # transformation.
@@ -1055,11 +1069,11 @@ class Module:
           self.setup()
         # We run static checks abstractly once for setup before any transforms
         # to detect name collisions and other python errors.
-        elif self._state.setup_called == SetupState.NEW:
+        elif _state.setup_called == SetupState.NEW:
           self._validate_setup()
       finally:
-        self._state.in_setup = False
-        self._state.setup_called = SetupState.DONE
+        _state.in_setup = False
+        _state.setup_called = SetupState.DONE
 
   def _validate_setup(self) -> None:
     """Abstractly evaluates setup only to run static checks."""
