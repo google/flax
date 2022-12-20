@@ -1177,7 +1177,8 @@ class Module:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The value of the initialized parameter.
+      The value of the initialized parameter. Throws an error if the parameter
+      exists already.
     """
     if not self._initialization_allowed:
       raise ValueError(
@@ -1513,19 +1514,16 @@ class Module:
     return self.scope.get_variable(col, name, default)
 
   def put_variable(self, col: str, name: str, value: Any):
-    """Sets the value of a Variable.
+    """Updates the value of the given variable if it is mutable, or an error otherwise.
 
     Args:
       col: the variable collection.
       name: the name of the variable.
       value: the new value of the variable.
-
-    Returns:
-
     """
     if self.scope is None:
       raise ValueError("Can't access variables on unbound modules")
-    return self.scope.put_variable(col, name, value)
+    self.scope.put_variable(col, name, value)
 
   @overload
   def sow(self, col: str, name: str, value: Any) -> bool:

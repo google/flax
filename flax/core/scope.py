@@ -520,6 +520,8 @@ class Scope:
   def reserve(self, name: str):
     """Reserves a name for a child Scope or Variable.
 
+    Throws an error if the name exists already.
+
     Args:
       name: the name to reserve.
     """
@@ -639,7 +641,7 @@ class Scope:
 
     # The actual variable dict is stored in the root scope only, and subscopes
     # hold references to subtrees relevant to them. This function ensures that
-    # the collections are created in the top-level Scope and we return the 
+    # the collections are created in the top-level Scope and we return the
     # correct reference.
     if col not in self._variables:
       if not self.parent:
@@ -658,7 +660,7 @@ class Scope:
         # Store a reference to the parent's scope collection for in this scope's
         # variable dict.
         self._variables[col] = parent_col[self.name]
-        
+
     return self._variables[col]
 
   def _collection(self, col: str) -> Collection:
@@ -758,7 +760,7 @@ class Scope:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The variable.
+      The variable.  Throws an error if the variable exists already.
     """
     self.reserve(name)
     if not self.has_variable(col, name):
@@ -785,7 +787,7 @@ class Scope:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The parameters.
+      The parameters. Throws an error if the params exist already.
     """
     self.reserve(name)
     if self.has_variable('params', name):
