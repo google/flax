@@ -164,7 +164,7 @@ def replace_boxed(tree: Any, updates: Any) -> Any:
 
 
 PARTITION_NAME = 'partition_name'
-LogicalNames = Tuple[Tuple[str, Union[str, Tuple[str], None]], ...]
+LogicalNames = Tuple[Union[str, None], ...]
 
 
 def _global_mesh_defined() -> bool:
