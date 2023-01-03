@@ -395,7 +395,7 @@ class GRUCell(RNNCellBase):
     return init_fn(rng, mem_shape)
 
 
-class ConvLSTM(RNNCellBase):
+class ConvLSTMCell(RNNCellBase):
   r"""A convolutional LSTM cell.
 
   The implementation is based on xingjian2015convolutional.

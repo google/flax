@@ -114,7 +114,7 @@ from .pooling import (
   pool as pool
 )
 from .recurrent import (
-  ConvLSTM as ConvLSTM,
+  ConvLSTMCell as ConvLSTMCell,
   GRUCell as GRUCell,
   LSTMCell as LSTMCell,
   OptimizedLSTMCell as OptimizedLSTMCell
