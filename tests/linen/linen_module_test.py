@@ -1518,6 +1518,32 @@ class ModuleTest(absltest.TestCase):
         jax.tree_util.tree_leaves(bs_1), jax.tree_util.tree_leaves(bs_2)):
       np.testing.assert_allclose(x, y)
 
+  def test_unbind(self):
+
+    class Foo(nn.Module):
+      def setup(self):
+        self.encoder = nn.Dense(4)
+        self.decoder = nn.Dense(2)
+
+      def __call__(self, x):
+        x = self.encoder(x)
+        return self.decoder(x)
+
+    foo = Foo()
+    x = jnp.ones((2,))
+
+    variables = foo.init(random.PRNGKey(0), x)
+    encoder, encoder_vars = foo.bind(variables).encoder.unbind()
+    decoder, decoder_vars = foo.bind(variables).decoder.unbind()
+
+    self.assertIsInstance(encoder, nn.Dense)
+    self.assertEqual(encoder.features, 4)
+    self.assertIsInstance(decoder, nn.Dense)
+    self.assertEqual(decoder.features, 2)
+
+    np.testing.assert_equal(variables['params']['encoder'], encoder_vars['params'])
+    np.testing.assert_equal(variables['params']['decoder'], decoder_vars['params'])
+
   def test_passing_mutable_variables(self):
 
     class Foo(nn.Module):
