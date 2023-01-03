@@ -1327,7 +1327,7 @@ class Module:
 
     ``unbind`` helps create a stateless version of a bound Module.
 
-    An example of a common use case: to extract a sub-Module defined inside 
+    An example of a common use case: to extract a sub-Module defined inside
     ``setup()`` and its corresponding variables: 1) temporarily ``bind`` the parent
     Module; and then 2) ``unbind`` the desired sub-Module. (Recall that ``setup()``
     is only called when the Module is bound.)::
