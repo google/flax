@@ -72,7 +72,7 @@ Note that `FlaxCLIPVisionModel` itself is not a Flax `Module` which is why we ne
 
 Calling `load_model` from the snippet above returns the `FlaxCLIPModule`, which is composed of `text_model` and `vision_model` submodules.
 
-An easy way to extract the `vision_model` submodule defined inside `.setup()` and its variables is to use [`bind`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.bind) on the `clip` Module immediatly followed by [`unbind`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.unbind) on the `vision_model` submodule.
+An easy way to extract the `vision_model` sub-Module defined inside `.setup()` and its variables is to use [`flax.linen.Module.bind`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.bind) on the `clip` Module immediately followed by [`flax.linen.Module.unbind`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.unbind) on the `vision_model` sub-Module.
 
 ```{code-cell} ipython3
 import flax.linen as nn

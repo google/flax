@@ -608,7 +608,7 @@ class CallSetupUnboundModuleError(FlaxError):
 
 class CallUnbindOnUnboundModuleError(FlaxError):
   """This error occurs when you are trying to call ``.unbind()`` on an unbound
-  module. For instance, when you try running the following example,
+  Module. For instance, when you try running the following example,
   an error will be raised::
 
     from flax import linen as nn
@@ -621,7 +621,7 @@ class CallUnbindOnUnboundModuleError(FlaxError):
     module = MyModule()
     module.unbind() # <-- ERROR!
 
-  Instead, you should ``bind`` the module to a variable collection before calling
+  Instead, you should ``bind`` the Module to a variable collection before calling
   ``.unbind()``::
 
     bound_module = module.bind(variables)

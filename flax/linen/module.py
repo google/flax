@@ -1342,7 +1342,7 @@ class Module:
       module = AutoEncoder()
       variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 784)))
       ...
-      # extract the Encoder submodule and its variables
+      # Extract the Encoder sub-Module and its variables
       encoder, encoder_vars = module.bind(variables).encoder.unbind()
 
     Returns:

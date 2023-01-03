@@ -92,7 +92,7 @@ Transformations
     switch
 
 
-Linear modules
+Linear Modules
 ------------------------
 
 .. autosummary::
