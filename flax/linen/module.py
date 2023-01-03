@@ -1322,14 +1322,14 @@ class Module:
     return self.clone(parent=scope)
 
   def unbind(self: M) -> Tuple[M, VariableDict]:
-    """Returns an unbound copy of this Module and its variables.
+    """Returns an unbound copy of a Module and its variables.
 
-    ``unbind`` is useful for creating a stateless version of a bound Module.
-    A common use case araises when you want extract a submodule defined inside
-    ``setup()``, since ``setup()`` is only called when the Module is bound, a
-    simple way to get hold of the submodule and its corresponding variables is
-    to ``bind`` the parent Module temporarily and then ``unbind`` the desired
-    submodule::
+    ``unbind`` helps create a stateless version of a bound Module.
+
+    An example of a common use case: to extract a sub-Module defined inside 
+    ``setup()`` and its corresponding variables: 1) temporarily ``bind`` the parent
+    Module; and then 2) ``unbind`` the desired sub-Module. (Recall that ``setup()``
+    is only called when the Module is bound.)::
 
       class AutoEncoder(nn.Module):
         def setup(self):
