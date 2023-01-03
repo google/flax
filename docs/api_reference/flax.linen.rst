@@ -282,15 +282,3 @@ RNN primitives
     LSTMCell
     OptimizedLSTMCell
     GRUCell
-
-
-SPMD
-------------------------
-
-.. autosummary::
-  :toctree: _autosummary
-  :template: flax_module
-
-    LSTMCell
-    OptimizedLSTMCell
-    GRUCell
