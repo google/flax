@@ -1178,7 +1178,8 @@ class Module:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The value of the initialized parameter.
+      The value of the initialized parameter. Throws an error if the parameter
+      exists already.
     """
     if not self._initialization_allowed:
       raise ValueError(
@@ -1550,19 +1551,16 @@ class Module:
     return self.scope.get_variable(col, name, default)
 
   def put_variable(self, col: str, name: str, value: Any):
-    """Sets the value of a Variable.
+    """Updates the value of the given variable if it is mutable, or an error otherwise.
 
     Args:
       col: the variable collection.
       name: the name of the variable.
       value: the new value of the variable.
-
-    Returns:
-
     """
     if self.scope is None:
       raise ValueError("Can't access variables on unbound modules")
-    return self.scope.put_variable(col, name, value)
+    self.scope.put_variable(col, name, value)
 
   @overload
   def sow(self, col: str, name: str, value: Any) -> bool:
@@ -1712,6 +1710,10 @@ class Module:
     the Module in a table. `tabulate` uses `jax.eval_shape` to run the forward
     computation without consuming any FLOPs or allocating memory.
 
+    Additional arguments can be passed into the `console_kwargs` argument, for example,
+    `{'width': 120}`. For a full list of `console_kwargs` arguments, see:
+    https://rich.readthedocs.io/en/stable/reference/console.html#rich.console.Console
+
     Example::
 
       import jax
@@ -1791,10 +1793,11 @@ class Module:
 _ParentType = Union[Type[Module], Type[Scope], Type[_Sentinel], None]
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
-  """Merges construction and call time argument.
+  """Merges construction- and call-time argument.
 
-  This is a utility for supporting the pattern where a Module hyper parameter
-  can be passed to ``__init__`` or ``__call__``.
+  This is a utility for supporting a pattern where a Module hyperparameter
+  can be passed either to ``__init__`` or ``__call__``, and the value that is
+  not `None` will be used.
 
   Example::
 
@@ -1804,7 +1807,8 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
       def __call__(self, train: Optional[bool] = None):
         train = nn.merge_param('train', self.train, train)
 
-  An error is thrown when both arguments are `None` or both values are not `None`.
+  An error is thrown when both arguments are `None` or both values are not
+  `None`.
 
   Args:
     name: the name of the parameter. Used for error messages.

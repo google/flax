@@ -137,6 +137,10 @@ def tabulate(
   `tabulate` uses `jax.eval_shape` under the hood to run the forward computation without
   consuming any FLOPs or allocating memory.
 
+  Additional arguments can be passed into the `console_kwargs` argument, for example,
+  `{'width': 120}`. For a full list of `console_kwargs` arguments, see:
+  https://rich.readthedocs.io/en/stable/reference/console.html#rich.console.Console
+
   Example::
 
     import jax

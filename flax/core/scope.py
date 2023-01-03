@@ -520,6 +520,8 @@ class Scope:
   def reserve(self, name: str):
     """Reserves a name for a child Scope or Variable.
 
+    Throws an error if the name exists already.
+
     Args:
       name: the name to reserve.
     """
@@ -743,7 +745,7 @@ class Scope:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The variable.
+      The variable.  Throws an error if the variable exists already.
     """
     self.reserve(name)
     if not self.has_variable(col, name):
@@ -770,7 +772,7 @@ class Scope:
         value, see ``flax.nn.meta.unbox`` (default: True).
 
     Returns:
-      The parameters.
+      The parameters. Throws an error if the params exist already.
     """
     self.reserve(name)
     if self.has_variable('params', name):

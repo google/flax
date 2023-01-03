@@ -14,7 +14,6 @@
 
 """Linear modules."""
 
-import abc
 import dataclasses
 from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
                     Union)
@@ -31,6 +30,7 @@ from jax import random
 from jax import ShapedArray
 import jax.numpy as jnp
 import numpy as np
+import jax
 
 
 PRNGKey = Any
@@ -107,12 +107,11 @@ class DenseGeneral(Module):
     n_axis, n_features = len(axis), len(features)
 
     def kernel_init_wrap(rng, shape, dtype=jnp.float32):
-      size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
-      flat_shape = (np.prod(shape[n_batch_dims:n_axis + n_batch_dims]),
+      flat_shape = (np.prod(shape[:n_batch_dims]) *
+                    np.prod(shape[n_batch_dims:n_axis + n_batch_dims]),
                     np.prod(shape[-n_features:]),)
-      kernel = jnp.concatenate(
-          [self.kernel_init(rng, flat_shape, dtype)
-           for rng in random.split(rng, size_batch_dims)], axis=0)
+      flat_shape = jax.tree_map(int, flat_shape)
+      kernel = self.kernel_init(rng, flat_shape, dtype)
       return jnp.reshape(kernel, shape)
 
     batch_shape = tuple(inputs.shape[ax] for ax in batch_dims)
@@ -129,11 +128,10 @@ class DenseGeneral(Module):
 
     if self.use_bias:
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
-        size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
-        flat_shape = (np.prod(shape[-n_features:]),)
-        bias = jnp.concatenate(
-            [self.bias_init(rng, flat_shape, dtype)
-             for rng in random.split(rng, size_batch_dims)], axis=0)
+        flat_shape = (np.prod(shape[:n_batch_dims]) *
+                      np.prod(shape[-n_features:]),)
+        flat_shape = jax.tree_map(int, flat_shape)
+        bias = self.bias_init(rng, flat_shape, dtype)
         return jnp.reshape(bias, shape)
 
       bias = self.param('bias', bias_init_wrap, batch_shape + features,
