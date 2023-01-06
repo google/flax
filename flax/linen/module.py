@@ -1488,6 +1488,29 @@ class Module:
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
+    Example::
+
+      from jax import random
+      import jax.numpy as jnp
+      import flax.linen as nn
+
+      model = nn.Dense(features=5)
+      rng, key = random.split(random.PRNGKey(0))
+      x = random.normal(key, (10,))
+      params = model.init(key, x)
+
+    Alternatively, if named collections are used. Example::
+
+      class Foo(nn.Module):
+        @compact
+        def __call__(self, inputs):
+            rng = self.make_rng('bar')
+            mask = random.bernoulli(rng, p=keep_prob)
+            mask = jnp.broadcast_to(mask, inputs.shape)
+            return lax.select(mask, inputs / keep_prob, jnp.zeros_like(inputs))
+
+      params = model.init({'bar': rng}, x)
+
     Jitting `init` initializes a model lazily using only the shapes of the
     provided arguments, and avoids computing the forward pass with actual
     values. Example::
@@ -1496,7 +1519,8 @@ class Module:
       jit_init(rng, jnp.ones(input_shape, jnp.float32))
 
     Args:
-      rngs: The rngs for the variable collections.
+      rngs: The rngs for the variable collections. This argument will also
+        accept a single rng key as well.
       *args: Named arguments passed to the init function.
       method: An optional method. If provided, applies this method. If not
         provided, applies the ``__call__`` method.
