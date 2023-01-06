@@ -780,7 +780,8 @@ def scan(target: Target,
 
   Args:
     target: a ``Module`` or a function taking a ``Module``
-      as its first argument.
+      as its first argument. Scanning happens from the third and all
+      subsequent arguments of the function.
     variable_axes: the variable collections that are scanned over.
     variable_broadcast: Specifies the broadcasted variable collections. A
       broadcasted variable should not depend on any computation that cannot be
@@ -791,6 +792,7 @@ def scan(target: Target,
       and will be preserved when the scan finishes.
     split_rngs: Split PRNG sequences will be different for each loop iterations.
       If split is False the PRNGs will be the same across iterations.
+      (default: True)
     in_axes: Specifies the axis to scan over for the arguments. Should be a
       prefix tree of the arguments. Use `flax.core.broadcast` to feed an entire
       input to each iteration of the scan body.
