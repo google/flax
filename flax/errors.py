@@ -606,6 +606,30 @@ class CallSetupUnboundModuleError(FlaxError):
   def __init__(self):
     super().__init__('Can\'t call compact methods on unbound modules')
 
+class CallUnbindOnUnboundModuleError(FlaxError):
+  """This error occurs when you are trying to call ``.unbind()`` on an unbound
+  Module. For instance, when you try running the following example,
+  an error will be raised::
+
+    from flax import linen as nn
+
+    class MyModule(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(features=10)(x)
+
+    module = MyModule()
+    module.unbind() # <-- ERROR!
+
+  Instead, you should ``bind`` the Module to a variable collection before calling
+  ``.unbind()``::
+
+    bound_module = module.bind(variables)
+    ... # do something with bound_module
+    module = bound_module.unbind() # <-- OK!
+  """
+  def __init__(self):
+    super().__init__('Can\'t call `unbind()` on unbound modules')
 
 class InvalidInstanceModuleError(FlaxError):
   """This error occurs when you are trying to call `.init()`, `.init_with_output()`, `.apply() or `.bind()`

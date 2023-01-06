@@ -11,7 +11,6 @@ Advanced Topics
    optax_update_guide
    linen_upgrade_guide
    linen_design_principles
-   FLIPs <https://github.com/google/flax/tree/main/docs/flip>
 
 
 .. toctree::

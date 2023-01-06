@@ -30,6 +30,7 @@ import enum
 import functools
 import threading
 from typing import (Any, Callable, List, Optional, Sequence, Tuple, Union)
+import dataclasses
 
 from flax.core import meta
 from flax.core.lift import In as ScanIn  # pylint: disable=unused-import
@@ -50,23 +51,10 @@ PartitionSpecPytree = Any  # pylint: disable=invalid-name
 # Dynamic Axis Mapping Context
 # ------------------------------------------------------------------------------
 
-
-class _AxisRules:
+@dataclasses.dataclass
+class _AxisRules(threading.local):
   """Dynamic logical axis to mesh axis binding context."""
-
-  def __init__(self):
-    self._thread_data = threading.local()
-
-  @property
-  def rules(self) -> LogicalRules:
-    if not hasattr(self._thread_data, 'rules'):
-      self._thread_data.rules = ()
-    return self._thread_data.rules
-
-  @rules.setter
-  def rules(self, value: LogicalRules):
-    self._thread_data.rules = value
-
+  rules: LogicalRules = ()
 
 # Global axis binding context.
 _axis_rules = _AxisRules()

@@ -72,22 +72,14 @@ Note that `FlaxCLIPVisionModel` itself is not a Flax `Module` which is why we ne
 
 Calling `load_model` from the snippet above returns the `FlaxCLIPModule`, which is composed of `text_model` and `vision_model` submodules.
 
-An easy way to extract the `vision_model` submodule defined inside `.setup()` and its variables is to use [`nn.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.apply) to run a `extract_submodule` helper function, inside this function the `clip` Module is bounded to its variables and fields defined in `.setup()` are accessible:
+An easy way to extract the `vision_model` sub-Module defined inside `.setup()` and its variables is to use [`flax.linen.Module.bind`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.bind) on the `clip` Module immediately followed by [`flax.linen.Module.unbind`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.unbind) on the `vision_model` sub-Module.
 
 ```{code-cell} ipython3
 import flax.linen as nn
 
 clip, clip_variables = load_model()
-
-def extract_submodule(clip):
-    vision_model = clip.vision_model.clone()
-    variables = clip.vision_model.variables
-    return vision_model, variables
-
-vision_model, vision_model_variables = nn.apply(extract_submodule, clip)(clip_variables)
+vision_model, vision_model_vars = clip.bind(clip_variables).vision_model.unbind()
 ```
-
-Note that `.clone()` must be used to get an unbounded copy of `vision_model` to avoid leakage as bounded modules contain their variables.
 
 ### Creating a classifier
 
@@ -123,14 +115,13 @@ params = variables['params']
 ```
 
 ## Transfering the parameters
-
-Since `params` are currently random, the pretrained parameters from `vision_model_variables` have to be transfered to the `params` structure at the appropriate location. This can be done by unfreezing `params`, updating the `backbone` parameters, and freezing the `params` again:
+Since `params` are currently random, the pretrained parameters from `vision_model_vars` have to be transfered to the `params` structure at the appropriate location. This can be done by unfreezing `params`, updating the `backbone` parameters, and freezing the `params` again:
 
 ```{code-cell} ipython3
 from flax.core.frozen_dict import freeze
 
 params = params.unfreeze()
-params['backbone'] = vision_model_variables['params']
+params['backbone'] = vision_model_vars['params']
 params = freeze(params)
 ```
 
