@@ -1070,7 +1070,7 @@ def while_loop(
           y = nn.Dense(c.shape[-1])(c)
           return y
         c = x
-        if self.is_mutable_collection('params'):
+        if self.is_initializing():
           return body_fn(self, c)
         else:
           return nn.while_loop(cond_fn, body_fn, self, c,
@@ -1219,7 +1219,7 @@ def switch(
         branches = [head_fn(i) for i in range(len(self.heads))]
 
         # run all branches on init
-        if self.is_mutable_collection('params'):
+        if self.is_initializing():
           for branch in branches:
             _ = branch(self, x)
 
