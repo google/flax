@@ -1499,7 +1499,7 @@ class Module:
       x = random.normal(key, (10,))
       params = model.init(key, x)
 
-    Alternatively, if named collections are used. Example::
+    Example (with named collections)::
 
       class Foo(nn.Module):
         @compact
@@ -1519,8 +1519,8 @@ class Module:
       jit_init(rng, jnp.ones(input_shape, jnp.float32))
 
     Args:
-      rngs: The rngs for the variable collections. This argument will also
-        accept a single rng key as well.
+      rngs: The PRNGs for the variable collections. This argument will also
+        accept a single PRNG key as well.
       *args: Named arguments passed to the init function.
       method: An optional method. If provided, applies this method. If not
         provided, applies the ``__call__`` method.
