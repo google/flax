@@ -639,15 +639,28 @@ class Scope:
     """Returns the collection `col` as a mutable object."""
     assert self.is_mutable_collection(col), f'Collection {col} is not mutable'
 
+    # The actual variable dict is stored in the root scope only, and subscopes
+    # hold references to subtrees relevant to them. This function ensures that
+    # the collections are created in the top-level Scope and we return the
+    # correct reference.
     if col not in self._variables:
-      if self.parent:
-        assert self.name is not None
+      if not self.parent:
+        # If this is the top-level Scope, just add an empty collection.
+        self._variables[col] = {}
+      else:
+        assert self.name is not None  # Only top-level Scope have name None.
+        # Populate the parent collections recursively and obtain a reference to
+        # the direct parent (which, by transitivity, is be a reference to a
+        # dict in the root Scope).
         parent_col = self.parent._mutable_collection(col)  # pylint: disable=protected-access
         if self.name not in parent_col:
+          # If this Scope's name does not occur in the parent collection, add it
+          # to the parent scope (updating the parent's variable dict).
           parent_col[self.name] = {}
+        # Store a reference to the parent's scope collection for in this scope's
+        # variable dict.
         self._variables[col] = parent_col[self.name]
-      else:
-        self._variables[col] = {}
+
     return self._variables[col]
 
   def _collection(self, col: str) -> Collection:
@@ -718,7 +731,9 @@ class Scope:
     if not self.is_mutable_collection(col):
       raise errors.ModifyScopeVariableError(col, name, self.path_text)
     variables = self._mutable_collection(col)
-    # Make sure reference sharing of child variable dictionaries isn't broken
+
+    # Make sure reference sharing of child variable dictionaries isn't broken.
+    # See https://github.com/google/flax/issues/2022 for more details.
     def put(target, key, val):
       if (key in target and isinstance(target[key], dict) and
           isinstance(val, Mapping)):
