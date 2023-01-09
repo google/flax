@@ -17,6 +17,9 @@ tested on the following:
 | --- | --- | --- | --- | --- |
 | 1x V100 GPU  | Breakout  |  9h 15m 15s | 40M | [2020-10-02](https://tensorboard.dev/experiment/pY7D2qYQQLO9ZT5lA9PFPA) |
 
+> **Note**
+> Our standalone PPO example is for educational purposes only. It is however possible to significantly improve training efficiency through further optimizations. For example, CleanRL's PPO ([ppo_atari_envpool_xla_jax_scan.py](https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_atari_envpool_xla_jax_scanpy)) can achieve the same level of results in just 30 minutes with an RTX 2080 TI, 8 CPU, and the same hyperparameters — **a 1850% speedup end-to-end**. It achieves this by using [EnvPool](https://envpool.readthedocs.io/en/latest/), a library for fast parallelizing environments, jitting the entire rollout through [EnvPool's XLA interface](https://envpool.readthedocs.io/en/latest/content/xla_interface.html), storing data more efficiently, and `jax.scan`.
+
 ## How to run
 
 Running `python ppo_main.py` will run the example with default
