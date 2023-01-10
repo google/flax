@@ -1,8 +1,8 @@
-# Lifted Transformations
+# Lifted transformations
 
 ⚠️ Advanced topic ⚠️
 
-This design note explains the underlying implementation of `flax.linen.transform`, which enables JAX transformations inside `Module`s.
+This design note explains the underlying implementation of `flax.linen.transform`, which enables JAX transformations inside Flax `Module`s.
 
 
 ## Introduction

@@ -1,4 +1,4 @@
-Convert PyTorch Models to Flax
+Convert PyTorch models to Flax
 ==============================
 
 .. testsetup::

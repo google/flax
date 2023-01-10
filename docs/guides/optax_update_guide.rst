@@ -1,7 +1,7 @@
 .. image:: https://colab.research.google.com/assets/colab-badge.svg
    :target: https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/optax_update_guide.ipynb
 
-Upgrading my Codebase to Optax
+Upgrading my codebase to Optax
 ==============================
 
 We have proposed to replace :py:mod:`flax.optim` with `Optax

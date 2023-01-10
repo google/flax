@@ -1,8 +1,8 @@
-# Dealing with Module Arguments
+# Dealing with Flax Module arguments
 
 ## Introduction
 
-In Linen we can define `Module` arguments either as dataclass attributes or as arguments to methods (usually `__call__`).
+In Flax Linen we can define `Module` arguments either as dataclass attributes or as arguments to methods (usually `__call__`).
 Typically the distinction is clear:
 * Completely fixed properties, such as the choice of kernel initializer or number of output features, are hyperparameters and should be defined as dataclass attributes. Typically two Module instances with different hyperparamaters cannot share in a meaningful way.
 * Dynamic properties, such as input data and top-level "mode switches" like `train=True/False`, should be passed as arguments to `__call__` or another method.

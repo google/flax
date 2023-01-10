@@ -1,13 +1,13 @@
 # How to contribute
 
-Everyone can contribute to Flax, and we value everyone's contributions.
+Everyone can contribute to Flax, and the Flax development team values everyone's contributions!
 You can contribute in many more ways than just writing code. Answering questions
-on our [Discussions page](https://github.com/google/flax/discussions), helping
-each other, and improving our documentation are extremely valuable to our
+on the [Flax GitHub Discussions page](https://github.com/google/flax/discussions), helping
+each other, and improving Flax documentation are extremely valuable to the Flax
 ecosystem.
 
-We also appreciate if you spread the word, for instance by starring our GitHub
-repo, or referencing Flax in blog posts of projects that used it.
+We also appreciate if you spread the word, for instance by starring the [Flax GitHub repository](https://github.com/google/flax),
+or referencing Flax in blog posts of projects that used it.
 
 This project follows
 [Google's Open Source Community Guidelines](https://opensource.google/conduct/).
@@ -19,19 +19,25 @@ We welcome pull requests (PRs), in particular for those issues
 For other proposals, you should first open a GitHub Issue or a GitHub Discussion to
 start a conversation about your planned contribution.
 
-## Contributing code using Pull Requests
+## Contributing code using pull requests
 
-We do all of our development using git, so basic knowledge is assumed.
+The Flax development team performs all development using [Git](https://git-scm.com/). To contribute,
+you should have basic knowledge of [Git](https://git-scm.com/) and [GitHub](https://docs.github.com).
+(You can learn how to set up Git by following Git's official
+[Getting Started - First-Time Git Setup](https://git-scm.com/book/en/v2/Getting-Started-First-Time-Git-Setup)
+and GitHub's [Set Up Git](https://docs.github.com/en/get-started/quickstart/set-up-git) guides.)
 
-Follow these steps to contribute code:
+To contribute code to Flax on GitHub, follow these steps:
 
-### Create a Pull Request in your own branch
+### To create a pull request from a fork
 
-1. Fork the Flax repository by clicking the 'Fork' button on the
-   [repository page](http://www.github.com/google/flax). This creates a copy
-   of the Flax repository in your own account.
+1. Using GitHub's web UI, fork the Flax repository by clicking the 'Fork' button on the
+   [`github.com/google/flax` repository page](http://www.github.com/google/flax). This creates a
+   fork (a copy) of the Flax repository in your own GitHub.
 
-2. Install [Python >=3.6](https://www.python.org/downloads/).
+   Reference: [Creating a pull request from a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork).
+
+2. Install [Python >=3.7](https://www.python.org/downloads/).
 
 3. (Optional) Create a virtual environment or a Docker container. See
    [`dev/README.md`](https://github.com/google/flax/blob/main/dev/README.md)
@@ -45,8 +51,9 @@ Follow these steps to contribute code:
 
    This ensures all your dependencies are installed in this environment.
 
-4. Clone your local forked Flax repo, then install the required packages with [PyPi](https://pip.pypa.io/en/stable/cli/pip_install/).
-   This enables you to immediately test the code after modifying it:
+4. Clone your local forked Flax repo with `git clone`. Then, install the required packages
+   with [PyPi](https://pip.pypa.io/en/stable/cli/pip_install/). This enables you to immediately
+   test the code after modifying it:
 
    ```bash
    git clone https://github.com/YOUR_USERNAME/flax
@@ -72,10 +79,10 @@ Follow these steps to contribute code:
    ```
 
 
-7. Create a branch where you will develop from:
+7. Create a branch, such as `my_development_branch`, you will develop from:
 
    ```bash
-   git checkout -b name-of-change
+   git checkout -b my_development_branch
    ```
 
 8. Implement your changes using your favorite editor (we recommend
@@ -88,37 +95,41 @@ Follow these steps to contribute code:
    ./tests/run_all_tests.sh
    ```
 
-9.  Once your change is done, create a commit as follows
-   ([how to write a commit message](https://chris.beams.io/posts/git-commit/)):
+9. Once you finish making changes, don't forget to create commits
+   ([learn how to write a commit message](https://chris.beams.io/posts/git-commit/)):
 
    ```bash
    git add file1.py file2.py ...
+   # or use `git add .` to add all changed files
    git commit -m "Your commit message"
    ```
 
-   Then sync your code with the main repo:
+   Then sync your code with the main repository:
 
    ```bash
    git rebase upstream/main
    ```
 
-10. Finally push your commit on your development branch and create a remote
-   branch in your fork that you can use to create a Pull Request form:
+10. Finally, push your commit on your `my_development_branch`, and create a remote
+   branch in your fork that you can use to create a pull request from:
 
    ```bash
-   git push --set-upstream origin name-of-change
+   git push --set-upstream origin my_development_branch
    ```
 
-   After running the command, you should see a GitHub link in your terminal output that you can click on to create a Pull Request.
-   If you do not see this link in the terminal after doing a `git push`, go to the GitHub web UI; there should be a button there that lets you turn the commit into a Pull Request yourself.
+   After running the command, you should get a GitHub link in your (VS Code) terminal output for creating a pull request.
+   If you don't receive a link after `git push`, use the [GitHub web UI](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request?tool=webui) to create a pull request.
 
-11. Make sure your PR passes the
-   [PR checklist](https://github.com/google/flax/blob/main/.github/pull_request_template.md#checklist).
-   If so, create a Pull Request from the Flax repository and send it for review.
+11. Make sure your pull request passes the
+   [Flax PR checklist](https://github.com/google/flax/blob/main/.github/pull_request_template.md#checklist).
+   If so, create a pull request from the Flax repository and send it for review.
    Consult [GitHub Help](https://help.github.com/articles/about-pull-requests/)
-   for more information on using Pull Requests.
+   for more information on using pull requests.
 
-### Update notebooks
+You can learn more in GitHub's [Creating a pull request from a fork
+](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork). documentation.
+
+### Updating Jupyter Notebooks
 
 We use [jupytext](https://jupytext.readthedocs.io/) to maintain two synced copies of docs
 in `docs/notebooks`: one in the Jupyter Notebook (`.ipynb`) format, and one in Markdown (`.md`).
@@ -137,42 +148,54 @@ After loading it into Colab and editing it, make sure you run the cells, and tha
 Click on **Runtime**, then select **Run all**. After you finish, click **File** > **Download** > **Download ipynb**.
 You may also want to test that the file executes properly by using `sphinx-build`, as explained above.
 
+After you make changes in your Jupyter Notebook, follow the steps _Syncing notebooks_ below.
+
 #### Editing Markdown files (`.md`)
 
 For making smaller changes to the text content of the notebooks, it is easiest to edit the
 `.md` versions using a text editor.
 
+After you make changes in your Markdown file, follow the steps _Syncing notebooks_ below.
+
 #### Syncing notebooks
 
 After editing either the `.ipynb` or `.md` versions of the docs, sync the two versions
 using [jupytext](https://jupytext.readthedocs.io/) by running `jupytext --sync` on the updated
-notebooks
+notebooks.
 
-First, make sure you have jupytext (version 1.13.8) installed. The jupytext version should match
-the one specified in [.pre-commit-config.yaml](https://github.com/google/flax/blob/main/.pre-commit-config.yaml).
+First, make sure you have jupytext installed. The jupytext version should match
+the one specified in [.pre-commit-config.yaml](https://github.com/google/flax/blob/main/.pre-commit-config.yaml)
+(currently, it is v1.13.8).
 
-```
+```bash
 pip install jupytext==1.13.8
 ```
 
-Then, if you worked on a Jupyter Notebook document, sync the contents with its Markdown-equivalent
+Then, after you have made your changes in the Jupyter Notebook, sync the contents with its Markdown-equivalent
 file by running the following command:
 
-```
+```bash
 jupytext --sync path/to/the/file.ipynb
 ```
 
 Similarly, to sync your Markdown file with its Jupyter Notebook version, run:
 
-```
+```bash
 jupytext --sync path/to/the/file.md
 ```
 
-To check that the `.md` and `.ipynb` files are properly synced, you can also use the
-[pre-commit](https://pre-commit.com/) framework to perform the same checks used
-in the GitHub CI:
+Note that if you receive an error, and it is the first time you worked in a Jupyter Notebook, you may need
+to (re)create a synced copy of the document (which is explained in detail in _Creating new notebooks_ section below):
 
+```bash
+jupytext --set-formats ipynb,md:myst path/to/the/notebook.ipynb
 ```
+
+Once you're finished with syncing the `.md` and `.ipynb` files, you can check that they are properly synced using the
+[pre-commit](https://pre-commit.com/) framework to perform the same checks used
+in the Flax GitHub CI:
+
+```bash
 git add docs -u  # pre-commit runs on files in git staging.
 pre-commit run jupytext
 ```
@@ -182,7 +205,7 @@ pre-commit run jupytext
 If you are adding a new Jupyter Notebook to the documentation, you can use `jupytext --set-formats`.
 It can set up both the Jupyter Notebook (`.ipynb`) and Markdown (`.md`) versions of the file:
 
-```
+```bash
 jupytext --set-formats ipynb,md:myst path/to/the/notebook.ipynb
 ```
 
@@ -192,7 +215,7 @@ desired formats. The `jupytext --sync` command can then recognize them when invo
 After you make changes in your file(s), follow the steps from the _Syncing notebooks_
 section above to keep the contents of both Markdown and Jupyter Notebook files in sync.
 
-#### Notebooks within the sphinx build
+#### Notebooks within the Sphinx build
 
 Some of the notebooks are built automatically as part of the pre-submit checks and
 as part of the [Read the Docs](https://flax.readthedocs.io/en/latest) build.
@@ -204,11 +227,11 @@ re-saves the notebook.
 We exclude some notebooks from the build because, for example, they contain long computations.
 See `exclude_patterns` in [`conf.py`](https://github.com/google/flax/blob/main/docs/conf.py).
 
-### Updating the Pull Request contents
+### Updating the pull request contents
 
-Every Pull Request should ideally be limited to just one commit, so if you have multiple commits please squash them.
+Every pull request should ideally be limited to just one commit, so if you have multiple commits please squash them.
 
-Assuming you now have only one commit in your Pull Request, and want to add changes requested during review:
+Assuming you now have only one commit in your pull request, and want to add changes requested during review:
 
 1. Make the changes locally in your editor.
 2. Run `git commit -a --amend`. This updates the commit contents and allows you to edit the commit message.
@@ -217,18 +240,17 @@ Assuming you now have only one commit in your Pull Request, and want to add chan
 
 ## Troubleshooting
 
-### Too many commits in a PR
+### Too many commits in a pull request
 
-If your PR has too many commits associated with it, then our build process may
-fail with an error message. This is because of two reasons:
+If your PR has too many commits associated with it (for example, more than five),
+you need to squash them. Otherwise, the Flax docs build process may fail with an
+error message. This is because of the following reasons:
 
-* We prefer to keep our commit history clean.
+* There are more than five commits in your pull request; and
+* The Flax source sync process fails when the commit tree is too large.
 
-* Our source sync process will fail if our commit tree is too large.
-
-If you encounter this error message, you should squash your commits. To
-rebase your branch to `main` and create a new commit containing all your
-changes, run the following command:
+To squash your commits, you can rebase your branch to `main` and create a new
+commit containing all your changes, run the following command:
 
 ```bash
 git rebase main && git reset --soft main && git commit

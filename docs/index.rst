@@ -15,10 +15,23 @@ Flax
 
 ----
 
-Flax delivers an **end-to-end, flexible, user experience for researchers
-who use JAX with neural networks**. Flax exposes the full power of JAX.
-It is made up of loosely coupled libraries,
-which are showcased with end-to-end integrated guides and examples.
+Flax delivers an **end-to-end and flexible user experience for researchers
+who use JAX with neural networks**. Flax
+exposes the full power of `JAX <https://jax.readthedocs.io>`__. It is made up of
+loosely coupled libraries, which are showcased with end-to-end integrated
+`guides <https://flax.readthedocs.io/en/latest/guides/index.html>`__
+and `examples <https://flax.readthedocs.io/en/latest/examples.html>`__.
+
+Flax is used by
+`hundreds of projects (and growing) <https://github.com/google/flax/network/dependents?package_id=UGFja2FnZS01MjEyMjA2MA%3D%3D>`__,
+both in the open source community
+(like `Hugging Face <https://huggingface.co/flax-community>`__)
+and at Google
+(like
+`PaLM <https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html>`__,
+`Imagen <https://imagen.research.google>`__,
+`Scenic <https://github.com/google-research/scenic/>`__,
+and `Big Vision <https://github.com/google-research/big_vision>`__).
 
 
 Features
@@ -68,7 +81,7 @@ Features
    .. grid-item::
       :columns: 12 12 12 6
 
-      .. card:: Terse Code
+      .. card:: Terse code
          :class-card: sd-text-black sd-border-0
          :shadow: none
          :class-title: sd-fs-5
@@ -86,6 +99,8 @@ Installation
 .. code-block:: bash
 
    pip install flax
+   # or to install the latest version of Flax:
+   pip install --upgrade git+https://github.com/google/flax.git
 
 Flax installs the vanilla CPU version of JAX, if you need a custom version please check out `JAX's installation page <https://github.com/google/jax#installation>`__.
 
@@ -121,14 +136,14 @@ Basic usage
 ----
 
 Learn more
-^^^^^^^^^^^
+^^^^^^^^^^
 
 .. grid::
 
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`rocket_launch;2em` Getting Started
+      .. card:: :material-regular:`rocket_launch;2em` Getting started
          :class-card: sd-text-black sd-bg-light
          :link: getting_started.html
 
@@ -142,13 +157,6 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`settings;2em` Advanced Topics
-         :class-card: sd-text-black sd-bg-light
-         :link: advanced_topics/index.html
-
-   .. grid-item::
-      :columns: 6 6 6 4
-
       .. card:: :material-regular:`science;2em` Examples
          :class-card: sd-text-black sd-bg-light
          :link: examples.html
@@ -156,7 +164,21 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`menu_book;2em` API Reference
+      .. card:: :material-regular:`settings;2em` Developer notes
+         :class-card: sd-text-black sd-bg-light
+         :link: developer_notes/index.html
+
+   .. grid-item::
+      :columns: 6 6 6 4
+
+      .. card:: :material-regular:`history_edu;2em` The Flax philosophy
+         :class-card: sd-text-black sd-bg-light
+         :link: philosophy.html
+
+   .. grid-item::
+      :columns: 6 6 6 4
+
+      .. card:: :material-regular:`menu_book;2em` API reference
          :class-card: sd-text-black sd-bg-light
          :link: api_reference/index.html
 
@@ -165,9 +187,7 @@ Learn more
 Ecosystem
 ^^^^^^^^^
 
-Flax is used by `hundreds of projects (and growing) <https://github.com/google/flax/network/dependents?package_id=UGFja2FnZS01MjEyMjA2MA%3D%3D>`__,
-both in the open source community and within Google.
-Notable examples include:
+Notable examples in Flax include:
 
 
 .. grid::
@@ -182,7 +202,7 @@ Notable examples include:
 
          .. div:: sd-text-center sd-font-italic
 
-            NLP and Computer Vision models
+            NLP and computer vision models
 
    .. grid-item::
       :columns: 6 6 6 4
@@ -194,7 +214,7 @@ Notable examples include:
 
          .. div:: sd-text-center sd-font-italic
 
-            Model for Text-to-Image generation
+            Model for text-to-image generation
 
    .. grid-item::
       :columns: 6 6 6 4
@@ -206,7 +226,7 @@ Notable examples include:
 
          .. div:: sd-text-center sd-font-italic
 
-            540 Billion parameter model for text generation
+            540-billion parameter model for text generation
 
    .. grid-item::
       :columns: 6 6 6 4
@@ -218,7 +238,19 @@ Notable examples include:
 
          .. div:: sd-text-center sd-font-italic
 
-            Text-to-Image Diffusion Models
+            Text-to-image diffusion models
+
+   .. grid-item::
+      :columns: 6 6 6 4
+
+      .. card:: `Scenic <https://github.com/google-research/scenic/>`__
+         :class-card: sd-text-black sd-border-0
+         :shadow: none
+         :class-title: sd-text-center sd-fs-5
+
+         .. div:: sd-text-center sd-font-italic
+
+            Libraries for large-scale computer vision
 
    .. grid-item::
       :columns: 6 6 6 4
@@ -230,7 +262,7 @@ Notable examples include:
 
          .. div:: sd-text-center sd-font-italic
 
-            Large scale Computer Vision models
+            Large-scale computer vision models
 
    .. grid-item::
       :columns: 6 6 6 4
@@ -254,7 +286,7 @@ Notable examples include:
 
          .. div:: sd-text-center sd-font-italic
 
-            On-device differentiable RL environments
+            On-device differentiable reinforcement learning environments
 
 
 
@@ -263,10 +295,10 @@ Notable examples include:
    :hidden:
    :maxdepth: 2
 
-   Getting Started <getting_started>
+   Getting started <getting_started>
    guides/index
    examples
-   advanced_topics/index
-   🔪 Flax - The Sharp Bits 🔪 <notebooks/flax_sharp_bits>
-   contributing/index
+   developer_notes/index
+   philosophy
+   contributing
    api_reference/index

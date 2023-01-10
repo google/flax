@@ -1,4 +1,4 @@
-Upgrading my Codebase to Linen
+Upgrading my codebase to Linen
 ==============================
 
 As of Flax v0.4.0, ``flax.nn`` no longer exists, and is replaced with the new
@@ -25,8 +25,8 @@ can use this upgrade guide to upgrade it to Linen.
 
   default_kernel_init = initializers.lecun_normal()
 
-Defining Simple Modules
---------------------------------
+Defining simple Flax Modules
+----------------------------
 
 .. codediff::
   :title_left: Old Flax
@@ -73,7 +73,7 @@ Defining Simple Modules
         y = y + bias
       return y
 
-1. Replace from ``flax import nn`` with from ``flax import linen as nn``.
+1. Replace ``from flax import nn`` with ``from flax import linen as nn``.
 
 2. Move arguments to ``apply`` into dataclass attributes. Add type annotations
    (or use type ``Any`` to bypass).
@@ -91,8 +91,8 @@ Defining Simple Modules
    can take arbitrary argument lists).
 
 
-Using Modules inside other Modules
---------------------------------
+Using Flax Modules inside other Modules
+---------------------------------------
 
 .. codediff::
   :title_left: Old Flax
@@ -176,7 +176,7 @@ Sharing submodules and defining multiple methods
 4. Define additional methods just like in regular Python.
 
 ``Module.partial`` inside other modules
---------------------------------
+---------------------------------------
 
 .. codediff::
   :title_left: Old Flax
@@ -287,7 +287,7 @@ Top-level training code patterns
 
 
 1. We no longer use the ``Model`` abstraction -- instead we pass parameters
-   around directly, usually encapsulated in a `Train State`_ object, which can
+   around directly, usually encapsulated in a `TrainState`_ object, which can
    directly be passed to JAX transformations.
 
 2. To compute initial parameters, construct a module instance and call |init|_
@@ -304,14 +304,14 @@ Top-level training code patterns
    See the `Variables documentation`_ for more details.
 
 4. We recommend using Optax optimizers. See our separate HOWTO called
-   `Upgrading my Codebase to Optax`_ for more details.
+   `Upgrading my codebase to Optax`_ for more details.
 
 5. To make predictions with your model, make an instance at the top level (this
    is free -- just a wrapper around constructor attributes) and call the
    ``apply`` method (which will call ``__call__`` internally).
 
 Non-trainable variables ("state"): Use within Modules
---------------------------------
+-----------------------------------------------------
 
 .. codediff::
   :title_left: Old Flax
@@ -343,7 +343,7 @@ for details). Flax also lets you treat each variable collection differently when
 using JAX transformations inside modules.
 
 Non-trainable variables ("state"): Top-level training code patterns
---------------------------------
+-------------------------------------------------------------------
 
 .. codediff::
   :title_left: Old Flax
@@ -398,7 +398,7 @@ Non-trainable variables ("state"): Top-level training code patterns
     return compute_metrics(logits, batch['label'])
 
 1. |init|_ returns a variable dict, e.g. ``{"param": ..., "batch_stats": ...}``
-   (see `Variable documentation`_).
+   (see `Variables documentation`_).
 
 2. Combine the different variable collections into a variable dict.
 
@@ -412,7 +412,7 @@ Non-trainable variables ("state"): Top-level training code patterns
    value is once again just the output.
 
 Loading pre-Linen checkpoints
---------------------------------
+-----------------------------
 
 While most Linen modules should be able to use pre-Linen weights without any
 modification, there is one catch: In pre-Linen API submodules were numbered
@@ -430,7 +430,7 @@ In Linen this is instead:
 TODO: Add an example here how to load a new ``TrainState`` object.
 
 Randomness
---------------------------------
+----------
 
 .. codediff::
   :title_left: Old Flax
@@ -471,9 +471,9 @@ Randomness
     logits = Transformer().apply(
       {'params': params}, inputs, rngs={'dropout': dropout_rng})  # [2] #!
 
-1. RNGs in Linen have "kinds" -- in this case "dropout". Different kinds can be
-   treated different in JAX transformations (for example -- do you want the same
-   dropout mask for each timestep in a sequence model or a different one?)
+1. RNGs in Linen have "kinds" -- in this case ``'dropout'``. Different kinds can
+   be treated different in JAX transformations (for example, do you want the
+   same dropout mask for each timestep in a sequence model or a different one?)
 
 2. Instead of using the ``nn.stochastic`` context manager, you pass in RNGs
    explicitly to ``module.apply``. During evaluation you wouldn't pass any RNGs
@@ -481,13 +481,13 @@ Randomness
    ``self.make_rng('dropout')`` would raise an error.
 
 
-Lifted Transforms
---------------------------------
+Lifted transformations
+----------------------
 
 In Linen, rather than using JAX transformation directly, we are using
 "lifted transforms", which are JAX transformations applied to Flax Modules.
 
-For more information, please see the design note on `Lifted Transformations`_.
+For more information, please see the design note on `Lifted transformations`_.
 
 TODO: Given an example of ``jax.scan_in_dim`` (pre-Linen) vs. ``nn.scan``
 (Linen).
@@ -495,8 +495,8 @@ TODO: Given an example of ``jax.scan_in_dim`` (pre-Linen) vs. ``nn.scan``
 .. _`Should I use setup or nn.compact?`: https://flax.readthedocs.io/en/latest/design_notes/setup_or_nncompact.html
 .. _`Variables documentation`: https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.core.variables
 .. _`TrainState`: https://flax.readthedocs.io/en/latest/flax.training.html#train-state
-.. _`Upgrading my Codebase to Optax`: https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html
-.. _`Lifted Transformations`: https://flax.readthedocs.io/en/latest/design_notes/lift.html
+.. _`Upgrading my codebase to Optax`: https://flax.readthedocs.io/en/latest/guides/optax_update_guide.html
+.. _`Lifted transformations`: https://flax.readthedocs.io/en/latest/design_notes/lift.html
 
 
 .. |@compact| replace:: ``@compact``

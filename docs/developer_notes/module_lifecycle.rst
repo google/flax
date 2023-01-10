@@ -1,5 +1,5 @@
-The Module lifecycle
-######################
+The Flax Module lifecycle
+#########################
 
 .. testsetup::
 
@@ -10,9 +10,9 @@ The Module lifecycle
   import jax
 
 
-This design note is intended for users who are already familiar with linen Modules but want to understand more about the design principles behind the abstraction. This note should give you a good understanding of the assumptions and guarantees the Module API is built upon. If you have no practical experience with Modules yet, check out the `MNIST Tutorial <https://flax.readthedocs.io/en/latest/notebooks/annotated_mnist.html>`_.
+This design note is intended for users who are already familiar with Flax Linen Modules but want to understand more about the design principles behind the abstraction. This note should give you a good understanding of the assumptions and guarantees the Module API is built upon. If you have no practical experience with Modules yet, check out the `Getting started notebook <https://flax.readthedocs.io/en/latest/getting_started.html>`_.
 
-linen Modules offer a Pythonic abstracton on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
+Flax Linen Modules offer a Pythonic abstracton on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
 
 
 Overview
