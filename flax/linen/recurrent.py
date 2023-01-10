@@ -346,7 +346,7 @@ class GRUCell(RNNCellBase):
     """Gated recurrent unit (GRU) cell.
 
     Args:
-      carry: the hidden state of the LSTM cell,
+      carry: the hidden state of the GRU cell,
         initialized using `GRUCell.initialize_carry`.
       inputs: an ndarray with the input for the current time step.
         All dimensions except the final are considered batch dimensions.
