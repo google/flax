@@ -65,4 +65,4 @@ flax_profile = bool_env('FLAX_PROFILE', True)
 flax_lazy_rng = bool_env('FLAX_LAZY_RNG', True)
 
 # Whether to use Orbax to save checkpoints
-flax_use_orbax_checkpointing = bool_env('FLAX_USE_ORBAX_CHECKPOINTING', False)
+flax_use_orbax_checkpointing = bool_env('FLAX_USE_ORBAX_CHECKPOINTING', True)
