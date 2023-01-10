@@ -436,8 +436,12 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
   # Remove newer and older invalid checkpoints.
   _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
                         keep_every_n_steps, has_mpa)
+  # Record checkpoint-related metrics.
   orbax.utils.record_saved_duration(ckpt_start_time)
-
+  if async_manager:
+    jax.monitoring.record_event_duration_secs(
+        '/jax/checkpoint/write/async/total_duration_secs',
+        time.time() - ckpt_start_time)
 
 
 def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
@@ -584,6 +588,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   target = serialization.to_bytes(target)
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
+    jax.monitoring.record_event('/jax/flax/checkpoint/save_main_ckpt_task')
     return _save_main_ckpt_file(target, False, (ckpt_tmp_path, ckpt_path),
                                 base_path, step, keep, overwrite,
                                 keep_every_n_steps, start_time)
@@ -690,6 +695,7 @@ def save_checkpoint_multiprocess(
     sync_global_devices('check_overwrite_strictly_before_save')
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
+    jax.monitoring.record_event('/jax/flax/checkpoint/save_main_ckpt_task')
     return _save_main_ckpt_file(target, has_mpa, (ckpt_tmp_path, ckpt_path),
                                 base_path, step, keep, overwrite,
                                 keep_every_n_steps, start_time)
