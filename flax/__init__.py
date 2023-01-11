@@ -15,6 +15,10 @@
 
 """Flax API."""
 
+from .configurations import (
+    config as config,
+)
+
 from . import core
 from . import jax_utils
 from . import linen

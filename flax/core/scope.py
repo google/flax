@@ -23,7 +23,7 @@ from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
                     Sequence, Set, Tuple, TypeVar, Union)
 
 from flax.ids import uuid
-from flax import config
+from flax import configurations as config
 from flax import errors
 from flax import struct
 from flax import traceback_util
