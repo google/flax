@@ -85,7 +85,7 @@ class CheckpointsTest(parameterized.TestCase):
 
   def setUp(self):
     super().setUp()
-    config.flax_use_orbax_checkpointing = False  # default value
+    config.update('flax_use_orbax_checkpointing', False)  # default value
 
   def test_naturalsort(self):
     np.random.seed(0)
@@ -107,7 +107,7 @@ class CheckpointsTest(parameterized.TestCase):
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints(self, use_orbax):
-    config.flax_use_orbax_checkpointing = use_orbax
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
@@ -161,7 +161,7 @@ class CheckpointsTest(parameterized.TestCase):
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_overwrite_checkpoints(self, use_orbax):
-    config.flax_use_orbax_checkpointing = use_orbax
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     overwrite_error = ValueError if use_orbax else errors.InvalidCheckpointError
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32)}
@@ -188,7 +188,7 @@ class CheckpointsTest(parameterized.TestCase):
   @parameterized.parameters({'use_orbax': True, 'keep_every_n_steps': None},
                             {'use_orbax': False, 'keep_every_n_steps': 7})
   def test_keep(self, use_orbax, keep_every_n_steps):
-    config.flax_use_orbax_checkpointing = use_orbax
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
     test_object = {'a': np.array([1, 2, 3], np.int32)}
     steps_start = 17
@@ -218,7 +218,7 @@ class CheckpointsTest(parameterized.TestCase):
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints_w_float_steps(self, use_orbax):
-    config.flax_use_orbax_checkpointing = use_orbax
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
@@ -245,7 +245,7 @@ class CheckpointsTest(parameterized.TestCase):
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints_target_none(self, use_orbax):
-    config.flax_use_orbax_checkpointing = use_orbax
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {'a': np.array([0, 0, 0], np.int32),
                     'b': np.array([0, 0, 0], np.int32)}
@@ -275,7 +275,7 @@ class CheckpointsTest(parameterized.TestCase):
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints_target_empty(self, use_orbax):
-    config.flax_use_orbax_checkpointing = use_orbax
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
     test_object0 = {}
     test_object1 = []
@@ -345,7 +345,7 @@ class CheckpointsTest(parameterized.TestCase):
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_complex_pytree(self, use_orbax):
-    config.flax_use_orbax_checkpointing = use_orbax
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
     to_save = [CustomDC(foo=12, bar={'x': jnp.array((1, 4))}), np.array((2, 3))]
     target = [CustomDC(foo=0, bar={'x': jnp.array((0, 0))}), np.array((0, 0))]
@@ -360,10 +360,10 @@ class CheckpointsTest(parameterized.TestCase):
     to_save = [CustomDC(foo=12, bar={'x': jnp.array((1, 4))}), np.array((2, 3))]
     target = [CustomDC(foo=0, bar={'x': jnp.array((0, 0))}), np.array((0, 0))]
     # Store an orbax ckpt
-    config.flax_use_orbax_checkpointing = True
+    config.update('flax_use_orbax_checkpointing', True)
     checkpoints.save_checkpoint(tmp_dir, to_save, 0, prefix='test_')
     # And a legacy ckpt
-    config.flax_use_orbax_checkpointing = False
+    config.update('flax_use_orbax_checkpointing', False)
     checkpoints.save_checkpoint(tmp_dir, to_save, 1, prefix='test_', keep=2)
 
     # Both gets restored with same API.
