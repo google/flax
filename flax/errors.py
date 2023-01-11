@@ -183,7 +183,6 @@ class ScopeParamNotFoundError(FlaxError):
 
 class ScopeCollectionNotFound(FlaxError):
   """This error is thrown when trying to access a variable from an empty
-
   collection.
 
   There are two common causes:

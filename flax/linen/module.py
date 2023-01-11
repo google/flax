@@ -1270,15 +1270,15 @@ class Module:
     """Creates an interactive Module instance by binding variables and RNGs.
 
     ``bind`` provides an "interactive" instance of a Module directly without
-    transforming a function with ``apply``. This is particularly useful for debugging
-    and interactive use cases like notebooks where a function would limit the ability
-    to split up code into different cells.
+    transforming a function with ``apply``. This is particularly useful for
+    debugging zand interactive use cases like notebooks where a function would
+    limit the ability to split up code into different cells.
 
-    Once the variables (and optionally RNGs) are bound to a ``Module`` it becomes a
-    stateful object. Note that idiomatic JAX is functional and therefore an interactive
-    instance does not mix well with vanilla JAX APIs. ``bind()`` should only be used
-    for interactive experimentation, and in all other cases we strongly encourage users
-    to use ``apply()`` instead.
+    Once the variables (and optionally RNGs) are bound to a ``Module`` it
+    becomes a stateful object. Note that idiomatic JAX is functional and
+    therefore an interactive instance does not mix well with vanilla JAX APIs.
+    ``bind()`` should only be used for interactive experimentation, and in all
+    other cases we strongly encourage users to use ``apply()`` instead.
 
     Example::
 
@@ -1301,7 +1301,6 @@ class Module:
       z = model.encoder(x)
       x_reconstructed = model.decoder(z)
 
-
     Args:
       variables: A dictionary containing variables keyed by variable
         collections. See :mod:`flax.core.variables` for more details
@@ -1313,6 +1312,7 @@ class Module:
           ``bool``: all/no collections are mutable.
           ``str``: The name of a single mutable collection.
           ``list``: A list of names of mutable collections.
+
     Returns:
       A copy of this instance with bound variables and RNGs.
     """
