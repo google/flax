@@ -34,4 +34,30 @@ from jax.nn.initializers import variance_scaling as variance_scaling
 from jax.nn.initializers import xavier_normal as xavier_normal
 from jax.nn.initializers import xavier_uniform as xavier_uniform
 from jax.nn.initializers import zeros as zeros
+from jax.nn.initializers import Initializer as Initializer
 # pylint: enable=unused-import
+
+def zeros_init() -> Initializer:
+  """Builds an initializer that returns a constant array full of zeros.
+
+  >>> import jax, jax.numpy as jnp
+  >>> from flax.linen.initializers import zeros_init
+  >>> zeros_initializer = zeros_init()
+  >>> zeros_initializer(jax.random.PRNGKey(42), (2, 3), jnp.float32)
+  Array([[0., 0., 0.],
+         [0., 0., 0.]], dtype=float32)
+  """
+  return zeros
+
+def ones_init() -> Initializer:
+  """Builds an initializer that returns a constant array full of ones.
+
+  >>> import jax, jax.numpy as jnp
+  >>> from flax.linen.initializers import ones_init
+  >>> ones_initializer = ones_init()
+  >>> ones_initializer(jax.random.PRNGKey(42), (3, 2), jnp.float32)
+  Array([[1., 1.],
+         [1., 1.],
+         [1., 1.]], dtype=float32)
+  """
+  return ones
