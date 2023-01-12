@@ -73,28 +73,29 @@ Graph modeling
 - :octicon:`mark-github;0.9em` `Graph Neural Networks <https://github.com/google/flax/tree/main/examples/ogbg_molpcba/>`__:
   Molecular predictions on ogbg-molpcba from the Open Graph Benchmark.
 
-Contributing Examples
+Contributing examples
 *********************
 
-Most of the core examples follow a structure that we found to work
-well with Flax projects, and we strive to make the examples easy to explore and
-easy to fork. In particular (taken from `#231 <https://github.com/google/flax/issues/231>`__)
+Most of the `core Flax examples on GitHub <https://github.com/google/flax/tree/main/examples>`__
+follow a structure that the Flax dev team found works well with Flax projects.
+The team strives to make these examples easy to explore and fork. In particular
+(as per GitHub Issue `#231 <https://github.com/google/flax/issues/231>`__):
 
-- README: contains links to paper, command line, `TensorBoard <https://tensorboard.dev/>`__ metrics
-- Focus: an example is about a single model/dataset
-- Configs: we use ``ml_collections.ConfigDict`` stored under ``configs/``
-- Tests: executable ``main.py`` loads ``train.py`` which has ``train_test.py``
-- Data: is read from `TensorFlow Datasets <https://www.tensorflow.org/datasets>`__
-- Standalone: every directory is self-contained
-- Requirements: versions are pinned in ``requirements.txt``
-- Boilerplate: is reduced by using `clu <https://pypi.org/project/clu/>`__
-- Interactive: the example can be explored with a `Colab <https://colab.research.google.com/>`__
+- README: contains links to paper, command line, `TensorBoard <https://tensorboard.dev/>`__ metrics.
+- Focus: an example is about a single model/dataset.
+- Configs: we use ``ml_collections.ConfigDict`` stored under ``configs/``.
+- Tests: executable ``main.py`` loads ``train.py`` which has ``train_test.py``.
+- Data: is read from `TensorFlow Datasets <https://www.tensorflow.org/datasets>`__.
+- Standalone: every directory is self-contained.
+- Requirements: versions are pinned in ``requirements.txt``.
+- Boilerplate: is reduced by using `clu <https://pypi.org/project/clu/>`__.
+- Interactive: the example can be explored with a `Colab <https://colab.research.google.com/>`__.
 
-Repositories Using Flax
-#######################
+Repositories that use Flax
+##########################
 
 The following code bases use Flax and provide training frameworks and a wealth
-of examples, in many cases with pre-trained weights:
+of examples. In many cases, you can also find pre-trained weights:
 
 - `🤗 Hugging Face <https://huggingface.co/flax-community>`__ is a
   very popular library for building, training, and deploying state of the art
@@ -126,14 +127,15 @@ of examples, in many cases with pre-trained weights:
   training, evaluation, and inference of sequence models (starting with
   language) at many scales.
 
-Community Examples
-###################
+Community examples
+##################
 
-In addition to the curated list of official Flax examples, there is a growing
-community of people using Flax to build new types of machine learning models. We
-are happy to showcase any example built by the community here! If you want to
-submit your own example, we suggest that you start by forking one of the
-official Flax example, and start from there.
+In addition to the `curated list of official Flax examples on GitHub <https://github.com/google/flax/tree/main/examples>`__,
+there is a growing community of people using Flax to build new types of machine
+learning models. We are happy to showcase any example built by the community here!
+
+If you want to submit your own Flax example, you can start by forking
+one of the `official Flax examples on GitHub <https://github.com/google/flax/tree/main/examples>`__.
 
 Models
 ******
@@ -197,7 +199,7 @@ Examples
       - https://arxiv.org/abs/2006.11239
 
 Tutorials
-********
+*********
 
 .. currently left empty as a placeholder for tutorials
 .. list-table::
@@ -212,17 +214,21 @@ Tutorials
       -
       -
 
-Contributing Policy
-********************
+Contributing policy
+*******************
 
 If you are interested in adding a project to the Community Examples section, take the following
 into consideration:
 
-* **Examples**: examples should contain a README that is helpful, clear, and makes it easy to run
-  the code. The code itself should be easy to follow.
-* **Tutorials**: tutorials must preferably be runnable notebooks, be well written, and discuss
-  an interesting topic. Also, the tutorial's content must be different from the existing
-  guides in the Flax documentation and other community examples to be considered for inclusion.
+* **Code examples**: Examples for must contain a README that is helpful, clear, and explains
+  how to run the code. The code itself should be easy to follow.
+* **Tutorials**: These docs should preferrably be a Jupyter Notebook format
+  (refer to `Contributing <https://flax.readthedocs.io/en/latest/contributing.html>`__
+  to learn how to convert a Jupyter Notebook into a Markdown file with `jupytext`).
+  Your tutorial should be well-written, and discuss/decsribe an interesting topic/task.
+  To avoid duplication, the content of these docs must be different from
+  `existing docs on the Flax documentation site <https://flax.readthedocs.io/>`__
+  or other community examples mentioned in this document.
 * **Models**: repositories with models ported to Flax must provide at least one of the following:
 
   * Metrics that are comparable to the original work when the model is trained to completion. Having
@@ -230,5 +236,8 @@ into consideration:
   * Tests to verify numerical equivalence against a well known implementation (same inputs
     + weights = same outputs) preferably using pretrained weights.
 
-On all cases above, code should work with the latest stable version of packages like ``jax``,
-``flax``, and ``optax``, and make substantial use of Flax.
+In all cases mentioned above, the code must work with the latest stable versions of the
+following packages: ``jax``, ``flax``, and ``optax``, and make substantial use of Flax.
+Note that both ``jax`` and ``optax`` are `required packages <https://github.com/google/flax/blob/main/setup.py>`__
+of ``flax`` (refer to the `installation instructions <https://github.com/google/flax/blob/main/README.md#quick-install>`__
+for more details).

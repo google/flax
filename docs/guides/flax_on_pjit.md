@@ -7,7 +7,7 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: Python 3 (ipykernel)
+  display_name: Python 3
   language: python
   name: python3
 ---
@@ -16,7 +16,7 @@ kernelspec:
 
 # Scale up Flax Modules on multiple devices with `pjit`
 
-This guide shows how to scale up [Flax Modules](https://flax.readthedocs.io/en/latest/advanced_topics/module_lifecycle.html) on multiple devices and hosts using JAX's [`pjit`](https://jax.readthedocs.io/en/latest/jax.experimental.pjit.html#module-jax.experimental.pjit) and [`flax.linen.spmd`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module-flax.linen.spmd).
+This guide shows how to scale up [Flax Modules](https://flax.readthedocs.io/en/latest/developer_notes/module_lifecycle.html) on multiple devices and hosts using JAX's [`pjit`](https://jax.readthedocs.io/en/latest/jax.experimental.pjit.html#module-jax.experimental.pjit) and [`flax.linen.spmd`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module-flax.linen.spmd).
 
 ## Flax and `pjit`
 
@@ -28,7 +28,7 @@ This guide shows how to scale up [Flax Modules](https://flax.readthedocs.io/en/l
 
 To learn more, refer to [JAX-101 pjit tutorial](https://jax.readthedocs.io/en/latest/jax-101/08-pjit.html) and [JAX in multi-process environments](https://jax.readthedocs.io/en/latest/multi_process.html).
 
-Flax provides several functionalities that can help you use `pjit` on [Flax Modules](https://flax.readthedocs.io/en/latest/advanced_topics/module_lifecycle.html), including:
+Flax provides several functionalities that can help you use `pjit` on [Flax Modules](https://flax.readthedocs.io/en/latest/developer_notes/module_lifecycle.html), including:
 
 1. An interface to specify partitions of your data when defining [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module).
 2. Utility functions to generate the partition information that `pjit` requires to run.
@@ -49,7 +49,7 @@ Install Flax from HEAD:
 
 +++ {"id": "a9601432b448"}
 
-# Imports
+## Imports
 
 Import some necessary dependencies.
 
@@ -169,7 +169,7 @@ For example:
 
 ## Define a model with `flax.linen.scan` lifted transformation
 
-This guide uses `flax.linen.scan` to demonstrate how [Flax lifted transforms](https://flax.readthedocs.io/en/latest/advanced_topics/lift.html#supported-transformations), such as `scan`, can work together with [JAX `pjit`](https://jax.readthedocs.io/en/latest/jax.experimental.pjit.html).
+This guide uses `flax.linen.scan` to demonstrate how [Flax lifted transforms](https://flax.readthedocs.io/en/latest/developer_notes/lift.html#supported-transformations), such as `scan`, can work together with [JAX `pjit`](https://jax.readthedocs.io/en/latest/jax.experimental.pjit.html).
 
 Having created `DotReluDot`, define the `MLP` model (by subclassing `flax.linen.Module`) as multiple layers of `DotReluDot`.
 
@@ -394,7 +394,7 @@ with mesh:
 
 +++ {"id": "51420b514d53"}
 
-# Logical axis annotation
+## Logical axis annotation
 
 JAX auto SPMD encourages users to explore different sharding layouts to find the optimal one. To this end, in Flax you actually can annotate the dimensions of any data with more descriptive axis names (not just device mesh axis names like `'data'` and `'model'`). 
 
@@ -518,7 +518,7 @@ In really advanced use cases, you may have more complicated sharding patterns th
 
 +++ {"id": "576bdd5cd782"}
 
-# Save the data
+## Save the data
 
 You can use [`flax.training.checkpoints`](https://flax.readthedocs.io/en/latest/_modules/flax/training/checkpoints.html) to save the cross-device array, as shown in the [Save and load checkpoints guide - Multi-host/multi-process checkpointing](https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#multi-host-multi-process-checkpointing). This is especially required if you are running on a multi-host environment (for example, a TPU pod).
 
