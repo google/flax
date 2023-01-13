@@ -1690,8 +1690,22 @@ class Module:
       print(intm_grads['dense3']) # ==> [[-1.456924   -0.44332537  0.02422847]
                                   #      [-1.456924   -0.44332537  0.02422847]]
 
+    If perturbations are not passed to `apply`, `perturb` behaves like a no-op
+    so you can easily disable the behavior when not needed::
+
+      model.apply({'params': params, 'perturbations': perturbations}, x) # works as expected
+      model.apply({'params': params}, x) # behaves like a no-op
+
     """
-    value += self.variable(collection, name, lambda: jnp.zeros_like(value)).value # type: ignore
+    def _root_has_collection():
+      """Returns True if the root scope has the collection."""
+      assert self.scope is not None
+      return collection in self.scope.root._variables
+    # we will only add the perturbation variable if the collection is mutable
+    # (e.g. during `init`) or if the collection was passed to `apply` (contained in
+    # the root scope).
+    if self.is_mutable_collection(collection) or _root_has_collection():
+      value += self.variable(collection, name, lambda: jnp.zeros_like(value)).value # type: ignore
     return value
 
   def tabulate(
