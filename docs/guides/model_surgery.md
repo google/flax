@@ -13,7 +13,7 @@ jupyter:
     name: python3
 ---
 
-Model Surgery
+Model surgery
 ==============================
 
 Usually, Flax modules and optimizers track and update the params for you. But there may be some time when you want to do some model surgery and tweak the param tensors yourself. This guide shows you how to do the trick.

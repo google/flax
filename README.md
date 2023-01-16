@@ -12,7 +12,7 @@
 | [**What does Flax look like?**](#what-does-flax-look-like)
 | [**Documentation**](https://flax.readthedocs.io/)
 
-This README is a very short intro. **To learn everything you need to know about Flax, see our [full documentation](https://flax.readthedocs.io/)**
+This README is a very short intro. **To learn everything you need to know about Flax, refer to our [full documentation](https://flax.readthedocs.io/)**
 
 Flax was originally started by engineers and researchers within the Brain Team in Google Research (in close collaboration with the JAX team), and is now developed jointly with the open source community.
 
@@ -64,16 +64,16 @@ comes with everything you need to start your research, including:
 
 ## Quick install
 
-You will need Python 3.6 or later and a working [JAX](https://github.com/google/jax/blob/main/README.md)
-installation (with or without GPU support, see instructions there). For a
-CPU-only version:
+You will need Python 3.6 or later, and a working [JAX](https://github.com/google/jax/blob/main/README.md)
+installation (with or without GPU support - refer to [the instructions](https://github.com/google/jax/blob/main/README.md)).
+For a CPU-only version of JAX:
 
 ```
 > pip install --upgrade pip # To support manylinux2010 wheels.
 > pip install --upgrade jax jaxlib # CPU-only
 ```
 
-Then install Flax from PyPi:
+Then, install Flax from PyPi:
 
 ```
 > pip install flax
@@ -89,9 +89,9 @@ To upgrade to the latest version of Flax, you can use:
 
 We provide three examples using the Flax API: a simple multi-layer perceptron, a CNN and an auto-encoder.
 
-To learn more about the `Module` abstraction, see our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, see our
+To learn more about the `Module` abstraction, check out our [docs](https://flax.readthedocs.io/), our [broad intro to the Module abstraction](https://github.com/google/flax/blob/main/docs/notebooks/linen_intro.ipynb). For additional concrete demonstrations of best practices, refer to our
 [guides](https://flax.readthedocs.io/en/latest/guides/index.html) and
-[advanced topics documentation](https://flax.readthedocs.io/en/latest/advanced_topics/index.html).
+[developer notes](https://flax.readthedocs.io/en/latest/developer_notes/index.html).
 
 ```py
 from typing import Sequence
