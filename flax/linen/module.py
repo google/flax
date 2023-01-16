@@ -1488,12 +1488,61 @@ class Module:
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
+    ``init`` takes in a ``PRNGKey`` or dictionary of ``PRNGKey`` as its first argument and all
+    the ``*args`` and ``**kwargs`` accepted by ``method`` (``__call__`` by default), and returns
+    a dictionary of initialized variables.
+
+    Example::
+
+      >>> import flax.linen as nn
+      >>> import jax.numpy as jnp
+      >>> import jax
+      ...
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x, train):
+      ...     x = nn.Dense(16)(x)
+      ...     x = nn.BatchNorm(use_running_average=not train)(x)
+      ...     x = nn.relu(x)
+      ...     return nn.Dense(1)(x)
+      ...
+      >>> module = Foo()
+      >>> key = jax.random.PRNGKey(0)
+      >>> variables = module.init(key, jnp.empty((1, 7)), train=False)
+
+    If you pass a single ``PRNGKey`` Flax will use it to feed the ``'params'`` RNG stream.
+    If you want to use a different RNG stream or need to use multiple streams, you must pass a
+    dictionary mapping each RNG stream name to its corresponding ``PRNGKey`` to ``init``.
+
+    Example::
+
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x, train):
+      ...     x = nn.Dense(16)(x)
+      ...     x = nn.BatchNorm(use_running_average=not train)(x)
+      ...     x = nn.relu(x)
+      ...
+      ...     # Add gaussian noise
+      ...     noise_key = self.make_rng('noise')
+      ...     x = x + jax.random.normal(noise_key, x.shape)
+      ...
+      ...     return nn.Dense(1)(x)
+      ...
+      >>> module = Foo()
+      >>> rngs = {'params': jax.random.PRNGKey(0), 'noise': jax.random.PRNGKey(1)}
+      >>> variables = module.init(rngs, jnp.empty((1, 7)), train=False)
+
     Jitting `init` initializes a model lazily using only the shapes of the
     provided arguments, and avoids computing the forward pass with actual
     values. Example::
 
-      jit_init = jax.jit(SomeModule(...).init)
-      jit_init(rng, jnp.ones(input_shape, jnp.float32))
+      >>> module = nn.Dense(1)
+      >>> init_jit = jax.jit(module.init)
+      >>> variables = init_jit(jax.random.PRNGKey(0), jnp.empty((1, 7)))
+
+    ``init`` is a light wrapper over ``apply``, so other ``apply`` arguments like
+    ``method``, ``mutable``, and ``capture_intermediates`` are also available.
 
     Args:
       rngs: The rngs for the variable collections.
