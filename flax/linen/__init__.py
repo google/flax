@@ -121,20 +121,21 @@ from .recurrent import (
 )
 from .stochastic import Dropout as Dropout
 from .transforms import (
-  checkpoint as checkpoint,
-  custom_vjp as custom_vjp,
-  jit as jit,
-  jvp as jvp,
-  map_variables as map_variables,
-  named_call as named_call,
-  remat as remat,
-  remat_scan as remat_scan,
-  scan as scan,
-  vjp as vjp,
-  vmap as vmap,
-  while_loop as while_loop,
-  cond as cond,
-  switch as switch,
+    checkpoint as checkpoint,
+    custom_vjp as custom_vjp,
+    jit as jit,
+    jvp as jvp,
+    map_variables as map_variables,
+    named_call as named_call,
+    remat as remat,
+    remat_scan as remat_scan,
+    scan as scan,
+    vjp as vjp,
+    vmap as vmap,
+    while_loop as while_loop,
+    cond as cond,
+    switch as switch,
+    add_metadata_axis,
 )
 from .summary import tabulate
 # pylint: enable=g-multiple-import
