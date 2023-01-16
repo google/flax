@@ -69,20 +69,20 @@ installation (with or without GPU support - refer to [the instructions](https://
 For a CPU-only version of JAX:
 
 ```
-> pip install --upgrade pip # To support manylinux2010 wheels.
-> pip install --upgrade jax jaxlib # CPU-only
+pip install --upgrade pip # To support manylinux2010 wheels.
+pip install --upgrade jax jaxlib # CPU-only
 ```
 
 Then, install Flax from PyPi:
 
 ```
-> pip install flax
+pip install flax
 ```
 
 To upgrade to the latest version of Flax, you can use:
 
 ```
-> pip install --upgrade git+https://github.com/google/flax.git
+pip install --upgrade git+https://github.com/google/flax.git
 ```
 
 ## What does Flax look like?
