@@ -1488,8 +1488,7 @@ class Module:
            **kwargs) -> FrozenVariableDict:
     """Initializes a module method with variables and returns modified variables.
 
-    ``init`` takes in a ``PRNGKey`` or dictionary of ``PRNGKey`` as its first argument and all
-    the ``*args`` and ``**kwargs`` accepted by ``method`` (``__call__`` by default), and returns
+    ``init`` takes as first argument either a single ``PRNGKey``, or a dictionary mapping variable collections names to their ``PRNGKeys``, and will call ``method`` (which is the module's ``__call__`` function by default) passing ``*args`` and ``**kwargs``, and returns
     a dictionary of initialized variables.
 
     Example::
@@ -1510,7 +1509,7 @@ class Module:
       >>> key = jax.random.PRNGKey(0)
       >>> variables = module.init(key, jnp.empty((1, 7)), train=False)
 
-    If you pass a single ``PRNGKey`` Flax will use it to feed the ``'params'`` RNG stream.
+    If you pass a single ``PRNGKey``, Flax will use it to feed the ``'params'`` RNG stream.
     If you want to use a different RNG stream or need to use multiple streams, you must pass a
     dictionary mapping each RNG stream name to its corresponding ``PRNGKey`` to ``init``.
 
