@@ -40,7 +40,7 @@ import docs.conf_sphinx_patch
 # -- Project information -----------------------------------------------------
 
 project = 'Flax'
-copyright = '2021, The Flax authors'  # pylint: disable=redefined-builtin
+copyright = '2023, The Flax authors'  # pylint: disable=redefined-builtin
 author = 'The Flax authors'
 
 
