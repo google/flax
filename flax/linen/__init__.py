@@ -135,6 +135,7 @@ from .transforms import (
   while_loop as while_loop,
   cond as cond,
   switch as switch,
+  add_metadata_axis,
 )
 from .summary import tabulate
 # pylint: enable=g-multiple-import
