@@ -23,6 +23,7 @@ import numpy as np
 from flax import linen as nn
 from flax.core.scope import Array
 from flax.linen import summary
+from flax import struct
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -31,6 +32,11 @@ CONSOLE_TEST_KWARGS = dict(force_terminal=False, no_color=True, width=10_000)
 
 def _get_shapes(pytree):
   return jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, pytree)
+
+def _get_obj_repr_value(x):
+  if isinstance(x, summary._ObjectRepresentation):
+    return x.obj
+  return x
 
 class ConvBlock(nn.Module):
   features: int
@@ -115,8 +121,8 @@ class SummaryTest(absltest.TestCase):
     )
     # get values for inputs and outputs from their _ValueRepresentation
     for row in table:
-      row.inputs = jax.tree_util.tree_map(lambda x: x.value(), row.inputs)
-      row.outputs = jax.tree_util.tree_map(lambda x: x.value(), row.outputs)
+      row.inputs = jax.tree_util.tree_map(_get_obj_repr_value, row.inputs)
+      row.outputs = jax.tree_util.tree_map(_get_obj_repr_value, row.outputs)
 
     # 10 rows = 1 CNN + 4 ConvBlock_0 + 4 ConvBlock_1 + 1 Dense_0
     self.assertEqual(len(table), 10)
@@ -189,9 +195,10 @@ class SummaryTest(absltest.TestCase):
       x, training=True, mutable=True,
     )
     # get values for inputs and outputs from their _ValueRepresentation
+
     for row in table:
-      row.inputs = jax.tree_util.tree_map(lambda x: x.value(), row.inputs)
-      row.outputs = jax.tree_util.tree_map(lambda x: x.value(), row.outputs)
+      row.inputs = jax.tree_util.tree_map(_get_obj_repr_value, row.inputs)
+      row.outputs = jax.tree_util.tree_map(_get_obj_repr_value, row.outputs)
 
     # 4 rows = 1 CNN + 1 ConvBlock_0 + 1 ConvBlock_1 + 1 Dense_0
     self.assertEqual(len(table), 4)
@@ -511,6 +518,50 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('4.141592', lines[5])
     self.assertIn('x: 3.141592', lines[7])
     self.assertIn('4.141592', lines[7])
+
+  def test_partitioned_params(self):
+
+    class Classifier(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        hidden = nn.Dense(
+          features=1024,
+          kernel_init=nn.with_partitioning(
+            nn.initializers.lecun_normal(), (None, 'data')
+          ),
+          bias_init=nn.with_partitioning(
+            nn.initializers.zeros, (None,)
+          ),
+          name='hidden',
+        )
+        x = x / 255.0
+        x = x.reshape((x.shape[0], -1))  # flatten
+        x = nn.relu(hidden(x))
+        x = nn.Dense(features=10, name='head')(x)
+        return x
+
+    module = Classifier()
+    lines = module.tabulate(jax.random.PRNGKey(0), jnp.empty((1, 28, 28, 1)),
+                            console_kwargs=CONSOLE_TEST_KWARGS).splitlines()
+    self.assertIn('P(None,)', lines[7])
+    self.assertIn('P(None, data)', lines[8])
+
+  def test_non_array_variables(self):
+
+    class Metadata(struct.PyTreeNode):
+      names: tuple = struct.field(pytree_node=False)
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self):
+        self.sow('foo', 'bar', Metadata(('baz', 'qux')))
+
+    module = Foo()
+    lines = module.tabulate({},
+                            console_kwargs=CONSOLE_TEST_KWARGS).splitlines()
+    self.assertIn('names', lines[6])
+    self.assertIn('baz', lines[7])
+    self.assertIn('qux', lines[8])
 
 
 if __name__ == '__main__':

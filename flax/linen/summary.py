@@ -19,6 +19,7 @@ import io
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Type, Union
 
 import flax.linen.module as module_lib
+from flax.core import meta
 from flax.core.scope import CollectionFilter, FrozenVariableDict, MutableVariableDict
 import jax
 import jax.numpy as jnp
@@ -26,6 +27,7 @@ import rich.console
 import rich.table
 import rich.text
 import yaml
+import numpy as np
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
@@ -38,25 +40,34 @@ class _ValueRepresentation(ABC):
   def render(self) -> str:
     ...
 
-  @abstractmethod
-  def value(self) -> Any:
-    ...
-
 @dataclasses.dataclass
 class _ArrayRepresentation(_ValueRepresentation):
   shape: Tuple[int, ...]
   dtype: Any
 
   @classmethod
+  def from_array(cls, x: Array) -> '_ArrayRepresentation':
+    return cls(jnp.shape(x), jnp.result_type(x))
+
+  @classmethod
   def render_array(cls, x) -> str:
-    return cls(jnp.shape(x), jnp.result_type(x)).render()
+    return cls.from_array(x).render()
 
   def render(self):
     shape_repr = ','.join(str(x) for x in self.shape)
     return f'[dim]{self.dtype}[/dim][{shape_repr}]'
 
-  def value(self):
-    return self
+@dataclasses.dataclass
+class _PartitionedArrayRepresentation(_ValueRepresentation):
+  array_representation: _ArrayRepresentation
+  names: meta.LogicalNames
+
+  @classmethod
+  def from_partitioned(cls, partitioned: meta.Partitioned) -> '_PartitionedArrayRepresentation':
+    return cls(_ArrayRepresentation.from_array(partitioned.value), partitioned.names)
+
+  def render(self):
+    return self.array_representation.render() + f'  P{self.names}'
 
 @dataclasses.dataclass
 class _ObjectRepresentation(_ValueRepresentation):
@@ -64,9 +75,6 @@ class _ObjectRepresentation(_ValueRepresentation):
 
   def render(self):
     return repr(self.obj)
-
-  def value(self):
-    return self.obj
 
 @dataclasses.dataclass
 class Row:
@@ -92,8 +100,10 @@ class Row:
   counted_variables: Dict[str, Dict[str, Any]]
 
   def __post_init__(self):
-    self.inputs = _normalize_structure(self.inputs)
-    self.outputs = _normalize_structure(self.outputs)
+    self.inputs = self.inputs
+    self.outputs = self.outputs
+    self.module_variables = self.module_variables
+    self.counted_variables = self.counted_variables
 
   def size_and_bytes(self, collections: Iterable[str]) -> Dict[str, Tuple[int, int]]:
     return {
@@ -355,8 +365,10 @@ def _render_table(table: Table, console_extras: Optional[Mapping[str, Any]]) -> 
       col_repr = ''
 
       if collection in row.module_variables:
+        module_variables = _represent_tree(row.module_variables[collection])
+        module_variables = _normalize_structure(module_variables)
         col_repr += _as_yaml_str(
-          _summary_tree_map(_ArrayRepresentation.render_array, row.module_variables[collection]))
+          _summary_tree_map(_maybe_render, module_variables))
         if col_repr:
           col_repr += '\n\n'
 
@@ -369,8 +381,8 @@ def _render_table(table: Table, console_extras: Optional[Mapping[str, Any]]) -> 
     rich_table.add_row(
         path_repr,
         row.module_type.__name__ + method_repr,
-        _as_yaml_str(_summary_tree_map(lambda x: x.render(), row.inputs)),
-        _as_yaml_str(_summary_tree_map(lambda x: x.render(), row.outputs)),
+        _as_yaml_str(_summary_tree_map(_maybe_render, _normalize_structure(row.inputs))),
+        _as_yaml_str(_summary_tree_map(_maybe_render, _normalize_structure(row.outputs))),
         *collections_size_repr)
 
   # add footer with totals
@@ -416,8 +428,8 @@ def _size_and_bytes_repr(size: int, num_bytes: int) -> str:
 
 def _size_and_bytes(pytree: Any) -> Tuple[int, int]:
   leaves = jax.tree_util.tree_leaves(pytree)
-  size = sum(x.size for x in leaves)
-  num_bytes = sum(x.size * x.dtype.itemsize for x in leaves)
+  size = sum(x.size for x in leaves if hasattr(x, 'size'))
+  num_bytes = sum(x.size * x.dtype.itemsize for x in leaves if hasattr(x, 'size'))
   return size, num_bytes
 
 
@@ -445,10 +457,14 @@ def _as_yaml_str(value) -> str:
 
 
 def _normalize_structure(obj):
+  if isinstance(obj, _ValueRepresentation):
+    return obj
   if isinstance(obj, (tuple, list)):
     return tuple(map(_normalize_structure, obj))
   elif isinstance(obj, Mapping):
     return {k: _normalize_structure(v) for k, v in obj.items()}
+  elif dataclasses.is_dataclass(obj):
+    return {f.name: _normalize_structure(getattr(obj, f.name)) for f in dataclasses.fields(obj)}
   else:
     return obj
 
@@ -459,3 +475,25 @@ def _bytes_repr(num_bytes):
                   (f'{num_bytes:,}', 'B'))
 
   return f'{count} {units}'
+
+
+def _get_value_representation(x: Any) -> _ValueRepresentation:
+  if isinstance(x, (int, float, bool, type(None))) or (
+    isinstance(x, np.ndarray) and np.isscalar(x)):
+    return _ObjectRepresentation(x)
+  elif isinstance(x, meta.Partitioned):
+    return _PartitionedArrayRepresentation.from_partitioned(x)
+  try:
+    return _ArrayRepresentation.from_array(x)
+  except:
+    return _ObjectRepresentation(x)
+
+def _represent_tree(x):
+  """Returns a tree with the same structure as `x` but with each leaf replaced
+  by a `_ValueRepresentation` object."""
+  return jax.tree_util.tree_map(
+    _get_value_representation, x,
+    is_leaf=lambda x: x is None or isinstance(x, meta.Partitioned))
+
+def _maybe_render(x):
+  return x.render() if hasattr(x, 'render') else repr(x)
