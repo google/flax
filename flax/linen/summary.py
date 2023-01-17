@@ -67,7 +67,7 @@ class _PartitionedArrayRepresentation(_ValueRepresentation):
     return cls(_ArrayRepresentation.from_array(partitioned.value), partitioned.names)
 
   def render(self):
-    return self.array_representation.render() + f'  P{self.names}'
+    return self.array_representation.render() + f' [dim]P[/dim]{self.names}'
 
 @dataclasses.dataclass
 class _ObjectRepresentation(_ValueRepresentation):
