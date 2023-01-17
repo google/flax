@@ -30,7 +30,7 @@ import numpy as np
 jax.config.parse_flags_with_absl()
 
 
-class AttentionTest(parameterized.TestCase):
+class InitializersTest(parameterized.TestCase):
 
   @parameterized.parameters(
     {
