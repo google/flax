@@ -74,7 +74,7 @@ class InvalidRngError(FlaxError):
     class Bar(nn.Module):
       @nn.compact
       def __call__(self, x):
-        some_param = self.param('some_param', nn.initializers.zeros, (1, ))
+        some_param = self.param('some_param', nn.initializers.zeros_init(), (1, ))
         dropout_rng = self.make_rng('dropout')
         x = nn.Dense(features=4)(x)
         ...
@@ -364,7 +364,7 @@ class NameInUseError(FlaxError):
     class Foo(nn.Module):
       @nn.compact
       def __call__(self, x):
-        bar = self.param('bar', nn.initializers.zeros, (1, ))
+        bar = self.param('bar', nn.initializers.zeros_init(), (1, ))
         embed = nn.Embed(num_embeddings=2, features=5, name='bar')  # <-- ERROR!
 
   Variables should also have unique names, even if they have their own
@@ -374,7 +374,7 @@ class NameInUseError(FlaxError):
       @nn.compact
       def __call__(self, inputs):
         _ = self.param('mean', initializers.lecun_normal(), (2, 2))
-        _ = self.variable('stats', 'mean', initializers.zeros, (2, 2))
+        _ = self.variable('stats', 'mean', initializers.zeros_init(), (2, 2))
   """
 
   def __init__(self, key_type, value, module_name):

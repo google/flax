@@ -584,7 +584,7 @@ class TransformTest(absltest.TestCase):
   def test_module_transform_with_setup(self):
     class Foo(nn.Module):
       def setup(self):
-        self.test = self.param('test', nn.initializers.ones, ())
+        self.test = self.param('test', nn.initializers.ones_init(), ())
 
       def __call__(self, x):
         return x * self.test
@@ -1151,7 +1151,7 @@ class TransformTest(absltest.TestCase):
     class Bar(nn.Module):
       @nn.compact
       def __call__(self, x):
-        p = self.param('test', nn.initializers.zeros, ())
+        p = self.param('test', nn.initializers.zeros_init(), ())
         self.variable('state', 'counter', lambda: 0)
         return p * x
 

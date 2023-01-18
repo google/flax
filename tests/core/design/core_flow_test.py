@@ -31,7 +31,7 @@ Flow = Any
 @dataclass
 class DenseFlow:
   kernel_init: Initializer = nn.linear.default_kernel_init
-  bias_init: Initializer = nn.initializers.zeros
+  bias_init: Initializer = nn.initializers.zeros_init()
 
   def params(self, scope: Scope, features: int):
     kernel = scope.param('kernel', self.kernel_init, (features, features))
