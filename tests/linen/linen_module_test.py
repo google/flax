@@ -1450,6 +1450,34 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(
         all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply']))
 
+  def test_perturb_noop(self):
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(10)(x)
+        x = self.perturb('before_multiply', x)
+        x = 4 * x
+        x = self.perturb('after_multiply', x)
+        return x
+
+
+    x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10,))
+    module = Foo()
+    variables = module.init(jax.random.PRNGKey(0), x)
+    params = variables['params']
+    perturbations = variables['perturbations']
+
+    # check no error if perturbations is not passed
+    module.apply({'params': params}, x)
+
+    # check errors if perturbations is passed but empty
+    with self.assertRaisesRegex(errors.ScopeCollectionNotFound, 'Tried to access'):
+      module.apply({'params': params, 'perturbations': {}}, x)
+
+    # check no error if perturbations is passed and not empty
+    module.apply({'params': params, 'perturbations': perturbations}, x)
+
   def test_functional_apply(self):
 
     class Foo(nn.Module):
