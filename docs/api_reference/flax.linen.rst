@@ -206,6 +206,7 @@ Initializers
     lecun_uniform
     normal
     ones
+    ones_init
     orthogonal
     uniform
     standardize
@@ -213,6 +214,7 @@ Initializers
     xavier_normal
     xavier_uniform
     zeros
+    zeros_init
 
 
 Combinators
