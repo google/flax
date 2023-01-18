@@ -22,7 +22,7 @@ from flax.linen import Module, compact
 class Dense(Module):
   features: int
   kernel_init: Callable = initializers.lecun_normal()
-  bias_init: Callable = initializers.zeros
+  bias_init: Callable = initializers.zeros()
   use_bias: bool = True
 
   @compact

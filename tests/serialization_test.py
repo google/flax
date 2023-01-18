@@ -89,7 +89,7 @@ class SerializationTest(parameterized.TestCase):
 
   def test_model_serialization(self):
     rng = random.PRNGKey(0)
-    module = nn.Dense(features=1, kernel_init=nn.initializers.ones)
+    module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     x = jnp.ones((1, 1), jnp.float32)
     initial_params = module.init(rng, x)
     state = serialization.to_state_dict(initial_params)
@@ -120,7 +120,7 @@ class SerializationTest(parameterized.TestCase):
 
   def test_optimizer_serialization(self):
     rng = random.PRNGKey(0)
-    module = nn.Dense(features=1, kernel_init=nn.initializers.ones)
+    module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     x = jnp.ones((1, 1), jnp.float32)
     initial_params = module.init(rng, x)
     tx = optax.sgd(0.1, momentum=0.1)
@@ -294,7 +294,7 @@ class SerializationTest(parameterized.TestCase):
 
   def test_model_serialization_to_bytes(self):
     rng = random.PRNGKey(0)
-    module = nn.Dense(features=1, kernel_init=nn.initializers.ones)
+    module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     initial_params = module.init(rng, jnp.ones((1, 1), jnp.float32))
     serialized_bytes = serialization.to_bytes(initial_params)
     restored_params = serialization.from_bytes(initial_params, serialized_bytes)
@@ -302,7 +302,7 @@ class SerializationTest(parameterized.TestCase):
 
   def test_optimizer_serialization_to_bytes(self):
     rng = random.PRNGKey(0)
-    module = nn.Dense(features=1, kernel_init=nn.initializers.ones)
+    module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     initial_params = module.init(rng, jnp.ones((1, 1), jnp.float32))
     # model = nn.Model(module, initial_params)
     tx = optax.sgd(0.1, momentum=0.1)
