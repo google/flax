@@ -143,7 +143,7 @@ Another benefit of defining submodules and/or variables inline is that you can a
 
     @nn.compact
     def __call__(self, x):
-      scale = self.param("scale", nn.initializers.ones_init(), x.shape[-1:])
+      scale = self.param("scale", nn.initializers.ones, x.shape[-1:])
       x *= scale[None]
       a = nn.Dense(self.hidden_size)(x)
       h = nn.relu(a)

@@ -30,7 +30,7 @@ def batch_norm(scope: Scope,
                axis=-1, momentum=0.99, epsilon=1e-5,
                dtype=jnp.float32,
                bias=True, scale=True,
-               bias_init=initializers.zeros_init(), scale_init=initializers.ones_init(),
+               bias_init=initializers.zeros, scale_init=initializers.ones,
                axis_name=None, axis_index_groups=None,
                kind='batch_stats'):
 
@@ -83,8 +83,8 @@ def layer_norm(
     dtype=jnp.float32,
     bias=True,
     scale=True,
-    bias_init=initializers.zeros_init(),
-    scale_init=initializers.ones_init()):
+    bias_init=initializers.zeros,
+    scale_init=initializers.ones):
   """Applies layer normalization on the input.
   It normalizes the activations of the layer for each given example in a
   batch independently, rather than across a batch like Batch Normalization.
@@ -125,8 +125,8 @@ def group_norm(scope,
                dtype=jnp.float32,
                bias=True,
                scale=True,
-               bias_init=initializers.zeros_init(),
-               scale_init=initializers.ones_init()):
+               bias_init=initializers.zeros,
+               scale_init=initializers.ones):
   """Applies group normalization to the input (arxiv.org/abs/1803.08494).
   This op is similar to batch normalization, but statistics are shared across
   equally-sized groups of channels and not shared across batch dimension.

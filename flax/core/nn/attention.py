@@ -181,7 +181,7 @@ def multi_head_dot_product_attention(
     deterministic=False,
     precision=None,
     kernel_init=default_kernel_init,
-    bias_init=initializers.zeros_init(),
+    bias_init=initializers.zeros,
     bias=True,
     attention_fn=dot_product_attention):
   """Applies multi-head dot product attention on the input data.

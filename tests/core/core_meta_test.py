@@ -27,7 +27,7 @@ class MetaTest(absltest.TestCase):
   def test_boxed_param(self):
     def f(scope, xs):
       def g(scope, x):
-        kernel_init = meta.with_partitioning(nn.initializers.ones_init(),
+        kernel_init = meta.with_partitioning(nn.initializers.ones,
                                              ('in', 'out'))
         kernel = scope.param('kernel', kernel_init, (x.shape[-1], 2))
         kernel_box = scope.get_variable('params', 'kernel')
@@ -47,7 +47,7 @@ class MetaTest(absltest.TestCase):
   def test_boxed_variable(self):
     def f(scope, xs):
       def g(scope, x):
-        kernel_init = meta.with_partitioning(nn.initializers.ones_init(),
+        kernel_init = meta.with_partitioning(nn.initializers.ones,
                                              ('in', 'out'))
         kernel = scope.variable('params', 'kernel', kernel_init,
                                 scope.make_rng('params'), (x.shape[-1], 2))
@@ -70,7 +70,7 @@ class MetaTest(absltest.TestCase):
   def test_partition_axis_unspecified(self):
     def f(scope, xs):
       def g(scope, x):
-        kernel_init = meta.with_partitioning(nn.initializers.ones_init(),
+        kernel_init = meta.with_partitioning(nn.initializers.ones,
                                              ('in', 'out'))
         scope.param('kernel', kernel_init, (3, 2))
         return x
@@ -98,7 +98,7 @@ class MetaTest(absltest.TestCase):
   def test_scan_over_layers(self):
     def f(scope, x):
       def body(scope, x):
-        kernel_init = meta.with_partitioning(nn.initializers.ones_init(),
+        kernel_init = meta.with_partitioning(nn.initializers.ones,
                                              ('in', 'out'))
         y = nn.dense(scope, x, 3, kernel_init=kernel_init)
         return y, ()

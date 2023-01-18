@@ -98,7 +98,7 @@ class LiftTest(absltest.TestCase):
 
   def test_jvp(self):
     def g(scope, x):
-      p = scope.param('test', nn.initializers.zeros_init(), ())
+      p = scope.param('test', nn.initializers.zeros, ())
       scope.variable('state', 'counter', lambda: 0)
       return p * x
 

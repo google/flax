@@ -32,7 +32,7 @@ class LinenMetaTest(absltest.TestCase):
 
       @nn.compact
       def __call__(mdl_self, x):  # pylint: disable=no-self-argument
-        kernel_init = nn.with_partitioning(nn.initializers.ones_init(),
+        kernel_init = nn.with_partitioning(nn.initializers.ones,
                                            ('in', 'out'))
         kernel = mdl_self.param('kernel', kernel_init, (x.shape[-1], 2))
         kernel_box = mdl_self.get_variable('params', 'kernel')
@@ -60,7 +60,7 @@ class LinenMetaTest(absltest.TestCase):
 
       @nn.compact
       def __call__(mdl_self, x):  # pylint: disable=no-self-argument
-        kernel_init = nn.with_partitioning(nn.initializers.ones_init(),
+        kernel_init = nn.with_partitioning(nn.initializers.ones,
                                            ('in', 'out'))
         kernel = mdl_self.variable(
             'params', 'kernel', kernel_init,
@@ -90,7 +90,7 @@ class LinenMetaTest(absltest.TestCase):
   # def test_boxed_variable(self):
   #   def f(scope, xs):
   #     def g(scope, x):
-        # kernel_init = nn.with_partitioning(nn.initializers.ones_init(),
+        # kernel_init = nn.with_partitioning(nn.initializers.ones,
         #                                      ('in', 'out'))
         # kernel = scope.variable('params', 'kernel', kernel_init,
         #                         scope.make_rng('params'), (x.shape[-1], 2))

@@ -30,7 +30,7 @@ class Dense(Module):
   features: int
   use_bias: bool = True
   kernel_init: Callable = initializers.lecun_normal()
-  bias_init: Callable = initializers.zeros_init()
+  bias_init: Callable = initializers.zeros
   dtype: Any = jnp.float32
   precision: PrecisionLike = None
 

@@ -239,7 +239,7 @@ tags: []
 class SimpleDense(nn.Module):
   features: int
   kernel_init: Callable = nn.initializers.lecun_normal()
-  bias_init: Callable = nn.initializers.zeros_init()
+  bias_init: Callable = nn.initializers.zeros
 
   @nn.compact
   def __call__(self, inputs):
@@ -279,7 +279,7 @@ class ExplicitDense(nn.Module):
   features_in: int  # <-- explicit input shape
   features: int
   kernel_init: Callable = nn.initializers.lecun_normal()
-  bias_init: Callable = nn.initializers.zeros_init()
+  bias_init: Callable = nn.initializers.zeros
 
   def setup(self):
     self.kernel = self.param('kernel',

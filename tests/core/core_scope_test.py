@@ -105,7 +105,7 @@ class ScopeTest(absltest.TestCase):
 
   def test_inconsistent_param_shapes(self):
     def f(scope):
-      scope.param('test', nn.initializers.ones_init(), (4,))
+      scope.param('test', nn.initializers.ones, (4,))
 
     msg = r'Inconsistent shapes between value and initializer for parameter "test" in "/": \(2,\), \(4,\).'
     with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
@@ -113,7 +113,7 @@ class ScopeTest(absltest.TestCase):
 
   def test_apply_variables_bad_pytree(self):
     def f(scope):
-      scope.param('kernel', nn.initializers.ones_init(), (4,))
+      scope.param('kernel', nn.initializers.ones, (4,))
 
     params = freeze({
         'params': {
@@ -188,10 +188,10 @@ class ScopeTest(absltest.TestCase):
   def test_empty_col_error(self):
     root = Scope({})
     with self.assertRaises(errors.ScopeCollectionNotFound):
-      root.param('test', nn.initializers.zeros_init(), ())
+      root.param('test', nn.initializers.zeros, ())
     root = Scope({'params': {}})
     with self.assertRaises(errors.ScopeCollectionNotFound):
-      root.param('test', nn.initializers.zeros_init(), ())
+      root.param('test', nn.initializers.zeros, ())
 
     root = Scope({'params': {'abc': 1}})
     with self.assertRaises(errors.ScopeCollectionNotFound):

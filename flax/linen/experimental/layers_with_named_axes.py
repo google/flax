@@ -18,9 +18,9 @@ from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
 from flax import linen as nn
 from flax.linen.initializers import lecun_normal
-from flax.linen.initializers import ones_init
+from flax.linen.initializers import ones
 from flax.linen.initializers import variance_scaling
-from flax.linen.initializers import zeros_init
+from flax.linen.initializers import zeros
 from flax.linen.linear import PrecisionLike
 from flax.linen.partitioning import param_with_axes
 from flax.linen.partitioning import with_sharding_constraint
@@ -67,7 +67,7 @@ class Dense(nn.Module):
   param_dtype: DType = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, DType], Array] = zeros
   kernel_axes: Tuple[str, ...] = ()
 
   @nn.compact
@@ -285,8 +285,8 @@ class LayerNorm(nn.Module):
   param_dtype: DType = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = zeros_init()
-  scale_init: Callable[[PRNGKey, Shape, DType], Array] = ones_init()
+  bias_init: Callable[[PRNGKey, Shape, DType], Array] = zeros
+  scale_init: Callable[[PRNGKey, Shape, DType], Array] = ones
 
   @nn.compact
   def __call__(self, x):

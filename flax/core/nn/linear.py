@@ -41,7 +41,7 @@ def dense_general(
     bias=True,
     dtype=jnp.float32,
     kernel_init=default_kernel_init,
-    bias_init=initializers.zeros_init(),
+    bias_init=initializers.zeros,
     precision=None):
   """Applies a linear transformation to the inputs along multiple dimensions.
 
@@ -127,7 +127,7 @@ def dense(scope,
           dtype=jnp.float32,
           precision=None,
           kernel_init=default_kernel_init,
-          bias_init=initializers.zeros_init()):
+          bias_init=initializers.zeros):
   """Applies a linear transformation to the inputs along the last dimension.
 
   Args:
@@ -177,7 +177,7 @@ def conv(scope,
          dtype=jnp.float32,
          precision=None,
          kernel_init=default_kernel_init,
-         bias_init=initializers.zeros_init()):
+         bias_init=initializers.zeros):
   """Applies a convolution to the inputs.
 
   Args:
@@ -250,7 +250,7 @@ def conv_transpose(scope,
                    dtype=jnp.float32,
                    precision=None,
                    kernel_init=default_kernel_init,
-                   bias_init=initializers.zeros_init()):
+                   bias_init=initializers.zeros):
   """Applies a transposed convolution to the inputs. Behaviour mirrors that of
   `jax.lax.conv_transpose`.
 

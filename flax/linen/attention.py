@@ -18,7 +18,7 @@ import functools
 from typing import (Any, Callable, Optional, Tuple)
 from flax.linen.dtypes import promote_dtype
 
-from flax.linen.initializers import zeros_init
+from flax.linen.initializers import zeros
 from flax.linen.linear import default_kernel_init
 from flax.linen.linear import DenseGeneral
 from flax.linen.linear import PrecisionLike
@@ -223,7 +223,7 @@ class MultiHeadDotProductAttention(Module):
   deterministic: Optional[bool] = None
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False

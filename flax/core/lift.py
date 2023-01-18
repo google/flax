@@ -364,7 +364,7 @@ def vjp(
   Example::
 
     def learn_scale(scope, x, y):
-      p = scope.param('scale', nn.initializers.zeros_init(), ())
+      p = scope.param('scale', nn.initializers.zeros, ())
       return p * x * y
     def f(scope, x, y):
       z, bwd = lift.vjp(learn_scale, scope, x, y)
@@ -455,7 +455,7 @@ def jvp(
   Example::
 
     def learn_scale(scope, x):
-      p = scope.param('scale', nn.initializers.zeros_init(), ())
+      p = scope.param('scale', nn.initializers.zeros, ())
       return p * x
 
     def f(scope, x):

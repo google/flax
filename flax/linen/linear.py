@@ -20,7 +20,7 @@ from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
 
 from flax.linen.initializers import lecun_normal
 from flax.linen.initializers import variance_scaling
-from flax.linen.initializers import zeros_init
+from flax.linen.initializers import zeros
 from flax.linen.module import compact
 from flax.linen.module import Module
 from flax.linen.dtypes import promote_dtype
@@ -78,7 +78,7 @@ class DenseGeneral(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
   precision: PrecisionLike = None
 
   @compact
@@ -172,7 +172,7 @@ class Dense(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -288,7 +288,7 @@ class _Conv(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -593,7 +593,7 @@ class ConvTranspose(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
