@@ -17,7 +17,7 @@ kernelspec:
 [![Open On GitHub](https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub)](https://github.com/google/flax/blob/main/docs/notebooks/optax_update_guide.ipynb)
 
 Colab for
-https://flax.readthedocs.io/en/latest/howtos/optax_update_guide.html
+https://flax.readthedocs.io/en/latest/guides/optax_update_guide.html
 
 +++ {"id": "fCCY-S009eHv"}
 

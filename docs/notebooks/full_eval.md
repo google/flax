@@ -17,7 +17,7 @@ kernelspec:
 [![Open On GitHub](https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub)](https://github.com/google/flax/blob/main/docs/notebooks/full_eval.ipynb)
 
 This notebook only contains executable code cells for the examples mentioned in
-https://flax.readthedocs.io/en/latest/howtos/full_eval.html
+https://flax.readthedocs.io/en/latest/guides/full_eval.html
 
 Please refer to above link for a an explanation of the problem and the proposed solutions.
 
