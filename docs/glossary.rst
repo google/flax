@@ -27,8 +27,10 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       `setup vs compact guide <https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html>`__.
 
     `Folding in <https://jax.readthedocs.io/en/latest/_autosummary/jax.random.fold_in.html>`__
-      Generating a new PRNG key given an input PRNG key and integer. Generally faster than
-      `jax.random.split <https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html>`__.
+      Generating a new PRNG key given an input PRNG key and integer. Typically used when you want to
+      generate a new key but still be able to use the original rng key afterwards. You can also do this with
+      `jax.random.split <https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html>`__
+      but this will effectively create two RNG keys, which is slower.
 
     `FrozenDict <https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.FrozenDict>`__
       An immutable dictionary which can be “`unfrozen <https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.unfreeze>`__”
