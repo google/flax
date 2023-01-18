@@ -826,6 +826,7 @@ class ModuleTest(absltest.TestCase):
   def test_module_apply_method(self):
 
     class Foo(nn.Module):
+      not_callable: int = 1
 
       @nn.compact
       def __call__(self):
@@ -849,8 +850,17 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaisesRegex(errors.ApplyModuleInvalidMethodError, msg):
       Foo().apply({}, method=lambda: True)
 
-    with self.assertRaisesRegex(errors.ApplyModuleInvalidMethodError, msg):
+    # string method names are also allowed.
+    Foo().apply({}, method='test')
+
+    # non-existent attribute names will yield AttributeError.
+    with self.assertRaisesRegex(AttributeError, "allowed_apply_fn"):
       Foo().apply({}, method='allowed_apply_fn')
+
+    # attributes which are not callables yield TypeError.
+    with self.assertRaisesRegex(TypeError, "'Foo.not_callable' must be a callable"):
+      Foo().apply({}, method='not_callable')
+
 
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)
