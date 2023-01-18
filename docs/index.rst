@@ -164,6 +164,13 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
+      .. card:: :material-regular:`import_contacts;2em` Glossary
+         :class-card: sd-text-black sd-bg-light
+         :link: glossary.html
+
+   .. grid-item::
+      :columns: 6 6 6 4
+
       .. card:: :material-regular:`settings;2em` Developer notes
          :class-card: sd-text-black sd-bg-light
          :link: developer_notes/index.html
@@ -298,6 +305,7 @@ Notable examples in Flax include:
    Quick Start <getting_started>
    guides/index
    examples
+   glossary
    developer_notes/index
    philosophy
    contributing
