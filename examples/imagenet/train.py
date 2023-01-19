@@ -289,7 +289,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
       dataset_builder.info.splits['train'].num_examples // config.batch_size
   )
 
-  if config.num_train_steps == -1:
+  if config.num_train_steps <= 0:
     num_steps = int(steps_per_epoch * config.num_epochs)
   else:
     num_steps = config.num_train_steps
