@@ -1,4 +1,9 @@
 #!/bin/bash
+# If you get an error like:
+#   Cloning into 'datasets'...
+#   fatal: cannot change to 'https://github.com/tensorflow/datasets/': No such file or directory
+#   error: failed to initialize sparse-checkout
+# This mean your git version is outdated. Just update it.
 
 
 set -e
