@@ -37,11 +37,11 @@ class MLP(nn.Module):
   def __call__(self, inputs):
     x = inputs
     for layer_size in self.layer_sizes[:-1]:
-      x = nn.Dense(features=layer_size, kernel_init=nn.initializers.ones)(x)
+      x = nn.Dense(features=layer_size, kernel_init=nn.initializers.ones_init())(x)
       if self.activation is not None:
         x = self.activation(x)
     x = nn.Dense(
-        features=self.layer_sizes[-1], kernel_init=nn.initializers.ones)(
+        features=self.layer_sizes[-1], kernel_init=nn.initializers.ones_init())(
             x)
     if self.activation_final is None:
       return x
@@ -90,9 +90,9 @@ class SequentialTest(absltest.TestCase):
 
   def test_same_output_as_mlp(self):
     sequential = nn.Sequential([
-        nn.Dense(4, kernel_init=nn.initializers.ones),
-        nn.Dense(8, kernel_init=nn.initializers.ones),
-        nn.Dense(2, kernel_init=nn.initializers.ones)
+        nn.Dense(4, kernel_init=nn.initializers.ones_init()),
+        nn.Dense(8, kernel_init=nn.initializers.ones_init()),
+        nn.Dense(2, kernel_init=nn.initializers.ones_init())
     ])
     mlp = MLP(layer_sizes=[4, 8, 2])
 
@@ -107,9 +107,9 @@ class SequentialTest(absltest.TestCase):
 
   def test_same_output_as_mlp_with_activation(self):
     sequential = nn.Sequential([
-        nn.Dense(4, kernel_init=nn.initializers.ones), nn.relu,
-        nn.Dense(8, kernel_init=nn.initializers.ones), nn.relu,
-        nn.Dense(2, kernel_init=nn.initializers.ones), nn.log_softmax
+        nn.Dense(4, kernel_init=nn.initializers.ones_init()), nn.relu,
+        nn.Dense(8, kernel_init=nn.initializers.ones_init()), nn.relu,
+        nn.Dense(2, kernel_init=nn.initializers.ones_init()), nn.log_softmax
     ])
 
     mlp = MLP(

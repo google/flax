@@ -445,7 +445,7 @@ outputId: 83b5fea4-071e-4ea0-8fa8-610e69fb5fd5
 class SimpleDense(nn.Module):
   features: int
   kernel_init: Callable = nn.initializers.lecun_normal()
-  bias_init: Callable = nn.initializers.zeros
+  bias_init: Callable = nn.initializers.zeros_init()
 
   @nn.compact
   def __call__(self, inputs):

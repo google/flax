@@ -924,7 +924,7 @@ def vjp(
     class LearnScale(nn.Module):
       @nn.compact
       def __call__(self, x, y):
-        p = self.param('scale', nn.initializers.zeros, ())
+        p = self.param('scale', nn.initializers.zeros_init(), ())
         return p * x * y
 
     class Foo(nn.Module):
@@ -999,7 +999,7 @@ def jvp(
     class LearnScale(nn.Module):
       @nn.compact
       def __call__(self, x):
-        p = self.param('test', nn.initializers.zeros, ())
+        p = self.param('test', nn.initializers._init(), ())
         return p * x
 
     class Foo(nn.Module):
@@ -1016,7 +1016,7 @@ def jvp(
   Example::
 
     def learn_scale(scope, x):
-      p = scope.param('scale', nn.initializers.zeros, ())
+      p = scope.param('scale', nn.initializers.zeros_init(), ())
       return p * x
 
     def f(scope, x):

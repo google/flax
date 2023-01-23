@@ -585,7 +585,7 @@ class TransformTest(absltest.TestCase):
   def test_module_transform_with_setup(self):
     class Foo(nn.Module):
       def setup(self):
-        self.test = self.param('test', nn.initializers.ones, ())
+        self.test = self.param('test', nn.initializers.ones_init(), ())
 
       def __call__(self, x):
         return x * self.test
