@@ -581,6 +581,8 @@ class ConvTranspose(Module):
       for details.
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
+    transpose_kernel: if True flips spatial axes and swaps the input/output
+      channel axes of the kernel.
   """
   features: int
   kernel_size: Union[int, Tuple[int, ...]]
@@ -594,6 +596,7 @@ class ConvTranspose(Module):
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  transpose_kernel: bool = False
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -636,7 +639,10 @@ class ConvTranspose(Module):
     strides = self.strides or (1,) * (inputs.ndim - 2)
 
     in_features = jnp.shape(inputs)[-1]
-    kernel_shape = kernel_size + (in_features, self.features)
+    if self.transpose_kernel:
+      kernel_shape = kernel_size + (self.features, in_features)
+    else:
+      kernel_shape = kernel_size + (in_features, self.features)
 
     if self.mask is not None and self.mask.shape != kernel_shape:
       raise ValueError('Mask needs to have the same shape as weights. '
@@ -667,6 +673,7 @@ class ConvTranspose(Module):
         strides,
         padding_lax,
         rhs_dilation=self.kernel_dilation,
+        transpose_kernel=self.transpose_kernel,
         precision=self.precision)
 
     if self.padding == 'CIRCULAR':
@@ -689,12 +696,20 @@ class ConvTranspose(Module):
           -(y_dim - x_dim) % (2 * x_dim)
           for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
       ]
-      # Divide the padding equaly between left and right. The choice to put
-      # "+1" on the left (and not on the right) represents a convention for
-      # aligning even-sized kernels.
-      total_pad = [
-          ((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs
-      ]
+      if self.transpose_kernel:
+        # If the kernel is transposed, the "+1" is put on the right to
+        # mirror the regular convolution. If the same kernel parameters are used
+        # as for Conv, this layer then computes the proper transpose convolution.
+        total_pad = [
+            (size_diff // 2, (size_diff + 1) // 2) for size_diff in size_diffs
+        ]
+      else:
+        # Divide the padding equally between left and right. The choice to put
+        # "+1" on the left (and not on the right) represents a convention for
+        # aligning even-sized kernels.
+        total_pad = [
+            ((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs
+        ]
       y = jnp.pad(y, [(0, 0)] + total_pad + [(0, 0)])
       # Wrap the result periodically around each spatial dimension,
       # one by one.
