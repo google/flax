@@ -1925,6 +1925,24 @@ class ModuleTest(absltest.TestCase):
                                 'Trying to access a property that'):
       foo.apply({})
 
+  def test_repr(self):
+
+    class Base1(nn.Module):
+      a: int
+
+    class Base2(nn.Module):
+        b: str
+
+    class Foo(Base2, Base1):
+        c: float
+
+    module = Foo(a=1, b='ok', c=3.0)
+    str_rep = repr(module)
+
+    self.assertIn('a = 1', str_rep)
+    self.assertIn("b = 'ok'", str_rep)
+    self.assertIn('c = 3.0', str_rep)
+
 
 class LeakTests(absltest.TestCase):
 
