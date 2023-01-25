@@ -12,7 +12,7 @@ vNext
 -
 -
 -
--
+- Add ``Module.lazy_init`` to avoid compute during Module initialization.
 -
 -
 -

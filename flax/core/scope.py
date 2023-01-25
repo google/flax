@@ -30,6 +30,7 @@ from flax import traceback_util
 from .frozen_dict import freeze
 from .frozen_dict import FrozenDict
 from .frozen_dict import unfreeze
+from . import partial_eval
 from . import tracers
 from . import meta
 import jax
@@ -941,6 +942,38 @@ def init(fn: Callable[..., Any],
                                                         **kwargs)
 
   return wrapper
+
+
+def lazy_init(fn: Callable[..., Any],
+         mutable: CollectionFilter = True,
+         flags: Optional[Mapping] = None) -> Callable[..., Any]:
+  """Functionalize a `Scope` function for lazy initialization.
+
+  Similair to ``init`` except that the init function now accepts
+  ``jax.ShapeDtypeStruct`` instances for arguments that do not
+  affect the variable initialization (typically this is all the input data).
+
+  Example::
+
+    def f(scope, x):
+        # the kernel init only uses the shape of x so we don't actually
+        # need a value for x and can pass it as a ShapeDtypeStruct in lazy_init.
+        k = scope.param("kernel", nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1]))
+        return x @ k
+    init_fn = lazy_init(f)
+    variables = init_fn(random.PRNGKey(0), jax.ShapeDtypeStruct((1, 128), jnp.float32))
+
+
+  Args:
+    fn: a function taking a `Scope` as its first argument.
+    mutable: the filter determining which variable collections are mutable.
+    flags: internal flags.
+
+  Returns:
+    `fn` with the scope partially applied. Unlike ``init`` which returns a tuple of function
+    output and variables, the lazy init function only returns the variables.
+  """
+  return partial_eval.lazy_init(lambda *args, **kwargs: init(fn, mutable, flags)(*args, **kwargs)[1])
 
 
 def _is_valid_collection(col: VariableDict):

@@ -35,6 +35,7 @@ import flax
 from flax import (config, core, errors, serialization, traceback_util,
                   traverse_util)
 from flax.core import Scope
+from flax.core import partial_eval
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (  # pylint: disable=g-multiple-import
     CollectionFilter, DenyList, FrozenVariableDict, Variable, VariableDict,
@@ -1525,6 +1526,43 @@ class Module:
         capture_intermediates=capture_intermediates,
         **kwargs)
     return v_out
+
+  @traceback_util.api_boundary
+  def lazy_init(self,
+           rngs: Union[PRNGKey, RNGSequences],
+           *args,
+           method: Optional[Callable[..., Any]] = None,
+           mutable: CollectionFilter = DenyList('intermediates'),
+           **kwargs) -> FrozenVariableDict:
+    """Initializes a module without computing on an actual input.
+
+    lazy_init will initialize the variables without doing unnecessary compute.
+    The input data should be passed as a ``jax.ShapeDtypeStruct`` which specifies
+    the shape and dtype of the input but no concrete data.
+
+    Example::
+
+      model = nn.Dense(features=256)
+      variables = model.lazy_init(rng, jax.ShapeDtypeStruct((1, 128), jnp.float32))
+
+    Args:
+      rngs: The rngs for the variable collections.
+      *args: arguments passed to the init function.
+      method: An optional method. If provided, applies this method. If not
+        provided, applies the ``__call__`` method.
+      mutable: Can be bool, str, or list. Specifies which collections should be
+        treated as mutable: ``bool``: all/no collections are mutable.
+        ``str``: The name of a single mutable collection. ``list``: A
+        list of names of mutable collections. By default all collections
+        except "intermediates" are mutable.
+      **kwargs: Keyword arguments passed to the init function.
+    Returns:
+      The initialized variable dict.
+    """
+    Module._module_checks(self)
+    def lazy_wrapper(rngs, *args, **kwargs):
+      return self.init(rngs, *args, method=method, mutable=mutable, **kwargs)
+    return partial_eval.lazy_init(lazy_wrapper)(rngs, *args, **kwargs)
 
   @property
   def variables(self) -> VariableDict:
