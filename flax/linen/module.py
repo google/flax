@@ -1364,7 +1364,7 @@ class Module:
             variables: VariableDict,
             *args,
             rngs: Optional[RNGSequences] = None,
-            method: Optional[Callable[..., Any]] = None,
+            method: Union[Callable[..., Any], str, None] = None,
             mutable: CollectionFilter = False,
             capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
             **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
@@ -1382,6 +1382,11 @@ class Module:
     instance, the example below is equivalent to the one above::
 
       encoded = model.apply({'params': params}, x, method=model.encode)
+
+    You can also pass a string to a callable attribute of the module. For
+    example, the previous can be written as::
+
+      encoded = model.apply({'params': params}, x, method='encode')
 
     Note ``method`` can also be a function that is not defined in
     ``Transformer``. In that case, the function should have at least one
@@ -1402,7 +1407,8 @@ class Module:
         The "params" PRNG sequence is used to initialize parameters.
       method: A function to call apply on. This is generally a function in the
         module. If provided, applies this method. If not provided, applies the
-        ``__call__`` method of the module.
+        ``__call__`` method of the module. A string can also be provided to
+        specify a method by name.
       mutable: Can be bool, str, or list. Specifies which collections should be
                treated as mutable: ``bool``: all/no collections are mutable.
                ``str``: The name of a single mutable collection. ``list``: A
@@ -1421,7 +1427,13 @@ class Module:
     """
     Module._module_checks(self)
 
-    if method is None:
+    if isinstance(method, str):
+      attribute_name = method
+      method = getattr(self, attribute_name)
+      if not callable(method):
+        class_name = type(self).__name__
+        raise TypeError(f'\'{class_name}.{attribute_name}\' must be a callable, got {type(method)}.')
+    elif method is None:
       method = self.__call__
     method = _get_unbound_fn(method)
     return apply(
@@ -1434,7 +1446,7 @@ class Module:
   def init_with_output(self,
                        rngs: Union[PRNGKey, RNGSequences],
                        *args,
-                       method: Optional[Callable[..., Any]] = None,
+                       method: Union[Callable[..., Any], str, None] = None,
                        mutable: CollectionFilter = DenyList('intermediates'),
                        capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
                        **kwargs) -> Tuple[Any, FrozenVariableDict]:
@@ -1444,7 +1456,8 @@ class Module:
       rngs: The rngs for the variable collections.
       *args: Named arguments passed to the init function.
       method: An optional method. If provided, applies this method. If not
-        provided, applies the ``__call__`` method.
+        provided, applies the ``__call__`` method. A string can also be'
+        provided to specify a method by name.
       mutable: Can be bool, str, or list. Specifies which collections should be
         treated as mutable: ``bool``: all/no collections are mutable.
         ``str``: The name of a single mutable collection. ``list``: A
@@ -1469,7 +1482,14 @@ class Module:
             'RNGs should be of shape (2,) or KeyArray in Module '
             f'{self.__class__.__name__}, but rngs are: {rngs}')
       rngs = {'params': rngs}
-    if method is None:
+
+    if isinstance(method, str):
+      attribute_name = method
+      method = getattr(self, attribute_name)
+      if not callable(method):
+        class_name = type(self).__name__
+        raise TypeError(f'\'{class_name}.{attribute_name}\' must be a callable, got {type(method)}.')
+    elif method is None:
       method = self.__call__
     method = _get_unbound_fn(method)
     return init_with_output(
@@ -1483,7 +1503,7 @@ class Module:
   def init(self,
            rngs: Union[PRNGKey, RNGSequences],
            *args,
-           method: Optional[Callable[..., Any]] = None,
+           method: Union[Callable[..., Any], str, None] = None,
            mutable: CollectionFilter = DenyList('intermediates'),
            capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
            **kwargs) -> FrozenVariableDict:
@@ -1548,7 +1568,8 @@ class Module:
       rngs: The rngs for the variable collections.
       *args: Named arguments passed to the init function.
       method: An optional method. If provided, applies this method. If not
-        provided, applies the ``__call__`` method.
+        provided, applies the ``__call__`` method. A string can also be
+        provided to specify a method by name.
       mutable: Can be bool, str, or list. Specifies which collections should be
         treated as mutable: ``bool``: all/no collections are mutable.
         ``str``: The name of a single mutable collection. ``list``: A
