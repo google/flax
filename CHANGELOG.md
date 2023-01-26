@@ -24,6 +24,22 @@ vNext
 -
 -
 
+0.6.4
+-----
+New features:
+- Our [ReadTheDoc](https://flax.readthedocs.io/en/latest/index.html) site is a lot more organized now! More improvements on the way.
+- Flax auto-SPMD parallelism API to work seamlessly with `jax.pjit`: https://flax.readthedocs.io/en/latest/guides/flax_on_pjit.html
+- Added new `zeros_init` and `ones_init` initializers.
+- Adds standardize initializer.
+- Allowed specifying method as a string.
+- Allowed runtime overwrite of `flax.config` flags.
+
+Bug fixes:
+- Added missing `dataclass.fields` from `__repr__`.
+- Renamed ConvLSTM to ConvLSTMCell.
+- Fix some tiny inconsistencies between scope.py and module.py.
+- Improved many many docstrings, comments and error messages.
+
 0.6.3
 -----
 New features:
