@@ -841,21 +841,40 @@ def map_variables(
     methods=None) -> Target:
   """Map Variables inside a module.
 
-  Example::
+  ``map_variables`` can be used to transform the variables inside a module
+  both before and after the module is applied. This is useful among other
+  things for masking the weights of a module without having to modify the
+  module itself.
 
-    class OneBitDense(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        def sign(x):
-          return jax.tree_util.tree_map(jnp.sign, x)
-        MapDense = nn.map_variables(nn.Dense, "params", sign, init=True)
-        return MapDense(4)(x)
+  Example::
+    >>> import jax
+    >>> import jax.numpy as jnp
+    >>> import flax.linen as nn
+    ...
+    >>> class CasualDense(nn.Module):
+    ...   features: int
+    ...
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     def apply_mask(variables):
+    ...       return (jax.tree_map(jnp.triu, variables)
+    ...               if not self.is_initializing() else variables)
+    ...
+    ...     CasualDense = nn.map_variables(
+    ...       nn.Dense, 'params', apply_mask, init=self.is_initializing())
+    ...
+    ...     mapped_dense = CasualDense(features=self.features, use_bias=False)
+    ...     return mapped_dense(x)
+    ...
+    >>> module = CasualDense(features=5)
+    >>> variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 5)))
 
   Args:
-    target: the function to be transformed.
+    target: the module or function to be transformed.
     mapped_collections: the collection(s) to be transformed.
-    trans_in_fn: creates a view of the target variables.
-    trans_out_fn: transforms the updated variables in the view after mutation.
+    trans_in_fn: modifies the variables before applying the module or function.
+    trans_out_fn: modifies the variables after applying the module or function,
+      it is only applied if either ``init`` or ``mutable`` are not False.
     init: If True, variables are initialized before transformation.
     mutable: If True, the mapped variable collections will be mutable.
     rngs: PRNGSequences added to the transformed scope (default: all).
