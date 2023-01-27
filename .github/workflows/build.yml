@@ -118,6 +118,13 @@ jobs:
     - name: Install Flax
       run: |
         venv/bin/python3 -m pip install -e .
+    - name: Cached mypy cache
+      id: mypy_cache
+      uses: actions/cache@v3
+      if: matrix.test-type == 'mypy'
+      with:
+        path: .mypy_cache
+        key: mypy-${{ steps.setup_python.outputs.python-version }}-${{ steps.week_year.outputs.DATE }}
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
