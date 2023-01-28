@@ -7,7 +7,7 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: Python 3.10.4 64-bit
+  display_name: py38
   language: python
   name: python3
 ---
@@ -21,6 +21,8 @@ Flax exposes the full power of JAX. And just like when using JAX, there are cert
 First, install and/or update Flax:
 
 ```{code-cell} ipython3
+:tags: [skip-execution]
+
 !pip install -qq flax
 ```
 

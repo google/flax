@@ -39,6 +39,8 @@ colab:
 id: qdrEVv9tinJn
 outputId: e30aa464-fa52-4f35-df96-716c68a4b3ee
 tags: [skip-execution]
+vscode:
+  languageId: python
 ---
 # Install the latest JAXlib version.
 !pip install --upgrade -q pip jax jaxlib
@@ -47,12 +49,22 @@ tags: [skip-execution]
 ```
 
 ```{code-cell}
-:id: kN6bZDaReZO2
-
+---
+executionInfo:
+  elapsed: 57
+  status: ok
+  timestamp: 1674873908618
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: kN6bZDaReZO2
+vscode:
+  languageId: python
+---
 import jax
 from typing import Any, Callable, Sequence
 from jax import lax, random, numpy as jnp
-from flax.core import freeze, unfreeze
 from flax import linen as nn
 ```
 
@@ -67,8 +79,19 @@ A dense layer is a layer that has a kernel parameter $W\in\mathcal{M}_{m,n}(\mat
 This dense layer is already provided by Flax in the `flax.linen` module (here imported as `nn`).
 
 ```{code-cell}
-:id: zWX2zEtphT4Y
-
+---
+executionInfo:
+  elapsed: 1
+  status: ok
+  timestamp: 1674873910218
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: zWX2zEtphT4Y
+vscode:
+  languageId: python
+---
 # We create one dense layer instance (taking 'features' parameter as input)
 model = nn.Dense(features=5)
 ```
@@ -83,10 +106,18 @@ Parameters are not stored with the models themselves. You need to initialize par
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 55
+  status: ok
+  timestamp: 1674873911368
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: K529lhzeYtl8
-outputId: 06feb9d2-db50-4f41-c169-6df4336f43a5
+outputId: f211892c-975d-4dc5-97d3-f570feb6b8ca
+vscode:
+  languageId: python
 ---
 key1, key2 = random.split(random.PRNGKey(0))
 x = random.normal(key1, (10,)) # Dummy input data
@@ -105,35 +136,24 @@ The result is what we expect: bias and kernel parameters of the correct size. Un
 * Initialization functions are called to generate the initial set of parameters that the model will use. Those are functions that take as arguments `(PRNG Key, shape, dtype)` and return an Array of shape `shape`.
 * The init function returns the initialized set of parameters (you can also get the output of the forward pass on the dummy input with the same syntax by using the `init_with_output` method instead of `init`.
 
-+++ {"id": "3yL9mKk7naJn"}
-
-The output shows that the parameters are stored in a `FrozenDict` instance, which helps deal with the functional nature of JAX by preventing any mutation of the underlying dict and making the user aware of it. Read more about it in the [`flax.core.frozen_dict.FrozenDict` API docs](https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.FrozenDict).
-
-As a consequence, the following doesn't work:
-
-```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: HtOFWeiynaJo
-outputId: 689b4230-2a3d-4823-d103-2858e6debc4d
----
-try:
-    params['new_key'] = jnp.ones((2,2))
-except ValueError as e:
-    print("Error: ", e)
-```
-
 +++ {"id": "M1qo9M3_naJo"}
 
 To conduct a forward pass with the model with a given set of parameters (which are never stored with the model), we just use the `apply` method by providing it the parameters to use as well as the input:
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 58
+  status: ok
+  timestamp: 1674873913259
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: J8ietJecWiuK
-outputId: 7bbe6bb4-94d5-4574-fbb5-aa0fcd1c84ae
+outputId: e6e55476-ca78-4f24-ed54-85113c55f08e
+vscode:
+  languageId: python
 ---
 model.apply(params, x)
 ```
@@ -150,10 +170,18 @@ Here, we see that the tuple $(W,b)$ matches the parameters of the Dense layer. W
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 53
+  status: ok
+  timestamp: 1674873914775
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: bFIiMnL4dl-e
-outputId: 6eae59dc-0632-4f53-eac8-c22a7c646a52
+outputId: 8895c131-c7ec-4151-995e-b9efeedf2360
+vscode:
+  languageId: python
 ---
 # Set problem dimensions.
 n_samples = 20
@@ -165,8 +193,8 @@ key = random.PRNGKey(0)
 k1, k2 = random.split(key)
 W = random.normal(k1, (x_dim, y_dim))
 b = random.normal(k2, (y_dim,))
-# Store the parameters in a FrozenDict pytree.
-true_params = freeze({'params': {'bias': b, 'kernel': W}})
+# Store the parameters in a dict.
+true_params = {'params': {'bias': b, 'kernel': W}}
 
 # Generate samples with additional noise.
 key_sample, key_noise = random.split(k1)
@@ -180,8 +208,19 @@ print('x shape:', x_samples.shape, '; y shape:', y_samples.shape)
 We copy the same training loop that we used in the JAX pytree linear regression example with `jax.value_and_grad()`, but here we can use `model.apply()` instead of having to define our own feed-forward function (`predict_pytree()` in the [JAX example](https://flax.readthedocs.io/en/latest/guides/jax_for_the_impatient.html#linear-regression-with-pytrees)).
 
 ```{code-cell}
-:id: JqJaVc7BeNyT
-
+---
+executionInfo:
+  elapsed: 54
+  status: ok
+  timestamp: 1674873917111
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: JqJaVc7BeNyT
+vscode:
+  languageId: python
+---
 # Same as JAX version but using model.apply().
 @jax.jit
 def mse(params, x_batched, y_batched):
@@ -199,10 +238,18 @@ And finally perform the gradient descent.
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 815
+  status: ok
+  timestamp: 1674873918936
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: ePEl1ndse0Jq
-outputId: 50d975b3-4706-4d8a-c4b8-2629ab8e3ac4
+outputId: 3c444941-d177-42ba-a420-bc9a355cf296
+vscode:
+  languageId: python
 ---
 learning_rate = 0.3  # Gradient step size.
 print('Loss for "true" W,b: ', mse(true_params, x_samples, y_samples))
@@ -249,8 +296,19 @@ to the
 [official documentation](https://optax.readthedocs.io/en/latest/).
 
 ```{code-cell}
-:id: Ce77uDJx1bUF
-
+---
+executionInfo:
+  elapsed: 53
+  status: ok
+  timestamp: 1674873920662
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
+id: Ce77uDJx1bUF
+vscode:
+  languageId: python
+---
 import optax
 tx = optax.adam(learning_rate=learning_rate)
 opt_state = tx.init(params)
@@ -259,10 +317,18 @@ loss_grad_fn = jax.value_and_grad(mse)
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 874
+  status: ok
+  timestamp: 1674873922307
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: PTSv0vx13xPO
-outputId: eec0c096-1d9e-4b3c-f8e5-942ee63828ec
+outputId: f51a6525-70ec-4de9-9b68-6f7fa587fc6b
+vscode:
+  languageId: python
 ---
 for i in range(101):
   loss_val, grads = loss_grad_fn(params, x_samples, y_samples)
@@ -280,10 +346,18 @@ Now that we're happy with the result of our training, we might want to save the 
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 58
+  status: ok
+  timestamp: 1674873923411
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: BiUPRU93XnAZ
-outputId: b97e7d83-3e40-4a80-b1fe-1f6ceff30a0c
+outputId: 07fc6a19-b3bd-4134-b0ff-05a95f61f7cd
+vscode:
+  languageId: python
 ---
 from flax import serialization
 bytes_output = serialization.to_bytes(params)
@@ -302,10 +376,18 @@ To load the model back, you'll need to use a template of the model parameter str
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 60
+  status: ok
+  timestamp: 1674873968644
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: MOhoBDCOYYJ5
-outputId: 13acc4e1-8757-4554-e2c8-d594ba6e67dc
+outputId: 2de7ebfa-e104-4cda-c299-a89fb2531eb9
+vscode:
+  languageId: python
 ---
 serialization.from_bytes(params, bytes_output)
 ```
@@ -326,10 +408,18 @@ The base abstraction for models is the `nn.Module` class, and every type of pred
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 186
+  status: ok
+  timestamp: 1674874082797
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: vbfrfbkxgPhg
-outputId: b59c679c-d164-4fd6-92db-b50f0d310ec3
+outputId: e3e71eb4-7eea-4ee8-b01f-03d8fb5198d1
+vscode:
+  languageId: python
 ---
 class ExplicitMLP(nn.Module):
   features: Sequence[int]
@@ -355,7 +445,7 @@ model = ExplicitMLP(features=[3,4,5])
 params = model.init(key2, x)
 y = model.apply(params, x)
 
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, unfreeze(params)))
+print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, params))
 print('output:\n', y)
 ```
 
@@ -374,10 +464,18 @@ Since the module structure and its parameters are not tied to each other, you ca
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 66
+  status: ok
+  timestamp: 1674874097200
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: DEYrVA6dnaJu
-outputId: 4af16ec5-b52a-43b0-fc47-1f8ab25e7058
+outputId: 61c328bd-d586-493c-a0a0-a3004033ff62
+vscode:
+  languageId: python
 ---
 try:
     y = model(x) # Returns an error
@@ -391,10 +489,18 @@ Since here we have a very simple model, we could have used an alternative (but e
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 180
+  status: ok
+  timestamp: 1674874147005
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: ZTCbdpQ4suSK
-outputId: 183a74ef-f54e-4848-99bf-fee4c174ba6d
+outputId: 74375c32-0d97-4e1e-e2cc-4bd4663524f6
+vscode:
+  languageId: python
 ---
 class SimpleMLP(nn.Module):
   features: Sequence[int]
@@ -417,7 +523,7 @@ model = SimpleMLP(features=[3,4,5])
 params = model.init(key2, x)
 y = model.apply(params, x)
 
-print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, unfreeze(params)))
+print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, params))
 print('output:\n', y)
 ```
 
@@ -437,10 +543,18 @@ In the previous MLP example, we relied only on predefined layers and operators (
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 98
+  status: ok
+  timestamp: 1674874183118
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: wK371Pt_vVfR
-outputId: 83b5fea4-071e-4ea0-8fa8-610e69fb5fd5
+outputId: 27590735-52d6-4ce7-eb5c-350240e0a72f
+vscode:
+  languageId: python
 ---
 class SimpleDense(nn.Module):
   features: int
@@ -494,10 +608,18 @@ For demonstration purposes, we'll implement a simplified but similar mechanism t
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 59
+  status: ok
+  timestamp: 1674874256167
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: J6_tR-nPzB1i
-outputId: 75465fd6-cdc8-497c-a3ec-7f709b5dde7a
+outputId: 6e3b54b3-0260-49c3-834c-7b39339e4f0b
+vscode:
+  languageId: python
 ---
 class BiasAdderWithRunningMean(nn.Module):
   decay: float = 0.99
@@ -532,16 +654,24 @@ Here, `updated_state` returns only the state variables that are being mutated by
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 4
+  status: ok
+  timestamp: 1674874463906
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: IbTsCAvZcdBy
-outputId: 09a8bdd1-eaf8-401a-cf7c-386a7a5aa87b
+outputId: 9b4f6da1-851b-44ac-b254-7c1fe9c4aa4c
+vscode:
+  languageId: python
 ---
 for val in [1.0, 2.0, 3.0]:
   x = val * jnp.ones((10,5))
   y, updated_state = model.apply(variables, x, mutable=['batch_stats'])
-  old_state, params = variables.pop('params')
-  variables = freeze({'params': params, **updated_state})
+  params = variables.pop('params')
+  variables = {'params': params, **updated_state}
   print('updated state:\n', updated_state) # Shows only the mutable part
 ```
 
@@ -553,10 +683,18 @@ From this simplified example, you should be able to derive a full BatchNorm impl
 
 ```{code-cell}
 ---
-colab:
-  base_uri: https://localhost:8080/
+executionInfo:
+  elapsed: 58
+  status: ok
+  timestamp: 1674874605332
+  user:
+    displayName: Marcus Chiam
+    userId: '17531616275590396120'
+  user_tz: 480
 id: TUgAbUPpnaJw
-outputId: 0906fbab-b866-4956-d231-b1374415d448
+outputId: 690ca4a3-a564-4325-f0ef-0dba52779629
+vscode:
+  languageId: python
 ---
 from functools import partial
 
@@ -576,7 +714,8 @@ def update_step(tx, apply_fn, x, opt_state, params, state):
 
 x = jnp.ones((10,5))
 variables = model.init(random.PRNGKey(0), x)
-state, params = variables.pop('params')
+state = variables.copy()
+params = state.pop('params')
 del variables
 tx = optax.sgd(learning_rate=0.02)
 opt_state = tx.init(params)

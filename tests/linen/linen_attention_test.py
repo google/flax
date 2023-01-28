@@ -119,7 +119,9 @@ class AttentionTest(parameterized.TestCase):
     decode_module = module.clone(decode=True)
 
     initial_vars = decode_module.init(key2, inputs)
-    state, params = initial_vars.pop('params')
+    # state, params = initial_vars.pop('params')
+    state = initial_vars.copy()
+    params = state.pop('params')
     causal_mask = nn.attention.make_causal_mask(jnp.ones((bs,) + spatial_shape))
     y_ref = jax.jit(lambda x, y: module.apply(initial_vars, x, y))(
         inputs, causal_mask)

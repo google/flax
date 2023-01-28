@@ -33,7 +33,7 @@ This guide covers the following:
 
 Install/upgrade Flax and [Orbax](https://github.com/google/orbax). For JAX installation with GPU/TPU support, visit [this section on GitHub](https://github.com/google/jax#installation).
 
-```python
+```python tags=["skip-execution"]
 !pip install -U -qq flax orbax
 
 # Orbax needs to enable asyncio in a Colab environment.

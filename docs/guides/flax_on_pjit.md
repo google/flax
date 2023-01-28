@@ -42,6 +42,7 @@ Install Flax from HEAD:
 
 ```{code-cell} ipython3
 :id: 867203db3bef
+:tags: [skip-execution]
 
 # Once Flax v0.6.4 is released, use `pip3 install flax`.
 !pip3 install -qq "git+https://github.com/google/flax.git@main#egg=flax"

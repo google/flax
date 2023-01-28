@@ -21,6 +21,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 import flax.linen.module as module_lib
 from flax.core import meta
 from flax.core.scope import CollectionFilter, FrozenVariableDict, MutableVariableDict
+from flax.core import freeze
 import jax
 import jax.numpy as jnp
 import rich.console
@@ -244,7 +245,7 @@ def _get_module_table(
     with module_lib._tabulate_context():
 
       def _get_variables():
-        return module.init(*args, **kwargs)
+        return freeze(module.init(*args, **kwargs))
 
       variables = jax.eval_shape(_get_variables)
       calls = module_lib._context.call_info_stack[-1].calls

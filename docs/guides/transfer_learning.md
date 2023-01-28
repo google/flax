@@ -7,7 +7,7 @@ jupytext:
     format_version: 0.13
     jupytext_version: 1.13.8
 kernelspec:
-  display_name: 'Python 3.8.10 (''.venv'': venv)'
+  display_name: py38
   language: python
   name: python3
 ---
@@ -93,7 +93,7 @@ import jax
 class Classifier(nn.Module):
   num_classes: int
   backbone: nn.Module
-  
+
 
   @nn.compact
   def __call__(self, x):
@@ -101,6 +101,7 @@ class Classifier(nn.Module):
     x = nn.Dense(
       self.num_classes, name='head', kernel_init=nn.zeros)(x)
     return x
+print(type(clip_variables))
 ```
 
 To construct a classifier `model`, the `vision_model` Module is passed as the `backbone` to `Classifier`. Then the model's `params` can be randomly initialized by passing fake data that is used to infer the parameter shapes.
@@ -118,9 +119,9 @@ params = variables['params']
 Since `params` are currently random, the pretrained parameters from `vision_model_vars` have to be transfered to the `params` structure at the appropriate location. This can be done by unfreezing `params`, updating the `backbone` parameters, and freezing the `params` again:
 
 ```{code-cell} ipython3
-from flax.core.frozen_dict import freeze
+from flax.core.frozen_dict import unfreeze, freeze
 
-params = params.unfreeze()
+params = unfreeze(params)
 params['backbone'] = vision_model_vars['params']
 params = freeze(params)
 ```
@@ -135,7 +136,7 @@ If you need to to train different parts of the model separately, you have three 
 2. Filter the parameters for `jax.grad`.
 3. Use multiple optimizers for different parameters.
 
-For most situations we recommend using multiple optimizers via [Optax](https://optax.readthedocs.io/)'s [`multi_transform`](https://optax.readthedocs.io/en/latest/api.html#optax.multi_transform) as its both efficient and can be easily extended to implement many fine-tunning strategies. 
+For most situations we recommend using multiple optimizers via [Optax](https://optax.readthedocs.io/)'s [`multi_transform`](https://optax.readthedocs.io/en/latest/api.html#optax.multi_transform) as its both efficient and can be easily extended to implement many fine-tunning strategies.
 
 ### **optax.multi_transform**
 

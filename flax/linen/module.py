@@ -1369,7 +1369,7 @@ class Module:
             method: Union[Callable[..., Any], str, None] = None,
             mutable: CollectionFilter = False,
             capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
-            **kwargs) -> Union[Any, Tuple[Any, FrozenVariableDict]]:
+            **kwargs) -> Union[Any, Tuple[Any, dict]]:
     """Applies a module method to variables and returns output and modified variables.
 
     Note that `method` should be set if one would like to call `apply` on a
@@ -1451,7 +1451,7 @@ class Module:
                        method: Union[Callable[..., Any], str, None] = None,
                        mutable: CollectionFilter = DenyList('intermediates'),
                        capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
-                       **kwargs) -> Tuple[Any, FrozenVariableDict]:
+                       **kwargs) -> Tuple[Any, dict]:
     """Initializes a module method with variables and returns output and modified variables.
 
     Args:
@@ -1508,7 +1508,7 @@ class Module:
            method: Union[Callable[..., Any], str, None] = None,
            mutable: CollectionFilter = DenyList('intermediates'),
            capture_intermediates: Union[bool, Callable[['Module', str], bool]] = False,
-           **kwargs) -> FrozenVariableDict:
+           **kwargs) -> dict:
     """Initializes a module method with variables and returns modified variables.
 
     ``init`` takes as first argument either a single ``PRNGKey``, or a dictionary mapping variable collections names to their ``PRNGKeys``, and will call ``method`` (which is the module's ``__call__`` function by default) passing ``*args`` and ``**kwargs``, and returns
@@ -2024,7 +2024,7 @@ def apply(fn: Callable[..., Any], module: Module,
 def init_with_output(fn: Callable[..., Any], module: Module,
                      mutable: CollectionFilter = DenyList('intermediates'),
                      capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
-                     ) -> Callable[..., Tuple[Any, FrozenVariableDict]]:
+                     ) -> Callable[..., Tuple[Any, dict]]:
   """Creates an init function to call ``fn`` with a bound module that also returns the function outputs.
 
   Unlike ``Module.init_with_output`` this function returns a new function with the signature
@@ -2085,7 +2085,7 @@ def init_with_output(fn: Callable[..., Any], module: Module,
 def init(fn: Callable[..., Any], module: Module,
          mutable: CollectionFilter = DenyList('intermediates'),
          capture_intermediates: Union[bool, Callable[[Module, str], bool]] = False,
-         ) -> Callable[..., FrozenVariableDict]:
+         ) -> Callable[..., dict]:
   """Creates an init function to call ``fn`` with a bound module.
 
   Unlike ``Module.init`` this function returns a new function with the signature

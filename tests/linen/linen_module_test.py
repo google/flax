@@ -1157,7 +1157,7 @@ class ModuleTest(absltest.TestCase):
 
     variables = A().init(random.PRNGKey(0), jnp.ones((1,)))
     var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'b': {
                 'foo': {
@@ -1166,7 +1166,7 @@ class ModuleTest(absltest.TestCase):
                 }
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
   def test_module_pass_in_closure(self):
@@ -1182,14 +1182,14 @@ class ModuleTest(absltest.TestCase):
 
     variables = B().init(random.PRNGKey(0), jnp.ones((1,)))
     var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'foo': {
                 'bias': (2,),
                 'kernel': (1, 2),
             }
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
     self.assertIsNone(a.name)
 
@@ -1232,7 +1232,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y.shape, (4, 5))
 
     var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'dense_out': {
                 'bias': (5,),
@@ -1245,7 +1245,7 @@ class ModuleTest(absltest.TestCase):
                 },
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
   def test_toplevel_submodule_adoption_pytree(self):
@@ -1276,7 +1276,7 @@ class ModuleTest(absltest.TestCase):
     params = B(a_pytree).init(key, x, x)
     print('apply', x.shape)
     unused_y, counters = b.apply(params, x, x, mutable='counter')
-    ref_counters = freeze({
+    ref_counters = {
         'counter': {
             'A_bar': {
                 'i': jnp.array(2.0),
@@ -1285,7 +1285,7 @@ class ModuleTest(absltest.TestCase):
                 'i': jnp.array(2.0),
             },
         },
-    })
+    }
     self.assertTrue(
         jax.tree_util.tree_all(
             jax.tree_util.tree_map(
@@ -1323,7 +1323,7 @@ class ModuleTest(absltest.TestCase):
     c = C(a, b)
     p = c.init(key, x)
     var_shapes = jax.tree_util.tree_map(jnp.shape, p)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'Dense_0': {
                 'kernel': (2, 2),
@@ -1339,7 +1339,7 @@ class ModuleTest(absltest.TestCase):
                 },
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
   def test_toplevel_named_submodule_adoption(self):
@@ -1369,7 +1369,7 @@ class ModuleTest(absltest.TestCase):
     init_vars = b.init(k, x)
     var_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
     if config.flax_relaxed_naming:
-      ref_var_shapes = freeze({
+      ref_var_shapes = {
           'params': {
               'foo': {
                   'dense': {
@@ -1380,9 +1380,9 @@ class ModuleTest(absltest.TestCase):
                   'kernel': (4, 6),
               },
           },
-      })
+      }
     else:
-      ref_var_shapes = freeze({
+      ref_var_shapes = {
           'params': {
               'a': {
                   'dense': {
@@ -1393,7 +1393,7 @@ class ModuleTest(absltest.TestCase):
                   'kernel': (4, 6),
               },
           },
-      })
+      }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
   def test_toplevel_submodule_pytree_adoption_sharing(self):
@@ -1423,13 +1423,13 @@ class ModuleTest(absltest.TestCase):
 
     params = b.init(key, x)
     _, counters = b.apply(params, x, mutable='counter')
-    ref_counters = freeze({
+    ref_counters = {
         'counter': {
             'A_bar': {
                 'i': jnp.array(6.0),
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(counters, ref_counters))
 
   def test_inner_class_def(self):
@@ -1651,7 +1651,6 @@ class ModuleTest(absltest.TestCase):
 
     x = jnp.ones((3,))
     variables = Foo().init(random.PRNGKey(0), x)
-    variables = variables.unfreeze()
     y = Foo().apply(variables, x)
     self.assertEqual(y.shape, (2,))
 

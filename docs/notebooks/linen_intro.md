@@ -385,7 +385,8 @@ x = random.uniform(key1, (3,4,4))
 model = Block(features=3, training=True)
 
 init_variables = model.init({'params': key2, 'dropout': key3}, x)
-_, init_params = init_variables.pop('params')
+init_params = init_variables.copy()
+init_params = init_params.pop('params')
 
 # When calling `apply` with mutable kinds, returns a pair of output,
 # mutated_variables.

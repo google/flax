@@ -173,6 +173,7 @@ executionInfo:
   user_tz: 480
 id: qXr7JDpIxGNZ
 outputId: 1249b7fb-6787-41eb-b34c-61d736300844
+tags: [skip-execution]
 ---
 !pip install -q clu
 ```

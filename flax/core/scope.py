@@ -487,11 +487,11 @@ class Scope:
     self._invalid = True
 
   def mutable_variables(self) -> VariableDict:
-    """Returns an immutable copy of the mutable variables belonging to this Scope."""
+    """Returns mutable variables belonging to this Scope."""
     self._populate_collections()
     xs = {k: v for k, v in self._variables.items()
           if in_filter(self.mutable, k)}
-    return freeze(xs)
+    return xs
 
   def variables(self) -> VariableDict:
     """Returns an immutable copy of the variables belonging to this Scope."""
