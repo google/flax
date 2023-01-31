@@ -1545,6 +1545,14 @@ class Module:
       model = nn.Dense(features=256)
       variables = model.lazy_init(rng, jax.ShapeDtypeStruct((1, 128), jnp.float32))
 
+    The args and kwargs args passed to ``lazy_init`` can be a mix of
+    concrete (jax arrays, scalars, bools) and abstract (ShapeDtypeStruct) values.
+    Concrete values are only necessary for arguments that affect
+    the initialization of variables. For example, the model might expect
+    a keyword arg that enables/disables a subpart of the model.
+    In this case, an explicit value (True/Flase) should be passed otherwise
+    ``lazy_init`` cannot infer which variables should be initialized.
+
     Args:
       rngs: The rngs for the variable collections.
       *args: arguments passed to the init function.
