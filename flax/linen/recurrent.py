@@ -25,8 +25,7 @@ from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
 from flax.linen.activation import sigmoid
 from flax.linen.activation import tanh
 from flax.linen.dtypes import promote_dtype
-from flax.linen.initializers import orthogonal
-from flax.linen.initializers import zeros
+from flax.linen import initializers
 from flax.linen.linear import Conv
 from flax.linen.linear import default_kernel_init
 from flax.linen.linear import Dense
@@ -47,7 +46,7 @@ class RNNCellBase(Module):
   """RNN cell base class."""
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
     """Initialize the RNN cell carry.
 
     Args:
@@ -86,16 +85,16 @@ class LSTMCell(RNNCellBase):
     kernel_init: initializer function for the kernels that transform
       the input (default: lecun_normal).
     recurrent_kernel_init: initializer function for the kernels that transform
-      the hidden state (default: orthogonal).
-    bias_init: initializer for the bias parameters (default: zeros)
+      the hidden state (default: initializers.orthogonal).
+    bias_init: initializer for the bias parameters (default: initializers.zeros)
     dtype: the dtype of the computation (default: infer from inputs and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.orthogonal()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
 
@@ -137,7 +136,7 @@ class LSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
     """Initialize the RNN cell carry.
 
     Args:
@@ -161,7 +160,7 @@ class DenseParams(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Array]:
@@ -205,16 +204,16 @@ class OptimizedLSTMCell(RNNCellBase):
     kernel_init: initializer function for the kernels that transform
       the input (default: lecun_normal).
     recurrent_kernel_init: initializer function for the kernels that transform
-      the hidden state (default: orthogonal).
-    bias_init: initializer for the bias parameters (default: zeros).
+      the hidden state (default: initializers.orthogonal).
+    bias_init: initializer for the bias parameters (default: initializers.zeros).
     dtype: the dtype of the computation (default: infer from inputs and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
   gate_fn: Callable[..., Any] = sigmoid
   activation_fn: Callable[..., Any] = tanh
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = orthogonal()
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.orthogonal()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
 
@@ -286,7 +285,7 @@ class OptimizedLSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
     """Initialize the RNN cell carry.
 
     Args:
@@ -326,8 +325,8 @@ class GRUCell(RNNCellBase):
     kernel_init: initializer function for the kernels that transform
       the input (default: lecun_normal).
     recurrent_kernel_init: initializer function for the kernels that transform
-      the hidden state (default: orthogonal).
-    bias_init: initializer for the bias parameters (default: zeros)
+      the hidden state (default: initializers.orthogonal).
+    bias_init: initializer for the bias parameters (default: initializers.zeros)
     dtype: the dtype of the computation (default: None).
     param_dtype: the dtype passed to parameter initializers (default: float32).
   """
@@ -336,8 +335,8 @@ class GRUCell(RNNCellBase):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       default_kernel_init)
   recurrent_kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      orthogonal())
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+      initializers.orthogonal())
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
 
@@ -380,7 +379,7 @@ class GRUCell(RNNCellBase):
     return new_h, new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
     """Initialize the RNN cell carry.
 
     Args:
@@ -485,7 +484,7 @@ class ConvLSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @staticmethod
-  def initialize_carry(rng, batch_dims, size, init_fn=zeros):
+  def initialize_carry(rng, batch_dims, size, init_fn=initializers.zeros):
     """Initialize the RNN cell carry.
 
     Args:
