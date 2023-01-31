@@ -13,3 +13,6 @@ build/
 .vscode/*
 /.devcontainer
 docs/**/tmp
+venv/
+.pytest_cache/
+.mypy_cache/
