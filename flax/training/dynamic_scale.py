@@ -18,7 +18,7 @@
 import functools
 from typing import Any, Callable, NamedTuple, Optional, Sequence, Union
 
-from .. import struct
+from flax import struct
 
 import jax
 from jax import lax
