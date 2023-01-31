@@ -8,13 +8,17 @@
 # 'pre-commit run --all'
 
 repos:
-- repo: https://github.com/mwouts/jupytext
-  rev: v1.13.8
-  hooks:
-  - id: jupytext
-    args: [--sync]
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.3.0
-  hooks:
-  - id: trailing-whitespace
-    exclude: ^docs/.*\.md$
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: check-toml
+  - repo: https://github.com/mwouts/jupytext
+    rev: v1.13.8
+    hooks:
+      - id: jupytext
+        args: [--sync]
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.3.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^docs/.*\.md$
