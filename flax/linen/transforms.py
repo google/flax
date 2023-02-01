@@ -865,7 +865,7 @@ def map_variables(
     ...     # temporary class
     ...     _CausalDense = nn.map_variables(
     ...       nn.Dense, 'params', self.apply_mask, init=self.is_initializing())
-    ...     self.dense = _CasualDense(features=self.features, use_bias=False)
+    ...     self.dense = _CausalDense(features=self.features, use_bias=False)
     ...
     ...   def __call__(self, x):
     ...     return self.dense(x)
