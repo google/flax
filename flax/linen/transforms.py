@@ -851,22 +851,26 @@ def map_variables(
     >>> import jax.numpy as jnp
     >>> import flax.linen as nn
     ...
-    >>> class CasualDense(nn.Module):
+    >>> class CausalDense(nn.Module):
+    ...   '''A dense layer that masks the weights such that the output is
+    ...   causal, i.e. output i only depends on input <= i.
+    ...   '''
     ...   features: int
     ...
-    ...   @nn.compact
+    ...   def apply_mask(self, variables):
+    ...     return (jax.tree_map(jnp.triu, variables)
+    ...             if not self.is_initializing() else variables)
+    ...
+    ...   def setup(self):
+    ...     # temporary class
+    ...     _CausalDense = nn.map_variables(
+    ...       nn.Dense, 'params', self.apply_mask, init=self.is_initializing())
+    ...     self.dense = _CausalDense(features=self.features, use_bias=False)
+    ...
     ...   def __call__(self, x):
-    ...     def apply_mask(variables):
-    ...       return (jax.tree_map(jnp.triu, variables)
-    ...               if not self.is_initializing() else variables)
+    ...     return self.dense(x)
     ...
-    ...     CasualDense = nn.map_variables(
-    ...       nn.Dense, 'params', apply_mask, init=self.is_initializing())
-    ...
-    ...     mapped_dense = CasualDense(features=self.features, use_bias=False)
-    ...     return mapped_dense(x)
-    ...
-    >>> module = CasualDense(features=5)
+    >>> module = CausalDense(features=5)
     >>> variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 5)))
 
   Args:
