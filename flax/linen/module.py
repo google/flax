@@ -65,17 +65,6 @@ TestScope = type('TestScope',
 
 # pylint: disable=protected-access,attribute-defined-outside-init
 
-def _get_value_representation(x: Any) -> 'flax.linen.summary._ValueRepresentation':
-  from flax.linen import summary
-
-  if isinstance(x, (int, float, bool, type(None))) or (
-    isinstance(x, np.ndarray) and np.isscalar(x)):
-    return summary._ObjectRepresentation(x)
-  try:
-    return summary._ArrayRepresentation(jnp.shape(x), jnp.result_type(x))
-  except:
-    return summary._ObjectRepresentation(x)
-
 def _indent(x: str, num_spaces: int):
   indent_str = ' ' * num_spaces
   lines = x.split('\n')
@@ -837,8 +826,7 @@ class Module:
         if filter_fn and filter_fn(self, fun_name):
           self.sow('intermediates', fun_name, y)
       if add_call_info:
-        _args, _kwargs, _y = jax.tree_util.tree_map(
-          _get_value_representation, (args, kwargs, y), is_leaf=lambda x: x is None)
+        _args, _kwargs, _y = flax.linen.summary._represent_tree((args, kwargs, y))
         _context.call_info_stack[-1].calls.append(
           _CallInfo(call_index, scope_path, type(self), fun.__name__, _args, _kwargs, _y))
       return y
