@@ -14,6 +14,7 @@
 
 """Tests for flax.linen."""
 
+import contextlib
 import copy
 import dataclasses
 import functools
@@ -24,6 +25,7 @@ from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
                     Tuple, TypeVar, get_type_hints)
 
 from absl.testing import absltest
+from flax import config
 from flax import errors
 from flax import linen as nn
 from flax import struct
@@ -42,6 +44,16 @@ jax.config.parse_flags_with_absl()
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(jax.tree_util.tree_map(operator.eq, x, y))
+
+
+@contextlib.contextmanager
+def relax_naming(value: bool):
+  old_value = config.flax_relaxed_naming
+  try:
+    config.update('flax_relaxed_naming', value)
+    yield None
+  finally:
+    config.update('flax_relaxed_naming', old_value)
 
 
 class DummyModule(nn.Module):
@@ -426,9 +438,13 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
 
-    msg = 'Duplicate use of scope name: "bias"'
-    with self.assertRaisesWithLiteralMatch(ValueError, msg):
-      unused_y = Dummy(x.shape, parent=scope)(x)
+    if config.flax_relaxed_naming:
+      with self.assertRaises(errors.NameInUseError):
+        unused_y = Dummy(x.shape, parent=scope)(x)
+    else:
+      msg = 'Duplicate use of scope name: "bias"'
+      with self.assertRaisesWithLiteralMatch(ValueError, msg):
+        unused_y = Dummy(x.shape, parent=scope)(x)
 
   def test_submodule_var_collision_with_submodule(self):
     rngkey = jax.random.PRNGKey(0)
@@ -483,6 +499,7 @@ class ModuleTest(absltest.TestCase):
 
     Foo({'a': ()}).apply({})
 
+  @absltest.skipIf(config.flax_relaxed_naming, "relaxed naming")
   def test_attr_param_name_collision(self):
     rngkey = jax.random.PRNGKey(0)
 
@@ -499,8 +516,9 @@ class ModuleTest(absltest.TestCase):
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     msg = 'Could not create param "bias" in Module Dummy: Name in use'
     with self.assertRaisesRegex(errors.NameInUseError, msg):
-      unused_y = Dummy(x.shape, parent=scope)(x)
+      unused_y = Dummy(True, parent=scope)(x)
 
+  @absltest.skipIf(config.flax_relaxed_naming, "relaxed naming")
   def test_attr_submodule_name_collision(self):
     rngkey = jax.random.PRNGKey(0)
 
@@ -517,7 +535,7 @@ class ModuleTest(absltest.TestCase):
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     msg = 'Could not create submodule "bias" in Module Dummy: Name in use'
     with self.assertRaisesRegex(errors.NameInUseError, msg):
-      unused_y = Dummy(x.shape, parent=scope)(x)
+      unused_y = Dummy(True, parent=scope)(x)
 
   def test_only_one_compact_method(self):
     msg = 'Only one method per class can be @compact'
@@ -1329,18 +1347,32 @@ class ModuleTest(absltest.TestCase):
     x = jnp.zeros((5, 5))
     init_vars = b.init(k, x)
     var_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
-    ref_var_shapes = freeze({
-        'params': {
-            'a': {
-                'dense': {
-                    'kernel': (5, 4),
-                },
-            },
-            'proj': {
-                'kernel': (4, 6),
-            },
-        },
-    })
+    if config.flax_relaxed_naming:
+      ref_var_shapes = freeze({
+          'params': {
+              'foo': {
+                  'dense': {
+                      'kernel': (5, 4),
+                  },
+              },
+              'proj': {
+                  'kernel': (4, 6),
+              },
+          },
+      })
+    else:
+      ref_var_shapes = freeze({
+          'params': {
+              'a': {
+                  'dense': {
+                      'kernel': (5, 4),
+                  },
+              },
+              'proj': {
+                  'kernel': (4, 6),
+              },
+          },
+      })
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
   def test_toplevel_submodule_pytree_adoption_sharing(self):
@@ -1984,6 +2016,131 @@ class LeakTests(absltest.TestCase):
           out = sample_from_prior(rngs, np.ones((4, 50)))
           out.block_until_ready()
           del out, rngs
+
+
+class RelaxedNamingTests(absltest.TestCase):
+
+  def test_relaxed_adoption(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('p', nn.initializers.zeros, x.shape)
+        return x + p
+
+    class Bar(nn.Module):
+      sub: nn.Module
+      def __call__(self, x):
+        return self.sub(x)
+
+    with relax_naming(True):
+      foo = Foo(name='foo')
+      bar = Bar(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("foo" in vs['params'], "relaxed naming failure")
+
+    with relax_naming(False):
+      foo = Foo(name='foo')
+      bar = Bar(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("sub" in vs['params'], "old policy naming failure")
+
+  def test_relaxed_adoption_still_conflict_checks(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('p', nn.initializers.zeros, x.shape)
+        return x + p
+
+    class Bar(nn.Module):
+      sub1: nn.Module
+      sub2: nn.Module
+      def __call__(self, x):
+        return self.sub(x)
+
+    with relax_naming(True):
+      foo1 = Foo(name='foo')
+      foo2 = Foo(name='foo')
+      bar = Bar(sub1=foo1, sub2=foo2)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      with self.assertRaises(errors.NameInUseError):
+        vs = bar.init(k, x)
+
+  def test_relaxed_adoption_unnamed_adoptee(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('p', nn.initializers.zeros, x.shape)
+        return x + p
+
+    class Bar(nn.Module):
+      sub: nn.Module
+      def __call__(self, x):
+        return self.sub(x)
+
+    with relax_naming(True):
+      foo = Foo(name=None)
+      bar = Bar(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("sub" in vs['params'], "relaxed naming failure")
+
+    with relax_naming(False):
+      foo = Foo(name='foo')
+      bar = Bar(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("sub" in vs['params'], "old policy naming failure")
+
+  def test_relaxed_python_conflict(self):
+
+    class Foo(nn.Module):
+      dummy = 0
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('dummy', nn.initializers.zeros, x.shape)
+        return x + p
+
+    with relax_naming(True):
+      foo = Foo(name='foo')
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = foo.init(k, x)
+
+    with relax_naming(False):
+      foo = Foo(name='foo')
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      with self.assertRaises(errors.NameInUseError):
+        vs = foo.init(k, x)
+
+  def test_relaxed_intercollection_conflict(self):
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        v1 = self.variable('col1', 'v', lambda x: jnp.zeros(x), x.shape)
+        v2 = self.variable('col2', 'v', lambda x: jnp.zeros(x), x.shape)
+        return x + v1.value + v2.value
+
+    with relax_naming(True):
+      foo = Foo(name='foo')
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = foo.init(k, x)
+
+    with relax_naming(False):
+      foo = Foo(name='foo')
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      with self.assertRaises(errors.NameInUseError):
+        vs = foo.init(k, x)
 
 
 if __name__ == '__main__':
