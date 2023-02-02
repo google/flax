@@ -262,9 +262,9 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
     assert names.pop(index) == axis_name
     return self.replace(names=tuple(names))
 
-  def get_partition_spec(self) -> pjit.PartitionSpec:
+  def get_partition_spec(self) -> jax.sharding.PartitionSpec:
     """Returns the ``Partitionspec`` for this partitioned value."""
-    return pjit.PartitionSpec(*self.names)
+    return jax.sharding.PartitionSpec(*self.names)
 
 
 def with_partitioning(

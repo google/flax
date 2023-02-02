@@ -19,7 +19,6 @@ from flax.core import init, lift, meta, nn
 import jax
 from jax import numpy as jnp
 from jax import random
-from jax.experimental import pjit
 
 
 class MetaTest(absltest.TestCase):
@@ -122,8 +121,13 @@ class MetaTest(absltest.TestCase):
                                      ('layers', 'in', 'out')),
           'bias': jnp.zeros((8, 3))}
     ps = meta.get_partition_spec(xs)
-    self.assertEqual(ps, {'kernel': pjit.PartitionSpec('layers', 'in', 'out'),
-                          'bias': None})
+    self.assertEqual(
+        ps,
+        {
+            'kernel': jax.sharding.PartitionSpec('layers', 'in', 'out'),
+            'bias': None,
+        },
+    )
 
 
 if __name__ == '__main__':

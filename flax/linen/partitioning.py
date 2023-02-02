@@ -59,7 +59,6 @@ from flax.linen.spmd import with_logical_constraint as with_sharding_constraint
 from flax.traverse_util import flatten_dict
 from flax.traverse_util import unflatten_dict
 import jax
-from jax.experimental import pjit
 
 
 # ------------------------------------------------------------------------------
@@ -147,7 +146,7 @@ def param_with_axes(
   if axes is not None:
     # apply logical axis constraint immediately
     module_param = with_sharding_constraint(module_param,
-                                            pjit.PartitionSpec(*axes))
+                                            jax.sharding.PartitionSpec(*axes))
     # record logical axis constraint for global axis metadata
     module.sow(
         'params_axes', f'{name}_axes', AxisMetadata(axes),  # type: ignore
@@ -287,7 +286,7 @@ def get_axis_names(axes_metadata):
     annotations.
   """
   def leaf_rewrite(x):
-    return None if x is None else pjit.PartitionSpec(*x)
+    return None if x is None else jax.sharding.PartitionSpec(*x)
   def rewrite(tree):
     return jax.tree_util.tree_map(leaf_rewrite, tree, is_leaf=_is_logical_spec)
   axes_metadata = unfreeze(axes_metadata)  # pytype: disable=wrong-arg-types

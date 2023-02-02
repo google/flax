@@ -135,7 +135,7 @@ def _logical_to_mesh_axes(
 def logical_to_mesh_axes(
     array_dim_names: Optional[Sequence[Optional[str]]],
     rules: Optional[LogicalRules] = None,
-) -> Optional[pjit.PartitionSpec]:
+) -> Optional[jax.sharding.PartitionSpec]:
   """Compute layout for an array.
 
   The rules are in order of precedence, and consist of pairs:
@@ -173,7 +173,7 @@ def logical_to_mesh_axes(
     return None
   # We default to None - ie unsharded along the dimension.
   result = [None if x is _unassigned_axis else x for x in result]
-  return pjit.PartitionSpec(*result)
+  return jax.sharding.PartitionSpec(*result)
 
 
 def logical_to_mesh(
@@ -181,9 +181,11 @@ def logical_to_mesh(
     rules: Optional[LogicalRules] = None
 ) -> Any:
   """Applies logical_to_mesh_axes to pytrees of logical PartitionSpecs."""
-  return jax.tree_map(lambda x: logical_to_mesh_axes(x, rules),
-                      tree,
-                      is_leaf=lambda x: isinstance(x, pjit.PartitionSpec))
+  return jax.tree_map(
+      lambda x: logical_to_mesh_axes(x, rules),
+      tree,
+      is_leaf=lambda x: isinstance(x, jax.sharding.PartitionSpec),
+  )
 
 
 def _global_mesh_defined() -> bool:
@@ -201,7 +203,7 @@ class RulesFallback(enum.Enum):
 
 def _with_sharding_constraint(
     x: Array,
-    axis_resources: Optional[pjit.PartitionSpec]):
+    axis_resources: Optional[jax.sharding.PartitionSpec]):
   """Wrapper for pjit with_sharding_constraint, no-op on cpu or outside pjit."""
   if jax.devices()[0].platform == 'cpu' or not _global_mesh_defined():
     return x
@@ -226,7 +228,7 @@ def _with_sharding_constraint_one_fallback(
         raise ValueError(f'Axis names {axis_resources} did not match a rule')
       else:
         return x
-  return _with_sharding_constraint(x, pjit.PartitionSpec(*mesh_axes))
+  return _with_sharding_constraint(x, jax.sharding.PartitionSpec(*mesh_axes))
 
 
 def _is_logical_spec(x):

@@ -21,7 +21,6 @@ from flax.core import freeze, unfreeze
 from flax.linen import partitioning
 import jax
 from jax import random
-from jax.experimental import pjit
 import jax.numpy as jnp
 
 
@@ -132,19 +131,21 @@ class PartitioningTest(parameterized.TestCase):
       _ = partitioning.with_sharding_constraint(arr, None)
       wsc_fn.assert_not_called()
       _ = partitioning.with_sharding_constraint(arr, axes)
-      wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', 'model'))
+      wsc_fn.assert_called_with(
+          arr, jax.sharding.PartitionSpec('data', 'model')
+      )
 
   @mock.patch('flax.linen.spmd._with_sharding_constraint')
   def test_with_sharding_constraint_fallback(self, wsc_fn):
     arr = jnp.ones((2, 2))
     with partitioning.axis_rules(AXIS_RULES_1):
       _ = partitioning.with_sharding_constraint(arr, ('foo', 'not_recognized'))
-      wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', None))
+      wsc_fn.assert_called_with(arr, jax.sharding.PartitionSpec('data', None))
       wsc_fn.reset_mock()
       _ = partitioning.with_sharding_constraint(
           arr, ('foo', 'not_recognized'),
           fallback=partitioning.RulesFallback.AXIS_IS_UNSHARDED)
-      wsc_fn.assert_called_with(arr, pjit.PartitionSpec('data', None))
+      wsc_fn.assert_called_with(arr, jax.sharding.PartitionSpec('data', None))
       wsc_fn.reset_mock()
       with self.assertRaises(ValueError):
         _ = partitioning.with_sharding_constraint(
@@ -195,7 +196,7 @@ class PartitioningTest(parameterized.TestCase):
                      partitioning.AxisMetadata(names=('foo', 'bar')))
     logical_axis_names = partitioning.get_axis_names(variables['params_axes'])
     self.assertEqual(logical_axis_names,
-                     {'foo': pjit.PartitionSpec('foo', 'bar')})
+                     {'foo': jax.sharding.PartitionSpec('foo', 'bar')})
 
   def test_param_pytree_with_axes(self):
     def init_fn(k, s, d):
@@ -225,9 +226,9 @@ class PartitioningTest(parameterized.TestCase):
     logical_axis_names = partitioning.get_axis_names(variables['params_axes'])
     expected = freeze(
         {'foo':
-             {'a': pjit.PartitionSpec('foo', 'bar'),
-              'b': (pjit.PartitionSpec('foo', 'bar'),
-                    pjit.PartitionSpec('bar', 'foo'))}})
+             {'a': jax.sharding.PartitionSpec('foo', 'bar'),
+              'b': (jax.sharding.PartitionSpec('foo', 'bar'),
+                    jax.sharding.PartitionSpec('bar', 'foo'))}})
     self.assertEqual(logical_axis_names, expected)
 
   @parameterized.parameters(dict(axes_spec=None), dict(axes_spec=()))
@@ -258,7 +259,7 @@ class PartitioningTest(parameterized.TestCase):
     x = jnp.ones((2, 2))
     variables = VarTest().init(k, x)
     logical_axis_names = partitioning.get_axis_names(variables['test_axes'])
-    self.assertEqual(logical_axis_names, {'foo': pjit.PartitionSpec()})
+    self.assertEqual(logical_axis_names, {'foo': jax.sharding.PartitionSpec()})
 
   def test_variable_with_axes(self):
     class VarTest(nn.Module):
@@ -283,7 +284,7 @@ class PartitioningTest(parameterized.TestCase):
                      partitioning.AxisMetadata(names=('foo', 'bar')))
     logical_axis_names = partitioning.get_axis_names(variables['test_axes'])
     self.assertEqual(logical_axis_names,
-                     {'foo': pjit.PartitionSpec('foo', 'bar')})
+                     {'foo': jax.sharding.PartitionSpec('foo', 'bar')})
 
   @mock.patch('flax.linen.partitioning._with_sharding_constraint')
   def test_variable_with_axes_fallback(self, wsc_fn):
@@ -312,7 +313,7 @@ class PartitioningTest(parameterized.TestCase):
                      partitioning.AxisMetadata(names=('foo', 'bar')))
     logical_axis_names = partitioning.get_axis_names(variables['test_axes'])
     self.assertEqual(logical_axis_names,
-                     {'foo': pjit.PartitionSpec('foo', 'bar')})
+                     {'foo': jax.sharding.PartitionSpec('foo', 'bar')})
 
   def test_scan_with_axes(self):
     # MLP Hparams
@@ -379,13 +380,13 @@ class PartitioningTest(parameterized.TestCase):
     self.assertEqual(
         logical_axis_names,
         {'scanned_layer': {
-            'W1': pjit.PartitionSpec('layer', 'emb', 'mlp'),
-            'W2': pjit.PartitionSpec('layer', 'mlp', 'emb')}})
+            'W1': jax.sharding.PartitionSpec('layer', 'emb', 'mlp'),
+            'W2': jax.sharding.PartitionSpec('layer', 'mlp', 'emb')}})
     logical_axis_names = partitioning.get_axis_names(variables['stats_axes'])
     self.assertEqual(
         logical_axis_names,
         {'scanned_layer': {
-            'y_st': pjit.PartitionSpec('batch', 'layer', 'emb')}})
+            'y_st': jax.sharding.PartitionSpec('batch', 'layer', 'emb')}})
 
   def test_vmap_with_axes(self):
 
