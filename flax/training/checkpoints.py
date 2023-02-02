@@ -29,11 +29,12 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from absl import logging
 from flax import config
-from flax import io
 from flax import core
 from flax import errors
+from flax import io
 from flax import serialization
 from flax import traverse_util
+from flax.training import orbax_utils
 import jax
 from jax import monitoring
 from jax import process_index
@@ -147,29 +148,20 @@ class AsyncManager():
     self.save_future = self.executor.submit(task) # type: ignore
 
 
-def _use_multiprocess_serialization(value: Any) -> bool:
-  """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
-  if isinstance(value, GlobalDeviceArray):
-    return True
-  if jax.config.jax_array and isinstance(value, jax.Array):
-    return not value.is_fully_addressable
-  return False
-
-
 def _split_mp_arrays(
     target: Dict[str, Any]
 ) -> Tuple[Dict[str, Any], List[Tuple[MultiprocessArrayType, str]]]:
   """Split out the multiprocess arrays from the target pytree to save."""
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(target, (core.FrozenDict, dict)):
-    if _use_multiprocess_serialization(target):
+    if orbax_utils.is_multiprocess_array(target):
       return MP_ARRAY_PH, [(target, '')]
     return target, []
   # Traverse the target and handle distributed arrays.
   flattened = traverse_util.flatten_dict(target, keep_empty_nodes=True)
   mpa_targets = []
   for key, value in flattened.items():
-    if _use_multiprocess_serialization(value):
+    if orbax_utils.is_multiprocess_array(value):
       subpath = '/'.join(key)
       mpa_targets.append((value, subpath))
       flattened[key] = MP_ARRAY_PH + subpath
@@ -271,7 +263,7 @@ def _restore_mpas(state_dict,
 
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
-    if _use_multiprocess_serialization(target) and isinstance(
+    if orbax_utils.is_multiprocess_array(target) and isinstance(
         state_dict, str) and state_dict.startswith(MP_ARRAY_PH):
       _check_mpa_errors()
       return _safe_deserialize([((), target, ckpt_path + MP_ARRAY_POSTFIX)],
@@ -290,7 +282,7 @@ def _restore_mpas(state_dict,
     if isinstance(value, str) and value.startswith(MP_ARRAY_PH):
       _check_mpa_errors()
       if not target or (key not in target_flattened) or (
-          not _use_multiprocess_serialization(target_flattened[key])):
+          not orbax_utils.is_multiprocess_array(target_flattened[key])):
         if allow_partial:
           logging.warning(
               'Multiprocess array %s could not be restored because a valid array is not found in target at the corresponding location. Proceed to restore other arrays because allow_partial_restoration=True',
@@ -571,8 +563,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     if not orbax_checkpointer:
       # If no checkpointer provided, save synchronously with default setting.
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
-    save_args = jax.tree_util.tree_map(lambda x: orbax.SaveArgs(aggregate=True),
-                                       target)
+    save_args = orbax_utils.save_args_from_target(target)
     orbax_checkpointer.save(
         ckpt_path, target, save_args=save_args, force=overwrite)
     _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
@@ -675,9 +666,7 @@ def save_checkpoint_multiprocess(
     if process_index() == 0:
       _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
                             keep_every_n_steps, True)
-    save_args = jax.tree_util.tree_map(
-        lambda x: orbax.SaveArgs(
-            aggregate=not _use_multiprocess_serialization(x)), target)
+    save_args = orbax_utils.save_args_from_target(target)
     orbax_checkpointer.save(
         ckpt_path, target, save_args=save_args, force=overwrite)
     end_time = time.time()
@@ -837,12 +826,19 @@ def restore_checkpoint(
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
 
     def make_restore_args(x):
-      if isinstance(x, GlobalDeviceArray):
-        return orbax.ArrayRestoreArgs(mesh=x.mesh, mesh_axes=x.mesh_axes)
-      return orbax.ArrayRestoreArgs()
+      if orbax_utils.is_multiprocess_array(x):
+        if isinstance(x, GlobalDeviceArray):
+          return orbax.ArrayRestoreArgs(restore_type=GlobalDeviceArray,
+                                        mesh=x.mesh, mesh_axes=x.mesh_axes)
+        return orbax.ArrayRestoreArgs(
+            restore_type=jax.Array,
+            mesh=x.sharding.mesh,
+            mesh_axes=x.sharding.spec,
+        )
+      return orbax.RestoreArgs()
 
     restore_args = None
-    if target:
+    if target is not None:
       restore_args = jax.tree_util.tree_map(make_restore_args, target)
     restored = orbax_checkpointer.restore(
         ckpt_path, item=target, restore_args=restore_args)
