@@ -947,7 +947,7 @@ def init(fn: Callable[..., Any],
 def lazy_init(fn: Callable[..., Any],
          mutable: CollectionFilter = True,
          flags: Optional[Mapping] = None) -> Callable[..., Any]:
-  """Functionalize a `Scope` function for lazy initialization.
+  """Functionalizes a `Scope` function for lazy initialization.
 
   Similair to ``init`` except that the init function now accepts
   ``jax.ShapeDtypeStruct`` instances for arguments that do not
