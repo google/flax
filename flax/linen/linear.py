@@ -18,6 +18,7 @@ import dataclasses
 from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
                     Union)
 
+from flax.core import meta
 from flax.linen import initializers
 from flax.linen.module import compact
 from flax.linen.module import Module
@@ -110,6 +111,8 @@ class DenseGeneral(Module):
                     np.prod(shape[-n_features:]),)
       flat_shape = jax.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
+      if isinstance(kernel, meta.AxisMetadata):
+        return meta.replace_boxed(kernel, jnp.reshape(kernel.unbox(), shape))
       return jnp.reshape(kernel, shape)
 
     batch_shape = tuple(inputs.shape[ax] for ax in batch_dims)
@@ -130,6 +133,8 @@ class DenseGeneral(Module):
                       np.prod(shape[-n_features:]),)
         flat_shape = jax.tree_map(int, flat_shape)
         bias = self.bias_init(rng, flat_shape, dtype)
+        if isinstance(bias, meta.AxisMetadata):
+          return meta.replace_boxed(bias, jnp.reshape(bias.unbox(), shape))
         return jnp.reshape(bias, shape)
 
       bias = self.param('bias', bias_init_wrap, batch_shape + features,
