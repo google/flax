@@ -14,7 +14,7 @@ vNext
 -
 -
 -
-- Bumps minimal JAX version to 0.3.24.
+-
 -
 -
 -

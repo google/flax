@@ -23,10 +23,24 @@ import warnings
 import jax
 from jax import lax
 from jax import linear_util as lu
+from jax.config import config
 from jax.interpreters import partial_eval as pe
 from jax.interpreters import xla
+import jax.lib.xla_bridge as xb
 import jax.numpy as jnp
 import numpy as np
+
+
+def _pmap_device_order():
+  # match the default device assignments used in pmap:
+  # for single-host, that's the XLA default device assignment
+  # for multi-host, it's the order of jax.local_devices()
+  # TODO(phawkins): remove this code and use jax.local_devices() after jax
+  # 0.3.24 is the minimum.
+  if jax.__version_info__ < (0, 3, 24) and jax.process_count() == 1:
+    return xb.get_backend().get_default_device_assignment(jax.device_count())
+  else:
+    return jax.local_devices()
 
 
 def replicate(tree, devices=None):
@@ -39,7 +53,7 @@ def replicate(tree, devices=None):
   Returns:
     A new pytree containing the replicated arrays.
   """
-  devices = devices or jax.local_devices()
+  devices = devices or _pmap_device_order()
   return jax.device_put_replicated(tree, devices)
 
 
@@ -105,8 +119,7 @@ def prefetch_to_device(iterator, size, devices=None):
 
   This utility is mostly useful for GPUs, for TPUs and CPUs it should not be
   necessary -- the TPU & CPU memory allocators (normally) don't pick a memory
-  location that isn't free yet so they don't block. Instead those allocators
-  OOM.
+  location that isn't free yet so they don't block. Instead those allocators OOM.
 
   Args:
     iterator: an iterator that yields a pytree of ndarrays where the first
@@ -127,7 +140,7 @@ def prefetch_to_device(iterator, size, devices=None):
     the specified devices.
   """
   queue = collections.deque()
-  devices = devices or jax.local_devices()
+  devices = devices or _pmap_device_order()
 
   def _prefetch(xs):
     if hasattr(jax, "device_put_sharded"):  # jax>=0.2.0
