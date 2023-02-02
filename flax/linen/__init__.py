@@ -80,7 +80,9 @@ from .spmd import (
 )
 from .initializers import (
   ones as ones,
-  zeros as zeros
+  ones_init as ones_init,
+  zeros as zeros,
+  zeros_init as zeros_init
 )
 from .linear import (
   Conv as Conv,

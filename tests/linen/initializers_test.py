@@ -18,7 +18,7 @@ from absl.testing import absltest
 from absl.testing import parameterized
 
 from flax import linen as nn
-from flax.linen.initializers import zeros_init, ones_init
+from flax.linen import initializers
 
 import jax
 from jax import random
@@ -34,11 +34,11 @@ class InitializersTest(parameterized.TestCase):
 
   @parameterized.parameters(
     {
-      'builder_fn': zeros_init,
+      'builder_fn': initializers.zeros_init,
       'params_shape': (2, 3),
       'expected_params': jnp.zeros((2, 3)),
     }, {
-      'builder_fn': ones_init,
+      'builder_fn': initializers.ones_init,
       'params_shape': (3, 2),
       'expected_params': jnp.ones((3, 2)),
     })
@@ -48,10 +48,10 @@ class InitializersTest(parameterized.TestCase):
 
   @parameterized.parameters(
     {
-      'builder_fn': zeros_init,
+      'builder_fn': initializers.zeros_init,
       'expected_params': jnp.zeros((2, 5)),
     }, {
-      'builder_fn': ones_init,
+      'builder_fn': initializers.ones_init,
       'expected_params': jnp.ones((2, 5)),
     })
   def test_kernel_builder(self, builder_fn, expected_params):

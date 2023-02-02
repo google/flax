@@ -18,9 +18,7 @@ import dataclasses
 from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
                     Union)
 
-from flax.linen.initializers import lecun_normal
-from flax.linen.initializers import variance_scaling
-from flax.linen.initializers import zeros
+from flax.linen import initializers
 from flax.linen.module import compact
 from flax.linen.module import Module
 from flax.linen.dtypes import promote_dtype
@@ -40,7 +38,7 @@ Array = Any
 PrecisionLike = Union[None, str, lax.Precision, Tuple[str, str],
                       Tuple[lax.Precision, lax.Precision]]
 
-default_kernel_init = lecun_normal()
+default_kernel_init = initializers.lecun_normal()
 
 
 def _normalize_axes(axes: Tuple[int, ...], ndim: int) -> Tuple[int, ...]:
@@ -78,7 +76,7 @@ class DenseGeneral(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   precision: PrecisionLike = None
 
   @compact
@@ -172,7 +170,7 @@ class Dense(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -288,7 +286,7 @@ class _Conv(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -595,7 +593,7 @@ class ConvTranspose(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
   transpose_kernel: bool = False
 
   @compact
@@ -728,7 +726,7 @@ class ConvTranspose(Module):
     return y
 
 
-default_embed_init = variance_scaling(1.0, 'fan_in', 'normal', out_axis=0)
+default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal', out_axis=0)
 
 
 class Embed(Module):
