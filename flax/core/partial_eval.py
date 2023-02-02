@@ -17,20 +17,20 @@ def _maybe_unknown(x: Any) -> pe.PartialVal:
 
 
 def lazy_init(fn):
-  """Lazily evaluate a function by using the shapes of the inputs.
+  """Lazily evaluates a function by using the shapes of the inputs.
 
   The returned function accepts a combination of JAX values and
   ``jax.ShapeDtypeStruct`` instances for the inputs for which we
   don't need concrete values (only the shape and dtype).
 
   This API is used by ``core.lazy_init`` or ``Module.lazy_init``
-  to initialize variables without doing any actual compute on the
+  to initialize variables without doing any actual computation on the
   inputs.
 
   Args:
     fn: the function to be lazily evaluated.
   Returns:
-    A new function that accepts a mix of concrete valeus and
+    A new function that accepts a mix of concrete values and
     ``jax.ShapeDtypeStruct`` instances.
   """
   @functools.wraps(fn)
@@ -40,7 +40,7 @@ def lazy_init(fn):
     inputs_flat, in_tree = jax.tree_util.tree_flatten((args, kwargs))
     f_flat, out_tree = jax.api_util.flatten_fun(lu.wrap_init(fn), in_tree)
     # map inputs to PartialVal known/unknown
-    # only compute depending on knowns will be computed
+    # only the computations depending on knowns will be executed
     in_pvals = [_maybe_unknown(x) for x in inputs_flat]
     _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
     # all outputs should be knowns. If this fails
