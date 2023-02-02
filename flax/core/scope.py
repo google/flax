@@ -403,7 +403,7 @@ class Scope:
   <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
-  reservations: Set[str]
+  reservations: Dict[str, Optional[str]]
 
   def __init__(self,
                variables: MutableVariableDict,
@@ -437,7 +437,7 @@ class Scope:
     self.trace_level = tracers.trace_level(tracers.current_trace())
 
     self.rng_counters = {key: 0 for key in self.rngs}
-    self.reservations = set()
+    self.reservations = dict()
 
     self._invalid = False
 
@@ -517,20 +517,39 @@ class Scope:
       scope.rng_counters = self.rng_counters
     return scope
 
-  def reserve(self, name: str):
+  def name_reserved(self, name: str, col: Optional[str] = None) -> bool:
+    """Checks whether a name for a child Scope or Variable is taken.
+
+    Args:
+      name: the name to check for collision.
+      col: if a variable, the collection used.
+    """
+    if name in self.reservations:
+      # with relaxed naming, allow the same name for two variables in
+      # different collections, otherwise raise error.
+      if config.flax_relaxed_naming:
+        if (self.reservations[name] is None or col is None
+            or self.reservations[name] == col):
+            return True
+      else:
+        return True
+    return False
+
+  def reserve(self, name: str, col: Optional[str] = None):
     """Reserves a name for a child Scope or Variable.
 
     Throws an error if the name exists already.
 
     Args:
       name: the name to reserve.
+      col: if a variable, the collection used.
     """
     if not isinstance(name, str):
       raise TypeError('The type of scope "{name}" should be string but '
                       f'it is {type(name)}')
-    if name in self.reservations:
+    if self.name_reserved(name, col):
       raise ValueError(f'Duplicate use of scope name: "{name}"')
-    self.reservations.add(name)
+    self.reservations[name] = col
 
   def default_name(self, prefix: str) -> str:
     """Generates an unreserved name with the given prefix.
@@ -762,7 +781,7 @@ class Scope:
     Returns:
       The variable.  Throws an error if the variable exists already.
     """
-    self.reserve(name)
+    self.reserve(name, col)
     if not self.has_variable(col, name):
       if not self.is_mutable_collection(col) or init_fn is None:
         if self.is_collection_empty(col):
@@ -789,7 +808,7 @@ class Scope:
     Returns:
       The parameters. Throws an error if the params exist already.
     """
-    self.reserve(name)
+    self.reserve(name, 'params')
     if self.has_variable('params', name):
       abs_rng = jax.ShapeDtypeStruct(random.default_prng_impl().key_shape,
                                      jnp.uint32)

@@ -1004,9 +1004,14 @@ class Module:
     queue = []
     def adopt_attr_modules(cache, queue, suffix, subvalue):
       if isinstance(subvalue, Module):
+        adopted_name = None
         if subvalue.parent is None:
           # Module was passed from outside. It needs to be cloned.
-          # Outside modules are named by attachment, not an outer name.
+          # Outside modules are named by attachment, not an outer name,
+          # UNLESS we're using new relaxed naming, in which case an existing
+          # name will be used.
+          if config.flax_relaxed_naming:
+            adopted_name = object.__getattribute__(subvalue, 'name')
           object.__setattr__(subvalue, 'name', None)
           # Preserve sharing-by-reference relationships during adoption
           # via cache keyed on unique instance ids.
@@ -1019,7 +1024,9 @@ class Module:
             cache[key] = subvalue
         if subvalue.name is None:
           object.__setattr__(subvalue, 'parent', self)
-          object.__setattr__(subvalue, 'name', f'{name}{suffix}')
+          if adopted_name is None:
+            adopted_name = f'{name}{suffix}'
+          object.__setattr__(subvalue, 'name', adopted_name)
           queue.append(subvalue)
       return subvalue
     val = _freeze_attr(_map_over_modules_in_tree(
@@ -1062,7 +1069,13 @@ class Module:
   def _name_taken(self,
                   name: str,
                   module: Optional['Module'] = None,
-                  reuse_scopes: bool = False) -> bool:
+                  reuse_scopes: bool = False,
+                  collection: Optional[str] = None) -> bool:
+    # with relaxed naming don't force non-overlap with python attribute names.
+    if config.flax_relaxed_naming:
+      if reuse_scopes:
+        return False
+      return self.scope.name_reserved(name, collection)
     if name in _all_names_on_object(self):
       val = getattr(self, name, None)
       if module is not None and val is module:
@@ -1134,7 +1147,7 @@ class Module:
       raise ValueError(
           'Variables must be initialized in `setup()` or in a method '
           'wrapped in `@compact`')
-    if self._name_taken(name):
+    if self._name_taken(name, collection=col):
       raise errors.NameInUseError('variable', name, self.__class__.__name__)
     v = self.scope.variable(col, name, init_fn, *init_args, unbox=unbox)
     self._state.children[name] = col
@@ -1174,7 +1187,7 @@ class Module:
       raise ValueError(
           'Parameters must be initialized in `setup()` or in a method '
           'wrapped in `@compact`')
-    if self._name_taken(name):
+    if self._name_taken(name, collection='params'):
       raise errors.NameInUseError('param', name, self.__class__.__name__)
     v = self.scope.param(name, init_fn, *init_args, unbox=unbox)
     self._state.children[name] = 'params'
