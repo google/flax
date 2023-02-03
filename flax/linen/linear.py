@@ -77,7 +77,7 @@ class DenseGeneral(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
   precision: PrecisionLike = None
 
   @compact
@@ -175,7 +175,7 @@ class Dense(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -291,7 +291,7 @@ class _Conv(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -598,7 +598,7 @@ class ConvTranspose(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
   transpose_kernel: bool = False
 
   @compact

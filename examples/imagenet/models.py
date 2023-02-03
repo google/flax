@@ -41,8 +41,7 @@ class ResNetBlock(nn.Module):
     y = self.norm()(y)
     y = self.act(y)
     y = self.conv(self.filters, (3, 3))(y)
-    # Use zero initialization from ReZero: https://arxiv.org/abs/2003.04887.
-    y = self.norm(scale_init=nn.initializers.zeros)(y)
+    y = self.norm(scale_init=nn.initializers.zeros_init())(y)
 
     if residual.shape != y.shape:
       residual = self.conv(self.filters, (1, 1),
@@ -70,8 +69,7 @@ class BottleneckResNetBlock(nn.Module):
     y = self.norm()(y)
     y = self.act(y)
     y = self.conv(self.filters * 4, (1, 1))(y)
-    # Use zero initialization from ReZero: https://arxiv.org/abs/2003.04887.
-    y = self.norm(scale_init=nn.initializers.zeros)(y)
+    y = self.norm(scale_init=nn.initializers.zeros_init())(y)
 
     if residual.shape != y.shape:
       residual = self.conv(self.filters * 4, (1, 1),

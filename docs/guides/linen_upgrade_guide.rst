@@ -41,7 +41,7 @@ Defining simple Flax Modules
               features,
               use_bias=True,
               kernel_init=default_kernel_init,
-              bias_init=initializers.zeros):
+              bias_init=initializers.zeros_init()):
 
       kernel = self.param('kernel',
         (inputs.shape[-1], features), kernel_init)
@@ -60,7 +60,7 @@ Defining simple Flax Modules
     features: int  # [2] #!
     use_bias: bool = True
     kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-    bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
+    bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
 
     @nn.compact
     def __call__(self, inputs):  # [3] #!
@@ -322,18 +322,18 @@ Non-trainable variables ("state"): Use within Modules
     def apply(self, x, ...):
       # [...]
       ra_mean = self.state(
-        'mean', (x.shape[-1], ), initializers.zeros)
+        'mean', (x.shape[-1], ), initializers.zeros_init())
       ra_var = self.state(
-        'var', (x.shape[-1], ), initializers.ones)
+        'var', (x.shape[-1], ), initializers.ones_init())
       # [...]
   ---
   class BatchNorm(nn.Module):
     def __call__(self, x):
       # [...]
       ra_mean = self.variable(  #!
-        'batch_stats', 'mean', initializers.zeros, (x.shape[-1], ))
+        'batch_stats', 'mean', initializers.zeros_init(), (x.shape[-1], ))
       ra_var = self.variable(
-        'batch_stats', 'var', initializers.ones, (x.shape[-1], ))
+        'batch_stats', 'var', initializers.ones_init(), (x.shape[-1], ))
       # [...]
 
 The first argument is the name of the variable collection ("param" is the only

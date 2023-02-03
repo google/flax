@@ -30,7 +30,7 @@ class Dense:
   features: int
   bias: bool = True
   kernel_init: Any = nn.linear.default_kernel_init
-  bias_init: Any = nn.initializers.zeros
+  bias_init: Any = nn.initializers.zeros_init()
 
   def __call__(self, scope, x):
     kernel = scope.param('kernel', self.kernel_init, (x.shape[-1], self.features))
@@ -50,7 +50,7 @@ class ExplicitDense:
   @staticmethod
   def create(rng, in_size, out_size, bias=True,
              kernel_init=nn.linear.default_kernel_init,
-             bias_init=nn.initializers.zeros):
+             bias_init=nn.initializers.zeros_init()):
     k1, k2 = random.split(rng, 2)
     kernel = kernel_init(k1, (in_size, out_size))
     if bias:
@@ -63,7 +63,7 @@ class ExplicitDense:
   @staticmethod
   def create_in_scope(scope, in_size, out_size, bias=True,
                       kernel_init=nn.linear.default_kernel_init,
-                      bias_init=nn.initializers.zeros):
+                      bias_init=nn.initializers.zeros_init()):
     kernel = scope.param('kernel', kernel_init, (in_size, out_size))
     if bias:
       bias = scope.param('bias', bias_init, (out_size,))

@@ -64,7 +64,7 @@ class Dense(nn.Module):
   param_dtype: DType = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.zeros
+  bias_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.zeros_init()
   kernel_axes: Tuple[str, ...] = ()
 
   @nn.compact
@@ -282,8 +282,8 @@ class LayerNorm(nn.Module):
   param_dtype: DType = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.zeros
-  scale_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.ones
+  bias_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.zeros_init()
+  scale_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.ones_init()
 
   @nn.compact
   def __call__(self, x):
