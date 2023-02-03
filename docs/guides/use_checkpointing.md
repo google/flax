@@ -255,21 +255,22 @@ Unfortunately, Python Jupyter notebooks are single-host only and cannot activate
 
 ```python
 # Multi-host related imports.
-from jax.experimental import maps, PartitionSpec, pjit
+from jax.sharding import PartitionSpec
+from jax.experimental import pjit
 ```
 
 ```python
 # Create a multi-process array.
 mesh_shape = (4, 2)
 devices = np.asarray(jax.devices()).reshape(*mesh_shape)
-mesh = maps.Mesh(devices, ('x', 'y'))
+mesh = jax.sharding.Mesh(devices, ('x', 'y'))
 
 f = pjit.pjit(
   lambda x: x,
   in_axis_resources=None,
   out_axis_resources=PartitionSpec('x', 'y'))
 
-with maps.Mesh(mesh.devices, mesh.axis_names):
+with jax.sharding.Mesh(mesh.devices, mesh.axis_names):
     mp_array = f(np.arange(8 * 2).reshape(8, 2))
 
 # Make it a pytree as usual.
@@ -297,7 +298,7 @@ checkpoints.save_checkpoint_multiprocess(ckpt_dir,
 Note that, when using [`flax.training.checkpoints.restore_checkpoint`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.restore_checkpoint), you need to pass a `target` with valid multi-process arrays at the correct structural location. Flax only uses the `target` arrays' meshes and mesh axes to restore the checkpoint. This means that the multi-process array in the `target` arg doesn't have to be as large as your checkpoint's size (the shape of the multi-process array doesn't need to have the same shape as the actual array in your checkpoint).
 
 ```python
-with maps.Mesh(mesh.devices, mesh.axis_names):
+with jax.sharding.Mesh(mesh.devices, mesh.axis_names):
     mp_smaller_array = f(np.zeros(8).reshape(4, 2))
 
 mp_target = {'model': mp_smaller_array}

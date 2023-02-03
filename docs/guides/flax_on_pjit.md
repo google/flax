@@ -207,7 +207,7 @@ class MLP(nn.Module):
 
 ## Specify sharding (includes initialization and `TrainState` creation)
 
-Next, generate the [`jax.experimental.pjit.PartitionSpec`](https://jax.readthedocs.io/en/latest/jax-101/08-pjit.html?#more-information-on-partitionspec) that `pjit` should receive as annotations of _input_ and _output_ data. `PartitionSpec` is a tuple of 2 axes (in a 2x4 mesh). To learn more, refer to [JAX-101: Introduction to `pjit`](https://jax.readthedocs.io/en/latest/jax-101/08-pjit.html).
+Next, generate the [`jax.sharding.PartitionSpec`](https://jax.readthedocs.io/en/latest/jax-101/08-pjit.html?#more-information-on-partitionspec) that `pjit` should receive as annotations of _input_ and _output_ data. `PartitionSpec` is a tuple of 2 axes (in a 2x4 mesh). To learn more, refer to [JAX-101: Introduction to `pjit`](https://jax.readthedocs.io/en/latest/jax-101/08-pjit.html).
 
 ### Specify the input
 
@@ -275,7 +275,7 @@ state_spec
 
 Now you can apply JAX [`pjit`](https://jax.readthedocs.io/en/latest/jax.experimental.pjit.html#module-jax.experimental.pjit) to your `init_fn` in a similar fashion as [`jax.jit`](https://jax.readthedocs.io/en/latest/jax-101/02-jitting.html) but with two extra arguments: `in_axis_resources` and `out_axis_resources`.
 
-You need to add a `with mesh:` context when running a `pjit`ted function, so that it can refer to `mesh` (an instance of `jax.experimental.maps.Mesh`) to allocate data on devices correctly.
+You need to add a `with mesh:` context when running a `pjit`ted function, so that it can refer to `mesh` (an instance of `jax.sharding.Mesh`) to allocate data on devices correctly.
 
 ```{code-cell} ipython3
 :id: a298c5d03c0d
