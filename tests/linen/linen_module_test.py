@@ -21,7 +21,7 @@ import functools
 import gc
 import inspect
 import operator
-from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
+from typing import (Any, Callable, Generic, List, Mapping, NamedTuple, Sequence,
                     Tuple, TypeVar, get_type_hints)
 
 from absl.testing import absltest
@@ -1972,6 +1972,93 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaisesRegex(errors.DescriptorAttributeError,
                                 'Trying to access a property that'):
       foo.apply({})
+
+  def test_getattribute_triggers_setup(self):
+    class B(nn.Module):
+      def setup(self):
+        self.p1 = self.param('p1', lambda k: jnp.ones((2,)))
+      def fn1(self, x):
+        return self.p1 + x
+    class A(nn.Module):
+      b: nn.Module
+      def __call__(self, x):
+        return self.b.fn1(x)
+    a = A(b=B())
+    k = random.PRNGKey(0)
+    x = jnp.zeros((2,))
+    vs = nn.init(lambda a,x: a(x), a)(k, x)
+    y = nn.apply(lambda a,x: a.b.fn1(x), a)(vs, x)
+    np.testing.assert_array_equal(y, jnp.ones((2,)))
+
+  def test_setup_called_bounded_submodules(self):
+    module = nn.Sequential([
+      nn.Sequential([
+        nn.Dense(2),
+        nn.relu,
+        nn.Dense(2),
+      ]),
+      nn.relu,
+      nn.Dense(2),
+    ])
+    x = jnp.ones((1, 3))
+    variables = module.init(jax.random.PRNGKey(0), x)
+    bound_module = module.bind(variables)
+
+    self.assertIsNotNone(bound_module.layers[0].layers[0].scope)
+    self.assertIsNotNone(bound_module.layers[0].layers[2].scope)
+    self.assertIsNotNone(bound_module.layers[2].scope)
+
+  def test_call_bounded_toplevel_mutable(self):
+
+    class Bar(nn.Module):
+      a: int
+
+      def setup(self):
+        self.b = self.param('b', lambda k: jnp.ones(()))
+
+      def __call__(self, x):
+        return x + self.a * self.b
+
+    class Foo(nn.Module):
+      bars: Sequence[Bar]
+
+      def __call__(self, x):
+        for bar in self.bars:
+          x = bar(x)
+        return x
+
+
+    module = Foo(bars=[])
+    module.bars = [Bar(a=1)]
+
+    variables = module.init(jax.random.PRNGKey(0), jnp.ones(()))
+    bound_module = module.bind(variables)
+
+    bar1 = bound_module.bars[0]
+    self.assertIsNotNone(bar1.scope)
+
+  def test_input_module_with_compact(self):
+
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(2)(x)
+
+    class Foo(nn.Module):
+      backbone: Bar
+
+      @nn.compact
+      def __call__(self, x):
+        return self.backbone(x)
+
+    module = Foo(backbone=Bar())
+    x = jnp.ones((1, 3))
+    variables = module.init(jax.random.PRNGKey(0), x)
+    y = module.apply(variables, x)
+
+    # do the same using bind
+    bound_module = module.bind(variables)
+    y2 = bound_module(x)
 
   def test_repr(self):
 

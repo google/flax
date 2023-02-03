@@ -481,6 +481,13 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
 
   return method_or_fn
 
+def _has_modules(x):
+  if isinstance(x, Module):
+    return True
+  elif isinstance(x, (int, float, bool, str, np.ndarray, jnp.ndarray)):
+    return False
+  else:
+    return any(isinstance(v, Module) for v in jax.tree_util.tree_leaves(x))
 
 class SetupState(enum.IntEnum):
   # setup() has not been called.
@@ -896,6 +903,15 @@ class Module:
           'are only accessible from inside \'init\' or \'apply\'.')
       raise AttributeError(msg)
 
+  def __getattribute__(self, name):
+    """Call setup() before accessing any submodule attributes."""
+    # NB: all code here is very "hot" and will be run very frequently.
+    if ('_submodule_dataclass_fields' in object.__getattribute__(self, '__dict__')
+        and name in object.__getattribute__(self, '_submodule_dataclass_fields')):
+      object.__getattribute__(self, '_try_setup')()
+    # always run original python __getattribute__
+    return object.__getattribute__(self, name)
+
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
@@ -915,6 +931,15 @@ class Module:
     # Typically we set the parent based on the dynamic module context.
     if self.parent is _unspecified_parent:  # pytype: disable=attribute-error
       object.__setattr__(self, 'parent', _context.module_stack[-1])
+
+    # find all dataclass fields that have submodules
+    submodule_dataclass_fields = {
+      field.name for field in dataclasses.fields(self)
+      if field.name not in ('parent', 'name')
+      if field.name in self.__dict__ # ignore fields that have not been set
+      if _has_modules(getattr(self, field.name))
+    }
+    object.__setattr__(self, '_submodule_dataclass_fields', submodule_dataclass_fields)
 
     # Initialization is deferred for top level Modules or any other "orphan"
     # Modules until attachment by __setattr__ i.e. MyModule(..., parent=None)
@@ -2086,3 +2111,4 @@ def init(fn: Callable[..., Any], module: Module,
   def init_wrapper(*args, **kwargs):
     return init_fn(*args, **kwargs)[1]
   return init_wrapper
+
