@@ -588,7 +588,30 @@ def checkpoint(target: Target,
                methods=None) -> Target:
   """Lifted version of ``jax.checkpoint``.
 
-  This function is aliased to ``lift.remat`` just like ``jax.remat``.
+  Checkpointing is a technique for reducing memory usage by recomputing
+  activations during backpropagation. When training large models, it can be
+  helpful to checkpoint parts of the model to trade off memory usage for
+  additional computation.
+
+  Example::
+
+    >>> import jax
+    >>> import jax.numpy as jnp
+    >>> import flax.linen as nn
+    ...
+    >>> class CheckpointedMLP(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     CheckpointDense = nn.checkpoint(nn.Dense)
+    ...     x = CheckpointDense(128)(x)
+    ...     x = nn.relu(x)
+    ...     x = CheckpointDense(1)(x)
+    ...     return x
+    ...
+    >>> model = CheckpointedMLP()
+    >>> variables = model.init(jax.random.PRNGKey(0), jnp.ones((1, 16)))
+
+  This function is aliased to ``remat`` just like ``jax.remat``.
 
   Args:
     target: a ``Module`` or a function taking a ``Module``
@@ -616,7 +639,9 @@ def checkpoint(target: Target,
       arguments as static can avoid ConcretizationTypeErrors when tracing, but
       at the cost of more retracing overheads.
     policy: Experimental checkpoint policy, see ``jax.checkpoint``.
-    methods: If `target` is a `Module`, the methods of `Module` to checkpoint.
+    methods: An optional list of method names that will be lifted, if `methods`
+      is None (default) only the `__call__` method will be lifted. If `target`
+      is a function, `methods` is ignored.
 
   Returns:
     A wrapped version of ``target``. When computing gradients intermediate
