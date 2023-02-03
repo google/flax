@@ -42,7 +42,7 @@ and the Flax kernel has shape [inC, outC]. Transposing the kernel will do the tr
   t_out = t_fc(t_x)
   t_out = t_out.detach().cpu().numpy()
 
-  np.testing.assert_almost_equal(j_out, t_out)
+  np.testing.assert_almost_equal(j_out, t_out, rtol=1e-5)
 
 
 Convolutions
