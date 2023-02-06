@@ -1,0 +1,89 @@
+[tool.yapf]
+based_on_style = "yapf"
+
+[tool.pytype]
+# TODO(levskaya): figure out why we get pyi-error from flax's root __init__.py
+# could be a pytype bug.
+disable = "pyi-error"
+
+[tool.mypy]
+show_error_codes = true
+no_implicit_optional = true
+disable_error_code = "attr-defined"
+
+[[tool.mypy.overrides]]
+module="tensorflow.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="tensorboard.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="absl.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="jax.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="rich.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="flax.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="jaxlib.cuda.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="jaxlib.cpu.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="msgpack"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="numpy.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="optax.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="orbax.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="opt_einsum.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="scipy.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="libtpu.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="jaxlib.mlir.*"
+ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module="yaml"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # By default error out on any warnings.
+    "error",
+    # Jax warning when no gpu/tpu found.
+	"ignore:No GPU/TPU found, falling back to CPU.*:UserWarning",
+    # We should remove our dependence on jtu.
+    "ignore:jax.test_util.check_eq is deprecated and will soon be removed.*:FutureWarning",
+    # ImportWarning: can't resolve package from __spec__ or __package__, falling back on __name__ and __path__
+    "ignore:can't resolve package from.*:ImportWarning",
+    # traverse_util.Traversal will be removed soon.
+    "ignore:`flax.traverse_util.Traversal` will be deprecated.*:DeprecationWarning",
+    # distutils DeprecationWarning
+    "ignore:distutils Version classes are deprecated.*:DeprecationWarning",
+    # Deprecated numpy for Python 3.9
+    "ignore:`np.bool.*` is a deprecated alias:DeprecationWarning",
+    "ignore:NumPy will stop allowing conversion of out-of-bound Python integers to integer arrays:DeprecationWarning",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "@abc.abstractmethod",
+    "raise NotImplementedError",
+]
