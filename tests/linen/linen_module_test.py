@@ -88,6 +88,27 @@ class ModuleTest(absltest.TestCase):
     np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
 
+  def test_lazy_init(self):
+
+    class Foo(nn.Module):
+      @compact
+      def __call__(self, x):
+        k = self.param("kernel", nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1]))
+        return x @ k
+    # provide a massive input message which would OOM if any compute ops were actually executed
+    variables = Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((1024 * 1024 * 1024, 128), jnp.float32))
+    self.assertEqual(variables["params"]["kernel"].shape, (128, 128))
+
+  def test_lazy_init_fails_on_data_dependence(self):
+    class Foo(nn.Module):
+      @compact
+      def __call__(self, x):
+        k = self.param("kernel", lambda _: x)
+        return x * k
+
+    with self.assertRaises(errors.LazyInitError):
+      Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
+
   def test_arg_module(self):
     rngkey = jax.random.PRNGKey(0)
     x = jnp.ones((10,))

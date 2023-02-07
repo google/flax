@@ -60,6 +60,37 @@ class FlaxError(Exception):
 
 
 #################################################
+# lazy_init.py errors                           #
+#################################################
+
+
+class LazyInitError(FlaxError):
+  """Lazy Init function has uncomputable return values.
+
+  This happens when passing an argument to lazy_init with ``jax.ShapeDtypeStruct``
+  that affects the initialized variables.
+  Make sure the init function only uses the shape and dtype or pass an
+  actual JAX array if this is impossible.
+
+  Example::
+
+    class Foo(nn.Module):
+      @compact
+      def __call__(self, x):
+        # This parameter depends on the input x
+        # this causes an error when using lazy_init.
+        k = self.param("kernel", lambda _: x)
+        return x * k
+    Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
+  """
+
+  def __init__(self, partial_val):
+    super().__init__(
+        f'Lazy init encoutered a value that could with '
+        f'the given inputs (shape: {partial_val}).')
+
+
+#################################################
 # scope.py errors                               #
 #################################################
 
