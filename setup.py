@@ -52,7 +52,7 @@ tests_require = [
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
     "pytype",
     "sentencepiece",  # WMT example.
-    "tensorflow_text>=2.4.0",  # WMT example.
+    "tensorflow_text>=2.11.0",  # WMT example.
     "tensorflow_datasets",
     "tensorflow",
     "torch",
