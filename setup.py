@@ -51,8 +51,8 @@ tests_require = [
     "pytest-custom_exit_code",
     "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
     "pytype",
-    "sentencepiece",  # WMT example.
-    "tensorflow_text>=2.4.0",  # WMT example.
+    "sentencepiece",  # for WMT/LM1B examples
+    "tensorflow_text>=2.11.0",  # for WMT/LM1B examples
     "tensorflow_datasets",
     "tensorflow",
     "torch",
