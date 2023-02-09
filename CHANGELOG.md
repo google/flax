@@ -6,23 +6,28 @@ vNext
 (Add your change to a random empty line to avoid merge conflicts)
 -
 -
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+
+0.6.5
+-----
 - Added logical partitioning helpers for using pjit with Flax.
--
--
--
--
--
 - Add ``Module.lazy_init`` to avoid compute during Module initialization.
--
--
--
--
--
--
--
--
--
--
 
 0.6.4
 -----
