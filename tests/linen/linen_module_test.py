@@ -830,7 +830,7 @@ class ModuleTest(absltest.TestCase):
         return repr(self)
 
     mlp = MLP()
-    expected_trace = ("""MLP(
+    expected_trace = """MLP(
     # attributes
     act = relu
     sizes = (3, 2)
@@ -844,6 +844,7 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
+        dot_general = dot_general
     )
     Dense_1 = Dense(
         # attributes
@@ -854,8 +855,9 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
+        dot_general = dot_general
     )
-)""")
+)"""
     x = jnp.ones((1, 2))
     trace, variables = mlp.init_with_output(random.PRNGKey(0), x)
     self.assertEqual(trace, expected_trace)
@@ -905,7 +907,6 @@ class ModuleTest(absltest.TestCase):
       Foo().apply({}, method='not_callable')
       # test same for init.
       Foo().init({}, method='not_callable')
-
 
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)
@@ -1530,7 +1531,6 @@ class ModuleTest(absltest.TestCase):
         x = self.perturb('after_multiply', x)
         return x
 
-
     x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10,))
     module = Foo()
     variables = module.init(jax.random.PRNGKey(0), x)
@@ -2000,10 +2000,10 @@ class ModuleTest(absltest.TestCase):
       a: int
 
     class Base2(nn.Module):
-        b: str
+      b: str
 
     class Foo(Base2, Base1):
-        c: float
+      c: float
 
     module = Foo(a=1, b='ok', c=3.0)
     str_rep = repr(module)

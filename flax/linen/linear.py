@@ -79,6 +79,7 @@ class DenseGeneral(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
   precision: PrecisionLike = None
+  dot_general: Any = lax.dot_general
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -144,10 +145,12 @@ class DenseGeneral(Module):
 
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
 
-    out = lax.dot_general(inputs,
-                          kernel,
-                          ((axis, contract_ind), (batch_dims, batch_ind)),
-                          precision=self.precision)
+    out = self.dot_general(
+        inputs,
+        kernel,
+        ((axis, contract_ind), (batch_dims, batch_ind)),
+        precision=self.precision,
+    )
     # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
       # expand bias shape to broadcast bias over batch dims.
@@ -176,6 +179,7 @@ class Dense(Module):
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  dot_general: Any = lax.dot_general
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -197,9 +201,12 @@ class Dense(Module):
     else:
       bias = None
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
-    y = lax.dot_general(inputs, kernel,
-                        (((inputs.ndim - 1,), (0,)), ((), ())),
-                        precision=self.precision)
+    y = self.dot_general(
+        inputs,
+        kernel,
+        (((inputs.ndim - 1,), (0,)), ((), ())),
+        precision=self.precision,
+    )
     if bias is not None:
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
     return y

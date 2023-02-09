@@ -227,6 +227,7 @@ class MultiHeadDotProductAttention(Module):
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
+  dot_general: Any = lax.dot_general
 
   @compact
   def __call__(self,
@@ -261,15 +262,18 @@ class MultiHeadDotProductAttention(Module):
         'Memory dimension must be divisible by number of heads.')
     head_dim = qkv_features // self.num_heads
 
-    dense = functools.partial(DenseGeneral,
-                              axis=-1,
-                              dtype=self.dtype,
-                              param_dtype=self.param_dtype,
-                              features=(self.num_heads, head_dim),
-                              kernel_init=self.kernel_init,
-                              bias_init=self.bias_init,
-                              use_bias=self.use_bias,
-                              precision=self.precision)
+    dense = functools.partial(
+        DenseGeneral,
+        axis=-1,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        features=(self.num_heads, head_dim),
+        kernel_init=self.kernel_init,
+        bias_init=self.bias_init,
+        use_bias=self.use_bias,
+        precision=self.precision,
+        dot_general=self.dot_general,
+    )
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
     query, key, value = (dense(name='query')(inputs_q),
@@ -335,15 +339,18 @@ class MultiHeadDotProductAttention(Module):
         dtype=self.dtype,
         precision=self.precision)  # pytype: disable=wrong-keyword-args
     # back to the original inputs dimensions
-    out = DenseGeneral(features=features,
-                       axis=(-2, -1),
-                       kernel_init=self.kernel_init,
-                       bias_init=self.bias_init,
-                       use_bias=self.use_bias,
-                       dtype=self.dtype,
-                       param_dtype=self.param_dtype,
-                       precision=self.precision,
-                       name='out')(x)
+    out = DenseGeneral(
+        features=features,
+        axis=(-2, -1),
+        kernel_init=self.kernel_init,
+        bias_init=self.bias_init,
+        use_bias=self.use_bias,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        precision=self.precision,
+        dot_general=self.dot_general,
+        name='out',
+    )(x)
     return out
 
 
