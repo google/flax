@@ -94,8 +94,8 @@ Next, import all the `pjit`-related libraries.
 ```{code-cell} ipython3
 :id: 684fe9fe13a0
 
-from jax.experimental.pjit import pjit, with_sharding_constraint, PartitionSpec
-from jax.experimental.maps import Mesh
+from jax.experimental.pjit import pjit, with_sharding_constraint
+from jax.sharding import Mesh, PartitionSpec
 from jax.experimental import mesh_utils
 
 # Start a device mesh.
