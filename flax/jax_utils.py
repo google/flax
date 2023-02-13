@@ -23,24 +23,13 @@ import warnings
 import jax
 from jax import lax
 from jax import linear_util as lu
-from jax.config import config
 from jax.interpreters import partial_eval as pe
-from jax.interpreters import xla
-import jax.lib.xla_bridge as xb
 import jax.numpy as jnp
 import numpy as np
 
 
 def _pmap_device_order():
-  # match the default device assignments used in pmap:
-  # for single-host, that's the XLA default device assignment
-  # for multi-host, it's the order of jax.local_devices()
-  # TODO(phawkins): remove this code and use jax.local_devices() after jax
-  # 0.3.24 is the minimum.
-  if jax.__version_info__ < (0, 3, 24) and jax.process_count() == 1:
-    return xb.get_backend().get_default_device_assignment(jax.device_count())
-  else:
-    return jax.local_devices()
+  return jax.local_devices()
 
 
 def replicate(tree, devices=None):
@@ -143,16 +132,7 @@ def prefetch_to_device(iterator, size, devices=None):
   devices = devices or _pmap_device_order()
 
   def _prefetch(xs):
-    if hasattr(jax, "device_put_sharded"):  # jax>=0.2.0
-      return jax.device_put_sharded(list(xs), devices)
-    else:
-      aval = jax.xla.abstractify(xs)
-      assert xs.shape[0] == len(devices), (
-          "The first dimension of the iterator's ndarrays is not "
-          "equal to the number of devices.")
-      buffers = [xla.device_put(x, devices[i])
-                 for i, x in enumerate(xs)]
-      return jax.pxla.ShardedDeviceArray(aval, buffers)
+    return jax.device_put_sharded(list(xs), devices)
 
   def enqueue(n):  # Enqueues *up to* `n` elements from the iterator.
     for data in itertools.islice(iterator, n):
