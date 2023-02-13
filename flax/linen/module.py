@@ -482,6 +482,21 @@ def _get_unbound_fn(method_or_fn: Callable[..., Any]) -> Callable[..., Any]:
 
   return method_or_fn
 
+def _tree_has_modules(x):
+  if isinstance(x, Module):
+    return True
+  elif isinstance(x, (int, float, bool, str, np.ndarray, jnp.ndarray)):
+    return False
+  else:
+    return any(isinstance(v, Module) for v in jax.tree_util.tree_leaves(x))
+
+def _map_submodules(fn: Callable[['Module'], Any], tree):
+  """Map a function over all submodules in a tree."""
+  def _map_fn(x):
+    if isinstance(x, Module):
+      return fn(x)
+    return x
+  return jax.tree_map(_map_fn, tree)
 
 class SetupState(enum.IntEnum):
   # setup() has not been called.
@@ -897,6 +912,15 @@ class Module:
           'are only accessible from inside \'init\' or \'apply\'.')
       raise AttributeError(msg)
 
+  def __getattribute__(self, name):
+    """Call setup() before accessing any submodule attributes."""
+    # NB: all code here is very "hot" and will be run very frequently.
+    if ('_submodule_dataclass_fields' in object.__getattribute__(self, '__dict__')
+        and name in object.__getattribute__(self, '_submodule_dataclass_fields')):
+      object.__getattribute__(self, '_try_setup')()
+    # always run original python __getattribute__
+    return object.__getattribute__(self, name)
+
   def __dir__(self) -> List[str]:
     """Call setup() before listing attributes."""
     self._try_setup()
@@ -916,6 +940,15 @@ class Module:
     # Typically we set the parent based on the dynamic module context.
     if self.parent is _unspecified_parent:  # pytype: disable=attribute-error
       object.__setattr__(self, 'parent', _context.module_stack[-1])
+
+    # find all dataclass fields that have submodules
+    submodule_dataclass_fields = {
+      field.name for field in dataclasses.fields(self)
+      if field.name not in ('parent', 'name')
+      if field.name in self.__dict__ # ignore fields that have not been set
+      if _tree_has_modules(getattr(self, field.name))
+    }
+    object.__setattr__(self, '_submodule_dataclass_fields', submodule_dataclass_fields)
 
     # Initialization is deferred for top level Modules or any other "orphan"
     # Modules until attachment by __setattr__ i.e. MyModule(..., parent=None)
@@ -957,6 +990,7 @@ class Module:
       raise ValueError('parent must be None, Module or Scope')
 
     self._state.is_initialized = True
+    # self._try_setup()
 
   def __repr__(self) -> str:
     return _module_repr(self)
@@ -1035,6 +1069,8 @@ class Module:
     object.__setattr__(self, name, val)
     for x in queue:
       x.__post_init__()
+    # call _try_setup on all submodules
+    _map_submodules(lambda m: m._try_setup(), val)
 
   def _try_setup(self, shallow: bool = False) -> None:
     """Tries to setup module if scope is available and setup has not been called yet."""
@@ -1047,7 +1083,7 @@ class Module:
         # not call the user's setup. This avoids running before a
         # transformation.
         for field in dataclasses.fields(self):
-          if field.name != 'parent' and field.init:
+          if field.name not in ('parent', 'name') and field.init:
             self._register_submodules(field.name, getattr(self, field.name))
         if not shallow:
           self.setup()
@@ -1095,6 +1131,7 @@ class Module:
 
   def clone(self: M, *,
             parent: Optional[Union[Scope, 'Module']] = None,
+            _deep_clone: Union[bool, weakref.WeakValueDictionary] = False,
             **updates) -> M:
     """Creates a clone of this Module, with optionally updated arguments.
 
@@ -1106,6 +1143,21 @@ class Module:
       A clone of the this Module with the updated attributes and parent.
     """
     attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self) if f.init}
+    if _deep_clone != False:
+      cache = weakref.WeakValueDictionary() if _deep_clone is True else _deep_clone
+      def clone_fn(m: Module) -> Module:
+        key = m._id
+        if key in cache:
+          return cache[key]
+        else:
+          clone = m.clone(_deep_clone=cache)
+          cache[key] = clone
+          return clone
+
+      for field_name, value in attrs.items():
+        if field_name not in ('parent', 'name'):
+          attrs[field_name] = _map_submodules(clone_fn, value)
+
     attrs.update(parent=parent, **updates)
     return self.__class__(**attrs)
 
@@ -1323,7 +1375,7 @@ class Module:
 
     del args
     scope = core.bind(variables, rngs=rngs, mutable=mutable)
-    return self.clone(parent=scope)
+    return self.clone(parent=scope, _deep_clone=True)
 
   def unbind(self: M) -> Tuple[M, VariableDict]:
     """Returns an unbound copy of a Module and its variables.
@@ -2009,7 +2061,7 @@ def apply(fn: Callable[..., Any], module: Module,
   def scope_fn(scope, *args, **kwargs):
     _context.capture_stack.append(capture_intermediates)
     try:
-      return fn(module.clone(parent=scope), *args, **kwargs)
+      return fn(module.clone(parent=scope, _deep_clone=True), *args, **kwargs)
     finally:
       _context.capture_stack.pop()
 
@@ -2070,7 +2122,7 @@ def init_with_output(fn: Callable[..., Any], module: Module,
   def scope_fn(scope, *args, **kwargs):
     _context.capture_stack.append(capture_intermediates)
     try:
-      return fn(module.clone(parent=scope), *args, **kwargs)
+      return fn(module.clone(parent=scope, _deep_clone=True), *args, **kwargs)
     finally:
       _context.capture_stack.pop()
 
