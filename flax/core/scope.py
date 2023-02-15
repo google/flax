@@ -486,17 +486,21 @@ class Scope:
     """Invalidates the Scope."""
     self._invalid = True
 
-  def mutable_variables(self) -> VariableDict:
+  def mutable_variables(self) -> Union[VariableDict, Dict[str, Any]]:
     """Returns an immutable copy of the mutable variables belonging to this Scope."""
     self._populate_collections()
     xs = {k: v for k, v in self._variables.items()
           if in_filter(self.mutable, k)}
-    return freeze(xs)
+    if config.flax_return_frozendict:
+      return freeze(xs)
+    return xs
 
-  def variables(self) -> VariableDict:
+  def variables(self) -> Union[VariableDict, Dict[str, Any]]:
     """Returns an immutable copy of the variables belonging to this Scope."""
     self._populate_collections()
-    return freeze(self._variables)
+    if config.flax_return_frozendict:
+      return freeze(self._variables)
+    return self._variables
 
   def _validate_trace_level(self):
     tracers.check_trace_level(self.trace_level)
@@ -916,7 +920,7 @@ def apply(fn: Callable[..., Any],
   def wrapper(variables: VariableDict,
               *args,
               rngs: Optional[RNGSequences] = None,
-              **kwargs) -> Union[Any, Tuple[Any, VariableDict]]:
+              **kwargs) -> Union[Any, Tuple[Any, Union[VariableDict, Dict[str, Any]]]]:
     # Try to detect if user accidentally passed {'params': {'params': ...}.
     if 'params' in variables and isinstance(
         variables['params'],

@@ -95,3 +95,8 @@ flax_preserve_adopted_names = define_bool_state(
     name='preserve_adopted_names',
     default=False,
     help=("When adopting outside modules, don't clobber existing names."))
+
+flax_return_frozendict = define_bool_state(
+    name='return_frozendict',
+    default=True,
+    help=('Whether to return FrozenDicts when calling init or apply.'))
