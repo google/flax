@@ -47,13 +47,13 @@ def tree_equals(x, y):
 
 
 @contextlib.contextmanager
-def relax_naming(value: bool):
-  old_value = config.flax_relaxed_naming
+def set_config(option: str, value: bool):
+  old_value = getattr(config, option)
   try:
-    config.update('flax_relaxed_naming', value)
+    config.update(option, value)
     yield None
   finally:
-    config.update('flax_relaxed_naming', old_value)
+    config.update(option, old_value)
 
 
 class DummyModule(nn.Module):
@@ -1275,7 +1275,6 @@ class ModuleTest(absltest.TestCase):
     x = jnp.ones((2, 2))
 
     params = B(a_pytree).init(key, x, x)
-    print('apply', x.shape)
     unused_y, counters = b.apply(params, x, x, mutable='counter')
     ref_counters = freeze({
         'counter': {
@@ -1369,7 +1368,7 @@ class ModuleTest(absltest.TestCase):
     x = jnp.zeros((5, 5))
     init_vars = b.init(k, x)
     var_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
-    if config.flax_relaxed_naming:
+    if config.flax_preserve_adopted_names:
       ref_var_shapes = freeze({
           'params': {
               'foo': {
@@ -2053,21 +2052,91 @@ class RelaxedNamingTests(absltest.TestCase):
       def __call__(self, x):
         return self.sub(x)
 
-    with relax_naming(True):
+    with set_config('flax_preserve_adopted_names', True):
       foo = Foo(name='foo')
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("foo" in vs['params'], "relaxed naming failure")
+      y = bar.apply(vs, x)
 
-    with relax_naming(False):
+    with set_config('flax_preserve_adopted_names', False):
       foo = Foo(name='foo')
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("sub" in vs['params'], "old policy naming failure")
+      y = bar.apply(vs, x)
+
+  def test_class_optional_adoption_name_preservation(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('p', nn.initializers.zeros, x.shape)
+        return x + p
+
+    class Bar1(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = True
+      def __call__(self, x):
+        return self.sub(x)
+
+    class Bar2(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = False
+      def __call__(self, x):
+        return self.sub(x)
+
+    with set_config('flax_preserve_adopted_names', False):
+      foo = Foo(name='foo')
+      bar = Bar1(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("foo" in vs['params'], "adoption naming failure")
+      y = bar.apply(vs, x)
+
+    with set_config('flax_preserve_adopted_names', True):
+      foo = Foo(name='foo')
+      bar = Bar2(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("sub" in vs['params'], "adoption naming failure")
+      y = bar.apply(vs, x)
+
+  def test_nested_class_optional_adoption_name_preservation(self):
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('p', nn.initializers.zeros, x.shape)
+        return x + p
+
+    class Bar(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = True
+      def __call__(self, x):
+        return self.sub(x)
+
+    class Baz(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = True
+      def __call__(self, x):
+        return self.sub(x)
+
+    with set_config('flax_preserve_adopted_names', False):
+      foo = Foo(name='foo')
+      bar = Bar(sub=foo, name='bar')
+      baz = Baz(sub=bar)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = baz.init(k, x)
+      self.assertTrue("bar" in vs['params'], "adoption naming failure")
+      self.assertTrue("foo" in vs['params']['bar'], "adoption naming failure")
+      y = baz.apply(vs, x)
 
   def test_relaxed_adoption_still_conflict_checks(self):
     class Foo(nn.Module):
@@ -2082,7 +2151,7 @@ class RelaxedNamingTests(absltest.TestCase):
       def __call__(self, x):
         return self.sub(x)
 
-    with relax_naming(True):
+    with set_config('flax_preserve_adopted_names', True):
       foo1 = Foo(name='foo')
       foo2 = Foo(name='foo')
       bar = Bar(sub1=foo1, sub2=foo2)
@@ -2103,21 +2172,23 @@ class RelaxedNamingTests(absltest.TestCase):
       def __call__(self, x):
         return self.sub(x)
 
-    with relax_naming(True):
+    with set_config('flax_preserve_adopted_names', True):
       foo = Foo(name=None)
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("sub" in vs['params'], "relaxed naming failure")
+      y = bar.apply(vs, x)
 
-    with relax_naming(False):
+    with set_config('flax_preserve_adopted_names', False):
       foo = Foo(name='foo')
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("sub" in vs['params'], "old policy naming failure")
+      y = bar.apply(vs, x)
 
   def test_relaxed_python_conflict(self):
 
@@ -2128,13 +2199,13 @@ class RelaxedNamingTests(absltest.TestCase):
         p = self.param('dummy', nn.initializers.zeros, x.shape)
         return x + p
 
-    with relax_naming(True):
+    with set_config('flax_relaxed_naming', True):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = foo.init(k, x)
 
-    with relax_naming(False):
+    with set_config('flax_relaxed_naming', False):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
@@ -2150,13 +2221,13 @@ class RelaxedNamingTests(absltest.TestCase):
         v2 = self.variable('col2', 'v', lambda x: jnp.zeros(x), x.shape)
         return x + v1.value + v2.value
 
-    with relax_naming(True):
+    with set_config('flax_relaxed_naming', True):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = foo.init(k, x)
 
-    with relax_naming(False):
+    with set_config('flax_relaxed_naming', False):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
