@@ -38,6 +38,8 @@ Dtype = Any  # this could be a real type?
 Array = Any
 PrecisionLike = Union[None, str, lax.Precision, Tuple[str, str],
                       Tuple[lax.Precision, lax.Precision]]
+DotGeneralT = Callable[..., Array]
+ConvGeneralDilatedT = Callable[..., Array]
 
 default_kernel_init = initializers.lecun_normal()
 
@@ -79,7 +81,7 @@ class DenseGeneral(Module):
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
   precision: PrecisionLike = None
-  dot_general: Any = lax.dot_general
+  dot_general: DotGeneralT = lax.dot_general
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -179,7 +181,7 @@ class Dense(Module):
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
-  dot_general: Any = lax.dot_general
+  dot_general: DotGeneralT = lax.dot_general
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -299,6 +301,7 @@ class _Conv(Module):
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -402,7 +405,7 @@ class _Conv(Module):
       # Need to know the spatial output shape of a standard convolution to
       # create the unshared convolution kernel.
       conv_output_shape = eval_shape(
-          lambda lhs, rhs: lax.conv_general_dilated(  # pylint: disable=g-long-lambda
+          lambda lhs, rhs: self.conv_general_dilated(  # pylint: disable=g-long-lambda
               lhs=lhs,
               rhs=rhs,
               window_strides=strides,
@@ -412,7 +415,7 @@ class _Conv(Module):
               rhs_dilation=kernel_dilation,
           ),
           inputs,
-          ShapedArray(kernel_size + (in_features, self.features), inputs.dtype)
+          ShapedArray(kernel_size + (in_features, self.features), inputs.dtype),
       ).shape
 
       # One (unshared) convolutional kernel per each pixel in the output.
@@ -443,7 +446,7 @@ class _Conv(Module):
 
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
     if self.shared_weights:
-      y = lax.conv_general_dilated(
+      y = self.conv_general_dilated(
           inputs,
           kernel,
           strides,
@@ -452,7 +455,7 @@ class _Conv(Module):
           rhs_dilation=kernel_dilation,
           dimension_numbers=dimension_numbers,
           feature_group_count=self.feature_group_count,
-          precision=self.precision
+          precision=self.precision,
       )
     else:
       y = lax.conv_general_dilated_local(
