@@ -598,8 +598,8 @@ class ConvTranspose(Module):
       channel axes of the kernel.
   """
   features: int
-  kernel_size: Union[int, Tuple[int, ...]]
-  strides: Optional[Tuple[int, ...]] = None
+  kernel_size: Union[int, Sequence[int]]
+  strides: Optional[Sequence[int]] = None
   padding: PaddingLike = 'SAME'
   kernel_dilation: Optional[Sequence[int]] = None
   use_bias: bool = True
@@ -637,7 +637,7 @@ class ConvTranspose(Module):
     if isinstance(self.kernel_size, int):
       kernel_size = (self.kernel_size,)
     else:
-      kernel_size = self.kernel_size
+      kernel_size = tuple(self.kernel_size)
 
     # Combine all input batch dimensions into a single leading batch axis.
     num_batch_dimensions = inputs.ndim - (len(kernel_size) + 1)
@@ -649,7 +649,10 @@ class ConvTranspose(Module):
       inputs = jnp.reshape(inputs, flat_input_shape)
 
     strides: Tuple[int, ...]
-    strides = self.strides or (1,) * (inputs.ndim - 2)
+    if self.strides is None:
+      strides = (1,) * (inputs.ndim - 2)
+    else:
+      strides = tuple(self.strides)
 
     in_features = jnp.shape(inputs)[-1]
     if self.transpose_kernel:
