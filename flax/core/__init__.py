@@ -31,6 +31,7 @@ from .scope import (
   DenyList as DenyList,
   apply as apply,
   init as init,
+  lazy_init as lazy_init,
   bind as bind)
 
 from .lift import (

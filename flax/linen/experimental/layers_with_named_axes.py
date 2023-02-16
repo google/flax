@@ -18,6 +18,7 @@ from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
 from flax import linen as nn
 from flax.linen import initializers
+from flax.linen.linear import DotGeneralT
 from flax.linen.linear import PrecisionLike
 from flax.linen.partitioning import param_with_axes
 from flax.linen.partitioning import with_sharding_constraint
@@ -66,6 +67,7 @@ class Dense(nn.Module):
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
   bias_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.zeros_init()
   kernel_axes: Tuple[str, ...] = ()
+  dot_general: DotGeneralT = lax.dot_general
 
   @nn.compact
   def __call__(self, inputs: Array) -> Array:
@@ -84,9 +86,12 @@ class Dense(nn.Module):
                              self.param_dtype,
                              axes=self.kernel_axes)
     kernel = jnp.asarray(kernel, self.dtype)
-    y = lax.dot_general(inputs, kernel,
-                        (((inputs.ndim - 1,), (0,)), ((), ())),
-                        precision=self.precision)
+    y = self.dot_general(
+        inputs,
+        kernel,
+        (((inputs.ndim - 1,), (0,)), ((), ())),
+        precision=self.precision,
+    )
     if self.use_bias:
       bias = param_with_axes('bias',
                              self.bias_init,
