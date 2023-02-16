@@ -30,11 +30,14 @@ install_requires = [
     "matplotlib",  # only needed for tensorboard export
     "msgpack",
     "optax",
-    "orbax",
     "tensorstore",
     "rich>=11.1",
     "typing_extensions>=4.1.1",
     "PyYAML>=5.4.1",
+]
+
+extra_requires = [
+    "orbax",  # orbax depends on flax, but not it is not vital for flax
 ]
 
 tests_require = [
@@ -86,6 +89,7 @@ setup(
     zip_safe=False,
     install_requires=install_requires,
     extras_require={
+        "extra": extra_requires,
         "testing": tests_require,
         },
     )
