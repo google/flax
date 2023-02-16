@@ -108,7 +108,8 @@ from .module import (
 from .normalization import (
   BatchNorm as BatchNorm,
   GroupNorm as GroupNorm,
-  LayerNorm as LayerNorm
+  LayerNorm as LayerNorm,
+  RMSNorm as RMSNorm
 )
 from .pooling import (
   avg_pool as avg_pool,
