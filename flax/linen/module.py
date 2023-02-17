@@ -942,13 +942,13 @@ class Module:
       object.__setattr__(self, 'parent', _context.module_stack[-1])
 
     # find all dataclass fields that have submodules
-    submodule_dataclass_fields = {
+    _submodule_dataclass_fields = tuple(
       field.name for field in dataclasses.fields(self)
       if field.name not in ('parent', 'name')
       if field.name in self.__dict__ # ignore fields that have not been set
       if _tree_has_modules(getattr(self, field.name))
-    }
-    object.__setattr__(self, '_submodule_dataclass_fields', submodule_dataclass_fields)
+    )
+    object.__setattr__(self, '_submodule_dataclass_fields', _submodule_dataclass_fields)
 
     # Initialization is deferred for top level Modules or any other "orphan"
     # Modules until attachment by __setattr__ i.e. MyModule(..., parent=None)
@@ -1140,6 +1140,9 @@ class Module:
       A clone of the this Module with the updated attributes and parent.
     """
     attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self) if f.init}
+
+    attrs.update(parent=parent, **updates)
+
     if _deep_clone != False:
       cache = weakref.WeakValueDictionary() if _deep_clone is True else _deep_clone
       def clone_fn(m: Module) -> Module:
@@ -1152,11 +1155,27 @@ class Module:
           return clone
 
       for field_name, value in attrs.items():
-        if field_name not in ('parent', 'name'):
-          attrs[field_name] = _map_submodules(clone_fn, value)
+        attrs[field_name] = _map_submodules(clone_fn, value)
 
-    attrs.update(parent=parent, **updates)
-    return self.__class__(**attrs)
+    module = self.__class__(**attrs)
+
+    if _deep_clone is True:
+      module._recursive_register_submodules()
+
+    return module
+
+  def _recursive_register_submodules(self):
+    for field_name in self._submodule_dataclass_fields:
+      value = self.__dict__[field_name]
+      current_in_setup = self._state.in_setup
+      try:
+        self._state.in_setup = True
+        self._register_submodules(field_name, value)
+      finally:
+        self._state.in_setup = current_in_setup
+
+      value = self.__dict__[field_name]
+      _map_submodules(lambda m: m._recursive_register_submodules(), value)
 
   def variable(self, col: str, name: str,
                init_fn: Optional[Callable[..., Any]] = None,

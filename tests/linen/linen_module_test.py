@@ -2096,7 +2096,7 @@ class ModuleTest(absltest.TestCase):
     bar1 = bound_module.bars[0]
     self.assertIsNotNone(bar1.scope)
 
-  @pytest.mark.skip(reason="Leaving it here to tackle it later")
+  # @pytest.mark.skip(reason="Leaving it here to tackle it later")
   def test_nested_shared(self):
     class Shared(nn.Module):
       @nn.compact
