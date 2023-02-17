@@ -990,7 +990,6 @@ class Module:
       raise ValueError('parent must be None, Module or Scope')
 
     self._state.is_initialized = True
-    # self._try_setup()
 
   def __repr__(self) -> str:
     return _module_repr(self)
@@ -1069,8 +1068,6 @@ class Module:
     object.__setattr__(self, name, val)
     for x in queue:
       x.__post_init__()
-    # call _try_setup on all submodules
-    _map_submodules(lambda m: m._try_setup(), val)
 
   def _try_setup(self, shallow: bool = False) -> None:
     """Tries to setup module if scope is available and setup has not been called yet."""
