@@ -88,5 +88,10 @@ flax_use_orbax_checkpointing = define_bool_state(
 
 flax_relaxed_naming = define_bool_state(
     name='relaxed_naming',
-    default=False,
+    default=True,
     help=('Whether to relax naming constraints.'))
+
+flax_preserve_adopted_names = define_bool_state(
+    name='preserve_adopted_names',
+    default=False,
+    help=("When adopting outside modules, don't clobber existing names."))

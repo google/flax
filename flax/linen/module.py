@@ -1003,25 +1003,26 @@ class Module:
     cache = _caches.get(root, weakref.WeakValueDictionary())
     _caches[root] = cache
     queue = []
+    preserve_adopted_names = config.flax_preserve_adopted_names
+    if hasattr(self, 'preserve_adopted_names'):
+       preserve_adopted_names = self.preserve_adopted_names
     def adopt_attr_modules(cache, queue, suffix, subvalue):
       if isinstance(subvalue, Module):
         adopted_name = None
         if subvalue.parent is None:
-          # Module was passed from outside. It needs to be cloned.
-          # Outside modules are named by attachment, not an outer name,
-          # UNLESS we're using new relaxed naming, in which case an existing
-          # name will be used.
-          if config.flax_relaxed_naming:
-            adopted_name = object.__getattribute__(subvalue, 'name')
-          object.__setattr__(subvalue, 'name', None)
           # Preserve sharing-by-reference relationships during adoption
           # via cache keyed on unique instance ids.
           key = subvalue._id
+          # Module was passed from outside. It needs to be cloned.
+          # Outside modules are named by attachment, not an outer name,
+          # UNLESS we're using new adopted name policy, in which case an existing
+          # name will be used, as is often supplied by config systems.
+          if preserve_adopted_names:
+            adopted_name = object.__getattribute__(subvalue, 'name')
           if key in cache:
             subvalue = cache[key]
           else:
-            # We must bind to local variable before adding to weakvalue dict.
-            subvalue = subvalue.clone()
+            subvalue = subvalue.clone(name=None)
             cache[key] = subvalue
         if subvalue.name is None:
           object.__setattr__(subvalue, 'parent', self)
