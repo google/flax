@@ -1144,7 +1144,7 @@ class Module:
     attrs.update(parent=parent, **updates)
 
     if _deep_clone != False:
-      cache = weakref.WeakValueDictionary() if _deep_clone is True else _deep_clone
+      cache = weakref.WeakValueDictionary() if isinstance(_deep_clone, bool) else _deep_clone
       def clone_fn(m: Module) -> Module:
         key = m._id
         if key in cache:
