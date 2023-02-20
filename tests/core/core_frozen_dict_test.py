@@ -15,6 +15,7 @@
 from flax.core import FrozenDict, unfreeze, freeze
 
 import jax
+from jax._src.tree_util import prefix_errors
 
 
 from absl.testing import absltest
@@ -83,6 +84,14 @@ class FrozenDictTest(absltest.TestCase):
   def test_frozen_dict_copy_reserved_name(self):
     result = FrozenDict({'a': 1}).copy({'cls': 2})
     self.assertEqual(result, {'a': 1, 'cls': 2})
+
+  def test_frozen_dict_keypaths(self):
+    tree = FrozenDict({'a': {'b': {'c': 1}}})
+    bad_prefix_tree = FrozenDict({'a': {'b': {'d': 1}}})
+
+    e, = prefix_errors(bad_prefix_tree, tree)
+    with self.assertRaisesRegex(ValueError, r'different pytree metadata at key path\s*tree\[\'a\'\]\[\'b\'\]\n'):
+      raise e('tree')
 
 
 if __name__ == '__main__':

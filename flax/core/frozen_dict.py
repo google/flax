@@ -148,19 +148,19 @@ class FrozenDict(Mapping[K, V]):
     """
     return unfreeze(self)
 
-  def tree_flatten(self) -> Tuple[Tuple[Dict[Any, Any]], Tuple[()]]:
+  def tree_flatten(self) -> Tuple[Tuple[Any, ...], Tuple[Any, ...]]:
     """Flattens this FrozenDict.
 
     Returns:
       A flattened version of this FrozenDict instance.
     """
-    return (self._dict,), ()
+    return tuple(self._dict.values()), tuple(self._dict.keys())
 
   @classmethod
-  def tree_unflatten(cls, _, data):
+  def tree_unflatten(cls, meta: Tuple[Any, ...], data: Tuple[Any, ...]):
     # data is already deep copied due to tree map mechanism
     # we can skip the deep copy in the constructor
-    return cls(*data, __unsafe_skip_copy__=True)
+    return cls(zip(meta, data), __unsafe_skip_copy__=True)
 
 
 def _prepare_freeze(xs: Any) -> Any:
@@ -235,3 +235,8 @@ serialization.register_serialization_state(
     FrozenDict,
     _frozen_dict_state_dict,
     _restore_frozen_dict)
+
+def _frozen_dict_keypaths(x: FrozenDict[Any, Any]) -> jax.tree_util.GetitemKeyPathEntry:
+  return [jax.tree_util.GetitemKeyPathEntry(key) for key in sorted(x)]
+
+jax.tree_util.register_keypaths(FrozenDict, _frozen_dict_keypaths)
