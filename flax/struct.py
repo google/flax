@@ -16,7 +16,7 @@
 """
 
 import dataclasses
-import typing
+import inspect
 from typing import TypeVar, Callable, Tuple, Union, Any
 
 from . import serialization
@@ -120,20 +120,39 @@ def dataclass(clz: _T) -> _T:
     data = tuple(getattr(x, name) for name in data_fields)
     return data, meta
 
+  def iterate_clz_with_keys(x):
+    meta = tuple(getattr(x, name) for name in meta_fields)
+    data = tuple(
+        (jax.tree_util.GetAttrKey(name), getattr(x, name))
+        for name in data_fields
+    )
+    return data, meta
+
   def clz_from_iterable(meta, data):
     meta_args = tuple(zip(meta_fields, meta))
     data_args = tuple(zip(data_fields, data))
     kwargs = dict(meta_args + data_args)
     return data_clz(**kwargs)
 
-  jax.tree_util.register_pytree_node(data_clz,
-                                     iterate_clz,
-                                     clz_from_iterable)
+  # TODO(ivyzheng): Remove the old code and roll up Flax version after
+  # JAX 0.4.6 release.
+  if hasattr(jax.tree_util, 'register_pytree_with_keys') and inspect.isfunction(
+      jax.tree_util.register_pytree_with_keys
+  ):
+    jax.tree_util.register_pytree_with_keys(
+        data_clz, iterate_clz_with_keys, clz_from_iterable
+    )
+  else:
+    jax.tree_util.register_pytree_node(data_clz, iterate_clz, clz_from_iterable)
 
-  if tuple(map(int, jax.version.__version__.split('.'))) >= (0, 3, 1):
-    def keypaths(_):
-      return [jax.tree_util.AttributeKeyPathEntry(name) for name in data_fields]
-    jax.tree_util.register_keypaths(data_clz, keypaths)
+    if tuple(map(int, jax.version.__version__.split('.'))) >= (0, 3, 1):
+
+      def keypaths(_):
+        return [
+            jax.tree_util.AttributeKeyPathEntry(name) for name in data_fields
+        ]
+
+      jax.tree_util.register_keypaths(data_clz, keypaths)
 
   def to_state_dict(x):
     state_dict = {name: serialization.to_state_dict(getattr(x, name))
