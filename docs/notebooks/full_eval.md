@@ -6,9 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3
-  name: python3
 ---
 
 +++ {"id": "SMNC51ldX-Nq"}
@@ -26,13 +23,10 @@ Please refer to above link for a an explanation of the problem and the proposed 
 ### setup
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: 62DTHYCYHWp1
-outputId: b38d096f-58db-4d61-effa-eafa4c732826
-tags: [skip-execution]
----
+:id: 62DTHYCYHWp1
+:outputId: b38d096f-58db-4d61-effa-eafa4c732826
+:tags: [skip-execution]
+
 !pip install -q chex einops
 # tfds.split_for_jax_process() was added in 4.5.1
 !pip install -q tensorflow_datasets -U
@@ -67,12 +61,9 @@ dataset_name = 'mnist'
 ```
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: bZ-HWxKZHf6I
-outputId: 639262cb-b617-4561-c31f-60b33156a15f
----
+:id: bZ-HWxKZHf6I
+:outputId: 639262cb-b617-4561-c31f-60b33156a15f
+
 class FakeModel(nn.Module):
   num_classes: int
   @nn.compact
@@ -90,17 +81,9 @@ model.apply(variables, inputs)
 ### The problem
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-  height: 121
-  referenced_widgets: [5ff2865d0c0240909b5123a16cab4847, 6f7316963aba4fd4b01fbe5f6c0e62f7,
-    8712c2f9196a48b19f5a362eed9b96cd, e7102cf7f0e342c1a26a2042927d621c, 276324b8d0f24b5382ec8e646818e41b,
-    0ca8b31500144c53bf16c4af69667cbd, 510b002fcda944ee9d148c8ab089cb8a, 07c84a778f3b4be586fb0cb0946d03a0,
-    3c96dc03c61348b3b014ba98427a8431, 7783236eae3c48749c2bce6f8facef42, a0418596a12048d7b1dc37fd34000a01]
-id: yfGNjMBFWEUk
-outputId: 09f0c28b-d28e-4a7a-8afe-8797da44ad6d
----
+:id: yfGNjMBFWEUk
+:outputId: 09f0c28b-d28e-4a7a-8afe-8797da44ad6d
+
 # last batch has different shape
 collections.Counter(
     tuple(batch['image'].shape)
@@ -109,12 +92,9 @@ collections.Counter(
 ```
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: eFPK-Oysl1YS
-outputId: 293bd0e4-011e-41b4-de48-a53b9cfd0958
----
+:id: eFPK-Oysl1YS
+:outputId: 293bd0e4-011e-41b4-de48-a53b9cfd0958
+
 # need to drop remainder when using multiple batch levels in a dataparallel
 # setup
 sum(
@@ -126,12 +106,9 @@ sum(
 ```
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: DlAJwgYDmoxe
-outputId: 8bb353f3-98db-4645-e627-3c3683e36ea9
----
+:id: DlAJwgYDmoxe
+:outputId: 8bb353f3-98db-4645-e627-3c3683e36ea9
+
 # having different number of examples for different hosts will result in SPMD
 # violation when all examples are to be processed
 process_count = 6
@@ -143,12 +120,9 @@ process_count = 6
 ```
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: oUb7QrR2Iwk9
-outputId: 19234b4a-9f9c-47c4-cbcc-5f7fb2573746
----
+:id: oUb7QrR2Iwk9
+:outputId: 19234b4a-9f9c-47c4-cbcc-5f7fb2573746
+
 # baseline: simple batching, keep reminder
 # => leads to recompilation & only works on single device
 
@@ -171,12 +145,9 @@ correct, total, correct / total
 ```
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: dlJuEBcLKY94
-outputId: e94cf79c-a033-4bc3-a086-75ecd8bd21f0
----
+:id: dlJuEBcLKY94
+:outputId: e94cf79c-a033-4bc3-a086-75ecd8bd21f0
+
 # when the remainder is dropped, we can use multiple devices and avoid
 # recompilations
 # => but results are incorrect
@@ -211,12 +182,9 @@ correct, total, correct / total
 #### Manual implementation
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: I1hg8paaasXj
-outputId: 2e6c611d-357e-4e51-99d8-47c24d785b11
----
+:id: I1hg8paaasXj
+:outputId: 2e6c611d-357e-4e51-99d8-47c24d785b11
+
 # manually padding
 # => precise & allows for data parallelism
 
@@ -252,12 +220,9 @@ correct, total, correct / total
 #### Using `pad_shard_unpad()`
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: pQX__5DfEX9g
-outputId: 71017214-c4ce-4da0-8db5-9300dba79c3a
----
+:id: pQX__5DfEX9g
+:outputId: 71017214-c4ce-4da0-8db5-9300dba79c3a
+
 # same as before, but using @pad_shard_unshard decorator
 
 # manually padding
@@ -327,12 +292,9 @@ correct, total, correct / total
 #### Multi-host complications
 
 ```{code-cell} ipython3
----
-colab:
-  base_uri: https://localhost:8080/
-id: MjtmUUjWPV1X
-outputId: 70ee173a-dcdf-4136-a3e0-6685c09f8198
----
+:id: MjtmUUjWPV1X
+:outputId: 70ee173a-dcdf-4136-a3e0-6685c09f8198
+
 # infinite zero padding
 
 def with_infinite_padding(dataset):

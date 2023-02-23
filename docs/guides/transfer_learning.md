@@ -6,10 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: 'Python 3.8.10 (''.venv'': venv)'
-  language: python
-  name: python3
 ---
 
 # Transfer learning

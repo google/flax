@@ -6,9 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3
-  name: python3
 ---
 
 +++ {"id": "yf-nWLh0naJi"}
@@ -33,13 +30,10 @@ This notebook will walk you through the following workflow:
 Here we provide the code needed to set up the environment for our notebook.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: qdrEVv9tinJn
-outputId: e30aa464-fa52-4f35-df96-716c68a4b3ee
-tags: [skip-execution]
----
+:id: qdrEVv9tinJn
+:outputId: e30aa464-fa52-4f35-df96-716c68a4b3ee
+:tags: [skip-execution]
+
 # Install the latest JAXlib version.
 !pip install --upgrade -q pip jax jaxlib
 # Install Flax at head:
@@ -82,12 +76,9 @@ Layers (and models in general, we'll use that word from now on) are subclasses o
 Parameters are not stored with the models themselves. You need to initialize parameters by calling the `init` function, using a PRNGKey and dummy input data.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: K529lhzeYtl8
-outputId: 06feb9d2-db50-4f41-c169-6df4336f43a5
----
+:id: K529lhzeYtl8
+:outputId: 06feb9d2-db50-4f41-c169-6df4336f43a5
+
 key1, key2 = random.split(random.PRNGKey(0))
 x = random.normal(key1, (10,)) # Dummy input data
 params = model.init(key2, x) # Initialization call
@@ -112,12 +103,9 @@ The output shows that the parameters are stored in a `FrozenDict` instance, whic
 As a consequence, the following doesn't work:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: HtOFWeiynaJo
-outputId: 689b4230-2a3d-4823-d103-2858e6debc4d
----
+:id: HtOFWeiynaJo
+:outputId: 689b4230-2a3d-4823-d103-2858e6debc4d
+
 try:
     params['new_key'] = jnp.ones((2,2))
 except ValueError as e:
@@ -129,12 +117,9 @@ except ValueError as e:
 To conduct a forward pass with the model with a given set of parameters (which are never stored with the model), we just use the `apply` method by providing it the parameters to use as well as the input:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: J8ietJecWiuK
-outputId: 7bbe6bb4-94d5-4574-fbb5-aa0fcd1c84ae
----
+:id: J8ietJecWiuK
+:outputId: 7bbe6bb4-94d5-4574-fbb5-aa0fcd1c84ae
+
 model.apply(params, x)
 ```
 
@@ -149,12 +134,9 @@ $$\mathcal{L}(W,b)\rightarrow\frac{1}{k}\sum_{i=1}^{k} \frac{1}{2}\|y_i-f_{W,b}(
 Here, we see that the tuple $(W,b)$ matches the parameters of the Dense layer. We'll perform gradient descent using those. Let's first generate the fake data we'll use. The data is exactly the same as in the JAX part's linear regression pytree example.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: bFIiMnL4dl-e
-outputId: 6eae59dc-0632-4f53-eac8-c22a7c646a52
----
+:id: bFIiMnL4dl-e
+:outputId: 6eae59dc-0632-4f53-eac8-c22a7c646a52
+
 # Set problem dimensions.
 n_samples = 20
 x_dim = 10
@@ -198,12 +180,9 @@ def mse(params, x_batched, y_batched):
 And finally perform the gradient descent.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: ePEl1ndse0Jq
-outputId: 50d975b3-4706-4d8a-c4b8-2629ab8e3ac4
----
+:id: ePEl1ndse0Jq
+:outputId: 50d975b3-4706-4d8a-c4b8-2629ab8e3ac4
+
 learning_rate = 0.3  # Gradient step size.
 print('Loss for "true" W,b: ', mse(true_params, x_samples, y_samples))
 loss_grad_fn = jax.value_and_grad(mse)
@@ -258,12 +237,9 @@ loss_grad_fn = jax.value_and_grad(mse)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: PTSv0vx13xPO
-outputId: eec0c096-1d9e-4b3c-f8e5-942ee63828ec
----
+:id: PTSv0vx13xPO
+:outputId: eec0c096-1d9e-4b3c-f8e5-942ee63828ec
+
 for i in range(101):
   loss_val, grads = loss_grad_fn(params, x_samples, y_samples)
   updates, opt_state = tx.update(grads, opt_state)
@@ -279,12 +255,9 @@ for i in range(101):
 Now that we're happy with the result of our training, we might want to save the model parameters to load them back later. Flax provides a serialization package to enable you to do that.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: BiUPRU93XnAZ
-outputId: b97e7d83-3e40-4a80-b1fe-1f6ceff30a0c
----
+:id: BiUPRU93XnAZ
+:outputId: b97e7d83-3e40-4a80-b1fe-1f6ceff30a0c
+
 from flax import serialization
 bytes_output = serialization.to_bytes(params)
 dict_output = serialization.to_state_dict(params)
@@ -301,12 +274,9 @@ To load the model back, you'll need to use a template of the model parameter str
 *The point of enforcing structure through template is to avoid users issues downstream, so you need to first have the right model that generates the parameters structure.*
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: MOhoBDCOYYJ5
-outputId: 13acc4e1-8757-4554-e2c8-d594ba6e67dc
----
+:id: MOhoBDCOYYJ5
+:outputId: 13acc4e1-8757-4554-e2c8-d594ba6e67dc
+
 serialization.from_bytes(params, bytes_output)
 ```
 
@@ -325,12 +295,9 @@ Flax allows you to define your own models, which should be a bit more complicate
 The base abstraction for models is the `nn.Module` class, and every type of predefined layers in Flax (like the previous `Dense`) is a subclass of `nn.Module`. Let's take a look and start by defining a simple but custom multi-layer perceptron i.e. a sequence of Dense layers interleaved with calls to a non-linear activation function.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: vbfrfbkxgPhg
-outputId: b59c679c-d164-4fd6-92db-b50f0d310ec3
----
+:id: vbfrfbkxgPhg
+:outputId: b59c679c-d164-4fd6-92db-b50f0d310ec3
+
 class ExplicitMLP(nn.Module):
   features: Sequence[int]
 
@@ -373,12 +340,9 @@ As we can see, a `nn.Module` subclass is made of:
 Since the module structure and its parameters are not tied to each other, you can't directly call `model(x)` on a given input as it will return an error. The `__call__` function is being wrapped up in the `apply` one, which is the one to call on an input:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: DEYrVA6dnaJu
-outputId: 4af16ec5-b52a-43b0-fc47-1f8ab25e7058
----
+:id: DEYrVA6dnaJu
+:outputId: 4af16ec5-b52a-43b0-fc47-1f8ab25e7058
+
 try:
     y = model(x) # Returns an error
 except AttributeError as e:
@@ -390,12 +354,9 @@ except AttributeError as e:
 Since here we have a very simple model, we could have used an alternative (but equivalent) way of declaring the submodules inline in the `__call__` using the `@nn.compact` annotation like so:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: ZTCbdpQ4suSK
-outputId: 183a74ef-f54e-4848-99bf-fee4c174ba6d
----
+:id: ZTCbdpQ4suSK
+:outputId: 183a74ef-f54e-4848-99bf-fee4c174ba6d
+
 class SimpleMLP(nn.Module):
   features: Sequence[int]
 
@@ -436,12 +397,9 @@ There are, however, a few differences you should be aware of between the two dec
 In the previous MLP example, we relied only on predefined layers and operators (`Dense`, `relu`). Let's imagine that you didn't have a Dense layer provided by Flax and you wanted to write it on your own. Here is what it would look like using the `@nn.compact` way to declare a new modules:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: wK371Pt_vVfR
-outputId: 83b5fea4-071e-4ea0-8fa8-610e69fb5fd5
----
+:id: wK371Pt_vVfR
+:outputId: 83b5fea4-071e-4ea0-8fa8-610e69fb5fd5
+
 class SimpleDense(nn.Module):
   features: int
   kernel_init: Callable = nn.initializers.lecun_normal()
@@ -493,12 +451,9 @@ However this is not enough to cover everything that we would need for machine le
 For demonstration purposes, we'll implement a simplified but similar mechanism to batch normalization: we'll store running averages and subtract those to the input at training time. For proper batchnorm, you should use (and look at) the implementation [here](https://github.com/google/flax/blob/main/flax/linen/normalization.py).
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: J6_tR-nPzB1i
-outputId: 75465fd6-cdc8-497c-a3ec-7f709b5dde7a
----
+:id: J6_tR-nPzB1i
+:outputId: 75465fd6-cdc8-497c-a3ec-7f709b5dde7a
+
 class BiasAdderWithRunningMean(nn.Module):
   decay: float = 0.99
 
@@ -531,12 +486,9 @@ print('updated state:\n', updated_state)
 Here, `updated_state` returns only the state variables that are being mutated by the model while applying it on data. To update the variables and get the new parameters of the model, we can use the following pattern:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: IbTsCAvZcdBy
-outputId: 09a8bdd1-eaf8-401a-cf7c-386a7a5aa87b
----
+:id: IbTsCAvZcdBy
+:outputId: 09a8bdd1-eaf8-401a-cf7c-386a7a5aa87b
+
 for val in [1.0, 2.0, 3.0]:
   x = val * jnp.ones((10,5))
   y, updated_state = model.apply(variables, x, mutable=['batch_stats'])
@@ -552,12 +504,9 @@ From this simplified example, you should be able to derive a full BatchNorm impl
 *This example isn't doing anything and is only for demonstration purposes.*
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: TUgAbUPpnaJw
-outputId: 0906fbab-b866-4956-d231-b1374415d448
----
+:id: TUgAbUPpnaJw
+:outputId: 0906fbab-b866-4956-d231-b1374415d448
+
 from functools import partial
 
 @partial(jax.jit, static_argnums=(0, 1))

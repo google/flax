@@ -7,10 +7,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3
-  language: python
-  name: python3
 ---
 
 +++ {"id": "6eea21b3"}
@@ -51,10 +47,6 @@ executionInfo:
   elapsed: 54
   status: ok
   timestamp: 1673483483044
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: bRlrHqZVXZvk
 ---
 import tensorflow_datasets as tfds  # TFDS for MNIST
@@ -98,10 +90,6 @@ executionInfo:
   elapsed: 53
   status: ok
   timestamp: 1673483483208
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: cbc079cd
 ---
 from flax import linen as nn  # Linen API
@@ -136,10 +124,6 @@ executionInfo:
   elapsed: 103
   status: ok
   timestamp: 1673483483427
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: lDHfog81zLQa
 outputId: 2c580f41-bf5d-40ec-f1cf-ab7f319a84da
 ---
@@ -167,10 +151,6 @@ executionInfo:
   elapsed: 52
   status: ok
   timestamp: 1673483483631
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: qXr7JDpIxGNZ
 outputId: 1249b7fb-6787-41eb-b34c-61d736300844
 ---
@@ -183,10 +163,6 @@ executionInfo:
   elapsed: 1
   status: ok
   timestamp: 1673483483754
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: CJDaJNijyOji
 ---
 from clu import metrics
@@ -205,10 +181,6 @@ executionInfo:
   elapsed: 55
   status: ok
   timestamp: 1673483483958
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: 7W0qf7FC9uG5
 ---
 @struct.dataclass
@@ -228,10 +200,6 @@ executionInfo:
   elapsed: 54
   status: ok
   timestamp: 1673483484125
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: e0102447
 ---
 class TrainState(train_state.TrainState):
@@ -273,10 +241,6 @@ executionInfo:
   elapsed: 52
   status: ok
   timestamp: 1673483484293
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: 9b0af486
 ---
 @jax.jit
@@ -305,10 +269,6 @@ executionInfo:
   elapsed: 53
   status: ok
   timestamp: 1673483484460
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: 961bf70b
 ---
 @jax.jit
@@ -333,10 +293,6 @@ executionInfo:
   elapsed: 515
   status: ok
   timestamp: 1673483485090
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: bff5393e
 ---
 num_epochs = 10
@@ -363,10 +319,6 @@ executionInfo:
   elapsed: 59
   status: ok
   timestamp: 1673483485268
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: xC4MFyBsfT-U
 ---
 tf.random.set_seed(0)
@@ -378,10 +330,6 @@ executionInfo:
   elapsed: 52
   status: ok
   timestamp: 1673483485436
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: e4f6f4d3
 ---
 init_rng = jax.random.PRNGKey(0)
@@ -400,10 +348,6 @@ executionInfo:
   elapsed: 56
   status: ok
   timestamp: 1673483485606
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: 445fcab0
 ---
 learning_rate = 0.01
@@ -416,10 +360,6 @@ executionInfo:
   elapsed: 52
   status: ok
   timestamp: 1673483485777
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: 5221eafd
 ---
 state = create_train_state(cnn, init_rng, learning_rate, momentum)
@@ -450,10 +390,6 @@ executionInfo:
   elapsed: 55
   status: ok
   timestamp: 1673483485947
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: '74295360'
 ---
 # since train_ds is replicated num_epochs times in get_datasets(), we divide by num_epochs
@@ -466,10 +402,6 @@ executionInfo:
   elapsed: 1
   status: ok
   timestamp: 1673483486076
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: cRtnMZuQFlKl
 ---
 metrics_history = {'train_loss': [],
@@ -484,10 +416,6 @@ executionInfo:
   elapsed: 17908
   status: ok
   timestamp: 1673483504133
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: 2c40ce90
 outputId: 258a2c76-2c8f-4a9e-d48b-dde57c342a87
 ---
@@ -524,16 +452,10 @@ for step,batch in enumerate(train_ds.as_numpy_iterator()):
 
 ```{code-cell}
 ---
-colab:
-  height: 353
 executionInfo:
   elapsed: 358
   status: ok
   timestamp: 1673483504621
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: Zs5atiqIG9Kz
 outputId: 431a2fcd-44fa-4202-f55a-906555f060ac
 ---
@@ -564,10 +486,6 @@ executionInfo:
   elapsed: 580
   status: ok
   timestamp: 1673483505350
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: DFwxgBQf44ks
 ---
 @jax.jit
@@ -581,16 +499,10 @@ pred = pred_step(state, test_batch)
 
 ```{code-cell}
 ---
-colab:
-  height: 699
 executionInfo:
   elapsed: 1250
   status: ok
   timestamp: 1673483506723
-  user:
-    displayName: Marcus Chiam
-    userId: '17531616275590396120'
-  user_tz: 480
 id: 5d5nF3u44JFI
 outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
 ---
