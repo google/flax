@@ -144,7 +144,7 @@ class LinenMetaTest(absltest.TestCase):
     x = jnp.ones((8, 128))
     spec = nn.get_partition_spec(
         jax.eval_shape(model.init, random.PRNGKey(0), x))
-    self.assertEqual(spec.unfreeze(), {
+    self.assertEqual(spec, {
         'params': {
             'MLP_0': {
                 'Dense_0': {

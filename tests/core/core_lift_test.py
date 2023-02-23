@@ -14,7 +14,8 @@
 
 import operator
 from flax import errors
-from flax.core import Scope, init, apply, lift, nn, FrozenDict, unfreeze
+from flax.core import Scope, init, apply, lift, nn, FrozenDict, unfreeze, copy
+from flax.configurations import use_regular_dict
 
 import jax
 from jax import random
@@ -24,6 +25,7 @@ import numpy as np
 
 
 from absl.testing import absltest
+
 
 class LiftTest(absltest.TestCase):
 
@@ -155,11 +157,12 @@ class LiftTest(absltest.TestCase):
 
     x = jnp.ones((1, 3))
     y1, vars = init(f)(random.PRNGKey(0), x, True)
-    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 0})
+    self.assertEqual(vars['state'], {'true_count': 1, 'false_count': 0})
     y2, vars = apply(f, mutable="state")(vars, x, False)
-    self.assertEqual(vars['state'].unfreeze(), {'true_count': 1, 'false_count': 1})
+    self.assertEqual(vars['state'], {'true_count': 1, 'false_count': 1})
     np.testing.assert_allclose(y1, -y2)
 
+  @use_regular_dict()
   def test_switch(self):
     def f(scope, x, index):
       scope.variable('state', 'a_count', lambda: 0)
@@ -182,14 +185,14 @@ class LiftTest(absltest.TestCase):
 
     x = jnp.ones((1, 3))
     y1, vars = init(f)(random.PRNGKey(0), x, 0)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 0, 'c_count': 0})
+    self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 0, 'c_count': 0})
     y2, updates = apply(f, mutable="state")(vars, x, 1)
-    vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 0})
+    vars = copy(vars, updates)
+    self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 1, 'c_count': 0})
     np.testing.assert_allclose(y1, -y2)
     y3, updates = apply(f, mutable="state")(vars, x, 2)
-    vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 1})
+    vars = copy(vars, updates)
+    self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 1, 'c_count': 1})
     np.testing.assert_allclose(y1, y3)
 
   def test_subscope_var_aliasing(self):
