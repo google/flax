@@ -534,7 +534,7 @@ class RNN(Module):
   ``(kernel_height, kernel_width, features)``::
 
     >>> x = jnp.ones((10, 50, 32, 32, 3)) # (batch, time, height, width, features)
-    >>> conv_lstm = nn.RNN(nn.ConvLSTMCell(), size=(3, 3, 64))
+    >>> conv_lstm = nn.RNN(nn.ConvLSTMCell(), cell_size=(3, 3, 64))
     >>> y, variables = conv_lstm.init_with_output(jax.random.PRNGKey(0), x)
     >>> y.shape # (batch, time, height, width, features)
     (10, 50, 32, 32, 64)
