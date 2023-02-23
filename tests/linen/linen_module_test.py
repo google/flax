@@ -29,7 +29,7 @@ from flax import config
 from flax import errors
 from flax import linen as nn
 from flax import struct
-from flax.core import Scope, freeze, tracers
+from flax.core import Scope, freeze, FrozenDict, tracers
 from flax.linen import compact
 import jax
 from jax import random
@@ -2233,6 +2233,23 @@ class RelaxedNamingTests(absltest.TestCase):
       x = jnp.zeros((1,))
       with self.assertRaises(errors.NameInUseError):
         vs = foo.init(k, x)
+
+
+class FrozenDictTests(absltest.TestCase):
+
+  def test_frozendict_flag(self):
+
+    with set_config('flax_return_frozendict', True):
+      x = jnp.zeros((2,3))
+      layer = nn.Dense(5)
+      params = layer.init(random.PRNGKey(0), x)
+      self.assertTrue(isinstance(params, FrozenDict))
+
+    with set_config('flax_return_frozendict', False):
+      x = jnp.zeros((2,3))
+      layer = nn.Dense(5)
+      params = layer.init(random.PRNGKey(0), x)
+      self.assertTrue(isinstance(params, dict))
 
 
 if __name__ == '__main__':
