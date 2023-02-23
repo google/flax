@@ -23,7 +23,8 @@ from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
                     Sequence, Set, Tuple, TypeVar, Union)
 
 from flax.ids import uuid
-from flax import configurations as config
+from flax import config as config
+from flax import configurations as legacy_config  # only for flax_lazy_rng
 from flax import errors
 from flax import struct
 from flax import traceback_util
@@ -96,7 +97,7 @@ class LazyRng(struct.PyTreeNode):
   @staticmethod
   def create(rng: Union['LazyRng', PRNGKey],
              *suffix: PRNGFoldable) -> 'LazyRng':
-    if not config.flax_lazy_rng:
+    if not legacy_config.flax_lazy_rng:
       if isinstance(rng, LazyRng):
         assert not rng.suffix
         rng = rng.rng
