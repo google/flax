@@ -16,7 +16,9 @@ from .axes_scan import broadcast as broadcast
 from .frozen_dict import (
   FrozenDict as FrozenDict,
   freeze as freeze,
-  unfreeze as unfreeze
+  unfreeze as unfreeze,
+  copy as copy,
+  pop as pop
 )
 
 from .tracers import (
