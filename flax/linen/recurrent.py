@@ -18,9 +18,12 @@ THe RNNCell modules can be scanned using lifted transforms. For more information
 see: https://flax.readthedocs.io/en/latest/advanced_topics/lift.html.
 """
 
+from abc import abstractmethod
 import abc
 from functools import partial   # pylint: disable=g-importing-member
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union, TypeVar
+from typing_extensions import Protocol
+from absl import logging
 
 from flax.linen.activation import sigmoid
 from flax.linen.activation import tanh
@@ -35,11 +38,19 @@ from flax.linen.module import Module
 from jax import numpy as jnp
 from jax import random
 import numpy as np
+from flax.core import lift
+from flax.core.frozen_dict import FrozenDict
+from flax.linen import transforms
+import jax
 
+A = TypeVar('A')
 PRNGKey = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Array = Any
+Carry = Any
+CarryHistory = Any
+Output = Any
 
 
 class RNNCellBase(Module):
@@ -498,3 +509,227 @@ class ConvLSTMCell(RNNCellBase):
     key1, key2 = random.split(rng)
     mem_shape = batch_dims + size
     return init_fn(key1, mem_shape), init_fn(key2, mem_shape)
+
+class RNN(Module):
+  """The ``RNN`` module takes any :class:`RNNCellBase` instance and applies it over a sequence
+  using :func:`flax.linen.scan`.
+
+  Example::
+
+    >>> import jax.numpy as jnp
+    >>> import jax
+    >>> import flax.linen as nn
+    ...
+    >>> x = jnp.ones((10, 50, 32)) # (batch, time, features)
+    >>> lstm = nn.RNN(nn.LSTMCell(), cell_size=64)
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> y = lstm.apply(variables, x)
+    >>> y.shape # (batch, time, cell_size)
+    (10, 50, 64)
+
+  As shown above, RNN uses the ``cell_size`` argument to set the ``size`` argument for the cell's
+  ``initialize_carry`` method, in practice this is typically the number of hidden units you want
+  for the cell. However, this may vary depending on the cell you are using, for example the
+  :class:`ConvLSTMCell` requires a ``size`` argument of the form
+  ``(kernel_height, kernel_width, features)``::
+
+    >>> x = jnp.ones((10, 50, 32, 32, 3)) # (batch, time, height, width, features)
+    >>> conv_lstm = nn.RNN(nn.ConvLSTMCell(), size=(3, 3, 64))
+    >>> y, variables = conv_lstm.init_with_output(jax.random.PRNGKey(0), x)
+    >>> y.shape # (batch, time, height, width, features)
+    (10, 50, 32, 32, 64)
+
+  By default RNN expect the time dimension after the batch dimension (``(*batch, time, *features)``),
+  if you set ``time_major=True`` RNN will instead expect the time dimesion to be at the beginning
+  (``(time, *batch, *features)``)::
+
+    >>> x = jnp.ones((50, 10, 32)) # (time, batch, features)
+    >>> lstm = nn.RNN(nn.LSTMCell(), cell_size=64, time_major=True)
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> y = lstm.apply(variables, x)
+    >>> y.shape # (time, batch, cell_size)
+    (50, 10, 64)
+
+  The output is an array of shape ``(*batch, time, *cell_size)`` by default (typically), however
+  if you set ``return_carry=True`` it will instead return a tuple of the final carry and the output::
+
+    >>> x = jnp.ones((10, 50, 32)) # (batch, time, features)
+    >>> lstm = nn.RNN(nn.LSTMCell(), cell_size=64, return_carry=True)
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> carry, y = lstm.apply(variables, x)
+    >>> jax.tree_map(jnp.shape, carry) # ((batch, cell_size), (batch, cell_size))
+    ((10, 64), (10, 64))
+    >>> y.shape # (batch, time, cell_size)
+    (10, 50, 64)
+
+  To support variable length sequences, you can pass a ``segmentation_mask`` which is an integer
+  array of shape ``(*batch, time)``, where a 1 indicates the element is part of the sequence and a 0 indicates
+  a padding element. Sequences must be padded to the right, i.e. all elements of a sequence must be
+  contiguous and padded elements must be to the right of the sequence. For example::
+
+    >>> # 3 sequences with max length 5
+    >>> segmentation_mask = jnp.array([
+    ...   [1, 1, 1, 0, 0], # length 3
+    ...   [1, 1, 0, 0, 0], # length 2
+    ...   [1, 1, 1, 1, 1], # length 5
+    ... ])
+
+  The output elements corresponding to padding elements are NOT zeroed out. If ``return_carry``
+  is set to ``True`` the carry will be the state of the last valid element of each sequence.
+
+  RNN also accepts some of the arguments of :func:`flax.linen.scan`, by default they are set to
+  work with cells like :class:`LSTMCell` and :class:`GRUCell` but they can be overriden as needed.
+  Overriding default values to scan looks like this::
+
+    >>> lstm = nn.RNN(
+    ...   nn.LSTMCell(), cell_size=64,
+    ...   unroll=1, variable_axes={}, variable_broadcast='params',
+    ...   variable_carry=False, split_rngs={'params': False})
+
+  Attributes:
+    cell: an instance of :class:`RNNCellBase`.
+    cell_size: the size of the cell as requested by :meth:`RNNCellBase.initialize_carry`,
+      it can be an integer or a tuple of integers.
+    time_major: if ``time_major=False`` (default) it will expect inputs with shape
+      ``(*batch, time, *features)``, else it will expect inputs with shape ``(time, *batch, *features)``.
+    return_carry: if ``return_carry=False`` (default) only the output sequence is returned,
+      else it will return a tuple of the final carry and the output sequence.
+    unroll: how many scan iterations to unroll within a single iteration of a loop,
+      defaults to 1. This argument will be passed to `nn.scan`.
+    variable_axes: a dictionary mapping each collection to either an integer `i` (meaning we scan over
+      dimension `i`) or `None` (replicate rather than scan). This argument is forwarded to `nn.scan`.
+    variable_broadcast: Specifies the broadcasted variable collections. A
+      broadcasted variable should not depend on any computation that cannot be
+      lifted out of the loop. This is typically used to define shared parameters
+      inside the fn. This argument is forwarded to `nn.scan`.
+    variable_carry: Specifies the variable collections that are carried through
+      the loop. Mutations to these variables are carried to the next iteration
+      and will be preserved when the scan finishes. This argument is forwarded to
+      `nn.scan`.
+    split_rngs: a mapping from PRNGSequenceFilter to bool specifying whether a collection's
+      PRNG key should be split such that its values are different at each step, or replicated
+      such that its values remain the same at each step. This argument is forwarded to `nn.scan`.
+  """
+  cell: RNNCellBase
+  cell_size: Union[int, Tuple[int, ...]]
+  time_major: bool = False
+  return_carry: bool = False
+  unroll: int = 1
+  variable_axes: Mapping[lift.CollectionFilter,lift.InOutScanAxis] = FrozenDict()
+  variable_broadcast: lift.CollectionFilter = 'params'
+  variable_carry: lift.CollectionFilter = False
+  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict({'params': False})
+
+  def __call__(
+    self,
+    inputs: jax.Array,
+    *,
+    initial_carry: Optional[Carry] = None,
+    init_key: Optional[random.KeyArray] = None,
+    segmentation_mask: Optional[Array] = None,
+    return_carry: Optional[bool] = None,
+    time_major: Optional[bool] = None
+  ) -> Union[Output, Tuple[Carry, Output]]:
+    """
+    Applies the RNN to the inputs.
+
+    ``__call__`` allows you to optionally override some attributes like ``return_carry``
+    and ``time_major`` defined in the constructor.
+
+    Arguments:
+      inputs: the input sequence.
+      initial_carry: the initial carry, if not provided it will be initialized
+        using the cell's :meth:`RNNCellBase.initialize_carry` method.
+      init_key: a PRNG key used to initialize the carry, if not provided
+        ``jax.random.PRNGKey(0)`` will be used. Most cells will ignore this
+        argument.
+      segmentation_mask: an integer array of shape ``(*batch, time)`` indicating
+        which elements are part of the sequence and which are padding elements.
+      return_carry: if ``return_carry=False`` (default) only the output sequence is returned,
+        else it will return a tuple of the final carry and the output sequence.
+      time_major: if ``time_major=False`` (default) it will expect inputs with shape
+        ``(*batch, time, *features)``, else it will expect inputs with shape ``(time, *batch, *features)``.
+    Returns:
+      if ``return_carry=False`` (default) only the output sequence is returned,
+      else it will return a tuple of the final carry and the output sequence.
+    """
+
+    if return_carry is None:
+      return_carry = self.return_carry
+
+    if time_major is None:
+      time_major = self.time_major
+
+    # Infer the number of batch dimensions from the input shape.
+    # Cells like ConvLSTM have additional spatial dimensions.
+    num_features_dims = 1 if isinstance(self.cell_size, int) else len(self.cell_size)
+    time_axis = 0 if time_major else inputs.ndim - num_features_dims - 1
+    if time_major:
+      batch_dims = inputs.shape[1:-num_features_dims]
+    else:
+      batch_dims = inputs.shape[:time_axis]
+
+    carry: Carry
+    if initial_carry is None:
+      if init_key is None:
+        init_key = random.PRNGKey(0)
+      carry = self.cell.initialize_carry(
+        init_key, batch_dims=batch_dims, size=self.cell_size)
+    else:
+      carry = initial_carry
+
+    def scan_fn(
+      cell: RNNCellBase, carry: Carry, x: Array
+    ) -> Union[Tuple[Carry, Array], Tuple[Carry, Tuple[Carry, Array]]]:
+      carry, y = cell(carry, x)
+      # When we have a segmentation mask we return the carry as an output
+      # so that we can select the last carry for each sequence later.
+      # This uses more memory but is faster than using jnp.where at each
+      # iteration. As a small optimization do this when we really need it.
+      if segmentation_mask is not None and return_carry:
+        return carry, (carry, y)
+      else:
+        return carry, y
+
+    scan = transforms.scan(
+      scan_fn,
+      in_axes=time_axis,
+      out_axes=time_axis if segmentation_mask is None else (0, time_axis),
+      unroll=self.unroll,
+      variable_axes=self.variable_axes,
+      variable_broadcast=self.variable_broadcast,
+      variable_carry=self.variable_carry,
+      split_rngs=self.split_rngs,
+    )
+
+    scan_output = scan(self.cell, carry, inputs)
+
+    # Next we select the final carry. If a segmentation mask was provided and
+    # return_carry is True we slice the carry history and select the last valid
+    # carry for each sequence. Otherwise we just use the last carry.
+    if segmentation_mask is not None and return_carry:
+      _, (carries, outputs) = scan_output
+      # segmentation_mask[None] expands the shape of the mask to match the
+      # number of dimensions of the carry.
+      carry = _select_last(carries, segmentation_mask[None], axis=0)
+    else:
+      carry, outputs = scan_output
+
+    if return_carry:
+      return carry, outputs
+    else:
+      return outputs
+
+def _select_last(sequence: A, segmentation_mask: jnp.ndarray, axis: int) -> A:
+  last_idx = segmentation_mask.sum(axis=-1) - 1
+
+  def _slice_array(x: jnp.ndarray):
+    _last_idx = _expand_dims_for(last_idx, to_target=x)
+    x = jnp.take_along_axis(x, _last_idx, axis=axis)
+    return x.squeeze(axis=axis)
+
+  return jax.tree_map(_slice_array, sequence)
+
+def _expand_dims_for(x, *, to_target):
+  """Expands the shape of 'x' to match those of 'to_target' by adding singleton dimensions."""
+  return x.reshape(x.shape + (1,) * (to_target.ndim - x.ndim))
