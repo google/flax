@@ -1,14 +1,13 @@
 ---
 jupyter:
   jupytext:
+    formats: ipynb,md
+    main_language: python
     text_representation:
       extension: .md
       format_name: markdown
       format_version: '1.3'
       jupytext_version: 1.13.8
-  kernelspec:
-    display_name: Python 3
-    name: python3
 ---
 
 <!-- #region id="6e9134fa" -->
@@ -34,11 +33,11 @@ This guide covers the following:
 Install/upgrade Flax and [Orbax](https://github.com/google/orbax). For JAX installation with GPU/TPU support, visit [this section on GitHub](https://github.com/google/jax#installation).
 <!-- #endregion -->
 
-```python id="e80f8743" outputId="ef736fb8-e585-44c4-80bd-27b5fe852699" colab={"base_uri": "https://localhost:8080/"}
-!pip install -U -qq jaxlib jax flax orbax
+```python tags=["skip-execution"]
+! pip install -U -qq jaxlib jax flax orbax
 
 # Orbax needs to enable asyncio in a Colab environment.
-!pip install -qq nest_asyncio
+! pip install -qq nest_asyncio
 ```
 
 <!-- #region id="-icO30rwmKYj" -->
@@ -77,7 +76,7 @@ In Flax, you save and load any given JAX [pytree](https://jax.readthedocs.io/en/
 Create a pytree with many data structures and containers, and play with it:
 <!-- #endregion -->
 
-```python id="56dec3f6" outputId="f1856d96-1961-48ed-bb7c-cb63fbaa7567" colab={"base_uri": "https://localhost:8080/"}
+```python id="56dec3f6" outputId="f1856d96-1961-48ed-bb7c-cb63fbaa7567"
 # A simple model with one linear layer.
 key1, key2 = random.split(random.PRNGKey(0))
 x1 = random.normal(key1, (5,))      # A simple JAX array.
@@ -110,7 +109,7 @@ When saving a checkpoint, Flax will bookkeep the existing checkpoints based on y
 You can start to use Orbax to handle the underlying save by creating an [`orbax.checkpoint.Checkpointer`](https://github.com/google/orbax/blob/main/orbax/checkpoint/checkpointer.py), and pass it into the `flax.checkpoints.save_checkpoint` call.
 <!-- #endregion -->
 
-```python id="4cdb35ef" colab={"base_uri": "https://localhost:8080/", "height": 36} outputId="6d849273-15ce-4480-8864-726d1838ac1f"
+```python id="4cdb35ef" outputId="6d849273-15ce-4480-8864-726d1838ac1f"
 # Import Flax Checkpoints.
 from flax.training import checkpoints
 
@@ -144,7 +143,7 @@ orbax_checkpointer.save(os.path.join(ckpt_dir, 'orbax_checkpoint'),
 It is also possible to use pure Orbax to manage multiple checkpoints across different steps. Again, see [Orbax](https://github.com/google/orbax) documentation for detailed information.
 <!-- #endregion -->
 
-```python id="T6T8V4UBXB1R" colab={"base_uri": "https://localhost:8080/"} outputId="b7132933-566d-440d-c34e-c5468d87cbdc"
+```python id="T6T8V4UBXB1R" outputId="b7132933-566d-440d-c34e-c5468d87cbdc"
 orbax_ckpt_dir = 'tmp/orbax-checkpointing'
 if os.path.exists(orbax_ckpt_dir):
     shutil.rmtree(orbax_ckpt_dir)  # Remove any existing checkpoints from the last notebook run.
@@ -164,7 +163,7 @@ With the migration to Orbax in progress, `restore_checkpoint` can automatically 
 You can always restore a pytree out of your checkpoints by setting `target=None`.
 <!-- #endregion -->
 
-```python id="150b20a0" outputId="85ffceca-f38d-46b8-e567-d9d38b7885f9" colab={"base_uri": "https://localhost:8080/"}
+```python id="150b20a0" outputId="85ffceca-f38d-46b8-e567-d9d38b7885f9"
 raw_restored = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=None)
 raw_restored
 ```
@@ -173,7 +172,7 @@ raw_restored
 Equivalently using pure Orbax:
 <!-- #endregion -->
 
-```python id="WgRJj3wjXIaN" colab={"base_uri": "https://localhost:8080/"} outputId="b4af1ef4-f22f-459b-bdca-2e6bfa16c08b"
+```python id="WgRJj3wjXIaN" outputId="b4af1ef4-f22f-459b-bdca-2e6bfa16c08b"
 raw_restored = orbax_checkpointer.restore(os.path.join(ckpt_dir, 'orbax_checkpoint'))
 raw_restored
 ```
@@ -192,7 +191,7 @@ To resolve this, you should pass an example `target` in `flax.training.checkpoin
 It's often recommended to refactor out the process of initializing a checkpoint's structure (for example, a [`TrainState`](https://flax.readthedocs.io/en/latest/flip/1009-optimizer-api.html?#train-state)), so that saving/loading is easier and less error-prone. This is because complicated objects like `apply_fn` and `tx` (optimizer) are not stored in the checkpoint file and must be initiated by code.
 <!-- #endregion -->
 
-```python id="58f42513" outputId="110c6b6e-fe42-4179-e5d8-6b92d355e11b" colab={"base_uri": "https://localhost:8080/"}
+```python id="58f42513" outputId="110c6b6e-fe42-4179-e5d8-6b92d355e11b"
 empty_state = train_state.TrainState.create(
     apply_fn=model.apply,
     params=jax.tree_map(np.zeros_like, variables['params']),  # values of the tree leaf doesn't matter
@@ -212,7 +211,7 @@ The flexibility of using *Flax dataclasses*—[`flax.struct.dataclass`](https://
 Note: Flax supports [`flax.struct.dataclass`](https://flax.readthedocs.io/en/latest/api_reference/flax.struct.html#flax.struct.dataclass), not Python's built-in `dataclasses.dataclass`.
 <!-- #endregion -->
 
-```python id="be65d4af" outputId="4fe776f0-65f8-4fc4-d64a-990520b36dce" colab={"base_uri": "https://localhost:8080/"}
+```python id="be65d4af" outputId="4fe776f0-65f8-4fc4-d64a-990520b36dce"
 class CustomTrainState(train_state.TrainState):
     batch_stats: Any = None
 
@@ -251,7 +250,7 @@ It is recommended to keep your checkpoints up to date with your pytree dataclass
 But if you must restore checkpoints and Flax dataclasses with incompatible fields, you can manually add/remove corresponding fields before passing in the correct target structure:
 <!-- #endregion -->
 
-```python id="29fd1e33" outputId="cdbb9247-d1eb-4458-aa83-8db0332af7cb" colab={"base_uri": "https://localhost:8080/"}
+```python id="29fd1e33" outputId="cdbb9247-d1eb-4458-aa83-8db0332af7cb"
 # Pass no target to get a raw state dictionary first.
 raw_state_dict = checkpoints.restore_checkpoint(ckpt_dir, target=None, step=0)
 # Add/remove fields as needed.
@@ -272,7 +271,7 @@ Note: You should use the same `async_checkpointer` to handle all your async save
 Whenever you want to explicitly wait until an async save is done, you can call `async_checkpointer.wait_until_finished()`. Alternatively, you can pass in `orbax_checkpointer=async_checkpointer` when running `restore_checkpoint` and Flax will automatically wait and restore safely.
 <!-- #endregion -->
 
-```python id="85be68a6" outputId="aefce94c-8bae-4355-c142-05f2b61c39e2" colab={"base_uri": "https://localhost:8080/"}
+```python id="85be68a6" outputId="aefce94c-8bae-4355-c142-05f2b61c39e2"
 # `orbax.checkpoint.AsyncCheckpointer` needs some multi-process initialization, because it was
 # originally designed for multi-process large model checkpointing.
 # For Python notebooks or other single-process setting, just set up with `num_processes=1`.
@@ -343,7 +342,7 @@ The arguments in [`flax.training.checkpoints.save_checkpoint_multiprocess`](http
 If your checkpoint is too large, you can specify `timeout_secs` in the manager and give it more time to finish writing.
 <!-- #endregion -->
 
-```python id="5d10039b" outputId="901bb097-0899-479d-b9ae-61dae79e7057" colab={"base_uri": "https://localhost:8080/", "height": 36}
+```python id="5d10039b" outputId="901bb097-0899-479d-b9ae-61dae79e7057"
 async_checkpointer = orbax.checkpoint.AsyncCheckpointer(orbax.checkpoint.PyTreeCheckpointHandler(), timeout_secs=50)
 checkpoints.save_checkpoint_multiprocess(ckpt_dir,
                                          mp_ckpt,
@@ -359,7 +358,7 @@ checkpoints.save_checkpoint_multiprocess(ckpt_dir,
 Note that, when using [`flax.training.checkpoints.restore_checkpoint`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.restore_checkpoint), you need to pass a `target` with valid multi-process arrays at the correct structural location. Flax only uses the `target` arrays' meshes and mesh axes to restore the checkpoint. This means that the multi-process array in the `target` arg doesn't have to be as large as your checkpoint's size (the shape of the multi-process array doesn't need to have the same shape as the actual array in your checkpoint).
 <!-- #endregion -->
 
-```python id="a9f9724c" outputId="393c4a0e-8a8c-4ca6-c609-93c8bab38e75" colab={"base_uri": "https://localhost:8080/"}
+```python id="a9f9724c" outputId="393c4a0e-8a8c-4ca6-c609-93c8bab38e75"
 with jax.sharding.Mesh(mesh.devices, mesh.axis_names):
     mp_smaller_array = f(np.zeros(8).reshape(4, 2))
 

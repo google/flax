@@ -18,3 +18,13 @@ repos:
   hooks:
   - id: trailing-whitespace
     exclude: ^docs/.*\.md$
+- repo: https://github.com/kynan/nbstripout
+  rev: 0.6.1
+  hooks:
+    - id: nbstripout
+      args: [
+        --keep-output,
+        --keep-count,
+        --extra-keys,
+        "metadata.kernelspec metadata.vscode metadata.colab cell.metadata.executionInfo.user cell.metadata.executionInfo.user_tz cell.metadata.colab",
+      ]

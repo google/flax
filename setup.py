@@ -56,6 +56,7 @@ tests_require = [
     "tensorflow_datasets",
     "tensorflow",
     "torch",
+    "nbstripout",
 ]
 
 __version__ = None

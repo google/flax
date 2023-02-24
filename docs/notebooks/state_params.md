@@ -6,9 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3
-  name: python3
 ---
 
 +++ {"id": "8Z1q_WRdTpgv"}

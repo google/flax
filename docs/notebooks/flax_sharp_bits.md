@@ -6,10 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3.10.4 64-bit
-  language: python
-  name: python3
 ---
 
 # 🔪 Flax - The Sharp Bits 🔪
@@ -21,7 +17,9 @@ Flax exposes the full power of JAX. And just like when using JAX, there are cert
 First, install and/or update Flax:
 
 ```{code-cell} ipython3
-!pip install -qq flax
+:tags: [skip-execution]
+
+! pip install -qq flax
 ```
 
 ## 🔪 `flax.linen.Dropout` layer and randomness

@@ -72,7 +72,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install standalone dependencies only
       run: |
-        pip install .
+        pip install -e .
     - name: Test importing Flax
       run: |
         python -c "import flax"

@@ -6,10 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: 'Python 3.8.11 (''.venv'': venv)'
-  language: python
-  name: python3
 ---
 
 +++ {"id": "C1QVJFlVsxcZ"}
@@ -83,12 +79,9 @@ We need to initialize the Module variables, these include the parameters of the 
 We call the `init` method on the instantiated Module.  If the Module `__call__` method has args `(self, *args, **kwargs)` then we call `init` with `(rngs, *args, **kwargs)` so in this case, just `(rng, input)`:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: Vjx0HWNcfa8h
-outputId: 3adfaeaf-977e-4e82-8adf-d254fae6eb91
----
+:id: Vjx0HWNcfa8h
+:outputId: 3adfaeaf-977e-4e82-8adf-d254fae6eb91
+
 # Make RNG Keys and a fake input.
 key1, key2 = random.split(random.PRNGKey(0), 2)
 x = random.uniform(key1, (4,4))
@@ -108,12 +101,9 @@ We call the `apply` method on the instantiated Module.  If the Module `__call__`
 So in this case, just `(variables, input)`:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: R9QZ6EOBg5X8
-outputId: e8c389a6-29f3-4f93-97ea-703e85a8b811
----
+:id: R9QZ6EOBg5X8
+:outputId: e8c389a6-29f3-4f93-97ea-703e85a8b811
+
 y = model.apply(init_variables, x)
 y
 ```
@@ -136,13 +126,10 @@ Additional points:
 We support declaring modules in `setup()` that can still benefit from shape inference by using __Lazy Initialization__ that sets up variables the first time the Module is called.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: qB6l-9EabOwH
-outputId: 1a6c6a17-0b95-42c2-b5bf-b9ad80fd7758
-tags: []
----
+:id: qB6l-9EabOwH
+:outputId: 1a6c6a17-0b95-42c2-b5bf-b9ad80fd7758
+:tags: []
+
 class ExplicitMLP(nn.Module):
   features: Sequence[int]
 
@@ -176,13 +163,10 @@ print('output:\n', y)
 Here we show the equivalent compact form of the MLP that declares the submodules inline using the `@compact` decorator.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: UPNGIr6wcGaw
-outputId: b3709789-e66e-4e20-f6b2-04022f8a62bb
-tags: []
----
+:id: UPNGIr6wcGaw
+:outputId: b3709789-e66e-4e20-f6b2-04022f8a62bb
+:tags: []
+
 class SimpleMLP(nn.Module):
   features: Sequence[int]
 
@@ -229,13 +213,10 @@ with arguments:
 Again, we'll demonstrate declaring things inline as we typically do using the `@compact` decorator.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: 7OACbTFHjMvl
-outputId: bc5cb1f2-c5e9-4159-d131-73247009e32f
-tags: []
----
+:id: 7OACbTFHjMvl
+:outputId: bc5cb1f2-c5e9-4159-d131-73247009e32f
+:tags: []
+
 class SimpleDense(nn.Module):
   features: int
   kernel_init: Callable = nn.initializers.lecun_normal()
@@ -268,13 +249,10 @@ print('output:\n', y)
 We can also declare variables in setup, though in doing so you can't take advantage of shape inference and have to provide explicit shape information at initialization.  The syntax is a little repetitive in this case right now, but we do force agreement of the assigned names.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: CE0CTLVvZ8Yn
-outputId: 1e822bd8-7a08-4e80-e0e6-a86637c46772
-tags: []
----
+:id: CE0CTLVvZ8Yn
+:outputId: 1e822bd8-7a08-4e80-e0e6-a86637c46772
+:tags: []
+
 class ExplicitDense(nn.Module):
   features_in: int  # <-- explicit input shape
   features: int
@@ -323,13 +301,10 @@ with arguments:
 ⚠️ Unlike parameters, we expect these to be mutated, so `self.variable` returns not a constant, but a _reference_ to the variable.  To __get__ the raw value, you'd write `myvariable.value` and to __set__ it `myvariable.value = new_value`.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: u6_fbrW2XT5t
-outputId: 2a8f5453-81b1-44dc-a431-d14b372c5710
-tags: []
----
+:id: u6_fbrW2XT5t
+:outputId: 2a8f5453-81b1-44dc-a431-d14b372c5710
+:tags: []
+
 class Counter(nn.Module):
   @nn.compact
   def __call__(self):
@@ -362,13 +337,10 @@ print('output:\n', y)
 Let's make an artificial, goofy example that mixes differentiable parameters, stochastic layers, and mutable variables:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: BBrbcEdCnQ4o
-outputId: 8f299a5c-74c8-476c-93fa-e5543901ec45
-tags: []
----
+:id: BBrbcEdCnQ4o
+:outputId: 8f299a5c-74c8-476c-93fa-e5543901ec45
+:tags: []
+
 class Block(nn.Module):
   features: int
   training: bool
@@ -423,13 +395,10 @@ It's not immediately clear what use this has, but you can compile specific submo
 _Known Gotcha_: at the moment, the decorator changes the RNG stream slightly, so comparing jitted an unjitted initializations will look different.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: UEUTO8bf0Kf2
-outputId: 3f324d0f-259f-40f0-8273-103f7fc281c5
-tags: []
----
+:id: UEUTO8bf0Kf2
+:outputId: 3f324d0f-259f-40f0-8273-103f7fc281c5
+:tags: []
+
 class MLP(nn.Module):
   features: Sequence[int]
 
@@ -465,13 +434,10 @@ For memory-expensive computations, we can `remat` our method to recompute a Modu
 _Known Gotcha_: at the moment, the decorator changes the RNG stream slightly, so comparing remat'd and undecorated initializations will look different.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: sogMxDQpyMZE
-outputId: 7fe8e13b-7dd6-4e55-ee50-ce334e8ed178
-tags: []
----
+:id: sogMxDQpyMZE
+:outputId: 7fe8e13b-7dd6-4e55-ee50-ce334e8ed178
+:tags: []
+
 class RematMLP(nn.Module):
   features: Sequence[int]
   # For all transforms, we can annotate a method, or wrap an existing
@@ -518,13 +484,10 @@ In addition, we provide for each __kind__ of variable it's axis rules:
 Below we show an example defining a batched, multiheaded attention module from a single-headed unbatched attention implementation.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: PIGiriD0yFXo
-outputId: 223d880e-c7b2-4210-ebb5-dbfcdd9aed09
-tags: []
----
+:id: PIGiriD0yFXo
+:outputId: 223d880e-c7b2-4210-ebb5-dbfcdd9aed09
+:tags: []
+
 class RawDotProductAttention(nn.Module):
   attn_dropout_rate: float = 0.1
   train: bool = False
@@ -645,13 +608,10 @@ OR we specify that the variable kind is to be treated like a "carry" by passing 
 Further, for `scan`'d variable kinds, we further specify whether or not to split the rng at each step.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: oxA_lWm7tH2B
-outputId: 7d9ebed3-64de-4ca8-9dce-4b09ba9e31a1
-tags: []
----
+:id: oxA_lWm7tH2B
+:outputId: 7d9ebed3-64de-4ca8-9dce-4b09ba9e31a1
+:tags: []
+
 class SimpleScan(nn.Module):
   @nn.compact
   def __call__(self, xs):

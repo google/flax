@@ -7,9 +7,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3
-  name: python3
 ---
 
 +++ {"id": "SwtfSYdoHsc_"}
@@ -44,12 +41,9 @@ import numpy as np # We import the standard NumPy library
 Let's start by generating some matrices, and then try matrix multiplication.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: L2HKiLTNJ4Eh
-outputId: c4297a1a-4e4b-4bdc-ca5d-3d33aca92b3b
----
+:id: L2HKiLTNJ4Eh
+:outputId: c4297a1a-4e4b-4bdc-ca5d-3d33aca92b3b
+
 m = jnp.ones((4,4)) # We're generating one 4 by 4 matrix filled with ones.
 n = jnp.array([[1.0, 2.0, 3.0, 4.0],
                [5.0, 6.0, 7.0, 8.0]]) # An explicit 2 by 4 array
@@ -63,12 +57,9 @@ Arrays in JAX are represented as DeviceArray instances and are agnostic to the p
 We can obviously multiply matrices like we would do in NumPy.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: 9do-ZRGaRThn
-outputId: 9c4feb4d-3bd1-4921-97ce-c8087b37496f
----
+:id: 9do-ZRGaRThn
+:outputId: 9c4feb4d-3bd1-4921-97ce-c8087b37496f
+
 jnp.dot(n, m).block_until_ready() # Note: yields the same result as np.dot(m)
 ```
 
@@ -79,12 +70,9 @@ DeviceArray instances are actually futures ([more here](https://jax.readthedocs.
 JAX is fully compatible with NumPy, and can transparently process arrays from one library to the other.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: hFthGlHoRZ59
-outputId: 15892d6a-c06c-4f98-a7d4-ad432bdd1f57
----
+:id: hFthGlHoRZ59
+:outputId: 15892d6a-c06c-4f98-a7d4-ad432bdd1f57
+
 x = np.random.normal(size=(4,4)) # Creating one standard NumPy array instance
 jnp.dot(x,m)
 ```
@@ -94,12 +82,9 @@ jnp.dot(x,m)
 If you're using accelerators, using NumPy arrays directly will result in multiple transfers from CPU to GPU/TPU memory. You can save that transfer bandwidth, either by creating directly a DeviceArray or by using `jax.device_put` on the NumPy array. With DeviceArrays, computation is done on device so no additional data transfer is required, e.g. `jnp.dot(long_vector, long_vector)` will only transfer a single scalar (result of the computation) back from device to host.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: -VABtdIwTFfN
-outputId: 08965869-bdd7-44c8-ae46-207061b5112c
----
+:id: -VABtdIwTFfN
+:outputId: 08965869-bdd7-44c8-ae46-207061b5112c
+
 x = np.random.normal(size=(4,4))
 x = jax.device_put(x)
 x
@@ -110,12 +95,9 @@ x
 Conversely, if you want to get back a Numpy array from a JAX array, you can simply do so by using it in the Numpy API.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: vEJ1mSvStjEC
-outputId: 00a8cc38-59a2-4cf9-ed23-eb5fbb708495
----
+:id: vEJ1mSvStjEC
+:outputId: 00a8cc38-59a2-4cf9-ed23-eb5fbb708495
+
 x = jnp.array([[1.0, 2.0, 3.0, 4.0],
                [5.0, 6.0, 7.0, 8.0]])
 np.array(x)
@@ -127,12 +109,9 @@ np.array(x)
 JAX is functional by essence, one practical consequence being that JAX arrays are immutable. This means no in-place ops and sliced assignments. More generally, functions should not take input or produce output using a global state.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: -erZrgZXawFW
-outputId: c3c03081-6235-482f-a88c-cc180f661954
----
+:id: -erZrgZXawFW
+:outputId: c3c03081-6235-482f-a88c-cc180f661954
+
 x = jnp.array([[1.0, 2.0, 3.0, 4.0],
                [5.0, 6.0, 7.0, 8.0]])
 updated = x.at[0, 0].set(3.0) # whereas x[0,0] = 3.0 would fail
@@ -154,12 +133,9 @@ In JAX, randomness is managed in a very specific way, and you can read more on J
 In short, you need to explicitly manage the PRNGs (pseudo random number generators) and their states. In JAX's PRNGs, the state is represented as a pair of two unsigned-int32s that is called a key (there is no special meaning to the two unsigned int32s -- it's just a way of representing a uint64).
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: 8iz9KGF4s7nN
-outputId: c5bb1581-090b-42ed-cc42-08436154bc14
----
+:id: 8iz9KGF4s7nN
+:outputId: c5bb1581-090b-42ed-cc42-08436154bc14
+
 key = random.PRNGKey(0)
 key
 ```
@@ -178,12 +154,9 @@ for i in range(3):
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: lOBv5CaB3dMa
-outputId: ac89afdc-a73e-4c31-d005-7e1e6ad551cd
----
+:id: lOBv5CaB3dMa
+:outputId: ac89afdc-a73e-4c31-d005-7e1e6ad551cd
+
 print("old key", key, "--> normal", random.normal(key, shape=(1,)))
 key, subkey = random.split(key)
 print("    \---SPLIT --> new key   ", key, "--> normal", random.normal(key, shape=(1,)) )
@@ -195,12 +168,9 @@ print("             \--> new subkey", subkey, "--> normal", random.normal(subkey
 You can also generate multiple subkeys at once if needed:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: G3zRojMs4Cce
-outputId: e48e1ed0-4f16-49cb-dc2b-cb51d3ec56b5
----
+:id: G3zRojMs4Cce
+:outputId: e48e1ed0-4f16-49cb-dc2b-cb51d3ec56b5
+
 key, *subkeys = random.split(key, 4)
 key, subkeys
 ```
@@ -230,12 +200,9 @@ with the (known) gradient:
 $$\nabla f(x) = x$$
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: zDOydrLMcIzp
-outputId: 580c14ed-d1a3-4f92-c9b9-78d58c87bc76
----
+:id: zDOydrLMcIzp
+:outputId: 580c14ed-d1a3-4f92-c9b9-78d58c87bc76
+
 key = random.PRNGKey(0)
 def f(x):
   return jnp.dot(x.T,x)/2.0
@@ -251,12 +218,9 @@ JAX computes the gradient as an operator acting on functions with `jax.grad`. No
 Let's take the gradient of f and make sure it matches the identity map.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: ael3pVHmhhTs
-outputId: 4d0c5122-1ead-4a94-9153-7eb3b399dae2
----
+:id: ael3pVHmhhTs
+:outputId: 4d0c5122-1ead-4a94-9153-7eb3b399dae2
+
 v = random.normal(key,(4,))
 print("Original v:")
 print(v)
@@ -285,12 +249,9 @@ $$(f(x), df(x)\bullet v)$$
 Let's use a simple function as an example: $f(x) = \frac{1}{2}({x_1}^2, {x_2}^2, \ldots, {x_n}^2)$ where we know that $df(x)\bullet h = (x_1h_1, x_2h_2,\ldots,x_nh_n)$. Hence using `jax.jvp` with $h= (1,1,\ldots,1)$ should return $x$ as an output.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: Q2ntaHBeh-5u
-outputId: 93591ad3-832f-4928-c1f8-073cc3b7aae7
----
+:id: Q2ntaHBeh-5u
+:outputId: 93591ad3-832f-4928-c1f8-073cc3b7aae7
+
 def f(x):
   return jnp.multiply(x,x)/2.0
 
@@ -318,12 +279,9 @@ $$(f(x),v\rightarrow v^TJ_f(x))$$
 Keeping the same example as previously, using $v=(1,\ldots,1)$, applying the VJP function returned by JAX should return the $x$ value:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: _1VTl9zXqsFl
-outputId: f3f143a9-b1f1-4a4d-e4b1-c24a0fa114b8
----
+:id: _1VTl9zXqsFl
+:outputId: f3f143a9-b1f1-4a4d-e4b1-c24a0fa114b8
+
 (val, jvp_fun) = jax.vjp(f,x)
 print("x = ", x)
 print("v^T Jf(x) = ", jvp_fun(jnp.ones((5,)))[0])
@@ -343,12 +301,9 @@ We borrow the following example from the [JAX quickstart](https://jax.readthedoc
 JAX uses the XLA compiler under the hood, and enables you to jit compile your code to make it faster and more efficient. This is the purpose of the @jit annotation.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: D6p_wQ9xeIiu
-outputId: af7ea5af-5ee1-4aa5-d8d7-8f6a20da2b0e
----
+:id: D6p_wQ9xeIiu
+:outputId: af7ea5af-5ee1-4aa5-d8d7-8f6a20da2b0e
+
 def selu(x, alpha=1.67, lmbda=1.05):
   return lmbda * jnp.where(x > 0, x, alpha * jnp.exp(x) - alpha)
 
@@ -361,12 +316,9 @@ v = random.normal(key, (1000000,))
 Now using the jit annotation (or function here) to speed things up:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: us5pWySG0jWL
-outputId: e8ff3b7b-3917-40fc-8f29-eb9e6df262e5
----
+:id: us5pWySG0jWL
+:outputId: e8ff3b7b-3917-40fc-8f29-eb9e6df262e5
+
 selu_jit = jax.jit(selu)
 %timeit selu_jit(v).block_until_ready()
 ```
@@ -381,12 +333,9 @@ jit compilation can be used along with autodiff in the code transparently.
 Finally, JAX enables you to write code that applies to a single example, and then vectorize it to manage transparently batching dimensions.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: j-E6MsKF0tmZ
-outputId: bfa377e8-92ee-4473-abd4-8d52338e2cc5
----
+:id: j-E6MsKF0tmZ
+:outputId: bfa377e8-92ee-4473-abd4-8d52338e2cc5
+
 mat = random.normal(key, (15, 10))
 batched_x = random.normal(key, (5, 10)) # Batch size on axis 0
 single = random.normal(key, (10,))
@@ -447,12 +396,9 @@ print('x shape:', x_samples.shape, '; y shape:', y_samples.shape)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: 5L2np6wve_xp
-outputId: 9db5c834-d7da-4291-d1ec-d4c39008d5ed
----
+:id: 5L2np6wve_xp
+:outputId: 9db5c834-d7da-4291-d1ec-d4c39008d5ed
+
 # Initialize estimated W and b with zeros.
 W_hat = jnp.zeros_like(W)
 b_hat = jnp.zeros_like(b)
@@ -513,12 +459,9 @@ t = [1, {"k1": 2, "k2": (3, 4)}, 5]
 You will often come across `tree_map` function that maps a function f to a tree and its leaves. We used it in the previous section to display the shapes of the model's parameters.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: szDhssVBUjTa
-outputId: 9ae4ebf1-a3c4-4ecb-b3df-67c8450310f8
----
+:id: szDhssVBUjTa
+:outputId: 9ae4ebf1-a3c4-4ecb-b3df-67c8450310f8
+
 tree_util.tree_map(lambda x: x*x, t)
 ```
 
@@ -527,12 +470,9 @@ tree_util.tree_map(lambda x: x*x, t)
 Instead of applying a standalone function to each of the tree leaves, you can also provide a tuple of additional trees with similar shape to the input tree that will provide per leaf arguments to the function.
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: bNOYK_E7UnOh
-outputId: d211bf85-5993-488c-9fec-aeaf375df007
----
+:id: bNOYK_E7UnOh
+:outputId: d211bf85-5993-488c-9fec-aeaf375df007
+
 t2 = tree_util.tree_map(lambda x: x*x, t)
 tree_util.tree_map(lambda x,y: x+y, t, t2)
 ```
@@ -571,12 +511,9 @@ params = {'W': jnp.zeros_like(W), 'b': jnp.zeros_like(b)}
 The great thing is that JAX is able to handle differentiation with respect to pytree parameters:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: 8zc7cMaiWSny
-outputId: a69605cb-1eed-4f81-fc2e-93646c9694dd
----
+:id: 8zc7cMaiWSny
+:outputId: a69605cb-1eed-4f81-fc2e-93646c9694dd
+
 jax.grad(mse_pytree)(params, x_samples, y_samples)
 ```
 
@@ -585,12 +522,9 @@ jax.grad(mse_pytree)(params, x_samples, y_samples)
 Now using our tree of params, we can write the gradient descent in a simpler way using `jax.tree_util.tree_map`:
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: jEntdcDBXBCj
-outputId: f309aff7-2aad-453f-ad88-019d967d4289
----
+:id: jEntdcDBXBCj
+:outputId: f309aff7-2aad-453f-ad88-019d967d4289
+
 # Always remember to jit!
 @jax.jit
 def update_params_pytree(params, learning_rate, x_samples, y_samples):
