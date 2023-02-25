@@ -24,6 +24,8 @@ To modify a config value on run time, call:
 import os
 from jax import config as jax_config
 
+from contextlib import ContextDecorator
+
 # Keep a wrapper at the flax namespace, in case we make our implementation
 # in the future.
 config = jax_config
@@ -66,6 +68,23 @@ def static_bool_env(varname: str, default: bool) -> bool:
         'invalid truth value {!r} for environment {!r}'.format(val, varname))
 
 
+class use_regular_dict(ContextDecorator):
+  """Context decorator for test functions to temporarily use regular dicts
+  instead of FrozenDicts.
+
+  This is a temporary feature flag to help migrate to FrozenDicts. Returning
+  FrozenDicts will be deprecated and removed in the future.
+  """
+  def __enter__(self):
+    self._old_value = config.flax_return_frozendict # save current env value
+    config.update('flax_return_frozendict', False) # return regular dicts
+    return self
+
+  def __exit__(self, *exc):
+    config.update('flax_return_frozendict', self._old_value) # switch back to old env value
+    return False
+
+
 # Flax Global Configuration Variables:
 
 # Whether to use the lazy rng implementation.
@@ -96,6 +115,7 @@ flax_preserve_adopted_names = define_bool_state(
     default=False,
     help=("When adopting outside modules, don't clobber existing names."))
 
+#TODO(marcuschiam): remove this feature flag once regular dict migration is complete
 flax_return_frozendict = define_bool_state(
     name='return_frozendict',
     default=True,

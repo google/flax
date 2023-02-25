@@ -110,7 +110,7 @@ class MetaTest(absltest.TestCase):
       return c
 
     _, variables = init(f)(random.PRNGKey(0), jnp.zeros((8, 3)))
-    boxed_shapes = jax.tree_map(jnp.shape, variables['params'].unfreeze())
+    boxed_shapes = jax.tree_map(jnp.shape, variables['params'])
     self.assertEqual(boxed_shapes, {
         'kernel': meta.Partitioned((8, 3, 3), ('layers', 'in', 'out')),
         'bias': (8, 3),
