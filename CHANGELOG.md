@@ -26,7 +26,7 @@ vNext
 
 0.6.6
 -----
-- 0.6.5 was yanked so this one contains all that was in 0.6.5 as well.
+- 0.6.5 was yanked so this release contains all that was in 0.6.5 as well.
 - Migrated regular dict to FrozenDict, currently controlled by a flag.
 - Refactored and separate out name relaxation policy changes.
 - Added RMS normalization layer.
