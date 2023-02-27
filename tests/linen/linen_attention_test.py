@@ -19,6 +19,8 @@ from absl.testing import parameterized
 
 from flax import linen as nn
 from flax import jax_utils
+from flax.core import pop
+from flax.configurations import use_regular_dict
 
 import jax
 from jax import lax
@@ -30,7 +32,6 @@ import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
-
 
 class AttentionTest(parameterized.TestCase):
 
@@ -102,6 +103,7 @@ class AttentionTest(parameterized.TestCase):
     np.testing.assert_allclose(mask_1d, mask_1d_simple,)
 
   @parameterized.parameters([((5,), (1,)), ((6, 5), (2,))])
+  @use_regular_dict()
   def test_decoding(self, spatial_shape, attn_dims):
     bs = 2
     num_heads = 3
@@ -119,7 +121,7 @@ class AttentionTest(parameterized.TestCase):
     decode_module = module.clone(decode=True)
 
     initial_vars = decode_module.init(key2, inputs)
-    state, params = initial_vars.pop('params')
+    state, params = pop(initial_vars, 'params')
     causal_mask = nn.attention.make_causal_mask(jnp.ones((bs,) + spatial_shape))
     y_ref = jax.jit(lambda x, y: module.apply(initial_vars, x, y))(
         inputs, causal_mask)

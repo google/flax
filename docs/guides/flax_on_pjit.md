@@ -6,10 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3
-  language: python
-  name: python3
 ---
 
 +++ {"id": "2a9f78765c0c"}
@@ -42,9 +38,10 @@ Install Flax from HEAD:
 
 ```{code-cell} ipython3
 :id: 867203db3bef
+:tags: [skip-execution]
 
 # Once Flax v0.6.4 is released, use `pip3 install flax`.
-!pip3 install -qq "git+https://github.com/google/flax.git@main#egg=flax"
+! pip3 install -qq "git+https://github.com/google/flax.git@main#egg=flax"
 ```
 
 +++ {"id": "a9601432b448"}

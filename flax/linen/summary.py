@@ -310,7 +310,7 @@ def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) ->
   path_variables = {}
 
   for collection in variables:
-    collection_variables = variables[collection]
+    collection_variables = jax.tree_util.tree_map(lambda x: x, variables[collection]) # make a deep copy
     for name in path:
       if name not in collection_variables:
         collection_variables = None
@@ -318,7 +318,7 @@ def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) ->
       collection_variables = collection_variables[name]
 
     if collection_variables is not None:
-      path_variables[collection] = collection_variables.unfreeze()
+      path_variables[collection] = collection_variables
 
   return path_variables
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import FrozenDict, unfreeze, freeze
+from flax.core import FrozenDict, unfreeze, freeze, copy, pop
 
 import jax
 
@@ -83,6 +83,17 @@ class FrozenDictTest(absltest.TestCase):
   def test_frozen_dict_copy_reserved_name(self):
     result = FrozenDict({'a': 1}).copy({'cls': 2})
     self.assertEqual(result, {'a': 1, 'cls': 2})
+
+  def test_utility_pop(self):
+    x = {'a': 1, 'b': {'c': 2}}
+    new_x, value = pop(x, 'b')
+    self.assertEqual(new_x, {'a': 1})
+    self.assertEqual(value, {'c': 2})
+
+  def test_utility_copy(self):
+    x = {'a': 1, 'b': {'c': 2}}
+    new_x = copy(x, add_or_replace={'b': {'c': -1, 'd': 3}})
+    self.assertEqual(new_x, {'a': 1, 'b': {'c': -1, 'd': 3}})
 
 
 if __name__ == '__main__':

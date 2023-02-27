@@ -6,9 +6,6 @@ jupytext:
     format_name: myst
     format_version: 0.13
     jupytext_version: 1.13.8
-kernelspec:
-  display_name: Python 3
-  name: python3
 ---
 
 +++ {"id": "dHMnJTK9R5n9"}
@@ -46,12 +43,9 @@ import optax
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: mb2xGRAwueSa
-outputId: 30260605-6773-482d-be0e-0383e63b9fa2
----
+:id: mb2xGRAwueSa
+:outputId: 30260605-6773-482d-be0e-0383e63b9fa2
+
 batch = {
     'image': jnp.ones([1, 28, 28, 1]),
     'label': jnp.array([0]),
@@ -59,12 +53,9 @@ batch = {
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: lf11Nzj-t32w
-outputId: c54a570b-d76a-43bb-f1ab-5cbbbfd6f584
----
+:id: lf11Nzj-t32w
+:outputId: c54a570b-d76a-43bb-f1ab-5cbbbfd6f584
+
 class Perceptron(nn.Module):
   units: Sequence[int]
   @nn.compact
@@ -86,12 +77,9 @@ jax.tree_util.tree_map(jnp.shape, variables)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: xKm0nn4X57Vg
-outputId: e1794ea2-ea91-45b5-8b89-d39d2d923cc5
----
+:id: xKm0nn4X57Vg
+:outputId: e1794ea2-ea91-45b5-8b89-d39d2d923cc5
+
 import tensorflow_datasets as tfds
 
 builder = tfds.builder('mnist')
@@ -105,12 +93,9 @@ jax.tree_util.tree_map(jnp.shape, batch)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: eCceGZ_Kvko5
-outputId: af1f8657-b3eb-4c9b-d073-48954481166b
----
+:id: eCceGZ_Kvko5
+:outputId: af1f8657-b3eb-4c9b-d073-48954481166b
+
 @jax.jit
 def eval(params):
   logits = model.apply({'params': params}, ds_test['image'])
@@ -130,12 +115,9 @@ learning_rate, momentum = 0.01, 0.9
 ### Replacing `flax.optim` with `optax`
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: 7mlz-P5AwBc2
-outputId: 05cb4271-e407-4798-d0ea-cd8dfbd9f2a1
----
+:id: 7mlz-P5AwBc2
+:outputId: 05cb4271-e407-4798-d0ea-cd8dfbd9f2a1
+
 @jax.jit
 def train_step(optimizer, batch):
   grads = jax.grad(loss)(optimizer.target, batch)
@@ -150,12 +132,9 @@ eval(optimizer.target)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: n9IxglwJxD3X
-outputId: a42f9e8d-d1fe-4221-ec28-b7258174b16c
----
+:id: n9IxglwJxD3X
+:outputId: a42f9e8d-d1fe-4221-ec28-b7258174b16c
+
 tx = optax.sgd(learning_rate, momentum)
 params = variables['params']
 opt_state = tx.init(params)
@@ -174,12 +153,9 @@ eval(params)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: mBcp17BEvBVs
-outputId: dd912efc-669f-42c2-86b2-e242cecc67ce
----
+:id: mBcp17BEvBVs
+:outputId: dd912efc-669f-42c2-86b2-e242cecc67ce
+
 @jax.jit
 def train_step(state, batch):
   def loss(params):
@@ -206,12 +182,9 @@ eval(params)
 ### Composable Gradient Transformations
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: M2WjJ7HT8GMn
-outputId: 7ae7117e-5d1d-44ca-abb8-65b0db2c0eb6
----
+:id: M2WjJ7HT8GMn
+:outputId: 7ae7117e-5d1d-44ca-abb8-65b0db2c0eb6
+
 @jax.jit
 def train_step(params, opt_state, batch):
   grads = jax.grad(loss)(params, batch)
@@ -243,12 +216,9 @@ weight_decay = 1e-5
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: cx1YCFVL9ktA
-outputId: bb6795a7-c5c2-458a-d3e9-4b769b857fed
----
+:id: cx1YCFVL9ktA
+:outputId: bb6795a7-c5c2-458a-d3e9-4b769b857fed
+
 @jax.jit
 def train_step(optimizer, batch):
   grads = jax.grad(loss)(optimizer.target, batch)
@@ -263,12 +233,9 @@ eval(optimizer.target)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: kIWCQz33-p98
-outputId: 84753c79-314b-4982-97e6-0c61a490eab1
----
+:id: kIWCQz33-p98
+:outputId: 84753c79-314b-4982-97e6-0c61a490eab1
+
 @jax.jit
 def train_step(params, opt_state, batch):
   grads = jax.grad(loss)(params, batch)
@@ -301,12 +268,9 @@ grad_clip_norm = 1.0
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: mFnX8fb3Chwb
-outputId: aae283d2-623e-4a43-c001-3e62b11483ae
----
+:id: mFnX8fb3Chwb
+:outputId: aae283d2-623e-4a43-c001-3e62b11483ae
+
 @jax.jit
 def train_step(optimizer, batch):
   grads = jax.grad(loss)(optimizer.target, batch)
@@ -325,12 +289,9 @@ eval(optimizer.target)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: aJYN2A-TDhp3
-outputId: a9563d3a-7dc6-4ecf-bb7b-49356cf9fe13
----
+:id: aJYN2A-TDhp3
+:outputId: a9563d3a-7dc6-4ecf-bb7b-49356cf9fe13
+
 @jax.jit
 def train_step(params, opt_state, batch):
   grads = jax.grad(loss)(params, batch)
@@ -363,12 +324,9 @@ schedule = lambda step: learning_rate * jnp.exp(step * 1e-3)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: NinuzivVFYb5
-outputId: c90b880e-d6f0-40fc-94b8-28d0622d8440
----
+:id: NinuzivVFYb5
+:outputId: c90b880e-d6f0-40fc-94b8-28d0622d8440
+
 @jax.jit
 def train_step(step, optimizer, batch):
   grads = jax.grad(loss)(optimizer.target, batch)
@@ -384,12 +342,9 @@ eval(optimizer.target)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: lzaYwXzuFp-L
-outputId: 0ed7f41f-cc2d-46c6-ae9f-4be5b906fb7f
----
+:id: lzaYwXzuFp-L
+:outputId: 0ed7f41f-cc2d-46c6-ae9f-4be5b906fb7f
+
 @jax.jit
 def train_step(params, opt_state, batch):
   grads = jax.grad(loss)(params, batch)
@@ -415,12 +370,9 @@ eval(params)
 ### Multiple Optimizers
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: d-2veL8lGDbV
-outputId: b006d3cc-eff6-410a-e201-ccd9464db9d7
----
+:id: d-2veL8lGDbV
+:outputId: b006d3cc-eff6-410a-e201-ccd9464db9d7
+
 @jax.jit
 def train_step(optimizer, batch):
   grads = jax.grad(loss)(optimizer.target, batch)
@@ -442,12 +394,9 @@ eval(optimizer.target)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: MvQlkiCuHr41
-outputId: 88b4b0dd-4b80-4c5b-c21d-803c097b8cc6
----
+:id: MvQlkiCuHr41
+:outputId: 88b4b0dd-4b80-4c5b-c21d-803c097b8cc6
+
 @jax.jit
 def train_step(params, opt_state, batch):
   grads = jax.grad(loss)(params, batch)
@@ -477,12 +426,9 @@ eval(params)
 ```
 
 ```{code-cell}
----
-colab:
-  base_uri: https://localhost:8080/
-id: v2omX108JYDo
-outputId: a9f45c8c-0db5-4b5e-b429-e6d79b22eca0
----
+:id: v2omX108JYDo
+:outputId: a9f45c8c-0db5-4b5e-b429-e6d79b22eca0
+
 @jax.jit
 def train_step(params, opt_state, batch):
   grads = jax.grad(loss)(params, batch)

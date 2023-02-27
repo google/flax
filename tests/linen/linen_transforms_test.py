@@ -27,7 +27,8 @@ import numpy as np
 from flax import config
 from flax import errors
 from flax import linen as nn
-from flax.core import freeze
+from flax.core import freeze, copy
+from flax.configurations import use_regular_dict
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -806,6 +807,7 @@ class TransformTest(absltest.TestCase):
     y3 = Ctrafo(a2, b).apply(p2, x)
     np.testing.assert_allclose(y1, y3, atol=1e-7)
 
+  @use_regular_dict()
   def test_toplevel_submodule_adoption_pytree_transform(self):
     class A(nn.Module):
       @nn.compact
@@ -834,7 +836,7 @@ class TransformTest(absltest.TestCase):
 
     p = B(As).init(key, x, x)
     y, cntrs = b.apply(p, x, x, mutable='counter')
-    ref_cntrs = freeze({
+    ref_cntrs = {
         'counter': {
             'A_bar': {
                 'i': jnp.array(11.0),
@@ -843,13 +845,14 @@ class TransformTest(absltest.TestCase):
                 'i': jnp.array(11.0),
             },
         },
-      })
+      }
     self.assertTrue(jax.tree_util.tree_all(
         jax.tree_util.tree_map(
             lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
             cntrs, ref_cntrs)
         ))
 
+  @use_regular_dict()
   def test_partially_applied_module_constructor_transform(self):
     k = random.PRNGKey(0)
     x = jnp.ones((3,4,4))
@@ -860,13 +863,14 @@ class TransformTest(absltest.TestCase):
         split_rngs={'params':True})(4)
     init_vars = vmap_dense.init(k, x)
     init_vars_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'kernel': (3, 4, 4),
         },
-    })
+    }
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
+  @use_regular_dict()
   def test_partial_module_method(self):
     k = random.PRNGKey(0)
     x = jnp.ones((3,4,4))
@@ -884,11 +888,11 @@ class TransformTest(absltest.TestCase):
 
     init_vars = Foo().init(k, x)
     init_vars_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
           'Dense_0': {'kernel': (3, 4, 2)}
         },
-    })
+    }
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
   def test_variable_in_args_transform(self):
@@ -1504,6 +1508,7 @@ class TransformTest(absltest.TestCase):
 
         return nn.cond(pred, true_fn, false_fn, self, x)
 
+  @use_regular_dict()
   def test_switch(self):
     class Foo(nn.Module):
       @nn.compact
@@ -1528,16 +1533,17 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((1, 3))
     foo = Foo()
     y1, vars = foo.init_with_output(random.PRNGKey(0), x, 0)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 0, 'c_count': 0})
+    self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 0, 'c_count': 0})
     y2, updates = foo.apply(vars, x, 1, mutable="state")
-    vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 0})
+    vars = copy(vars, updates)
+    self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 1, 'c_count': 0})
     np.testing.assert_allclose(y1, -y2)
     y3, updates = foo.apply(vars, x, 2, mutable="state")
-    vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'a_count': 1, 'b_count': 1, 'c_count': 1})
+    vars = copy(vars, updates)
+    self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 1, 'c_count': 1})
     np.testing.assert_allclose(y1, y3)
 
+  @use_regular_dict()
   def test_switch_multihead(self):
     class Foo(nn.Module):
       def setup(self) -> None:
@@ -1566,13 +1572,13 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((1, 3))
     foo = Foo()
     y1, vars = foo.init_with_output(random.PRNGKey(0), x, 0)
-    self.assertEqual(vars['state'].unfreeze(), {'0_count': 1, '1_count': 0, '2_count': 0})
+    self.assertEqual(vars['state'], {'0_count': 1, '1_count': 0, '2_count': 0})
     y2, updates = foo.apply(vars, x, 1, mutable="state")
-    vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'0_count': 1, '1_count': 1, '2_count': 0})
+    vars = copy(vars, updates)
+    self.assertEqual(vars['state'], {'0_count': 1, '1_count': 1, '2_count': 0})
     y3, updates = foo.apply(vars, x, 2, mutable="state")
-    vars = vars.copy(updates)
-    self.assertEqual(vars['state'].unfreeze(), {'0_count': 1, '1_count': 1, '2_count': 1})
+    vars = copy(vars, updates)
+    self.assertEqual(vars['state'], {'0_count': 1, '1_count': 1, '2_count': 1})
 
     self.assertEqual(vars['params']['heads_0']['layers_0']['kernel'].shape, (3, 10))
     self.assertEqual(vars['params']['heads_0']['layers_0']['bias'].shape, (10,))
