@@ -57,7 +57,7 @@ def temperature_sample(prompt_inputs,
   # initial loop PRNGKey
   rng0 = prng_key
   # loop position counter.
-  i0 = jnp.array(0)
+  i0 = jnp.array(-1)
   # per batch-item holding current token in loop.
   token0 = jnp.zeros((batch_size, 1), dtype=jnp.int32)
   # per batch-item state bit indicating if sentence has finished.
@@ -72,7 +72,7 @@ def temperature_sample(prompt_inputs,
     """Sampling loop termination condition."""
     (i, _, _, _, ended, _) = state
     # Have we reached max decoding length?
-    not_at_end = (i < max_decode_len)
+    not_at_end = (i < max_decode_len - 1)
     # Have all sampled sequences reached an end marker?
     all_sequences_ended = jnp.all(ended)
     return not_at_end & (~all_sequences_ended)
