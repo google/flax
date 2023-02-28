@@ -268,3 +268,5 @@ RNN primitives
     LSTMCell
     OptimizedLSTMCell
     GRUCell
+    RNNCellBase
+    RNN

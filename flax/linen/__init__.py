@@ -120,7 +120,9 @@ from .recurrent import (
   ConvLSTMCell as ConvLSTMCell,
   GRUCell as GRUCell,
   LSTMCell as LSTMCell,
-  OptimizedLSTMCell as OptimizedLSTMCell
+  OptimizedLSTMCell as OptimizedLSTMCell,
+  RNNCellBase as RNNCellBase,
+  RNN as RNN,
 )
 from .stochastic import Dropout as Dropout
 from .transforms import (
