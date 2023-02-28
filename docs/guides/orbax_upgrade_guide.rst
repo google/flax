@@ -1,14 +1,24 @@
 .. image:: https://colab.research.google.com/assets/colab-badge.svg
-:target: https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/orbax_upgrade_guide.ipynb
+   :target: https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/orbax_upgrade_guide.ipynb
 
-Upgrading my codebase to Orbax
+Migrate checkpointing to Orbax
 ==============================
 
-This guide shows you how to convert a ``flax.training.checkpoints`` call to the equivalent in `Orbax <https://github.com/google/orbax>`_.
+This guide shows how to convert Flax's checkpoint saving and restoring calls — `flax.training.checkpoints.save_checkpoint <https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints.save_checkpoint>`__ and `restore_checkpoint <https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.checkpoints>`__ — to the equivalent `Orbax <https://github.com/google/orbax>`__ methods. Orbax provides a flexible and customizable API for managing checkpoints for various objects. Note that as Flax's checkpointing is being migrated to Orbax from ``flax.training.checkpoints``, all existing features in the Flax API will continue to be supported, but the API will change.
 
-See also Orbax's quick start `colab introduction <http://colab.research.google.com/github/google/orbax/blob/main/orbax//checkpoint/orbax_checkpoint.ipynb>`_ and `official documentation <https://github.com/google/orbax/blob/main/docs/checkpoint.md>`_.
+You will learn how to migrate to Orbax through the following scenarios:
 
-Alternatively to this page, you can click the "Open in Colab" link above to run the following code in Colab environment.
+*  The most common use case: Saving/loading and managing checkpoints
+*  A "lightweight" use case: "Pure" saving/loading without the top-level checkpoint manager
+*  Restoring checkpoints without a target pytree
+*  Async checkpointing
+*  Saving/loading a single JAX or NumPy Array
+
+To learn more about Orbax, check out the `quick start introductory Colab notebook <http://colab.research.google.com/github/google/orbax/blob/main/orbax//checkpoint/orbax_checkpoint.ipynb>`__ and `the official Orbax documentation <https://github.com/google/orbax/blob/main/docs/checkpoint.md>`_.
+
+You can click on "Open in Colab" above to run the code from this guide.
+
+Throughout the guide, you will be able to compare code examples with and without the Orbax code.
 
 .. testsetup::
 
@@ -19,7 +29,7 @@ Alternatively to this page, you can click the "Open in Colab" link above to run 
   import jax.numpy as jnp
   import numpy as np
 
-  # Orbax needs to enable asyncio in colab environment.
+  # Orbax needs to have asyncio enabled in the Colab environment.
   import nest_asyncio
   nest_asyncio.apply()
 
@@ -32,37 +42,36 @@ Alternatively to this page, you can click the "Open in Colab" link above to run 
 
 
 Setup
----------------------------------------
+*****
 
 .. testcode::
 
-  # Some pytrees to showcase
+  # Create some dummy variables for this example.
   MAX_STEPS = 5
   CKPT_PYTREE = [12, {'foo': 'str', 'bar': np.array((2, 3))}, [1, 4, 10]]
   TARGET_PYTREE = [0, {'foo': '', 'bar': np.array((0))}, [0, 0, 0]]
 
-Most Common Case: Save/Load + Management
----------------------------------------
+Most common use case: Saving/loading and managing checkpoints
+*************************************************************
 
-Follow this if:
+This section covers the following scenario:
 
-*  Your original Flax ``save_checkpoint()`` or ``save_checkpoint_multiprocess()`` call contains these args: ``prefix``, ``keep``, ``keep_every_n_steps``.
+*  Your original Flax ``save_checkpoint()`` or ``save_checkpoint_multiprocess()`` call contains the following arguments: ``prefix``, ``keep``, ``keep_every_n_steps``; or
+*  You want to use some automatic management logic for your checkpoints (for example, for deleting old data, deleting data based on metrics/loss, and so on).
 
-*  You want to use some automatic management logic for your checkpoints (e.g., delete old data, delete based on metrics/loss, etc).
+In this case, you need to use ``orbax.CheckpointManager``. This allows you to not only save and load your model, but also manage your checkpoints and delete outdated checkpoints *automatically*.
 
-Then you should switch to using an ``orbax.CheckpointManager``. This allows you to not only save and load your model, but also manage your checkpoints and delete outdated checkpoints automatically.
+To upgrade your code:
 
-Modify your code to:
+1. Create and keep an ``orbax.CheckpointManager`` instance at the top level, customized with ``orbax.CheckpointManagerOptions``.
 
-1. Create and keep an ``orbax.CheckpointManager`` instance at the top level, customized with ``orbax.CheckpointManagerOptions``
+2. At runtime, call ``orbax.CheckpointManager.save()`` to save your data.
 
-2. In runtime, call ``CheckpointManager.save()`` to save your data.
+3. Then, call ``orbax.CheckpointManager.restore()`` to restore your data.
 
-3. Call ``CheckpointManager.restore()`` to restore your data.
+4. And, if your checkpoint includes some multi-host/multi-process array, pass the correct ``mesh`` into ``flax.training.orbax_utils.restore_args_from_target()`` to generate the correct ``restore_args`` before restoring.
 
-4. If your checkpoint includes some multihost/multiprocess array, you need to pass the correct ``mesh`` into a ``restore_args_from_target()`` to generate the correct ``restore_args`` before restoring.
-
-See below for code examples for before and after migration.
+For example:
 
 .. codediff::
   :title_left: flax.checkpoints
@@ -71,9 +80,9 @@ See below for code examples for before and after migration.
 
   CKPT_DIR = './tmp/'
 
-  # Inside a training loop
+  # Inside your training loop
   for step in range(MAX_STEPS):
-    # ... do your training ...
+    # do training
     checkpoints.save_checkpoint(CKPT_DIR, CKPT_PYTREE, step=step,
                                 prefix='test_', keep=3, keep_every_n_steps=2)
 
@@ -84,16 +93,16 @@ See below for code examples for before and after migration.
 
   CKPT_DIR = './tmp/'
 
-  # At top level
+  # At the top level
   mgr_options = orbax.checkpoint.CheckpointManagerOptions(
     max_to_keep=3, keep_period=2, step_prefix='test_')
   ckpt_mgr = orbax.checkpoint.CheckpointManager(
     CKPT_DIR,
     orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler()), mgr_options)
 
-  # Inside a training loop
+  # Inside your training loop
   for step in range(MAX_STEPS):
-    # ... do your training ...
+    # do training
     save_args = flax.training.orbax_utils.save_args_from_target(CKPT_PYTREE)
     ckpt_mgr.save(step, CKPT_PYTREE, save_kwargs={'save_args': save_args})
 
@@ -102,12 +111,14 @@ See below for code examples for before and after migration.
   ckpt_mgr.restore(4, items=TARGET_PYTREE, restore_kwargs={'restore_args': restore_args})
 
 
-Lightweight Case: Pure Save/Load without Setup
------------------------------------
+A "lightweight" use case: "Pure" saving/loading without the top-level checkpoint manager
+****************************************************************************************
 
-If you prefer to not maintain a top-level checkpoint manager, you can still save and restore any individual checkpoint with an ``orbax.checkpoint.Checkpointer``. Note that this means you cannot use all the management features.
+If you prefer to not maintain a top-level checkpoint manager, you can still save and restore any individual checkpoint with an ``orbax.checkpoint.Checkpointer``. Note that this means you cannot use all the Orbax management features.
 
-For argument ``overwrite`` in ``flax.save_checkpoint()``, use argument ``force`` in ``Checkpointer.save()`` instead.
+To migrate to Orbax code, instead of using the ``overwrite`` argument in ``flax.save_checkpoint()`` use the ``force`` argument in ``orbax.checkpoint.Checkpointer.save()``.
+
+For example:
 
 .. codediff::
   :title_left: flax.checkpoints
@@ -123,7 +134,7 @@ For argument ``overwrite`` in ``flax.save_checkpoint()``, use argument ``force``
 
   PURE_CKPT_DIR = './tmp/pure'
 
-  ckptr = orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler())  # stateless object, can be created on-fly
+  ckptr = orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler())  # A stateless object, can be created on the fly.
   ckptr.save(PURE_CKPT_DIR, CKPT_PYTREE,
              save_args=flax.training.orbax_utils.save_args_from_target(CKPT_PYTREE), force=True)
   ckptr.restore(PURE_CKPT_DIR, item=TARGET_PYTREE,
@@ -131,10 +142,12 @@ For argument ``overwrite`` in ``flax.save_checkpoint()``, use argument ``force``
 
 
 
-Restore without a target pytree
------------------------------------
+Restoring checkpoints without a target pytree
+*********************************************
 
-Pass ``item=None`` to Orbax ``Checkpointer`` or ``items=None`` to ``CheckpointManager``'s ``.restore()`` should trigger restoration.
+If you need to restore your checkpoints without a target pytree, pass ``item=None`` to ``orbax.checkpoint.Checkpointer`` or ``items=None`` to ``orbax.CheckpointManager``'s ``.restore()`` method, which should trigger the restoration.
+
+For example:
 
 .. codediff::
   :title_left: flax.checkpoints
@@ -150,27 +163,29 @@ Pass ``item=None`` to Orbax ``Checkpointer`` or ``items=None`` to ``CheckpointMa
 
   NOTARGET_CKPT_DIR = './tmp/no_target'
 
-  # stateless object, can be created on-fly
+  # A stateless object, can be created on the fly.
   ckptr = orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler())
   ckptr.save(NOTARGET_CKPT_DIR, CKPT_PYTREE,
              save_args=flax.training.orbax_utils.save_args_from_target(CKPT_PYTREE))
   ckptr.restore(NOTARGET_CKPT_DIR, item=None)
 
 
-Async Checkpointing
------------------------------------
+Async checkpointing
+*******************
 
-Substitute ``orbax.checkpoint.Checkpointer`` with ``orbax.checkpoint.AsyncCheckpointer`` makes all saves async.
+To make your checkpoint-saving asynchronous, substitute ``orbax.checkpoint.Checkpointer`` with ``orbax.checkpoint.AsyncCheckpointer``.
 
-You can later call ``AsyncCheckpointer.wait_until_finished()`` or ``CheckpointerManager.wait_until_finished()`` to wait for the save the complete.
+Then, you can call ``orbax.checkpoint.AsyncCheckpointer.wait_until_finished()`` or Orbax's ``CheckpointerManager.wait_until_finished()`` to wait for the save the complete.
 
-See more details on the `checkpoint guide <https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#asynchronized-checkpointing>`_.
+For more details, read the `checkpoint guide <https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#asynchronized-checkpointing>`_.
 
 
-Save/Load a single JAX or Numpy Array
------------------------------------
+Saving/loading a single JAX or NumPy Array
+******************************************
 
-``orbax.checkpoint.PyTreeCheckpointHandler``, as the name suggests, is only for pytrees. If you want to save/restore a single Pytree leaf (e.g., an array), use ``orbax.checkpoint.ArrayCheckpointHandler`` instead.
+The ``orbax.checkpoint.PyTreeCheckpointHandler`` class, as the name suggests, can only be used for pytrees. Therefore, if you need to save/restore a single pytree leaf (for example, an array), use ``orbax.checkpoint.ArrayCheckpointHandler`` instead.
+
+For example:
 
 .. codediff::
   :title_left: flax.checkpoints
@@ -191,8 +206,7 @@ Save/Load a single JAX or Numpy Array
   ckptr.restore(ARR_CKPT_DIR, item=None)
 
 
+Final words
+***********
 
-Final Words
------------
-
-This guide only shows you how to migrate an existed Flax checkpointing call to Orbax. Orbax as a tool provides much more functionalities and is actively developing new features. Please stay tuned with their `official github repository <https://github.com/google/orbax>`_ for more!
+This guide provides an overview of how to migrate from the "legacy" Flax checkpointing API to the Orbax API. Orbax provides more functionalities and the Orbax team is actively developing new features. Stay tuned and follow the `official Orbax GitHub repository <https://github.com/google/orbax>`__ for more!
