@@ -51,9 +51,12 @@ Follow these steps to contribute code:
    ```bash
    git clone https://github.com/YOUR_USERNAME/flax
    cd flax
-   pip install ".[testing]"
    pip install -e .
+   pip install ".[testing]"
    pip install -r docs/requirements.txt
+   # install in editable mode again because docs/requirements.txt
+   # reinstalls project in non-editable mode
+   pip install -e .
    ```
 
 5. Set up pre-commit hooks, this will run some automated checks during each `git` commit and
@@ -126,6 +129,10 @@ in `docs/notebooks`: one in the Jupyter Notebook (`.ipynb`) format, and one in M
 The former can be opened and executed directly in [Google Colab](https://colab.research.google.com/).
 Markdown makes it easier to track changes/diffs within version control and, for example, GitHub
 web UI, since `.ipynb` files are based on JSON.
+
+**NOTE**: If your notebook contains a cell that uses `pip` to install a package
+you must add a `skip-execution` tag to that cell so `myst-nb` will skip the cell
+when testing the notebooks.
 
 #### Editing Jupyter Notebooks (`.ipynb`)
 

@@ -49,7 +49,8 @@ def _abs_sq(x):
 def _compute_stats(x: Array, axes: Optional[Axes],
                    dtype: Optional[Dtype],
                    axis_name: Optional[str] = None,
-                   axis_index_groups: Any = None):
+                   axis_index_groups: Any = None,
+                   use_mean: bool = True):
   """Computes mean and variance statistics.
 
   This implementation takes care of a few important details:
@@ -68,6 +69,9 @@ def _compute_stats(x: Array, axes: Optional[Axes],
       are always at least float32 for stability (default: dtype of x).
     axis_name: Optional name for the pmapped axis to compute mean over.
     axis_index_groups: Optional axis indices.
+    use_mean: If true, calculate the mean from the input and use it when
+      computing the variance. If false, set the mean to zero and compute
+      the variance without subtracting the mean.
 
   Returns:
     A pair ``(mean, var)``.
@@ -79,8 +83,12 @@ def _compute_stats(x: Array, axes: Optional[Axes],
   dtype = jnp.promote_types(dtype, jnp.float32)
   x = jnp.asarray(x, dtype)
 
-  mean = jnp.mean(x, axes)
   mean2 = jnp.mean(_abs_sq(x), axes)
+  if use_mean:
+    mean = jnp.mean(x, axes)
+  else:
+    mean = jnp.zeros(mean2.shape, dtype=dtype)
+
   if axis_name is not None:
     concatenated_mean = jnp.concatenate([mean, mean2])
     mean, mean2 = jnp.split(
@@ -333,6 +341,76 @@ class LayerNorm(Module):
         self.dtype, self.param_dtype, self.epsilon,
         self.use_bias, self.use_scale,
         self.bias_init, self.scale_init)
+
+
+class RMSNorm(Module):
+  """RMS Layer normalization (https://arxiv.org/abs/1910.07467).
+
+  RMSNorm normalizes the activations of the layer for each given example in a
+  batch independently, rather than across a batch like Batch Normalization.
+  Unlike LayerNorm which re-centers the mean to be 0 and normalizes by the
+  standard deviation of the activations, RMSNorm does not re-center at all
+  and instead normalizes by the root mean square of the activations.
+
+  Example::
+    >>> import jax.numpy as jnp
+    >>> import jax
+    >>> import flax.linen as nn
+    ...
+    >>> x = jax.random.uniform(jax.random.PRNGKey(0), (2, 3))
+    >>> layer = nn.RMSNorm()
+    >>> variables = layer.init(jax.random.PRNGKey(1), x)
+    >>> y = layer.apply(variables, x)
+
+  Attributes:
+    epsilon: A small float added to variance to avoid dividing by zero.
+    dtype: the dtype of the result (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    use_scale: If True, multiply by scale (gamma). When the next layer is linear
+      (also e.g. nn.relu), this can be disabled since the scaling will be done
+      by the next layer.
+    scale_init: Initializer for scale, by default, one.
+    reduction_axes: Axes for computing normalization statistics.
+    feature_axes: Feature axes for learned bias and scaling.
+    axis_name: the axis name used to combine batch statistics from multiple
+      devices. See `jax.pmap` for a description of axis names (default: None).
+      This is only needed if the model is subdivided across devices, i.e. the
+      array being normalized is sharded across devices within a pmap.
+    axis_index_groups: groups of axis indices within that named axis
+      representing subsets of devices to reduce over (default: None). For
+      example, `[[0, 1], [2, 3]]` would independently batch-normalize over
+      the examples on the first two and last two devices. See `jax.lax.psum`
+      for more details.
+  """
+  epsilon: float = 1e-6
+  dtype: Optional[Dtype] = None
+  param_dtype: Dtype = jnp.float32
+  use_scale: bool = True
+  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  reduction_axes: Axes = -1
+  feature_axes: Axes = -1
+  axis_name: Optional[str] = None
+  axis_index_groups: Any = None
+
+  @compact
+  def __call__(self, x):
+    """Applies layer normalization on the input.
+
+    Args:
+      x: the inputs
+
+    Returns:
+      Normalized inputs (the same shape as inputs).
+    """
+    mean, var = _compute_stats(x, self.reduction_axes, self.dtype,
+                               self.axis_name, self.axis_index_groups,
+                               use_mean=False)
+
+    return _normalize(
+        self, x, mean, var, self.reduction_axes, self.feature_axes,
+        self.dtype, self.param_dtype, self.epsilon,
+        False, self.use_scale,
+        initializers.zeros, self.scale_init)
 
 
 class GroupNorm(Module):

@@ -72,7 +72,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install standalone dependencies only
       run: |
-        pip install .
+        pip install -e .
     - name: Test importing Flax
       run: |
         python -c "import flax"
@@ -114,6 +114,7 @@ jobs:
         python3 -m venv venv
         venv/bin/python3 -m pip install .
         venv/bin/python3 -m pip install .[testing]
+        venv/bin/python3 -m pip install tensorflow_datasets[dev]
         venv/bin/python3 -m pip install -r docs/requirements.txt
     - name: Install Flax
       run: |

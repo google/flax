@@ -215,6 +215,46 @@ def unfreeze(x: FrozenDict[Any, Any]) -> Dict[Any, Any]:
     return x
 
 
+def copy(x: Dict[str, Any], add_or_replace: Dict[str, Any]) -> Dict[str, Any]:
+  """Create a new dict with additional and/or replaced entries. This is a utility
+  function for regular dicts that mimics the behavior of `FrozenDict.copy`.
+
+  Example::
+
+  new_variables = copy(variables, {'additional_entries': 1})
+
+  Args:
+    x: the dictionary to be copied and updated
+    add_or_replace: dictionary of key-value pairs to add or replace in the dict x
+  Returns:
+    A new dict with the additional and/or replaced entries.
+  """
+
+  new_dict = jax.tree_map(lambda x: x, x) # make a deep copy of dict x
+  new_dict.update(add_or_replace)
+  return new_dict
+
+
+def pop(x: Dict[str, Any], key: str) -> Tuple[Dict[str, Any], Any]:
+  """Create a new dict where one entry is removed. This is a utility
+  function for regular dicts that mimics the behavior of `FrozenDict.pop`.
+
+  Example::
+
+    state, params = pop(variables, 'params')
+
+  Args:
+    x: the dictionary to remove the entry from
+    key: the key to remove from the dict
+  Returns:
+    A pair with the new dict and the removed value.
+  """
+
+  new_dict = jax.tree_map(lambda x: x, x) # make a deep copy of dict x
+  value = new_dict.pop(key)
+  return new_dict, value
+
+
 def _frozen_dict_state_dict(xs):
   return {key: serialization.to_state_dict(value) for key, value in xs.items()}
 

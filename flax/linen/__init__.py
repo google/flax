@@ -108,7 +108,8 @@ from .module import (
 from .normalization import (
   BatchNorm as BatchNorm,
   GroupNorm as GroupNorm,
-  LayerNorm as LayerNorm
+  LayerNorm as LayerNorm,
+  RMSNorm as RMSNorm
 )
 from .pooling import (
   avg_pool as avg_pool,
@@ -119,7 +120,9 @@ from .recurrent import (
   ConvLSTMCell as ConvLSTMCell,
   GRUCell as GRUCell,
   LSTMCell as LSTMCell,
-  OptimizedLSTMCell as OptimizedLSTMCell
+  OptimizedLSTMCell as OptimizedLSTMCell,
+  RNNCellBase as RNNCellBase,
+  RNN as RNN,
 )
 from .stochastic import Dropout as Dropout
 from .transforms import (

@@ -29,8 +29,9 @@ from flax import config
 from flax import errors
 from flax import linen as nn
 from flax import struct
-from flax.core import Scope, freeze, tracers
+from flax.core import Scope, freeze, FrozenDict, tracers
 from flax.linen import compact
+from flax.configurations import use_regular_dict
 import jax
 from jax import random
 from jax.nn import initializers
@@ -41,19 +42,18 @@ from unittest.mock import patch
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
-
 def tree_equals(x, y):
   return jax.tree_util.tree_all(jax.tree_util.tree_map(operator.eq, x, y))
 
 
 @contextlib.contextmanager
-def relax_naming(value: bool):
-  old_value = config.flax_relaxed_naming
+def set_config(option: str, value: bool):
+  old_value = getattr(config, option)
   try:
-    config.update('flax_relaxed_naming', value)
+    config.update(option, value)
     yield None
   finally:
-    config.update('flax_relaxed_naming', old_value)
+    config.update(option, old_value)
 
 
 class DummyModule(nn.Module):
@@ -87,6 +87,27 @@ class ModuleTest(absltest.TestCase):
     np.testing.assert_allclose(y, y2)
     np.testing.assert_allclose(y, jnp.array([2.]))
     self.assertEqual(params, {'bias': jnp.array([1.])})
+
+  def test_lazy_init(self):
+
+    class Foo(nn.Module):
+      @compact
+      def __call__(self, x):
+        k = self.param("kernel", nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1]))
+        return x @ k
+    # provide a massive input message which would OOM if any compute ops were actually executed
+    variables = Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((1024 * 1024 * 1024, 128), jnp.float32))
+    self.assertEqual(variables["params"]["kernel"].shape, (128, 128))
+
+  def test_lazy_init_fails_on_data_dependence(self):
+    class Foo(nn.Module):
+      @compact
+      def __call__(self, x):
+        k = self.param("kernel", lambda _: x)
+        return x * k
+
+    with self.assertRaises(errors.LazyInitError):
+      Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
 
   def test_arg_module(self):
     rngkey = jax.random.PRNGKey(0)
@@ -809,7 +830,7 @@ class ModuleTest(absltest.TestCase):
         return repr(self)
 
     mlp = MLP()
-    expected_trace = ("""MLP(
+    expected_trace = """MLP(
     # attributes
     act = relu
     sizes = (3, 2)
@@ -823,6 +844,7 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
+        dot_general = dot_general
     )
     Dense_1 = Dense(
         # attributes
@@ -833,8 +855,9 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
+        dot_general = dot_general
     )
-)""")
+)"""
     x = jnp.ones((1, 2))
     trace, variables = mlp.init_with_output(random.PRNGKey(0), x)
     self.assertEqual(trace, expected_trace)
@@ -884,7 +907,6 @@ class ModuleTest(absltest.TestCase):
       Foo().apply({}, method='not_callable')
       # test same for init.
       Foo().init({}, method='not_callable')
-
 
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)
@@ -1118,6 +1140,7 @@ class ModuleTest(absltest.TestCase):
     A().test()
     self.assertFalse(setup_called)
 
+  @use_regular_dict()
   def test_module_pass_as_attr(self):
 
     class A(nn.Module):
@@ -1136,7 +1159,7 @@ class ModuleTest(absltest.TestCase):
 
     variables = A().init(random.PRNGKey(0), jnp.ones((1,)))
     var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'b': {
                 'foo': {
@@ -1145,9 +1168,10 @@ class ModuleTest(absltest.TestCase):
                 }
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
+  @use_regular_dict()
   def test_module_pass_in_closure(self):
     a = nn.Dense(2)
 
@@ -1161,17 +1185,18 @@ class ModuleTest(absltest.TestCase):
 
     variables = B().init(random.PRNGKey(0), jnp.ones((1,)))
     var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'foo': {
                 'bias': (2,),
                 'kernel': (1, 2),
             }
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
     self.assertIsNone(a.name)
 
+  @use_regular_dict()
   def test_toplevel_submodule_adoption(self):
 
     class Encoder(nn.Module):
@@ -1211,7 +1236,7 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y.shape, (4, 5))
 
     var_shapes = jax.tree_util.tree_map(jnp.shape, variables)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'dense_out': {
                 'bias': (5,),
@@ -1224,9 +1249,10 @@ class ModuleTest(absltest.TestCase):
                 },
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
+  @use_regular_dict()
   def test_toplevel_submodule_adoption_pytree(self):
 
     class A(nn.Module):
@@ -1253,9 +1279,8 @@ class ModuleTest(absltest.TestCase):
     x = jnp.ones((2, 2))
 
     params = B(a_pytree).init(key, x, x)
-    print('apply', x.shape)
     unused_y, counters = b.apply(params, x, x, mutable='counter')
-    ref_counters = freeze({
+    ref_counters = {
         'counter': {
             'A_bar': {
                 'i': jnp.array(2.0),
@@ -1264,13 +1289,14 @@ class ModuleTest(absltest.TestCase):
                 'i': jnp.array(2.0),
             },
         },
-    })
+    }
     self.assertTrue(
         jax.tree_util.tree_all(
             jax.tree_util.tree_map(
                 lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
                 counters, ref_counters)))
 
+  @use_regular_dict()
   def test_toplevel_submodule_adoption_sharing(self):
     dense = functools.partial(nn.Dense, use_bias=False)
 
@@ -1302,7 +1328,7 @@ class ModuleTest(absltest.TestCase):
     c = C(a, b)
     p = c.init(key, x)
     var_shapes = jax.tree_util.tree_map(jnp.shape, p)
-    ref_var_shapes = freeze({
+    ref_var_shapes = {
         'params': {
             'Dense_0': {
                 'kernel': (2, 2),
@@ -1318,9 +1344,10 @@ class ModuleTest(absltest.TestCase):
                 },
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
+  @use_regular_dict()
   def test_toplevel_named_submodule_adoption(self):
     dense = functools.partial(nn.Dense, use_bias=False)
 
@@ -1347,8 +1374,8 @@ class ModuleTest(absltest.TestCase):
     x = jnp.zeros((5, 5))
     init_vars = b.init(k, x)
     var_shapes = jax.tree_util.tree_map(jnp.shape, init_vars)
-    if config.flax_relaxed_naming:
-      ref_var_shapes = freeze({
+    if config.flax_preserve_adopted_names:
+      ref_var_shapes = {
           'params': {
               'foo': {
                   'dense': {
@@ -1359,9 +1386,9 @@ class ModuleTest(absltest.TestCase):
                   'kernel': (4, 6),
               },
           },
-      })
+      }
     else:
-      ref_var_shapes = freeze({
+      ref_var_shapes = {
           'params': {
               'a': {
                   'dense': {
@@ -1372,9 +1399,10 @@ class ModuleTest(absltest.TestCase):
                   'kernel': (4, 6),
               },
           },
-      })
+      }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
+  @use_regular_dict()
   def test_toplevel_submodule_pytree_adoption_sharing(self):
 
     class A(nn.Module):
@@ -1402,13 +1430,13 @@ class ModuleTest(absltest.TestCase):
 
     params = b.init(key, x)
     _, counters = b.apply(params, x, mutable='counter')
-    ref_counters = freeze({
+    ref_counters = {
         'counter': {
             'A_bar': {
                 'i': jnp.array(6.0),
             },
         },
-    })
+    }
     self.assertTrue(tree_equals(counters, ref_counters))
 
   def test_inner_class_def(self):
@@ -1508,7 +1536,6 @@ class ModuleTest(absltest.TestCase):
         x = 4 * x
         x = self.perturb('after_multiply', x)
         return x
-
 
     x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10,))
     module = Foo()
@@ -1630,7 +1657,6 @@ class ModuleTest(absltest.TestCase):
 
     x = jnp.ones((3,))
     variables = Foo().init(random.PRNGKey(0), x)
-    variables = variables.unfreeze()
     y = Foo().apply(variables, x)
     self.assertEqual(y.shape, (2,))
 
@@ -1979,10 +2005,10 @@ class ModuleTest(absltest.TestCase):
       a: int
 
     class Base2(nn.Module):
-        b: str
+      b: str
 
     class Foo(Base2, Base1):
-        c: float
+      c: float
 
     module = Foo(a=1, b='ok', c=3.0)
     str_rep = repr(module)
@@ -2032,21 +2058,91 @@ class RelaxedNamingTests(absltest.TestCase):
       def __call__(self, x):
         return self.sub(x)
 
-    with relax_naming(True):
+    with set_config('flax_preserve_adopted_names', True):
       foo = Foo(name='foo')
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("foo" in vs['params'], "relaxed naming failure")
+      y = bar.apply(vs, x)
 
-    with relax_naming(False):
+    with set_config('flax_preserve_adopted_names', False):
       foo = Foo(name='foo')
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("sub" in vs['params'], "old policy naming failure")
+      y = bar.apply(vs, x)
+
+  def test_class_optional_adoption_name_preservation(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('p', nn.initializers.zeros, x.shape)
+        return x + p
+
+    class Bar1(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = True
+      def __call__(self, x):
+        return self.sub(x)
+
+    class Bar2(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = False
+      def __call__(self, x):
+        return self.sub(x)
+
+    with set_config('flax_preserve_adopted_names', False):
+      foo = Foo(name='foo')
+      bar = Bar1(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("foo" in vs['params'], "adoption naming failure")
+      y = bar.apply(vs, x)
+
+    with set_config('flax_preserve_adopted_names', True):
+      foo = Foo(name='foo')
+      bar = Bar2(sub=foo)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = bar.init(k, x)
+      self.assertTrue("sub" in vs['params'], "adoption naming failure")
+      y = bar.apply(vs, x)
+
+  def test_nested_class_optional_adoption_name_preservation(self):
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        p = self.param('p', nn.initializers.zeros, x.shape)
+        return x + p
+
+    class Bar(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = True
+      def __call__(self, x):
+        return self.sub(x)
+
+    class Baz(nn.Module):
+      sub: nn.Module
+      preserve_adopted_names = True
+      def __call__(self, x):
+        return self.sub(x)
+
+    with set_config('flax_preserve_adopted_names', False):
+      foo = Foo(name='foo')
+      bar = Bar(sub=foo, name='bar')
+      baz = Baz(sub=bar)
+      k = random.PRNGKey(0)
+      x = jnp.zeros((1,))
+      vs = baz.init(k, x)
+      self.assertTrue("bar" in vs['params'], "adoption naming failure")
+      self.assertTrue("foo" in vs['params']['bar'], "adoption naming failure")
+      y = baz.apply(vs, x)
 
   def test_relaxed_adoption_still_conflict_checks(self):
     class Foo(nn.Module):
@@ -2061,7 +2157,7 @@ class RelaxedNamingTests(absltest.TestCase):
       def __call__(self, x):
         return self.sub(x)
 
-    with relax_naming(True):
+    with set_config('flax_preserve_adopted_names', True):
       foo1 = Foo(name='foo')
       foo2 = Foo(name='foo')
       bar = Bar(sub1=foo1, sub2=foo2)
@@ -2082,21 +2178,23 @@ class RelaxedNamingTests(absltest.TestCase):
       def __call__(self, x):
         return self.sub(x)
 
-    with relax_naming(True):
+    with set_config('flax_preserve_adopted_names', True):
       foo = Foo(name=None)
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("sub" in vs['params'], "relaxed naming failure")
+      y = bar.apply(vs, x)
 
-    with relax_naming(False):
+    with set_config('flax_preserve_adopted_names', False):
       foo = Foo(name='foo')
       bar = Bar(sub=foo)
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
       self.assertTrue("sub" in vs['params'], "old policy naming failure")
+      y = bar.apply(vs, x)
 
   def test_relaxed_python_conflict(self):
 
@@ -2107,13 +2205,13 @@ class RelaxedNamingTests(absltest.TestCase):
         p = self.param('dummy', nn.initializers.zeros, x.shape)
         return x + p
 
-    with relax_naming(True):
+    with set_config('flax_relaxed_naming', True):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = foo.init(k, x)
 
-    with relax_naming(False):
+    with set_config('flax_relaxed_naming', False):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
@@ -2129,18 +2227,35 @@ class RelaxedNamingTests(absltest.TestCase):
         v2 = self.variable('col2', 'v', lambda x: jnp.zeros(x), x.shape)
         return x + v1.value + v2.value
 
-    with relax_naming(True):
+    with set_config('flax_relaxed_naming', True):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = foo.init(k, x)
 
-    with relax_naming(False):
+    with set_config('flax_relaxed_naming', False):
       foo = Foo(name='foo')
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       with self.assertRaises(errors.NameInUseError):
         vs = foo.init(k, x)
+
+
+class FrozenDictTests(absltest.TestCase):
+
+  def test_frozendict_flag(self):
+
+    with set_config('flax_return_frozendict', True):
+      x = jnp.zeros((2,3))
+      layer = nn.Dense(5)
+      params = layer.init(random.PRNGKey(0), x)
+      self.assertTrue(isinstance(params, FrozenDict))
+
+    with set_config('flax_return_frozendict', False):
+      x = jnp.zeros((2,3))
+      layer = nn.Dense(5)
+      params = layer.init(random.PRNGKey(0), x)
+      self.assertTrue(isinstance(params, dict))
 
 
 if __name__ == '__main__':

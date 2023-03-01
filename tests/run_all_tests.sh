@@ -85,6 +85,12 @@ if $RUN_DOCTEST; then
   pytest -n auto flax --doctest-modules --suppress-no-test-exit-code
 fi
 
+# check that flax is running on editable mode
+# (i.e. no notebook installed flax from pypi)
+echo "=== CHECKING FLAX IS EDITABLE ==="
+assert_error="flax is not running on editable mode."
+(cd docs; python -c "import flax; assert 'site-packages' not in flax.__file__, \"$assert_error\"")
+
 # env vars must be set after doctest
 export JAX_NUMPY_RANK_PROMOTION=raise
 export FLAX_PROFILE=1
