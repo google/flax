@@ -8,17 +8,27 @@
 # 'pre-commit run --all'
 
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
-    hooks:
-      - id: check-toml
-  - repo: https://github.com/mwouts/jupytext
-    rev: v1.13.8
-    hooks:
-      - id: jupytext
-        args: [--sync]
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.3.0
-    hooks:
-      - id: trailing-whitespace
-        exclude: ^docs/.*\.md$
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.4.0
+  hooks:
+  - id: check-toml
+- repo: https://github.com/mwouts/jupytext
+  rev: v1.13.8
+  hooks:
+  - id: jupytext
+    args: [--sync]
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.3.0
+  hooks:
+  - id: trailing-whitespace
+    exclude: ^docs/.*\.md$
+- repo: https://github.com/kynan/nbstripout
+  rev: 0.6.1
+  hooks:
+    - id: nbstripout
+      args: [
+        --keep-output,
+        --keep-count,
+        --extra-keys,
+        "metadata.kernelspec metadata.vscode metadata.colab cell.metadata.executionInfo.user cell.metadata.executionInfo.user_tz cell.metadata.colab",
+      ]
