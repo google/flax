@@ -84,6 +84,12 @@ To upgrade to the latest version of Flax, you can use:
 ```
 pip install --upgrade git+https://github.com/google/flax.git
 ```
+To install some additional dependencies (like `matplotlib`) that are required but not included
+by some dependencies, you can use:
+
+```bash
+pip install flax[all]
+```
 
 ## What does Flax look like?
 
