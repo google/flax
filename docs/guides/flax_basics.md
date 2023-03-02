@@ -198,7 +198,7 @@ for i in range(101):
   loss_val, grads = loss_grad_fn(params, x_samples, y_samples)
   params = update_params(params, learning_rate, grads)
   if i % 10 == 0:
-    print(f'Loss step {i}: ', loss_val)
+    print(f'Loss step {i}: {loss_val}')
 ```
 
 +++ {"id": "zqEnJ9Poyb6q"}
@@ -245,7 +245,7 @@ for i in range(101):
   updates, opt_state = tx.update(grads, opt_state)
   params = optax.apply_updates(params, updates)
   if i % 10 == 0:
-    print('Loss step {}: '.format(i), loss_val)
+    print(f'Loss step {i}: {loss_val}')
 ```
 
 +++ {"id": "0eAPPwtpXYu7"}
