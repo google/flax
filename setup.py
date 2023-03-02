@@ -25,38 +25,40 @@ except OSError:
   README = ""
 
 install_requires = [
-    "numpy>=1.12",
-    "jax>=0.4.2",
-    "matplotlib",  # only needed for tensorboard export
-    "msgpack",
-    "optax",
-    "orbax",
-    "tensorstore",
-    "rich>=11.1",
-    "typing_extensions>=4.1.1",
-    "PyYAML>=5.4.1",
+  "numpy>=1.12",
+  "jax>=0.4.2",
+  "msgpack",
+  "optax",
+  "orbax",
+  "tensorstore",
+  "rich>=11.1",
+  "typing_extensions>=4.1.1",
+  "PyYAML>=5.4.1",
+]
+all_requires = [
+  "matplotlib",  # only needed for tensorboard export
 ]
 
 tests_require = [
-    "atari-py==0.2.5",  # Last version does not have the ROMs we test on pre-packaged
-    "clu",  # All examples.
-    "gym==0.18.3",
-    "jaxlib",
-    "jraph>=0.0.6dev0",
-    "ml-collections",
-    "mypy",
-    "opencv-python",
-    "pytest",
-    "pytest-cov",
-    "pytest-custom_exit_code",
-    "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
-    "pytype",
-    "sentencepiece",  # WMT/LM1B examples
-    "tensorflow_text>=2.11.0",  # WMT/LM1B examples
-    "tensorflow_datasets",
-    "tensorflow",
-    "torch",
-    "nbstripout",
+  "atari-py==0.2.5",  # Last version does not have the ROMs we test on pre-packaged
+  "clu",  # All examples.
+  "gym==0.18.3",
+  "jaxlib",
+  "jraph>=0.0.6dev0",
+  "ml-collections",
+  "mypy",
+  "opencv-python",
+  "pytest",
+  "pytest-cov",
+  "pytest-custom_exit_code",
+  "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
+  "pytype",
+  "sentencepiece",  # WMT/LM1B examples
+  "tensorflow_text>=2.11.0",  # WMT/LM1B examples
+  "tensorflow_datasets",
+  "tensorflow",
+  "torch",
+  "nbstripout",
 ]
 
 __version__ = None
@@ -65,28 +67,29 @@ with open("flax/version.py") as f:
   exec(f.read(), globals())
 
 setup(
-    name="flax",
-    version=__version__,
-    description="Flax: A neural network library for JAX designed for flexibility",
-    long_description="\n\n".join([README]),
-    long_description_content_type="text/markdown",
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: Apache Software License",
-        "Programming Language :: Python :: 3.7",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        ],
-    keywords="",
-    author="Flax team",
-    author_email="flax-dev@google.com",
-    url="https://github.com/google/flax",
-    packages=find_packages(),
-    package_data={"flax": ["py.typed"]},
-    zip_safe=False,
-    install_requires=install_requires,
-    extras_require={
-        "testing": tests_require,
-        },
-    )
+  name="flax",
+  version=__version__,
+  description="Flax: A neural network library for JAX designed for flexibility",
+  long_description="\n\n".join([README]),
+  long_description_content_type="text/markdown",
+  classifiers=[
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.7",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  ],
+  keywords="",
+  author="Flax team",
+  author_email="flax-dev@google.com",
+  url="https://github.com/google/flax",
+  packages=find_packages(),
+  package_data={"flax": ["py.typed"]},
+  zip_safe=False,
+  install_requires=install_requires,
+  extras_require={
+    "testing": tests_require,
+    "all": all_requires,
+  },
+)
