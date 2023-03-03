@@ -17,7 +17,6 @@
 from typing import Any, Optional
 
 import jax
-from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.sharding import Mesh
 from orbax import checkpoint as orbax
 
@@ -27,9 +26,7 @@ PyTree = type(jax.tree_util.tree_structure(None))
 
 def is_multiprocess_array(value: Any) -> bool:
   """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
-  if isinstance(value, GlobalDeviceArray):
-    return True
-  if jax.config.jax_array and isinstance(value, jax.Array):
+  if isinstance(value, jax.Array):
     return not value.is_fully_addressable
   return False
 
@@ -43,8 +40,6 @@ def save_args_from_target(target: Any) -> Any:
 def restore_args_from_target(target: Any, mesh: Optional[Mesh]) -> Any:
   def find_axes(x):
     if is_multiprocess_array(x):
-      if isinstance(x, GlobalDeviceArray):
-        return x.mesh_axes
       return x.sharding.spec
     return None
   if not any(

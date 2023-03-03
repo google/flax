@@ -39,7 +39,6 @@ import jax
 from jax import monitoring
 from jax import process_index
 from jax import sharding
-from jax.experimental.global_device_array import GlobalDeviceArray
 from jax.experimental.multihost_utils import sync_global_devices
 import orbax.checkpoint as orbax
 
@@ -88,7 +87,7 @@ PyTree = Any
 
 # TODO(flax-dev): Remove this once flax is using the latest jax release
 # containing jax.Array attribute.
-MultiprocessArrayType = Union[GlobalDeviceArray, Any]
+MultiprocessArrayType = Any
 
 
 def _checkpoint_path(ckpt_dir: str,
@@ -248,13 +247,7 @@ def _restore_mpas(state_dict,
     # Check if the given target array types are valid.
     shardings = []
     for _, arr, path in target_mpas:
-      # Use GDA with jax.config.jax_array turned off, or jax.experimental.array
-      # with jax.config.jax_array turned on.
-      if isinstance(arr, GlobalDeviceArray) and jax.config.jax_array:
-        raise errors.MPARestoreTypeNotMatchError(step, path)
-      if isinstance(arr, GlobalDeviceArray):
-        shardings.append(sharding.NamedSharding(arr.mesh, arr.mesh_axes))
-      elif jax.config.jax_array and isinstance(arr, jax.Array):
+      if isinstance(arr, jax.Array):
         shardings.append(arr.sharding)
 
     # Restore the arrays.
@@ -827,9 +820,6 @@ def restore_checkpoint(
 
     def make_restore_args(x):
       if orbax_utils.is_multiprocess_array(x):
-        if isinstance(x, GlobalDeviceArray):
-          return orbax.ArrayRestoreArgs(restore_type=GlobalDeviceArray,
-                                        mesh=x.mesh, mesh_axes=x.mesh_axes)
         return orbax.ArrayRestoreArgs(
             restore_type=jax.Array,
             mesh=x.sharding.mesh,
