@@ -36,6 +36,11 @@ class Point:
   y: float
   meta: Any = struct.field(pytree_node=False)
 
+@struct.dataclass
+class GenericDataClass:
+  value: Any
+  meta: Any = struct.field(pytree_node=False)
+
 
 class StructTest(absltest.TestCase):
 
@@ -44,12 +49,33 @@ class StructTest(absltest.TestCase):
     with self.assertRaises(dataclasses.FrozenInstanceError):
       p.new_field = 1
 
-  def test_mutation(self):
+  def test_mutation_error(self):
     p = Point(x=1, y=2, meta={})
     new_p = p.replace(x=3)
     self.assertEqual(new_p, Point(x=3, y=2, meta={}))
     with self.assertRaises(dataclasses.FrozenInstanceError):
       p.y = 3
+
+  def test_mutable_copy(self):
+    p = Point(x=1, y=2, meta={})
+    gdc1 = GenericDataClass(value=p, meta={})
+    gdc2 = GenericDataClass(value=gdc1, meta={})
+    gdc3 = GenericDataClass(value=gdc2, meta={})
+
+    with self.assertRaises(dataclasses.FrozenInstanceError):
+      gdc3.value.value.value.y = 3
+
+    with struct.create_mutable_copy(gdc3) as gdc3_copy:
+      self.assertEqual(gdc3_copy.__mutable__, True)
+      gdc3_copy.value.value.value.y = 3
+    self.assertEqual(gdc3_copy.__mutable__, False)
+
+    self.assertEqual(gdc3_copy.value.value.value.y, 3) # confirm value was changed
+    self.assertEqual(gdc3.value.value.value.y, 2) # confirm original object is unchanged
+
+    # confirm that copied object is not mutable outside contextmanager
+    with self.assertRaises(dataclasses.FrozenInstanceError):
+      gdc3_copy.value.value.value.y = 4
 
   def test_pytree_nodes(self):
     p = Point(x=1, y=2, meta={'abc': True})

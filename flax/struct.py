@@ -16,12 +16,13 @@
 """
 
 import dataclasses
-import typing
-from typing import TypeVar, Callable, Tuple, Union, Any
+import contextlib
+from typing import TypeVar, Generator, Any
 
 from . import serialization
 
 import jax
+from jax._src.tree_util import _registry
 from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
 
 
@@ -162,10 +163,49 @@ def dataclass(clz: _T) -> _T:
   serialization.register_serialization_state(
       data_clz, to_state_dict, from_state_dict)
 
+  def new_setattr(obj, name, value):
+    if obj.__mutable__:
+      object.__setattr__(obj, name, value)
+    else:
+      raise dataclasses.FrozenInstanceError(f"cannot assign to field '{name}'")
+
+  data_clz.__mutable__ = False # denotes whether the object's currently mutable
+  data_clz.__setattr__ = new_setattr # type: ignore
+
   # add a _flax_dataclass flag to distinguish from regular dataclasses
   data_clz._flax_dataclass = True # type: ignore[attr-defined]
 
   return data_clz # type: ignore
+
+@contextlib.contextmanager
+def create_mutable_copy(obj: _T) -> Generator[_T, None, None]:
+
+  def set_mutable_attribute(obj, value: bool, visited: set):
+    if id(obj) in visited:
+      return
+    visited.add(id(obj))
+
+    if dataclasses.is_dataclass(obj) and hasattr(obj, '__mutable__'):
+      object.__setattr__(obj, '__mutable__', value)
+
+    for child_obj in get_children(obj):
+      set_mutable_attribute(child_obj, value, visited)
+
+  def get_children(obj):
+    registry_entry = _registry.get(type(obj))
+    if registry_entry:
+      children, metadata = registry_entry.to_iter(obj)
+      return list(children)
+
+    return []
+
+  obj_copy = jax.tree_util.tree_map(lambda leaf: leaf, obj) # make deep copy
+
+  try:
+    set_mutable_attribute(obj_copy, True, set())
+    yield obj_copy
+  finally:
+    set_mutable_attribute(obj_copy, False, set())
 
 
 TNode = TypeVar('TNode', bound='PyTreeNode')
