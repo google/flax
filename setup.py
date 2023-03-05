@@ -26,7 +26,7 @@ except OSError:
 
 install_requires = [
   "numpy>=1.12",
-  "jax>=0.4.2",
+  "jax>=0.4.5",
   "msgpack",
   "optax",
   "orbax",
