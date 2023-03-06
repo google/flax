@@ -43,7 +43,7 @@ Features
       :columns: 12 12 12 6
 
       .. card:: Safety
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-fs-5
 
@@ -57,7 +57,7 @@ Features
       :columns: 12 12 12 6
 
       .. card:: Control
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-fs-5
 
@@ -70,7 +70,7 @@ Features
       :columns: 12 12 12 6
 
       .. card:: Functional API
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-fs-5
 
@@ -82,7 +82,7 @@ Features
       :columns: 12 12 12 6
 
       .. card:: Terse code
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-fs-5
 
@@ -203,7 +203,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `🤗 Hugging Face <https://huggingface.co/flax-community>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -215,7 +215,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `🥑 DALLE Mini <https://huggingface.co/dalle-mini>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -227,7 +227,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `PaLM <https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -239,7 +239,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `Imagen <https://imagen.research.google>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -251,7 +251,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `Scenic <https://github.com/google-research/scenic/>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -263,7 +263,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `Big Vision <https://github.com/google-research/big_vision>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -275,7 +275,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `T5x <https://github.com/google-research/t5x>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -287,7 +287,7 @@ Notable examples in Flax include:
       :columns: 6 6 6 4
 
       .. card:: `Brax <https://github.com/google/brax>`__
-         :class-card: sd-text-black sd-border-0
+         :class-card: sd-border-0
          :shadow: none
          :class-title: sd-text-center sd-fs-5
 
@@ -302,7 +302,7 @@ Notable examples in Flax include:
    :hidden:
    :maxdepth: 2
 
-   Quick Start <getting_started>
+   Quick start <getting_started>
    guides/index
    examples
    glossary
