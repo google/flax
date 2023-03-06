@@ -326,22 +326,43 @@ class CheckpointsTest(parameterized.TestCase):
     with io.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w') as f:
       f.write('test_tmp')
     io.makedirs(os.path.join(tmp_dir, 'test_tmp_gda'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
-                     None)
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'), None)
 
     with io.GFile(os.path.join(tmp_dir, 'test_0'), 'w') as f:
       f.write('test_0')
     io.makedirs(os.path.join(tmp_dir, 'test_0_gda'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
-                     os.path.join(tmp_dir, 'test_0'))
+    self.assertEqual(
+        checkpoints.latest_checkpoint(tmp_dir, 'test_'),
+        os.path.join(tmp_dir, 'test_0'),
+    )
 
     with io.GFile(os.path.join(tmp_dir, 'test_10'), 'w') as f:
       f.write('test_10')
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'test_'),
-                     os.path.join(tmp_dir, 'test_10'))
-    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'),
-                     None)
+    self.assertEqual(
+        checkpoints.latest_checkpoint(tmp_dir, 'test_'),
+        os.path.join(tmp_dir, 'test_10'),
+    )
+    self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'), None)
 
+  @parameterized.parameters(
+      {'step_type': int, 'steps': [1, 5, 112]},
+      {'step_type': float, 'steps': [1.0, 4.5, 5.6]},
+  )
+  def test_available_steps(self, step_type, steps):
+    tmp_dir = pathlib.Path(self.create_tempdir().full_path)
+    with io.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w') as f:
+      f.write('test_tmp')
+    io.makedirs(os.path.join(tmp_dir, 'test_tmp_gda'))
+
+    for step in steps:
+      with io.GFile(os.path.join(tmp_dir, 'test_' + str(step)), 'w') as f:
+        f.write('test_' + str(step))
+      io.makedirs(os.path.join(tmp_dir, 'test_' + str(step) + '_gda'))
+
+    self.assertEqual(
+        checkpoints.available_steps(tmp_dir, 'test_', step_type=step_type),
+        steps,
+    )
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_complex_pytree(self, use_orbax):

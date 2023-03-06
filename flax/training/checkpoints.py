@@ -25,7 +25,7 @@ import os
 import pathlib
 import re
 import time
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 from absl import logging
 from flax import config
@@ -705,16 +705,16 @@ def save_checkpoint_multiprocess(
   return ckpt_path
 
 
-def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
-                      prefix: str = 'checkpoint_') -> Optional[str]:
-  """Retrieve the path of the latest checkpoint in a directory.
+def _all_checkpoints(ckpt_dir: Union[str, os.PathLike],
+                     prefix: str = 'checkpoint_') -> list[str]:
+  """Retrieve all checkpoint paths in directory.
 
   Args:
     ckpt_dir: str: directory of checkpoints to restore from.
     prefix: str: name prefix of checkpoint files.
 
   Returns:
-    The latest checkpoint path or None if no checkpoints were found.
+    Sorted list of checkpoint paths or empty list if no checkpoints were found.
   """
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   checkpoint_files: List[Any] = [
@@ -728,9 +728,52 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
   ]
   checkpoint_files = natural_sort(checkpoint_files)
   if checkpoint_files:
+    return checkpoint_files
+  else:
+    return []
+
+
+def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
+                      prefix: str = 'checkpoint_') -> Optional[str]:
+  """Retrieve the path of the latest checkpoint in a directory.
+
+  Args:
+    ckpt_dir: str: directory of checkpoints to restore from.
+    prefix: str: name prefix of checkpoint files.
+
+  Returns:
+    The latest checkpoint path or None if no checkpoints were found.
+  """
+  checkpoint_files = _all_checkpoints(ckpt_dir, prefix)
+  if checkpoint_files:
     return checkpoint_files[-1]
   else:
     return None
+
+
+def available_steps(ckpt_dir: Union[str, os.PathLike],
+                    prefix: str = 'checkpoint_',
+                    step_type: Type = int) -> List[Union[int, float]]:
+  """Return step numbers of available checkpoints in a directory.
+
+
+  Args:
+    ckpt_dir: str: directory of checkpoints to restore from.
+    prefix: str: name prefix of checkpoint files.
+    step_type: type: type for steps, int (default) or float.
+
+  Returns:
+    Sorted list of available steps or empty list if no checkpoints were found.
+  """
+  checkpoint_files = _all_checkpoints(ckpt_dir, prefix)
+
+  checkpoint_steps = []
+
+  for file in checkpoint_files:
+    prefix_idx = file.rfind(prefix)
+    checkpoint_steps += [step_type(file[prefix_idx + len(prefix) :])]
+
+  return checkpoint_steps
 
 
 def restore_checkpoint(
