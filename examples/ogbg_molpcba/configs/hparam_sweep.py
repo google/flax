@@ -23,10 +23,10 @@ def get_config():
 
   # Optimizer.
   config.optimizer = 'adam'
-  config.learning_rate = None
+  config.learning_rate = 1e-3
 
   # Training hyperparameters.
-  config.batch_size = None
+  config.batch_size = 256
   config.num_train_steps = 500_000
   config.log_every_steps = 50
   config.eval_every_steps = 1_000
@@ -37,9 +37,9 @@ def get_config():
 
   # GNN hyperparameters.
   config.model = 'GraphConvNet'
-  config.message_passing_steps = None
-  config.latent_size = None
-  config.dropout_rate = None
+  config.message_passing_steps = 5
+  config.latent_size = 256
+  config.dropout_rate = 0.1
   config.num_mlp_layers = 2
   config.num_classes = 128
   config.skip_connections = True
@@ -48,17 +48,16 @@ def get_config():
   return config
 
 
-def get_hyper(hyper):
-  return hyper.product([
-      hyper.sweep('config.add_virtual_node', [True, False]),
-      hyper.sweep('config.add_undirected_edges', [True, False]),
-      hyper.sweep('config.add_self_loops', [True, False]),
-      hyper.sweep('config.layer_norm', [True, False]),
-      hyper.sweep('config.skip_connections', [True, False]),
-      hyper.sweep('config.batch_size', [256]),
-      hyper.sweep('config.message_passing_steps', [5]),
-      hyper.sweep('config.latent_size', [256]),
-      hyper.sweep('config.learning_rate', [1e-3]),
-      hyper.sweep('config.num_mlp_layers', [2]),
-      hyper.sweep('config.dropout_rate', [0.1]),
-  ])
+def sweep(add):
+  for add_virtual_node in (True, False):
+    for add_undirected_edges in (True, False):
+      for add_self_loops in (True, False):
+        for layer_norm in (True, False):
+          for skip_connections in (True, False):
+            add(
+                add_virtual_node=add_virtual_node,
+                add_undirected_edges=add_undirected_edges,
+                add_self_loops=add_self_loops,
+                layer_norm=layer_norm,
+                skip_connections=skip_connections,
+            )
