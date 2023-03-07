@@ -706,7 +706,7 @@ def save_checkpoint_multiprocess(
 
 
 def _all_checkpoints(ckpt_dir: Union[str, os.PathLike],
-                     prefix: str = 'checkpoint_') -> list[str]:
+                     prefix: str = 'checkpoint_') -> List[str]:
   """Retrieve all checkpoint paths in directory.
 
   Args:

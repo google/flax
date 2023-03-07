@@ -113,7 +113,7 @@ def pack_dataset(dataset: tf.data.Dataset,
     if k not in shapes:
       raise ValueError('Key %s not found in dataset.  Available keys are %s' %
                        (k, shapes.keys()))
-    if not shapes[k].is_compatible_with(tf.TensorShape([None])):
+    if not shapes[k].is_compatible_with(tf.TensorShape([None])): # type: ignore[wrong-arg-types]
       raise ValueError('Tensors to be packed must be one-dimensional.')
   # make sure that the length dictionary contains all keys as well as the
   # keys suffixed by "_segmentation" and "_position"
@@ -239,8 +239,8 @@ def _pack_with_tf_ops(dataset: tf.data.Dataset, keys: List[str],
         loop_vars=(i, partial, outputs),
         shape_invariants=(
             tf.TensorShape([]),
-            {k: tf.TensorShape([None]) for k in keys_etc},
-            {k: tf.TensorShape(None) for k in keys_etc},
+            {k: tf.TensorShape([None]) for k in keys_etc}, # type: ignore[wrong-arg-types]
+            {k: tf.TensorShape(None) for k in keys_etc}, # type: ignore[wrong-arg-types]
         ),
         maximum_iterations=dynamic_batch_size)
     _, outputs = write_packed_example(partial, outputs)

@@ -631,9 +631,30 @@ def create_descriptor_wrapper(descriptor: Descriptor):
 # Base Module definition.
 # -----------------------------------------------------------------------------
 
-
+# The ModuleBase class is created only to make static analyzers happy
+# mainly pytype and pyright. Some notes:
+# * pyright (correctly) complains that Module itself is not a dataclass, even
+#   though all its subclasses and intances ARE dataclasses. Because there is no
+#   way to annotate this in a way that pyright understands, we create a
+#   ModuleBase class decorated with `dataclass_transform` such that pyright
+#   thinks Module is a dataclass (in reality only subclasses are instantiated
+#   so this is fine).
+# * The `__dataclass_fields__` attribute is needed because pytype seems to
+#   not understand the `dataclass_transform` decorator, therefore we need
+#   to add the attribute manually.
+# * Other attributes are annotated for completeness. Because we are using
+#   the `if typing.TYPE_CHECKING` pattern, these annotations are not present
+#   at runtime so they don't affect the dataclass behavior.
 @dataclass_transform()
-class Module:
+class ModuleBase:
+  if typing.TYPE_CHECKING:
+    scope: Optional[Scope]
+    _state: _ModuleInternalState
+    _parent_ref: Union['Module', weakref.ReferenceType['Module'], None]
+    parent: Union['Module', _Sentinel, None]
+    __dataclass_fields__: Dict[str, dataclasses.Field]
+
+class Module(ModuleBase):
   """Base class for all neural network modules. Layers and models should subclass this class.
 
   All Flax Modules are Python 3.7
@@ -667,7 +688,6 @@ class Module:
   """
 
   if typing.TYPE_CHECKING:
-
     def __init__(self, *args, **kwargs):
       # this stub makes sure pytype accepts constructor arguments.
       pass
@@ -695,7 +715,7 @@ class Module:
     cls.scope: Optional[Scope] = None # type: ignore
     # Handles weak referencing of parent Modules to prevent reference cycles.
     cls._parent_ref = None # type: ignore[attr-defined]
-    cls.parent = ParentDescriptor() # type: ignore[attr-defined]
+    cls.parent = ParentDescriptor() # type: ignore[assignment]
 
   @classmethod
   def _customized_dataclass_transform(cls):
@@ -812,6 +832,7 @@ class Module:
     try:
       # get call info
       if add_call_info:
+        assert self.scope is not None
         call_index = _context.call_info_stack[-1].get_call_index(self)
         scope_path = jax.tree_util.tree_map(_fix_path_part, self.scope.path)
 
@@ -947,6 +968,7 @@ class Module:
         raise errors.NameInUseError('submodule', self.name, parent_class)
       # Finalize attachment to parent and scope initialization.
       self.parent._state.children[self.name] = self
+      assert self.parent.scope is not None
       object.__setattr__(
           self, 'scope', self.parent.scope.push(self.name, reuse=reuse_scopes))
 
@@ -1073,6 +1095,7 @@ class Module:
                   module: Optional['Module'] = None,
                   reuse_scopes: bool = False,
                   collection: Optional[str] = None) -> bool:
+    assert self.scope is not None
     # with relaxed naming don't force non-overlap with python attribute names.
     if config.flax_relaxed_naming:
       if reuse_scopes:
@@ -1151,6 +1174,7 @@ class Module:
           'wrapped in `@compact`')
     if self._name_taken(name, collection=col):
       raise errors.NameInUseError('variable', name, self.__class__.__name__)
+    assert self.scope is not None
     v = self.scope.variable(col, name, init_fn, *init_args, unbox=unbox)
     self._state.children[name] = col
     return v
@@ -1191,6 +1215,7 @@ class Module:
           'wrapped in `@compact`')
     if self._name_taken(name, collection='params'):
       raise errors.NameInUseError('param', name, self.__class__.__name__)
+    assert self.scope is not None
     v = self.scope.param(name, init_fn, *init_args, unbox=unbox)
     self._state.children[name] = 'params'
     return v
