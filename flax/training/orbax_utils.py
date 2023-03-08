@@ -21,7 +21,7 @@ from jax.sharding import Mesh
 from orbax import checkpoint as orbax
 
 
-PyTree = type(jax.tree_util.tree_structure(None))
+PyTree = Any
 
 
 def is_multiprocess_array(value: Any) -> bool:
