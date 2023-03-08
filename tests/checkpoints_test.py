@@ -158,7 +158,6 @@ class CheckpointsTest(parameterized.TestCase):
       checkpoints.restore_checkpoint(
           tmp_dir, test_object0, step=5, prefix='test_')
 
-
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_overwrite_checkpoints(self, use_orbax):
     config.update('flax_use_orbax_checkpointing', use_orbax)
@@ -183,7 +182,6 @@ class CheckpointsTest(parameterized.TestCase):
     checkpoints.save_checkpoint(non_norm_dir_path, test_object, 4, keep=1)
     new_object = checkpoints.restore_checkpoint(non_norm_dir_path, test_object0)
     check_eq(new_object, test_object)
-
 
   @parameterized.parameters({'use_orbax': True, 'keep_every_n_steps': None},
                             {'use_orbax': False, 'keep_every_n_steps': 7})
@@ -215,7 +213,6 @@ class CheckpointsTest(parameterized.TestCase):
         with self.assertRaises(ValueError):
           checkpoints.restore_checkpoint(tmp_dir, target=None, step=step)
 
-
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints_w_float_steps(self, use_orbax):
     config.update('flax_use_orbax_checkpointing', use_orbax)
@@ -241,7 +238,6 @@ class CheckpointsTest(parameterized.TestCase):
     self.assertIn('test_3.0', os.listdir(tmp_dir))
     self.assertIn('test_2.0', os.listdir(tmp_dir))
     check_eq(new_object, test_object1)
-
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints_target_none(self, use_orbax):
@@ -271,7 +267,6 @@ class CheckpointsTest(parameterized.TestCase):
     checkpoints.save_checkpoint(tmp_dir, test_object0, 1)
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
     check_eq(new_object, test_object0)
-
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints_target_empty(self, use_orbax):
@@ -368,12 +363,17 @@ class CheckpointsTest(parameterized.TestCase):
   def test_complex_pytree(self, use_orbax):
     config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
-    to_save = [CustomDC(foo=12, bar={'x': jnp.array((1, 4))}), np.array((2, 3))]
-    target = [CustomDC(foo=0, bar={'x': jnp.array((0, 0))}), np.array((0, 0))]
+    to_save = [
+        CustomDC(foo=12, bar=core.freeze({'x': jnp.array((1, 4))})),
+        np.array((2, 3)),
+    ]
+    target = [
+        CustomDC(foo=0, bar=core.freeze({'x': jnp.array((0, 0))})),
+        np.array((0, 0)),
+    ]
     checkpoints.save_checkpoint(tmp_dir, to_save, 0)
     restored = checkpoints.restore_checkpoint(tmp_dir, target=target)
     check_eq(restored, to_save)
-
 
   # restore_checkpoint can automatically restore either orbax or legacy files.
   def test_auto_restore(self):

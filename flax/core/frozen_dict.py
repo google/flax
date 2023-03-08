@@ -15,7 +15,7 @@
 """Frozen Dictionary."""
 
 import collections
-from typing import Any, TypeVar, Mapping, Dict, Tuple, Union
+from typing import Any, TypeVar, Mapping, Dict, Tuple, Union, Hashable
 
 from flax import serialization
 import jax
@@ -47,6 +47,7 @@ def _indent(x, num_spaces):
   return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
 
 
+# TODO(ivyzheng): change to register_pytree_with_keys_class after JAX release.
 @jax.tree_util.register_pytree_node_class
 class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
@@ -148,19 +149,26 @@ class FrozenDict(Mapping[K, V]):
     """
     return unfreeze(self)
 
-  def tree_flatten(self) -> Tuple[Tuple[Dict[Any, Any]], Tuple[()]]:
+  # TODO(ivyzheng): remove this after JAX 0.4.6 release.
+  def tree_flatten(self) -> Tuple[Tuple[Any, ...], Hashable]:
     """Flattens this FrozenDict.
 
     Returns:
       A flattened version of this FrozenDict instance.
     """
-    return (self._dict,), ()
+    sorted_keys = sorted(self._dict)
+    return tuple([self._dict[k] for k in sorted_keys]), tuple(sorted_keys)
 
   @classmethod
-  def tree_unflatten(cls, _, data):
+  def tree_unflatten(cls, keys, values):
     # data is already deep copied due to tree map mechanism
     # we can skip the deep copy in the constructor
-    return cls(*data, __unsafe_skip_copy__=True)
+    return cls({k: v for k, v in zip(keys, values)}, __unsafe_skip_copy__=True)
+
+
+jax.tree_util.register_keypaths(
+    FrozenDict, lambda fd: tuple(jax.tree_util.DictKey(k) for k in sorted(fd))
+)
 
 
 def _prepare_freeze(xs: Any) -> Any:

@@ -59,8 +59,6 @@ class StructTest(absltest.TestCase):
     self.assertEqual(new_p, Point(x=2, y=4, meta={'abc': True}))
 
   def test_keypath_error(self):
-    if tuple(map(int, jax.version.__version__.split('.'))) < (0, 3, 1):
-      raise unittest.SkipTest("test only works with jax>=0.3.1")
     # TODO(mattjj): avoid using internal prefix_errors by testing vmap error msg
     e, = prefix_errors(Point(1., [2.],  meta={}), Point(1., 2., meta={}))
     with self.assertRaisesRegex(ValueError, r'in_axes\.y'):
