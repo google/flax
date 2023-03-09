@@ -79,6 +79,7 @@ For example:
   :sync:
 
   CKPT_DIR = './tmp/'
+  flax.config.update('flax_use_orbax_checkpointing', False)
 
   # Inside your training loop
   for step in range(MAX_STEPS):
@@ -91,11 +92,11 @@ For example:
 
   ---
 
-  CKPT_DIR = './tmp/'
+  CKPT_DIR = './tmp/orbax'
 
   # At the top level
   mgr_options = orbax.checkpoint.CheckpointManagerOptions(
-    max_to_keep=3, keep_period=2, step_prefix='test_')
+    create=True, max_to_keep=3, keep_period=2, step_prefix='test_')
   ckpt_mgr = orbax.checkpoint.CheckpointManager(
     CKPT_DIR,
     orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler()), mgr_options)
@@ -126,6 +127,7 @@ For example:
   :sync:
 
   PURE_CKPT_DIR = './tmp/pure'
+  flax.config.update('flax_use_orbax_checkpointing', False)
 
   checkpoints.save_checkpoint(PURE_CKPT_DIR, CKPT_PYTREE, step=0, overwrite=True)
   checkpoints.restore_checkpoint(PURE_CKPT_DIR, target=TARGET_PYTREE)
@@ -155,6 +157,7 @@ For example:
   :sync:
 
   NOTARGET_CKPT_DIR = './tmp/no_target'
+  flax.config.update('flax_use_orbax_checkpointing', False)
 
   checkpoints.save_checkpoint(NOTARGET_CKPT_DIR, CKPT_PYTREE, step=0)
   checkpoints.restore_checkpoint(NOTARGET_CKPT_DIR, target=None)
@@ -193,6 +196,7 @@ For example:
   :sync:
 
   ARR_CKPT_DIR = './tmp/singleton'
+  flax.config.update('flax_use_orbax_checkpointing', False)
 
   checkpoints.save_checkpoint(ARR_CKPT_DIR, jnp.arange(10), step=0)
   checkpoints.restore_checkpoint(ARR_CKPT_DIR, target=None)

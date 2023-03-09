@@ -85,6 +85,7 @@ Below are code examples for before and after the migration to Orbax:
 
 ```python
 CKPT_DIR = './tmp/'
+flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
 
@@ -99,13 +100,13 @@ checkpoints.restore_checkpoint(CKPT_DIR, target=TARGET_PYTREE, step=4, prefix='t
 ```
 
 ```python
-CKPT_DIR = './tmp/'
+CKPT_DIR = './tmp/orbax'
 
 # After: Using the Orbax API
 
 # At the top level
 mgr_options = orbax_checkpoint.CheckpointManagerOptions(
-    max_to_keep=3, keep_period=2, step_prefix='test_')
+    create=True, max_to_keep=3, keep_period=2, step_prefix='test_')
 ckpt_mgr = orbax.checkpoint.CheckpointManager(
     CKPT_DIR,
     orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler()), mgr_options)
@@ -131,6 +132,7 @@ For example:
 
 ```python
 PURE_CKPT_DIR = './tmp/pure'
+flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
 checkpoints.save_checkpoint(PURE_CKPT_DIR, CKPT_PYTREE, step=0, overwrite=True)
@@ -138,13 +140,13 @@ checkpoints.restore_checkpoint(PURE_CKPT_DIR, target=TARGET_PYTREE)
 ```
 
 ```python
-PURE_CKPT_DIR_ORBAX = './tmp/pure/orbax'
+PURE_CKPT_DIR = './tmp/pure/orbax'
 
 # After: Using the Orbax API
 ckptr = orbax_checkpoint.Checkpointer(orbax_checkpoint.PyTreeCheckpointHandler())  # A stateless object, can be created on the fly.
-ckptr.save(PURE_CKPT_DIR_ORBAX, CKPT_PYTREE,
+ckptr.save(PURE_CKPT_DIR, CKPT_PYTREE,
            save_args=orbax_utils.save_args_from_target(CKPT_PYTREE), force=True)
-ckptr.restore(PURE_CKPT_DIR_ORBAX, item=TARGET_PYTREE,
+ckptr.restore(PURE_CKPT_DIR, item=TARGET_PYTREE,
               restore_args=orbax_utils.restore_args_from_target(TARGET_PYTREE, mesh=None))
 ```
 
@@ -156,6 +158,7 @@ For example:
 
 ```python
 NOTARGET_CKPT_DIR = './tmp/no_target'
+flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
 checkpoints.save_checkpoint(NOTARGET_CKPT_DIR, CKPT_PYTREE, step=0)
@@ -188,6 +191,7 @@ For example:
 
 ```python
 ARR_CKPT_DIR = './tmp/singleton'
+flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
 checkpoints.save_checkpoint(ARR_CKPT_DIR, jnp.arange(10), step=0)

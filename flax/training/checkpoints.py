@@ -26,6 +26,7 @@ import pathlib
 import re
 import time
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
+import warnings
 
 from absl import logging
 from flax import config
@@ -566,6 +567,16 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
                                           end_time - start_time)
     return ckpt_path
 
+  warnings.warn(
+      (
+          'Flax Checkpointing will soon be deprecated in favor of Orbax'
+          ' (https://github.com/google/orbax). Please refer to the Checkpoint'
+          ' Upgrade Guide'
+          ' (https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html)'
+          ' to self-migrate your code to Orbax.'
+      ),
+      DeprecationWarning,
+  )
   if not overwrite:
     _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step) # type: ignore
 
