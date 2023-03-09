@@ -336,7 +336,9 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
   """Clean up the checkpoint space according to `overwrite`, `keep`, and `keep_every_n_steps` parameters.
   """
   dir_path, prefix = os.path.split(base_path)
-  checkpoint_files: List[Any] = [pathlib.PurePath(c) for c in io.listdir(dir_path)]
+  checkpoint_files: List[Any] = [
+      pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)
+  ]
   checkpoint_files = [
       os.path.join(dir_path, c)
       for c in checkpoint_files
