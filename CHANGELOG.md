@@ -24,6 +24,15 @@ vNext
 -
 -
 
+0.6.7
+-----
+- New checkpoints will be saved using Orbax! Please check out [upgrade guide](https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html) and consider migrating completely to the Orbax API.
+  - You could `flax.config.update('flax_use_orbax_checkpointing', False)` to temporarily disable this migration, but note that Flax legacy checkpointing will be removed 3 months from Mar 10, 2023.
+- Migrating `FrozenDict` to regular dict: utility functions now work on both.
+- Migrated Flax dataclass and `FrozenDict` to JAX pytree keypath API.
+- Fixed pytype and improved typing for `Module`
+- Fixed up uses of PyTree and PyTreeDef types.
+
 0.6.6
 -----
 - 0.6.5 was yanked so this release contains all that was in 0.6.5 as well.
