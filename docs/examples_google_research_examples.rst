@@ -46,40 +46,51 @@ Colorization Transformer (ColTran)
 
     - *"We presented the Colorization Transformer (ColTran), an architecture that entirely relies on selfattention for image colorization. We introduce conditional transformer layers, a novel building block for conditional, generative models based on self-attention. Our ablations show the superiority of employing this mechanism over a number of different baselines. Finally, we demonstrate that ColTran can generate diverse, high-fidelity colorizations on ImageNet, which are largely indistinguishable from the ground-truth even for human raters."*
 
-Vision Transformer (ViT) and MLP-Mixer Architectures
-====================================================
+Vision Transformer (ViT), MLP-Mixer Architectures *and* Big Vision
+==================================================================
 
-- `Code on GitHub <https://github.com/google-research/vision_transformer>`_
-- `Colab notebooks <https://github.com/google-research/vision_transformer#colab>`_
+- Code on GitHub:
+
+  - `Vision Transformer and MLP-Mixer Architectures <https://github.com/google-research/vision_transformer>`__
+
+  - `Big Vision <https://github.com/google-research/big_vision>`__
+
+    - *"This codebase is designed for training large-scale vision models using Cloud TPU VMs or GPU machines. It is based on Jax/Flax libraries, and uses tf.data and TensorFlow Datasets for scalable and reproducible input pipelines."*
+
+- `Colab notebooks <https://github.com/google-research/vision_transformer#colab>`__:
+
+  - The JAX code of Vision Transformers and MLP Mixers
+  - More than 50k Vision Transformer and hybrid checkpoints that were used to generate the data of "How to train your ViT?"
+
 - Research papers:
 
-  - `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`_ (Dosovitskiy et al., 2020)
+  - `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale <https://arxiv.org/abs/2010.11929>`__ (Dosovitskiy et al., 2020)
 
     - *"In vision, attention is either applied in conjunction with convolutional networks, or used to replace certain components of convolutional networks while keeping their overall structure in place. We show that this reliance on CNNs is not necessary and a pure transformer applied directly to sequences of image patches can perform very well on image classification tasks. When pre-trained on large amounts of data and transferred to multiple mid-sized or small image recognition benchmarks (ImageNet, CIFAR-100, VTAB, etc.), Vision Transformer (ViT) attains excellent results compared to state-of-the-art convolutional networks while requiring substantially fewer computational resources to train."*
 
-  - `MLP-Mixer: An All-MLP Architecture for Vision <https://arxiv.org/abs/2105.01601>`_ (Tolstikhin et al., 2021)
+  - `MLP-Mixer: An All-MLP Architecture for Vision <https://arxiv.org/abs/2105.01601>`__ (Tolstikhin et al., 2021)
 
     - *"In this paper we show that while convolutions and attention are both sufficient for good performance, neither of them are necessary. We present MLP-Mixer, an architecture based exclusively on multi-layer perceptrons (MLPs). MLP-Mixer contains two types of layers: one with MLPs applied independently to image patches (i.e. "mixing" the per-location features), and one with MLPs applied across patches (i.e. "mixing" spatial information). When trained on large datasets, or with modern regularization schemes, MLP-Mixer attains competitive scores on image classification benchmarks, with pre-training and inference cost comparable to state-of-the-art models."*
 
-  - `How to Train Your ViT? Data, Augmentation, and Regularization in Vision Transformers <https://arxiv.org/abs/2106.10270>`_ (Steiner et al., 2021)
+  - `How to Train Your ViT? Data, Augmentation, and Regularization in Vision Transformers <https://arxiv.org/abs/2106.10270>`__ (Steiner et al., 2021)
 
     - *"Vision Transformers (ViT) have been shown to attain highly competitive performance for a wide range of vision applications, such as image classification, object detection and semantic image segmentation. In comparison to convolutional neural networks, the Vision Transformer's weaker inductive bias is generally found to cause an increased reliance on model regularization or data augmentation ("AugReg" for short) when training on smaller training datasets. We conduct a systematic empirical study in order to better understand the interplay between the amount of training data, AugReg, model size and compute budget."*
 
-  - `When Vision Transformers Outperform ResNets without Pretraining or Strong Data Augmentations <https://arxiv.org/abs/2106.01548>`_ (X. Chen et al., 2021)
+  - `When Vision Transformers Outperform ResNets without Pretraining or Strong Data Augmentations <https://arxiv.org/abs/2106.01548>`__ (X. Chen et al., 2021)
 
     - *"Vision Transformers (ViTs) and MLPs signal further efforts on replacing hand-wired features or inductive biases with general-purpose neural architectures. Existing works empower the models by massive data, such as large-scale pre-training and/or repeated strong data augmentations, and still report optimization-related problems (e.g., sensitivity to initialization and learning rates). Hence, this paper investigates ViTs and MLP-Mixers from the lens of loss geometry, intending to improve the models' data efficiency at training and generalization at inference."*
 
-  - `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`_ (X. Zhai et al., 2021)
+  - `LiT: Zero-Shot Transfer with Locked-image Text Tuning <https://arxiv.org/abs/2111.07991>`__ (X. Zhai et al., 2021)
 
     - *"This paper presents contrastive-tuning, a simple method employing contrastive training to align image and text models while still taking advantage of their pre-training. In our empirical study we find that locked pre-trained image models with unlocked text models work best. We call this instance of contrastive-tuning "Locked-image Tuning" (LiT), which just teaches a text model to read out good representations from a pre-trained image model for new tasks. A LiT model gains the capability of zero-shot transfer to new vision tasks, such as image classification or retrieval. The proposed LiT is widely applicable; it works reliably with multiple pre-training methods (supervised and unsupervised) and across diverse architectures (ResNet, Vision Transformers and MLP-Mixer) using three different image-text datasets."*
 
 Scaling Vision with Sparse Mixture of Experts (MoE)
 ===================================================
 
-- `Code on GitHub <https://github.com/google-research/vmoe>`_
+- `Code on GitHub <https://github.com/google-research/vmoe>`__
 - Research paper:
 
-  - `Scaling Vision with Sparse Mixture of Experts <https://arxiv.org/abs/2106.05974>`_ (Riquelme et al., 2021)
+  - `Scaling Vision with Sparse Mixture of Experts <https://arxiv.org/abs/2106.05974>`__ (Riquelme et al., 2021)
 
     - *"Sparsely-gated Mixture of Experts networks (MoEs) have demonstrated excellent scalability in Natural Language Processing. In Computer Vision, however, almost all performant networks are "dense", that is, every input is processed by every parameter. We present a Vision MoE (V-MoE), a sparse version of the Vision Transformer, that is scalable and competitive with the largest dense networks... we demonstrate the potential of V-MoE to scale vision models, and train a 15B parameter model that attains 90.35% on ImageNet..."*
 
@@ -119,7 +130,7 @@ Surrogate Gap Minimization Improves Sharpness-Aware Training
 - `Code on GitHub <https://github.com/google-research/big_vision/tree/main/big_vision/trainers/proj/gsam>`__
 - Research paper:
 
-  - `Surrogate Gap Minimization Improves Sharpness-Aware Training <https://arxiv.org/abs/2203.08065>`_ (J. Zhuang et al., 2022)
+  - `Surrogate Gap Minimization Improves Sharpness-Aware Training <https://arxiv.org/abs/2203.08065>`__ (J. Zhuang et al., 2022)
 
     - *"The recently proposed Sharpness-Aware Minimization (SAM) improves generalization by minimizing a perturbed loss defined as the maximum loss within a neighborhood in the parameter space. However, we show that both sharp and flat minima can have a low perturbed loss, implying that SAM does not always prefer flat minima. Instead, we define a surrogate gap, a measure equivalent to the dominant eigenvalue of Hessian at a local minimum when the radius of neighborhood (to derive the perturbed loss) is small. The surrogate gap is easy to compute and feasible for direct minimization during training. Based on the above observations, we propose Surrogate Gap Guided Sharpness-Aware Minimization (GSAM), a novel improvement over SAM with negligible computation overhead..."*
 
@@ -193,7 +204,7 @@ Amos Optimizer *and* JEstimator
 
 - Research paper:
 
-  - `Amos: An Adam-style Optimizer with Adaptive Weight Decay towards Model-Oriented Scale <https://arxiv.org/abs/2210.11693>`_ (Tian and Parikh, 2022)
+  - `Amos: An Adam-style Optimizer with Adaptive Weight Decay towards Model-Oriented Scale <https://arxiv.org/abs/2210.11693>`__ (Tian and Parikh, 2022)
 
     - Presents *"Amos, an optimizer compatible with the optax library, and JEstimator, a light-weight library with a tf.Estimator-like interface to manage T5X-compatible checkpoints for machine learning programs in JAX."* *"When used for pre-training BERT variants and T5, Amos consistently converges faster than the state-of-the-art settings of AdamW, achieving better validation loss within <=70% training steps and time, while requiring <=51% memory for slot variables."*
 
