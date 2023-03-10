@@ -833,7 +833,7 @@ class Scope:
         # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
           raise errors.ScopeParamShapeError(name, self.path_text,
-                                            jnp.shape(val), jnp.shape(abs_val))
+                                            jnp.shape(abs_val), jnp.shape(val))
     else:
       if not self.is_mutable_collection('params'):
         if self.is_collection_empty('params'):
