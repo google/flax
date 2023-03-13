@@ -287,6 +287,8 @@ def with_partitioning(
   Args:
     fn: The function to be wrapped. Typically this is an initializer.
     names: The logical axis passed to ``Partitioned``.
+    mesh: The mesh to use for the partitioning. If None, the global mesh
+      resource is used if available.
   Returns:
     A function wrapping ``fn`` that will return an instance of ``Partitioned``.
   """

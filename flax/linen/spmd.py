@@ -283,8 +283,8 @@ class LogicallyPartitioned(meta.Partitioned):
 def with_logical_partitioning(
     fn: Callable[..., Any],
     names: meta.LogicalNames,
-    rules: Optional[LogicalRules] = None,
     mesh: Optional[jax.sharding.Mesh] = None,
+    rules: Optional[LogicalRules] = None,
   ) ->  Callable[..., LogicallyPartitioned]:
   """Wraps a function's return value with LogicallyPartitioned.
 
@@ -297,6 +297,10 @@ def with_logical_partitioning(
   Args:
     fn: The function to be wrapped. Typically this is an initializer.
     names: The logical axis passed to ``LogicallyPartitioned``.
+    mesh: The mesh to use for the partitioning. If None, the global mesh
+      resource is used if available.
+    rules: Optional logical to mesh rules use. If None, the global rules
+      are used if available.
   Returns:
     A function wrapping ``fn`` that will return an instance of
     ``LogicallyPartitioned``.
