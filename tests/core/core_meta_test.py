@@ -19,6 +19,8 @@ from flax.core import init, lift, meta, nn
 import jax
 from jax import numpy as jnp
 from jax import random
+from jax import sharding
+from jax.experimental import mesh_utils
 
 
 class MetaTest(absltest.TestCase):
@@ -129,6 +131,32 @@ class MetaTest(absltest.TestCase):
         },
     )
 
+  def test_boxed_param_with_mesh(self):
+    devices = mesh_utils.create_device_mesh((jax.local_device_count(), 1))
+    mesh = sharding.Mesh(devices, ('in', 'out'))
+
+    def f(scope, x):
+        kernel_init = meta.with_partitioning(
+          nn.initializers.ones_init(),('in', 'out'), mesh=mesh)
+        kernel = scope.param('kernel', kernel_init, (x.shape[-1], 2))
+        kernel_box = scope.get_variable('params', 'kernel')
+        self.assertIsInstance(kernel_box, meta.Partitioned)
+        self.assertEqual(kernel_box.names, ('in', 'out'))
+        return x @ kernel
+
+    @jax.jit
+    def create_state():
+      y, variables = init(f)(random.PRNGKey(0), jnp.zeros((8, 4)))
+      spec = meta.get_partition_spec(variables)
+      shardings = jax.tree_map(lambda s: sharding.NamedSharding(mesh, s), spec)
+      variables = jax.lax.with_sharding_constraint(variables, shardings)
+      return variables
+
+
+    variables = create_state()
+    self.assertEqual(variables['params']['kernel'].names,
+                     ('in', 'out'))
+    self.assertIs(variables['params']['kernel'].mesh, mesh)
 
 if __name__ == '__main__':
   absltest.main()

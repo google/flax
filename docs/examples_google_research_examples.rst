@@ -29,7 +29,7 @@ Self-attention Does Not Need O(n^2) Memory
 - Research paper:
 
   - `Self-attention Does Not Need O(n^2) Memory <https://arxiv.org/abs/2112.05682>`__ (Rabe and Staats, 2021)
-  
+
     - *"We present a very simple algorithm for attention that requires O(1) memory with respect to sequence length and an extension to self-attention that requires O(log n) memory. This is in contrast with the frequently stated belief that self-attention requires O(n^2) memory. While the time complexity is still O(n^2), device memory rather than compute capability is often the limiting factor on modern accelerators. Thus, reducing the memory requirements of attention allows processing of longer sequences than might otherwise be feasible..."*
 
 Computer vision
