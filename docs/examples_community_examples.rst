@@ -80,10 +80,10 @@ Tutorials
       - Author
       - Task type
       - Reference
-    * -
-      -
-      -
-      -
+    * - `Transformers from scratch with JAX/Flax <https://github.com/kenkenpa2126/Transformers_from_scratch_with_JAX-Flax>`__
+      - `@kenkenpa2126 <https://github.com/kenkenpa2126>`__
+      - Language modeling
+      - Attention is All you Need, GPT-2, ...
 
 Contributing policy
 *******************
