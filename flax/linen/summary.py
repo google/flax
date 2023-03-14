@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 import dataclasses
 import io
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Type, Union
+from flax.core import unfreeze
 
 import flax.linen.module as module_lib
 from flax.core import meta
@@ -310,7 +311,7 @@ def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) ->
   path_variables = {}
 
   for collection in variables:
-    collection_variables = jax.tree_util.tree_map(lambda x: x, variables[collection]) # make a deep copy
+    collection_variables = variables[collection]
     for name in path:
       if name not in collection_variables:
         collection_variables = None
@@ -318,7 +319,7 @@ def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) ->
       collection_variables = collection_variables[name]
 
     if collection_variables is not None:
-      path_variables[collection] = collection_variables
+      path_variables[collection] = unfreeze(collection_variables)
 
   return path_variables
 

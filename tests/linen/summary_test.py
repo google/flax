@@ -571,6 +571,18 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('baz', lines[7])
     self.assertIn('qux', lines[8])
 
+  def test_tabulate_param_count(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        h = nn.Dense(4)(x)
+        return nn.Dense(2)(h)
+
+    x = jnp.ones((16, 9))
+    rep = Foo().tabulate(jax.random.PRNGKey(0), x, console_kwargs=CONSOLE_TEST_KWARGS)
+    lines = rep.splitlines()
+    self.assertIn('Total Parameters: 50', lines[-2])
+
 
 if __name__ == '__main__':
   absltest.main()
