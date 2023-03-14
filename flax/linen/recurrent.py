@@ -277,12 +277,12 @@ class OptimizedLSTMCell(RNNCellBase):
           features=hidden_features, use_bias=False,
           param_dtype=self.param_dtype,
           kernel_init=self.kernel_init, bias_init=self.bias_init,
-          name=f'i{component}')(inputs)
+          name=f'i{component}')(inputs) # type: ignore[call-arg]
       dense_params_h[component] = DenseParams(
           features=hidden_features, use_bias=True,
           param_dtype=self.param_dtype,
           kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
-          name=f'h{component}')(h)
+          name=f'h{component}')(h) # type: ignore[call-arg]
     dense_h = _concat_dense(h, dense_params_h, use_bias=True)
     dense_i = _concat_dense(inputs, dense_params_i, use_bias=False)
 

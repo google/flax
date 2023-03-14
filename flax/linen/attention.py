@@ -351,7 +351,7 @@ class MultiHeadDotProductAttention(Module):
         param_dtype=self.param_dtype,
         precision=self.precision,
         dot_general=self.out_dot_general,
-        name='out',
+        name='out', # type: ignore[call-arg]
     )(x)
     return out
 
