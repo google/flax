@@ -888,6 +888,9 @@ def restore_checkpoint(
       restore_args = jax.tree_util.tree_map(make_restore_args, target)
     restored = orbax_checkpointer.restore(
         ckpt_path, item=target, restore_args=restore_args)
+    restored = serialization.to_state_dict(restored)
+    if target is not None:
+      restored = serialization.from_state_dict(target, restored)
     end_time = time.time()
     monitoring.record_event_duration_secs(_READ_CHECKPOINT_EVENT,
                                           end_time - start_time)
