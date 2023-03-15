@@ -200,11 +200,10 @@ def restore_checkpoint(state, workdir):
 
 
 def save_checkpoint(state, workdir):
-  if jax.process_index() == 0:
-    # get train state from the first replica
-    state = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state))
-    step = int(state.step)
-    checkpoints.save_checkpoint(workdir, state, step, keep=3)
+  state = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state))
+  step = int(state.step)
+  logging.info('Saving checkpoint step %d.', step)
+  checkpoints.save_checkpoint_multiprocess(workdir, state, step, keep=3)
 
 
 # pmean only works inside pmap because it needs an axis name.

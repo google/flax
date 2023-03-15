@@ -553,7 +553,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Save a checkpoint on one host after every checkpoint_freq steps.
       save_checkpoint = (step % config.checkpoint_every_steps == 0 or
                          is_last_step)
-      if config.save_checkpoints and save_checkpoint and jax.process_index() == 0:
+      if config.save_checkpoints and save_checkpoint:
+        logging.info("Saving checkpoint step %d.", step)
         with report_progress.timed("checkpoint"):
-          checkpoints.save_checkpoint(workdir, jax_utils.unreplicate(state),
-                                      step)
+          checkpoints.save_checkpoint_multiprocess(
+              workdir, jax_utils.unreplicate(state), step
+          )

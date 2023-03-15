@@ -550,7 +550,10 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
   if config.flax_use_orbax_checkpointing or orbax_checkpointer:
     if jax.process_count() > 1:
       logging.warning(
-          'Multiple JAX processes detected when saving checkpoint. Please note that only process 0 will execute the save, and you may lose data if the checkpoints saved by other processes contain unique data.'
+          'Multiple JAX processes detected when saving checkpoint. Please '
+          'note that only process 0 will execute the save, and you may lose '
+          'data if the checkpoints saved by other processes contain unique '
+          'data (not a likely scenario).'
       )
     # Make sure any previous work is done before making file changes.
     if orbax_checkpointer and isinstance(orbax_checkpointer,
@@ -562,8 +565,10 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     save_args = orbax_utils.save_args_from_target(target)
     orbax_checkpointer.save(
         ckpt_path, target, save_args=save_args, force=overwrite)
-    _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
-                          keep_every_n_steps, True)
+    # Do a process check here in case people call this for multihost.
+    if process_index() == 0:
+      _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
+                            keep_every_n_steps, True)
     end_time = time.time()
     monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT,
                                           end_time - start_time)
@@ -679,6 +684,17 @@ def save_checkpoint_multiprocess(
     monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT,
                                           end_time - start_time)
     return ckpt_path
+
+  warnings.warn(
+      (
+          'Flax Checkpointing will soon be deprecated in favor of Orbax'
+          ' (https://github.com/google/orbax). Please refer to the Checkpoint'
+          ' Upgrade Guide'
+          ' (https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html)'
+          ' to self-migrate your code to Orbax.'
+      ),
+      DeprecationWarning,
+  )
 
   target = serialization.to_state_dict(target)
   target, mpa_targets = _split_mp_arrays(target)
