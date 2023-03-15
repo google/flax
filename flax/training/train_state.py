@@ -51,9 +51,9 @@ class TrainState(struct.PyTreeNode):
   """
   step: int
   apply_fn: Callable = struct.field(pytree_node=False)
-  params: core.FrozenDict[str, Any]
+  params: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
   tx: optax.GradientTransformation = struct.field(pytree_node=False)
-  opt_state: optax.OptState
+  opt_state: optax.OptState = struct.field(pytree_node=True)
 
   def apply_gradients(self, *, grads, **kwargs):
     """Updates `step`, `params`, `opt_state` and `**kwargs` in return value.

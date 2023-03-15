@@ -19,6 +19,8 @@ from absl.testing import parameterized
 from flax import linen as nn
 from flax.core import freeze, unfreeze
 from flax.linen import partitioning
+from jax.experimental import mesh_utils
+from jax import sharding
 import jax
 from jax import random
 import jax.numpy as jnp
@@ -132,7 +134,7 @@ class PartitioningTest(parameterized.TestCase):
       wsc_fn.assert_not_called()
       _ = partitioning.with_sharding_constraint(arr, axes)
       wsc_fn.assert_called_with(
-          arr, jax.sharding.PartitionSpec('data', 'model')
+          arr, jax.sharding.PartitionSpec('data', 'model'), mesh=None
       )
 
   @mock.patch('flax.linen.spmd._with_sharding_constraint')
@@ -140,12 +142,12 @@ class PartitioningTest(parameterized.TestCase):
     arr = jnp.ones((2, 2))
     with partitioning.axis_rules(AXIS_RULES_1):
       _ = partitioning.with_sharding_constraint(arr, ('foo', 'not_recognized'))
-      wsc_fn.assert_called_with(arr, jax.sharding.PartitionSpec('data', None))
+      wsc_fn.assert_called_with(arr, jax.sharding.PartitionSpec('data', None), mesh=None)
       wsc_fn.reset_mock()
       _ = partitioning.with_sharding_constraint(
           arr, ('foo', 'not_recognized'),
           fallback=partitioning.RulesFallback.AXIS_IS_UNSHARDED)
-      wsc_fn.assert_called_with(arr, jax.sharding.PartitionSpec('data', None))
+      wsc_fn.assert_called_with(arr, jax.sharding.PartitionSpec('data', None), mesh=None)
       wsc_fn.reset_mock()
       with self.assertRaises(ValueError):
         _ = partitioning.with_sharding_constraint(
@@ -449,6 +451,39 @@ class PartitioningTest(parameterized.TestCase):
             }
         })
 
+  def test_logical_with_mesh_and_rules(self):
+    devices = mesh_utils.create_device_mesh((jax.local_device_count(), 1))
+    mesh = sharding.Mesh(devices, ('in', 'out'))
+    test = self
+    rules = (('a', 'in'), ('b', 'out'))
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        kernel_init = nn.with_logical_partitioning(
+          nn.initializers.ones_init(), ('a', 'b'), mesh=mesh, rules=rules)
+        kernel = self.param('kernel', kernel_init, (x.shape[-1], 2))
+        kernel_box = self.get_variable('params', 'kernel')
+        test.assertIsInstance(kernel_box, nn.Partitioned)
+        test.assertEqual(kernel_box.names, ('a', 'b'))
+        return x @ kernel
+
+    @jax.jit
+    def create_state():
+      module = Foo()
+      variables = module.init(random.PRNGKey(0), jnp.zeros((8, 4)))
+      logical_spec = nn.get_partition_spec(variables)
+      spec = nn.logical_to_mesh(logical_spec, rules)
+      shardings = jax.tree_map(lambda s: sharding.NamedSharding(mesh, s), spec)
+      variables = jax.lax.with_sharding_constraint(variables, shardings)
+      return variables
+
+
+    variables = create_state()
+    self.assertEqual(variables['params']['kernel'].names,
+                     ('a', 'b'))
+    self.assertIs(variables['params']['kernel'].mesh, mesh)
+    self.assertEqual(variables['params']['kernel'].rules, rules)
 
 if __name__ == '__main__':
   absltest.main()

@@ -23,7 +23,7 @@ to keep track of how variables should be partitioned with ``jax.pjit``.
 
 import abc
 import functools
-from typing import Any, Callable, Dict, Mapping, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple, TypeVar, Union
 
 from flax import errors
 from flax import struct
@@ -231,12 +231,16 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
   """
   value: Any
   names: LogicalNames = struct.field(pytree_node=False)
+  mesh: Optional[jax.sharding.Mesh] = struct.field(default=None, pytree_node=False)
 
   def unbox(self, apply_constraint=True) -> Any:
     """Returns the wrapped value with the partitioning applied as a sharding constraint."""
-    if apply_constraint and _global_mesh_defined():
-      return pjit.with_sharding_constraint(
-          self.value, self.get_partition_spec())
+    if apply_constraint and (_global_mesh_defined() or self.mesh is not None):
+      axis_resource = self.get_partition_spec()
+      if self.mesh is not None:
+        axis_resource = jax.sharding.NamedSharding(self.mesh, axis_resource)
+      return jax.lax.with_sharding_constraint(
+          self.value, axis_resource)
     else:
       return self.value
 
@@ -269,7 +273,9 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
 
 def with_partitioning(
     fn: Callable[..., Any],
-    names: LogicalNames) ->  Callable[..., Partitioned]:
+    names: LogicalNames,
+    mesh: Optional[jax.sharding.Mesh] = None,
+  ) ->  Callable[..., Partitioned]:
   """Wraps a function's return value with Partitioned.
 
   Example::
@@ -281,12 +287,14 @@ def with_partitioning(
   Args:
     fn: The function to be wrapped. Typically this is an initializer.
     names: The logical axis passed to ``Partitioned``.
+    mesh: The mesh to use for the partitioning. If None, the global mesh
+      resource is used if available.
   Returns:
     A function wrapping ``fn`` that will return an instance of ``Partitioned``.
   """
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
-    return Partitioned(fn(*args, **kwargs), names)
+    return Partitioned(fn(*args, **kwargs), names, mesh=mesh)
   return wrapper
 
 

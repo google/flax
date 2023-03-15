@@ -26,18 +26,19 @@ introducing logical axis metadata into a model's variables.
 
 import collections
 import contextlib
+import dataclasses
 import enum
 import functools
 import threading
-from typing import (Any, Callable, List, Optional, Sequence, Tuple, Union)
-import dataclasses
+from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
+
+import jax
+from jax.experimental import maps, pjit
+from flax import struct
 
 from flax.core import meta
 from flax.core.lift import In as ScanIn  # pylint: disable=unused-import
 from flax.core.lift import Out as ScanOut  # pylint: disable=unused-import
-import jax
-from jax.experimental import maps
-from jax.experimental import pjit
 
 # Real types and dummy aliases for documentation
 LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str], None]]]
@@ -203,22 +204,27 @@ class RulesFallback(enum.Enum):
 
 def _with_sharding_constraint(
     x: Array,
-    axis_resources: Optional[jax.sharding.PartitionSpec]):
+    axis_resources: Optional[jax.sharding.PartitionSpec],
+    mesh: Optional[jax.sharding.Mesh] = None):
   """Wrapper for pjit with_sharding_constraint, no-op on cpu or outside pjit."""
-  if jax.devices()[0].platform == 'cpu' or not _global_mesh_defined():
+  if jax.devices()[0].platform == 'cpu' or (not _global_mesh_defined() and mesh is None):
     return x
   else:
+    if mesh is not None:
+      axis_resources = jax.sharding.NamedSharding(mesh, axis_resources)
     return pjit.with_sharding_constraint(x, axis_resources)
 
 
 def _with_sharding_constraint_one_fallback(
     axis_resources: LogicalPartitionSpec,
     x: Array,
-    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
+    rules: Optional[LogicalRules] = None,
+    mesh: Optional[jax.sharding.Mesh] = None):
   """Either imposes a sharding constraint or applies fallback."""
-  mesh_axes = _logical_to_mesh_axes(axis_resources)
+  mesh_axes = _logical_to_mesh_axes(axis_resources, rules)
   if mesh_axes is None:
-    return _with_sharding_constraint(x, None)
+    return _with_sharding_constraint(x, None, mesh=mesh)
 
   if fallback == RulesFallback.AXIS_IS_UNSHARDED:
     mesh_axes = [None if x is _unassigned_axis else x for x in mesh_axes]
@@ -228,7 +234,7 @@ def _with_sharding_constraint_one_fallback(
         raise ValueError(f'Axis names {axis_resources} did not match a rule')
       else:
         return x
-  return _with_sharding_constraint(x, jax.sharding.PartitionSpec(*mesh_axes))
+  return _with_sharding_constraint(x, jax.sharding.PartitionSpec(*mesh_axes), mesh=mesh)
 
 
 def _is_logical_spec(x):
@@ -239,15 +245,20 @@ def _is_logical_spec(x):
 def with_logical_constraint(
     x: ArrayPytree,
     logical_axis_resources: LogicalPartitionSpecPytree,
+    rules: Optional[LogicalRules] = None,
+    mesh: Optional[jax.sharding.Mesh] = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
   """Version of pjit's with_sharding_constraint that uses logical axis names."""
   # If no axis binding is set, this is a no-op.
-  if not _axis_rules.rules or logical_axis_resources is None:
+  if rules is None:
+    rules = _axis_rules.rules
+  if not rules or logical_axis_resources is None:
     return x
   # Translate logical names to mesh assignments.
   return jax.tree_util.tree_map(
       functools.partial(
-          _with_sharding_constraint_one_fallback, fallback=fallback),
+          _with_sharding_constraint_one_fallback, fallback=fallback,
+          rules=rules, mesh=mesh),
       logical_axis_resources,
       x,
       is_leaf=_is_logical_spec)
@@ -258,18 +269,23 @@ def with_logical_constraint(
 
 
 class LogicallyPartitioned(meta.Partitioned):
+  rules: Optional[LogicalRules] = struct.field(default=None, pytree_node=False)
   def unbox(self, apply_constraint=True) -> Any:
     """Returns the wrapped value with the partitioning constraint applied."""
-    if apply_constraint and _global_mesh_defined():
+    if apply_constraint and (_global_mesh_defined() or self.mesh is not None):
       return with_logical_constraint(
-          self.value, self.get_partition_spec())
+          self.value, self.get_partition_spec(),
+          rules=self.rules, mesh=self.mesh)
     else:
       return self.value
 
 
 def with_logical_partitioning(
     fn: Callable[..., Any],
-    names: meta.LogicalNames) ->  Callable[..., LogicallyPartitioned]:
+    names: meta.LogicalNames,
+    mesh: Optional[jax.sharding.Mesh] = None,
+    rules: Optional[LogicalRules] = None,
+  ) ->  Callable[..., LogicallyPartitioned]:
   """Wraps a function's return value with LogicallyPartitioned.
 
   Example::
@@ -281,11 +297,16 @@ def with_logical_partitioning(
   Args:
     fn: The function to be wrapped. Typically this is an initializer.
     names: The logical axis passed to ``LogicallyPartitioned``.
+    mesh: The mesh to use for the partitioning. If None, the global mesh
+      resource is used if available.
+    rules: Optional logical to mesh rules use. If None, the global rules
+      are used if available.
   Returns:
     A function wrapping ``fn`` that will return an instance of
     ``LogicallyPartitioned``.
   """
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
-    return LogicallyPartitioned(fn(*args, **kwargs), names)
+    return LogicallyPartitioned(fn(*args, **kwargs), names,
+                                rules=rules, mesh=mesh)
   return wrapper
