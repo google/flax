@@ -737,7 +737,8 @@ def _all_checkpoints(ckpt_dir: Union[str, os.PathLike],
       os.path.join(ckpt_dir, c)
       for c in checkpoint_files
       if c.match(f'{prefix}*') and not c.match(f'{prefix}tmp') and
-      not c.match(f'*{MP_ARRAY_POSTFIX}')
+      not c.match(f'*{MP_ARRAY_POSTFIX}') and
+      not c.match(f'*{orbax.utils.TMP_DIR_SUFFIX}*')
   ]
   checkpoint_files = natural_sort(checkpoint_files)
   if checkpoint_files:

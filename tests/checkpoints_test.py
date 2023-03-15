@@ -32,6 +32,8 @@ import jax
 from jax import numpy as jnp
 import numpy as np
 
+import orbax.checkpoint as orbax
+
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
@@ -338,6 +340,11 @@ class CheckpointsTest(parameterized.TestCase):
         os.path.join(tmp_dir, 'test_10'),
     )
     self.assertEqual(checkpoints.latest_checkpoint(tmp_dir, 'ckpt_'), None)
+
+    path = f'orbaxtest_{orbax.utils.TMP_DIR_SUFFIX}_10'
+    with io.GFile(os.path.join(tmp_dir, path), 'w') as f:
+      f.write('orbaxtest_10')
+    self.assertIsNone(checkpoints.latest_checkpoint(tmp_dir, 'orbaxtest_'))
 
   @parameterized.parameters(
       {'step_type': int, 'steps': [1, 5, 112]},
