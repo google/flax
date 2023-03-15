@@ -260,9 +260,9 @@ class ScopeParamShapeError(FlaxError):
   """
 
   def __init__(self, param_name, scope_path, value_shape, init_shape):
-    super().__init__('Inconsistent shapes between value and initializer '
-                     f'for parameter "{param_name}" in "{scope_path}": '
-                     f'{value_shape}, {init_shape}.')
+    super().__init__(f'Initializer expected to generate shape {init_shape} '
+                     f'but got shape {value_shape} instead for parameter '
+                     f'"{param_name}" in "{scope_path}".')
 
 
 class ScopeVariableNotFoundError(FlaxError):
