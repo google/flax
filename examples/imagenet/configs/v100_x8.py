@@ -26,3 +26,9 @@ def get_config():
   config.cache = True
 
   return config
+
+
+metrics = default_lib.metrics
+
+
+metrics = default_lib.metrics

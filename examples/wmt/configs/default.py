@@ -30,11 +30,11 @@ def get_config():
   config.max_corpus_chars = 10**7
 
   # Name of TFDS translation dataset to use.
-  config.dataset_name = "wmt17_translate/de-en"
+  config.dataset_name = 'wmt17_translate/de-en'
 
   # Optional name of TFDS translation dataset to use for evaluation.
-  config.eval_dataset_name = "wmt14_translate/de-en"
-  config.eval_split = "test"
+  config.eval_dataset_name = 'wmt14_translate/de-en'
+  config.eval_split = 'test'
 
   # Reverse the direction of translation.
   config.reverse_translation = False
@@ -107,10 +107,23 @@ def get_config():
   # Frequency of eval during training, e.g. every 1000 steps.
   config.eval_every_steps = 1_000
 
-  # Use float16 (GPU) or bfloat16 (TPU) mixed precision training instead of float32.
+  # Use float16/bfloat16 (GPU/TPU) mixed precision training instead of float32.
   config.use_mixed_precision = True
 
   # Integer for PRNG random seed.
   config.seed = 0
 
   return config
+
+
+def metrics():
+  return [
+      'train_loss',
+      'eval_loss',
+      'bleu',
+      'eval_accuracy',
+      'train_accuracy',
+      'uptime',
+      'steps_per_sec',
+      'train_learning_rate',
+  ]

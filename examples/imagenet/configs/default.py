@@ -55,3 +55,14 @@ def get_config():
   config.num_train_steps = -1
   config.steps_per_eval = -1
   return config
+
+
+def metrics():
+  return [
+      'train_loss',
+      'eval_loss',
+      'train_accuracy',
+      'eval_accuracy',
+      'steps_per_second',
+      'train_learning_rate',
+  ]

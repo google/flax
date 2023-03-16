@@ -27,3 +27,6 @@ def get_config():
   config.half_precision = True
 
   return config
+
+
+metrics = default_lib.metrics

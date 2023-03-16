@@ -26,3 +26,7 @@ def get_config():
   config.batch_size = 128
   config.num_epochs = 10
   return config
+
+
+def metrics():
+  return []
