@@ -34,7 +34,8 @@ Install/upgrade Flax and [Orbax](https://github.com/google/orbax). For JAX insta
 <!-- #endregion -->
 
 ```python tags=["skip-execution"]
-! pip install -U -qq jaxlib jax flax orbax
+# replace with `pip install flax` after release 0.6.9.
+! pip install -U "git+https://github.com/google/flax.git@main#egg=flax"
 
 # Orbax needs to enable asyncio in a Colab environment.
 ! pip install -qq nest_asyncio
@@ -226,8 +227,8 @@ custom_state = CustomTrainState.create(
 custom_target = {'model': custom_state, 'config': None, 'data': [jnp.zeros_like(x1)]}
 try:
     checkpoints.restore_checkpoint(ckpt_dir, target=custom_target, step=0)
-except ValueError as e:
-    print('ValueError when target state has an unmentioned field:')
+except KeyError as e:
+    print('KeyError when target state has an unmentioned field:')
     print(e)
     print('')
 
@@ -236,12 +237,8 @@ except ValueError as e:
 custom_ckpt = {'model': custom_state, 'config': config, 'data': [x1]}
 checkpoints.save_checkpoint(ckpt_dir, custom_ckpt, step=1, overwrite=True,
                             keep=2, orbax_checkpointer=orbax_checkpointer)
-try:
-    checkpoints.restore_checkpoint(ckpt_dir, target=target, step=1)
-except ValueError as e:
-    print('ValueError when target state misses a recorded field:')
-    print(e)
-
+print('Fields not present target state ("batch_stats" in this case) are skipped:')
+checkpoints.restore_checkpoint(ckpt_dir, target=target, step=1)
 ```
 
 <!-- #region id="379c2255" -->
@@ -254,9 +251,9 @@ But if you must restore checkpoints and Flax dataclasses with incompatible field
 # Pass no target to get a raw state dictionary first.
 raw_state_dict = checkpoints.restore_checkpoint(ckpt_dir, target=None, step=0)
 # Add/remove fields as needed.
-raw_state_dict['model']['batch_stats'] = np.arange(10)
+raw_state_dict['model']['batch_stats'] = np.flip(np.arange(10))
 # Restore the classes with correct target now
-serialization.from_state_dict(custom_target, raw_state_dict)
+orbax.checkpoint.utils.deserialize_tree(custom_target, raw_state_dict, keep_empty_nodes=True)
 ```
 
 <!-- #region id="a6b39501" -->
