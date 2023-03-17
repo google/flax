@@ -58,8 +58,7 @@ To contribute code to Flax on GitHub, follow these steps:
    ```bash
    git clone https://github.com/YOUR_USERNAME/flax
    cd flax
-   pip install -e .[all]
-   pip install -e .[testing]
+   pip install -e .[all,testing]
    pip install -r docs/requirements.txt
    ```
 
