@@ -115,6 +115,7 @@ jobs:
         venv/bin/python3 -m pip install -U --upgrade-strategy eager .[all,testing]
         venv/bin/python3 -m pip install -U --upgrade-strategy eager tensorflow_datasets[dev]
         venv/bin/python3 -m pip install -U --upgrade-strategy eager -r docs/requirements.txt
+        venv/bin/python3 -m pip install -e . # reinstall in editable mode
     # - name: Install Flax
     #   run: |
     #     venv/bin/python3 -m pip install -e .[all]
