@@ -111,10 +111,9 @@ jobs:
       # if: steps.venv_cache.outputs.cache-hit != 'true'
       run: |
         if [ ! -d "venv" ]; then python3 -m venv venv; fi
-        venv/bin/python3 -m pip install -U pip
-        venv/bin/python3 -m pip install -U --upgrade-strategy eager .[all,testing]
-        venv/bin/python3 -m pip install -U --upgrade-strategy eager tensorflow_datasets[dev]
-        venv/bin/python3 -m pip install -U --upgrade-strategy eager -r docs/requirements.txt
+        venv/bin/python3 -m pip install -U .[all,testing]
+        venv/bin/python3 -m pip install -U tensorflow_datasets[dev]
+        venv/bin/python3 -m pip install -U -r docs/requirements.txt
         venv/bin/python3 -m pip install -e . # reinstall in editable mode
     # - name: Install Flax
     #   run: |
