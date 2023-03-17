@@ -862,7 +862,7 @@ def restore_checkpoint(
 
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   ckpt_dir = safe_normpath(ckpt_dir)
-  if step:
+  if step is not None:
     ckpt_path = _checkpoint_path(ckpt_dir, step, prefix)
     if not io.exists(ckpt_path):
       raise ValueError(f'Matching checkpoint not found: {ckpt_path}')
@@ -883,10 +883,10 @@ def restore_checkpoint(
     else:
       ckpt_path = ckpt_dir
 
-  logging.info('Restoring checkpoint from %s', ckpt_path)
-
   # Restore the checkpoint with Orbax if needed.
   is_orbax = io.exists(os.path.join(ckpt_path, ORBAX_CKPT_FILENAME))
+  ckpt_type = 'orbax' if is_orbax else 'legacy Flax'
+  logging.info(f'Restoring {ckpt_type} checkpoint from {ckpt_path}')
   if is_orbax:
     if not orbax_checkpointer:
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
