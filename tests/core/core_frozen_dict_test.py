@@ -129,17 +129,16 @@ class FrozenDictTest(parameterized.TestCase):
         jax.tree_util.tree_unflatten(tdef, flat_leaves),
         frozen,
     )
-    if hasattr(jax.tree_util, 'tree_flatten_with_path'):
-      flat_path_leaves, tdef = jax.tree_util.tree_flatten_with_path(frozen)
-      self.assertEqual(
-          flat_path_leaves,
-          [((jax.tree_util.DictKey('b'), jax.tree_util.DictKey('a')), 2),
-           ((jax.tree_util.DictKey('c'),), 1)],
-      )
-      self.assertEqual(
-          jax.tree_util.tree_unflatten(tdef, [l for _, l in flat_path_leaves]),
-          frozen,
-      )
+    flat_path_leaves, tdef = jax.tree_util.tree_flatten_with_path(frozen)
+    self.assertEqual(
+        flat_path_leaves,
+        [((jax.tree_util.DictKey('b'), jax.tree_util.DictKey('a')), 2),
+         ((jax.tree_util.DictKey('c'),), 1)],
+    )
+    self.assertEqual(
+        jax.tree_util.tree_unflatten(tdef, [l for _, l in flat_path_leaves]),
+        frozen,
+    )
 
 if __name__ == '__main__':
   absltest.main()

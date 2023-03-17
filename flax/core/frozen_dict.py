@@ -47,8 +47,7 @@ def _indent(x, num_spaces):
   return '\n'.join(indent_str + line for line in lines[:-1]) + '\n'
 
 
-# TODO(ivyzheng): change to register_pytree_with_keys_class after JAX release.
-@jax.tree_util.register_pytree_node_class
+@jax.tree_util.register_pytree_with_keys_class
 class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
   __slots__ = ('_dict', '_hash')
@@ -149,26 +148,22 @@ class FrozenDict(Mapping[K, V]):
     """
     return unfreeze(self)
 
-  # TODO(ivyzheng): remove this after JAX 0.4.6 release.
-  def tree_flatten(self) -> Tuple[Tuple[Any, ...], Hashable]:
+  def tree_flatten_with_keys(self) -> Tuple[Tuple[Any, ...], Hashable]:
     """Flattens this FrozenDict.
 
     Returns:
       A flattened version of this FrozenDict instance.
     """
     sorted_keys = sorted(self._dict)
-    return tuple([self._dict[k] for k in sorted_keys]), tuple(sorted_keys)
+    return tuple(
+        [(jax.tree_util.DictKey(k), self._dict[k]) for k in sorted_keys]
+    ), tuple(sorted_keys)
 
   @classmethod
   def tree_unflatten(cls, keys, values):
     # data is already deep copied due to tree map mechanism
     # we can skip the deep copy in the constructor
     return cls({k: v for k, v in zip(keys, values)}, __unsafe_skip_copy__=True)
-
-
-jax.tree_util.register_keypaths(
-    FrozenDict, lambda fd: tuple(jax.tree_util.DictKey(k) for k in sorted(fd))
-)
 
 
 def _prepare_freeze(xs: Any) -> Any:
