@@ -96,7 +96,9 @@ class ResNet(nn.Module):
                    use_running_average=not train,
                    momentum=0.9,
                    epsilon=1e-5,
-                   dtype=self.dtype)
+                   dtype=self.dtype,
+                   axis_name='batch')
+
 
     x = conv(self.num_filters, (7, 7), (2, 2),
              padding=[(3, 3), (3, 3)],
