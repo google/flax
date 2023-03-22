@@ -121,8 +121,9 @@ from .recurrent import (
   GRUCell as GRUCell,
   LSTMCell as LSTMCell,
   OptimizedLSTMCell as OptimizedLSTMCell,
-  RNNCellBase as RNNCellBase,
   RNN as RNN,
+  RNNCellBase as RNNCellBase,
+  Bidirectional as Bidirectional,
 )
 from .stochastic import Dropout as Dropout
 from .transforms import (
