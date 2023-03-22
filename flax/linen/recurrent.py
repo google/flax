@@ -18,10 +18,8 @@ THe RNNCell modules can be scanned using lifted transforms. For more information
 see: https://flax.readthedocs.io/en/latest/advanced_topics/lift.html.
 """
 
-from abc import abstractmethod
-import abc
 from functools import partial   # pylint: disable=g-importing-member
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple, Union, TypeVar
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union, TypeVar, cast
 from typing_extensions import Protocol
 from absl import logging
 
@@ -47,7 +45,7 @@ A = TypeVar('A')
 PRNGKey = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
-Array = Any
+Array = jax.Array
 Carry = Any
 CarryHistory = Any
 Output = Any
@@ -174,7 +172,7 @@ class DenseParams(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
 
   @compact
-  def __call__(self, inputs: Array) -> Tuple[Array, Array]:
+  def __call__(self, inputs: Array) -> Tuple[Array, Optional[Array]]:
     k = self.param(
         'kernel', self.kernel_init, (inputs.shape[-1], self.features),
         self.param_dtype)
@@ -246,14 +244,19 @@ class OptimizedLSTMCell(RNNCellBase):
     hidden_features = h.shape[-1]
 
     def _concat_dense(inputs: Array,
-                      params: Mapping[str, Tuple[Array, Array]],
-                      use_bias: bool = True) -> Array:
+                      params: Mapping[str, Tuple[Array, Optional[Array]]],
+                      use_bias: bool = True) -> Dict[str, Array]:
       # Concatenates the individual kernels and biases, given in params, into a
       # single kernel and single bias for efficiency before applying them using
       # dot_general.
-      kernels, biases = zip(*params.values())
+      kernels = [kernel for kernel, _ in params.values()]
       kernel = jnp.concatenate(kernels, axis=-1)
       if use_bias:
+        biases = []
+        for _, bias in params.values():
+          if bias is None:
+            raise ValueError('bias is None but use_bias is True.')
+          biases.append(bias)
         bias = jnp.concatenate(biases, axis=-1)
       else:
         bias = None
@@ -596,6 +599,14 @@ class RNN(Module):
       ``(*batch, time, *features)``, else it will expect inputs with shape ``(time, *batch, *features)``.
     return_carry: if ``return_carry=False`` (default) only the output sequence is returned,
       else it will return a tuple of the final carry and the output sequence.
+    reverse: if ``reverse=False`` (default) the sequence is processed from left to right and
+      returned in the original order, else it will be processed from right to left, and
+      returned in reverse order. If ``segmentation_mask`` is passed, padding will always remain
+      at the end of the sequence.
+    keep_order: if ``keep_order=True``, when ``reverse=True``
+      the output will be reversed back to the original order after processing, this is
+      useful to align sequences in bidirectional RNNs. If ``keep_order=False`` (default),
+      the output will remain in the order specified by ``reverse``.
     unroll: how many scan iterations to unroll within a single iteration of a loop,
       defaults to 1. This argument will be passed to `nn.scan`.
     variable_axes: a dictionary mapping each collection to either an integer `i` (meaning we scan over
@@ -616,6 +627,8 @@ class RNN(Module):
   cell_size: Union[int, Tuple[int, ...]]
   time_major: bool = False
   return_carry: bool = False
+  reverse: bool = False
+  keep_order: bool = False
   unroll: int = 1
   variable_axes: Mapping[lift.CollectionFilter,lift.InOutScanAxis] = FrozenDict()
   variable_broadcast: lift.CollectionFilter = 'params'
@@ -630,7 +643,9 @@ class RNN(Module):
     init_key: Optional[random.KeyArray] = None,
     segmentation_mask: Optional[Array] = None,
     return_carry: Optional[bool] = None,
-    time_major: Optional[bool] = None
+    time_major: Optional[bool] = None,
+    reverse: Optional[bool] = None,
+    keep_order: Optional[bool] = None,
   ) -> Union[Output, Tuple[Carry, Output]]:
     """
     Applies the RNN to the inputs.
@@ -651,6 +666,14 @@ class RNN(Module):
         else it will return a tuple of the final carry and the output sequence.
       time_major: if ``time_major=False`` (default) it will expect inputs with shape
         ``(*batch, time, *features)``, else it will expect inputs with shape ``(time, *batch, *features)``.
+      reverse: overrides the ``reverse`` attribute, if ``reverse=False`` (default) the sequence is
+        processed from left to right and returned in the original order, else it will be processed
+        from right to left, and returned in reverse order. If ``segmentation_mask`` is passed,
+        padding will always remain at the end of the sequence.
+      keep_order: overrides the ``keep_order`` attribute, if ``keep_order=True``, when ``reverse=True``
+        the output will be reversed back to the original order after processing, this is
+        useful to align sequences in bidirectional RNNs. If ``keep_order=False`` (default),
+        the output will remain in the order specified by ``reverse``.
     Returns:
       if ``return_carry=False`` (default) only the output sequence is returned,
       else it will return a tuple of the final carry and the output sequence.
@@ -658,9 +681,12 @@ class RNN(Module):
 
     if return_carry is None:
       return_carry = self.return_carry
-
     if time_major is None:
       time_major = self.time_major
+    if reverse is None:
+      reverse = self.reverse
+    if keep_order is None:
+      keep_order = self.keep_order
 
     # Infer the number of batch dimensions from the input shape.
     # Cells like ConvLSTM have additional spatial dimensions.
@@ -670,6 +696,13 @@ class RNN(Module):
       batch_dims = inputs.shape[1:-num_features_dims]
     else:
       batch_dims = inputs.shape[:time_axis]
+
+    # maybe reverse the sequence
+    if reverse:
+      inputs = jax.tree_map(
+        lambda x: flip_sequences(
+          x, segmentation_mask, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
+        inputs)
 
     carry: Carry
     if initial_carry is None:
@@ -717,6 +750,12 @@ class RNN(Module):
     else:
       carry, outputs = scan_output
 
+    if reverse and keep_order:
+      outputs = jax.tree_map(
+        lambda x: flip_sequences(
+          x, segmentation_mask, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
+        outputs)
+
     if return_carry:
       return carry, outputs
     else:
@@ -726,12 +765,143 @@ def _select_last(sequence: A, segmentation_mask: jnp.ndarray, axis: int) -> A:
   last_idx = segmentation_mask.sum(axis=-1) - 1
 
   def _slice_array(x: jnp.ndarray):
-    _last_idx = _expand_dims_for(last_idx, to_target=x)
+    _last_idx = _expand_dims_like(last_idx, target=x)
     x = jnp.take_along_axis(x, _last_idx, axis=axis)
     return x.squeeze(axis=axis)
 
   return jax.tree_map(_slice_array, sequence)
 
-def _expand_dims_for(x, *, to_target):
-  """Expands the shape of 'x' to match those of 'to_target' by adding singleton dimensions."""
-  return x.reshape(x.shape + (1,) * (to_target.ndim - x.ndim))
+def _expand_dims_like(x, target):
+  """Expands the shape of `x` to match `target`'s shape by adding singleton dimensions."""
+  return x.reshape(list(x.shape) + [1] * (target.ndim - x.ndim))
+
+# TODO: Make flip_sequences a method of RNN and generalize it to work with
+# multiple batch dimensions.
+def flip_sequences(
+  inputs: Array, segmentation_mask: Optional[Array], num_batch_dims: int, time_major: bool
+) -> Array:
+  """Flips a sequence of inputs along the time axis.
+
+  This function can be used to prepare inputs for the reverse direction of a
+  bidirectional LSTM. It solves the issue that, when naively flipping multiple
+  padded sequences stored in a matrix, the first elements would be padding
+  values for those sequences that were padded. This function keeps the padding
+  at the end, while flipping the rest of the elements.
+
+  Example:
+  ```python
+  inputs = [[1, 0, 0],
+            [2, 3, 0]
+            [4, 5, 6]]
+  lengths = [1, 2, 3]
+  flip_sequences(inputs, lengths) = [[1, 0, 0],
+                                     [3, 2, 0],
+                                     [6, 5, 4]]
+  ```
+
+  Args:
+    inputs: An array of input IDs <int>[batch_size, seq_length].
+    lengths: The length of each sequence <int>[batch_size].
+
+  Returns:
+    An ndarray with the flipped inputs.
+  """
+  # Compute the indices to put the inputs in flipped order as per above example.
+  time_axis = 0 if time_major else num_batch_dims
+  max_steps = inputs.shape[time_axis]
+
+  if segmentation_mask is None:
+    # reverse inputs and return
+    inputs = jnp.flip(inputs, axis=time_axis)
+    return inputs
+
+  lengths = jnp.sum(segmentation_mask, axis=time_axis, keepdims=True) # [*batch, 1]
+  # create indexes
+  idxs = jnp.arange(max_steps - 1, -1, -1) # [max_steps]
+  if time_major:
+    idxs = jnp.reshape(idxs, [max_steps] + [1] * num_batch_dims)
+  else:
+    idxs = jnp.reshape(idxs, [1] * num_batch_dims + [max_steps]) # [1, ..., max_steps]
+  idxs = (idxs + lengths) % max_steps # [*batch, max_steps]
+  idxs = _expand_dims_like(idxs, target=inputs) # [*batch, max_steps, *features]
+  # Select the inputs in flipped order.
+  outputs = jnp.take_along_axis(inputs, idxs, axis=time_axis)
+
+  return outputs
+
+
+def _concatenate(a: Array, b: Array) -> Array:
+  """Concatenates two arrays along the last dimension."""
+  return jnp.concatenate([a, b], axis=-1)
+
+class RNNBase(Protocol):
+  def __call__(
+    self,
+    inputs: jax.Array,
+    *,
+    initial_carry: Optional[Carry] = None,
+    init_key: Optional[random.KeyArray] = None,
+    segmentation_mask: Optional[Array] = None,
+    return_carry: Optional[bool] = None,
+    time_major: Optional[bool] = None,
+    reverse: Optional[bool] = None,
+    keep_order: Optional[bool] = None,
+  ) -> Union[Output, Tuple[Carry, Output]]:
+    ...
+
+class Bidirectional(Module):
+  """Processes the input in both directions and merges the results."""
+  forward_rnn: RNNBase
+  backward_rnn: RNNBase
+  merge_fn: Callable[[Array, Array], Array] = _concatenate
+  time_major: bool = False
+  return_carry: bool = False
+
+  def __call__(
+    self,
+    inputs: jax.Array,
+    *,
+    initial_carry: Optional[Carry] = None,
+    init_key: Optional[random.KeyArray] = None,
+    segmentation_mask: Optional[Array] = None,
+    return_carry: Optional[bool] = None,
+    time_major: Optional[bool] = None,
+    reverse: Optional[bool] = None,
+    keep_order: Optional[bool] = None,
+  ) -> Union[Output, Tuple[Carry, Output]]:
+    if time_major is None:
+      time_major = self.time_major
+    if return_carry is None:
+      return_carry = self.return_carry
+    if init_key is not None:
+      key_forward, key_backward = random.split(init_key)
+    else:
+      key_forward = key_backward = None
+    if initial_carry is not None:
+      initial_carry_forward, initial_carry_backward = initial_carry
+    else:
+      initial_carry_forward = initial_carry_backward = None
+    # Throw a warning in case the user accidentally re-uses the forward RNN
+    # for the backward pass and does not intend for them to share parameters.
+    if self.forward_rnn is self.backward_rnn:
+      logging.warning(("forward_rnn and backward_rnn is the same object, so "
+      "they will share parameters."))
+
+    # Encode in the forward direction.
+    carry_forward, outputs_forward = self.forward_rnn(
+      inputs, initial_carry=initial_carry_forward, init_key=key_forward,
+      segmentation_mask=segmentation_mask, return_carry=True,
+      time_major=time_major, reverse=False)
+
+    carry_backward, outputs_backward = self.backward_rnn(
+      inputs, initial_carry=initial_carry_backward, init_key=key_backward,
+      segmentation_mask=segmentation_mask, return_carry=True,
+      time_major=time_major, reverse=True, keep_order=True)
+
+    carry = (carry_forward, carry_backward)
+    outputs = jax.tree_map(self.merge_fn, outputs_forward, outputs_backward)
+
+    if return_carry:
+      return carry, outputs
+    else:
+      return outputs
