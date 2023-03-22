@@ -551,9 +551,9 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
     if jax.process_count() > 1:
       logging.warning(
           'Multiple JAX processes detected when saving checkpoint. Please '
-          'note that only process 0 will execute the save, and you may lose '
-          'data if the checkpoints saved by other processes contain unique '
-          'data (not a likely scenario).'
+          'note that if `flax.training.checkpoints.save_checkpoint` is only '
+          'called on one process (aka. guarded by a check '
+          '`jax.process_count() == 0`), the other devices will hang.'
       )
     # Make sure any previous work is done before making file changes.
     if orbax_checkpointer and isinstance(orbax_checkpointer,
@@ -895,8 +895,7 @@ def restore_checkpoint(
       if orbax_utils.is_multiprocess_array(x):
         return orbax.ArrayRestoreArgs(
             restore_type=jax.Array,
-            mesh=x.sharding.mesh,
-            mesh_axes=x.sharding.spec,
+            sharding=x.sharding,
         )
       return orbax.RestoreArgs()
 
