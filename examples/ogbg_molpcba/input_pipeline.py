@@ -55,9 +55,9 @@ def get_datasets(batch_size: int,
   # Construct the GraphsTuple converter function.
   convert_to_graphs_tuple_fn = functools.partial(
       convert_to_graphs_tuple,
-      add_virtual_node=add_self_loops,
+      add_virtual_node=add_virtual_node,
       add_undirected_edges=add_undirected_edges,
-      add_self_loops=add_virtual_node,
+      add_self_loops=add_self_loops,
   )
 
   # Process each split separately.
