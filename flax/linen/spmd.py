@@ -210,8 +210,9 @@ def _with_sharding_constraint(
   if jax.devices()[0].platform == 'cpu' or (not _global_mesh_defined() and mesh is None):
     return x
   else:
-    if mesh is not None:
-      axis_resources = jax.sharding.NamedSharding(mesh, axis_resources)
+    if mesh is not None and axis_resources is not None:
+      sharding = jax.sharding.NamedSharding(mesh, axis_resources)
+      return pjit.with_sharding_constraint(x, sharding)
     return pjit.with_sharding_constraint(x, axis_resources)
 
 

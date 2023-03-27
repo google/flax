@@ -24,6 +24,19 @@ vNext
 -
 -
 
+0.6.8
+-----
+- The automatic checkpoint migration was temporarily rolled back due to legacy compatibility issues.
+  - We still recommend you to use the [upgrade guide](https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html) and migrate completely to the Orbax API to ensure stability.
+  - Or alternatively, add `flax.config.update('flax_use_orbax_checkpointing', True)` to your project to avoid being impacted by the automatic migration process.
+- Added utility functions to frozen_dict api.
+- Migrated Flax away from `register_keypaths`.
+- Fixes kwargs in convert_to_graphs_tuple_fn.
+- Fixed examples in a few ways:
+  - Bumped the TF version
+  - Used latest checkpoint formats
+  - Other misc fixes.
+
 0.6.7
 -----
 - New checkpoints will be saved using Orbax! Please check out [upgrade guide](https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html) and consider migrating completely to the Orbax API.

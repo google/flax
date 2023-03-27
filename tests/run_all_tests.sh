@@ -106,6 +106,7 @@ if $RUN_PYTEST; then
       PYTEST_IGNORE+=" --ignore=$file"
   done
   # Run battery of core FLAX API tests.
+  echo "pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE"
   pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
 
   # Per-example tests.
