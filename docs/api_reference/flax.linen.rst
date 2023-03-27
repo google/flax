@@ -101,13 +101,16 @@ SPMD
 .. autosummary::
   :toctree: _autosummary
 
+    Partitioned
+    with_partitioning
+    get_partition_spec
+    LogicallyPartitioned
     logical_axis_rules
     set_logical_axis_rules
     get_logical_axis_rules
     logical_to_mesh_axes
     logical_to_mesh
     with_logical_constraint
-    LogicallyPartitioned
     with_logical_partitioning
 
 
