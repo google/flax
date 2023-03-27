@@ -10,3 +10,7 @@ flax.core.frozen_dict package
 .. autofunction:: freeze
 
 .. autofunction:: unfreeze
+
+.. autofunction:: copy
+
+.. autofunction:: pop
