@@ -9,5 +9,4 @@ to go for a standard pattern for all examples including the simplest ones
 one example, you know the structure of all of them. Having unit tests and
 integration tests is also very useful when you fork these examples.
 
-For more examples including contributions from the community and other projects currently using Flax see the **[Examples](https://flax.readthedocs.io/en/latest/examples/index.html)** section in the documentation.
-
+For more examples including contributions from the community and other projects currently using Flax see the **[Examples](https://flax.readthedocs.io/en/latest/examples.html)** section in the documentation.
