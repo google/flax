@@ -21,8 +21,9 @@ import functools
 import gc
 import inspect
 import operator
+import sys
 from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
-                    Tuple, TypeVar, get_type_hints)
+                    Tuple, TypeVar, get_type_hints, Optional)
 
 from absl.testing import absltest
 from flax import config
@@ -2016,6 +2017,28 @@ class ModuleTest(absltest.TestCase):
     self.assertIn('a = 1', str_rep)
     self.assertIn("b = 'ok'", str_rep)
     self.assertIn('c = 3.0', str_rep)
+
+  def test_kw_only(self):
+    def create_kw_layers():
+      class BaseLayer(nn.Module, kw_only=True):
+        base_multiplier: Optional[int] = -1
+
+      class ChildLayer(BaseLayer):
+        child_multiplier: int  # Don't want to have to set a default argument!
+        def __call__(self, x):
+          return x * self.child_multiplier * self.base_multiplier
+      return BaseLayer, ChildLayer
+
+    if tuple(sys.version_info)[:3] < (3, 10, 0):
+      with self.assertRaisesRegex(TypeError, 'not available before Py 3.10'):
+        BaseLayer, ChildLayer = create_kw_layers()
+    else:
+      BaseLayer, ChildLayer = create_kw_layers()
+      with self.assertRaisesRegex(TypeError, 'positional argument'):
+        _ = BaseLayer(2)
+      # Like in Python dataclass, `kw_only` is not inherited, so ChildLayer can
+      # take positional arg. It takes BaseLayer's default kwargs though.
+      np.testing.assert_equal(ChildLayer(8)(np.ones(10)), -8 * np.ones(10))
 
 
 class LeakTests(absltest.TestCase):

@@ -19,6 +19,7 @@ import enum
 import functools
 import inspect
 import re
+import sys
 import threading
 import typing
 import weakref
@@ -700,7 +701,7 @@ class Module(ModuleBase):
       pass
 
   @classmethod
-  def __init_subclass__(cls, **kwargs: Any) -> None:
+  def __init_subclass__(cls, kw_only: bool = False, **kwargs: Any) -> None:
     """Automatically initializes all subclasses as custom dataclasses."""
     super().__init_subclass__(**kwargs)
     # All Flax Modules are dataclasses.  We force this convention since
@@ -708,7 +709,7 @@ class Module(ModuleBase):
     # functional transformation.  Instead of using a python metaclass, we
     # automatically transform Modules into dataclasses at subclass creation
     # time, and we set the last dataclass arguments to `parent` and `name`.
-    cls._customized_dataclass_transform()
+    cls._customized_dataclass_transform(kw_only)
     # We wrap user-defined methods including setup and __call__ to enforce
     # a number of different checks and to provide clear error messages.
     cls._verify_single_or_no_compact()
@@ -721,7 +722,7 @@ class Module(ModuleBase):
     cls.parent = ParentDescriptor() # type: ignore[assignment]
 
   @classmethod
-  def _customized_dataclass_transform(cls):
+  def _customized_dataclass_transform(cls, kw_only: bool):
     """Transforms `cls` into a dataclass, with custom additional behavior.
 
     1. Inject `parent` and `name` fields.  (If they are already present,
@@ -753,14 +754,28 @@ class Module(ModuleBase):
                     ('name', Optional[str],
                      kw_only_dataclasses.field(default=None, kw_only=True))]
 
-    # Now apply dataclass transform (which operates in-place).
-    # Do generate a hash function only if not provided by the class.
-    kw_only_dataclasses.dataclass(
-        cls,
-        unsafe_hash='__hash__' not in cls.__dict__,
-        repr=False,
-        extra_fields=extra_fields)  # pytype: disable=wrong-keyword-args
-    cls.__hash__ = _wrap_hash(cls.__hash__)
+    if kw_only:
+      if tuple(sys.version_info)[:3] >= (3, 10, 0):
+        for name, annotation, default in extra_fields:  # pytype: disable=invalid-annotation
+          setattr(cls, name, default)
+          cls.__annotations__[name] = annotation
+        dataclasses.dataclass(
+            unsafe_hash='__hash__' not in cls.__dict__,
+            repr=False,
+            kw_only=True,
+        )(cls)  # type: ignore[call-overload]
+      else:
+        raise TypeError('`kw_only` is not available before Py 3.10.')
+    else:
+      # Now apply dataclass transform (which operates in-place).
+      # Do generate a hash function only if not provided by the class.
+      kw_only_dataclasses.dataclass(
+          cls,
+          unsafe_hash='__hash__' not in cls.__dict__,
+          repr=False,
+          extra_fields=extra_fields)  # pytype: disable=wrong-keyword-args
+
+    cls.__hash__ = _wrap_hash(cls.__hash__)  # type: ignore[method-assign]
 
   @classmethod
   def _verify_single_or_no_compact(cls):
@@ -1030,7 +1045,7 @@ class Module(ModuleBase):
     queue = []
     preserve_adopted_names = config.flax_preserve_adopted_names
     if hasattr(self, 'preserve_adopted_names'):
-       preserve_adopted_names = self.preserve_adopted_names
+      preserve_adopted_names = self.preserve_adopted_names
     def adopt_attr_modules(cache, queue, suffix, subvalue):
       if isinstance(subvalue, Module):
         adopted_name = None
