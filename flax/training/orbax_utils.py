@@ -15,6 +15,7 @@
 """Utils for Orbax Checkpointing, available even after Flax Checkpointing is deprecated."""
 
 from typing import Any, Optional
+import warnings
 
 import jax
 from jax.sharding import Mesh
@@ -37,19 +38,42 @@ def save_args_from_target(target: Any) -> Any:
   )
 
 
-def restore_args_from_target(target: Any, mesh: Optional[Mesh]) -> Any:
-  def find_axes(x):
+def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
+  """Creates Orbax `restore_args` given a target Pytree.
+
+  Args:
+    target: The Pytree that has the same structure as the checkpoint. The arrays
+      restored from checkpoint will have the same `sharding` as the target
+      Pytree's corresponding arrays.
+    mesh: DEPRECATED ARG. Please simply use your mesh to create the arrays
+      in your `target`, no need to pass it here.
+
+  Returns:
+    A Pytree of Orbax `RestoreArgs` or `ArrayRestoreArgs`
+  """
+  def find_sharding(x):
     if is_multiprocess_array(x):
-      return x.sharding.spec
+      return x.sharding
     return None
+
+  # Simpler case: no multihost arrays
   if not any(
       jax.tree_util.tree_flatten(jax.tree_map(is_multiprocess_array, target))[0]
   ):
     return jax.tree_util.tree_map(lambda x: orbax.RestoreArgs(), target)
-  assert (
-      mesh is not None
-  ), 'Argument `mesh` required because `target` contains multiprocess array.'
-  axes_tree = jax.tree_util.tree_map(find_axes, target)
-  return orbax.checkpoint_utils.restore_args_from_target(
-      mesh, target, axes_tree
-  )
+
+  # Multihost arrays: find sharding from the given target
+  sharding_tree = jax.tree_util.tree_map(find_sharding, target)
+  if mesh is not None:
+    warnings.warn(
+        (
+            'restore_args_from_target(): `mesh` arg is deprecated. Simply'
+            ' calling the function with target pytree should suffice.'
+        ),
+        DeprecationWarning,
+    )
+    axes_tree = jax.tree_util.tree_map(lambda s: s.spec, sharding_tree)
+    return orbax.checkpoint_utils.restore_args_from_target(
+        mesh, target, axes_tree
+    )
+  return orbax.checkpoint_utils.construct_restore_args(target, sharding_tree)
