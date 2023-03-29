@@ -1,4 +1,4 @@
-# Copyright 2022 The Flax Authors.
+# Copyright 2023 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ import functools
 from typing import Any, Callable, Optional
 
 import jax
+from jax import core
 from jax import lax
 from jax import linear_util as lu
 from jax.interpreters import partial_eval as pe
@@ -124,10 +125,10 @@ def scan(
     broadcast_body = functools.partial(body_fn, init_mode=True)
 
     carry_avals = jax.tree_util.tree_map(
-        lambda x: jax.ShapedArray(jnp.shape(x), jnp.result_type(x)),
+        lambda x: core.ShapedArray(jnp.shape(x), jnp.result_type(x)),
         init)
     scan_avals = jax.tree_util.tree_map(
-        lambda x: jax.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)),
+        lambda x: core.ShapedArray(jnp.shape(x)[1:], jnp.result_type(x)),
         xs)
     input_avals = (carry_avals, scan_avals)
 

@@ -1,4 +1,4 @@
-# Copyright 2022 The Flax Authors.
+# Copyright 2023 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ from typing import Any
 import functools
 
 import jax
+from jax import core
 from jax import linear_util as lu
 from jax.interpreters import partial_eval as pe
 
@@ -25,7 +26,7 @@ from flax import errors
 
 def _maybe_unknown(x: Any) -> pe.PartialVal:
   if isinstance(x, jax.ShapeDtypeStruct):
-    return pe.PartialVal.unknown(jax.ShapedArray(x.shape, x.dtype))
+    return pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
   else:
     return pe.PartialVal.known(x)
 

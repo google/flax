@@ -1,4 +1,4 @@
-# Copyright 2022 The Flax Authors.
+# Copyright 2023 The Flax Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import itertools
 import warnings
 
 import jax
+from jax import core
 from jax import lax
 from jax import linear_util as lu
 from jax.interpreters import partial_eval as pe
@@ -82,7 +83,7 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   input_structs = [_parse_spec(spec) for spec in input_spec]
   inputs_flat, in_tree = jax.tree_util.tree_flatten(input_structs)
   f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(f), in_tree)
-  in_pvals = [pe.PartialVal.unknown(jax.ShapedArray(x.shape, x.dtype))
+  in_pvals = [pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
               for x in inputs_flat]
   _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
   out_flat = [const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
