@@ -29,6 +29,3 @@ def get_config():
 
 
 metrics = default_lib.metrics
-
-
-metrics = default_lib.metrics
