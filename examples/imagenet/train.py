@@ -181,10 +181,11 @@ def prepare_tf_data(xs):
 
 
 def create_input_iter(dataset_builder, batch_size, image_size, dtype, train,
-                      cache):
+                      cache, shuffle_buffer_size, prefetch):
   ds = input_pipeline.create_split(
       dataset_builder, batch_size, image_size=image_size, dtype=dtype,
-      train=train, cache=cache)
+      train=train, cache=cache, shuffle_buffer_size=shuffle_buffer_size,
+      prefetch=prefetch)
   it = map(prepare_tf_data, ds)
   it = jax_utils.prefetch_to_device(it, 2)
   return it
@@ -279,10 +280,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
   dataset_builder = tfds.builder(config.dataset)
   train_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=True,
-      cache=config.cache)
+      cache=config.cache, shuffle_buffer_size=config.shuffle_buffer_size,
+      prefetch=config.prefetch)
   eval_iter = create_input_iter(
       dataset_builder, local_batch_size, image_size, input_dtype, train=False,
-      cache=config.cache)
+      cache=config.cache, shuffle_buffer_size=None, prefetch=config.prefetch)
 
   steps_per_epoch = (
       dataset_builder.info.splits['train'].num_examples // config.batch_size

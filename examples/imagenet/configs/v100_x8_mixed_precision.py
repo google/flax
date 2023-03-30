@@ -23,6 +23,7 @@ def get_config():
   config = default_lib.get_config()
 
   config.batch_size = 2048
+  config.shuffle_buffer_size = 16 * 2048
   config.cache = True
   config.half_precision = True
 

@@ -37,6 +37,7 @@ def get_config():
   # Consider setting the batch size to max(tpu_chips * 256, 8 * 1024) if you
   # train on a larger pod slice.
   config.batch_size = 1024
+  config.shuffle_buffer_size = 16 * 1024
   config.cache = True
   config.half_precision = True
 
