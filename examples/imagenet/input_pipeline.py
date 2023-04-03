@@ -227,6 +227,6 @@ def create_split(dataset_builder, batch_size, train, dtype=tf.float32,
   if not train:
     ds = ds.repeat()
 
-  ds = ds.prefetch(10)
+  ds = ds.prefetch(prefetch)
 
   return ds
