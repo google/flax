@@ -99,14 +99,14 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
     - name: Get week and year
-      id: week_year
-      run: echo "DATE=$(date +%U-%Y)" >> $GITHUB_OUTPUT
+      id: date_key
+      run: echo "DATE=$(date +%j)" >> $GITHUB_OUTPUT
     - name: Cached virtual environment
       id: venv_cache
       uses: actions/cache@v3
       with:
         path: venv
-        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.week_year.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'setup.py') }}
+        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'setup.py') }}
     - name: Install Dependencies for cache
       if: steps.venv_cache.outputs.cache-hit != 'true'
       run: |
@@ -125,7 +125,7 @@ jobs:
       if: matrix.test-type == 'mypy'
       with:
         path: .mypy_cache
-        key: mypy-${{ steps.setup_python.outputs.python-version }}-${{ steps.week_year.outputs.DATE }}
+        key: mypy-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}
     - name: Test with ${{ matrix.test-type }}
       run: |
         if [[ "${{ matrix.test-type }}" == "doctest" ]]; then
