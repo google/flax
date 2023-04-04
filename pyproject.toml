@@ -12,55 +12,25 @@ no_implicit_optional = true
 disable_error_code = "attr-defined"
 
 [[tool.mypy.overrides]]
-module="tensorflow.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="tensorboard.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="absl.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="jax.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="rich.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="flax.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="jaxlib.cuda.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="jaxlib.cpu.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="msgpack"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="numpy.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="optax.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="orbax.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="opt_einsum.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="scipy.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="libtpu.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="jaxlib.mlir.*"
-ignore_missing_imports = true
-[[tool.mypy.overrides]]
-module="yaml"
+module = [
+    "tensorflow.*",
+    "tensorboard.*",
+    "absl.*",
+    "jax.*",
+    "rich.*",
+    "flax.*",
+    "jaxlib.cuda.*",
+    "jaxlib.cpu.*",
+    "msgpack",
+    "numpy.*",
+    "optax.*",
+    "orbax.*",
+    "opt_einsum.*",
+    "scipy.*",
+    "libtpu.*",
+    "jaxlib.mlir.*",
+    "yaml",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
