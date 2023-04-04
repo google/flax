@@ -1318,7 +1318,7 @@ class Module(ModuleBase):
 
     ``bind`` provides an "interactive" instance of a Module directly without
     transforming a function with ``apply``. This is particularly useful for
-    debugging zand interactive use cases like notebooks where a function would
+    debugging and interactive use cases like notebooks where a function would
     limit the ability to split up code into different cells.
 
     Once the variables (and optionally RNGs) are bound to a ``Module`` it
