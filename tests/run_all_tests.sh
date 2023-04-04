@@ -10,7 +10,7 @@ GH_VENV=false
 for flag in "$@"; do
 case $flag in
   --with-cov)
-  PYTEST_OPTS+="--cov=flax --cov-report=xml --cov-report=term --cov-config=setup.cfg"
+  PYTEST_OPTS+="--cov=flax --cov-report=xml --cov-report=term --cov-config=pyproject.toml"
   ;;
   --help)
   echo "Usage:"
@@ -122,21 +122,21 @@ fi
 if $RUN_PYTYPE; then
   echo "=== RUNNING PYTYPE ==="
   # Validate types in library code.
-  pytype --jobs auto --config pytype.cfg flax/
+  pytype --jobs auto --config pyproject.toml flax/
 
   # Validate types in examples.
   for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
-      # use cd to make sure pytpe cache lives in example dir and doesn't name clash
+      # use cd to make sure pytype cache lives in example dir and doesn't name clash
       # use *.py to avoid importing configs as a top-level import which leads to import errors
       # because config files use relative imports (e.g. from config import ...).
-      (cd $egd ; pytype --jobs auto --config ../../pytype.cfg "*.py")
+      (cd $egd ; pytype --jobs auto --config ../../pyproject.toml "*.py")
   done
 fi
 
 if $RUN_MYPY; then
   echo "=== RUNNING MYPY ==="
   # Validate types in library code.
-  mypy --config mypy.ini flax/ --show-error-codes
+  mypy --config pyproject.toml flax/ --show-error-codes
 fi
 
 # Return error code 0 if no real failures happened.
