@@ -1,3 +1,76 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flax"
+description = "Flax: A neural network library for JAX designed for flexibility"
+keywords = []
+authors = [
+    {name = "Flax team", email = "flax-dev@google.com"},
+]
+dependencies = [
+    "numpy>=1.12",
+    "jax>=0.4.2",
+    "msgpack",
+    "optax",
+    "orbax-checkpoint",
+    "tensorstore",
+    "rich>=11.1",
+    "typing_extensions>=4.1.1",
+    "PyYAML>=5.4.1",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.7",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dynamic = ["version", "readme"]
+
+[project.optional-dependencies]
+all = [
+    "matplotlib",  # only needed for tensorboard export
+]
+testing = [
+    # Last version does not have the ROMs we test on pre-packaged
+    "atari-py==0.2.5",
+    "clu",  # All examples.
+    "einops",
+    "gym==0.18.3",
+    "jaxlib",
+    "jraph>=0.0.6dev0",
+    "ml-collections",
+    "mypy",
+    "opencv-python",
+    "pytest",
+    "pytest-cov",
+    "pytest-custom_exit_code",
+    "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
+    "pytype",
+    "sentencepiece",  # WMT/LM1B examples
+    "tensorflow_text>=2.11.0",  # WMT/LM1B examples
+    "tensorflow_datasets",
+    "tensorflow",
+    "torch",
+    "nbstripout",
+]
+
+[project.urls]
+homepage = "https://github.com/google/flax"
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"], content-type = "text/markdown"}
+version = {attr = "flax.version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["flax*"]
+
+[tool.setuptools.package-data]
+flax = ["*py.typed"]
+
 [tool.yapf]
 based_on_style = "yapf"
 
