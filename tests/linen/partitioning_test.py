@@ -473,8 +473,7 @@ class PartitioningTest(parameterized.TestCase):
       module = Foo()
       variables = module.init(random.PRNGKey(0), jnp.zeros((8, 4)))
       logical_spec = nn.get_partition_spec(variables)
-      spec = nn.logical_to_mesh(logical_spec, rules)
-      shardings = jax.tree_map(lambda s: sharding.NamedSharding(mesh, s), spec)
+      shardings = nn.logical_to_mesh_sharding(logical_spec, mesh, rules)
       variables = jax.lax.with_sharding_constraint(variables, shardings)
       return variables
 

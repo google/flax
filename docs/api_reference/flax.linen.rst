@@ -104,12 +104,14 @@ SPMD
     Partitioned
     with_partitioning
     get_partition_spec
+    get_sharding
     LogicallyPartitioned
     logical_axis_rules
     set_logical_axis_rules
     get_logical_axis_rules
     logical_to_mesh_axes
     logical_to_mesh
+    logical_to_mesh_sharding
     with_logical_constraint
     with_logical_partitioning
 

@@ -65,6 +65,7 @@ from ..core.meta import (
     Partitioned as Partitioned,
     with_partitioning as with_partitioning,
     get_partition_spec as get_partition_spec,
+    get_sharding as get_sharding,
     unbox as unbox,
     PARTITION_NAME as PARTITION_NAME,
 )
@@ -74,6 +75,7 @@ from .spmd import (
     get_logical_axis_rules as get_logical_axis_rules,
     logical_to_mesh_axes,
     logical_to_mesh,
+    logical_to_mesh_sharding,
     with_logical_constraint,
     LogicallyPartitioned as LogicallyPartitioned,
     with_logical_partitioning as with_logical_partitioning,

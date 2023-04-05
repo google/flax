@@ -29,7 +29,6 @@ from flax import errors
 from flax import struct
 import jax
 from jax.experimental import maps
-from jax.experimental import pjit
 
 
 TAxisMetadata = Any # TypeVar('TAxisMetadata', bound='AxisMetadata')
@@ -271,6 +270,10 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
     """Returns the ``Partitionspec`` for this partitioned value."""
     return jax.sharding.PartitionSpec(*self.names)
 
+  def get_sharding(self, mesh: jax.sharding.Mesh) -> jax.sharding.Sharding:
+    """Returns the ``NamedSharding`` for this partitioned value."""
+    return jax.sharding.NamedSharding(mesh, self.get_partition_spec())
+
 
 def with_partitioning(
     fn: Callable[..., Any],
@@ -304,7 +307,16 @@ def get_partition_spec(tree: Any) -> Any:
   def f(x):
     if isinstance(x, Partitioned):
       return x.get_partition_spec()
+    # Unboxed arrays, which should be replicated across all devices
+    elif hasattr(x, 'shape'):
+      return jax.sharding.PartitionSpec()
     else:
       return None
   return jax.tree_map(f, tree,
                       is_leaf=lambda x: isinstance(x, Partitioned))
+
+
+def get_sharding(tree: Any, mesh: jax.sharding.Mesh) -> Any:
+  """Extracts a jax.sharding tree from a PyTree containing ``Partitioned`` values and a mesh."""
+  pspec_tree = get_partition_spec(tree)
+  return jax.tree_map(lambda x: jax.sharding.NamedSharding(mesh, x), pspec_tree)
