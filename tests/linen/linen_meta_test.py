@@ -148,21 +148,25 @@ class LinenMetaTest(absltest.TestCase):
         'params': {
             'MLP_0': {
                 'Dense_0': {
-                    'bias': None,
+                    'bias': PartitionSpec(),
                     'kernel': PartitionSpec(None, 'data', 'model'),
                 },
                 'Dense_1': {
-                    'bias': None,
+                    'bias': PartitionSpec(),
                     'kernel': PartitionSpec(None, 'model', 'data'),
                 },
             },
         },
     })
-    init_fn = mesh(pjit(model.init, (
-        None, PartitionSpec('data', 'model')), spec))
+    x_spec = PartitionSpec('data', 'model')
+    f = lambda x: jax.sharding.NamedSharding(mesh, x)
+    init_fn = jax.jit(model.init,
+                      in_shardings=jax.tree_map(f, (PartitionSpec(None), x_spec)),
+                      out_shardings=jax.tree_map(f, spec))
     variables = init_fn(random.PRNGKey(0), x)
-    apply_fn = mesh(pjit(model.apply, (
-        spec, PartitionSpec('data', 'model')), PartitionSpec('data', 'model')))
+    apply_fn = jax.jit(model.apply,
+                      in_shardings=jax.tree_map(f, (spec, x_spec)),
+                      out_shardings=jax.tree_map(f, x_spec))
     y = apply_fn(variables, x)
     self.assertEqual(y.shape, (8, 128))
 

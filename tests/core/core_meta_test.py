@@ -121,13 +121,32 @@ class MetaTest(absltest.TestCase):
   def test_get_partition_spec(self):
     xs = {'kernel': meta.Partitioned(jnp.zeros((8, 3, 3)),
                                      ('layers', 'in', 'out')),
-          'bias': jnp.zeros((8, 3))}
+          'bias': jnp.zeros((8, 3)),
+          'step': jnp.array(100)}
     ps = meta.get_partition_spec(xs)
     self.assertEqual(
         ps,
         {
             'kernel': jax.sharding.PartitionSpec('layers', 'in', 'out'),
-            'bias': None,
+            'bias': jax.sharding.PartitionSpec(),
+            'step': jax.sharding.PartitionSpec(),
+        },
+    )
+
+  def test_get_sharding(self):
+    devices = mesh_utils.create_device_mesh((jax.local_device_count(), 1))
+    mesh = sharding.Mesh(devices, ('in', 'out'))
+    xs = {'kernel': meta.Partitioned(jnp.zeros((8, 3)),
+                                     ('in', 'out')),
+          'bias': jnp.zeros((8, 3)),
+          'step': jnp.array(100)}
+    ps = meta.get_sharding(xs, mesh)
+    self.assertEqual(
+        ps,
+        {
+            'kernel': jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec('in', 'out')),
+            'bias': jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
+            'step': jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec()),
         },
     )
 

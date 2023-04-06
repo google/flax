@@ -189,6 +189,19 @@ def logical_to_mesh(
   )
 
 
+def logical_to_mesh_sharding(
+    tree: Any,
+    mesh: jax.sharding.Mesh,
+    rules: Optional[LogicalRules] = None,
+) -> Any:
+  """Convert pytrees of logical PartitionSpecs to shardings."""
+  return jax.tree_map(
+      lambda x: jax.sharding.NamedSharding(mesh, x),
+      logical_to_mesh(tree, rules),
+      is_leaf=lambda x: isinstance(x, jax.sharding.PartitionSpec),
+  )
+
+
 def _global_mesh_defined() -> bool:
   """Checks if global xmap/pjit mesh resource environment is defined."""
   maps_env = maps.thread_resources.env
