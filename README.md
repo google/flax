@@ -183,7 +183,7 @@ decoded = model.apply(variables, encoded, method=model.decode)
 
 In-detail examples to train and evaluate a variety of Flax models for
 Natural Language Processing, Computer Vision, and Speech Recognition are
-actively maintained in the [🤗 Transformers repository](https://github.com/huggingface/transformers/tree/master/examples/flax).
+actively maintained in the [🤗 Transformers repository](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
 As of October 2021, the [19 most-used Transformer architectures](https://huggingface.co/transformers/#supported-frameworks) are supported in Flax
 and over 5000 pretrained checkpoints in Flax have been uploaded to the [🤗 Hub](https://huggingface.co/models?library=jax&sort=downloads).
