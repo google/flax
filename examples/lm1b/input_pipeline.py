@@ -150,7 +150,7 @@ def _pack_with_tf_ops(dataset: tf.data.Dataset, keys: List[str],
   Args:
     dataset: a dataset containing padded batches of examples.
     keys: a list of strings
-    key2length: an dict from feature-key to integer
+    key2length: a dict from feature-key to integer
 
   Returns:
     a dataset.

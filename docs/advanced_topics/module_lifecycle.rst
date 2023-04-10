@@ -12,7 +12,7 @@ The Module lifecycle
 
 This design note is intended for users who are already familiar with linen Modules but want to understand more about the design principles behind the abstraction. This note should give you a good understanding of the assumptions and guarantees the Module API is built upon. If you have no practical experience with Modules yet, check out the `MNIST Tutorial <https://flax.readthedocs.io/en/latest/notebooks/annotated_mnist.html>`_.
 
-linen Modules offer a Pythonic abstracton on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
+linen Modules offer a Pythonic abstraction on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
 
 
 Overview
@@ -65,7 +65,7 @@ Now we want to construct and use the ``MLP`` Module:
 
 First, we construct an instance of ``MLP`` and pass the construction attributes. Note that construction here is different from what you might expect if you are not used to Functional Programming patterns. The ``MLP`` constructor does not actually create variables or any internal state whatsoever. It's best to think of it as a specification or template of the Module that contains functionality but no data.
 
-Let's take a closer look at initialization. Surprisingly, there actually is no seperate initialization path in Flax. Calling ``init`` is just a special case of ``apply``, which you can also write as:
+Let's take a closer look at initialization. Surprisingly, there actually is no separate initialization path in Flax. Calling ``init`` is just a special case of ``apply``, which you can also write as:
 
 
 .. testcode::
@@ -130,7 +130,7 @@ Linen provides an alternative API for defining modules more compactly. This is e
       return nn.Dense(self.out_size)(h)
 
 
-A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module does. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a concise overview. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/design_notes/setup_or_nncompact.html>`_ for a practical guide on decding between setup and compact.
+A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module does. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a concise overview. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/design_notes/setup_or_nncompact.html>`_ for a practical guide on deciding between setup and compact.
 
 Another benefit of defining submodules and/or variables inline is that you can add arguments to your method when constructing variables. The most common example of this is using shape information to determine the shape of a parameter like this:
 
@@ -177,7 +177,7 @@ The order in which you define submodules determines the name of a submodule if n
         return nn.Dense(features=4)(x)
 
 
-The above Module will break because either the encoder or decoder path will construct a Module named "Dense_0". This means the two Modules will share parameters which is not intented here. Actually, the two Modules cannot share parameters because they each have a different number of features.
+The above Module will break because either the encoder or decoder path will construct a Module named "Dense_0". This means the two Modules will share parameters which is not intended here. Actually, the two Modules cannot share parameters because they each have a different number of features.
 
 This problem can be solved in various ways:
  - Provide explicit names
@@ -286,7 +286,7 @@ This procedure itself is tedious and error-prone but handled internally by Flax.
 
 #. Update the original state with the updated state returned from the transformation.
 
-A more in depth explanation of functionalization and lifting can be found in the `Lifted Transformation <https://flax.readthedocs.io/en/latest/design_notes/lift.html>`_ design note.
+A more in-depth explanation of functionalization and lifting can be found in the `Lifted Transformation <https://flax.readthedocs.io/en/latest/design_notes/lift.html>`_ design note.
 
 Practical consequences
 ==========================
@@ -363,7 +363,7 @@ Future work
 Setup for unbound Modules
 ===========================
 
-The current Module abstraction is particularly restrictive when it comes to initializing fields after construction. In the current Module API, the ``setup`` method is the place to initialize the fields of  the Module instance. Because ``setup`` is only called on a bound Module, the full Module API is available inside ``setup``, including variable declaration. However, oftentimes we don't actually require any stateful API's to initialize a field. In fact, most commonly we simply want to declare a submodule. More importantly, it's often useful to inspect submodules for debugging or to partially run the model. Consider for example:
+The current Module abstraction is particularly restrictive when it comes to initializing fields after construction. In the current Module API, the ``setup`` method is the place to initialize the fields of the Module instance. Because ``setup`` is only called on a bound Module, the full Module API is available inside ``setup``, including variable declaration. However, oftentimes we don't actually require any stateful API's to initialize a field. In fact, most commonly we simply want to declare a submodule. More importantly, it's often useful to inspect submodules for debugging or to partially run the model. Consider for example:
 
 
 .. testcode::

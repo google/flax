@@ -67,7 +67,7 @@ ae = AutoEncoder(
     input_shape=(28, 28, 1))
 
 
-# `ae.initialized` returnes a materialized copy of `ae` by
+# `ae.initialized` returns a materialized copy of `ae` by
 # running through an input to create submodules defined lazily.
 params = ae.init(
     {'params': random.PRNGKey(42)},

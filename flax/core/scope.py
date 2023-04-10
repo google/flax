@@ -876,7 +876,7 @@ def bind(variables: VariableDict,
   """Binds variables and rngs to a new ``Scope``.
 
   bind provides a ``Scope`` instance without transforming a function with
-  ``apply``. This is particalary useful for debugging and interactive use cases
+  ``apply``. This is particularly useful for debugging and interactive use cases
   like notebooks where a function would limit the ability split up code into
   different cells.
 
@@ -888,7 +888,7 @@ def bind(variables: VariableDict,
   Args:
     variables: Variable dictionary to bind.
     rngs: RNGs to bind.
-    mutable: Which variable colections to treat as mutable.
+    mutable: Which variable collections to treat as mutable.
     flags: internal flags.
 
   Returns:

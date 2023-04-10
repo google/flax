@@ -37,7 +37,7 @@ The world already has TensorFlow and PyTorch, and there’s little need to
 build a clone of either. We believe that the composable
 function-transformation approach that JAX takes opens up new frontiers
 for making neural net code more maintainable, more scalable and more
-performant than existing libraries.While we strive to offer an API
+performant than existing libraries. While we strive to offer an API
 familiar to those experienced with Keras/Sonnet/PyTorch, Linen is
 fundamentally a functional system for defining neural nets in JAX. Just
 a few examples of what we believe a JAX-targeted library can enable:

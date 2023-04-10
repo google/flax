@@ -109,8 +109,6 @@ In short, :meth:`flax.linen.Module.make_rng` *guarantees full reproducibility*.
     def __call__(self, x):
       x = nn.Dense(self.num_neurons)(x)
 
-
-
       return x
   ---
   class MyModel(nn.Module):
@@ -204,9 +202,6 @@ the training step function. Refer to the
 
   from flax.training import train_state
 
-
-
-
   state = train_state.TrainState.create(
     apply_fn=my_model.apply,
     params=params,
@@ -252,9 +247,8 @@ the training step function. Refer to the
       logits = state.apply_fn(
         {'params': params},
         x=batch['image'],
-
-
         )
+        
       loss = optax.softmax_cross_entropy_with_integer_labels(
         logits=logits, labels=batch['label'])
       return loss, logits

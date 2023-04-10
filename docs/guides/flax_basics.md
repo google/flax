@@ -432,7 +432,7 @@ print('output:\n', y)
 Here, we see how to both declare and assign a parameter to the model using the `self.param` method. It takes as input `(name, init_fn, *init_args)` :
 
 *   `name` is simply the name of the parameter that will end up in the parameter structure.
-*   `init_fn` is a function with input `(PRNGKey, *init_args)` returning an Array, with `init_args` being the arguments needed to call the initialisation function.
+*   `init_fn` is a function with input `(PRNGKey, *init_args)` returning an Array, with `init_args` being the arguments needed to call the initialization function.
 *   `init_args` are the arguments to provide to the initialization function.
 
 Such params can also be declared in the `setup` method; it won't be able to use shape inference because Flax is using lazy initialization at the first call site.

@@ -72,7 +72,7 @@ def unflatten_beam_dim(x, batch_size, beam_size):
 
 
 def flat_batch_beam_expand(x, beam_size):
-  """Expands the each batch item by beam_size in batch_dimension."""
+  """Expands each batch item by beam_size in batch_dimension."""
   return flatten_beam_dim(add_beam_dim(x, beam_size))
 
 

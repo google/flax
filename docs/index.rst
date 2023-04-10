@@ -50,7 +50,7 @@ Features
          .. div:: sd-font-normal
 
             Flax is designed for correctness and safety. Thanks to its immutable Modules
-            and Functional API, Flax helps mitigate bugs that araise when handling state
+            and Functional API, Flax helps mitigate bugs that arise when handling state
             in JAX.
 
    .. grid-item::
@@ -63,7 +63,7 @@ Features
 
          .. div:: sd-font-normal
 
-            Flax grants more fine grained control and expressivity than most Neural Network
+            Flax grants more fine-grained control and expressivity than most Neural Network
             frameworks via its Variable Collections, RNG Collections and Mutability conditions.
 
    .. grid-item::

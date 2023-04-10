@@ -66,7 +66,7 @@ class DynamicScale(struct.PyTreeNode):
       print(loss)
 
   Jax currently cannot execute conditionals efficiently on GPUs therefore we
-  selectifly ignore the gradient update using `jax.numpy.where` in case of
+  selectively ignore the gradient update using `jax.numpy.where` in case of
   non-finite gradients.
 
   Attributes:

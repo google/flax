@@ -100,11 +100,11 @@ New features:
 
 Bug fixes:
 - Fixes launch_gce.sh with imagenet example.
-- Properly report AttributeErrors from descriptors .
+- Properly report AttributeErrors from descriptors.
 - Fixes usages of `pmap`.
 - Return None if no _parent_ref is set.
 - Cap dynamic scale to float32 max.
-- no-op when double wrapping with struct.dataclass
+- no-op when double wrapping with struct.dataclass.
 - Allow variable_with_axes to have empty axes when axes is set to an empty tuple.
 - Don't create reference cycles among Modules.
 
@@ -143,7 +143,7 @@ Bug fixes:
 
 0.5.2
 -----
-- Fixes missing PyYAML dependecy.
+- Fixes missing PyYAML dependency.
 
 0.5.1
 -----
@@ -163,7 +163,7 @@ Bug fixes:
 - Fix support for JAX's experimental_name_stack.
 
 Breaking changes:
-- In rare cases the dtype of a layer can change due to  [default dtype FLIP](https://github.com/google/flax/blob/main/docs/flip/1777-default-dtype.md). See the "Backward compatibility" section of the proposal for more information.
+- In rare cases the dtype of a layer can change due to [default dtype FLIP](https://github.com/google/flax/blob/main/docs/flip/1777-default-dtype.md). See the "Backward compatibility" section of the proposal for more information.
 
 0.4.2
 -----
@@ -300,7 +300,7 @@ NOTE: You must now explicitly import `flax.nn` if you want to use the old
 0.3.1
 ------
 
-Many improvements to Linen, and the old `flax.nn` is officially reprecated!
+Many improvements to Linen, and the old `flax.nn` is officially deprecated!
 
 Notably, there's a clean API for extracting intermediates from modules
 defined using `@nn.compact`, a more ergonomic API for using Batch Norm and Dropout in modules
@@ -318,7 +318,7 @@ Possible breaking changes:
  - Bug Fix `flax.core.apply` and `Module.apply`. Now it returns a tuple
    containing the output and a frozen empty
    collection when `mutable` is specified as an empty list.
- - `broadcast_dims` is now a attribute to `Dropout` instead of a `__call__`
+ - `broadcast_dims` is now an attribute to `Dropout` instead of a `__call__`
    argument.
  - `use_running_average` and `deterministic` no longer have a default. They
    should be passed explicitly

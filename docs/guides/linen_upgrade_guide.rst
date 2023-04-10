@@ -270,14 +270,6 @@ Top-level training code patterns
         apply_fn=CNN.apply, params=params, tx=tx)
 
 
-
-
-
-
-
-
-
-
   def loss_fn(params):
     logits = CNN().apply({'params': params}, batch['image'])  # [5] #!
     one_hot = jax.nn.one_hot(batch['label'], 10)
@@ -366,7 +358,6 @@ Non-trainable variables ("state"): Top-level training code patterns
 
 
 
-
   # reads immutable batch statistics during evaluation
   def eval_step(model, model_state, batch):
   with nn.stateful(model_state, mutable=False):
@@ -376,8 +367,6 @@ Non-trainable variables ("state"): Top-level training code patterns
   # initial variables ({"param": ..., "batch_stats": ...})
   def initial_variables(key, init_batch):
     return ResNet().init(key, init_batch)  # [1] #!
-
-
 
 
 

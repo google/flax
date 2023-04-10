@@ -199,7 +199,7 @@ class SummaryWriter:
       tf.summary.text(name=tag, data=tf.constant(textdata), step=step)
 
   def write(self, tag, tensor, step, metadata=None):
-    """Saves a arbitrary tensor summary.
+    """Saves an arbitrary tensor summary.
 
     Useful when working with custom plugins or constructing a summary directly.
 

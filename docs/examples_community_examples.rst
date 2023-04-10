@@ -91,12 +91,12 @@ Contributing policy
 If you are interested in adding a project to the Community Examples section, take the following
 into consideration:
 
-* **Code examples**: Examples for must contain a README that is helpful, clear, and explains
+* **Code examples**: Examples must contain a README that is helpful, clear, and explains
   how to run the code. The code itself should be easy to follow.
 * **Tutorials**: These docs should preferrably be a Jupyter Notebook format
   (refer to `Contributing <https://flax.readthedocs.io/en/latest/contributing.html>`__
   to learn how to convert a Jupyter Notebook into a Markdown file with `jupytext`).
-  Your tutorial should be well-written, and discuss/decsribe an interesting topic/task.
+  Your tutorial should be well-written, and discuss/describe an interesting topic/task.
   To avoid duplication, the content of these docs must be different from
   `existing docs on the Flax documentation site <https://flax.readthedocs.io/>`__
   or other community examples mentioned in this document.

@@ -16,7 +16,7 @@ jupytext:
 This notebook only contains executable code cells for the examples mentioned in
 https://flax.readthedocs.io/en/latest/guides/full_eval.html
 
-Please refer to above link for a an explanation of the problem and the proposed solutions.
+Please refer to above link for an explanation of the problem and the proposed solutions.
 
 +++ {"id": "Um6ZK_o1W-Vu"}
 

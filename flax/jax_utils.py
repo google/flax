@@ -126,7 +126,7 @@ def prefetch_to_device(iterator, size, devices=None):
       Defaults to the order of devices expected by `jax.pmap`.
 
   Yields:
-    The original items from the iterator where each ndarray is now a sharded to
+    The original items from the iterator where each ndarray is now sharded to
     the specified devices.
   """
   queue = collections.deque()
@@ -189,7 +189,7 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
     axis: the axis to scan over.
     keepdims: keep the dimensions that are scanned over.
     unroll: an optional positive integer, or tuple of positive integers
-      showing how many iterations of the loop to be unroll into a single
+      showing how many iterations of the loop to be unrolled into a single
       iteration for each axis.
   Returns:
     A tuple of the final carry and the values returned by the body.

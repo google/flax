@@ -272,12 +272,6 @@ Top-level training code patterns
 
 
 
-
-
-
-
-
-
   def loss_fn(params):
     logits = CNN().apply({'params': params}, batch['image'])  # [5] #!
     one_hot = jax.nn.one_hot(batch['label'], 10)

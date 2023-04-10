@@ -104,9 +104,9 @@ def create_token(token, attributes, vocabs):
     [1025, 3, 1]
 
   Args:
-    token: CoNLL token atrributes.
+    token: CoNLL token attributes.
     attributes: selected attributes.
-    vocabs: dictonery of vocabs.
+    vocabs: dictionary of vocabs.
 
   Returns:
     List of attribute ids for a token, e.g. [1025, 3] with word id and pos id.
@@ -134,7 +134,7 @@ def create_sentence_with_root(attributes, vocabs):
 
   Args:
     attributes: attributes extracted from token.
-    vocabs: dictonery of vocabs.
+    vocabs: dictionary of vocabs.
 
   Returns:
     A list representing a sentence containing the root only,
@@ -201,7 +201,7 @@ def sentence_dataset_dict(filename,
     filename: file name of a corpus.
     vocabs: dictionary of dictionaries to map from strings to ids.
     attributes_input: attributes for the input.
-    attributes_target: target attributes empty targets is not inclueded.
+    attributes_target: target attributes empty targets is not included.
     batch_size: the size of a batch.
     bucket_size: the size of a bucket.
     repeat: number of times the dataset is repeated.

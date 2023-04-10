@@ -86,7 +86,7 @@ class LazyInitError(FlaxError):
 
   def __init__(self, partial_val):
     super().__init__(
-        f'Lazy init encoutered a value that could with '
+        f'Lazy init encountered a value that could with '
         f'the given inputs (shape: {partial_val}).')
 
 
