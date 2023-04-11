@@ -268,6 +268,35 @@ def pop(x: Union[FrozenDict, Dict[str, Any]], key: str) -> Tuple[Union[FrozenDic
   raise TypeError(f'Expected FrozenDict or dict, got {type(x)}')
 
 
+def pretty_repr(x: Any, num_spaces: int = 4) -> str:
+  """Returns an indented representation of the nested dictionary.
+  This is a utility function that can act on either a FrozenDict or
+  regular dict and mimics the behavior of `FrozenDict.pretty_repr`.
+  If x is any other dtype, this function will return `repr(x)`.
+
+  Args:
+    x: the dictionary to be represented
+    num_spaces: the number of space characters in each indentation level
+  Returns:
+    An indented string representation of the nested dictionary.
+  """
+
+  if isinstance(x, FrozenDict):
+    return x.pretty_repr()
+  else:
+    def pretty_dict(x):
+      if not isinstance(x, dict):
+        return repr(x)
+      rep = ''
+      for key, val in x.items():
+        rep += f'{key}: {pretty_dict(val)},\n'
+      if rep:
+        return '{\n' + _indent(rep, num_spaces) + '}'
+      else:
+        return '{}'
+    return pretty_dict(x)
+
+
 def _frozen_dict_state_dict(xs):
   return {key: serialization.to_state_dict(value) for key, value in xs.items()}
 

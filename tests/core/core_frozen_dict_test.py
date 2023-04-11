@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from absl.testing import absltest, parameterized
-from flax.core import FrozenDict, copy, freeze, pop, unfreeze
+from flax.core import FrozenDict, copy, freeze, pop, unfreeze, pretty_repr
 import jax
 
 
@@ -120,6 +120,23 @@ class FrozenDictTest(parameterized.TestCase):
     self.assertTrue(
         new_x == actual_new_x and isinstance(new_x, type(actual_new_x))
     )
+
+  @parameterized.parameters(
+      {
+          'x': {'a': 1, 'b': {'c': 2}},
+          'pretty_str': '{\n    a: 1,\n    b: {\n        c: 2,\n    },\n}',
+      },
+      {
+          'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
+          'pretty_str': 'FrozenDict({\n    a: 1,\n    b: {\n        c: 2,\n    },\n})',
+      },
+      {
+          'x': 345,
+          'pretty_str': '345',
+      },
+  )
+  def test_utility_pretty_repr(self, x, pretty_str):
+    self.assertEqual(pretty_repr(x), pretty_str)
 
   def test_flatten(self):
     frozen = freeze({'c': 1, 'b': {'a': 2}})

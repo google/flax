@@ -14,3 +14,5 @@ flax.core.frozen_dict package
 .. autofunction:: copy
 
 .. autofunction:: pop
+
+.. autofunction:: pretty_repr
