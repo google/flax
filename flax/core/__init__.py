@@ -18,7 +18,8 @@ from .frozen_dict import (
   freeze as freeze,
   unfreeze as unfreeze,
   copy as copy,
-  pop as pop
+  pop as pop,
+  pretty_repr as pretty_repr
 )
 
 from .tracers import (
