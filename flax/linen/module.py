@@ -926,7 +926,8 @@ class Module(ModuleBase):
     # We don't want to return anything for python copy / pickle methods.
     if name in _UNDEFINED_COPY_PICKLE_METHODS:
       raise AttributeError()
-    self._try_setup()
+    if name != '__name__':
+      self._try_setup()
     if name in self.__dict__:
       return self.__dict__[name]
     else:
