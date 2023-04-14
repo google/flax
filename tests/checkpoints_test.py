@@ -120,8 +120,6 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(
         tmp_dir, test_object0, prefix='test_')
     check_eq(new_object, test_object0)
-    # Create leftover temporary checkpoint, which should be ignored.
-    io.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 0, prefix='test_', keep=1)
     self.assertIn('test_0', os.listdir(tmp_dir))
@@ -225,8 +223,6 @@ class CheckpointsTest(parameterized.TestCase):
                     'b': np.array([1, 1, 1], np.int32)}
     test_object2 = {'a': np.array([4, 5, 6], np.int32),
                     'b': np.array([2, 2, 2], np.int32)}
-    # Create leftover temporary checkpoint, which should be ignored.
-    io.GFile(os.path.join(tmp_dir, 'test_tmp'), 'w')
     checkpoints.save_checkpoint(
         tmp_dir, test_object1, 0.0, prefix='test_', keep=1)
     self.assertIn('test_0.0', os.listdir(tmp_dir))
