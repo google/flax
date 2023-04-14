@@ -39,7 +39,7 @@ from flax.training import orbax_utils
 import jax
 from jax import monitoring
 from jax import process_index
-from jax import sharding
+from jax import tree_util as jtu
 from jax.experimental.multihost_utils import sync_global_devices
 import orbax.checkpoint as orbax
 
@@ -548,20 +548,36 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       ckpt_dir, step, prefix)
 
   if config.flax_use_orbax_checkpointing or orbax_checkpointer:
+    logging.info(
+        'Using Orbax as backend to save Flax checkpoints. For potential'
+        ' troubleshooting see:'
+        ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#orbax-as-backend-troubleshooting'
+    )
     if jax.process_count() > 1:
       logging.warning(
-          'Multiple JAX processes detected when saving checkpoint. Please '
-          'note that if `flax.training.checkpoints.save_checkpoint` is only '
-          'called on one process (aka. guarded by a check '
-          '`jax.process_count() == 0`), the other devices will hang.'
+          'Multiple JAX processes detected when calling single-process'
+          ' `save_checkpoint`. Your devices will HANG if this function is only'
+          ' called on process 0! Troubleshoot at:'
+          ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#if-your-devices-hang-when-writing-checkpoints'
       )
+
     # Make sure any previous work is done before making file changes.
     if orbax_checkpointer and isinstance(orbax_checkpointer,
                                          orbax.AsyncCheckpointer):
       orbax_checkpointer.wait_until_finished()
+    # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
-      # If no checkpointer provided, save synchronously with default setting.
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+    # Check singular target.
+    if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
+        orbax_checkpointer._handler, orbax.ArrayCheckpointHandler  # pylint: disable=protected-access
+    ):
+      raise ValueError(
+          'Orbax backend only accept pytree as save target. To save singular'
+          ' objects like numbers or Numpy arrays, checkout'
+          ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#if-you-don-t-save-pytrees'
+      )
+
     save_args = orbax_utils.save_args_from_target(target)
     orbax_checkpointer.save(
         ckpt_path, target, save_args=save_args, force=overwrite)
@@ -656,24 +672,40 @@ def save_checkpoint_multiprocess(
   start_time = time.time()
   # Make sure all saves are finished before the logic of checking and removing
   # outdated checkpoints happens.
-  sync_global_devices('starting_save_checkpoint')
+  sync_global_devices('Flax:Checkpoint:StartSave')
   if async_manager:
     async_manager.wait_previous_save()
   if gda_manager:
     gda_manager.wait_until_finished()
-    sync_global_devices('before_save_checkpoint')
+    sync_global_devices('Flax:Checkpoint:WaitLastSaveDone')
 
   ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
       ckpt_dir, step, prefix)
 
   if config.flax_use_orbax_checkpointing or orbax_checkpointer:
+    logging.info(
+        'Using Orbax as backend to save Flax checkpoints. For potential'
+        ' troubleshooting see:'
+        ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#orbax-as-backend-troubleshooting'
+    )
     # Make sure any previous work is done before making file changes.
     if orbax_checkpointer and isinstance(orbax_checkpointer,
                                          orbax.AsyncCheckpointer):
       orbax_checkpointer.wait_until_finished()
+
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+    # Check singular target.
+    if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
+        orbax_checkpointer._handler, orbax.ArrayCheckpointHandler  # pylint: disable=protected-access
+    ):
+      raise ValueError(
+          'Orbax backend only accept pytree as save target. To save singular'
+          ' objects like numbers or Numpy arrays, checkout'
+          ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#if-you-don-t-save-pytrees'
+      )
+
     if process_index() == 0:
       _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
                             keep_every_n_steps, True)
@@ -703,7 +735,7 @@ def save_checkpoint_multiprocess(
 
   if not overwrite:
     _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step) # type: ignore
-    sync_global_devices('check_overwrite_strictly_before_save')
+    sync_global_devices('Flax:Checkpoint:CheckOverwriteBeforeSave')
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
     jax.monitoring.record_event('/jax/flax/checkpoint/save_main_ckpt_task')
@@ -724,7 +756,7 @@ def save_checkpoint_multiprocess(
     # on process 0 and before any worker starts to write GDA data.
     if process_index() == 0:
       _make_mpa_dirs(mpa_targets, ckpt_tmp_path)
-    sync_global_devices('Flax:Checkpointing:AfterCreateMPADir')
+    sync_global_devices('Flax:Checkpoint:AfterCreateMPADir')
     _save_mpas(gda_manager, mpa_targets, ckpt_tmp_path, ckpt_path, base_path,
                keep, overwrite, keep_every_n_steps, start_time, async_manager)
 

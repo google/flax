@@ -255,16 +255,24 @@ class CheckpointsTest(parameterized.TestCase):
     expected_new_object = {str(k): v for k, v in enumerate(test_object1)}
     check_eq(new_object, expected_new_object)
 
-  def test_save_restore_checkpoints_target_singular(self):
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_save_restore_checkpoints_target_singular(self, use_orbax):
+    config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
     test_object0 = np.array([0, 0, 0], np.int32)
     test_object1 = np.array([1, 1, 1], np.int32)
-    checkpoints.save_checkpoint(tmp_dir, test_object1, 0)
-    new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
-    check_eq(new_object, test_object1)
-    checkpoints.save_checkpoint(tmp_dir, test_object0, 1)
-    new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
-    check_eq(new_object, test_object0)
+    # Orbax backend returns error if target is singular. Orbax user need to use
+    # ArrayCheckpointHandler instead.
+    if use_orbax:
+      with self.assertRaises(ValueError):
+        checkpoints.save_checkpoint(tmp_dir, test_object1, 0)
+    else:
+      checkpoints.save_checkpoint(tmp_dir, test_object1, 0)
+      new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
+      check_eq(new_object, test_object1)
+      checkpoints.save_checkpoint(tmp_dir, test_object0, 1)
+      new_object = checkpoints.restore_checkpoint(tmp_dir, target=test_object1)
+      check_eq(new_object, test_object0)
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_save_restore_checkpoints_target_empty(self, use_orbax):
