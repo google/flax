@@ -814,7 +814,8 @@ def restore_checkpoint(
     parallel: bool = True,
     gda_manager: Optional[Any] = None,
     allow_partial_mpa_restoration: bool = False,
-    orbax_checkpointer: Optional[orbax.Checkpointer] = None) -> PyTree:
+    orbax_checkpointer: Optional[orbax.Checkpointer] = None,
+    orbax_transforms: Optional[Dict] = None) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
 
   Sorts the checkpoint files naturally, returning the highest-valued
@@ -846,6 +847,8 @@ def restore_checkpoint(
       to be restored.
     orbax_checkpointer: the `Orbax.Checkpointer` that handles the underlying
       restore, if the given checkpoint is saved with Orbax.
+    orbax_transforms: the Orbax transformations that will be passed into
+      `orbax_checkpointer.restore()` call.
 
   Returns:
     Restored `target` updated from checkpoint file, or if no step specified and
@@ -899,11 +902,16 @@ def restore_checkpoint(
         )
       return orbax.RestoreArgs()
 
-    restore_args = None
+
+    restore_kwargs = {}
     if target is not None:
-      restore_args = jax.tree_util.tree_map(make_restore_args, target)
+      restore_kwargs['restore_args'] = jax.tree_util.tree_map(
+          make_restore_args, target
+      )
+    if orbax_transforms is not None:
+      restore_kwargs['transforms'] = orbax_transforms
     restored = orbax_checkpointer.restore(
-        ckpt_path, item=target, restore_args=restore_args)
+        ckpt_path, item=target, **restore_kwargs)
     restored = serialization.to_state_dict(restored)
     if target is not None:
       restored = serialization.from_state_dict(target, restored)
@@ -912,12 +920,13 @@ def restore_checkpoint(
                                           end_time - start_time)
     return restored
 
+  ckpt_size = os.stat(ckpt_path).st_size
   with io.GFile(ckpt_path, 'rb') as fp:
     if parallel and fp.seekable():
       buf_size = 128 << 20  # 128M buffer.
-      num_bufs = fp.size() / buf_size
+      num_bufs = ckpt_size / buf_size
       logging.debug('num_bufs: %d', num_bufs)
-      checkpoint_contents = bytearray(fp.size())
+      checkpoint_contents = bytearray(ckpt_size)
 
       def read_chunk(i):
         # NOTE: We have to re-open the file to read each chunk, otherwise the
