@@ -2018,6 +2018,29 @@ class ModuleTest(absltest.TestCase):
     self.assertIn("b = 'ok'", str_rep)
     self.assertIn('c = 3.0', str_rep)
 
+  def test_repr_should_not_cause_setup(self):
+
+    class MLP(nn.Module):
+
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(1)(x)
+        return repr(self)
+
+    class Foo(nn.Module):
+      a: float
+      b: MLP
+
+    scope = Scope({})
+    module = Foo(parent=scope, a=1, b=MLP(parent=scope))
+    str_rep = repr(module)
+    self.assertIn('a = 1', str_rep)
+
+    self.assertEqual(module._state.setup_called, nn.module.SetupState.NEW)
+    # Calling repr() on a module inadvertently causes the submodule to setup.
+    # TODO: fix this.
+    self.assertEqual(module.b._state.setup_called, nn.module.SetupState.DONE)
+
   def test_kw_only(self):
     def create_kw_layers():
       class BaseLayer(nn.Module, kw_only=True):
