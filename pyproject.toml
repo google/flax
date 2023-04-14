@@ -14,7 +14,7 @@ dependencies = [
     "jax>=0.4.2",
     "msgpack",
     "optax",
-    "orbax-checkpoint",
+    "orbax",
     "tensorstore",
     "rich>=11.1",
     "typing_extensions>=4.1.1",
@@ -127,8 +127,6 @@ filterwarnings = [
     "ignore:jax.experimental.maps.Mesh is deprecated. Use jax.sharding.Mesh.*:DeprecationWarning",
     # Deprecated legacy checkpoint - just want to keep the tests running for a while
     "ignore:Flax Checkpointing will soon be deprecated in favor of Orbax.*:DeprecationWarning",
-    # Future warning from jax
-    "ignore:jax.tree_util.register_keypaths is deprecated.*:FutureWarning",
     # Some Tensorflow IO error on 3/27/2023
     "ignore:file system plugins are not loaded.*:UserWarning",
     "ignore:unable to load libtensorflow_io_plugins.so.*:UserWarning",
