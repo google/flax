@@ -14,8 +14,8 @@
 
 """Tests for flax.io."""
 
-import tempfile
 import os
+import tempfile
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -219,6 +219,24 @@ class IOTest(parameterized.TestCase):
         io.rmtree(dir0_path)
 
       self.assertTrue(not os.path.exists(dir0_path))
+
+
+  @parameterized.parameters(
+    {'backend_mode': io.BackendMode.DEFAULT},
+    {'backend_mode': io.BackendMode.TF}
+  )
+  def test_getsize(self, backend_mode):
+    with tempfile.TemporaryDirectory() as temp_dir_path:
+      test_path = os.path.join(temp_dir_path, 'test')
+
+      content = b'placeholder text'
+      with io.GFile(test_path, 'wb') as file:
+        file.write(content)
+
+      with io.override_mode(backend_mode):
+        size = io.getsize(test_path)
+
+      self.assertEqual(size, len(content))
 
 
 if __name__ == '__main__':

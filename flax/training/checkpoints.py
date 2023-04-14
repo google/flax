@@ -920,7 +920,7 @@ def restore_checkpoint(
                                           end_time - start_time)
     return restored
 
-  ckpt_size = os.stat(ckpt_path).st_size
+  ckpt_size = io.getsize(ckpt_path)
   with io.GFile(ckpt_path, 'rb') as fp:
     if parallel and fp.seekable():
       buf_size = 128 << 20  # 128M buffer.
