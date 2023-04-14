@@ -14,7 +14,7 @@ dependencies = [
     "jax>=0.4.2",
     "msgpack",
     "optax",
-    "orbax",
+    "orbax-checkpoint",
     "tensorstore",
     "rich>=11.1",
     "typing_extensions>=4.1.1",
