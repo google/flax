@@ -565,22 +565,14 @@ class RNN(Module):
     >>> y.shape # (batch, time, cell_size)
     (10, 50, 64)
 
-  To support variable length sequences, you can pass a ``segmentation_mask`` which is an integer
-  array of shape ``(*batch, time)``, where a 1 indicates the element is part of the sequence and a 0 indicates
-  a padding element. Sequences must be padded to the right, i.e. all elements of a sequence must be
-  contiguous and padded elements must be to the right of the sequence. For example::
+  To support variable length sequences, you can pass a ``seq_lengths`` which is an integer
+  array of shape ``(*batch)`` where each element is the length of the sequence in the batch.
+  For example::
 
-    >>> # 3 sequences with max length 5
-    >>> segmentation_mask = jnp.array([
-    ...   [1, 1, 1, 0, 0], # length 3
-    ...   [1, 1, 0, 0, 0], # length 2
-    ...   [1, 1, 1, 1, 1], # length 5
-    ... ])
+    >>> seq_lengths = jnp.array([3, 2, 5])
 
-  We use this integer mask format because its compatible with sequence packing which might get
-  implemented in the future. The output elements corresponding to padding elements are NOT
-  zeroed out. If ``return_carry`` is set to ``True`` the carry will be the state of the last
-  valid element of each sequence.
+  The output elements corresponding to padding elements are NOT zeroed out. If ``return_carry``
+  is set to ``True`` the carry will be the state of the last valid element of each sequence.
 
   RNN also accepts some of the arguments of :func:`flax.linen.scan`, by default they are set to
   work with cells like :class:`LSTMCell` and :class:`GRUCell` but they can be overriden as needed.
@@ -601,7 +593,7 @@ class RNN(Module):
       else it will return a tuple of the final carry and the output sequence.
     reverse: if ``reverse=False`` (default) the sequence is processed from left to right and
       returned in the original order, else it will be processed from right to left, and
-      returned in reverse order. If ``segmentation_mask`` is passed, padding will always remain
+      returned in reverse order. If ``seq_lengths`` is passed, padding will always remain
       at the end of the sequence.
     keep_order: if ``keep_order=True``, when ``reverse=True``
       the output will be reversed back to the original order after processing, this is
@@ -641,7 +633,7 @@ class RNN(Module):
     *,
     initial_carry: Optional[Carry] = None,
     init_key: Optional[random.KeyArray] = None,
-    segmentation_mask: Optional[Array] = None,
+    seq_lengths: Optional[Array] = None,
     return_carry: Optional[bool] = None,
     time_major: Optional[bool] = None,
     reverse: Optional[bool] = None,
@@ -660,15 +652,17 @@ class RNN(Module):
       init_key: a PRNG key used to initialize the carry, if not provided
         ``jax.random.PRNGKey(0)`` will be used. Most cells will ignore this
         argument.
-      segmentation_mask: an integer array of shape ``(*batch, time)`` indicating
-        which elements are part of the sequence and which are padding elements.
+      seq_lengths: an optional integer array of shape ``(*batch)`` indicating
+        the length of each sequence, elements whose index in the time dimension
+        is greater than the corresponding length will be considered padding and
+        will be ignored.
       return_carry: if ``return_carry=False`` (default) only the output sequence is returned,
         else it will return a tuple of the final carry and the output sequence.
       time_major: if ``time_major=False`` (default) it will expect inputs with shape
         ``(*batch, time, *features)``, else it will expect inputs with shape ``(time, *batch, *features)``.
       reverse: overrides the ``reverse`` attribute, if ``reverse=False`` (default) the sequence is
         processed from left to right and returned in the original order, else it will be processed
-        from right to left, and returned in reverse order. If ``segmentation_mask`` is passed,
+        from right to left, and returned in reverse order. If ``seq_lengths`` is passed,
         padding will always remain at the end of the sequence.
       keep_order: overrides the ``keep_order`` attribute, if ``keep_order=True``, when ``reverse=True``
         the output will be reversed back to the original order after processing, this is
@@ -701,7 +695,7 @@ class RNN(Module):
     if reverse:
       inputs = jax.tree_map(
         lambda x: flip_sequences(
-          x, segmentation_mask, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
+          x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
         inputs)
 
     carry: Carry
@@ -721,7 +715,7 @@ class RNN(Module):
       # so that we can select the last carry for each sequence later.
       # This uses more memory but is faster than using jnp.where at each
       # iteration. As a small optimization do this when we really need it.
-      if segmentation_mask is not None and return_carry:
+      if seq_lengths is not None and return_carry:
         return carry, (carry, y)
       else:
         return carry, y
@@ -729,7 +723,7 @@ class RNN(Module):
     scan = transforms.scan(
       scan_fn,
       in_axes=time_axis,
-      out_axes=time_axis if segmentation_mask is None else (0, time_axis),
+      out_axes=time_axis if seq_lengths is None else (0, time_axis),
       unroll=self.unroll,
       variable_axes=self.variable_axes,
       variable_broadcast=self.variable_broadcast,
@@ -742,18 +736,18 @@ class RNN(Module):
     # Next we select the final carry. If a segmentation mask was provided and
     # return_carry is True we slice the carry history and select the last valid
     # carry for each sequence. Otherwise we just use the last carry.
-    if segmentation_mask is not None and return_carry:
+    if seq_lengths is not None and return_carry:
       _, (carries, outputs) = scan_output
-      # segmentation_mask[None] expands the shape of the mask to match the
+      # seq_lengths[None] expands the shape of the mask to match the
       # number of dimensions of the carry.
-      carry = _select_last(carries, segmentation_mask[None], axis=0)
+      carry = _select_last_carry(carries, seq_lengths)
     else:
       carry, outputs = scan_output
 
     if reverse and keep_order:
       outputs = jax.tree_map(
         lambda x: flip_sequences(
-          x, segmentation_mask, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
+          x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
         outputs)
 
     if return_carry:
@@ -761,13 +755,11 @@ class RNN(Module):
     else:
       return outputs
 
-def _select_last(sequence: A, segmentation_mask: jnp.ndarray, axis: int) -> A:
-  last_idx = segmentation_mask.sum(axis=-1) - 1
+def _select_last_carry(sequence: A, seq_lengths: jnp.ndarray) -> A:
+  last_idx = seq_lengths - 1
 
   def _slice_array(x: jnp.ndarray):
-    _last_idx = _expand_dims_like(last_idx, target=x)
-    x = jnp.take_along_axis(x, _last_idx, axis=axis)
-    return x.squeeze(axis=axis)
+    return x[last_idx, jnp.arange(x.shape[1])]
 
   return jax.tree_map(_slice_array, sequence)
 
@@ -775,10 +767,8 @@ def _expand_dims_like(x, target):
   """Expands the shape of `x` to match `target`'s shape by adding singleton dimensions."""
   return x.reshape(list(x.shape) + [1] * (target.ndim - x.ndim))
 
-# TODO: Make flip_sequences a method of RNN and generalize it to work with
-# multiple batch dimensions.
 def flip_sequences(
-  inputs: Array, segmentation_mask: Optional[Array], num_batch_dims: int, time_major: bool
+  inputs: Array, seq_lengths: Optional[Array], num_batch_dims: int, time_major: bool
 ) -> Array:
   """Flips a sequence of inputs along the time axis.
 
@@ -810,19 +800,20 @@ def flip_sequences(
   time_axis = 0 if time_major else num_batch_dims
   max_steps = inputs.shape[time_axis]
 
-  if segmentation_mask is None:
+  if seq_lengths is None:
     # reverse inputs and return
     inputs = jnp.flip(inputs, axis=time_axis)
     return inputs
 
-  lengths = jnp.sum(segmentation_mask, axis=time_axis, keepdims=True) # [*batch, 1]
+  seq_lengths = jnp.expand_dims(seq_lengths, axis=time_axis)
+
   # create indexes
   idxs = jnp.arange(max_steps - 1, -1, -1) # [max_steps]
   if time_major:
     idxs = jnp.reshape(idxs, [max_steps] + [1] * num_batch_dims)
   else:
     idxs = jnp.reshape(idxs, [1] * num_batch_dims + [max_steps]) # [1, ..., max_steps]
-  idxs = (idxs + lengths) % max_steps # [*batch, max_steps]
+  idxs = (idxs + seq_lengths) % max_steps # [*batch, max_steps]
   idxs = _expand_dims_like(idxs, target=inputs) # [*batch, max_steps, *features]
   # Select the inputs in flipped order.
   outputs = jnp.take_along_axis(inputs, idxs, axis=time_axis)
@@ -841,7 +832,7 @@ class RNNBase(Protocol):
     *,
     initial_carry: Optional[Carry] = None,
     init_key: Optional[random.KeyArray] = None,
-    segmentation_mask: Optional[Array] = None,
+    seq_lengths: Optional[Array] = None,
     return_carry: Optional[bool] = None,
     time_major: Optional[bool] = None,
     reverse: Optional[bool] = None,
@@ -863,7 +854,7 @@ class Bidirectional(Module):
     *,
     initial_carry: Optional[Carry] = None,
     init_key: Optional[random.KeyArray] = None,
-    segmentation_mask: Optional[Array] = None,
+    seq_lengths: Optional[Array] = None,
     return_carry: Optional[bool] = None,
     time_major: Optional[bool] = None,
     reverse: Optional[bool] = None,
@@ -890,12 +881,12 @@ class Bidirectional(Module):
     # Encode in the forward direction.
     carry_forward, outputs_forward = self.forward_rnn(
       inputs, initial_carry=initial_carry_forward, init_key=key_forward,
-      segmentation_mask=segmentation_mask, return_carry=True,
+      seq_lengths=seq_lengths, return_carry=True,
       time_major=time_major, reverse=False)
 
     carry_backward, outputs_backward = self.backward_rnn(
       inputs, initial_carry=initial_carry_backward, init_key=key_backward,
-      segmentation_mask=segmentation_mask, return_carry=True,
+      seq_lengths=seq_lengths, return_carry=True,
       time_major=time_major, reverse=True, keep_order=True)
 
     carry = (carry_forward, carry_backward)
