@@ -24,6 +24,15 @@ vNext
 -
 -
 
+0.6.9
+-----
+- Depend on `orbax-checkpoint` package instead of `orbax`.
+- Refactored setup scripts to `project.toml`.
+- Added pretty_repr utility fn.
+- Fix get_partition_spec on replicated array.
+- Updates imagenet.ipynb to use GPU Colab runtime, and fixed config.
+- Upgrade checkpointing code to `jax.sharding`, and with more warnings.
+
 0.6.8
 -----
 - The automatic checkpoint migration was temporarily rolled back due to legacy compatibility issues.
