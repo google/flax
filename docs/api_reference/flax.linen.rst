@@ -275,3 +275,4 @@ RNN primitives
     GRUCell
     RNNCellBase
     RNN
+    Bidirectional
