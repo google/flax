@@ -33,6 +33,7 @@ from typing_extensions import Protocol, \
   dataclass_transform  # pytype: disable=not-supported-yet
 
 import flax
+import flax.linen as nn
 from flax import (config, core, errors, serialization, traceback_util,
                   traverse_util)
 from flax.core import Scope
@@ -76,7 +77,10 @@ def _indent(x: str, num_spaces: int):
 
 
 def _attr_repr(value: Any):
-  if callable(value) and getattr(value, '__name__', None):
+  if callable(value) and (
+      (isinstance(value, nn.Module) and value.__dict__.get('__name__', None))
+      or (not isinstance(value, nn.Module) and getattr(value, '__name__', None))
+  ):
     value_rep = value.__name__
   else:
     value_rep = repr(value)
@@ -100,7 +104,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
     rep += '# attributes\n'
     for attr in attributes.keys():
       # TODO(jheek): can we get a nice string representation of attribute types?
-      value = getattr(module, attr, None)
+      value = module.__dict__.get(attr, None)
       value_rep = _attr_repr(value)
       rep += f'{attr} = {value_rep}\n'
   if child_modules:
