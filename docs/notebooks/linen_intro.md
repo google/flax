@@ -64,7 +64,7 @@ from flax import linen as nn
 +++ {"id": "nrVbFrh1ffve"}
 
 Let's instantiate a `Dense` layer.
- - Modules are actually objects in this API, so we provide _constructor arguments_ when initializing the Module.  In this case, we only have to provide the output `features` dimension.
+ - Modules are actually objects in this API, so we provide _contructor arguments_ when initializing the Module.  In this case, we only have to provide the output `features` dimension.
 
 ```{code-cell}
 :id: EcDH20Uufc-v
