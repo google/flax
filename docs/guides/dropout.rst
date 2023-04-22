@@ -247,8 +247,9 @@ the training step function. Refer to the
       logits = state.apply_fn(
         {'params': params},
         x=batch['image'],
+
+
         )
-        
       loss = optax.softmax_cross_entropy_with_integer_labels(
         logits=logits, labels=batch['label'])
       return loss, logits
