@@ -29,11 +29,12 @@ as demonstrated below.
 A common pattern is to accept a ``train`` (``training``) argument in the parent Flax ``Module``, and use
 it to define ``BatchNorm``'s ``use_running_average`` argument.
 
-Note: In other machine learning frameworks, like PyTorch or
-TensorFlow (Keras), this is specified via a mutable state or a call flag (for example, in
-`torch.nn.Module.eval <https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval>`__
-or ``tf.keras.Model`` by setting the
-`training <https://www.tensorflow.org/api_docs/python/tf/keras/Model#call>`__ flag).
+**Note**: In other machine learning frameworks, the difference in runtime behavior
+is specified via a mutable state or top-level flags, for example
+PyTorch's `Module.eval <https://pytorch.org/docs/stable/generated/torch.nn.Module.html#torch.nn.Module.eval>`__
+or Keras' ``Model.__call__``
+`training <https://www.tensorflow.org/api_docs/python/tf/keras/Model#call>`__ flag.
+
 
 .. codediff::
   :title_left: No BatchNorm
@@ -284,7 +285,6 @@ and the ``train`` argument is set to ``False``:
 
   @jax.jit
   def eval_step(state: TrainState, batch):
-    """Train for a single step."""
     logits = state.apply_fn(
       {'params': params},
       x=batch['image'])
@@ -298,7 +298,6 @@ and the ``train`` argument is set to ``False``:
   ---
   @jax.jit
   def eval_step(state: TrainState, batch):
-    """Train for a single step."""
     logits = state.apply_fn(
       {'params': params, 'batch_stats': state.batch_stats}, #!
       x=batch['image'], train=False) #!
