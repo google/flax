@@ -862,7 +862,7 @@ def scan(target: Target,
     out_axes: Specifies the axis to scan over for the return value. Should be a
       prefix tree of the return value.
     length: Specifies the number of loop iterations. This only needs to be
-      specified if it cannot be derivied from the scan arguments.
+      specified if it cannot be derived from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
     unroll: how many scan iterations to unroll within a single
       iteration of a loop (default: 1).
@@ -950,7 +950,7 @@ def map_variables(
     methods: If `target` is a `Module`, the methods of `Module` to map variables
       for.
   Returns:
-    a wrapped version of ``target`` that will map the specificied collections.
+    a wrapped version of ``target`` that will map the specified collections.
   """
 
   return lift_transform(

@@ -121,7 +121,7 @@ For convenience, the TPU creation commands are inlined below. Please note that
 we define `GCS_TFDS_BUCKET` to where your data stands in your cloud bucket.
 Also `YOUR_BUCKET` is the work directory you are experimenting in. You should
 choose ZONE based on where your TPU and work directory is. [Here](https://cloud.google.com/tpu/docs/types-zones)
-has some usefule information on which zones you can have different types of TPUs.
+has some useful information on which zones you can have different types of TPUs.
 
 ```shell
 VM_NAME=wmt

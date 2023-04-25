@@ -47,10 +47,6 @@ the same functionality.
   ---
   class MLP(nn.Module):
 
-
-
-
-
     @nn.compact #!
     def __call__(self, x):
       x = nn.Dense(32, name="dense1")(x) #!

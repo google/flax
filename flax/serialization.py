@@ -14,7 +14,7 @@
 
 """Serialization utilities for Jax.
 
-All Flax classes that carry state (e.g. ,Optimizer) can be turned into a
+All Flax classes that carry state (e.g., Optimizer) can be turned into a
 state dict of numpy arrays for easy serialization.
 """
 import enum
@@ -379,7 +379,7 @@ def msgpack_serialize(pytree, in_place: bool = False) -> bytes:
   Args:
     pytree: python tree of dict, list, tuple with python primitives
       and array leaves.
-    in_place: boolean specifyng if pytree should be modified in place.
+    in_place: boolean specifying if pytree should be modified in place.
 
   Returns:
     msgpack-encoded bytes of pytree.

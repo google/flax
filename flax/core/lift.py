@@ -723,7 +723,7 @@ def scan(fn: Callable[..., Any],
     out_axes: Specifies the axis to scan over for the return value. Should be a
       prefix tree of the return value.
     length: Specifies the number of loop iterations. This only needs
-      to be specified if it cannot be derivied from the scan arguments.
+      to be specified if it cannot be derived from the scan arguments.
     reverse: If true, scan from end to start in reverse order.
     unroll: how many scan iterations to unroll within a single
       iteration of a loop (default: 1).
@@ -991,7 +991,7 @@ def switch(index: Any,
   Note that this constraint is violated when
   creating variables or submodules in only one branch.
   Because initializing variables in just one branch
-  causes the paramater structure to be different.
+  causes the parameter structure to be different.
 
   Example::
 
@@ -1011,7 +1011,7 @@ def switch(index: Any,
       return lift.switch(index, [a_fn, b_fn, c_fn], scope, x)
 
   If you want to have a different parameter structure for each branch
-  you should run all branche on initialization before calling switch::
+  you should run all branch on initialization before calling switch::
 
     def multihead_switch_example(scope, x, index):
       def a_fn(scope, x):
@@ -1107,7 +1107,7 @@ def custom_vjp(fn: Callable[..., Any],
     fn: The function to define a custom_vjp for. The first argument
       should be a ``Module`` instance.
     forward_fn: A function with the same arguments as `fn` returning an tuple
-      with the original output and the residuals that will be passsed to
+      with the original output and the residuals that will be passed to
       `backward_fn`.
     backward_fn: arguments are passed as (*nondiff_args, residuals, tangents)
       The function should return a tuple containing the tangents for the

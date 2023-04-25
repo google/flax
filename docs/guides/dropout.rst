@@ -109,8 +109,6 @@ In short, :meth:`flax.linen.Module.make_rng` *guarantees full reproducibility*.
     def __call__(self, x):
       x = nn.Dense(self.num_neurons)(x)
 
-
-
       return x
   ---
   class MyModel(nn.Module):
@@ -203,9 +201,6 @@ the training step function. Refer to the
   :sync:
 
   from flax.training import train_state
-
-
-
 
   state = train_state.TrainState.create(
     apply_fn=my_model.apply,

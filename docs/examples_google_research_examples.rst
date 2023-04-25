@@ -44,7 +44,7 @@ Colorization Transformer (ColTran)
 
   - `Colorization Transformer <https://openreview.net/forum?id=5NA1PinlGFu>`__ (Kumar et al., 2020)
 
-    - *"We presented the Colorization Transformer (ColTran), an architecture that entirely relies on selfattention for image colorization. We introduce conditional transformer layers, a novel building block for conditional, generative models based on self-attention. Our ablations show the superiority of employing this mechanism over a number of different baselines. Finally, we demonstrate that ColTran can generate diverse, high-fidelity colorizations on ImageNet, which are largely indistinguishable from the ground-truth even for human raters."*
+    - *"We presented the Colorization Transformer (ColTran), an architecture that entirely relies on self-attention for image colorization. We introduce conditional transformer layers, a novel building block for conditional, generative models based on self-attention. Our ablations show the superiority of employing this mechanism over a number of different baselines. Finally, we demonstrate that ColTran can generate diverse, high-fidelity colorizations on ImageNet, which are largely indistinguishable from the ground-truth even for human raters."*
 
 Vision Transformer (ViT), MLP-Mixer Architectures *and* Big Vision
 ==================================================================

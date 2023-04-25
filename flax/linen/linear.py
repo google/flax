@@ -263,8 +263,8 @@ class _Conv(Module):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpeted as applying the same padding
-      in all dims and passign a single int in a sequence causes the same padding
+      spatial dimension. A single int is interpreted as applying the same padding
+      in all dims and assign a single int in a sequence causes the same padding
       to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of `n` integers, giving the
@@ -493,8 +493,8 @@ class Conv(_Conv):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpeted as applying the same padding
-      in all dims and passign a single int in a sequence causes the same padding
+      spatial dimension. A single int is interpreted as applying the same padding
+      in all dims and assign a single int in a sequence causes the same padding
       to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of `n` integers, giving the
@@ -536,8 +536,8 @@ class ConvLocal(_Conv):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpeted as applying the same padding
-      in all dims and passign a single int in a sequence causes the same padding
+      spatial dimension. A single int is interpreted as applying the same padding
+      in all dims and assign a single int in a sequence causes the same padding
       to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
       left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of `n` integers, giving the
@@ -578,8 +578,8 @@ class ConvTranspose(Module):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpeted as applying the same padding
-      in all dims and passign a single int in a sequence causes the same padding
+      spatial dimension. A single int is interpreted as applying the same padding
+      in all dims and assign a single int in a sequence causes the same padding
       to be used on both sides.
     kernel_dilation: `None`, or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution

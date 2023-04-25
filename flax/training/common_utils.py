@@ -41,7 +41,7 @@ def shard(xs):
 def shard_prng_key(prng_key):
   """Helper to shard (aka split) a PRNGKey for use with pmap'd functions.
 
-  PRNG keys can used at train time to drive stochastic modules
+  PRNG keys can be used at train time to drive stochastic modules
   e.g. Dropout. We would like a different PRNG key for each local
   device so that we end up with different random numbers on each one,
   hence we split our PRNG key.

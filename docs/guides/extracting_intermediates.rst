@@ -210,7 +210,7 @@ In the following code example we check if any intermediate activations are non-f
   variables = init(jax.random.PRNGKey(0), batch)
   y, is_finite = predict(variables, batch)
   all_finite = all(jax.tree_util.tree_leaves(is_finite))
-  assert all_finite, "non finite intermediate detected!"
+  assert all_finite, "non-finite intermediate detected!"
 
 By default only the intermediates of ``__call__`` methods are collected.
 Alternatively, you can pass a custom filter based on the ``Module`` instance and the method name.

@@ -266,12 +266,12 @@ class KeysOnlyMlpAttention(nn.Module):
 
   @nn.compact
   def __call__(self, keys: Array, mask: Array) -> Array:
-    """Applies model  to the input keys and mask.
+    """Applies model to the input keys and mask.
 
     Args:
       keys: The inputs for which to compute an attention score. Shape:
         <float32>[batch_size, seq_length, embeddings_size].
-      mask: A mask that determinines which values in `keys` are valid. Only
+      mask: A mask that determines which values in `keys` are valid. Only
         values for which the mask is True will get non-zero attention scores.
         <bool>[batch_size, seq_length].
 

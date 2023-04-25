@@ -165,7 +165,7 @@ For convenience, the TPU creation commands are inlined below. Please note that
 we define `GCS_TFDS_BUCKET` to where your data stands in your cloud bucket.
 Also `YOUR_BUCKET` is the work directory you are experimenting in. You should
 choose ZONE based on where your TPU and work directory is. [Here](https://cloud.google.com/tpu/docs/types-zones)
-has some usefule information on which zones you can have different types of TPUs.
+has some useful information on which zones you can have different types of TPUs.
 
 ```shell
 VM_NAME=imagenet
@@ -202,7 +202,7 @@ gcloud alpha compute tpus tpu-vm delete $VM_NAME \
 Can be launched with utility script described in
 [../cloud/README.md](../cloud/README.md)
 
-There are two configuratoins available:
+There are two configurations available:
 
 - `configs/v100_x8.py` : Full precision GPU training
 - `configs/v100_x8_mixed_precision.py` : Mixed precision GPU training. Note that

@@ -26,7 +26,7 @@ Image classification
 
 - :octicon:`mark-github;0.9em` `ImageNet <https://github.com/google/flax/tree/main/examples/imagenet/>`__ -
   `Interactive🕹 <https://colab.research.google.com/github/google/flax/blob/main/examples/imagenet/imagenet.ipynb>`__:
-  Resnet-50 on ImageNet with weight decay (featuring multi host SPMD, custom
+  Resnet-50 on ImageNet with weight decay (featuring multi-host SPMD, custom
   preprocessing, checkpointing, dynamic scaling, mixed precision).
 
 Reinforcement learning

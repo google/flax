@@ -130,9 +130,9 @@ Advantages of the boxing approach:
 1. Boxing can be used outside of Flax and metadata is automatically "inherited". For example, the optimizer state will
    have the same partitioning spec as the parameters, because the state is initialized using a ``jax.tree_map`` over the boxed parameters.
 2. Boxes are composable.
-3. Boxing avoids string manipulation and generally avoids having to handle additional auxilary collections like "param_axes" in the current
+3. Boxing avoids string manipulation and generally avoids having to handle additional auxiliary collections like "param_axes" in the current
    partitioning API.
-4. No need to lift metadata collections seperately.
+4. No need to lift metadata collections separately.
 
 
 Disadvantages:
@@ -187,7 +187,7 @@ variables = partitioned_dense.init(rng, jnp.ones((4,)))
 jax.tree_map(np.shape, variables)  # => {"params": {"kernel": Partitioned(value=(4, 8), names=(None, "data")), bias: (8,)}}
 ```
 
-The variable tree with metadata can be used to integrate with other libaries and APIs.
+The variable tree with metadata can be used to integrate with other libraries and APIs.
 For example, we can turn the ``Partitioned`` metadata into ``jax.pjit`` sharding annotations:
 
 ```python

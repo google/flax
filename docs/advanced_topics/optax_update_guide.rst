@@ -187,7 +187,7 @@ Learning Rate Schedules
 For learning rate schedules, Flax allows overwriting hyper parameters when
 applying the gradients. Optax maintains a step counter and provides this as an
 argument to a function for scaling the updates added with
-|optax.scale_by_schedule()|_. Optax also allows specifying a functions to
+|optax.scale_by_schedule()|_. Optax also allows specifying functions to
 inject arbitrary scalar values for other gradient updates via
 |optax.inject_hyperparams()|_.
 

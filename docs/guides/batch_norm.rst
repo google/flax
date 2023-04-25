@@ -106,17 +106,7 @@ collection.
   :sync:
 
   FrozenDict({
-
-
-
-
-
-
     'params': {
-
-
-
-
       'Dense_0': {
           'bias': (4,),
           'kernel': (3, 4),
@@ -171,7 +161,6 @@ need to consider the following:
   y = mlp.apply(
     {'params': params},
     x,
-
   )
   ...
 
@@ -198,8 +187,6 @@ is handling the additional ``batch_stats`` state. To do this, you need to:
   :sync:
 
   from flax.training import train_state
-
-
 
 
   state = train_state.TrainState.create(

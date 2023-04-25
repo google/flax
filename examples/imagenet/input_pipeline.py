@@ -48,7 +48,7 @@ def distorted_bounding_box_crop(image_bytes,
     aspect_ratio_range: An optional list of `float`s. The cropped area of the
         image must have an aspect ratio = width / height within this range.
     area_range: An optional list of `float`s. The cropped area of the image
-        must contain a fraction of the supplied image within in this range.
+        must contain a fraction of the supplied image within this range.
     max_attempts: An optional `int`. Number of attempts at generating a cropped
         region of the image of the specified constraints. After `max_attempts`
         failures, return the entire image.
