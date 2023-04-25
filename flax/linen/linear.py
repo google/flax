@@ -44,6 +44,8 @@ ConvGeneralDilatedT = Callable[..., Array]
 default_kernel_init = initializers.lecun_normal()
 
 
+asdf: int = 'asdf'
+
 def _normalize_axes(axes: Tuple[int, ...], ndim: int) -> Tuple[int, ...]:
   # A tuple by convention. len(axes_tuple) then also gives the rank efficiently.
   return tuple(sorted(ax if ax >= 0 else ndim + ax for ax in axes))
