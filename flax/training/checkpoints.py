@@ -275,8 +275,7 @@ def _restore_mpas(state_dict,
   for key, value in flattened.items():
     if isinstance(value, str) and value.startswith(MP_ARRAY_PH):
       _check_mpa_errors()
-      if not target or (key not in target_flattened) or (
-          not orbax_utils.is_multiprocess_array(target_flattened[key])):
+      if not target or (key not in target_flattened):
         if allow_partial:
           logging.warning(
               'Multiprocess array %s could not be restored because a valid array is not found in target at the corresponding location. Proceed to restore other arrays because allow_partial_restoration=True',
