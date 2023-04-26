@@ -140,7 +140,7 @@ for batch in ds.as_numpy_iterator():
   total += len(batch['label'])
   correct += (batch['label'] == preds.argmax(axis=1)).sum()
 
-correc = correct.item()
+correct = correct.item()
 correct, total, correct / total
 ```
 
@@ -169,7 +169,7 @@ for batch in ds.as_numpy_iterator():
   total += len(batch['label'].flatten())
   correct += (batch['label'] == preds.argmax(axis=-1)).sum()
 
-correc = correct.item()
+correct = correct.item()
 correct, total, correct / total
 ```
 
