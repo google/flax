@@ -1465,10 +1465,12 @@ class TransformTest(absltest.TestCase):
     class Foo(nn.Module):
       @nn.compact
       def __call__(self, x):
+        key_zero = random.PRNGKey(0)
+        key_zero = jnp.broadcast_to(key_zero, (2, *key_zero.shape))
         self.param('inc', lambda _: 1)
         self.put_variable('state', 'acc', 0)
-        self.put_variable('state', 'rng_params', jnp.zeros((2, 2), jnp.uint32))
-        self.put_variable('state', 'rng_loop', jnp.zeros((2, 2), jnp.uint32))
+        self.put_variable('state', 'rng_params', key_zero)
+        self.put_variable('state', 'rng_loop', key_zero)
 
         def cond_fn(mdl, c):
           acc = mdl.get_variable('state', 'acc')
@@ -1487,7 +1489,7 @@ class TransformTest(absltest.TestCase):
             carry_variables='state', split_rngs={'params': False, 'loop': True})
     x = 2
     mdl = Foo()
-    _, vars = mdl.apply({}, x, mutable=True, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    _, vars = mdl.apply({}, x, mutable=True, rngs={'params': random.PRNGKey(1), 'loop': random.PRNGKey(2)})
     self.assertEqual(vars['state']['acc'], x)
     np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
     np.testing.assert_array_compare(operator.__ne__, vars['state']['rng_loop'][0], vars['state']['rng_loop'][1])

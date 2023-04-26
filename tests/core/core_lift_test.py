@@ -116,10 +116,12 @@ class LiftTest(absltest.TestCase):
 
   def test_while_loop(self):
     def f(scope, x):
+      key_zero = random.PRNGKey(0)
+      key_zero = jnp.broadcast_to(key_zero, (2, *key_zero.shape))
       scope.param('inc', lambda _: 1)
       scope.put_variable('state', 'acc', 0)
-      scope.put_variable('state', 'rng_params', jnp.zeros((2, 2), jnp.uint32))
-      scope.put_variable('state', 'rng_loop', jnp.zeros((2, 2), jnp.uint32))
+      scope.put_variable('state', 'rng_params', key_zero)
+      scope.put_variable('state', 'rng_loop', key_zero)
 
       def cond_fn(scope, c):
         acc = scope.get_variable('state', 'acc')
@@ -135,7 +137,7 @@ class LiftTest(absltest.TestCase):
         return c + 2
       return lift.while_loop(cond_fn, body_fn, scope, 0, carry_variables='state', split_rngs={'params': False, 'loop': True})
     x = 2
-    c, vars = apply(f, mutable=True)({}, x, rngs={'params': random.PRNGKey(0), 'loop': random.PRNGKey(1)})
+    c, vars = apply(f, mutable=True)({}, x, rngs={'params': random.PRNGKey(1), 'loop': random.PRNGKey(2)})
     self.assertEqual(vars['state']['acc'], x)
     self.assertEqual(c, 2 * x)
     np.testing.assert_array_equal(vars['state']['rng_params'][0], vars['state']['rng_params'][1])
