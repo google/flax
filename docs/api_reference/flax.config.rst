@@ -2,6 +2,6 @@
 flax.config package
 ====================
 
-Flax has the following global config options.
-
-.. automodule:: flax.config
+.. automodule:: flax.configurations
+    :members:
+    :exclude-members: use_regular_dict

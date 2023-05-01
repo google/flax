@@ -2,7 +2,7 @@ API Reference
 =============
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 3
 
    flax.config
    flax.core.frozen_dict
