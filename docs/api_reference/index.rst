@@ -2,15 +2,15 @@ API Reference
 =============
 
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 4
 
+   flax.config
+   flax.core.frozen_dict
+   flax.errors
+   flax.jax_utils
    flax.linen
    flax.serialization
-   flax.core.frozen_dict
    flax.struct
-   flax.jax_utils
    flax.traceback_util
-   flax.traverse_util
    flax.training
-   flax.config
-   flax.errors
+   flax.traverse_util
