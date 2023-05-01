@@ -27,6 +27,7 @@ import numpy as np
 
 Array = jax.Array
 PRNGKey = jax.random.KeyArray
+LSTMCarry = Tuple[Array, Array]
 
 
 class DecoderLSTMCell(nn.RNNCellBase):
@@ -39,7 +40,9 @@ class DecoderLSTMCell(nn.RNNCellBase):
   vocab_size: int
 
   @nn.compact
-  def __call__(self, carry: Tuple[Array, Array], x: Array) -> Array:
+  def __call__(
+    self, carry: Tuple[LSTMCarry, Array], x: Array
+  ) -> Tuple[Tuple[LSTMCarry, Array], Tuple[Array, Array]]:
     """Applies the DecoderLSTM model."""
     lstm_state, last_prediction = carry
     if not self.teacher_force:
@@ -100,21 +103,20 @@ class Seq2seq(nn.Module):
     decoder = nn.RNN(DecoderLSTMCell(self.teacher_force, self.vocab_size), decoder_inputs.shape[-1],
       split_rngs={'params': False, 'lstm': True}, name='decoder')
 
-    segmentation_mask = self.get_segmentation_mask(encoder_inputs)
+    seq_lengths = self.get_seq_lengths(encoder_inputs)
 
-    encoder_state, _ = encoder(encoder_inputs, segmentation_mask=segmentation_mask)
+    encoder_state, _ = encoder(encoder_inputs, seq_lengths=seq_lengths)
     logits, predictions = decoder(decoder_inputs[:, :-1], initial_carry=(encoder_state, decoder_inputs[:, 0]))
 
     return logits, predictions
 
-  def get_segmentation_mask(self, inputs: Array) -> Array:
+  def get_seq_lengths(self, inputs: Array) -> Array:
     """Get segmentation mask for inputs."""
     # undo one-hot encoding
     inputs = jnp.argmax(inputs, axis=-1)
-    # calculate eos index
-    eos_idx = jnp.argmax(inputs == self.eos_id, axis=-1, keepdims=True)
-    # create index array
-    indexes = jnp.arange(inputs.shape[1])
-    indexes = jnp.broadcast_to(indexes, inputs.shape[:2])
-    # return mask
-    return indexes < eos_idx
+    # calculate sequence lengths
+    seq_lengths = jnp.argmax(inputs == self.eos_id, axis=-1)
+
+    return seq_lengths
+
+
