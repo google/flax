@@ -1,11 +1,12 @@
 Extracting intermediate values
 ==============================
 
-This pattern will show you how to extract intermediate values from a module.
+This guide will show you how to extract intermediate values from a module.
 Let's start with this simple CNN that uses :code:`nn.compact`.
 
 .. testsetup::
 
+  import flax
   import flax.linen as nn
   import jax
   import jax.numpy as jnp
@@ -88,14 +89,14 @@ The CNN can be augmented with calls to ``sow`` to store intermediates as followi
 
 ``sow`` acts as a no-op when the variable collection is not mutable.
 Therefore, it works perfectly for debugging and optional tracking of intermediates.
-The 'intermediates' collection is also used by the ``capture_intermediates`` API (see final section).
+The 'intermediates' collection is also used by the ``capture_intermediates`` API (see the :ref:`Use ``capture_intermediates``` section).
 
 Note that, by default ``sow`` appends values every time it is called:
 
 * This is necessary because once instantiated, a module could be called multiple
   times in its parent module, and we want to catch all the sowed values.
-* So you want to make sure that you **do not** feed intermediate values back in
-  in ``variables``. Otherwise every call will increase the length of that tuple
+* Therefore you want to make sure that you **do not** feed intermediate values back
+  into ``variables``. Otherwise every call will increase the length of that tuple
   and trigger a recompile.
 * To override the default append behavior, specify ``init_fn`` and ``reduce_fn``
   - see :meth:`Module.sow() <flax.linen.Module.sow>`.
@@ -189,7 +190,8 @@ Use ``capture_intermediates``
 
 Linen supports the capture of intermediate return values from submodules automatically without any code changes.
 This pattern should be considered the "sledge hammer" approach to capturing intermediates.
-As a debugging and inspection tool it is very useful but using the other patterns described in this howto.
+As a debugging and inspection tool it is very useful, but using the other patterns described in this guide
+will give you more fine-grained control over what intermediates you want to extract.
 
 In the following code example we check if any intermediate activations are non-finite (NaN or infinite):
 
@@ -213,7 +215,7 @@ In the following code example we check if any intermediate activations are non-f
   assert all_finite, "non-finite intermediate detected!"
 
 By default only the intermediates of ``__call__`` methods are collected.
-Alternatively, you can pass a custom filter based on the ``Module`` instance and the method name.
+Alternatively, you can pass a custom filter function based on the ``Module`` instance and the method name.
 
 .. testcode::
 
@@ -223,6 +225,73 @@ Alternatively, you can pass a custom filter based on the ``Module`` instance and
   y, state = CNN().apply(variables, batch, capture_intermediates=filter_Dense, mutable=["intermediates"])
   dense_intermediates = state['intermediates']
 
+Note that ``capture_intermediates`` will only apply to layers. You can use ``self.sow`` to manually store
+non-layer intermediates, but the filter function won't be applied to it.
+
+.. codediff::
+  :title_left: Capturing all layer intermediates
+  :title_right: Using filter function and ``self.sow()``
+
+  class Model(nn.Module):
+    @nn.compact
+    def __call__(self, x):
+      a = nn.Dense(4)(x) # Dense_0
+      b = nn.Dense(4)(x) # Dense_1
+      c = a + b # not a Flax layer, so won't be stored as an intermediate
+      d = nn.Dense(4)(c) # Dense_2
+      return d
+
+  @jax.jit
+  def init(key, x):
+    variables = Model().init(key, x)
+    return variables['params']
+
+  @jax.jit
+  def predict(params, x):
+    return Model().apply({"params": params}, x, capture_intermediates=True)
+
+  batch = jax.random.uniform(jax.random.PRNGKey(1), (1,3))
+  params = init(jax.random.PRNGKey(0), batch)
+  preds, feats = predict(params, batch)
+  feats # intermediate c in Model was not stored because it's not a Flax layer
+  ---
+  class Model(nn.Module):
+    @nn.compact
+    def __call__(self, x):
+      a = nn.Dense(4)(x) # Dense_0
+      b = nn.Dense(4)(x) # Dense_1
+      c = a + b
+      self.sow('intermediates', 'c', c) # store intermediate c #!
+      d = nn.Dense(4)(c) # Dense_2
+      return d
+
+  @jax.jit
+  def init(key, x):
+    variables = Model().init(key, x)
+    return variables['params']
+
+  @jax.jit
+  def predict(params, x):
+    # filter specifically for only the Dense_0 and Dense_2 layer #!
+    filter_fn = lambda mdl, method_name: isinstance(mdl.name, str) and (mdl.name in {'Dense_0', 'Dense_2'}) #!
+    return Model().apply({"params": params}, x, capture_intermediates=filter_fn) #!
+
+  batch = jax.random.uniform(jax.random.PRNGKey(1), (1,3))
+  params = init(jax.random.PRNGKey(0), batch)
+  preds, feats = predict(params, batch)
+  feats # intermediate c in Model is stored and isn't filtered out by the filter function #!
+
+To separate the intermediates extracted from ``self.sow`` from the intermediates extracted from ``capture_intermediates``,
+we can either define a separate collection like ``self.sow('sow_intermediates', 'c', c)``, or manually filter out
+the intermediates after calling ``.apply()``. For example:
+
+.. testcode::
+
+  flattened_dict = flax.traverse_util.flatten_dict(feats['intermediates'], sep='/')
+  flattened_dict['c']
+
+In terms of efficiency, as long as everything is jitted, then any intermediates you don't end up using
+should be optimized away by XLA.
 
 Use ``Sequential``
 ---------------------
@@ -267,6 +336,7 @@ your model more explicitly.
   def features(params, x):
     return Sequential(SeqCNN().layers[0:7]).apply({"params": params}, x)
 
+  batch = jnp.ones((1,28,28,1))
   params = init(jax.random.PRNGKey(0), batch)
   features(params, batch)
 
