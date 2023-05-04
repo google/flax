@@ -14,10 +14,10 @@
 
 """Global configuration options for Flax.
 
-Now a wrapper over jax.config, in which all config vars have a 'flax_' prefix.
+Now a wrapper over jax.config, in which all config vars have a 'flax\_' prefix.
 
 To modify a config value on run time, call:
-`flax.config.update('flax_<config_name>', <value>)`
+``flax.config.update('flax_<config_name>', <value>)``
 
 """
 
