@@ -54,7 +54,7 @@ jobs:
         # one too high when executing this as a Github Action.
         if (( $diff > 6)); then
           echo "ERROR! More than 5 commits in PR -- please squash your commits."
-          url=https://flax.readthedocs.io/en/latest/contributing.html#too-many-commits-in-a-pr
+          url=https://flax.readthedocs.io/en/latest/contributing.html#too-many-commits-in-a-pull-request
           echo "See $url for help on how to resolve this."
           exit 1
         fi

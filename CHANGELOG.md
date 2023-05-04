@@ -340,7 +340,7 @@ Other Improvements:
  - Add Adadelta optimizer
  - Fully deprecate all "pre-Linen" `flax.nn` classes and methods.
  - Some Module arguments can now be passed either as dataclass attribute or
-   as argument to `__call__`. See [design note](https://flax.readthedocs.io/en/latest/design_notes/arguments.html)
+   as argument to `__call__`. See [design note](https://flax.readthedocs.io/en/latest/guides/arguments.html)
  - Add `sow` method to `Module` and `capture_intermediates` argument to `Module.apply`.
    See [howto](https://flax.readthedocs.io/en/latest/howtos/extracting_intermediates.html) for usage patterns.
  - Support passing in modules directly as attributes to other modules, and

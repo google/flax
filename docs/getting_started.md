@@ -311,7 +311,7 @@ train_ds, test_ds = get_datasets(num_epochs, batch_size)
   and use it for parameter initialization. (Learn
   more about
   [JAX PRNG design](https://jax.readthedocs.io/en/latest/jax-101/05-random-numbers.html)
-  and [PRNG chains](https://flax.readthedocs.io/en/latest/design_notes/linen_design_principles.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables).)
+  and [PRNG chains](https://flax.readthedocs.io/en/latest/philosophy.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables).)
 
 ```{code-cell}
 ---

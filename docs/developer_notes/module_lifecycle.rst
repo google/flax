@@ -130,7 +130,7 @@ Linen provides an alternative API for defining modules more compactly. This is e
       return nn.Dense(self.out_size)(h)
 
 
-A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module does. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a concise overview. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/design_notes/setup_or_nncompact.html>`_ for a practical guide on deciding between setup and compact.
+A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module does. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a concise overview. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html>`_ for a practical guide on deciding between setup and compact.
 
 Another benefit of defining submodules and/or variables inline is that you can add arguments to your method when constructing variables. The most common example of this is using shape information to determine the shape of a parameter like this:
 
@@ -286,7 +286,7 @@ This procedure itself is tedious and error-prone but handled internally by Flax.
 
 #. Update the original state with the updated state returned from the transformation.
 
-A more in depth explanation of functionalization and lifting can be found in the `Lifted Transformation <https://flax.readthedocs.io/en/latest/design_notes/lift.html>`_ design note.
+A more in depth explanation of functionalization and lifting can be found in the `Lifted Transformation <https://flax.readthedocs.io/en/latest/developer_notes/lift.html>`_ design note.
 
 Practical consequences
 ==========================
