@@ -182,15 +182,12 @@ class RNNTest(absltest.TestCase):
 
     key = jax.random.PRNGKey(0)
     seq_lengths = jax.random.randint(key, (batch_size,), minval=1, maxval=seq_len + 1)
-    segmentation_mask = einops.repeat(
-      jnp.arange(seq_len), 'time -> batch time', batch=batch_size)
-    segmentation_mask = (segmentation_mask < seq_lengths[:, None]).astype(jnp.int32)
 
     rnn = nn.RNN(nn.LSTMCell(), channels_out, return_carry=True)
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
     ys: jnp.ndarray
-    (carry, ys), variables = rnn.init_with_output(jax.random.PRNGKey(0), xs, segmentation_mask=segmentation_mask)
+    (carry, ys), variables = rnn.init_with_output(jax.random.PRNGKey(0), xs, seq_lengths=seq_lengths)
 
     cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), (batch_size,), channels_out)
     cell_params = variables['params']['cell']
@@ -335,9 +332,9 @@ class RNNTest(absltest.TestCase):
 
   def test_flip_sequence(self):
     x = jnp.arange(2 * 5).reshape((2, 5))
-    segmentation_mask = jnp.array([[1, 1, 1, 1, 0], [1, 1, 0, 0, 0]])
+    seq_lengths = jnp.array([4, 2])
 
-    flipped = flip_sequences(x, segmentation_mask, num_batch_dims=1, time_major=False)
+    flipped = flip_sequences(x, seq_lengths, num_batch_dims=1, time_major=False)
 
     self.assertEqual(flipped.shape, (2, 5))
     np.testing.assert_allclose(flipped[0, :4], [3, 2, 1, 0])
@@ -345,9 +342,9 @@ class RNNTest(absltest.TestCase):
 
   def test_flip_sequence_more_feature_dims(self):
     x = jnp.arange(2 * 5 * 3).reshape((2, 5, 3))
-    segmentation_mask = jnp.array([[1, 1, 1, 1, 0], [1, 1, 0, 0, 0]])
+    seq_lengths = jnp.array([4, 2])
 
-    flipped = flip_sequences(x, segmentation_mask, num_batch_dims=1, time_major=False)
+    flipped = flip_sequences(x, seq_lengths, num_batch_dims=1, time_major=False)
 
     self.assertEqual(flipped.shape, (2, 5, 3))
     np.testing.assert_allclose(flipped[0, :4], x[0, :4][::-1])
@@ -355,15 +352,9 @@ class RNNTest(absltest.TestCase):
 
   def test_flip_sequence_time_major(self):
     x = jnp.arange(2 * 5).reshape((5, 2))
-    segmentation_mask = jnp.array([
-      [1, 1],
-      [1, 1],
-      [1, 0],
-      [1, 0],
-      [0, 0],
-    ])
+    seq_lengths = jnp.array([4, 2])
 
-    flipped = flip_sequences(x, segmentation_mask, num_batch_dims=1, time_major=True)
+    flipped = flip_sequences(x, seq_lengths, num_batch_dims=1, time_major=True)
 
     self.assertEqual(flipped.shape, (5, 2))
     np.testing.assert_allclose(flipped[:4, 0], x[:4, 0][::-1])
@@ -371,15 +362,9 @@ class RNNTest(absltest.TestCase):
 
   def test_flip_sequence_time_major_more_feature_dims(self):
     x = jnp.arange(2 * 5 * 3).reshape((5, 2, 3))
-    segmentation_mask = jnp.array([
-      [1, 1],
-      [1, 1],
-      [1, 0],
-      [1, 0],
-      [0, 0],
-    ])
+    seq_lengths = jnp.array([4, 2])
 
-    flipped = flip_sequences(x, segmentation_mask, num_batch_dims=1, time_major=True)
+    flipped = flip_sequences(x, seq_lengths, num_batch_dims=1, time_major=True)
 
     self.assertEqual(flipped.shape, (5, 2, 3))
     np.testing.assert_allclose(flipped[:4, 0], x[:4, 0][::-1])
