@@ -93,6 +93,47 @@ class AttentionTest(parameterized.TestCase):
     y, _ = sa_module.init_with_output(rngs, x, x)
     self.assertEqual(y.shape, x.shape)
 
+  def test_multihead_self_attention_w_dropout_disabled(self):
+    rng = random.PRNGKey(0)
+    x = jnp.ones((4, 2, 3, 5))
+    sa_module0 = nn.MultiHeadDotProductAttention(
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        dropout_rate=0.0,
+        deterministic=True,
+    )
+    rng1, rng2, rng3, rng4 = random.split(rng, 4)
+    rngs1 = {'params': rng1, 'dropout': rng2}
+    rngs2 = {'params': rng3, 'dropout': rng4}
+    y1, vs = sa_module0.init_with_output(rngs1, x, x)
+    y2, _ = sa_module0.init_with_output(rngs2, x, x)
+    np.testing.assert_allclose(y1, y2)
+    y3 = sa_module0.apply(vs, x, x, rngs=rngs1)
+    y4 = sa_module0.apply(vs, x, x, rngs=rngs2)
+    np.testing.assert_allclose(y3, y4)
+    sa_module1 = nn.MultiHeadDotProductAttention(
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        dropout_rate=0.0,
+    )
+    y5 = sa_module1.apply(vs, x, x, deterministic=True, rngs=rngs1)
+    y6 = sa_module1.apply(vs, x, x, deterministic=True, rngs=rngs2)
+    np.testing.assert_allclose(y5, y6)
+    sa_module2 = nn.MultiHeadDotProductAttention(
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        dropout_rate=0.5,
+    )
+    y7 = sa_module2.apply(vs, x, x, deterministic=True, rngs=rngs1)
+    y8 = sa_module2.apply(vs, x, x, deterministic=True, rngs=rngs2)
+    np.testing.assert_allclose(y7, y8)
+
   def test_causal_mask_1d(self):
     """Tests autoregresive masking for 1d attention."""
     x = jnp.ones((3, 16))  # (bs1, length)
