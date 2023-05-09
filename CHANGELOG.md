@@ -5,24 +5,27 @@ vNext
 ------
 (Add your change to a random empty line to avoid merge conflicts)
 -
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+
+0.6.10
+-----
 - Rudimentary quantization support: some layers can be parametrized with custom dot_general and conv_general_dilated.
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
--
 
 0.6.9
 -----
