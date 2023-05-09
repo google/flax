@@ -198,7 +198,7 @@ class Traversal(abc.ABC):
     warnings.warn(
         '`flax.traverse_util.Traversal` will be deprecated. If you are using '
         'it for `flax.optim`, use `optax` instead. Refer to the update guide '
-        'https://flax.readthedocs.io/en/latest/advanced_topics/optax_update_guide.html '
+        'https://flax.readthedocs.io/en/latest/guides/optax_update_guide.html '
         'for detailed instructions.', DeprecationWarning)
     return super().__new__(cls)
 

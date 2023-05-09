@@ -15,7 +15,7 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       are called, Flax clones the Module and binds the variables to it, and the module's method code is
       executed in a locally bound state, allowing things like calling submodules directly without
       providing variables. For more details, refer to the
-      `module lifecycle <https://flax.readthedocs.io/en/latest/advanced_topics/module_lifecycle.html>`__.
+      `module lifecycle <https://flax.readthedocs.io/en/latest/developer_notes/module_lifecycle.html>`__.
 
     Compact / Non-compact Module
       Modules with a single method are able to declare submodules and variables inline by
@@ -53,7 +53,7 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       simplifying the use of JAX transforms with layers.
 
     Lifted transformation
-      Refer to the `Flax docs <https://flax.readthedocs.io/en/latest/advanced_topics/lift.html>`__.
+      Refer to the `Flax docs <https://flax.readthedocs.io/en/latest/developer_notes/lift.html>`__.
 
     Module
       A dataclass allowing the definition and initialization of parameters in a
@@ -74,7 +74,7 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       Having different RNG sequences (e.g. for "params" and "dropout") allows fine-grained
       control in a multi-host setup (e.g. initializing parameters identically on different
       hosts, but have different dropout masks) and treating these sequences differently when
-      `lifting transformations <https://flax.readthedocs.io/en/latest/advanced_topics/lift.html>`__.
+      `lifting transformations <https://flax.readthedocs.io/en/latest/developer_notes/lift.html>`__.
 
     Scope
       A container class for holding the variables and PRNG keys for each layer.

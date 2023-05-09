@@ -15,7 +15,7 @@
 """Recurrent neural network modules.
 
 THe RNNCell modules can be scanned using lifted transforms. For more information
-see: https://flax.readthedocs.io/en/latest/advanced_topics/lift.html.
+see: https://flax.readthedocs.io/en/latest/developer_notes/lift.html.
 """
 
 from functools import partial   # pylint: disable=g-importing-member
