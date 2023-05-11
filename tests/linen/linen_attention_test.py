@@ -20,7 +20,7 @@ from absl.testing import parameterized
 from flax import linen as nn
 from flax import jax_utils
 from flax.core import pop
-from flax.configurations import use_regular_dict
+from flax.configurations import temp_flip_flag
 
 import jax
 from jax import lax
@@ -144,7 +144,7 @@ class AttentionTest(parameterized.TestCase):
     np.testing.assert_allclose(mask_1d, mask_1d_simple,)
 
   @parameterized.parameters([((5,), (1,)), ((6, 5), (2,))])
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_decoding(self, spatial_shape, attn_dims):
     bs = 2
     num_heads = 3

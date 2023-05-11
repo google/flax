@@ -4,4 +4,4 @@ flax.config package
 
 .. automodule:: flax.configurations
     :members:
-    :exclude-members: use_regular_dict
+    :exclude-members: temp_flip_flag

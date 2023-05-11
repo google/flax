@@ -24,7 +24,7 @@ To modify a config value on run time, call:
 import os
 from jax import config as jax_config
 
-from contextlib import ContextDecorator
+from contextlib import contextmanager
 
 # Keep a wrapper at the flax namespace, in case we make our implementation
 # in the future.
@@ -68,21 +68,20 @@ def static_bool_env(varname: str, default: bool) -> bool:
         'invalid truth value {!r} for environment {!r}'.format(val, varname))
 
 
-class use_regular_dict(ContextDecorator):
-  """Context decorator for test functions to temporarily use regular dicts
-  instead of FrozenDicts.
+@contextmanager
+def temp_flip_flag(var_name: str, var_value: bool):
+  """Context manager to temporarily flip feature flags for test functions.
 
-  This is a temporary feature flag to help migrate to FrozenDicts. Returning
-  FrozenDicts will be deprecated and removed in the future.
+  Args:
+    var_name: the config variable name (without the 'flax_' prefix)
+    var_value: the boolean value to set var_name to temporarily
   """
-  def __enter__(self):
-    self._old_value = config.flax_return_frozendict # save current env value
-    config.update('flax_return_frozendict', False) # return regular dicts
-    return self
-
-  def __exit__(self, *exc):
-    config.update('flax_return_frozendict', self._old_value) # switch back to old env value
-    return False
+  old_value = getattr(config, f'flax_{var_name}')
+  try:
+    config.update(f'flax_{var_name}', var_value)
+    yield
+  finally:
+    config.update(f'flax_{var_name}', old_value)
 
 
 # Flax Global Configuration Variables:
@@ -120,3 +119,9 @@ flax_return_frozendict = define_bool_state(
     name='return_frozendict',
     default=True,
     help=('Whether to return FrozenDicts when calling init or apply.'))
+
+flax_fix_rng = define_bool_state(
+    name ='fix_rng_separator',
+    default=False,
+    help=('Whether to add separator characters when folding in static data into PRNG keys.')
+)
