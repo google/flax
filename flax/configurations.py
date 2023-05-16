@@ -102,7 +102,7 @@ flax_profile = define_bool_state(
 
 flax_use_orbax_checkpointing = define_bool_state(
     name='use_orbax_checkpointing',
-    default=False,
+    default=True,
     help=('Whether to use Orbax to save checkpoints.'))
 
 flax_relaxed_naming = define_bool_state(
