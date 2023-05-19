@@ -118,5 +118,5 @@ flax_preserve_adopted_names = define_bool_state(
 #TODO(marcuschiam): remove this feature flag once regular dict migration is complete
 flax_return_frozendict = define_bool_state(
     name='return_frozendict',
-    default=True,
+    default=True, # default to True
     help=('Whether to return FrozenDicts when calling init or apply.'))
