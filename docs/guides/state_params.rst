@@ -12,6 +12,7 @@ We will show you how to...
 
 .. testsetup::
 
+  import flax
   from flax import linen as nn
   from jax import random
   import jax.numpy as jnp
@@ -69,7 +70,7 @@ Then we can write the actual training code.
   model = BiasAdderWithRunningMean()
   variables = model.init(random.PRNGKey(0), dummy_input)
   # Split state and params (which are updated by optimizer).
-  state, params = variables.pop('params')
+  state, params = flax.core.pop(variables, 'params')
   del variables  # Delete variables to avoid wasting resources
   tx = optax.sgd(learning_rate=0.02)
   opt_state = tx.init(params)
@@ -172,7 +173,7 @@ dimension. Now we are able to train the model:
   model = MLP(hidden_size=10, out_size=1)
   variables = model.init(random.PRNGKey(0), dummy_input)
   # Split state and params (which are updated by optimizer).
-  state, params = variables.pop('params')
+  state, params = flax.core.pop(variables, 'params')
   del variables  # Delete variables to avoid wasting resources
   tx = optax.sgd(learning_rate=0.02)
   opt_state = tx.init(params)
