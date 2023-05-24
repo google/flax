@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Global configuration options for Flax.
+r"""Global configuration options for Flax.
 
 Now a wrapper over jax.config, in which all config vars have a 'flax\_' prefix.
 

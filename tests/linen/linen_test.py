@@ -323,6 +323,21 @@ class StochasticTest(absltest.TestCase):
     res = jax.grad(lambda x, k: jnp.sum(fn(x, k)))(inputs, key3)
     self.assertFalse(np.isnan(res).any())
 
+  def test_dropout_manual_rng(self):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        key = self.make_rng('dropout')
+        x1 = nn.Dropout(rate=0.5, deterministic=False)(x, rng=key)
+        x2 = nn.Dropout(rate=0.5, deterministic=False)(x, rng=key)
+        return x1, x2
+
+    module = Foo()
+    x1, x2 = module.apply(
+      {}, jnp.ones((20, 20)), rngs={'dropout': random.PRNGKey(0)})
+
+    np.testing.assert_array_equal(x1, x2)
+
 
 # TODO(flax-dev): add integration tests for RNN cells
 class RecurrentTest(absltest.TestCase):
