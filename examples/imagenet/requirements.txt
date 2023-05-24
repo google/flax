@@ -1,6 +1,6 @@
 absl-py==1.0.0
 clu==0.0.6
-flax==0.6.0
+flax==0.6.5
 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 jax[cuda11_cudnn805]>=0.3.16  # change to jax[tpu] if running on tpus
