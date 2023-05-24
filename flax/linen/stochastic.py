@@ -14,7 +14,9 @@
 
 """Stochastic modules."""
 
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
+
+import jax
 
 from flax.linen.module import compact
 from flax.linen.module import merge_param
@@ -22,6 +24,8 @@ from flax.linen.module import Module
 from jax import lax
 from jax import random
 import jax.numpy as jnp
+
+KeyArray = Union[jax.Array, jax.random.KeyArray]
 
 
 class Dropout(Module):
@@ -46,7 +50,9 @@ class Dropout(Module):
   rng_collection: str = 'dropout'
 
   @compact
-  def __call__(self, inputs, deterministic: Optional[bool] = None):
+  def __call__(
+    self, inputs, deterministic: Optional[bool] = None, rng: Optional[KeyArray] = None
+  ):
     """Applies a random dropout mask to the input.
 
     Args:
@@ -54,6 +60,8 @@ class Dropout(Module):
       deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
         masked, whereas if true, no mask is applied and the inputs are returned
         as is.
+      rng: an optional PRNGKey used as the random key, if not specified, one
+        will be generated using ``make_rng`` with the ``rng_collection`` name.
 
     Returns:
       The masked inputs reweighted to preserve mean.
@@ -69,7 +77,8 @@ class Dropout(Module):
       return jnp.zeros_like(inputs)
 
     keep_prob = 1. - self.rate
-    rng = self.make_rng(self.rng_collection)
+    if rng is None:
+      rng = self.make_rng(self.rng_collection)
     broadcast_shape = list(inputs.shape)
     for dim in self.broadcast_dims:
       broadcast_shape[dim] = 1
