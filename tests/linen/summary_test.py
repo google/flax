@@ -24,7 +24,7 @@ from flax import linen as nn
 from flax.core.scope import Array
 from flax.linen import summary
 from flax import struct
-from flax.configurations import use_regular_dict
+from flax.configurations import temp_flip_flag
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -181,7 +181,7 @@ class SummaryTest(absltest.TestCase):
         row.counted_variables,
       )
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_module_summary_with_depth(self):
     """
     This test creates a Table using `module_summary` set the `depth` argument to `1`,
@@ -240,7 +240,7 @@ class SummaryTest(absltest.TestCase):
     self.assertEqual(table[3].module_variables, table[3].counted_variables)
 
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_tabulate(self):
     """
     This test creates a string representation of a Module using `Module.tabulate`
@@ -323,7 +323,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("(block_method)", module_repr)
     self.assertIn("(cnn_method)", module_repr)
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_tabulate_function(self):
     """
     This test creates a string representation of a Module using `Module.tabulate`
@@ -370,7 +370,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("79.4 KB", lines[-3])
 
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_lifted_transform(self):
     class LSTM(nn.Module):
       batch_size: int
@@ -407,7 +407,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("ScanLSTM/ii", lines[13])
     self.assertIn("Dense", lines[13])
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_lifted_transform_no_rename(self):
     class LSTM(nn.Module):
       batch_size: int
@@ -444,7 +444,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("ScanLSTMCell_0/ii", lines[13])
     self.assertIn("Dense", lines[13])
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_module_reuse(self):
     class ConvBlock(nn.Module):
       @nn.compact
@@ -526,7 +526,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn('x: 3.141592', lines[7])
     self.assertIn('4.141592', lines[7])
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_partitioned_params(self):
 
     class Classifier(nn.Module):

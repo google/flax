@@ -15,7 +15,7 @@
 import operator
 from flax import errors
 from flax.core import Scope, init, apply, lift, nn, FrozenDict, unfreeze, copy
-from flax.configurations import use_regular_dict
+from flax.configurations import temp_flip_flag
 
 import jax
 from jax import random
@@ -164,7 +164,7 @@ class LiftTest(absltest.TestCase):
     self.assertEqual(vars['state'], {'true_count': 1, 'false_count': 1})
     np.testing.assert_allclose(y1, -y2)
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_switch(self):
     def f(scope, x, index):
       scope.variable('state', 'a_count', lambda: 0)

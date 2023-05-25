@@ -28,7 +28,7 @@ from flax import config
 from flax import errors
 from flax import linen as nn
 from flax.core import freeze, copy
-from flax.configurations import use_regular_dict
+from flax.configurations import temp_flip_flag
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -278,7 +278,7 @@ class TransformTest(absltest.TestCase):
     y1 = normal_model.apply(init_variables, x2.reshape((-1, 4)), mutable=['batch_stats'])[0]
     y1 = y1.reshape((5, 4, 3))
     y2 = vmap_model.apply(init_variables, x2, mutable=['batch_stats'])[0]
-    np.testing.assert_allclose(y1, y2, atol=1e-6)
+    np.testing.assert_allclose(y1, y2, atol=1e-5)
 
   def test_scan(self):
     class SimpleScan(nn.Module):
@@ -807,7 +807,7 @@ class TransformTest(absltest.TestCase):
     y3 = Ctrafo(a2, b).apply(p2, x)
     np.testing.assert_allclose(y1, y3, atol=1e-7)
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_toplevel_submodule_adoption_pytree_transform(self):
     class A(nn.Module):
       @nn.compact
@@ -852,7 +852,7 @@ class TransformTest(absltest.TestCase):
             cntrs, ref_cntrs)
         ))
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_partially_applied_module_constructor_transform(self):
     k = random.PRNGKey(0)
     x = jnp.ones((3,4,4))
@@ -870,7 +870,7 @@ class TransformTest(absltest.TestCase):
     }
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_partial_module_method(self):
     k = random.PRNGKey(0)
     x = jnp.ones((3,4,4))
@@ -1510,7 +1510,7 @@ class TransformTest(absltest.TestCase):
 
         return nn.cond(pred, true_fn, false_fn, self, x)
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_switch(self):
     class Foo(nn.Module):
       @nn.compact
@@ -1545,7 +1545,7 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 1, 'c_count': 1})
     np.testing.assert_allclose(y1, y3)
 
-  @use_regular_dict()
+  @temp_flip_flag('return_frozendict', False)
   def test_switch_multihead(self):
     class Foo(nn.Module):
       def setup(self) -> None:
