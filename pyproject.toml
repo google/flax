@@ -131,7 +131,11 @@ filterwarnings = [
     "ignore:file system plugins are not loaded.*:UserWarning",
     "ignore:unable to load libtensorflow_io_plugins.so.*:UserWarning",
     # Remove this after next Optax release after 3/27/2023
-    "ignore:jax.numpy.DeviceArray is deprecated. Use jax.Array.*:DeprecationWarning"
+    "ignore:jax.numpy.DeviceArray is deprecated. Use jax.Array.*:DeprecationWarning",
+    # DeprecationWarning: pkg_resources is deprecated as an API
+    "ignore:.*pkg_resources is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
+    "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
