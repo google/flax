@@ -261,7 +261,9 @@ class MultiHeadDotProductAttention(Module):
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (
-        'Memory dimension must be divisible by number of heads.')
+        f'Memory dimension ({qkv_features}) must be divisible by number of'
+        f' heads ({self.num_heads}).'
+    )
     head_dim = qkv_features // self.num_heads
 
     dense = functools.partial(
