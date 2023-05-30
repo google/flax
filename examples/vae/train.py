@@ -11,88 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Traininga and evaluation logic."""
 
-from absl import app
-from absl import flags
+from absl import logging
+
 from flax import linen as nn
 from flax.training import train_state
-import jax.numpy as jnp
 import jax
 from jax import random
-import numpy as np
+import jax.numpy as jnp
 import optax
-import tensorflow as tf
 import tensorflow_datasets as tfds
 
+import input_pipeline
+import models
 import utils as vae_utils
-
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_float(
-    'learning_rate', default=1e-3,
-    help=('The learning rate for the Adam optimizer.')
-)
-
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.')
-)
-
-flags.DEFINE_integer(
-    'num_epochs', default=30,
-    help=('Number of training epochs.')
-)
-
-flags.DEFINE_integer(
-    'latents', default=20,
-    help=('Number of latent variables.')
-)
-
-
-class Encoder(nn.Module):
-  latents: int
-
-  @nn.compact
-  def __call__(self, x):
-    x = nn.Dense(500, name='fc1')(x)
-    x = nn.relu(x)
-    mean_x = nn.Dense(self.latents, name='fc2_mean')(x)
-    logvar_x = nn.Dense(self.latents, name='fc2_logvar')(x)
-    return mean_x, logvar_x
-
-
-class Decoder(nn.Module):
-
-  @nn.compact
-  def __call__(self, z):
-    z = nn.Dense(500, name='fc1')(z)
-    z = nn.relu(z)
-    z = nn.Dense(784, name='fc2')(z)
-    return z
-
-
-class VAE(nn.Module):
-  latents: int = 20
-
-  def setup(self):
-    self.encoder = Encoder(self.latents)
-    self.decoder = Decoder()
-
-  def __call__(self, x, z_rng):
-    mean, logvar = self.encoder(x)
-    z = reparameterize(z_rng, mean, logvar)
-    recon_x = self.decoder(z)
-    return recon_x, mean, logvar
-
-  def generate(self, z):
-    return nn.sigmoid(self.decoder(z))
-
-
-def reparameterize(rng, mean, logvar):
-  std = jnp.exp(0.5 * logvar)
-  eps = random.normal(rng, logvar.shape)
-  return mean + eps * std
 
 
 @jax.vmap
@@ -116,14 +49,10 @@ def compute_metrics(recon_x, x, mean, logvar):
   }
 
 
-def model():
-  return VAE(latents=FLAGS.latents)
-
-
-@jax.jit
-def train_step(state, batch, z_rng):
+def train_step(state, batch, z_rng, latents):
   def loss_fn(params):
-    recon_x, mean, logvar = model().apply({'params': params}, batch, z_rng)
+    recon_x, mean, logvar = models.model(latents).apply({'params': params},
+                                                      batch, z_rng)
 
     bce_loss = binary_cross_entropy_with_logits(recon_x, batch).mean()
     kld_loss = kl_divergence(mean, logvar).mean()
@@ -133,8 +62,7 @@ def train_step(state, batch, z_rng):
   return state.apply_gradients(grads=grads)
 
 
-@jax.jit
-def eval(params, images, z, z_rng):
+def eval_f(params, images, z, z_rng, latents):
   def eval_model(vae):
     recon_images, mean, logvar = vae(images, z_rng)
     comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
@@ -145,59 +73,44 @@ def eval(params, images, z, z_rng):
     metrics = compute_metrics(recon_images, images, mean, logvar)
     return metrics, comparison, generate_images
 
-  return nn.apply(eval_model, model())({'params': params})
+  return nn.apply(eval_model, models.model(latents))({'params': params})
 
 
-def prepare_image(x):
-  x = tf.cast(x['image'], tf.float32)
-  x = tf.reshape(x, (-1,))
-  return x
-
-
-def main(argv):
-  del argv
-
-  # Make sure tf does not allocate gpu memory.
-  tf.config.experimental.set_visible_devices([], 'GPU')
-
+def train_and_evaluate(batch_size, learning_rate, num_epochs, latents):
+  """Train and evaulate pipeline."""
   rng = random.PRNGKey(0)
   rng, key = random.split(rng)
 
   ds_builder = tfds.builder('binarized_mnist')
   ds_builder.download_and_prepare()
-  train_ds = ds_builder.as_dataset(split=tfds.Split.TRAIN)
-  train_ds = train_ds.map(prepare_image)
-  train_ds = train_ds.cache()
-  train_ds = train_ds.repeat()
-  train_ds = train_ds.shuffle(50000)
-  train_ds = train_ds.batch(FLAGS.batch_size)
-  train_ds = iter(tfds.as_numpy(train_ds))
 
-  test_ds = ds_builder.as_dataset(split=tfds.Split.TEST)
-  test_ds = test_ds.map(prepare_image).batch(10000)
-  test_ds = np.array(list(test_ds)[0])
-  test_ds = jax.device_put(test_ds)
+  logging.info('Initializing dataset.')
+  train_ds = input_pipeline.build_train_set(batch_size, ds_builder)
+  test_ds = input_pipeline.build_test_set(ds_builder)
 
-  init_data = jnp.ones((FLAGS.batch_size, 784), jnp.float32)
+  logging.info('Initializing model.')
+  init_data = jnp.ones((batch_size, 784), jnp.float32)
+  params = models.model(latents).init(key, init_data, rng)['params']
 
   state = train_state.TrainState.create(
-      apply_fn=model().apply,
-      params=model().init(key, init_data, rng)['params'],
-      tx=optax.adam(FLAGS.learning_rate),
+      apply_fn=models.model(latents).apply,
+      params=params,
+      tx=optax.adam(learning_rate),
   )
 
   rng, z_key, eval_rng = random.split(rng, 3)
-  z = random.normal(z_key, (64, FLAGS.latents))
+  z = random.normal(z_key, (64, latents))
 
-  steps_per_epoch = 50000 // FLAGS.batch_size
+  steps_per_epoch = ds_builder.info.splits["train"].num_examples // batch_size
 
-  for epoch in range(FLAGS.num_epochs):
+  for epoch in range(num_epochs):
     for _ in range(steps_per_epoch):
       batch = next(train_ds)
       rng, key = random.split(rng)
-      state = train_step(state, batch, key)
+      state = train_step(state, batch, key, latents)
 
-    metrics, comparison, sample = eval(state.params, test_ds, z, eval_rng)
+    metrics, comparison, sample = eval_f(state.params, test_ds, z, eval_rng,
+                                         latents)
     vae_utils.save_image(
         comparison, f'results/reconstruction_{epoch}.png', nrow=8)
     vae_utils.save_image(sample, f'results/sample_{epoch}.png', nrow=8)
@@ -206,6 +119,3 @@ def main(argv):
         epoch + 1, metrics['loss'], metrics['bce'], metrics['kld']
     ))
 
-
-if __name__ == '__main__':
-  app.run(main)
