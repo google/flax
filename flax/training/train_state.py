@@ -83,12 +83,11 @@ class TrainState(struct.PyTreeNode):
   @classmethod
   def create(cls, *, apply_fn, params, tx, **kwargs):
     """Creates a new instance with `step=0` and initialized `opt_state`."""
-    frozen_params = core.freeze(params) if isinstance(params, dict) else params
-    opt_state = tx.init(frozen_params)
+    opt_state = tx.init(params)
     return cls(
         step=0,
         apply_fn=apply_fn,
-        params=frozen_params,
+        params=params,
         tx=tx,
         opt_state=opt_state,
         **kwargs,
