@@ -41,6 +41,7 @@ from jax import monitoring
 from jax import process_index
 from jax import tree_util as jtu
 from jax.experimental.multihost_utils import sync_global_devices
+import numpy as np
 import orbax.checkpoint as orbax
 
 _READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'
@@ -63,14 +64,14 @@ SIGNED_FLOAT_RE = re.compile(
 # does not capture sign:
 UNSIGNED_FLOAT_RE = re.compile(
     r'[-+]?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
-# Module name folowed by number.
+# Module name followed by number.
 MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
 # Alternative schemes handled by `gfile`, e.g. on Google Cloud Storage (GCS).
 SCHEME_RE = re.compile('^(?P<scheme>[a-z][a-z0-9.+-]+://)?(?P<path>.*)', re.I)
 
 # Multiprocess arrays (GlobalDeviceArray, or JAX array with multiprocess
 # sharding) is across processes and will be stored in directories with this
-# postfix, seperated from the non-distributed data (e.g. the larger pytree)
+# postfix, separated from the non-distributed data (e.g. the larger pytree)
 MP_ARRAY_POSTFIX = '_gda'
 # Occurrences of multiprocess arrays in the target pytree will be
 # replaced by this string placeholder.
@@ -139,10 +140,12 @@ class AsyncManager():
       self.save_future.result()
 
   def save_async(self, task: Callable[[], Any]):
-    """Run a task async. The future will be tracked as self.save_future.
+    """Run a task async.
+
+    The future will be tracked as self.save_future.
 
     Args:
-      task: The callable to be executed asynchrously.
+      task: The callable to be executed asynchronously.
     """
     self.wait_previous_save()
     self.save_future = self.executor.submit(task) # type: ignore
@@ -567,7 +570,7 @@ def save_checkpoint(ckpt_dir: Union[str, os.PathLike],
       orbax_checkpointer.wait_until_finished()
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
-      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler(restore_using_default_types=True))
     # Check singular target.
     if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
         orbax_checkpointer._handler, orbax.ArrayCheckpointHandler  # pylint: disable=protected-access
@@ -695,7 +698,7 @@ def save_checkpoint_multiprocess(
 
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
-      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler(restore_using_default_types=True))
     # Check singular target.
     if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
         orbax_checkpointer._handler, orbax.ArrayCheckpointHandler  # pylint: disable=protected-access
@@ -924,7 +927,7 @@ def restore_checkpoint(
   logging.info(f'Restoring {ckpt_type} checkpoint from {ckpt_path}')
   if is_orbax:
     if not orbax_checkpointer:
-      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
+      orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler(restore_using_default_types=True))
 
     def make_restore_args(x):
       if orbax_utils.is_multiprocess_array(x):
@@ -932,14 +935,15 @@ def restore_checkpoint(
             restore_type=jax.Array,
             sharding=x.sharding,
         )
-      return orbax.RestoreArgs()
-
+      return orbax.RestoreArgs(restore_type=np.ndarray)
 
     restore_kwargs = {}
     if target is not None:
       restore_kwargs['restore_args'] = jax.tree_util.tree_map(
           make_restore_args, target
       )
+    logging.info(target)
+    logging.info(restore_kwargs)
     if orbax_transforms is not None:
       restore_kwargs['transforms'] = orbax_transforms
     restored = orbax_checkpointer.restore(

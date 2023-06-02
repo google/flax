@@ -19,6 +19,7 @@ import warnings
 
 import jax
 from jax.sharding import Mesh
+import numpy as np
 from orbax import checkpoint as orbax
 
 
@@ -60,7 +61,9 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
   if not any(
       jax.tree_util.tree_flatten(jax.tree_map(is_multiprocess_array, target))[0]
   ):
-    return jax.tree_util.tree_map(lambda x: orbax.RestoreArgs(), target)
+    return jax.tree_util.tree_map(
+        lambda x: orbax.RestoreArgs(restore_type=np.ndarray), target
+    )
 
   # Multihost arrays: find sharding from the given target
   sharding_tree = jax.tree_util.tree_map(find_sharding, target)
