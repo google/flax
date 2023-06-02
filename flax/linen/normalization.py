@@ -17,6 +17,7 @@
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
 from flax.linen.dtypes import canonicalize_dtype
 from flax.linen.module import Module, compact, merge_param  # pylint: disable=g-multiple-import
+from flax.linen.partitioning import param_with_axes
 from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
@@ -134,6 +135,7 @@ def _normalize(
     use_scale: bool,
     bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
     scale_init: Callable[[PRNGKey, Shape, Dtype], Array],
+    axes: Tuple[str, ...] = None,
 ):
   """Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
@@ -153,6 +155,7 @@ def _normalize(
     use_scale: If true, scale the output.
     bias_init: Initialization function for the bias term.
     scale_init: Initialization function for the scaling function.
+    axes: A tuple of axis names over which to shard parameters.
 
   Returns:
     The normalized input.
@@ -171,16 +174,15 @@ def _normalize(
   mul = lax.rsqrt(var + epsilon)
   args = [x]
   if use_scale:
-    scale = mdl.param(
-        'scale', scale_init, reduced_feature_shape, param_dtype
-    ).reshape(feature_shape)
+    scale = param_with_axes('scale', scale_init, reduced_feature_shape,
+                            param_dtype, axes=axes, module=mdl).reshape(feature_shape)
+
     mul *= scale
     args.append(scale)
   y *= mul
   if use_bias:
-    bias = mdl.param(
-        'bias', bias_init, reduced_feature_shape, param_dtype
-    ).reshape(feature_shape)
+    bias = param_with_axes('bias', bias_init, reduced_feature_shape,
+                           param_dtype, axes=axes, module=mdl).reshape(feature_shape)
     y += bias
     args.append(bias)
   dtype = canonicalize_dtype(*args, dtype=dtype)
@@ -241,6 +243,7 @@ class BatchNorm(Module):
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    pjit_axis_names: A tuple of axis names.
   """
 
   use_running_average: Optional[bool] = None
@@ -256,6 +259,7 @@ class BatchNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  pjit_axis_name: Tuple[str, ...] = None
 
   @compact
   def __call__(self, x, use_running_average: Optional[bool] = None):
@@ -326,6 +330,7 @@ class BatchNorm(Module):
         self.use_scale,
         self.bias_init,
         self.scale_init,
+        self.pjit_axis_name,
     )
 
 
@@ -360,6 +365,7 @@ class LayerNorm(Module):
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    pjit_axis_names: A tuple of axis names.
   """
 
   epsilon: float = 1e-6
@@ -374,6 +380,7 @@ class LayerNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  pjit_axis_name: Tuple[str, ...] = None
 
   @compact
   def __call__(self, x):
@@ -408,6 +415,7 @@ class LayerNorm(Module):
         self.use_scale,
         self.bias_init,
         self.scale_init,
+        self.pjit_axis_name,
     )
 
 
@@ -449,6 +457,7 @@ class RMSNorm(Module):
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
       examples on the first two and last two devices. See `jax.lax.psum` for
       more details.
+    pjit_axis_names: A tuple of axis names.
   """
 
   epsilon: float = 1e-6
@@ -460,6 +469,7 @@ class RMSNorm(Module):
   feature_axes: Axes = -1
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
+  pjit_axis_name: Tuple[str, ...] = None
 
   @compact
   def __call__(self, x):
@@ -494,6 +504,7 @@ class RMSNorm(Module):
         self.use_scale,
         initializers.zeros,
         self.scale_init,
+        self.pjit_axis_name,
     )
 
 
@@ -531,6 +542,7 @@ class GroupNorm(Module):
       more details.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    pjit_axis_names: A tuple of axis names.
   """
 
   num_groups: Optional[int] = 32
@@ -545,6 +557,7 @@ class GroupNorm(Module):
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
   use_fast_variance: bool = True
+  pjit_axis_name: Tuple[str, ...] = None
 
   @compact
   def __call__(self, x):
@@ -617,4 +630,5 @@ class GroupNorm(Module):
         self.use_scale,
         self.bias_init,
         self.scale_init,
+        self.pjit_axis_name,
     )
