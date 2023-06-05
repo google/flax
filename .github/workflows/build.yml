@@ -106,7 +106,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: venv
-        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'setup.py') }}
+        key: pip-${{ steps.setup_python.outputs.python-version }}-${{ steps.date_key.outputs.DATE }}-${{ hashFiles('**/requirements.txt', 'pyproject.toml') }}
     - name: Install Dependencies for cache
       if: steps.venv_cache.outputs.cache-hit != 'true'
       run: |
