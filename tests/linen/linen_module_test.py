@@ -1779,7 +1779,7 @@ class ModuleTest(absltest.TestCase):
         a = A()
         x0 = a()
         x1 = a()
-        return jnp.alltrue(x0 == x1)
+        return jnp.all(x0 == x1)
 
     k = random.PRNGKey(0)
     rng_equals = B().apply({}, rngs={'dropout': k})
