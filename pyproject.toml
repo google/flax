@@ -14,7 +14,7 @@ dependencies = [
     "jax>=0.4.2",
     "msgpack",
     "optax",
-    "orbax-checkpoint",
+    "orbax-checkpoint==0.2.3", # temporarily pin until orbax is fixed
     "tensorstore",
     "rich>=11.1",
     "typing_extensions>=4.1.1",
