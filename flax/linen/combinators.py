@@ -70,6 +70,12 @@ class Sequential(Module):
   """
   layers: Sequence[Callable[..., Any]]
 
+  def __post_init__(self):
+    if not isinstance(self.layers, Sequence):
+      raise ValueError('\'layers\' must be a sequence, '
+                       f'got \'{type(self.layers).__name__}\'.')
+    super().__post_init__()
+
   def __call__(self, *args, **kwargs):
     if not self.layers:
       raise ValueError(f'Empty Sequential module {self.name}.')
