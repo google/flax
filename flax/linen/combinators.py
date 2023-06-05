@@ -27,14 +27,13 @@ class Sequential(Module):
 
   Modules will be applied in the order that they are passed in the constructor.
 
-  The apply() method of Sequential accepts any input and forwards it to the
+  The ``__call__`` method of Sequential accepts any input and forwards it to the
   first module it contains. It chains the output sequentially to the input of
   the next module and returns the output of the final module.
 
   Example usage::
 
     class Foo(nn.Module):
-      feature_sizes: Sequence[int]
 
       @nn.compact
       def __call__(self, x):
@@ -44,7 +43,9 @@ class Sequential(Module):
                               nn.log_softmax])(x)
 
   This combinator supports also layers that return multiple outputs if returned
-  as a tuple or a dictionary.
+  as a tuple or a dictionary. If the output of a layer is a ``tuple`` it will be
+  expanded as ``*args`` in the next layer, if its a ``dict`` it
+  will be expanded as ``**kwargs``.
 
   Example usage::
 
