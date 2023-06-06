@@ -1808,7 +1808,7 @@ class Module(ModuleBase):
     if self.scope.has_variable(col, name):
       xs = self.scope.get_variable(col, name)
     else:
-      self.scope.reserve(name)
+      self.scope.reserve(name, col)
       self._state.children[name] = col
       xs = init_fn()
     xs = reduce_fn(xs, value)
