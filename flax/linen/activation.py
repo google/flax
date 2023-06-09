@@ -59,6 +59,12 @@ Dtype = Any
 class PReLU(Module):
   """Parametric Rectified Linear Unit (PReLU) activation function.
 
+  Note that PReLU is a Flax layer and not a simple activation function, so
+  it needs to be initialized before being called.
+
+  Example usage::
+    x = nn.PReLU()(x)
+
   Attributes:
     param_dtype: the dtype passed to parameter initializers (default: float32).
     negative_slope_init: the value to initialize the negative slope
