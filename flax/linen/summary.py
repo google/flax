@@ -13,23 +13,28 @@
 # limitations under the License.
 
 """Flax Module summary library."""
-from abc import ABC, abstractmethod
+
+from abc import ABC
+from abc import abstractmethod
 import dataclasses
 import io
 from types import MappingProxyType
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Type, Union
-from flax.core import unfreeze
 
-import flax.linen.module as module_lib
 from flax.core import meta
-from flax.core.scope import CollectionFilter, FrozenVariableDict, MutableVariableDict
+from flax.core import unfreeze
+from flax.core.scope import CollectionFilter
+from flax.core.scope import FrozenVariableDict
+from flax.core.scope import MutableVariableDict
+import flax.linen.module as module_lib
 import jax
 import jax.numpy as jnp
+import numpy as np
 import rich.console
 import rich.table
 import rich.text
 import yaml
-import numpy as np
+
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
@@ -93,6 +98,9 @@ class Row:
 
   Attributes:
     path: A tuple of strings that represents the path to the module.
+    module_type: type of the Module.
+    method: method of the module called.
+    inputs: inputs to the module.
     outputs: Output of the Module as reported by `capture_intermediates`.
     module_variables: Dictionary of variables in the module (no submodules
       included).
@@ -101,6 +109,8 @@ class Row:
       then this field is the same as `module_variables`, however if a
       summarization is done then this dictionary potentially contains parameters
       from submodules depending on the depth of the Module in question.
+    flops: FLOPs cost of calling the module method.
+    vjp_flops: FLOPs cost of calling the VJP of the module method.
   """
 
   path: Tuple[str, ...]
@@ -110,6 +120,8 @@ class Row:
   outputs: Any
   module_variables: Dict[str, Dict[str, Any]]
   counted_variables: Dict[str, Dict[str, Any]]
+  flops: int
+  vjp_flops: int
 
   def __post_init__(self):
     self.inputs = self.inputs
@@ -164,15 +176,16 @@ def tabulate(
 ) -> Callable[..., str]:
   """Returns a function that creates a summary of the Module represented as a table.
 
-  This function accepts most of the same arguments and internally calls `Module.init`,
-  except that it returns a function of the form `(*args, **kwargs) -> str` where `*args`
-  and `**kwargs` are passed to `method` (e.g. `__call__`) during the forward pass.
+  This function accepts most of the same arguments and internally calls
+  `Module.init`, except that it returns a function of the form
+  `(*args, **kwargs) -> str` where `*args` and `**kwargs` are passed to
+  `method` (e.g. `__call__`) during the forward pass.
 
-  `tabulate` uses `jax.eval_shape` under the hood to run the forward computation without
-  consuming any FLOPs or allocating memory.
+  `tabulate` uses `jax.eval_shape` under the hood to run the forward computation
+  without consuming any FLOPs or allocating memory.
 
-  Additional arguments can be passed into the `console_kwargs` argument, for example,
-  `{'width': 120}`. For a full list of `console_kwargs` arguments, see:
+  Additional arguments can be passed into the `console_kwargs` argument, for
+  example, `{'width': 120}`. For a full list of `console_kwargs` arguments, see:
   https://rich.readthedocs.io/en/stable/reference/console.html#rich.console.Console
 
   Example::
@@ -195,31 +208,37 @@ def tabulate(
 
   This gives the following output::
 
-                                    Foo Summary
-    ┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┓
-    ┃ path    ┃ module ┃ inputs        ┃ outputs       ┃ params               ┃
-    ┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━┩
-    │         │ Foo    │ float32[16,9] │ float32[16,2] │                      │
-    ├─────────┼────────┼───────────────┼───────────────┼──────────────────────┤
-    │ Dense_0 │ Dense  │ float32[16,9] │ float32[16,4] │ bias: float32[4]     │
-    │         │        │               │               │ kernel: float32[9,4] │
-    │         │        │               │               │                      │
-    │         │        │               │               │ 40 (160 B)           │
-    ├─────────┼────────┼───────────────┼───────────────┼──────────────────────┤
-    │ Dense_1 │ Dense  │ float32[16,4] │ float32[16,2] │ bias: float32[2]     │
-    │         │        │               │               │ kernel: float32[4,2] │
-    │         │        │               │               │                      │
-    │         │        │               │               │ 10 (40 B)            │
-    ├─────────┼────────┼───────────────┼───────────────┼──────────────────────┤
-    │         │        │               │         Total │ 50 (200 B)           │
-    └─────────┴────────┴───────────────┴───────────────┴──────────────────────┘
+                                           Foo Summary
+    ┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+    ┃ path    ┃ module ┃ inputs        ┃ outputs       ┃ flops ┃ vjp_flops ┃ params          ┃
+    ┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+    │         │ Foo    │ float32[16,9] │ float32[16,2] │ 1504  │ 4460      │                 │
+    ├─────────┼────────┼───────────────┼───────────────┼───────┼───────────┼─────────────────┤
+    │ Dense_0 │ Dense  │ float32[16,9] │ float32[16,4] │ 1216  │ 3620      │ bias:           │
+    │         │        │               │               │       │           │ float32[4]      │
+    │         │        │               │               │       │           │ kernel:         │
+    │         │        │               │               │       │           │ float32[9,4]    │
+    │         │        │               │               │       │           │                 │
+    │         │        │               │               │       │           │ 40 (160 B)      │
+    ├─────────┼────────┼───────────────┼───────────────┼───────┼───────────┼─────────────────┤
+    │ Dense_1 │ Dense  │ float32[16,4] │ float32[16,2] │ 288   │ 840       │ bias:           │
+    │         │        │               │               │       │           │ float32[2]      │
+    │         │        │               │               │       │           │ kernel:         │
+    │         │        │               │               │       │           │ float32[4,2]    │
+    │         │        │               │               │       │           │                 │
+    │         │        │               │               │       │           │ 10 (40 B)       │
+    ├─────────┼────────┼───────────────┼───────────────┼───────┼───────────┼─────────────────┤
+    │         │        │               │               │       │     Total │ 50 (200 B)      │
+    └─────────┴────────┴───────────────┴───────────────┴───────┴───────────┴─────────────────┘
 
-                          Total Parameters: 50 (200 B)
+                                   Total Parameters: 50 (200 B)
 
 
   **Note**: rows order in the table does not represent execution order,
   instead it aligns with the order of keys in `variables` which are sorted
   alphabetically.
+
+  **Note**: `vjp_flops` returns `0` if the module is not differentiable.
 
   Args:
     module: The module to tabulate.
@@ -229,21 +248,22 @@ def tabulate(
       depth limit, its parameter count and bytes will be added to the row of its
       first shown ancestor such that the sum of all rows always adds up to the
       total number of parameters of the Module.
+    show_repeated: If `True`, repeated calls to the same module will be shown
+      in the table, otherwise only the first call will be shown. Default is
+      `False`.
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable. ``str``: The
       name of a single mutable collection. ``list``: A list of names of mutable
       collections. By default all collections except 'intermediates' are
       mutable.
-    show_repeated: If `True`, repeated calls to the same module will be shown
-      in the table, otherwise only the first call will be shown. Default is
-      `False`.
-    console_kwargs: An optional dictionary with additional keyword arguments that
-      are passed to `rich.console.Console` when rendering the table. Default arguments
-      are `{'force_terminal': True, 'force_jupyter': False}`.
+    console_kwargs: An optional dictionary with additional keyword arguments
+      that are passed to `rich.console.Console` when rendering the table.
+      Default arguments are `{'force_terminal': True, 'force_jupyter': False}`.
     table_kwargs: An optional dictionary with additional keyword arguments that
       are passed to `rich.table.Table` constructor.
     column_kwargs: An optional dictionary with additional keyword arguments that
-      are passed to `rich.table.Table.add_column` when adding columns to the table.
+      are passed to `rich.table.Table.add_column` when adding columns to the
+      table.
     **kwargs: Additional arguments passed to `Module.init`.
 
   Returns:
@@ -262,13 +282,100 @@ def tabulate(
   return _tabulate_fn
 
 
+def _get_flops(fn, *args, **kwargs):
+  e = jax.jit(fn).lower(*args, **kwargs)
+  cost = e.cost_analysis()
+  flops = int(cost['flops']) if 'flops' in cost else 0
+  return flops
+
+
+def _get_call_flops(c: module_lib._CallInfo, mutable) -> tuple[int, int]:
+  """Return the FLOPs of executing the call `c` in the call stack.
+
+  Does not perform actual computation / compilation / memory allocation.
+
+  Args:
+    c: ``_CallInfo``.
+    mutable: Can be bool, str, or list. Specifies which collections should be
+      treated as mutable: ``bool``: all/no collections are mutable. ``str``:
+      The name of a single mutable collection. ``list``: A list of names of
+      mutable collections.
+
+  Returns:
+    FLOPs of executing forward pass of `c`, and its VJP.
+  """
+  args = jax.tree_map(_from_value_representation, c.args)
+  kwargs = jax.tree_map(_from_value_representation, c.kwargs)
+
+  static_kwargs = {}
+  dynamic_kwargs = {}
+  for k, v in kwargs.items():
+    if isinstance(v, jax.ShapeDtypeStruct):
+      dynamic_kwargs[k] = v
+    else:
+      static_kwargs[k] = v
+
+  def init(rngs, *args, **dynamic_kwargs):
+    """`c.module.init` closed over static keyword arguments."""
+    return c.module.init(
+        {'params': rngs, 'dropout': rngs},
+        *args,
+        method=c.method,
+        mutable=mutable,
+        **dynamic_kwargs,
+        **static_kwargs,
+    )
+
+  rngs = jax.ShapeDtypeStruct((2,), jnp.uint)
+  variables = jax.eval_shape(init, rngs, *args, **dynamic_kwargs)
+
+  def apply(variables, rngs, *args, **dynamic_kwargs):
+    """`c.module.apply` closed over static keyword arguments."""
+    return c.module.apply(
+        variables,
+        *args,
+        rngs={'dropout': rngs},
+        method=c.method,
+        mutable=mutable,
+        **dynamic_kwargs,
+        **static_kwargs,
+    )
+
+  # Forward pass FLOPs
+  flops = _get_flops(apply, variables, rngs, *args, **dynamic_kwargs)
+
+  # Backward pass FLOPs
+  dynamic_keys = tuple(dynamic_kwargs.keys())
+
+  def apply_positional(variables, rngs, *all_args):
+    """Same as `apply` above but with positional arguments only."""
+    split = len(all_args) - len(dynamic_keys)
+    args, dynamic_values = all_args[:split], all_args[split:]
+    dynamic_kwargs = {k: v for k, v in zip(dynamic_keys, dynamic_values)}
+    return apply(variables, rngs, *args, **dynamic_kwargs)
+
+  def apply_vjp(variables, rngs, *args, **dynamic_kwargs):
+    """VJP of `c.module.apply` closed over static keyword arguments."""
+    out, vjp_fn = jax.vjp(
+        apply_positional,
+        variables,
+        rngs,
+        *args,
+        *dynamic_kwargs.values(),
+    )
+    return vjp_fn(out)
+
+  vjp_flops = _get_flops(apply_vjp, variables, rngs, *args, **dynamic_kwargs)
+  return flops, vjp_flops
+
+
 def _get_module_table(
     module: module_lib.Module,
     depth: Optional[int],
     show_repeated: bool,
 ) -> Callable[..., Table]:
-  """A function that takes a Module and returns function with the same signature as `init`
-  but returns the Table representation of the Module."""
+  """A function that takes a Module and returns function with the same signature
+  as `init` but returns the Table representation of the Module."""
 
   def _get_table_fn(*args, **kwargs):
     with module_lib._tabulate_context():
@@ -307,15 +414,17 @@ def _get_module_table(
         counted_vars = module_vars
 
       visited_paths.add(c.path)
+
       rows.append(
           Row(
               c.path,
-              c.module_type,
+              type(c.module),
               c.method,
               inputs,
               c.outputs,
               module_vars,
               counted_vars,
+              *_get_call_flops(c, kwargs['mutable']),
           )
       )
 
@@ -357,8 +466,9 @@ def _get_module_variables(
 def _get_path_variables(
     path: Tuple[str, ...], variables: FrozenVariableDict
 ) -> MutableVariableDict:
-  """A function that takes a path and a variables structure and returns the variable structure at
-  that path."""
+  """A function that takes a path and a variables structure and returns the
+  variable structure at that path.
+  """
   path_variables = {}
 
   for collection in variables:
@@ -376,8 +486,9 @@ def _get_path_variables(
 
 
 def _process_inputs(args, kwargs) -> Any:
-  """A function that normalizes the representation of the ``args`` and ``kwargs``
-  for the ``inputs`` column."""
+  """A function that normalizes the representation of the ``args`` and
+  ``kwargs`` for the ``inputs`` column.
+  """
   if args and kwargs:
     input_values = (*args, kwargs)
   elif args and not kwargs:
@@ -401,7 +512,7 @@ def _render_table(
   if console_extras is not None:
     console_kwargs.update(console_extras)
 
-  non_params_cols = 4
+  non_params_cols = 6
   rich_table = rich.table.Table(
       show_header=True,
       show_lines=True,
@@ -414,6 +525,8 @@ def _render_table(
   rich_table.add_column('module', **column_kwargs)
   rich_table.add_column('inputs', **column_kwargs)
   rich_table.add_column('outputs', **column_kwargs)
+  rich_table.add_column('flops')
+  rich_table.add_column('vjp_flops')
 
   for col in table.collections:
     rich_table.add_column(col, **column_kwargs)
@@ -451,6 +564,14 @@ def _render_table(
         ),
         _as_yaml_str(
             _summary_tree_map(_maybe_render, _normalize_structure(row.outputs))
+        ),
+        _as_yaml_str(
+            _summary_tree_map(_maybe_render, _normalize_structure(row.flops))
+        ),
+        _as_yaml_str(
+            _summary_tree_map(
+                _maybe_render, _normalize_structure(row.vjp_flops)
+            )
         ),
         *collections_size_repr,
     )
@@ -575,6 +696,21 @@ def _get_value_representation(x: Any) -> _ValueRepresentation:
     return _ArrayRepresentation.from_array(x)
   except:
     return _ObjectRepresentation(x)
+
+
+def _from_value_representation(x: _ValueRepresentation) -> Any:
+  if isinstance(x, _ArrayRepresentation):
+    return jax.ShapeDtypeStruct(x.shape, x.dtype)
+
+  elif isinstance(x, _PartitionedArrayRepresentation):
+    return jax.ShapeDtypeStruct(
+        x.array_representation.shape, x.array_representation.dtype
+    )
+
+  elif isinstance(x, _ObjectRepresentation):
+    return x.obj
+
+  raise TypeError(x, type(x))
 
 
 def _represent_tree(x):

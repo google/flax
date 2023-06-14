@@ -13,63 +13,43 @@
 # limitations under the License.
 
 """Flax Module."""
+
 import contextlib
 import dataclasses
 import enum
 import functools
 import inspect
-import re
 import sys
 import threading
 from types import MappingProxyType
 import typing
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    Iterator,
-    List,
-    Literal,
-    Mapping,
-    Optional,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    overload,
-)
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Tuple, Type, TypeVar, Union, overload
+from typing_extensions import Protocol, dataclass_transform
 import weakref
 
 import flax
-from flax import (
-    config,
-    core,
-    errors,
-    serialization,
-    traceback_util,
-    traverse_util,
-)
+from flax import config
+from flax import core
+from flax import errors
+from flax import serialization
+from flax import traceback_util
+from flax import traverse_util
+from flax.core import meta
 from flax.core import partial_eval
 from flax.core import Scope
-from flax.core import meta
 from flax.core.frozen_dict import FrozenDict
-from flax.core.scope import (  # pylint: disable=g-multiple-import
-    CollectionFilter,
-    DenyList,
-    FrozenVariableDict,
-    Variable,
-    VariableDict,
-    union_filters,
-)
+from flax.core.scope import CollectionFilter
+from flax.core.scope import DenyList
+from flax.core.scope import FrozenVariableDict
+from flax.core.scope import union_filters
+from flax.core.scope import Variable
+from flax.core.scope import VariableDict
 from flax.ids import FlaxId
 from flax.ids import uuid
 import flax.linen as nn
 from flax.linen import kw_only_dataclasses
 import jax
 import jax.numpy as jnp
-import numpy as np
-from typing_extensions import Protocol, dataclass_transform  # pytype: disable=not-supported-yet
 
 
 traceback_util.register_exclusion(__file__)
@@ -159,7 +139,7 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 class _CallInfo:
   index: int
   path: Tuple[str, ...]
-  module_type: Type['Module']
+  module: 'Module'
   method: str
   args: Tuple[Any, ...]
   kwargs: Dict[str, Any]
@@ -171,7 +151,7 @@ class _CallInfoContext(threading.local):
   index: int
   calls: List[_CallInfo]
 
-  def get_call_index(self, module: 'Module') -> int:
+  def get_call_index(self) -> int:
     index = self.index
     self.index += 1
     return index
@@ -611,7 +591,7 @@ def wrap_descriptor_once(descriptor) -> 'DescriptorWrapper':
   """Wraps a descriptor to give better error messages.
 
   Args:
-    prop: User-defined Module attribute descriptor.
+    descriptor: User-defined Module attribute descriptor.
 
   Returns:
     Wrapped descriptor.
@@ -812,7 +792,7 @@ def create_descriptor_wrapper(descriptor: Descriptor):
   """Creates a descriptor wrapper that calls a get_fn on the descriptor."""
 
   class _DescriptorWrapper(DescriptorWrapper):
-    """A descriptor that can wrap any descriptor"""
+    """A descriptor that can wrap any descriptor."""
 
     if hasattr(descriptor, '__isabstractmethod__'):
       __isabstractmethod__ = descriptor.__isabstractmethod__
@@ -1106,7 +1086,7 @@ class Module(ModuleBase):
       # get call info
       if add_call_info:
         assert self.scope is not None
-        call_index = _context.call_info_stack[-1].get_call_index(self)
+        call_index = _context.call_info_stack[-1].get_call_index()
 
       if _global_interceptor_stack:
         run_fun = functools.partial(run_interceptors, fun)
@@ -1132,7 +1112,7 @@ class Module(ModuleBase):
             _CallInfo(
                 call_index,
                 self.path,
-                type(self),
+                self.clone(),
                 fun.__name__,
                 _args,
                 _kwargs,
@@ -1256,7 +1236,7 @@ class Module(ModuleBase):
           and self.parent._state.setup_called == SetupState.TRANSFORMED
       )
       # Perform name-collision check.
-      if self.parent._name_taken(self.name, self, reuse_scopes=reuse_scopes):
+      if self.parent._name_taken(self.name, reuse_scopes=reuse_scopes):
         parent_class = self.parent.__class__.__name__
         raise errors.NameInUseError('submodule', self.name, parent_class)
       # Finalize attachment to parent and scope initialization.
@@ -1403,7 +1383,6 @@ class Module(ModuleBase):
   def _name_taken(
       self,
       name: str,
-      module: Optional['Module'] = None,
       reuse_scopes: bool = False,
       collection: Optional[str] = None,
   ) -> bool:
@@ -1887,7 +1866,7 @@ class Module(ModuleBase):
         The name of a single mutable collection. ``list``: A list of names of
         mutable collections.
       capture_intermediates: If `True`, captures intermediate return values of
-        all Modules inside the "intermediates" collection. By default only the
+        all Modules inside the "intermediates" collection. By default, only the
         return values of all ``__call__`` methods are stored. A function can be
         passed to change the filter behavior. The filter function takes the
         Module instance and method name and returns a bool indicating whether
@@ -1944,12 +1923,12 @@ class Module(ModuleBase):
       rngs: The rngs for the variable collections.
       *args: Named arguments passed to the init function.
       method: An optional method. If provided, applies this method. If not
-        provided, applies the ``__call__`` method. A string can also be'
+        provided, applies the ``__call__`` method. A string can also be
         provided to specify a method by name.
       mutable: Can be bool, str, or list. Specifies which collections should be
         treated as mutable: ``bool``: all/no collections are mutable. ``str``:
         The name of a single mutable collection. ``list``: A list of names of
-        mutable collections. By default all collections except "intermediates"
+        mutable collections. By default, all collections except "intermediates"
         are mutable.
       capture_intermediates: If `True`, captures intermediate return values of
         all Modules inside the "intermediates" collection. By default only the
@@ -2255,7 +2234,7 @@ class Module(ModuleBase):
           return x
 
       model = Foo2()
-      variables = model.init(jax.random.key(0), x)
+      variables = model.init(jax.random.PRNGKey(0), x)
       y, state = model.apply(
           variables, jnp.ones((1, 1)), mutable=['intermediates'])
       print(state['intermediates'])  # ==> {'h': [[3.]]}
@@ -2394,46 +2373,52 @@ class Module(ModuleBase):
 
     This gives the following output::
 
-                                      Foo Summary
-      ┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┓
-      ┃ path    ┃ module ┃ inputs        ┃ outputs       ┃ params              ┃
-      ┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━┩
-      │         │ Foo    │ float32[16,9] │ float32[16,2] │                     │
-      ├─────────┼────────┼───────────────┼───────────────┼─────────────────────┤
-      │ Dense_0 │ Dense  │ float32[16,9] │ float32[16,4] │ bias: float32[4]    │
-      │         │        │               │               │ kernel: float32[9,4]│
-      │         │        │               │               │                     │
-      │         │        │               │               │ 40 (160 B)          │
-      ├─────────┼────────┼───────────────┼───────────────┼─────────────────────┤
-      │ Dense_1 │ Dense  │ float32[16,4] │ float32[16,2] │ bias: float32[2]    │
-      │         │        │               │               │ kernel: float32[4,2]│
-      │         │        │               │               │                     │
-      │         │        │               │               │ 10 (40 B)           │
-      ├─────────┼────────┼───────────────┼───────────────┼─────────────────────┤
-      │         │        │               │         Total │ 50 (200 B)          │
-      └─────────┴────────┴───────────────┴───────────────┴─────────────────────┘
+                                           Foo Summary
+    ┏━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+    ┃ path    ┃ module ┃ inputs        ┃ outputs       ┃ flops ┃ vjp_flops ┃ params          ┃
+    ┡━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+    │         │ Foo    │ float32[16,9] │ float32[16,2] │ 1504  │ 4460      │                 │
+    ├─────────┼────────┼───────────────┼───────────────┼───────┼───────────┼─────────────────┤
+    │ Dense_0 │ Dense  │ float32[16,9] │ float32[16,4] │ 1216  │ 3620      │ bias:           │
+    │         │        │               │               │       │           │ float32[4]      │
+    │         │        │               │               │       │           │ kernel:         │
+    │         │        │               │               │       │           │ float32[9,4]    │
+    │         │        │               │               │       │           │                 │
+    │         │        │               │               │       │           │ 40 (160 B)      │
+    ├─────────┼────────┼───────────────┼───────────────┼───────┼───────────┼─────────────────┤
+    │ Dense_1 │ Dense  │ float32[16,4] │ float32[16,2] │ 288   │ 840       │ bias:           │
+    │         │        │               │               │       │           │ float32[2]      │
+    │         │        │               │               │       │           │ kernel:         │
+    │         │        │               │               │       │           │ float32[4,2]    │
+    │         │        │               │               │       │           │                 │
+    │         │        │               │               │       │           │ 10 (40 B)       │
+    ├─────────┼────────┼───────────────┼───────────────┼───────┼───────────┼─────────────────┤
+    │         │        │               │               │       │     Total │ 50 (200 B)      │
+    └─────────┴────────┴───────────────┴───────────────┴───────┴───────────┴─────────────────┘
 
-                            Total Parameters: 50 (200 B)
+                                   Total Parameters: 50 (200 B)
 
     **Note**: rows order in the table does not represent execution order,
     instead it aligns with the order of keys in `variables` which are sorted
     alphabetically.
 
+    **Note**: `vjp_flops` returns `0` if the module is not differentiable.
+
     Args:
       rngs: The rngs for the variable collections as passed to `Module.init`.
       *args: The arguments to the forward computation.
-      depth: controls how many submodule deep the summary can go. By default its
-        `None` which means no limit. If a submodule is not shown because of the
-        depth limit, its parameter count and bytes will be added to the row of
-        its first shown ancestor such that the sum of all rows always adds up to
-        the total number of parameters of the Module.
+      depth: controls how many submodule deep the summary can go. By default,
+        its `None` which means no limit. If a submodule is not shown because of
+        the depth limit, its parameter count and bytes will be added to the row
+        of its first shown ancestor such that the sum of all rows always adds
+        up to the total number of parameters of the Module.
       show_repeated: If `True`, repeated calls to the same module will be shown
         in the table, otherwise only the first call will be shown. Default is
         `False`.
       mutable: Can be bool, str, or list. Specifies which collections should be
         treated as mutable: ``bool``: all/no collections are mutable. ``str``:
         The name of a single mutable collection. ``list``: A list of names of
-        mutable collections. By default all collections except 'intermediates'
+        mutable collections. By default, all collections except 'intermediates'
         are mutable.
       console_kwargs: An optional dictionary with additional keyword arguments
         that are passed to `rich.console.Console` when rendering the table.
@@ -2537,7 +2522,7 @@ def apply(
 
   Args:
     fn: The function that should be applied. The first argument passed will be
-      an module instance of the ``module`` with variables and RNGs bound to it.
+      a module instance of the ``module`` with variables and RNGs bound to it.
     module: The ``Module`` that will be used to bind variables and RNGs to. The
       ``Module`` passed as the first argument to ``fn`` will be a clone of
       module.
@@ -2546,7 +2531,7 @@ def apply(
       name of a single mutable collection. ``list``: A list of names of mutable
       collections.
     capture_intermediates: If `True`, captures intermediate return values of all
-      Modules inside the "intermediates" collection. By default only the return
+      Modules inside the "intermediates" collection. By default, only the return
       values of all `__call__` methods are stored. A function can be passed to
       change the filter behavior. The filter function takes the Module instance
       and method name and returns a bool indicating whether the output of that
@@ -2601,17 +2586,17 @@ def init_with_output(
 
   Args:
     fn: The function that should be applied. The first argument passed will be
-      an module instance of the ``module`` with variables and RNGs bound to it.
+      a module instance of the ``module`` with variables and RNGs bound to it.
     module: The ``Module`` that will be used to bind variables and RNGs to. The
       ``Module`` passed as the first argument to ``fn`` will be a clone of
       module.
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable. ``str``: The
       name of a single mutable collection. ``list``: A list of names of mutable
-      collections. By default all collections except "intermediates" are
+      collections. By default, all collections except "intermediates" are
       mutable.
     capture_intermediates: If `True`, captures intermediate return values of all
-      Modules inside the "intermediates" collection. By default only the return
+      Modules inside the "intermediates" collection. By default, only the return
       values of all `__call__` methods are stored. A function can be passed to
       change the filter behavior. The filter function takes the Module instance
       and method name and returns a bool indicating whether the output of that
@@ -2665,17 +2650,17 @@ def init(
 
   Args:
     fn: The function that should be applied. The first argument passed will be
-      an module instance of the ``module`` with variables and RNGs bound to it.
+      a module instance of the ``module`` with variables and RNGs bound to it.
     module: The ``Module`` that will be used to bind variables and RNGs to. The
       ``Module`` passed as the first argument to ``fn`` will be a clone of
       module.
     mutable: Can be bool, str, or list. Specifies which collections should be
       treated as mutable: ``bool``: all/no collections are mutable. ``str``: The
       name of a single mutable collection. ``list``: A list of names of mutable
-      collections. By default all collections except "intermediates" are
+      collections. By default, all collections except "intermediates" are
       mutable.
     capture_intermediates: If `True`, captures intermediate return values of all
-      Modules inside the "intermediates" collection. By default only the return
+      Modules inside the "intermediates" collection. By default, only the return
       values of all `__call__` methods are stored. A function can be passed to
       change the filter behavior. The filter function takes the Module instance
       and method name and returns a bool indicating whether the output of that
