@@ -25,16 +25,16 @@ from orbax import checkpoint as orbax
 PyTree = Any
 
 
-def is_multiprocess_array(value: Any) -> bool:
-  """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
+def is_multi_device_array(value: Any) -> bool:
+  """Instruct Orbax to save this array with Tensorstore instead of msgpack."""
   if isinstance(value, jax.Array):
-    return not value.is_fully_addressable
+    return not value.is_fully_replicated
   return False
 
 
 def save_args_from_target(target: Any) -> Any:
   return jax.tree_util.tree_map(
-      lambda x: orbax.SaveArgs(aggregate=not is_multiprocess_array(x)), target
+      lambda x: orbax.SaveArgs(aggregate=not is_multi_device_array(x)), target
   )
 
 
@@ -52,13 +52,13 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
     A Pytree of Orbax `RestoreArgs` or `ArrayRestoreArgs`
   """
   def find_sharding(x):
-    if is_multiprocess_array(x):
+    if is_multi_device_array(x):
       return x.sharding
     return None
 
   # Simpler case: no multihost arrays
   if not any(
-      jax.tree_util.tree_flatten(jax.tree_map(is_multiprocess_array, target))[0]
+      jax.tree_util.tree_flatten(jax.tree_map(is_multi_device_array, target))[0]
   ):
     return jax.tree_util.tree_map(lambda x: orbax.RestoreArgs(), target)
 

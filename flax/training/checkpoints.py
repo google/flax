@@ -91,6 +91,13 @@ PyTree = Any
 MultiprocessArrayType = Any
 
 
+def _is_multiprocess_array(value: Any) -> bool:
+  """Use GlobalAsyncCheckpointManager to save the array if it's only partially available on this host."""
+  if isinstance(value, jax.Array):
+    return not value.is_fully_addressable
+  return False
+
+
 def _checkpoint_path(ckpt_dir: str,
                      step: Union[int, float, str],
                      prefix: str = 'checkpoint_') -> str:
@@ -154,14 +161,14 @@ def _split_mp_arrays(
   """Split out the multiprocess arrays from the target pytree to save."""
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(target, (core.FrozenDict, dict)):
-    if orbax_utils.is_multiprocess_array(target):
+    if _is_multiprocess_array(target):
       return MP_ARRAY_PH, [(target, '')]
     return target, []
   # Traverse the target and handle distributed arrays.
   flattened = traverse_util.flatten_dict(target, keep_empty_nodes=True)
   mpa_targets = []
   for key, value in flattened.items():
-    if orbax_utils.is_multiprocess_array(value):
+    if _is_multiprocess_array(value):
       subpath = '/'.join(key)
       mpa_targets.append((value, subpath))
       flattened[key] = MP_ARRAY_PH + subpath
@@ -257,7 +264,7 @@ def _restore_mpas(state_dict,
 
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
-    if orbax_utils.is_multiprocess_array(target) and isinstance(
+    if _is_multiprocess_array(target) and isinstance(
         state_dict, str) and state_dict.startswith(MP_ARRAY_PH):
       _check_mpa_errors()
       return _safe_deserialize([((), target, ckpt_path + MP_ARRAY_POSTFIX)],
@@ -266,6 +273,7 @@ def _restore_mpas(state_dict,
 
   # Go through the restored checkpoint pytree for all MPAs
   flattened = traverse_util.flatten_dict(state_dict, keep_empty_nodes=True)
+  target_flattened = {}
   if target:
     target_flattened = traverse_util.flatten_dict(
         serialization.to_state_dict(target), keep_empty_nodes=True)
@@ -276,11 +284,15 @@ def _restore_mpas(state_dict,
     if isinstance(value, str) and value.startswith(MP_ARRAY_PH):
       _check_mpa_errors()
       if not target or (key not in target_flattened) or (
-          not orbax_utils.is_multiprocess_array(target_flattened[key])):
+          not _is_multiprocess_array(target_flattened[key])):
         if allow_partial:
           logging.warning(
-              'Multiprocess array %s could not be restored because a valid array is not found in target at the corresponding location. Proceed to restore other arrays because allow_partial_restoration=True',
-              key)
+              'Multiprocess array %s could not be restored because a valid'
+              ' array is not found in target at the corresponding location.'
+              ' Proceed to restore other arrays because'
+              ' allow_partial_restoration=True',
+              key,
+          )
         else:
           raise errors.MPARestoreTargetRequiredError(ckpt_path, step, key)
       else:
@@ -926,19 +938,10 @@ def restore_checkpoint(
     if not orbax_checkpointer:
       orbax_checkpointer = orbax.Checkpointer(orbax.PyTreeCheckpointHandler())
 
-    def make_restore_args(x):
-      if orbax_utils.is_multiprocess_array(x):
-        return orbax.ArrayRestoreArgs(
-            restore_type=jax.Array,
-            sharding=x.sharding,
-        )
-      return orbax.RestoreArgs()
-
-
     restore_kwargs = {}
     if target is not None:
-      restore_kwargs['restore_args'] = jax.tree_util.tree_map(
-          make_restore_args, target
+      restore_kwargs['restore_args'] = orbax_utils.restore_args_from_target(
+          target
       )
     if orbax_transforms is not None:
       restore_kwargs['transforms'] = orbax_transforms
