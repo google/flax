@@ -742,9 +742,11 @@ class TransformTest(absltest.TestCase):
     x = jnp.ones((2,))
     (y1, y2), _ = B().init_with_output(key, x)
     np.testing.assert_array_equal(y1, y2)
-    # cntr == 3 due to 1 call by _validate_setup
-    # and two further "real" calls.
-    self.assertEqual(cntr, 3)
+    # cntr == 4 due to:
+    # 1 call by _validate_setup
+    # 1 call for the setup() outside transform boundary
+    # and two further "real" calls in transform boundaries
+    self.assertEqual(cntr, 4)
 
   def test_toplevel_submodule_adoption_transform(self):
     class A(nn.Module):
@@ -1676,6 +1678,35 @@ class TransformTest(absltest.TestCase):
             nn.Partitioned(jnp.ones((4, 4)), names=('foo', 'bar'))}}}))
     self.assertEqual(jax.tree_map(jnp.shape, vs), outer_expect)
     self.assertEqual(jax.tree_map(jnp.shape, vars_copy), inner_expect)
+
+
+  def test_outer_setup_called_with_sharing_across_transforms(self):
+    class A(nn.Module):
+      def setup(self):
+        self.foo = self.param(
+            'foo', nn.initializers.zeros, (2, 2), jnp.float32)
+      def __call__(self, x):
+        return self.foo
+    class B(nn.Module):
+      a: Any
+      @nn.compact
+      def __call__(self, x):
+        return self.a(x)
+    class C(nn.Module):
+      def setup(self):
+        self.a = A()
+        self.b = nn.jit(B)(self.a)
+      def __call__(self, x):
+        b = self.b(x)
+        a = self.a(x)
+        return a + b
+    k = random.PRNGKey(0)
+    x = random.randint(k, (2, 2), minval=0, maxval=10)
+    vs = C().init(k, x)
+    y = C().apply(vs, x)
+    outer_expect = jax.tree_map(jnp.shape,
+        freeze({'params': {'a': {'foo': jnp.zeros((2, 2))}}}))
+    self.assertEqual(jax.tree_map(jnp.shape, vs), outer_expect)
 
 
 if __name__ == '__main__':

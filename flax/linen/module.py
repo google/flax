@@ -1112,7 +1112,8 @@ class Module(ModuleBase):
           self._validate_setup()
       finally:
         self._state.in_setup = False
-        self._state.setup_called = SetupState.DONE
+        if not shallow:
+          self._state.setup_called = SetupState.DONE
 
   def _validate_setup(self) -> None:
     """Abstractly evaluates setup only to run static checks."""
