@@ -22,6 +22,16 @@ vNext
 -
 -
 -
+0.6.11
+-----
+- Set Orbax-as-backend to be the default checkpointing method.
+- Fix setup trigger issue under sharing and transforms.
+- Add collection to self.scope.reserve(name, col) so that sow works with the same name in different collections.
+- Minor improvements for Sequential.
+- Improve the error message in MultiHeadDotProductAttention.
+- Allow manually specifying the rng key for Dropout.
+- RNN refactor.
+- fixed missing separator for rng fold in.
 
 0.6.10
 -----
