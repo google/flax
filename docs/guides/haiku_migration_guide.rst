@@ -447,7 +447,7 @@ in ``setup``, and use them in the ``encode`` and ``decode`` respectively.
       return x
 
 Note that in Flax ``setup`` doesn't run after ``__init__``, instead it runs
-when ``init`` or ``apply`` are called. TODO: explain?
+when ``init`` or ``apply`` are called.
 
 Now, we want to be able to call any method from our ``AutoEncoder`` model. In Haiku we
 can define multiple ``apply`` methods for a module through ``hk.multi_transform``. The
@@ -553,7 +553,7 @@ Finally, let's explore how we can employ the ``apply`` function to invoke the ``
 
   ---
 
-
+  ...
   z = model.apply(
     {"params": params},
 
