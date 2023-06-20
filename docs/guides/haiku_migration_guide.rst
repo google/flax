@@ -81,7 +81,7 @@ signature and passed to the superclass constructor.
 
 The ``__call__`` method looks very similar in both libraries, however, in Flax
 you have to use the ``@nn.compact`` decorator in order to be able to define
-submodule inline. In Haiku, this is the default behavior.
+submodules inline. In Haiku, this is the default behavior.
 
 Now, a place where Haiku and Flax differ substantially is in how you construct
 the model. In Haiku, you use ``hk.transform`` over a function
@@ -108,7 +108,7 @@ and ``apply`` methods. In Flax, you simply instantiate your Module.
 To get the model parameters in both libraries you use the ``init`` method
 with a ``PRNGKey`` plus some inputs to run the model. The main difference here is
 that Flax returns a mapping from collection names to nested array dictionaries,
-``params`` is just one of these possible collections. In Haiku, just get the ``params``
+``params`` is just one of these possible collections. In Haiku, you get the ``params``
 structure directly.
 
 .. codediff::
@@ -132,10 +132,12 @@ structure directly.
   )
   params = variables["params"]
 
-One very important thing to note is that in Flax the parameters structure
-is hierarchical, reflacting the structure of the model. Whereas in Haiku
-the parameters structure is mostly flat, it maps a ``/`` separated string path
-to the parameters of the most inner Modules.
+One very important thing to note is that in Flax the parameters structure is
+hierarchical, with one level per nested module and a final level for the
+parameter name.
+In Haiku the parameters structure is a python dictionary with a two level hierarchy:
+the fully qualified module name mapping to the parameter name. The module name
+consists of a ``/`` separated string path of all the nested Modules.
 
 .. tab-set::
 
@@ -179,7 +181,7 @@ to the parameters of the most inner Modules.
 During training in both frameworks you pass the parameters structure to the
 ``apply`` method to run the forward pass. Since we are using dropout, in
 both cases we must provide a ``key`` to ``apply`` in order to generate
-the random masks.
+the random dropout masks.
 
 .. codediff::
   :title_left: Haiku
@@ -230,7 +232,7 @@ just pass the parameters and the PRNGKey directly.
 Handling State
 -----------------
 
-Now let's see how state is handled in both libraries. We will take
+Now let's see how mutable state is handled in both libraries. We will take
 the same model as before, but now we will replace Dropout with BatchNorm.
 
 .. codediff::
@@ -266,12 +268,13 @@ the same model as before, but now we will replace Dropout with BatchNorm.
       x = jax.nn.relu(x)
       return x
 
-Code is very similar in this case a both libraries provide a BatchNorm layer. The most notable
-difference is that Haiku uses ``is_training`` to control weather or not to update the running
-statistics, whereas Flax uses ``use_running_average`` for the same purpose.
+The code is very similar in this case as both libraries provide a BatchNorm
+layer. The most notable difference is that Haiku uses ``is_training`` to
+control whether or not to update the running statistics, whereas Flax uses
+``use_running_average`` for the same purpose.
 
-To instantiate a stateful model in Haiku you use ``hk.transform_with_state``, which
-returns changes the signature for ``init`` and ``apply`` to accept and return
+To instantiate a stateful model in Haiku you use ``hk.transform_with_state``,
+which changes the signature for ``init`` and ``apply`` to accept and return
 state. As before, in Flax you construct the Module directly.
 
 .. codediff::
@@ -319,9 +322,11 @@ in Flax you get a new ``batch_stats`` collection in the ``variables`` dictionary
 
 
 In general, in Flax you might find other state collections in the ``variables``
-dictionary such as ``cache`` for auto-regressive transformers models, ``intermediates``
-for intermediate values added using ``Module.sow``, or other collection names defined
-by custom layers.
+dictionary such as ``cache`` for auto-regressive transformers models,
+``intermediates`` for intermediate values added using ``Module.sow``, or other
+collection names defined by custom layers. Haiku only makes a distinction
+between ``params`` (variables which do not change while running ``apply``) and
+``state`` (variables which can change while running ``apply``).
 
 Now, training looks very similar in both frameworks as you use the same
 ``apply`` method to run the forward pass. In Haiku, now pass the ``state``
@@ -371,14 +376,18 @@ return value.
 
   train_step(params, batch_stats, sample_x, jnp.ones((1,), dtype=jnp.int32))
 
-One major difference is that in Flax state collection can be mutable or immutable,
-during ``init`` all collection are mutable by default, however, during ``apply``
+One major difference is that in Flax a state collection can be mutable or immutable.
+During ``init`` all collections are mutable by default, however, during ``apply``
 you have to explicitly specify which collections are mutable. In this example,
-we specify that ``batch_stats`` is mutable, here a single string is passed but a list
-can also be given if there are more mutable collection. If this is not done an
-error wil be raised at runtime. Also, when ``mutable`` is anything other than ``False``,
-the ``updates`` dictionary is returned as the second return value, else only the model
-output is returned.
+we specify that ``batch_stats`` is mutable. Here a single string is passed but a list
+can also be given if there are more mutable collections. If this is not done an
+error will be raised at runtime when trying to mutate ``batch_stats``.
+Also, when ``mutable`` is anything other than ``False``, the ``updates``
+dictionary is returned as the second return value of ``apply``, else only the
+model output is returned.
+Haiku makes the mutable/immutable distinction through having ``params``
+(immutable) and ``state`` (mutable) and using either ``hk.transform`` or
+``hk.transform_with_state``
 
 Using Multiple Methods
 -----------------------
@@ -388,11 +397,9 @@ As an example, we will implement an auto-encoder model with three methods:
 ``encode``, ``decode``, and ``__call__``.
 
 In Haiku, we can just define the submodules that ``encode`` and ``decode`` need
-directly inline, in this case each will just call a ``Linear`` layer. In Flax,
-this approach doesn't work because you cannot have more than one ``@nn.compact`` method.
-Instead, we will define an ``encoder`` and a ``decoder`` Module
-ahead of time in ``setup``, and use them in the ``encode`` and ``decode``
-respectively.
+directly in ``__init__``, in this case each will just use a ``Linear`` layer.
+In Flax, we will define an ``encoder`` and a ``decoder`` Module ahead of time
+in ``setup``, and use them in the ``encode`` and ``decode`` respectively.
 
 .. codediff::
   :title_left: Haiku
@@ -404,14 +411,14 @@ respectively.
 
     def __init__(self, embed_dim: int, output_dim: int, name=None):
       super().__init__(name=name)
-      self.embed_dim = embed_dim
-      self.output_dim = output_dim
+      self.encoder = hk.Linear(embed_dim, name="encoder")
+      self.decoder = hk.Linear(output_dim, name="decoder")
 
     def encode(self, x):
-      return hk.Linear(self.embed_dim)(x)
+      return self.encoder(x)
 
     def decode(self, x):
-      return hk.Linear(self.output_dim)(x)
+      return self.decoder(x)
 
     def __call__(self, x):
       x = self.encode(x)
@@ -440,28 +447,29 @@ respectively.
       return x
 
 Note that in Flax ``setup`` doesn't run after ``__init__``, instead it runs
-when ``init`` or ``apply`` are called (more or less).
+when ``init`` or ``apply`` are called.
 
-Now, we want to be able to call run any method from our ``AutoEncoder`` model. In Haiku,
-we will define the ``forward`` function so that it receives a ``method`` argument indicating
-the ``AutoEncoder`` method we want to call along with the ``*args`` and ``**kwargs`` for that
-method. In Flax, calling the methods of a Module from ``apply`` is supported so nothing special
-needs to be done.
+Now, we want to be able to call any method from our ``AutoEncoder`` model. In Haiku we
+can define multiple ``apply`` methods for a module through ``hk.multi_transform``. The
+function passed to ``multi_transform`` defines how to initialize the module and which
+different apply methods to generate.
 
 .. codediff::
   :title_left: Haiku
   :title_right: Flax
   :sync:
 
-  def forward(*args, method: str = "__call__", **kwargs):
+  def forward():
     module = AutoEncoder(256, 784)
-    return getattr(module, method)(*args, **kwargs)
+    init = lambda x: module(x)
+    return init, (module.encode, module.decode)
 
-  model = hk.transform(forward)
+  model = hk.multi_transform(forward)
 
   ---
 
   ...
+
 
 
 
@@ -491,10 +499,7 @@ method. This will create all the necessary parameters for the model.
   )
   params = variables["params"]
 
-A significant distinction between Haiku and Flax lies in the consequences and semantics of invoking
-a method. In Haiku, invoking a method, by default, is similar to generating a submodule. In other
-words, it initiates a new name scope that commences with a ``~``, followed by the method's name.
-This pattern can be readily observed in the parameter structure.
+This generates the following parameter structure.
 
 .. tab-set::
 
@@ -504,11 +509,11 @@ This pattern can be readily observed in the parameter structure.
     .. code-block:: python
 
       {
-          'auto_encoder/~decode/linear': {
+          'auto_encoder/~/decoder': {
               'b': (784,),
               'w': (256, 784)
           },
-          'auto_encoder/~encode/linear': {
+          'auto_encoder/~/encoder': {
               'b': (256,),
               'w': (784, 256)
           }
@@ -531,10 +536,6 @@ This pattern can be readily observed in the parameter structure.
       })
 
 
-In contrast, in Flax invoking a method does not give rise to a new name scope, and
-the method's name is absent from the parameter structure. This difference in design
-leads to different architecture choices as presented in this example.
-
 Finally, let's explore how we can employ the ``apply`` function to invoke the ``encode`` method:
 
 .. codediff::
@@ -542,15 +543,17 @@ Finally, let's explore how we can employ the ``apply`` function to invoke the ``
   :title_right: Flax
   :sync:
 
-  z = model.apply(
+  encode, decode = model.apply
+  z = encode(
     params,
     None, # <== rng
     x=jax.numpy.ones((1, 784)),
-    method="encode",
+
   )
 
   ---
 
+  ...
   z = model.apply(
     {"params": params},
 
@@ -558,4 +561,13 @@ Finally, let's explore how we can employ the ``apply`` function to invoke the ``
     method="encode",
   )
 
-The only noteworthy distinction here is that in Haiku, ``rng`` is explicitly passed as ``None``.
+Because the Haiku ``apply`` function is generated through
+``hk.multi_transform``, it's a tuple of two functions which we can unpack into
+an ``encode`` and ``decode`` function which correspond to the methods on the
+``AutoEncoder`` module. In Flax we call the ``encode`` method through passing
+the method name as a string.
+Another noteworthy distinction here is that in Haiku, ``rng`` needs to be
+explicitly passed, even though the module does not use any stochastic
+operations during ``apply``. In Flax this is not necessary. The Haiku ``rng``
+is set to ``None`` here, but you could also use ``hk.without_apply_rng`` on the
+``apply`` function to remove the ``rng`` argument.
