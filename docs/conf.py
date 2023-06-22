@@ -60,6 +60,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'myst_nb',
     'codediff',
+    'flax_module',
     'sphinx_design',
 ]
 
