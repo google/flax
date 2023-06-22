@@ -31,7 +31,8 @@ Adapted from SEED RL, originally adapted from Dopamine.
 """
 
 import cv2
-from gym.spaces.box import Box
+from gymnasium.spaces.box import Box
+import gymnasium as gym
 import numpy as np
 
 
@@ -50,7 +51,7 @@ class AtariPreprocessing:
   and R2D2 papers.
   """
 
-  def __init__(self, environment, frame_skip=4, terminal_on_life_loss=False,
+  def __init__(self, environment: gym.Env, frame_skip=4, terminal_on_life_loss=False,
                screen_size=84, max_random_noops=0):
     """Constructor for an Atari 2600 preprocessor.
     Args:
@@ -119,7 +120,7 @@ class AtariPreprocessing:
     # follow them.
     no_ops = self.environment.np_random.randint(1, self.max_random_noops + 1)
     for _ in range(no_ops):
-      _, _, game_over, _ = self.environment.step(0)
+      _, _, game_over, _, _ = self.environment.step(0)
       if game_over:
         self.environment.reset()
 
@@ -173,7 +174,7 @@ class AtariPreprocessing:
     for time_step in range(self.frame_skip):
       # We bypass the Gym observation altogether and directly fetch the
       # grayscale image from the ALE. This is a little faster.
-      _, reward, game_over, info = self.environment.step(action)
+      _, reward, game_over, _, info = self.environment.step(action)
       accumulated_reward += reward
 
       if self.terminal_on_life_loss:
