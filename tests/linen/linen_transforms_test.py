@@ -1296,13 +1296,8 @@ class TransformTest(absltest.TestCase):
     k = random.PRNGKey(0)
     x = jnp.array([1.])
 
-    if config.flax_relaxed_naming:
-      with self.assertRaises(errors.NameInUseError):
-        y = Test().init(k, x)
-    else:
-      msg = 'Duplicate use of scope name: "sub"'
-      with self.assertRaisesWithLiteralMatch(ValueError, msg):
-        y = Test().init(k, x)
+    with self.assertRaises(errors.NameInUseError):
+      y = Test().init(k, x)
 
   def test_transform_with_setup_and_methods_on_submodule_pytrees(self):
     class Foo(nn.Module):

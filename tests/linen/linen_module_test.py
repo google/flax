@@ -460,13 +460,8 @@ class ModuleTest(absltest.TestCase):
     x = jnp.array([1.])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
 
-    if config.flax_relaxed_naming:
-      with self.assertRaises(errors.NameInUseError):
-        unused_y = Dummy(x.shape, parent=scope)(x)
-    else:
-      msg = 'Duplicate use of scope name: "bias"'
-      with self.assertRaisesWithLiteralMatch(ValueError, msg):
-        unused_y = Dummy(x.shape, parent=scope)(x)
+    with self.assertRaises(errors.NameInUseError):
+      unused_y = Dummy(x.shape, parent=scope)(x)
 
   def test_submodule_var_collision_with_submodule(self):
     rngkey = jax.random.PRNGKey(0)
@@ -520,44 +515,6 @@ class ModuleTest(absltest.TestCase):
         pass
 
     Foo({'a': ()}).apply({})
-
-  @absltest.skipIf(config.flax_relaxed_naming, "relaxed naming")
-  def test_attr_param_name_collision(self):
-    rngkey = jax.random.PRNGKey(0)
-
-    class Dummy(nn.Module):
-      bias: bool
-
-      def setup(self):
-        self.bias = self.param('bias', initializers.ones, (3, 3))
-
-      def __call__(self, x):
-        return x + self.bias
-
-    x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    msg = 'Could not create param "bias" in Module Dummy: Name in use'
-    with self.assertRaisesRegex(errors.NameInUseError, msg):
-      unused_y = Dummy(True, parent=scope)(x)
-
-  @absltest.skipIf(config.flax_relaxed_naming, "relaxed naming")
-  def test_attr_submodule_name_collision(self):
-    rngkey = jax.random.PRNGKey(0)
-
-    class Dummy(nn.Module):
-      bias: bool
-
-      def setup(self):
-        self.bias = DummyModule(name='bias')
-
-      def __call__(self, x):
-        return self.bias(x)
-
-    x = jnp.array([1.])
-    scope = Scope({}, {'params': rngkey}, mutable=['params'])
-    msg = 'Could not create submodule "bias" in Module Dummy: Name in use'
-    with self.assertRaisesRegex(errors.NameInUseError, msg):
-      unused_y = Dummy(True, parent=scope)(x)
 
   def test_only_one_compact_method(self):
     msg = 'Only one method per class can be @compact'
@@ -2425,18 +2382,10 @@ class RelaxedNamingTests(absltest.TestCase):
         p = self.param('dummy', nn.initializers.zeros, x.shape)
         return x + p
 
-    with set_config('flax_relaxed_naming', True):
-      foo = Foo(name='foo')
-      k = random.PRNGKey(0)
-      x = jnp.zeros((1,))
-      vs = foo.init(k, x)
-
-    with set_config('flax_relaxed_naming', False):
-      foo = Foo(name='foo')
-      k = random.PRNGKey(0)
-      x = jnp.zeros((1,))
-      with self.assertRaises(errors.NameInUseError):
-        vs = foo.init(k, x)
+    foo = Foo(name='foo')
+    k = random.PRNGKey(0)
+    x = jnp.zeros((1,))
+    vs = foo.init(k, x)
 
   def test_relaxed_intercollection_conflict(self):
 
@@ -2447,18 +2396,26 @@ class RelaxedNamingTests(absltest.TestCase):
         v2 = self.variable('col2', 'v', lambda x: jnp.zeros(x), x.shape)
         return x + v1.value + v2.value
 
-    with set_config('flax_relaxed_naming', True):
-      foo = Foo(name='foo')
-      k = random.PRNGKey(0)
-      x = jnp.zeros((1,))
-      vs = foo.init(k, x)
+    foo = Foo(name='foo')
+    k = random.PRNGKey(0)
+    x = jnp.zeros((1,))
+    vs = foo.init(k, x)
 
-    with set_config('flax_relaxed_naming', False):
-      foo = Foo(name='foo')
-      k = random.PRNGKey(0)
-      x = jnp.zeros((1,))
-      with self.assertRaises(errors.NameInUseError):
-        vs = foo.init(k, x)
+  def test_relaxed_intercollection_conflict_set(self):
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        v1 = self.variable('col1', 'v', lambda x: jnp.zeros(x), x.shape)
+        v2 = self.variable('col2', 'v', lambda x: jnp.zeros(x), x.shape)
+        v3 = self.variable('col1', 'v', lambda x: jnp.zeros(x), x.shape)
+        return x + v1.value + v2.value + v3.value
+
+    foo = Foo(name='foo')
+    k = random.PRNGKey(0)
+    x = jnp.zeros((1,))
+    with self.assertRaises(errors.NameInUseError):
+      vs = foo.init(k, x)
 
 
 class FrozenDictTests(absltest.TestCase):

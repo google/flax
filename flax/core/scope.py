@@ -14,6 +14,7 @@
 
 """Flax functional core: Scopes."""
 
+import collections
 import contextlib
 import dataclasses
 import functools
@@ -408,7 +409,7 @@ class Scope:
   <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
-  reservations: Dict[str, Optional[str]]
+  reservations: Dict[str, Set[Optional[str]]]
 
   def __init__(self,
                variables: MutableVariableDict,
@@ -442,7 +443,7 @@ class Scope:
     self.trace_level = tracers.trace_level(tracers.current_trace())
 
     self.rng_counters = {key: 0 for key in self.rngs}
-    self.reservations = dict()
+    self.reservations = collections.defaultdict(set)
 
     self._invalid = False
 
@@ -534,14 +535,11 @@ class Scope:
       col: if a variable, the collection used.
     """
     if name in self.reservations:
-      # with relaxed naming, allow the same name for two variables in
+      # allow the same name for two variables in
       # different collections, otherwise raise error.
-      if config.flax_relaxed_naming:
-        if (self.reservations[name] is None or col is None
-            or self.reservations[name] == col):
-            return True
-      else:
-        return True
+      if (None in self.reservations[name] or col is None
+          or col in self.reservations[name]):
+          return True
     return False
 
   def reserve(self, name: str, col: Optional[str] = None):
@@ -558,7 +556,7 @@ class Scope:
                       f'it is {type(name)}')
     if self.name_reserved(name, col):
       raise ValueError(f'Duplicate use of scope name: "{name}"')
-    self.reservations[name] = col
+    self.reservations[name].add(col)
 
   def default_name(self, prefix: str) -> str:
     """Generates an unreserved name with the given prefix.

@@ -279,20 +279,6 @@ def _map_over_modules_in_tree(fn, tree_or_leaf):
         tree_or_leaf, traverse_util.unflatten_dict(mapped_flat_dict))
 
 
-def _all_names_on_object(obj: Any) -> Set[str]:
-  """Gets all names of attributes on `obj` and its classes throughout MRO.
-
-  Args:
-    obj: The object to get names for.
-  Returns:
-    A set of names of attributes of `obj` and its classes.
-  """
-  nameset = set(obj.__dict__.keys())
-  for cls in obj.__class__.__mro__:
-    nameset = nameset.union(set(cls.__dict__.keys()))
-  return nameset
-
-
 def _freeze_attr(val: Any) -> Any:
   """Recursively wrap the given attribute `var` in ``FrozenDict``."""
   if isinstance(val, (dict, FrozenDict)):
@@ -1129,22 +1115,9 @@ class Module(ModuleBase):
                   reuse_scopes: bool = False,
                   collection: Optional[str] = None) -> bool:
     assert self.scope is not None
-    # with relaxed naming don't force non-overlap with python attribute names.
-    if config.flax_relaxed_naming:
-      if reuse_scopes:
-        return False
-      return self.scope.name_reserved(name, collection)
-    if name in _all_names_on_object(self):
-      val = getattr(self, name, None)
-      if module is not None and val is module:
-        # name is taken by the value itself because
-        # field assignment happened before naming
-        return False
-      return True
-    # Check for the existence of name in the scope object.
     if reuse_scopes:
       return False
-    return name in self.scope.reservations
+    return self.scope.name_reserved(name, collection)
 
   @property
   def _initialization_allowed(self):
