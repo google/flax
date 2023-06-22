@@ -1,7 +1,7 @@
 sphinx>=3.3.1
 sphinx-book-theme
 Pygments>=2.6.1
-jax>=0.3
+jax>=0.4
 jaxlib
 ipykernel
 myst_nb
