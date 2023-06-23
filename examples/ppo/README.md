@@ -5,7 +5,7 @@ to learn playing Atari games.
 
 ## Requirements
 
-This example depends on the `gym`, `opencv-python` and `atari-py` packages
+This example depends on the `gymnasium[atari,accept-rom-license]`, `opencv-python` packages
 in addition to `jax` and `flax`.
 
 ## Supported setups

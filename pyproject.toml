@@ -36,10 +36,9 @@ all = [
 ]
 testing = [
     # Last version does not have the ROMs we test on pre-packaged
-    "atari-py==0.2.5",
     "clu",  # All examples.
     "einops",
-    "gym==0.18.3",
+    "gymnasium[atari, accept-rom-license]",
     "jaxlib",
     "jraph>=0.0.6dev0",
     "ml-collections",
@@ -132,8 +131,8 @@ filterwarnings = [
     "ignore:unable to load libtensorflow_io_plugins.so.*:UserWarning",
     # Remove this after next Optax release after 3/27/2023
     "ignore:jax.numpy.DeviceArray is deprecated. Use jax.Array.*:DeprecationWarning",
-    # DeprecationWarning: pkg_resources is deprecated as an API
-    "ignore:.*pkg_resources is deprecated.*:DeprecationWarning",
+    # DeprecationWarnings for pkg_resources
+    "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
     # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
     "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
 ]
