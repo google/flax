@@ -29,7 +29,7 @@ Flax is a neural network library built on [JAX](https://jax.readthedocs.io) that
 growing set of users, most notably in the JAX submissions for the MLPerf
 0.7 benchmark. Our experience over the last year (and many conversations
 with users and JAX core devs) has guided a redesign of the API called
-[Linen](https://github.com/google/flax/blob/main/flax/linen/README.md) ([`flax.linen`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html)) in response to the following basic design questions.
+[Linen](https://github.com/google/flax/blob/main/flax/linen/README.md) ([`flax.linen`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/index.html)) in response to the following basic design questions.
 
 ### How does a neural network library benefit from being built on JAX and leverage JAX’s unique strengths?
 
@@ -70,7 +70,7 @@ transform options to the various variable collections and PRNG state.
 This unleashes the flexibility and strength of [JAX transformations](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html) – for
 example, one can achieve either device-parallel training or per-device
 ensembling by using [`jax.pmap`](https://jax.readthedocs.io/en/latest/_autosummary/jax.pmap.html) in different ways, without any explicit
-library support. Moreover, **within [Modules](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module)**, we expose lightweight
+library support. Moreover, **within [Modules](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module)**, we expose lightweight
 wrappers around the complex JAX transforms such as [`jax.vmap`](https://jax.readthedocs.io/en/latest/_autosummary/jax.vmap.html) and [`jax.lax.scan`](https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.scan.html)
 that annotate how each variable collection is to be transformed by JAX.
 Importantly, we handle the nontrivial cases of creating new variables
@@ -96,7 +96,7 @@ these various kinds under the single vague rubric of “state”, but keep
 different logical types of variables separate that can be treated
 differently under JAX transformations and under mutations (e.g. training
 vs prediction). Similarly, we allow for multiple separate named PRNG
-chains inside [Modules](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module) for separate treatment of randomness for different
+chains inside [Modules](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module) for separate treatment of randomness for different
 applications such as initialization, dropout, sampling, etc.
 
 At every stage the data associated with a neural net is not kept in a
@@ -113,7 +113,7 @@ dicts, you can use any (non-JAX-aware) serialization library directly.
 To be broadly useful to the JAX ecosystem, users shouldn’t need to
 heavily refactor their code in order to add “trainability” for a given
 numerical task. _“The library should not get in the way.”_ Utilizing
-purely functional code from within Linen is trivial: [Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module)
+purely functional code from within Linen is trivial: [Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module)
 implementations are just JAX code with named variables. Using Linen
 Modules inside otherwise purely functional code can be as simple as
 using a single top-level Module transformation to allow initialization

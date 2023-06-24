@@ -77,11 +77,11 @@ def get_datasets(num_epochs, batch_size):
 ## 3. Define network
 
 Create a convolutional neural network with the Linen API by subclassing
-[Flax Module](https://flax.readthedocs.io/en/latest/flax.linen.html#core-module-abstraction).
+[Flax Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html).
 Because the architecture in this example is relatively simple—you're just
 stacking layers—you can define the inlined submodules directly within the
 `__call__` method and wrap it with the
-[`@compact`](https://flax.readthedocs.io/en/latest/flax.linen.html#compact-methods)
+[`@compact`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/decorators.html#flax.linen.compact)
 decorator. To learn more about the Flax Linen `@compact` decorator, refer to the [`setup` vs `compact`](https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html) guide.
 
 ```{code-cell}
@@ -116,7 +116,7 @@ class CNN(nn.Module):
 
 ### View model layers
 
-Create an instance of the Flax Module and use the [`Module.tabulate`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.linen.Module.tabulate) method to visualize a table of the model layers by passing an RNG key and template image input.
+Create an instance of the Flax Module and use the [`Module.tabulate`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.tabulate) method to visualize a table of the model layers by passing an RNG key and template image input.
 
 ```{code-cell}
 ---
@@ -221,7 +221,7 @@ def create_train_state(module, rng, learning_rate, momentum):
 A function that:
 
 - Evaluates the neural network given the parameters and a batch of input images
-  with [`TrainState.apply_fn`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.train_state.TrainState) (which contains the [`Module.apply`](https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.apply)
+  with [`TrainState.apply_fn`](https://flax.readthedocs.io/en/latest/api_reference/flax.training.html#flax.training.train_state.TrainState) (which contains the [`Module.apply`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.apply)
   method (forward pass)).
 - Computes the cross entropy loss, using the predefined [`optax.softmax_cross_entropy_with_integer_labels()`](https://optax.readthedocs.io/en/latest/api.html#optax.softmax_cross_entropy_with_integer_labels). Note that this function expects integer labels, so there is no need to convert labels to onehot encoding.
 - Evaluates the gradient of the loss function using

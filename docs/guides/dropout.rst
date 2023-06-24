@@ -60,7 +60,7 @@ To create a model with dropout:
 * Subclass :meth:`flax.linen.Module`, and then use
   :meth:`flax.linen.Dropout` to add a dropout layer. Recall that
   :meth:`flax.linen.Module` is the
-  `base class for all neural network Modules <https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module>`__,
+  `base class for all neural network Modules <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html>`__,
   and all layers and models are subclassed from it.
 
 * In :meth:`flax.linen.Dropout`, the ``deterministic`` argument is required to
@@ -130,7 +130,7 @@ After creating your model:
 * Instantiate the model.
 * Then, in the :meth:`flax.linen.init()` call, set ``training=False``.
 * Finally, extract the ``params`` from the
-  `variable dictionary <https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module-flax.core.variables>`__.
+  `variable dictionary <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/variable.html>`__.
 
 Here, the main difference between the code without Flax ``Dropout``
 and with ``Dropout`` is that the ``training`` (or ``train``) argument must be

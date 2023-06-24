@@ -88,7 +88,7 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       Refer to :class:`flax.training.train_state.TrainState`.
 
     Variable
-      The `weights / parameters / data / arrays <https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#flax.core.variables.Variable>`__
+      The `weights / parameters / data / arrays <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/variable.html#flax.linen.Variable>`__
       residing in the leaves of :term:`variable collections<Variable collections>`.
       Variables are defined inside modules using :meth:`Module.variable() <flax.linen.Module.variable>`.
       A variable of collection "params" is simply called a param and can be set using
@@ -100,7 +100,7 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       They are typically differentiable, updated by an outer SGD-like loop / optimizer,
       rather than modified directly by forward-pass code.
 
-    `Variable dictionary <https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module-flax.core.variables>`__
+    `Variable dictionary <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/variable.html>`__
       A dictionary containing :term:`variable collections<Variable collections>`.
       Each variable collection is a mapping from a string name
       (e.g., ":term:`params<Params / parameters>`" or "batch_stats") to a (possibly nested)

@@ -12,7 +12,7 @@ The Flax Module lifecycle
 
 This design note is intended for users who are already familiar with Flax Linen Modules but want to understand more about the design principles behind the abstraction. This note should give you a good understanding of the assumptions and guarantees the Module API is built upon. If you have no practical experience with Modules yet, check out the `Getting started notebook <https://flax.readthedocs.io/en/latest/getting_started.html>`_.
 
-Flax Linen Modules offer a Pythonic abstraction on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
+Flax Linen Modules offer a Pythonic abstraction on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
 
 
 Overview
@@ -102,7 +102,7 @@ Notice that the lifecycle includes cloning the Module instance. This is done to 
 Variables
 ==========
 
-The word “variable” is ubiquitous in programming and math. However, it's important to have a good understanding of what variables are in the context of JAX and Flax. Inside Flax Modules, `variables <https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.core.variables>`_ act like you expect from Python. They are initialized once, read, and perhaps even updated every so often. However, JAX has no concept of variables. Instead, values are stored in arrays similar to NumPy arrays - with one important difference: they are immutable.
+The word “variable” is ubiquitous in programming and math. However, it's important to have a good understanding of what variables are in the context of JAX and Flax. Inside Flax Modules, `variables <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/variable.html>`_ act like you expect from Python. They are initialized once, read, and perhaps even updated every so often. However, JAX has no concept of variables. Instead, values are stored in arrays similar to NumPy arrays - with one important difference: they are immutable.
 
 The ``init`` and ``apply`` methods return the variables as a nested dictionary with string keys and JAX arrays at the leaves. At the top level each key corresponds to a variable collection. Inside each collection the nested dict structure corresponds with the ``Module`` hierarchy. The variable dict is immutable and therefore really just a snapshot of state the variables are in. When ``apply`` is called again, the variable dict is passed as an argument. Such that the variables are in the same state as when the previous ``init`` / ``apply`` call finished.
 
@@ -242,7 +242,7 @@ To make this approach work reliably we need well-defined cloning behavior. Rathe
 Bind
 ===============================================
 
-Sometimes it's useful to have a bound, top-level Module without having to wrap the code in a function. For example: to interact with a Module inside a Jupyter notebook. The `bind <https://flax.readthedocs.io/en/latest/flax.linen.html?highlight=bind#flax.linen.Module.bind>`_ method returns a bound clone with an unlimited lifetime. The downside of this is that you cannot combine it with JAX transformations or integrate it into a vanilla JAX codebase that expects stateless code. For example, `Optax <https://github.com/deepmind/optax>`_ can optimze a Pytree of parameters but it cannot directly optimize a bound ``Module`` instance created with ``.bind`` (because that's not a Pytree). Thus, you cannot combine the ``bind`` API with a functional optimizer API like Optax.
+Sometimes it's useful to have a bound, top-level Module without having to wrap the code in a function. For example: to interact with a Module inside a Jupyter notebook. The `bind <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.bind>`_ method returns a bound clone with an unlimited lifetime. The downside of this is that you cannot combine it with JAX transformations or integrate it into a vanilla JAX codebase that expects stateless code. For example, `Optax <https://github.com/deepmind/optax>`_ can optimize a Pytree of parameters but it cannot directly optimize a bound ``Module`` instance created with ``.bind`` (because that's not a Pytree). Thus, you cannot combine the ``bind`` API with a functional optimizer API like Optax.
 
 
 Setup
@@ -262,7 +262,7 @@ The ``setup`` method is often used like the constructor hook (``__init__``) in n
   mdl = TopLevelAccess()
   assert not hasattr(mdl, "foo")  # foo is not defined because setup is not called
 
-The ``setup`` method is not called immediately after the ``Module`` becomes bound but only when you interact with the ``Module`` instance (e.g.: call a method or access an attribute). This should not impact the behavior of a ``Module`` but the lazy execution does sometimes affect log statements and stack traces during debugging. The section on functionalization will explain why we need ``setup`` to be lazy in the first place.
+The ``setup`` method is not called immediately after the ``Module`` becomes bound but only when you interact with the ``Module`` instance (e.g.: call a method or access an attribute). This should not impact the behavior of a ``Module`` but the lazy execution does sometimes affect log statements and stack traces during debugging. The section on :ref:`Functionalization` will explain why we need ``setup`` to be lazy in the first place.
 
 
 Functionalization
@@ -314,7 +314,7 @@ For the most part functionalization is something that is handled automatically f
 
 Here ``inner`` takes a function that closes over a Module instance. In this example, that works fine because we are not transforming the inner method with a lifted transformation. Most methods are not transformed but it is good to know how to make Module methods transformable.
 
-The main obstacle for transformability are types that JAX does not recognize. JAX only understands `Pytree <https://jax.readthedocs.io/en/latest/jax-101/05.1-pytrees.html>`_ arguments. That's arbitrarily nested Python containers (dict, list, tuple) of (Jax) numpy ndarrays and Python numbers/bools. Flax allows to define dataclasses which are Pytree compatible using the `flax.struct <https://flax.readthedocs.io/en/latest/flax.struct.html>`_ API.
+The main obstacle for transformability are types that JAX does not recognize. JAX only understands `Pytree <https://jax.readthedocs.io/en/latest/jax-101/05.1-pytrees.html>`_ arguments; i.e. arbitrarily nested Python containers (dict, list, tuple) of (Jax) numpy ndarrays and Python numbers/bools. Flax allows to define dataclasses which are Pytree compatible using the `flax.struct <https://flax.readthedocs.io/en/latest/flax.struct.html>`_ API.
 
 Function closure is the most common way to accidentally hide a JAX array or Linen Module from a transformation. There is however an easy workaround if you want to pass closures that are also compatible with JAX and Linen transformations:
 
