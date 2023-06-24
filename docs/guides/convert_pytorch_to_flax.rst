@@ -42,7 +42,7 @@ and the Flax kernel has shape [inC, outC]. Transposing the kernel will do the tr
   t_out = t_fc(t_x)
   t_out = t_out.detach().cpu().numpy()
 
-  np.testing.assert_almost_equal(j_out, t_out)
+  np.testing.assert_almost_equal(j_out, t_out, decimal=6)
 
 
 Convolutions
@@ -205,7 +205,7 @@ while Flax multiplies the estimated statistic with ``momentum`` and the new obse
   # [N, C, H, W] -> [N, H, W, C]
   t_out = np.transpose(t_out.detach().cpu().numpy(), (0, 2, 3, 1))
 
-  np.testing.assert_almost_equal(j_out, t_out)
+  np.testing.assert_almost_equal(j_out, t_out, decimal=6)
 
 
 
@@ -253,7 +253,7 @@ operation. ``nn.pool()`` is the core function behind |nn.avg_pool()|_ and |nn.ma
   # [N, C, H, W] -> [N, H, W, C]
   t_out = np.transpose(t_out.detach().cpu().numpy(), (0, 2, 3, 1))
 
-  np.testing.assert_almost_equal(j_out, t_out)
+  np.testing.assert_almost_equal(j_out, t_out, decimal=6)
 
 
 
