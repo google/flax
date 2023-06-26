@@ -129,6 +129,20 @@ To contribute code to Flax on GitHub, follow these steps:
 You can learn more in GitHub's [Creating a pull request from a fork
 ](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork). documentation.
 
+## Contribution documentation
+To run the documentation locally, you need to install the requirements in `docs/requirements.txt` as noted above.
+Then, you can run the following command from the top of the repository:
+
+```bash
+sphinx-build -M html docs docs/_build -T
+```
+
+This will build the documentation and place it in `docs/_build/html`. You can then open `docs/_build/html/index.html` in your browser to view the documentation or run a local webserver:
+
+```bash
+python -m http.server --directory docs/_build/html
+```
+
 ### Updating Jupyter Notebooks
 
 We use [jupytext](https://jupytext.readthedocs.io/) to maintain two synced copies of docs
