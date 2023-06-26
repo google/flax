@@ -69,7 +69,7 @@ The ``batch_stats`` collection
 In addition to the ``params`` collection, ``BatchNorm`` also adds a ``batch_stats`` collection
 that contains the running average of the batch statistics.
 
-Note: You can learn more in the ``flax.linen`` `variables <https://flax.readthedocs.io/en/latest/api_reference/flax.linen.html#module-flax.core.variables>`__
+Note: You can learn more in the ``flax.linen`` `variables <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/variable.html>`__
 API documentation.
 
 The ``batch_stats`` collection must be extracted from the ``variables`` for later use.

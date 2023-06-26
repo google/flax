@@ -273,6 +273,6 @@ directly.
 .. _jax.pmap(): https://jax.readthedocs.io/en/latest/jax.html#jax.pmap
 .. |jax.lax.pmean()| replace:: ``jax.lax.pmean()``
 .. _jax.lax.pmean(): https://jax.readthedocs.io/en/latest/_autosummary/jax.lax.pmean.html
-.. _Module.init: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init
+.. _Module.init: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.init
 .. _`JIT mechanics: tracing and static variables`: https://jax.readthedocs.io/en/latest/notebooks/thinking_in_jax.html#JIT-mechanics:-tracing-and-static-variables
 .. _`MNIST example`: https://github.com/google/flax/blob/main/examples/mnist/train.py

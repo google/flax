@@ -482,29 +482,29 @@ TODO: Given an example of ``jax.scan_in_dim`` (pre-Linen) vs. ``nn.scan``
 (Linen).
 
 .. _`Should I use setup or nn.compact?`: https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html
-.. _`Variables documentation`: https://flax.readthedocs.io/en/latest/flax.linen.html#module-flax.core.variables
+.. _`Variables documentation`: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/variable.html
 .. _`TrainState`: https://flax.readthedocs.io/en/latest/flax.training.html#train-state
 .. _`Upgrading my codebase to Optax`: https://flax.readthedocs.io/en/latest/guides/optax_update_guide.html
 .. _`Lifted transformations`: https://flax.readthedocs.io/en/latest/developer_notes/lift.html
 
 
 .. |@compact| replace:: ``@compact``
-.. _@compact: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.compact
+.. _@compact: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/decorators.html#flax.linen.compact
 
 .. |init| replace:: ``init``
-.. _init: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init
+.. _init: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.init
 
 .. |init_with_output| replace:: ``init_with_output``
-.. _init_with_output: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.init_with_output
+.. _init_with_output: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.init_with_output
 
 .. |jax.jit| replace:: ``jax.jit``
 .. _jax.jit: https://jax.readthedocs.io/en/latest/_autosummary/jax.jit.html#jax.jit
 
 .. |self.param| replace:: ``self.param``
-.. _self.param: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.param
+.. _self.param: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.param
 
 .. |setup| replace:: ``setup``
-.. _setup: https://flax.readthedocs.io/en/latest/flax.linen.html#flax.linen.Module.setup
+.. _setup: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.setup
 
 .. |@flax.struct.dataclass| replace:: ``@flax.struct.dataclass``
 .. _@flax.struct.dataclass: https://flax.readthedocs.io/en/latest/flax.struct.html#flax.struct.dataclass
