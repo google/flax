@@ -772,14 +772,14 @@ def scan(target: Target,
     ...
     ...   @nn.compact
     ...   def __call__(self, x):
-    ...     batch_size = x.shape[0]
-    ...     ScanLSTMCell = nn.scan(
+    ...     ScanLSTM = nn.scan(
     ...       nn.LSTMCell, variable_broadcast="params",
     ...       split_rngs={"params": False}, in_axes=1, out_axes=1)
     ...
-    ...     carry = nn.LSTMCell.initialize_carry(
-    ...       jax.random.PRNGKey(0), (batch_size,), self.features)
-    ...     carry, x = ScanLSTMCell()(carry, x)
+    ...     lstm = ScanLSTM(self.features)
+    ...     input_shape =  x[:, 0].shape
+    ...     carry = lstm.initialize_carry(jax.random.PRNGKey(0), input_shape)
+    ...     carry, x = lstm(carry, x)
     ...     return x
     ...
     >>> x = jnp.ones((4, 12, 7))
@@ -795,9 +795,8 @@ def scan(target: Target,
     ...
     ...   @nn.compact
     ...   def __call__(self, x):
-    ...     batch_size = x.shape[0]
     ...
-    ...     cell = nn.LSTMCell()
+    ...     cell = nn.LSTMCell(self.features)
     ...     def body_fn(cell, carry, x):
     ...       carry, y = cell(carry, x)
     ...       return carry, y
@@ -805,8 +804,9 @@ def scan(target: Target,
     ...       body_fn, variable_broadcast="params",
     ...       split_rngs={"params": False}, in_axes=1, out_axes=1)
     ...
-    ...     carry = nn.LSTMCell.initialize_carry(
-    ...       jax.random.PRNGKey(0), (batch_size,), self.features)
+    ...     input_shape =  x[:, 0].shape
+    ...     carry = cell.initialize_carry(
+    ...       jax.random.PRNGKey(0), input_shape)
     ...     carry, x = scan(cell, carry, x)
     ...     return x
     ...

@@ -282,27 +282,26 @@ class TransformTest(absltest.TestCase):
 
   def test_scan(self):
     class SimpleScan(nn.Module):
+      features: int
       @nn.compact
       def __call__(self, c, xs):
         LSTM = nn.scan(nn.LSTMCell,
                        variable_broadcast='params',
                        split_rngs={'params': False})
-        return LSTM(name="lstm_cell")(c, xs)
+        return LSTM(self.features, name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
     xs = random.uniform(key1, (5, 3, 2))
     dummy_rng = random.PRNGKey(0)
-    init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[1:-1],
-                                              xs.shape[-1])
-    model = SimpleScan()
+    init_carry = nn.LSTMCell(2).initialize_carry(dummy_rng, xs[0].shape)
+    model = SimpleScan(2)
     init_variables = model.init(key2, init_carry, xs)
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
     lstmcell_variables = freeze({'params': init_variables['params']['lstm_cell']})
     for i in range(xs.shape[0]):
-      c, y = nn.LSTMCell().apply(lstmcell_variables, c, xs[i])
+      c, y = nn.LSTMCell(2).apply(lstmcell_variables, c, xs[i])
       ys.append(y[None, ...])
     y1 = jnp.vstack(ys)
 
@@ -313,6 +312,7 @@ class TransformTest(absltest.TestCase):
 
   def test_scan_decorated(self):
     class SimpleScan(nn.Module):
+      features: int
       @partial(nn.scan,
                variable_broadcast='params',
                in_axes=(nn.broadcast, 0),
@@ -320,23 +320,21 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, c, b, xs):
         assert b.shape == (4,)
-        return nn.LSTMCell(name="lstm_cell")(c, xs)
+        return nn.LSTMCell(self.features, name="lstm_cell")(c, xs)
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
     xs = random.uniform(key1, (4, 3, 2))
     b = jnp.ones((4,))
     dummy_rng = random.PRNGKey(0)
-    init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[1:-1],
-                                              xs.shape[-1])
-    model = SimpleScan()
+    init_carry = nn.LSTMCell(2).initialize_carry(dummy_rng, xs[0].shape)
+    model = SimpleScan(2)
     init_variables = model.init(key2, init_carry, b, xs)
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
     lstmcell_variables = freeze({'params': init_variables['params']['lstm_cell']})
     for i in range(xs.shape[0]):
-      c, y = nn.LSTMCell().apply(lstmcell_variables, c, xs[i])
+      c, y = nn.LSTMCell(2).apply(lstmcell_variables, c, xs[i])
       ys.append(y[None, ...])
     y1 = jnp.vstack(ys)
 

@@ -343,13 +343,13 @@ class StochasticTest(absltest.TestCase):
 class RecurrentTest(absltest.TestCase):
 
   def test_lstm(self):
+    lstm = nn.LSTMCell(features=4)
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
-    c0, h0 = nn.LSTMCell.initialize_carry(rng, (2,), 4)
+    c0, h0 = lstm.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
-    lstm = nn.LSTMCell()
     (carry, y), initial_params = lstm.init_with_output(key2, (c0, h0), x)
     self.assertEqual(carry[0].shape, (2, 4))
     self.assertEqual(carry[1].shape, (2, 4))
@@ -367,12 +367,12 @@ class RecurrentTest(absltest.TestCase):
     })
 
   def test_gru(self):
+    gru = nn.GRUCell(features=4)
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
-    carry0 = nn.GRUCell.initialize_carry(rng, (2,), 4)
+    carry0 = gru.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
-    gru = nn.GRUCell()
     (carry, y), initial_params = gru.init_with_output(key2, carry0, x)
     self.assertEqual(carry.shape, (2, 4))
     np.testing.assert_allclose(y, carry)
@@ -387,24 +387,24 @@ class RecurrentTest(absltest.TestCase):
     })
 
   def test_complex_input_gru(self):
+    gru = nn.GRUCell(features=4)
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3), dtype=jnp.complex64)
-    carry0 = nn.GRUCell.initialize_carry(rng, (2,), 4)
+    carry0 = gru.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
-    gru = nn.GRUCell()
     (carry, y), _ = gru.init_with_output(key2, carry0, x)
     self.assertEqual(carry.dtype, jnp.complex64)
     self.assertEqual(y.dtype, jnp.complex64)
 
   def test_convlstm(self):
+    lstm = nn.ConvLSTMCell(features=6, kernel_size=(3, 3))
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 4, 4, 3))
-    c0, h0 = nn.ConvLSTMCell.initialize_carry(rng, (2,), (4, 4, 6))
+    c0, h0 = lstm.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4, 4, 6))
     self.assertEqual(h0.shape, (2, 4, 4, 6))
-    lstm = nn.ConvLSTMCell(features=6, kernel_size=(3, 3))
     (carry, y), initial_params = lstm.init_with_output(key2, (c0, h0), x)
     self.assertEqual(carry[0].shape, (2, 4, 4, 6))
     self.assertEqual(carry[1].shape, (2, 4, 4, 6))
@@ -418,23 +418,23 @@ class RecurrentTest(absltest.TestCase):
   def test_optimized_lstm_cell_matches_regular(self):
 
     # Create regular LSTMCell.
+    lstm = nn.LSTMCell(features=4)
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
-    c0, h0 = nn.LSTMCell.initialize_carry(rng, (2,), 4)
+    c0, h0 = lstm.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
-    lstm = nn.LSTMCell()
     (_, y), lstm_params = lstm.init_with_output(key2, (c0, h0), x)
 
     # Create OptimizedLSTMCell.
+    lstm_opt = nn.OptimizedLSTMCell(features=4)
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
-    c0, h0 = nn.OptimizedLSTMCell.initialize_carry(rng, (2,), 4)
+    c0, h0 = lstm_opt.initialize_carry(rng, x.shape)
     self.assertEqual(c0.shape, (2, 4))
     self.assertEqual(h0.shape, (2, 4))
-    lstm_opt = nn.OptimizedLSTMCell()
     (_, y_opt), lstm_opt_params = lstm_opt.init_with_output(key2, (c0, h0), x)
 
     np.testing.assert_allclose(y, y_opt, rtol=1e-6)

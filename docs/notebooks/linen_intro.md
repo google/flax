@@ -613,22 +613,26 @@ Further, for `scan`'d variable kinds, we further specify whether or not to split
 :tags: []
 
 class SimpleScan(nn.Module):
+  features: int
+
   @nn.compact
   def __call__(self, xs):
-    dummy_rng = random.PRNGKey(0)
-    init_carry = nn.LSTMCell.initialize_carry(dummy_rng,
-                                              xs.shape[:1],
-                                              xs.shape[-1])
     LSTM = nn.scan(nn.LSTMCell,
                    in_axes=1, out_axes=1,
                    variable_broadcast='params',
                    split_rngs={'params': False})
-    return LSTM(name="lstm_cell")(init_carry, xs)
+    lstm = LSTM(self.features, name="lstm_cell")
+
+    dummy_rng = random.PRNGKey(0)
+    input_shape = xs[:, 0].shape
+    init_carry = lstm.initialize_carry(dummy_rng, input_shape)
+
+    return lstm(init_carry, xs)
 
 key1, key2 = random.split(random.PRNGKey(0), 2)
 xs = random.uniform(key1, (1, 5, 2))
 
-model = SimpleScan()
+model = SimpleScan(2)
 init_variables = model.init(key2, xs)
 
 print('initialized parameter shapes:\n', jax.tree_util.tree_map(jnp.shape, unfreeze(init_variables)))
