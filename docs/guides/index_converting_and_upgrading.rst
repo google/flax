@@ -9,3 +9,4 @@ Converting and upgrading
    orbax_upgrade_guide
    optax_update_guide
    linen_upgrade_guide
+   regular_dict_upgrade_guide
