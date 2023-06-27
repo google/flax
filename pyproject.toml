@@ -135,6 +135,8 @@ filterwarnings = [
     "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
     # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
     "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
+    # DeprecationWarning: module 'sre_constants' is deprecated
+    "ignore:.*module 'sre_constants' is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
