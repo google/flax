@@ -5,7 +5,7 @@ This code follows [pytorch/examples/vae](https://github.com/pytorch/examples/blo
 
 ```bash
 pip install -r requirements.txt
-python train.py
+python main.py
 ```
 
 ## Examples
