@@ -625,7 +625,7 @@ carry and output. In this case, the carry and the output are the same.
 Next, we will define a ``RNN`` Module that will contain the logic for the entire RNN.
 In Haiku, we will first initialze the ``RNNCell``, then use it to construct the ``carry``,
 and finally use ``hk.scan`` to run the ``RNNCell`` over the input sequence. In Flax its
-done a bit different, we will use ``nn.scan`` to define a new temporary type that wraps
+done a bit differently, we will use ``nn.scan`` to define a new temporary type that wraps
 ``RNNCell``. During this process we will also specify instruct ``nn.scan`` to broadcast
 the ``params`` collection (all steps share the same parameters) and to not split the
 ``params`` rng stream (so all steps intialize with the same parameters), and finally
@@ -648,12 +648,14 @@ the run the ``__call__`` method which will ``scan`` over the sequence.
       cell = RNNCell(self.hidden_size)
       carry = cell.initial_state(x.shape[0])
       carry, y = hk.scan(cell, carry, jnp.swapaxes(x, 1, 0))
-      return jnp.swapaxes(y, 0, 1)
+      y = jnp.swapaxes(y, 0, 1)
+      return y
 
   ---
 
   class RNN(nn.Module):
     hidden_size: int
+
 
     @nn.compact
     def __call__(self, x):
@@ -668,9 +670,9 @@ in Haiku the lifted transforms don't operate over the state, that is, Haiku will
 ``params`` and ``state`` in such a way that it keeps the same shape inside and outside of the
 transform. In Flax, the lifted transforms can operate over both variable collections and rng
 streams, the user must define how different collections are treated by each transform
-according to the transforms semantics.
+according to the transform's semantics.
 
-Finally, lets quickly view how the ``RNN`` Module would be used in both Haiku and Flax.
+Finally, let's quickly view how the ``RNN`` Module would be used in both Haiku and Flax.
 
 .. codediff::
   :title_left: Haiku
@@ -710,5 +712,5 @@ Finally, lets quickly view how the ``RNN`` Module would be used in both Haiku an
   )
 
 The only notable change with respect to the examples in the previous sections is that
-this time around we used ``hk.without_apply_rng``in Haiku so that we didn't have to
-the ``rng`` argument as ``None`` to the ``apply``method.
+this time around we used ``hk.without_apply_rng`` in Haiku so we didn't have to
+pass the ``rng`` argument as ``None`` to the ``apply`` method.
