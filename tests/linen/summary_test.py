@@ -373,25 +373,24 @@ class SummaryTest(absltest.TestCase):
   @temp_flip_flag('return_frozendict', False)
   def test_lifted_transform(self):
     class LSTM(nn.Module):
-      batch_size: int
-      out_feat: int
+      features: int
 
       @nn.compact
       def __call__(self, x):
-          carry = nn.LSTMCell.initialize_carry(
-              random.PRNGKey(0), (self.batch_size,), self.out_feat
+          carry = nn.LSTMCell(self.features).initialize_carry(
+              random.PRNGKey(0), x[:, 0].shape
           )
-          Cell = nn.scan(
+          ScanLSTM = nn.scan(
               nn.LSTMCell,
               variable_broadcast="params",
               split_rngs={"params": False},
               in_axes=1,
               out_axes=1,
           )
-          return Cell(name="ScanLSTM")(carry, x)
+          return ScanLSTM(self.features, name="ScanLSTM")(carry, x)
 
 
-    lstm = LSTM(batch_size=32, out_feat=128)
+    lstm = LSTM(features=128)
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
@@ -410,25 +409,24 @@ class SummaryTest(absltest.TestCase):
   @temp_flip_flag('return_frozendict', False)
   def test_lifted_transform_no_rename(self):
     class LSTM(nn.Module):
-      batch_size: int
-      out_feat: int
+      features: int
 
       @nn.compact
       def __call__(self, x):
-          carry = nn.LSTMCell.initialize_carry(
-              random.PRNGKey(0), (self.batch_size,), self.out_feat
+          carry = nn.LSTMCell(self.features).initialize_carry(
+              random.PRNGKey(0), x[:, 0].shape
           )
-          Cell = nn.scan(
+          ScanLSTM = nn.scan(
               nn.LSTMCell,
               variable_broadcast="params",
               split_rngs={"params": False},
               in_axes=1,
               out_axes=1,
           )
-          return Cell()(carry, x)
+          return ScanLSTM(self.features)(carry, x)
 
 
-    lstm = LSTM(batch_size=32, out_feat=128)
+    lstm = LSTM(features=128)
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(

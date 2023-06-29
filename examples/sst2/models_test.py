@@ -47,11 +47,11 @@ class ModelTest(parameterized.TestCase):
     seq_len = 3
     embedding_size = 4
     hidden_size = 5
-    model = models.SimpleLSTM()
+    model = models.SimpleLSTM(5)
     rng = jax.random.PRNGKey(0)
     inputs = np.random.RandomState(0).normal(
         size=[batch_size, seq_len, embedding_size])
-    initial_state = models.SimpleLSTM.initialize_carry((batch_size,), hidden_size)
+    initial_state = model.initialize_carry(inputs[:, 0].shape)
     (_, output), _ = model.init_with_output(rng, initial_state, inputs)
     self.assertEqual((batch_size, seq_len, hidden_size), output.shape)
 
