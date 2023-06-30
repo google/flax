@@ -117,7 +117,7 @@ For example:
   assert isinstance(variables, dict)
 
 Alternatively, the environment variable ``flax_return_frozendict``
-(found `here <https://github.com/google/flax/blob/main/flax/configurations.py#L121>`__) can be directly modified in the Flax source code.
+(found `here <https://github.com/google/flax/blob/main/flax/configurations.py>`__) can be directly modified in the Flax source code.
 
 
 Migration plan
