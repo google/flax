@@ -482,3 +482,7 @@ class TestRecurrentDeprecation(parameterized.TestCase):
       "The RNNCellBase API has changed"
     ):
       nn.RNN(cell, cell_size=8)
+
+
+if __name__ == '__main__':
+  absltest.main()
