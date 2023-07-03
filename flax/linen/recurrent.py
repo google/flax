@@ -193,8 +193,8 @@ class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     batch_dims = input_shape[:-1]
     key1, key2 = random.split(rng)
     mem_shape = batch_dims + (self.features,)
-    c = self.carry_init(key1, mem_shape)
-    h = self.carry_init(key2, mem_shape)
+    c = self.carry_init(key1, mem_shape, self.param_dtype)
+    h = self.carry_init(key2, mem_shape, self.param_dtype)
     return (c, h)
 
   @property
@@ -455,7 +455,7 @@ class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     """
     batch_dims = input_shape[:-1]
     mem_shape = batch_dims + (self.features,)
-    return self.carry_init(rng, mem_shape)
+    return self.carry_init(rng, mem_shape, self.param_dtype)
 
   @property
   def num_feature_axes(self) -> int:
@@ -569,8 +569,8 @@ class ConvLSTMCell(RNNCellBase):
     batch_dims = input_shape[:-self.num_feature_axes]
     key1, key2 = random.split(rng)
     mem_shape = batch_dims + signal_dims + (self.features,)
-    c = self.carry_init(key1, mem_shape)
-    h = self.carry_init(key2, mem_shape)
+    c = self.carry_init(key1, mem_shape, self.param_dtype)
+    h = self.carry_init(key2, mem_shape, self.param_dtype)
     return c, h
 
   @property
