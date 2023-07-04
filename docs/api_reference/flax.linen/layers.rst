@@ -126,6 +126,7 @@ Recurrent
   BatchNorm
   LayerNorm
   GroupNorm
+  RMSNorm
   Sequential
   Dropout
   SelfAttention
