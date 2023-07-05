@@ -83,9 +83,9 @@ def _compute_stats(x: Array, axes: Optional[Axes],
   dtype = jnp.promote_types(dtype, jnp.float32)
   x = jnp.asarray(x, dtype)
 
-  mean2 = jnp.mean(_abs_sq(x), axes)
+  mean2 = jnp.mean(_abs_sq(x), axes, keepdims=True)
   if use_mean:
-    mean = jnp.mean(x, axes)
+    mean = jnp.mean(x, axes, keepdims=True)
   else:
     mean = jnp.zeros(mean2.shape, dtype=dtype)
 
@@ -104,10 +104,8 @@ def _compute_stats(x: Array, axes: Optional[Axes],
 
 
 def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
-               reduction_axes: Axes, feature_axes: Axes,
-               dtype: Dtype, param_dtype: Dtype,
-               epsilon: float,
-               use_bias: bool, use_scale: bool,
+               feature_axes: Axes, dtype: Dtype, param_dtype: Dtype,
+               epsilon: float, use_bias: bool, use_scale: bool,
                bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
                scale_init: Callable[[PRNGKey, Shape, Dtype], Array]):
   """"Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
@@ -118,7 +116,6 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
     x: The input.
     mean: Mean to use for normalization.
     var: Variance to use for normalization.
-    reduction_axes: The axes in ``x`` to reduce.
     feature_axes: Axes containing features. A separate bias and scale is learned
       for each specified feature.
     dtype: The dtype of the result (default: infer from input and params).
@@ -132,7 +129,6 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
   Returns:
     The normalized input.
   """
-  reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
   feature_axes = _canonicalize_axes(x.ndim, feature_axes)
   feature_shape = [1] * x.ndim
   reduced_feature_shape = []
@@ -140,8 +136,6 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
     feature_shape[ax] = x.shape[ax]
     reduced_feature_shape.append(x.shape[ax])
 
-  mean = jnp.expand_dims(mean, reduction_axes)
-  var = jnp.expand_dims(var, reduction_axes)
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
   args = [x]
@@ -260,7 +254,8 @@ class BatchNorm(Module):
                            feature_shape)
 
     if use_running_average:
-      mean, var = ra_mean.value, ra_var.value
+      mean = jnp.expand_dims(ra_mean.value, axis=reduction_axes)
+      var = jnp.expand_dims(ra_var.value, axis=reduction_axes)
     else:
       mean, var = _compute_stats(
           x, reduction_axes,
@@ -269,15 +264,15 @@ class BatchNorm(Module):
           axis_index_groups=self.axis_index_groups)
 
       if not self.is_initializing():
-        ra_mean.value = self.momentum * ra_mean.value + (1 -
-                                                         self.momentum) * mean
-        ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
+        def ema_update(ema, value):
+          ema.value = self.momentum * ema.value + (1 - self.momentum) * value
+        ema_update(ra_mean, mean.reshape(feature_shape))
+        ema_update(ra_var, var.reshape(feature_shape))
 
     return _normalize(
-        self, x, mean, var, reduction_axes, feature_axes,
-        self.dtype, self.param_dtype, self.epsilon,
-        self.use_bias, self.use_scale,
-        self.bias_init, self.scale_init)
+        self, x, mean, var, feature_axes, self.dtype, self.param_dtype,
+        self.epsilon, self.use_bias, self.use_scale, self.bias_init,
+        self.scale_init)
 
 
 class LayerNorm(Module):
@@ -336,10 +331,9 @@ class LayerNorm(Module):
                                self.axis_name, self.axis_index_groups)
 
     return _normalize(
-        self, x, mean, var, self.reduction_axes, self.feature_axes,
-        self.dtype, self.param_dtype, self.epsilon,
-        self.use_bias, self.use_scale,
-        self.bias_init, self.scale_init)
+        self, x, mean, var, self.feature_axes, self.dtype, self.param_dtype,
+        self.epsilon, self.use_bias, self.use_scale, self.bias_init,
+        self.scale_init)
 
 
 class RMSNorm(Module):
@@ -406,10 +400,9 @@ class RMSNorm(Module):
                                use_mean=False)
 
     return _normalize(
-        self, x, mean, var, self.reduction_axes, self.feature_axes,
-        self.dtype, self.param_dtype, self.epsilon,
-        False, self.use_scale,
-        initializers.zeros, self.scale_init)
+        self, x, mean, var, self.feature_axes, self.dtype, self.param_dtype,
+        self.epsilon, False, self.use_scale, initializers.zeros,
+        self.scale_init)
 
 
 class GroupNorm(Module):
@@ -499,11 +492,10 @@ class GroupNorm(Module):
     mean, var = _compute_stats(
         x.reshape(group_shape), reduction_axes, self.dtype, self.axis_name,
         self.axis_index_groups)
-    mean = jnp.repeat(mean, group_size, axis=-1)
-    var = jnp.repeat(var, group_size, axis=-1)
+    mean = jnp.repeat(jnp.squeeze(mean, axis=-1), group_size, axis=-1)
+    var = jnp.repeat(jnp.squeeze(var, axis=-1), group_size, axis=-1)
 
     return _normalize(
-        self, x, mean, var, reduction_axes[:-1], feature_axes,
-        self.dtype, self.param_dtype, self.epsilon,
-        self.use_bias, self.use_scale,
-        self.bias_init, self.scale_init)
+        self, x, mean, var, feature_axes, self.dtype, self.param_dtype,
+        self.epsilon, self.use_bias, self.use_scale, self.bias_init,
+        self.scale_init)
