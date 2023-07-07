@@ -23,7 +23,7 @@ vNext
 -
 -
 
-0.6.11
+0.7.0
 -----
 - RNNCellBase refactor.
 
