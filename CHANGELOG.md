@@ -22,6 +22,11 @@ vNext
 -
 -
 -
+
+0.7.0
+-----
+- RNNCellBase refactor.
+
 0.6.11
 -----
 - Set Orbax-as-backend to be the default checkpointing method.
