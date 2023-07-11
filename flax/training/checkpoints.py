@@ -42,7 +42,7 @@ from jax import process_index
 from jax import tree_util as jtu
 from jax.experimental.multihost_utils import sync_global_devices
 import numpy as np
-import orbax.checkpoint as ock
+import orbax.checkpoint as ocp
 
 _READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'
 _WRITE_CHECKPOINT_EVENT: str = '/jax/checkpoint/write/durations_sec'
@@ -440,7 +440,7 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
   _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
                         keep_every_n_steps, has_mpa)
   # Record checkpoint-related metrics.
-  ock.utils.record_saved_duration(ckpt_start_time)
+  ocp.utils.record_saved_duration(ckpt_start_time)
   if async_manager:
     jax.monitoring.record_event_duration_secs(
         '/jax/checkpoint/write/async/total_duration_secs',
@@ -520,7 +520,7 @@ def save_checkpoint(
     overwrite: bool = False,
     keep_every_n_steps: Optional[int] = None,
     async_manager: Optional[AsyncManager] = None,
-    orbax_checkpointer: Optional[ock.Checkpointer] = None,
+    orbax_checkpointer: Optional[ocp.Checkpointer] = None,
 ) -> str:
   """Save a checkpoint of the model. Suitable for single-host.
 
@@ -548,7 +548,7 @@ def save_checkpoint(
     async_manager: if defined, the save will run without blocking the main
       thread. Only works for single host. Note that an ongoing save will still
       block subsequent saves, to make sure overwrite/keep logic works correctly.
-    orbax_checkpointer: if defined, the save will be done by ock. In the future,
+    orbax_checkpointer: if defined, the save will be done by ocp. In the future,
       all Flax checkpointing features will be migrated to Orbax, and starting to
       use an `orbax_checkpointer` is recommended. Please check out the
       checkpointing guide
@@ -583,17 +583,17 @@ def save_checkpoint(
 
     # Make sure any previous work is done before making file changes.
     if orbax_checkpointer and isinstance(
-        orbax_checkpointer, ock.AsyncCheckpointer
+        orbax_checkpointer, ocp.AsyncCheckpointer
     ):
       orbax_checkpointer.wait_until_finished()
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
-      orbax_checkpointer = ock.Checkpointer(
-          ock.PyTreeCheckpointHandler(restore_with_serialized_types=False)
+      orbax_checkpointer = ocp.Checkpointer(
+          ocp.PyTreeCheckpointHandler(restore_with_serialized_types=False)
       )
     # Check singular target.
     if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
-        orbax_checkpointer._handler, ock.ArrayCheckpointHandler  # pylint: disable=protected-access
+        orbax_checkpointer._handler, ocp.ArrayCheckpointHandler  # pylint: disable=protected-access
     ):
       raise ValueError(
           'Orbax backend only accept pytree as save target. To save singular'
@@ -619,7 +619,7 @@ def save_checkpoint(
           ' (https://github.com/google/orbax). Please refer to the Checkpoint'
           ' Upgrade Guide'
           ' (https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html)'
-          ' to self-migrate your code to ock.'
+          ' to self-migrate your code to ocp.'
       ),
       DeprecationWarning,
   )
@@ -653,7 +653,7 @@ def save_checkpoint_multiprocess(
     keep_every_n_steps: Optional[int] = None,
     async_manager: Optional[AsyncManager] = None,
     gda_manager: Optional[Any] = None,
-    orbax_checkpointer: Optional[ock.Checkpointer] = None,
+    orbax_checkpointer: Optional[ocp.Checkpointer] = None,
 ) -> str:
   """Save a checkpoint of the model in multi-process environment.
 
@@ -714,18 +714,18 @@ def save_checkpoint_multiprocess(
     )
     # Make sure any previous work is done before making file changes.
     if orbax_checkpointer and isinstance(
-        orbax_checkpointer, ock.AsyncCheckpointer
+        orbax_checkpointer, ocp.AsyncCheckpointer
     ):
       orbax_checkpointer.wait_until_finished()
 
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
-      orbax_checkpointer = ock.Checkpointer(
-          ock.PyTreeCheckpointHandler(restore_with_serialized_types=False)
+      orbax_checkpointer = ocp.Checkpointer(
+          ocp.PyTreeCheckpointHandler(restore_with_serialized_types=False)
       )
     # Check singular target.
     if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
-        orbax_checkpointer._handler, ock.ArrayCheckpointHandler  # pylint: disable=protected-access
+        orbax_checkpointer._handler, ocp.ArrayCheckpointHandler  # pylint: disable=protected-access
     ):
       raise ValueError(
           'Orbax backend only accept pytree as save target. To save singular'
@@ -750,7 +750,7 @@ def save_checkpoint_multiprocess(
           ' (https://github.com/google/orbax). Please refer to the Checkpoint'
           ' Upgrade Guide'
           ' (https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html)'
-          ' to self-migrate your code to ock.'
+          ' to self-migrate your code to ocp.'
       ),
       DeprecationWarning,
   )
@@ -814,7 +814,7 @@ def _all_checkpoints(ckpt_dir: Union[str, os.PathLike],
       if c.match(f'{prefix}*')
       and not c.match(f'{prefix}tmp')
       and not c.match(f'*{MP_ARRAY_POSTFIX}')
-      and not c.match(f'*{ock.utils.TMP_DIR_SUFFIX}*')
+      and not c.match(f'*{ocp.utils.TMP_DIR_SUFFIX}*')
   ]
   checkpoint_files = natural_sort(checkpoint_files)
   if checkpoint_files:
@@ -874,7 +874,7 @@ def restore_checkpoint(
     parallel: bool = True,
     gda_manager: Optional[Any] = None,
     allow_partial_mpa_restoration: bool = False,
-    orbax_checkpointer: Optional[ock.Checkpointer] = None,
+    orbax_checkpointer: Optional[ocp.Checkpointer] = None,
     orbax_transforms: Optional[Dict] = None,
 ) -> PyTree:
   """Restore last/best checkpoint from checkpoints in path.
@@ -905,8 +905,8 @@ def restore_checkpoint(
       may have some MPAs not restored correctly. Use this if you cannot provide
       a fully valid ``target`` and don't need all the MPAs in the checkpoint to
       be restored.
-    orbax_checkpointer: the `ock.Checkpointer` that handles the underlying
-      restore, if the given checkpoint is saved with ock.
+    orbax_checkpointer: the `ocp.Checkpointer` that handles the underlying
+      restore, if the given checkpoint is saved with ocp.
     orbax_transforms: the Orbax transformations that will be passed into
       `orbax_checkpointer.restore()` call.
 
@@ -920,7 +920,7 @@ def restore_checkpoint(
   start_time = time.time()
   # Make sure any previous work is done before checking files.
   if orbax_checkpointer and isinstance(
-      orbax_checkpointer, ock.AsyncCheckpointer
+      orbax_checkpointer, ocp.AsyncCheckpointer
   ):
     orbax_checkpointer.wait_until_finished()
 
@@ -953,8 +953,8 @@ def restore_checkpoint(
   logging.info(f'Restoring {ckpt_type} checkpoint from {ckpt_path}')
   if is_orbax:
     if not orbax_checkpointer:
-      orbax_checkpointer = ock.Checkpointer(
-          ock.PyTreeCheckpointHandler(restore_with_serialized_types=False)
+      orbax_checkpointer = ocp.Checkpointer(
+          ocp.PyTreeCheckpointHandler(restore_with_serialized_types=False)
       )
 
     restore_kwargs = {}
