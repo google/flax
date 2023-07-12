@@ -20,7 +20,7 @@ import warnings
 import jax
 from jax.sharding import Mesh
 import numpy as np
-import orbax.checkpoint as ock
+import orbax.checkpoint as ocp
 
 
 PyTree = Any
@@ -35,7 +35,7 @@ def is_multi_device_array(value: Any) -> bool:
 
 def save_args_from_target(target: Any) -> Any:
   return jax.tree_util.tree_map(
-      lambda x: ock.SaveArgs(aggregate=not is_multi_device_array(x)),
+      lambda x: ocp.SaveArgs(aggregate=not is_multi_device_array(x)),
       target,
   )
 
@@ -63,7 +63,7 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
       jax.tree_util.tree_flatten(jax.tree_map(is_multi_device_array, target))[0]
   ):
     return jax.tree_util.tree_map(
-        lambda x: ock.RestoreArgs(restore_type=np.ndarray), target
+        lambda x: ocp.RestoreArgs(restore_type=np.ndarray), target
     )
 
   # Multihost arrays: find sharding from the given target
@@ -77,7 +77,7 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
         DeprecationWarning,
     )
     axes_tree = jax.tree_util.tree_map(lambda s: s.spec, sharding_tree)
-    return ock.checkpoint_utils.restore_args_from_target(
+    return ocp.checkpoint_utils.restore_args_from_target(
         mesh, target, axes_tree
     )
-  return ock.checkpoint_utils.construct_restore_args(target, sharding_tree)
+  return ocp.checkpoint_utils.construct_restore_args(target, sharding_tree)
