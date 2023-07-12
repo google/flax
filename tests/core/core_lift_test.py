@@ -164,7 +164,6 @@ class LiftTest(absltest.TestCase):
     self.assertEqual(vars['state'], {'true_count': 1, 'false_count': 1})
     np.testing.assert_allclose(y1, -y2)
 
-  @temp_flip_flag('return_frozendict', False)
   def test_switch(self):
     def f(scope, x, index):
       scope.variable('state', 'a_count', lambda: 0)

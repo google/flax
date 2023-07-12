@@ -109,11 +109,12 @@ flax_preserve_adopted_names = define_bool_state(
     default=False,
     help=("When adopting outside modules, don't clobber existing names."))
 
-#TODO(marcuschiam): remove this feature flag once regular dict migration is complete
+# TODO(marcuschiam): remove this feature flag once regular dict migration is complete
 flax_return_frozendict = define_bool_state(
     name='return_frozendict',
-    default=True,
-    help=('Whether to return FrozenDicts when calling init or apply.'))
+    default=False,
+    help='Whether to return FrozenDicts when calling init or apply.',
+)
 
 flax_fix_rng = define_bool_state(
     name ='fix_rng_separator',
