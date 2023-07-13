@@ -21,6 +21,7 @@ import inspect
 import re
 import sys
 import threading
+from types import MappingProxyType
 import typing
 import weakref
 from typing import (Any, Callable, Dict, Iterable, List, Sequence, NamedTuple, Mapping,
@@ -1903,6 +1904,8 @@ class Module(ModuleBase):
     show_repeated: bool = False,
     mutable: CollectionFilter = True,
     console_kwargs: Optional[Mapping[str, Any]] = None,
+    table_kwargs: Mapping[str, Any] = MappingProxyType({}),
+    column_kwargs: Mapping[str, Any] = MappingProxyType({}),
     **kwargs) -> str:
     """Creates a summary of the Module represented as a table.
 
@@ -1978,6 +1981,10 @@ class Module(ModuleBase):
       console_kwargs: An optional dictionary with additional keyword arguments that
         are passed to `rich.console.Console` when rendering the table. Default arguments
         are `{'force_terminal': True, 'force_jupyter': False}`.
+      table_kwargs: An optional dictionary with additional keyword arguments that
+        are passed to `rich.table.Table` constructor.
+      column_kwargs: An optional dictionary with additional keyword arguments that
+        are passed to `rich.table.Table.add_column` when adding columns to the table.
       **kwargs: keyword arguments to pass to the forward computation.
 
     Returns:
@@ -1985,9 +1992,9 @@ class Module(ModuleBase):
     """
     from flax.linen import summary
 
-    tabulate_fn = summary.tabulate(self, rngs, depth=depth,
-                                   show_repeated=show_repeated, mutable=mutable,
-                                   console_kwargs=console_kwargs)
+    tabulate_fn = summary.tabulate(
+      self, rngs, depth=depth, show_repeated=show_repeated, mutable=mutable,
+      console_kwargs=console_kwargs, table_kwargs=table_kwargs, column_kwargs=column_kwargs)
     return tabulate_fn(*args, **kwargs)
 
 
