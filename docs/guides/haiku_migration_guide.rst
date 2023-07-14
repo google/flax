@@ -791,7 +791,7 @@ we are telling ``nn.scan`` create different parameters for each step and slice t
       return y
 
 Notice how in Flax we pass ``None`` as the second argument to ``ScanBlock`` and ignore
-its second output, these represent the inputs/outputs per-step but they are ``None``
+its second output. These represent the inputs/outputs per-step but they are ``None``
 because in this case we don't have any.
 
 Initializing each model is the same as in previous examples. In this case,
