@@ -715,7 +715,7 @@ The only notable change with respect to the examples in the previous sections is
 this time around we used ``hk.without_apply_rng`` in Haiku so we didn't have to
 pass the ``rng`` argument as ``None`` to the ``apply`` method.
 
-Scan Over Layers
+Scan over layers
 ----------------
 One very important application of ``scan`` is apply a sequence of layers iteratively
 over an input, passing the output of each layer as the input to the next layer. This
