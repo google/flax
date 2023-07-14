@@ -719,7 +719,7 @@ Scan Over Layers
 ----------------
 One very important application of ``scan`` is apply a sequence of layers iteratively
 over an input, passing the output of each layer as the input to the next layer. This
-very useful to reduce compilation time for big models. As an example we will create
+is very useful to reduce compilation time for big models. As an example we will create
 a simple ``Block`` Module, and then use it inside an ``MLP`` Module that will apply
 the ``Block`` Module ``num_layers`` times.
 
