@@ -141,16 +141,14 @@ def _normalize(mdl: Module, x: Array, mean: Array, var: Array,
   """
   reduction_axes = _canonicalize_axes(x.ndim, reduction_axes)
   feature_axes = _canonicalize_axes(x.ndim, feature_axes)
-  stats_shape = list(x.shape)
-  for axis in reduction_axes:
-    stats_shape[axis] = 1
-  mean = mean.reshape(stats_shape)
-  var = var.reshape(stats_shape)
   feature_shape = [1] * x.ndim
   reduced_feature_shape = []
   for ax in feature_axes:
     feature_shape[ax] = x.shape[ax]
     reduced_feature_shape.append(x.shape[ax])
+
+  mean = jnp.expand_dims(mean, reduction_axes)
+  var = jnp.expand_dims(var, reduction_axes)
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
   args = [x]
@@ -514,16 +512,11 @@ class GroupNorm(Module):
     group_size = x.shape[-1] // num_groups
     group_shape = x.shape[:-1] + (num_groups, group_size)
 
-    def broadcast_stat(stat):
-      stat = jnp.broadcast_to(stat[..., None],
-                              (x.shape[0], num_groups, group_size))
-      return stat.reshape((x.shape[0], num_groups * group_size))
-
     mean, var = _compute_stats(
         x.reshape(group_shape), reduction_axes, self.dtype, self.axis_name,
         self.axis_index_groups)
-    mean = broadcast_stat(mean)
-    var = broadcast_stat(var)
+    mean = jnp.repeat(mean, group_size, axis=-1)
+    var = jnp.repeat(var, group_size, axis=-1)
 
     return _normalize(
         self, x, mean, var, reduction_axes[:-1], feature_axes,
