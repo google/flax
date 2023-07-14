@@ -14,8 +14,7 @@
 
 """Normalization modules for Flax."""
 
-import functools
-from typing import (Any, Callable, Iterable, Optional, Tuple, Union)
+from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
 from flax.linen.dtypes import canonicalize_dtype
 from flax.linen.module import Module, compact, merge_param  # pylint: disable=g-multiple-import
 from jax import lax
@@ -27,8 +26,7 @@ PRNGKey = Any
 Array = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
-
-Axes = Union[int, Any]
+Axes = Union[int, Sequence[int]]
 
 
 def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
@@ -46,17 +44,22 @@ def _abs_sq(x):
     return lax.square(x)
 
 
-def _compute_stats(x: Array, axes: Optional[Axes],
-                   dtype: Optional[Dtype],
-                   axis_name: Optional[str] = None,
-                   axis_index_groups: Any = None,
-                   use_mean: bool = True):
+def _compute_stats(
+    x: Array,
+    axes: Axes,
+    dtype: Optional[Dtype],
+    axis_name: Optional[str] = None,
+    axis_index_groups: Any = None,
+    use_mean: bool = True,
+    use_fast_variance: bool = True,
+):
   """Computes mean and variance statistics.
 
   This implementation takes care of a few important details:
   - Computes in float32 precision for stability in half precision training.
-  - mean and variance are computable in a single XLA fusion,
-    by using Var = E[|x|^2] - |E[x]|^2 instead of Var = E[|x - E[x]|^2]).
+  - If `use_fast_variance` is `True`, mean and variance are computed using
+    Var = E[|x|^2] - |E[x]|^2, instead of Var = E[|x - E[x]|^2]), in a single
+    XLA fusion.
   - Clips negative variances to zero which can happen due to
     roundoff errors. This avoids downstream NaNs.
   - Supports averaging across a parallel axis and subgroups of a parallel axis
@@ -65,13 +68,15 @@ def _compute_stats(x: Array, axes: Optional[Axes],
   Arguments:
     x: Input array.
     axes: The axes in ``x`` to compute mean and variance statistics for.
-    dtype: Optional dtype specifying the minimal precision. Statistics
-      are always at least float32 for stability (default: dtype of x).
+    dtype: Optional dtype specifying the minimal precision. Statistics are
+      always at least float32 for stability (default: dtype of x).
     axis_name: Optional name for the pmapped axis to compute mean over.
     axis_index_groups: Optional axis indices.
     use_mean: If true, calculate the mean from the input and use it when
-      computing the variance. If false, set the mean to zero and compute
-      the variance without subtracting the mean.
+      computing the variance. If false, set the mean to zero and compute the
+      variance without subtracting the mean.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
 
   Returns:
     A pair ``(mean, var)``.
@@ -83,23 +88,25 @@ def _compute_stats(x: Array, axes: Optional[Axes],
   dtype = jnp.promote_types(dtype, jnp.float32)
   x = jnp.asarray(x, dtype)
 
-  mean2 = jnp.mean(_abs_sq(x), axes)
-  if use_mean:
-    mean = jnp.mean(x, axes)
-  else:
-    mean = jnp.zeros(mean2.shape, dtype=dtype)
+  def pmean(x):
+    if axis_name is None:
+      return x
+    return lax.pmean(x, axis_name, axis_index_groups=axis_index_groups)
 
-  if axis_name is not None:
-    pmean = functools.partial(
-        lax.pmean, axis_name=axis_name, axis_index_groups=axis_index_groups
-    )
-    if use_mean:
+  if use_mean:
+    if use_fast_variance:
+      mean = x.mean(axes)
+      mean2 = _abs_sq(x).mean(axes)
       mean, mean2 = jnp.split(pmean(jnp.concatenate([mean, mean2])), 2)
+      # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
+      # to floating point round-off errors.
+      var = jnp.maximum(0.0, mean2 - _abs_sq(mean))
     else:
-      mean2 = pmean(mean2)
-  # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
-  # to floating point round-off errors.
-  var = jnp.maximum(0., mean2 - _abs_sq(mean))
+      mean = pmean(x.mean(axes))
+      var = pmean(_abs_sq(x - jnp.expand_dims(mean, axes)).mean(axes))
+  else:
+    var = pmean(_abs_sq(x).mean(axes))
+    mean = jnp.zeros_like(var)
   return mean, var
 
 
@@ -308,9 +315,11 @@ class LayerNorm(Module):
       array being normalized is sharded across devices within a pmap.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
-      example, `[[0, 1], [2, 3]]` would independently batch-normalize over
-      the examples on the first two and last two devices. See `jax.lax.psum`
-      for more details.
+      example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
+      examples on the first two and last two devices. See `jax.lax.psum` for
+      more details.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
   """
   epsilon: float = 1e-6
   dtype: Optional[Dtype] = None
@@ -323,6 +332,7 @@ class LayerNorm(Module):
   feature_axes: Axes = -1
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
+  use_fast_variance: bool = True
 
   @compact
   def __call__(self, x):
@@ -334,8 +344,14 @@ class LayerNorm(Module):
     Returns:
       Normalized inputs (the same shape as inputs).
     """
-    mean, var = _compute_stats(x, self.reduction_axes, self.dtype,
-                               self.axis_name, self.axis_index_groups)
+    mean, var = _compute_stats(
+        x,
+        self.reduction_axes,
+        self.dtype,
+        self.axis_name,
+        self.axis_index_groups,
+        use_fast_variance=self.use_fast_variance,
+    )
 
     return _normalize(
         self, x, mean, var, self.reduction_axes, self.feature_axes,

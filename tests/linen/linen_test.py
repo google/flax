@@ -177,14 +177,23 @@ class NormalizationTest(parameterized.TestCase):
   @parameterized.parameters(
       {'reduction_axes': -1},
       {'reduction_axes': 1},
-      {'reduction_axes': (1, 2)})
-  def test_layer_norm(self, reduction_axes):
+      {'reduction_axes': (1, 2)},
+      {'reduction_axes': -1, 'use_fast_variance': False},
+  )
+  def test_layer_norm(self, reduction_axes, use_fast_variance=True):
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 3, 4))
-    model_cls = nn.LayerNorm(use_bias=False, use_scale=False, epsilon=e,
-                             reduction_axes=reduction_axes)
+    if not use_fast_variance:
+      x += 1e6  # This blows up fast variance, but should work otherwise.
+    model_cls = nn.LayerNorm(
+        use_bias=False,
+        use_scale=False,
+        epsilon=e,
+        reduction_axes=reduction_axes,
+        use_fast_variance=use_fast_variance,
+    )
     y, _ = model_cls.init_with_output(key2, x)
     self.assertEqual(x.dtype, y.dtype)
     self.assertEqual(x.shape, y.shape)
