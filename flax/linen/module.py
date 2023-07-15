@@ -715,6 +715,18 @@ class Module(ModuleBase):
     cls._parent_ref = None # type: ignore[attr-defined]
     cls.parent = ParentDescriptor() # type: ignore[assignment]
 
+    if hasattr(cls, '__post_init__'):
+      # Force all sub-classes to call `super(cls, self).__post_init__()`
+      def force_super_post_init(post_init_method):
+        @functools.wraps(post_init_method)
+        def new_post_init_method(self):
+          post_init_method(self)
+          if not hasattr(self, '_id') and hasattr(super(cls, self), '__post_init__'):
+            super(cls, self).__post_init__()
+        return new_post_init_method
+
+      cls.__post_init__ = force_super_post_init(cls.__post_init__) # type: ignore
+
   @classmethod
   def _customized_dataclass_transform(cls, kw_only: bool):
     """Transforms `cls` into a dataclass, with custom additional behavior.
@@ -1329,10 +1341,6 @@ class Module(ModuleBase):
 
     if not isinstance(self, Module):
       raise errors.InvalidInstanceModuleError()
-
-    overridden_post_init = self.__post_init__ != Module.__post_init__
-    if overridden_post_init and not hasattr(self, "_id"):
-      raise errors.IncorrectPostInitOverrideError()
 
   @traceback_util.api_boundary
   def bind(self: M,

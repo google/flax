@@ -1873,22 +1873,47 @@ class ModuleTest(absltest.TestCase):
       B.bind({},
              x)  # similar issue w. apply called on class instead of instance.
 
-  def test_throws_incorrect_post_init_override_error(self):
+  def test_super_post_init_called(self):
 
     class A(nn.Module):
-      x: float
+      @nn.compact
+      def __call__(self, input):
+        return input + 3
 
+    class B(nn.Module):
       def __post_init__(self):
-        self.x_square = self.x**2
+        self.container = 'post init op'
 
       @nn.compact
       def __call__(self, input):
         return input + 3
 
-    r = A(x=3)
+    class C(nn.Module):
+      def __post_init__(self):
+        self.container = 'post init op'
+        super().__post_init__()
 
-    with self.assertRaises(errors.IncorrectPostInitOverrideError):
+      @nn.compact
+      def __call__(self, input):
+        return input + 3
+
+    class Foo(nn.Module):
+      def __post_init__(self):
+        pass
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(12)(x)
+
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return Foo()(x)
+
+    for custom_module in (A,B,C,Foo,Bar):
+      r = custom_module()
       r.init(jax.random.PRNGKey(2), jnp.ones(3))
+
+      self.assertEqual(hasattr(r, '_id'), True)
 
   def test_deepcopy_unspecified_parent(self):
     parent_parameter = inspect.signature(DummyModule).parameters['parent']
