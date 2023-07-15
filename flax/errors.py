@@ -800,22 +800,6 @@ class MPARestoreDataCorruptedError(FlaxError):
         'Was its save halted before completion?')
 
 
-class MPARestoreTypeNotMatchError(FlaxError):
-  """Make sure the multiprocess array type you use matches your configuration in jax.config.jax_array.
-
-  If you turned `jax.config.jax_array` on, you should use
-  `jax.experimental.array.Array` everywhere, instead of using
-  `GlobalDeviceArray`. Otherwise, avoid using jax.experimental.array
-  to restore your checkpoint.
-  """
-
-  def __init__(self, step, gda_path):
-    super().__init__(
-        f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
-        f' "{gda_path}": The array type provided by the target does not match '
-        'the JAX global configuration, namely the jax.config.jax_array.')
-
-
 #################################################
 # transforms.py errors                          #
 #################################################
