@@ -133,7 +133,7 @@ class AtariPreprocessing:
     self.environment.reset()
     self.apply_random_noops()
 
-    self.lives = self.environment.ale.lives()
+    self.lives = self.environment.unwrapped.ale.lives()
     self._fetch_grayscale_observation(self.screen_buffer[0])
     self.screen_buffer[1].fill(0)
     return self._pool_and_resize()
@@ -178,7 +178,7 @@ class AtariPreprocessing:
       accumulated_reward += reward
 
       if self.terminal_on_life_loss:
-        new_lives = self.environment.ale.lives()
+        new_lives = self.environment.unwrapped.ale.lives()
         is_terminal = game_over or new_lives < self.lives
         self.lives = new_lives
       else:
@@ -205,7 +205,7 @@ class AtariPreprocessing:
     Returns:
       observation: numpy array, the current observation in grayscale.
     """
-    self.environment.ale.getScreenGrayscale(output)
+    self.environment.unwrapped.ale.getScreenGrayscale(output)
     return output
 
   def _pool_and_resize(self):
