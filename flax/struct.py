@@ -86,7 +86,7 @@ def dataclass(clz: _T) -> _T:
       @classmethod
       def create(cls, kernel):
         scale = jax.numpy.linalg.norm(kernel, axis=0, keepdims=True)
-        directin = direction / scale
+        direction = direction / scale
         return cls(direction, scale)
 
   Args:
