@@ -132,8 +132,11 @@ def create_stepped_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   return learning_rate_fn
 
 
-def create_cosine_learning_rate_schedule(base_learning_rate, steps_per_epoch,
-                                         halfcos_epochs, warmup_length=0.0):
+def create_cosine_learning_rate_schedule(base_learning_rate,
+                                         steps_per_epoch,
+                                         halfcos_epochs,
+                                         per_cycle_decay=1.0,
+                                         warmup_length=0.0):
   """Create a cosine learning rate schedule with optional warmup.
 
   Note that with `FLIP #1009`_ learning rate schedules in ``flax.training`` are
@@ -156,6 +159,8 @@ def create_cosine_learning_rate_schedule(base_learning_rate, steps_per_epoch,
     steps_per_epoch: the number of iterations per epoch
     halfcos_epochs: the number of epochs to complete half a cosine wave;
       normally the number of epochs used for training
+    per_cycle_decay: how much the base learning rate attenuates after each
+      cycle
     warmup_length: if > 0, the learning rate will be modulated by a warmup
       factor that will linearly ramp-up from 0 to 1 over the first
       `warmup_length` epochs
@@ -171,11 +176,13 @@ def create_cosine_learning_rate_schedule(base_learning_rate, steps_per_epoch,
   halfwavelength_steps = halfcos_epochs * steps_per_epoch
 
   def learning_rate_fn(step):
-    scale_factor = jnp.cos(step * jnp.pi / halfwavelength_steps) * 0.5 + 0.5
+    completed_fraction = step / halfwavelength_steps
+    completed_cycles = jnp.floor_divide(step, halfwavelength_steps)
+    completed_fraction -= completed_cycles
+    scale_factor = 0.5 * per_cycle_decay**completed_cycles * (
+        1.0 + jnp.cos(completed_fraction * jnp.pi))
     lr = base_learning_rate * scale_factor
     if warmup_length > 0.0:
       lr = lr * jnp.minimum(1., step / float(warmup_length) / steps_per_epoch)
     return lr
   return learning_rate_fn
-
-
