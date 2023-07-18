@@ -78,6 +78,7 @@ def scan(
      the function that performs the scan of the form:
      (broadcast_in, carry_in, *args) -> (broadcast_out, carry_out, scan_out).
   """
+  from flax.linen.module import tabulate_context
 
   def transpose_to_front(ax, xs):
     if ax is broadcast:
@@ -132,11 +133,12 @@ def scan(
         xs)
     input_avals = (carry_avals, scan_avals)
 
-    in_avals, in_tree = jax.tree_util.tree_flatten(input_avals)
-    f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
-        lu.wrap_init(broadcast_body), in_tree)
-    in_pvals = list(map(pe.PartialVal.unknown, in_avals))
-    _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
+    with tabulate_context(add_call_info=False):
+      in_avals, in_tree = jax.tree_util.tree_flatten(input_avals)
+      f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(
+          lu.wrap_init(broadcast_body), in_tree)
+      in_pvals = list(map(pe.PartialVal.unknown, in_avals))
+      _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
 
     out_flat = []
     for pv, const in out_pvals:

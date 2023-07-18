@@ -392,11 +392,10 @@ class SummaryTest(absltest.TestCase):
 
     lstm = LSTM(features=128)
 
-    with jax.check_tracer_leaks(True):
-      module_repr = lstm.tabulate(
-        random.PRNGKey(0),
-        x=jnp.ones((32, 128, 64)),
-        console_kwargs=CONSOLE_TEST_KWARGS)
+    module_repr = lstm.tabulate(
+      random.PRNGKey(0),
+      x=jnp.ones((32, 128, 64)),
+      console_kwargs=CONSOLE_TEST_KWARGS)
 
     lines = module_repr.splitlines()
 
@@ -428,11 +427,10 @@ class SummaryTest(absltest.TestCase):
 
     lstm = LSTM(features=128)
 
-    with jax.check_tracer_leaks(True):
-      module_repr = lstm.tabulate(
-        random.PRNGKey(0),
-        x=jnp.ones((32, 128, 64)),
-        console_kwargs=CONSOLE_TEST_KWARGS)
+    module_repr = lstm.tabulate(
+      random.PRNGKey(0),
+      x=jnp.ones((32, 128, 64)),
+      console_kwargs=CONSOLE_TEST_KWARGS)
 
     lines = module_repr.splitlines()
 

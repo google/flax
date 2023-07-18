@@ -242,7 +242,7 @@ def _get_module_table(
 
   def _get_table_fn(*args, **kwargs):
 
-    with module_lib._tabulate_context():
+    with module_lib.tabulate_context():
 
       def _get_variables():
         return module.init(*args, **kwargs)

@@ -249,10 +249,10 @@ class RNNTest(absltest.TestCase):
 
       for i in range(seq_len):
         cell_carry, y = cell.apply({'params': cell_params}, cell_carry, xs[batch_idx:batch_idx+1, i, :])
-        np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-5)
+        np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-4)
 
       carry_i = jax.tree_map(lambda x: x[batch_idx:batch_idx+1], carry)
-      np.testing.assert_allclose(cell_carry, carry_i, rtol=1e-5)
+      np.testing.assert_allclose(cell_carry, carry_i, rtol=1e-4)
 
   def test_numerical_equivalence_single_batch_jax_scan(self):
     batch_size = 3

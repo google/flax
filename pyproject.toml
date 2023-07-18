@@ -137,6 +137,8 @@ filterwarnings = [
     "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
     # DeprecationWarning: module 'sre_constants' is deprecated
     "ignore:.*module 'sre_constants' is deprecated.*:DeprecationWarning",
+    # UserWarning from gymnasium
+    "ignore:.*env.ale to get variables from other wrappers is deprecated.*:UserWarning",
 ]
 
 [tool.coverage.report]

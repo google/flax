@@ -895,6 +895,33 @@ class TransformTest(absltest.TestCase):
     }
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
+  def test_scan_carry_init(self):
+    class Block(nn.Module):
+      train: bool
+      @nn.compact
+      def __call__(self, x, _):
+        x = nn.Dense(3)(x)
+        x = nn.BatchNorm(use_running_average=not self.train)(x)
+        x = nn.relu(x)
+        return x, None
+
+    MLP = nn.scan(
+      Block, variable_axes={"params": 0}, split_rngs={"params": True},
+      variable_carry="batch_stats", length=5)
+
+    mlp = MLP(train=True)
+
+    variables = mlp.init(random.PRNGKey(0), jnp.ones((1, 3)), None)
+
+    self.assertEqual(variables["batch_stats"]["BatchNorm_0"]["mean"].shape, (3,))
+    self.assertEqual(variables["batch_stats"]["BatchNorm_0"]["var"].shape, (3,))
+    self.assertEqual(variables["params"]["BatchNorm_0"]["scale"].shape, (5, 3))
+    self.assertEqual(variables["params"]["BatchNorm_0"]["bias"].shape, (5, 3))
+    self.assertEqual(variables["params"]["Dense_0"]["kernel"].shape, (5, 3, 3))
+    self.assertEqual(variables["params"]["Dense_0"]["bias"].shape, (5, 3))
+
+
+
   def test_variable_in_args_transform(self):
     class Test(nn.Module):
       @nn.jit
