@@ -369,6 +369,14 @@ class RNNTest(absltest.TestCase):
     np.testing.assert_allclose(flipped[:4, 0], x[:4, 0][::-1])
     np.testing.assert_allclose(flipped[:2, 1], x[:2, 1][::-1])
 
+  def test_basic_seq_lengths(self):
+
+    x = jnp.ones((2, 10, 6))
+    lstm = nn.RNN(nn.LSTMCell(265))
+    variables = lstm.init(jax.random.PRNGKey(0), x)
+    y = lstm.apply(variables, x, seq_lengths=jnp.array([5, 5]))
+
+
 class BidirectionalTest(absltest.TestCase):
 
   def test_bidirectional(self):
