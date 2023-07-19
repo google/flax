@@ -178,6 +178,7 @@ class NormalizationTest(parameterized.TestCase):
       {'reduction_axes': -1},
       {'reduction_axes': 1},
       {'reduction_axes': (1, 2)},
+      {'reduction_axes': (0, 1, 2)},
       {'reduction_axes': -1, 'use_fast_variance': False},
   )
   def test_layer_norm(self, reduction_axes, use_fast_variance=True):

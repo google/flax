@@ -95,12 +95,7 @@ def _compute_stats(
 
   if use_mean:
     if use_fast_variance:
-      mean = x.mean(axes)
-      mean2 = _abs_sq(x).mean(axes)
-      if mean.ndim > 0:
-        mean, mean2 = jnp.split(pmean(jnp.concatenate([mean, mean2])), 2)
-      else:
-        mean, mean2 = pmean(mean), pmean(mean2)
+      mean, mean2 = pmean(jnp.stack([x.mean(axes), _abs_sq(x).mean(axes)]))
       # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
       # to floating point round-off errors.
       var = jnp.maximum(0.0, mean2 - _abs_sq(mean))
