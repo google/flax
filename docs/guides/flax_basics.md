@@ -96,22 +96,6 @@ The result is what we expect: bias and kernel parameters of the correct size. Un
 * Initialization functions are called to generate the initial set of parameters that the model will use. Those are functions that take as arguments `(PRNG Key, shape, dtype)` and return an Array of shape `shape`.
 * The init function returns the initialized set of parameters (you can also get the output of the forward pass on the dummy input with the same syntax by using the `init_with_output` method instead of `init`.
 
-+++ {"id": "3yL9mKk7naJn"}
-
-The output shows that the parameters are stored in a `FrozenDict` instance, which helps deal with the functional nature of JAX by preventing any mutation of the underlying dict and making the user aware of it. Read more about it in the [`flax.core.frozen_dict.FrozenDict` API docs](https://flax.readthedocs.io/en/latest/api_reference/flax.core.frozen_dict.html#flax.core.frozen_dict.FrozenDict).
-
-As a consequence, the following doesn't work:
-
-```{code-cell}
-:id: HtOFWeiynaJo
-:outputId: 689b4230-2a3d-4823-d103-2858e6debc4d
-
-try:
-    params['new_key'] = jnp.ones((2,2))
-except ValueError as e:
-    print("Error: ", e)
-```
-
 +++ {"id": "M1qo9M3_naJo"}
 
 To conduct a forward pass with the model with a given set of parameters (which are never stored with the model), we just use the `apply` method by providing it the parameters to use as well as the input:
