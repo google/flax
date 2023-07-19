@@ -32,7 +32,7 @@ The following are the utility functions and example upgrade patterns:
   import jax.numpy as jnp
 
   x = jnp.empty((1,3))
-  variables = nn.Dense(5).init(jax.random.PRNGKey(0), x)
+  variables = flax.core.freeze(nn.Dense(5).init(jax.random.PRNGKey(0), x))
 
   other_variables = jnp.array([1, 1, 1, 1, 1], dtype=jnp.float32)
 
