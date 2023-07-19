@@ -777,8 +777,9 @@ def scan(fn: Callable[..., Any],
         for rng_group, split in zip(rng_groups, rng_splits))
 
     carry_vars_new_axes = 0
-    scan_partial = lambda length: functools.partial(
-      axes_scan.scan, in_axes=(variable_in_axes, rng_axes, in_axes),
+    scan_partial = lambda length, unroll: axes_scan.scan(
+      scanned,
+      in_axes=(variable_in_axes, rng_axes, in_axes),
       out_axes=(out_axes, variable_out_axes, carry_vars_new_axes),
       reverse=reverse, unroll=unroll, length=length)
 
@@ -821,7 +822,7 @@ def scan(fn: Callable[..., Any],
 
     # compute new carry vars
     with tabulate_context(add_call_info=False): # dont add call info while tracing
-      carry_vars_new = jax.eval_shape(scan_partial(length)(scanned),
+      carry_vars_new = jax.eval_shape(scan_partial(length, unroll),
         broadcast_vars, (carry_vars, init), tuple(new_scan_vars),
         rng_groups, args)[2][2]
     has_new_carry_vars = len(jax.tree_util.tree_leaves(carry_vars_new)) > 0
@@ -838,7 +839,7 @@ def scan(fn: Callable[..., Any],
       # run scan for 1 step
       partial_length = 1 if length is not None else None
       with tabulate_context(add_call_info=False): # dont add call info on first step
-        broadcast_vars, (carry_vars, init), (ys1, scan_vars1, carry_vars_new) = scan_partial(partial_length)(scanned)(
+        broadcast_vars, (carry_vars, init), (ys1, scan_vars1, carry_vars_new) = scan_partial(partial_length, 1)(
           broadcast_vars, (carry_vars, init), new_scan_vars0, rng_groups0, args0)
       # slice new carry vars and merge with existing
       carry_vars_new = jax.tree_map(lambda x: x[0], carry_vars_new)
@@ -855,7 +856,7 @@ def scan(fn: Callable[..., Any],
       )
       # run scan on the rest of the inputs
       partial_length = length - 1 if length is not None else None
-      broadcast_vars, (carry_vars, c), (ys_rest, scan_vars_rest, carry_vars_new) = scan_partial(partial_length)(scanned)(
+      broadcast_vars, (carry_vars, c), (ys_rest, scan_vars_rest, carry_vars_new) = scan_partial(partial_length, unroll)(
         broadcast_vars, (carry_vars, init), new_scan_vars_rest, rng_groups_rest, args_rest)
       # concat ys and scan_vars
       ys = tree_map_upto_left(
@@ -875,7 +876,7 @@ def scan(fn: Callable[..., Any],
         right=((scan_vars1, scan_vars_rest),),
       )[0]
     else:
-      broadcast_vars, (carry_vars, c), (ys, scan_vars, carry_vars_new) = scan_partial(length)(scanned)(
+      broadcast_vars, (carry_vars, c), (ys, scan_vars, carry_vars_new) = scan_partial(length, unroll)(
         broadcast_vars, (carry_vars, init), tuple(new_scan_vars),
         rng_groups, args)
 
