@@ -786,6 +786,8 @@ class RNN(Module):
     else:
       carry = initial_carry
 
+    slice_carry = seq_lengths is not None and return_carry
+
     def scan_fn(
       cell: RNNCellBase, carry: Carry, x: Array
     ) -> Union[Tuple[Carry, Array], Tuple[Carry, Tuple[Carry, Array]]]:
@@ -794,7 +796,7 @@ class RNN(Module):
       # so that we can select the last carry for each sequence later.
       # This uses more memory but is faster than using jnp.where at each
       # iteration. As a small optimization do this when we really need it.
-      if seq_lengths is not None and return_carry:
+      if slice_carry:
         return carry, (carry, y)
       else:
         return carry, y
@@ -802,7 +804,7 @@ class RNN(Module):
     scan = transforms.scan(
       scan_fn,
       in_axes=time_axis,
-      out_axes=time_axis if seq_lengths is None else (0, time_axis),
+      out_axes=(0, time_axis) if slice_carry else time_axis,
       unroll=self.unroll,
       variable_axes=self.variable_axes,
       variable_broadcast=self.variable_broadcast,
@@ -815,7 +817,8 @@ class RNN(Module):
     # Next we select the final carry. If a segmentation mask was provided and
     # return_carry is True we slice the carry history and select the last valid
     # carry for each sequence. Otherwise we just use the last carry.
-    if seq_lengths is not None and return_carry:
+    if slice_carry:
+      assert seq_lengths is not None
       _, (carries, outputs) = scan_output
       # seq_lengths[None] expands the shape of the mask to match the
       # number of dimensions of the carry.
