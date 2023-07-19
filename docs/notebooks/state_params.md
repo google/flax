@@ -41,6 +41,7 @@ from jax import numpy as jnp
 from jax import random
 import optax
 
+import flax
 from flax import linen as nn
 
 
@@ -113,7 +114,7 @@ Then we can write the actual training code.
 model = BiasAdderWithRunningMean()
 variables = model.init(random.PRNGKey(0), dummy_input)
 # Split state and params (which are updated by optimizer).
-state, params = variables.pop('params')
+state, params = flax.core.pop(variables, 'params')
 del variables  # Delete variables to avoid wasting resources
 tx = optax.sgd(learning_rate=0.02)
 opt_state = tx.init(params)
@@ -202,7 +203,7 @@ Note that we also need to specify that the model state does not have a batch dim
 model = MLP(hidden_size=10, out_size=1)
 variables = model.init(random.PRNGKey(0), dummy_input)
 # Split state and params (which are updated by optimizer).
-state, params = variables.pop('params')
+state, params = flax.core.pop(variables, 'params')
 del variables  # Delete variables to avoid wasting resources
 tx = optax.sgd(learning_rate=0.02)
 opt_state = tx.init(params)
