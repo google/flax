@@ -818,6 +818,7 @@ class RNN(Module):
     # return_carry is True we slice the carry history and select the last valid
     # carry for each sequence. Otherwise we just use the last carry.
     if slice_carry:
+      assert seq_lengths is not None
       _, (carries, outputs) = scan_output
       # seq_lengths[None] expands the shape of the mask to match the
       # number of dimensions of the carry.
