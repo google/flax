@@ -1098,7 +1098,6 @@ class ModuleTest(absltest.TestCase):
     A().test()
     self.assertFalse(setup_called)
 
-  @temp_flip_flag('return_frozendict', False)
   def test_module_pass_as_attr(self):
 
     class A(nn.Module):
@@ -1129,7 +1128,6 @@ class ModuleTest(absltest.TestCase):
     }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
-  @temp_flip_flag('return_frozendict', False)
   def test_module_pass_in_closure(self):
     a = nn.Dense(2)
 
@@ -1154,7 +1152,6 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
     self.assertIsNone(a.name)
 
-  @temp_flip_flag('return_frozendict', False)
   def test_toplevel_submodule_adoption(self):
 
     class Encoder(nn.Module):
@@ -1210,7 +1207,6 @@ class ModuleTest(absltest.TestCase):
     }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
-  @temp_flip_flag('return_frozendict', False)
   def test_toplevel_submodule_adoption_pytree(self):
 
     class A(nn.Module):
@@ -1254,7 +1250,6 @@ class ModuleTest(absltest.TestCase):
                 lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
                 counters, ref_counters)))
 
-  @temp_flip_flag('return_frozendict', False)
   def test_toplevel_submodule_adoption_sharing(self):
     dense = functools.partial(nn.Dense, use_bias=False)
 
@@ -1305,7 +1300,6 @@ class ModuleTest(absltest.TestCase):
     }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
-  @temp_flip_flag('return_frozendict', False)
   def test_toplevel_named_submodule_adoption(self):
     dense = functools.partial(nn.Dense, use_bias=False)
 
@@ -1360,7 +1354,6 @@ class ModuleTest(absltest.TestCase):
       }
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
-  @temp_flip_flag('return_frozendict', False)
   def test_toplevel_submodule_pytree_adoption_sharing(self):
 
     class A(nn.Module):

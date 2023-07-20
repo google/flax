@@ -144,7 +144,6 @@ class AttentionTest(parameterized.TestCase):
     np.testing.assert_allclose(mask_1d, mask_1d_simple,)
 
   @parameterized.parameters([((5,), (1,)), ((6, 5), (2,))])
-  @temp_flip_flag('return_frozendict', False)
   def test_decoding(self, spatial_shape, attn_dims):
     bs = 2
     num_heads = 3

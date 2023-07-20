@@ -807,7 +807,6 @@ class TransformTest(absltest.TestCase):
     y3 = Ctrafo(a2, b).apply(p2, x)
     np.testing.assert_allclose(y1, y3, atol=1e-7)
 
-  @temp_flip_flag('return_frozendict', False)
   def test_toplevel_submodule_adoption_pytree_transform(self):
     class A(nn.Module):
       @nn.compact
@@ -852,7 +851,6 @@ class TransformTest(absltest.TestCase):
             cntrs, ref_cntrs)
         ))
 
-  @temp_flip_flag('return_frozendict', False)
   def test_partially_applied_module_constructor_transform(self):
     k = random.PRNGKey(0)
     x = jnp.ones((3,4,4))
@@ -870,7 +868,6 @@ class TransformTest(absltest.TestCase):
     }
     self.assertTrue(tree_equals(init_vars_shapes, ref_var_shapes))
 
-  @temp_flip_flag('return_frozendict', False)
   def test_partial_module_method(self):
     k = random.PRNGKey(0)
     x = jnp.ones((3,4,4))
@@ -1505,7 +1502,6 @@ class TransformTest(absltest.TestCase):
 
         return nn.cond(pred, true_fn, false_fn, self, x)
 
-  @temp_flip_flag('return_frozendict', False)
   def test_switch(self):
     class Foo(nn.Module):
       @nn.compact
@@ -1540,7 +1536,6 @@ class TransformTest(absltest.TestCase):
     self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 1, 'c_count': 1})
     np.testing.assert_allclose(y1, y3)
 
-  @temp_flip_flag('return_frozendict', False)
   def test_switch_multihead(self):
     class Foo(nn.Module):
       def setup(self) -> None:
