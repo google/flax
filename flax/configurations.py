@@ -54,7 +54,7 @@ def static_bool_env(varname: str, default: bool) -> bool:
     varname: the name of the variable
     default: the default boolean value
   Returns:
-    boolean return value derived from defaults and environment.
+    boolean return value derived from the defaults and environment.
   Raises: ValueError if the environment variable is anything else.
   """
   val = os.getenv(varname, str(default))

@@ -9,6 +9,8 @@ The original issue is outlined `here <https://github.com/google/flax/issues/1223
 
 This guide shows some common upgrade patterns.
 
+TEST comment.
+
 
 Utility functions
 -----------------
