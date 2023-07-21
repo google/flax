@@ -75,7 +75,8 @@ def dense_general(
     if set(batch_dims) != set(range(max_dim + 1)):
       raise ValueError(
           'batch_dims %s must be consecutive leading '
-          'dimensions starting from 0.' % str(batch_dims)
+          'dimensions starting from 0.'
+          % str(batch_dims)
       )
 
   ndim = inputs.ndim

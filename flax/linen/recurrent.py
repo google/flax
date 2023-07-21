@@ -225,9 +225,9 @@ class DenseParams(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[
-      [PRNGKey, Shape, Dtype], Array
-  ] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
+      initializers.zeros_init()
+  )
 
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Optional[Array]]:
@@ -728,9 +728,9 @@ class RNN(Module):
   reverse: bool = False
   keep_order: bool = False
   unroll: int = 1
-  variable_axes: Mapping[
-      lift.CollectionFilter, lift.InOutScanAxis
-  ] = FrozenDict()
+  variable_axes: Mapping[lift.CollectionFilter, lift.InOutScanAxis] = (
+      FrozenDict()
+  )
   variable_broadcast: lift.CollectionFilter = 'params'
   variable_carry: lift.CollectionFilter = False
   split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(

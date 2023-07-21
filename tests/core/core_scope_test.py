@@ -128,7 +128,10 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       scope.param('test', nn.initializers.ones_init(), (4,))
 
-    msg = r'Initializer expected to generate shape \(2,\) but got shape \(4,\) instead for parameter "test" in "/"'
+    msg = (
+        r'Initializer expected to generate shape \(2,\) but got shape \(4,\)'
+        r' instead for parameter "test" in "/"'
+    )
     with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
       apply(f)(freeze({'params': {'test': np.ones((2,))}}))
 

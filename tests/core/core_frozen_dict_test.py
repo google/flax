@@ -128,7 +128,9 @@ class FrozenDictTest(parameterized.TestCase):
       },
       {
           'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
-          'pretty_str': 'FrozenDict({\n    a: 1,\n    b: {\n        c: 2,\n    },\n})',
+          'pretty_str': (
+              'FrozenDict({\n    a: 1,\n    b: {\n        c: 2,\n    },\n})'
+          ),
       },
       {
           'x': 345,

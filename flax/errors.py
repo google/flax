@@ -708,7 +708,8 @@ class InvalidInstanceModuleError(FlaxError):
 
   def __init__(self):
     super().__init__(
-        'Can only call init, init_with_output or apply methods on an instance of the Module class, not the Module class itself'
+        'Can only call init, init_with_output or apply methods on an instance'
+        ' of the Module class, not the Module class itself'
     )
 
 
@@ -757,7 +758,8 @@ class DescriptorAttributeError(FlaxError):
 
   def __init__(self):
     super().__init__(
-        'Trying to access a property that is accessing a non-existent attribute.'
+        'Trying to access a property that is accessing a non-existent'
+        ' attribute.'
     )
 
 
@@ -772,7 +774,8 @@ class InvalidCheckpointError(FlaxError):
 
   def __init__(self, path, step):
     super().__init__(
-        f'Trying to save an outdated checkpoint at step: "{step}" and path: "{path}".'
+        f'Trying to save an outdated checkpoint at step: "{step}" and path:'
+        f' "{path}".'
     )
 
 

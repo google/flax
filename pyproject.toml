@@ -151,3 +151,4 @@ exclude_lines = [
 pyink-indentation = 2
 pyink-use-majority-quotes = true
 line-length = 80
+preview = true
