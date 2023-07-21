@@ -176,7 +176,9 @@ class IOTest(parameterized.TestCase):
 
       with io.override_mode(backend_mode):
         io.makedirs(test_dir_path)
-      self.assertTrue(os.path.exists(test_dir_path) and (os.path.isdir(test_dir_path)))
+      self.assertTrue(
+          os.path.exists(test_dir_path) and (os.path.isdir(test_dir_path))
+      )
 
   def test_glob(self):
     with tempfile.TemporaryDirectory() as temp_dir_path:

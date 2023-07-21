@@ -197,12 +197,16 @@ class SimpleBiLSTM(nn.Module):
 
   def __call__(self, embedded_inputs, lengths):
     # Forward LSTM.
-    initial_state = self.forward_lstm.initialize_carry(embedded_inputs[:, 0].shape)
+    initial_state = self.forward_lstm.initialize_carry(
+        embedded_inputs[:, 0].shape
+    )
     _, forward_outputs = self.forward_lstm(initial_state, embedded_inputs)
 
     # Backward LSTM.
     reversed_inputs = flip_sequences(embedded_inputs, lengths)
-    initial_state = self.backward_lstm.initialize_carry(reversed_inputs[:, 0].shape)
+    initial_state = self.backward_lstm.initialize_carry(
+        reversed_inputs[:, 0].shape
+    )
     _, backward_outputs = self.backward_lstm(initial_state, reversed_inputs)
     backward_outputs = flip_sequences(backward_outputs, lengths)
 

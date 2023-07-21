@@ -37,7 +37,9 @@ class TestTemperatureSampler(absltest.TestCase):
       logits = logits.squeeze(axis=1)
       return logits, cache
 
-    new_tokens = temperature_sample(tokens, cache, tokens_to_logits, key, topk=5)
+    new_tokens = temperature_sample(
+        tokens, cache, tokens_to_logits, key, topk=5
+    )
 
     np.testing.assert_array_equal(new_tokens, [[5, 6, 7, 8]])
 

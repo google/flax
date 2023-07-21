@@ -580,7 +580,9 @@ class _ModuleInternalState:
 
   def export(self) -> '_ModuleInternalState':
     """Exports transform-preserved state across transform boundary."""
-    setup_state = SetupState.TRANSFORMED if self.setup_called else SetupState.NEW
+    setup_state = (
+        SetupState.TRANSFORMED if self.setup_called else SetupState.NEW
+    )
     cloned = _ModuleInternalState(
         in_compact_method=self.in_compact_method,
         in_setup=self.in_setup,
@@ -970,7 +972,9 @@ class Module(ModuleBase):
         if filter_fn and filter_fn(self, fun_name):
           self.sow('intermediates', fun_name, y)
       if add_call_info:
-        _args, _kwargs, _y = flax.linen.summary._represent_tree((args, kwargs, y))
+        _args, _kwargs, _y = flax.linen.summary._represent_tree(
+            (args, kwargs, y)
+        )
         _context.call_info_stack[-1].calls.append(
             _CallInfo(
                 call_index,
@@ -1284,7 +1288,11 @@ class Module(ModuleBase):
     Returns:
       A clone of the this Module with the updated attributes and parent.
     """
-    attrs = {f.name: getattr(self, f.name) for f in dataclasses.fields(self) if f.init}
+    attrs = {
+        f.name: getattr(self, f.name)
+        for f in dataclasses.fields(self)
+        if f.init
+    }
 
     attrs.update(parent=parent, **updates)
 
@@ -2027,7 +2035,9 @@ class Module(ModuleBase):
     self.scope.put_variable(col, name, xs)
     return True
 
-  def perturb(self, name: str, value: T, collection: str = 'perturbations') -> T:
+  def perturb(
+      self, name: str, value: T, collection: str = 'perturbations'
+  ) -> T:
     """Add an zero-value variable ('perturbation') to the intermediate value.
 
     The gradient of `value` would be the same as the gradient of this

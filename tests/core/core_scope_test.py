@@ -36,7 +36,9 @@ class ScopeTest(absltest.TestCase):
       self.assertTrue(scope.has_rng('params'))
       self.assertFalse(scope.has_rng('dropout'))
       rng = scope.make_rng('params')
-      self.assertTrue(np.all(rng == LazyRng.create(random.PRNGKey(0), 1).as_jax_rng()))
+      self.assertTrue(
+          np.all(rng == LazyRng.create(random.PRNGKey(0), 1).as_jax_rng())
+      )
 
     init(f)(random.PRNGKey(0))
 
@@ -67,7 +69,9 @@ class ScopeTest(absltest.TestCase):
         scope.DenyList(['b', 'c']),
         scope.DenyList(set(['b'])),
     )
-    union_check(scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a'])))
+    union_check(
+        scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a']))
+    )
 
   def test_intersect_filter(self):
     def intersect_check(a, b, ans):
@@ -94,7 +98,9 @@ class ScopeTest(absltest.TestCase):
     subtract_check(False, False, set())
     subtract_check(True, True, False)
     subtract_check(True, 'a', scope.DenyList('a'))
-    subtract_check(scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c']))
+    subtract_check(
+        scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c'])
+    )
     subtract_check(
         scope.DenyList(['a', 'b']),
         ['b', 'c'],

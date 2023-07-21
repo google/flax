@@ -38,7 +38,9 @@ def softmax_attn(scope: Scope, weights: Array):
 def with_dropout(fn, rate: float, deterministic: bool = False):
   def attn_fn(scope: Scope, weights: Array):
     attn_weights = fn(scope, weights)
-    return nn.dropout(scope, attn_weights, deterministic=deterministic, rate=rate)
+    return nn.dropout(
+        scope, attn_weights, deterministic=deterministic, rate=rate
+    )
 
   return attn_fn
 

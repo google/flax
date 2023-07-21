@@ -355,7 +355,9 @@ def per_host_sum_pmap(in_tree):
   host_psum = jax.pmap(lambda x: jax.lax.psum(x, "i"), "i", devices=devices)
 
   def pre_pmap(xs):
-    return jax.tree_util.tree_map(lambda x: jnp.broadcast_to(x, (1,) + x.shape), xs)
+    return jax.tree_util.tree_map(
+        lambda x: jnp.broadcast_to(x, (1,) + x.shape), xs
+    )
 
   def post_pmap(xs):
     return jax.tree_util.tree_map(lambda x: x[0], xs)
@@ -626,7 +628,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
-        batch = common_utils.shard(jax.tree_util.tree_map(np.asarray, next(train_iter)))
+        batch = common_utils.shard(
+            jax.tree_util.tree_map(np.asarray, next(train_iter))
+        )
         state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
@@ -643,7 +647,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           lr = train_metrics.pop("learning_rate").mean()
           metrics_sums = jax.tree_util.tree_map(jnp.sum, train_metrics)
           denominator = metrics_sums.pop("denominator")
-          summary = jax.tree_util.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
+          summary = jax.tree_util.tree_map(
+              lambda x: x / denominator, metrics_sums
+          )  # pylint: disable=cell-var-from-loop
           summary["learning_rate"] = lr
           summary = {"train_" + k: v for k, v in summary.items()}
           writer.write_scalars(step, summary)

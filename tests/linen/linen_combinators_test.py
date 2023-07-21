@@ -37,7 +37,9 @@ class MLP(nn.Module):
   def __call__(self, inputs):
     x = inputs
     for layer_size in self.layer_sizes[:-1]:
-      x = nn.Dense(features=layer_size, kernel_init=nn.initializers.ones_init())(x)
+      x = nn.Dense(
+          features=layer_size, kernel_init=nn.initializers.ones_init()
+      )(x)
       if self.activation is not None:
         x = self.activation(x)
     x = nn.Dense(

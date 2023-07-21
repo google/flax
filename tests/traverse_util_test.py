@@ -297,10 +297,18 @@ class ModelParamTraversalTest(absltest.TestCase):
     updates, new_state = tx.update(gradients, state, params)
     new_params = optax.apply_updates(params, updates)
 
-    self.assertTrue(np.allclose(new_params['linear_1']['b'], params['linear_1']['b']))
-    self.assertTrue(np.allclose(new_params['linear_2']['b'], params['linear_2']['b']))
-    self.assertFalse(np.allclose(new_params['linear_1']['w'], params['linear_1']['w']))
-    self.assertFalse(np.allclose(new_params['linear_2']['w'], params['linear_2']['w']))
+    self.assertTrue(
+        np.allclose(new_params['linear_1']['b'], params['linear_1']['b'])
+    )
+    self.assertTrue(
+        np.allclose(new_params['linear_2']['b'], params['linear_2']['b'])
+    )
+    self.assertFalse(
+        np.allclose(new_params['linear_1']['w'], params['linear_1']['w'])
+    )
+    self.assertFalse(
+        np.allclose(new_params['linear_2']['w'], params['linear_2']['w'])
+    )
 
   def test_path_aware_map_with_masked(self):
     params = {

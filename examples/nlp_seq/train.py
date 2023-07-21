@@ -354,7 +354,9 @@ def main(argv):
   tick = time.time()
   best_dev_score = 0
   for step, batch in zip(range(num_train_steps), train_iter):
-    batch = common_utils.shard(jax.tree_util.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
+    batch = common_utils.shard(
+        jax.tree_util.tree_map(lambda x: x._numpy(), batch)
+    )  # pylint: disable=protected-access
 
     state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)

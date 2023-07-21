@@ -55,7 +55,9 @@ class TrainTest(parameterized.TestCase):
 
     Uses smaller inputs than `test_create_model` to due to higher compute.
     """
-    model = train.create_model(model_cls=models._ResNet1Local, half_precision=False)  # pylint: disable=protected-access
+    model = train.create_model(
+        model_cls=models._ResNet1Local, half_precision=False
+    )  # pylint: disable=protected-access
     params, batch_stats = train.initialized(random.PRNGKey(0), 64, model)
     variables = {'params': params, 'batch_stats': batch_stats}
     x = random.normal(random.PRNGKey(1), (1, 64, 64, 3))

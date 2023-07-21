@@ -102,7 +102,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(params, {'bias': jnp.array([1.0])})
 
   def test_lazy_init(self):
-
     class Foo(nn.Module):
 
       @compact
@@ -128,7 +127,9 @@ class ModuleTest(absltest.TestCase):
         return x * k
 
     with self.assertRaises(errors.LazyInitError):
-      Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
+      Foo().lazy_init(
+          random.PRNGKey(0), jax.ShapeDtypeStruct((8, 4), jnp.float32)
+      )
 
   def test_arg_module(self):
     rngkey = jax.random.PRNGKey(0)
@@ -867,7 +868,9 @@ class ModuleTest(absltest.TestCase):
       Foo().init({}, method='allowed_apply_fn')
 
     # attributes which are not callables yield TypeError.
-    with self.assertRaisesRegex(TypeError, "'Foo.not_callable' must be a callable"):
+    with self.assertRaisesRegex(
+        TypeError, "'Foo.not_callable' must be a callable"
+    ):
       Foo().apply({}, method='not_callable')
       # test same for init.
       Foo().init({}, method='not_callable')
@@ -1476,7 +1479,6 @@ class ModuleTest(absltest.TestCase):
     )
 
   def test_perturb_noop(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -1497,7 +1499,9 @@ class ModuleTest(absltest.TestCase):
     module.apply({'params': params}, x)
 
     # check errors if perturbations is passed but empty
-    with self.assertRaisesRegex(errors.ScopeCollectionNotFound, 'Tried to access'):
+    with self.assertRaisesRegex(
+        errors.ScopeCollectionNotFound, 'Tried to access'
+    ):
       module.apply({'params': params, 'perturbations': {}}, x)
 
     # check no error if perturbations is passed and not empty
@@ -1570,7 +1574,6 @@ class ModuleTest(absltest.TestCase):
       np.testing.assert_allclose(x, y)
 
   def test_unbind(self):
-
     class Foo(nn.Module):
 
       def setup(self):
@@ -1593,8 +1596,12 @@ class ModuleTest(absltest.TestCase):
     self.assertIsInstance(decoder, nn.Dense)
     self.assertEqual(decoder.features, 2)
 
-    np.testing.assert_equal(variables['params']['encoder'], encoder_vars['params'])
-    np.testing.assert_equal(variables['params']['decoder'], decoder_vars['params'])
+    np.testing.assert_equal(
+        variables['params']['encoder'], encoder_vars['params']
+    )
+    np.testing.assert_equal(
+        variables['params']['decoder'], decoder_vars['params']
+    )
 
   def test_passing_mutable_variables(self):
     class Foo(nn.Module):
@@ -2296,7 +2303,6 @@ class RelaxedNamingTests(absltest.TestCase):
       y = bar.apply(vs, x)
 
   def test_nested_class_optional_adoption_name_preservation(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -2400,7 +2406,6 @@ class RelaxedNamingTests(absltest.TestCase):
     vs = foo.init(k, x)
 
   def test_relaxed_intercollection_conflict(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -2415,7 +2420,6 @@ class RelaxedNamingTests(absltest.TestCase):
     vs = foo.init(k, x)
 
   def test_relaxed_intercollection_conflict_set(self):
-
     class Foo(nn.Module):
 
       @nn.compact

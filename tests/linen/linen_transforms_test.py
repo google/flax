@@ -327,7 +327,9 @@ class TransformTest(absltest.TestCase):
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
-    lstmcell_variables = freeze({'params': init_variables['params']['lstm_cell']})
+    lstmcell_variables = freeze(
+        {'params': init_variables['params']['lstm_cell']}
+    )
     for i in range(xs.shape[0]):
       c, y = nn.LSTMCell(2).apply(lstmcell_variables, c, xs[i])
       ys.append(y[None, ...])
@@ -363,7 +365,9 @@ class TransformTest(absltest.TestCase):
     # simulate scan in python for comparison:
     c = init_carry
     ys = []
-    lstmcell_variables = freeze({'params': init_variables['params']['lstm_cell']})
+    lstmcell_variables = freeze(
+        {'params': init_variables['params']['lstm_cell']}
+    )
     for i in range(xs.shape[0]):
       c, y = nn.LSTMCell(2).apply(lstmcell_variables, c, xs[i])
       ys.append(y[None, ...])
@@ -1267,7 +1271,9 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def _call(self, x, decode):
         def f(self):
-          return nn.Dense(self.features if decode else self.latents, use_bias=False)(x)
+          return nn.Dense(
+              self.features if decode else self.latents, use_bias=False
+          )(x)
 
         if decode:
           map_fn = trans
@@ -1367,7 +1373,9 @@ class TransformTest(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         bar = Bar()
-        vars_t = jax.tree_util.tree_map(jnp.ones_like, bar.variables.get('params', {}))
+        vars_t = jax.tree_util.tree_map(
+            jnp.ones_like, bar.variables.get('params', {})
+        )
         _, out_t = nn.jvp(
             Bar.__call__, bar, (x,), (jnp.zeros_like(x),), {'params': vars_t}
         )
@@ -1427,7 +1435,6 @@ class TransformTest(absltest.TestCase):
     )
 
   def test_custom_vjp(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -1884,16 +1891,26 @@ class TransformTest(absltest.TestCase):
     vars = copy(vars, updates)
     self.assertEqual(vars['state'], {'0_count': 1, '1_count': 1, '2_count': 1})
 
-    self.assertEqual(vars['params']['heads_0']['layers_0']['kernel'].shape, (3, 10))
+    self.assertEqual(
+        vars['params']['heads_0']['layers_0']['kernel'].shape, (3, 10)
+    )
     self.assertEqual(vars['params']['heads_0']['layers_0']['bias'].shape, (10,))
-    self.assertEqual(vars['params']['heads_0']['layers_1']['kernel'].shape, (10, 7))
+    self.assertEqual(
+        vars['params']['heads_0']['layers_1']['kernel'].shape, (10, 7)
+    )
     self.assertEqual(vars['params']['heads_0']['layers_1']['bias'].shape, (7,))
-    self.assertEqual(vars['params']['heads_0']['layers_2']['kernel'].shape, (7, 5))
+    self.assertEqual(
+        vars['params']['heads_0']['layers_2']['kernel'].shape, (7, 5)
+    )
     self.assertEqual(vars['params']['heads_0']['layers_2']['bias'].shape, (5,))
 
-    self.assertEqual(vars['params']['heads_1']['layers_0']['kernel'].shape, (3, 11))
+    self.assertEqual(
+        vars['params']['heads_1']['layers_0']['kernel'].shape, (3, 11)
+    )
     self.assertEqual(vars['params']['heads_1']['layers_0']['bias'].shape, (11,))
-    self.assertEqual(vars['params']['heads_1']['layers_1']['kernel'].shape, (11, 5))
+    self.assertEqual(
+        vars['params']['heads_1']['layers_1']['kernel'].shape, (11, 5)
+    )
     self.assertEqual(vars['params']['heads_1']['layers_1']['bias'].shape, (5,))
 
     self.assertEqual(vars['params']['heads_2']['kernel'].shape, (3, 5))

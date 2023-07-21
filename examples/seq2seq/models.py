@@ -109,7 +109,9 @@ class Seq2seq(nn.Module):
       encoding format).
     """
     # Encode inputs.
-    encoder = nn.RNN(nn.LSTMCell(self.hidden_size), return_carry=True, name='encoder')
+    encoder = nn.RNN(
+        nn.LSTMCell(self.hidden_size), return_carry=True, name='encoder'
+    )
     decoder = nn.RNN(
         DecoderLSTMCell(
             decoder_inputs.shape[-1], self.teacher_force, self.vocab_size

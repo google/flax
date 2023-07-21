@@ -489,7 +489,9 @@ class PartitioningTest(parameterized.TestCase):
     with partitioning.axis_rules(p_rules):
       variables = Foo().init(jax.random.PRNGKey(0), jnp.array([1, 2, 3]))
     variables = unfreeze(variables)
-    variables['params'] = jax.tree_util.tree_map(lambda x: x.shape, variables['params'])
+    variables['params'] = jax.tree_util.tree_map(
+        lambda x: x.shape, variables['params']
+    )
     self.assertDictEqual(
         variables,
         {
@@ -506,7 +508,9 @@ class PartitioningTest(parameterized.TestCase):
           jax.random.PRNGKey(0), jnp.array([[1, 2, 3], [4, 5, 6]])
       )
     variables = unfreeze(variables)
-    variables['params'] = jax.tree_util.tree_map(lambda x: x.shape, variables['params'])
+    variables['params'] = jax.tree_util.tree_map(
+        lambda x: x.shape, variables['params']
+    )
     self.assertDictEqual(
         variables,
         {

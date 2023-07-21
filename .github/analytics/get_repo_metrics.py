@@ -331,7 +331,9 @@ def main(_):
   )
   issues.get()
 
-  df_issues = df_issues0 = pd.DataFrame(list(_get_issues_features(issues.raw_data)))
+  df_issues = df_issues0 = pd.DataFrame(
+      list(_get_issues_features(issues.raw_data))
+  )
   df_issues['issue_response_time'] = (
       df_issues['time_labeled_or_converted'] - df_issues['created_at']
   )
@@ -350,7 +352,9 @@ def main(_):
   prs.get()
 
   df_prs = df_prs0 = pd.DataFrame(list(_get_pr_features(prs.raw_data)))
-  time_response = df_prs[['time_labeled_or_assigned', 'time_review']].min(axis=1)
+  time_response = df_prs[['time_labeled_or_assigned', 'time_review']].min(
+      axis=1
+  )
   df_prs['pr_response_time'] = time_response - df_prs['ready_for_review_at']
   df_prs['pr_resolution_time'] = (
       df_prs['time_merged_or_closed'] - df_prs['ready_for_review_at']
