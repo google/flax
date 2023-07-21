@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import Sequence, Callable
 from functools import partial
 
@@ -26,10 +25,12 @@ import jax
 from jax import random, numpy as jnp
 
 
-def mlp_custom_grad(scope: Scope, x: Array,
-                    sizes: Sequence[int] = (8, 1),
-                    act_fn: Callable[[Array], Array] = nn.relu):
-
+def mlp_custom_grad(
+    scope: Scope,
+    x: Array,
+    sizes: Sequence[int] = (8, 1),
+    act_fn: Callable[[Array], Array] = nn.relu,
+):
   f = nn.dense
 
   def fwd(scope, x, features):
@@ -44,7 +45,8 @@ def mlp_custom_grad(scope: Scope, x: Array,
     return (params_t, *input_t)
 
   dense_custom_grad = lift.custom_vjp(
-      f, forward_fn=fwd, backward_fn=bwd, nondiff_argnums=(2,))
+      f, forward_fn=fwd, backward_fn=bwd, nondiff_argnums=(2,)
+  )
 
   # hidden layers
   for size in sizes[:-1]:
@@ -61,11 +63,11 @@ class CustomVJPTest(absltest.TestCase):
     x = random.normal(random.PRNGKey(0), (1, 4))
     y, variables = init(mlp_custom_grad)(random.PRNGKey(1), x)
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     loss_fn = lambda p, x: jnp.mean(apply(mlp_custom_grad)(p, x) ** 2)
     grad = jax.grad(loss_fn)(variables, x)
-    grad_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, grad['params']))
+    grad_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, grad['params']))
     self.assertEqual(y.shape, (1, 1))
     expected_param_shapes = {
         'hidden_0': {'kernel': (4, 8), 'bias': (8,)},

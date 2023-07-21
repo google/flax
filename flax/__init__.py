@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """Flax API."""
+
+# pyformat: disable
 
 from .configurations import (
     config as config,

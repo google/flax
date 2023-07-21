@@ -18,7 +18,7 @@ repos:
   hooks:
   - id: check-toml
   - id: trailing-whitespace
-    exclude: ^docs/.*\.md$
+    exclude: ^docs/.*\.md$|^dev/.*\.py$
 - repo: https://github.com/kynan/nbstripout
   rev: 0.6.1
   hooks:
@@ -29,3 +29,7 @@ repos:
         --extra-keys,
         "metadata.kernelspec metadata.vscode metadata.colab cell.metadata.executionInfo.user cell.metadata.executionInfo.user_tz cell.metadata.colab",
       ]
+- repo: https://github.com/google/pyink
+  rev: 23.5.0
+  hooks:
+    - id: pyink

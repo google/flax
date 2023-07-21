@@ -33,7 +33,8 @@ import numpy as np
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
-Array = Any    # pylint: disable=invalid-name
+Array = Any  # pylint: disable=invalid-name
+
 
 class _ValueRepresentation(ABC):
   """A class that represents a value in the summary table."""
@@ -41,6 +42,7 @@ class _ValueRepresentation(ABC):
   @abstractmethod
   def render(self) -> str:
     ...
+
 
 @dataclasses.dataclass
 class _ArrayRepresentation(_ValueRepresentation):
@@ -59,17 +61,21 @@ class _ArrayRepresentation(_ValueRepresentation):
     shape_repr = ','.join(str(x) for x in self.shape)
     return f'[dim]{self.dtype}[/dim][{shape_repr}]'
 
+
 @dataclasses.dataclass
 class _PartitionedArrayRepresentation(_ValueRepresentation):
   array_representation: _ArrayRepresentation
   names: meta.LogicalNames
 
   @classmethod
-  def from_partitioned(cls, partitioned: meta.Partitioned) -> '_PartitionedArrayRepresentation':
+  def from_partitioned(
+      cls, partitioned: meta.Partitioned
+  ) -> '_PartitionedArrayRepresentation':
     return cls(_ArrayRepresentation.from_array(partitioned.value), partitioned.names)
 
   def render(self):
     return self.array_representation.render() + f' [dim]P[/dim]{self.names}'
+
 
 @dataclasses.dataclass
 class _ObjectRepresentation(_ValueRepresentation):
@@ -77,6 +83,7 @@ class _ObjectRepresentation(_ValueRepresentation):
 
   def render(self):
     return repr(self.obj)
+
 
 @dataclasses.dataclass
 class Row:
@@ -93,6 +100,7 @@ class Row:
       summarization is done then this dictionary potentially contains parameters
       from submodules depending on the depth of the Module in question.
   """
+
   path: Tuple[str, ...]
   module_type: Type[module_lib.Module]
   method: str
@@ -109,8 +117,12 @@ class Row:
 
   def size_and_bytes(self, collections: Iterable[str]) -> Dict[str, Tuple[int, int]]:
     return {
-        col: _size_and_bytes(self.counted_variables[col])
-        if col in self.counted_variables else (0, 0) for col in collections
+        col: (
+            _size_and_bytes(self.counted_variables[col])
+            if col in self.counted_variables
+            else (0, 0)
+        )
+        for col in collections
     }
 
 
@@ -124,23 +136,27 @@ class Table(List[Row]):
   * `collections`: a list containing the parameter collections (e.g. 'params', 'batch_stats', etc)
   """
 
-  def __init__(self, module: module_lib.Module, collections: Sequence[str],
-               rows: Iterable[Row]):
+  def __init__(
+      self,
+      module: module_lib.Module,
+      collections: Sequence[str],
+      rows: Iterable[Row],
+  ):
     super().__init__(rows)
     self.module = module
     self.collections = collections
 
 
 def tabulate(
-  module: module_lib.Module,
-  rngs: Union[PRNGKey, RNGSequences],
-  depth: Optional[int] = None,
-  show_repeated: bool = False,
-  mutable: CollectionFilter = True,
-  console_kwargs: Optional[Mapping[str, Any]] = None,
-  table_kwargs: Mapping[str, Any] = MappingProxyType({}),
-  column_kwargs: Mapping[str, Any] = MappingProxyType({}),
-  **kwargs,
+    module: module_lib.Module,
+    rngs: Union[PRNGKey, RNGSequences],
+    depth: Optional[int] = None,
+    show_repeated: bool = False,
+    mutable: CollectionFilter = True,
+    console_kwargs: Optional[Mapping[str, Any]] = None,
+    table_kwargs: Mapping[str, Any] = MappingProxyType({}),
+    column_kwargs: Mapping[str, Any] = MappingProxyType({}),
+    **kwargs,
 ) -> Callable[..., str]:
   """Returns a function that creates a summary of the Module represented as a table.
 
@@ -239,6 +255,7 @@ def tabulate(
 
   return _tabulate_fn
 
+
 def _get_module_table(
     module: module_lib.Module,
     depth: Optional[int],
@@ -248,7 +265,6 @@ def _get_module_table(
   but returns the Table representation of the Module."""
 
   def _get_table_fn(*args, **kwargs):
-
     with module_lib._tabulate_context():
 
       def _get_variables():
@@ -286,14 +302,26 @@ def _get_module_table(
 
       visited_paths.add(c.path)
       rows.append(
-        Row(c.path, c.module_type, c.method, inputs, c.outputs, module_vars, counted_vars))
+          Row(
+              c.path,
+              c.module_type,
+              c.method,
+              inputs,
+              c.outputs,
+              module_vars,
+              counted_vars,
+          )
+      )
 
     return Table(module, tuple(collections), rows)
 
   return _get_table_fn
 
+
 def _get_module_variables(
-  path: Tuple[str, ...], variables: FrozenVariableDict, all_paths: Set[Tuple[str, ...]]
+    path: Tuple[str, ...],
+    variables: FrozenVariableDict,
+    all_paths: Set[Tuple[str, ...]],
 ) -> Tuple[MutableVariableDict, Any]:
   """A function that takes a path and variables structure and returns a
   (module_variables, submodule_variables) tuple for that path. _get_module_variables
@@ -305,14 +333,16 @@ def _get_module_variables(
   for key in all_keys:
     submodule_path = path + (key,)
     if submodule_path in all_paths:
-
       for collection in module_variables:
         if key in module_variables[collection]:
           submodule_variables[collection][key] = module_variables[collection].pop(key)
 
   return module_variables, submodule_variables
 
-def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) -> MutableVariableDict:
+
+def _get_path_variables(
+    path: Tuple[str, ...], variables: FrozenVariableDict
+) -> MutableVariableDict:
   """A function that takes a path and a variables structure and returns the variable structure at
   that path."""
   path_variables = {}
@@ -330,6 +360,7 @@ def _get_path_variables(path: Tuple[str, ...], variables: FrozenVariableDict) ->
 
   return path_variables
 
+
 def _process_inputs(args, kwargs) -> Any:
   """A function that normalizes the representation of the ``args`` and ``kwargs``
   for the ``inputs`` column."""
@@ -344,11 +375,12 @@ def _process_inputs(args, kwargs) -> Any:
 
   return input_values
 
+
 def _render_table(
-  table: Table,
-  console_extras: Optional[Mapping[str, Any]],
-  table_kwargs: Mapping[str, Any],
-  column_kwargs: Mapping[str, Any],
+    table: Table,
+    console_extras: Optional[Mapping[str, Any]],
+    table_kwargs: Mapping[str, Any],
+    column_kwargs: Mapping[str, Any],
 ) -> str:
   """A function that renders a Table to a string representation using rich."""
   console_kwargs = {'force_terminal': True, 'force_jupyter': False}
@@ -357,11 +389,11 @@ def _render_table(
 
   non_params_cols = 4
   rich_table = rich.table.Table(
-    show_header=True,
-    show_lines=True,
-    show_footer=True,
-    title=f'{table.module.__class__.__name__} Summary',
-    **table_kwargs,
+      show_header=True,
+      show_lines=True,
+      show_footer=True,
+      title=f'{table.module.__class__.__name__} Summary',
+      **table_kwargs,
   )
 
   rich_table.add_column('path', **column_kwargs)
@@ -382,7 +414,8 @@ def _render_table(
         module_variables = _represent_tree(row.module_variables[collection])
         module_variables = _normalize_structure(module_variables)
         col_repr += _as_yaml_str(
-          _summary_tree_map(_maybe_render, module_variables))
+            _summary_tree_map(_maybe_render, module_variables)
+        )
         if col_repr:
           col_repr += '\n\n'
 
@@ -391,17 +424,27 @@ def _render_table(
 
     no_show_methods = {'__call__', '<lambda>'}
     path_repr = '/'.join(row.path)
-    method_repr = f' [dim]({row.method})[/dim]' if row.method not in no_show_methods else ''
+    method_repr = (
+        f' [dim]({row.method})[/dim]'
+        if row.method not in no_show_methods
+        else ''
+    )
     rich_table.add_row(
         path_repr,
         row.module_type.__name__ + method_repr,
-        _as_yaml_str(_summary_tree_map(_maybe_render, _normalize_structure(row.inputs))),
-        _as_yaml_str(_summary_tree_map(_maybe_render, _normalize_structure(row.outputs))),
-        *collections_size_repr)
+        _as_yaml_str(
+            _summary_tree_map(_maybe_render, _normalize_structure(row.inputs))
+        ),
+        _as_yaml_str(
+            _summary_tree_map(_maybe_render, _normalize_structure(row.outputs))
+        ),
+        *collections_size_repr,
+    )
 
   # add footer with totals
   rich_table.columns[non_params_cols - 1].footer = rich.text.Text.from_markup(
-      'Total', justify='right')
+      'Total', justify='right'
+  )
 
   # get collection totals
   collection_total = {col: (0, 0) for col in table.collections}
@@ -414,12 +457,13 @@ def _render_table(
 
   # add totals to footer
   for i, col in enumerate(table.collections):
-    rich_table.columns[non_params_cols + i].footer = \
-      _size_and_bytes_repr(*collection_total[col])
+    rich_table.columns[non_params_cols + i].footer = _size_and_bytes_repr(
+        *collection_total[col]
+    )
 
   # add final totals to caption
   caption_totals = (0, 0)
-  for (size, num_bytes) in collection_total.values():
+  for size, num_bytes in collection_total.values():
     caption_totals = (
         caption_totals[0] + size,
         caption_totals[1] + num_bytes,
@@ -430,8 +474,10 @@ def _render_table(
 
   return '\n' + _get_rich_repr(rich_table, console_kwargs) + '\n'
 
+
 def _summary_tree_map(f, tree, *rest):
   return jax.tree_util.tree_map(f, tree, *rest, is_leaf=lambda x: x is None)
+
 
 def _size_and_bytes_repr(size: int, num_bytes: int) -> str:
   if not size:
@@ -467,7 +513,7 @@ def _as_yaml_str(value) -> str:
       sort_keys=False,
       explicit_end=False,
   )
-  return file.getvalue().replace('\n...', '').replace('\'', '').strip()
+  return file.getvalue().replace('\n...', '').replace("'", '').strip()
 
 
 def _normalize_structure(obj):
@@ -478,22 +524,32 @@ def _normalize_structure(obj):
   elif isinstance(obj, Mapping):
     return {k: _normalize_structure(v) for k, v in obj.items()}
   elif dataclasses.is_dataclass(obj):
-    return {f.name: _normalize_structure(getattr(obj, f.name)) for f in dataclasses.fields(obj)}
+    return {
+        f.name: _normalize_structure(getattr(obj, f.name))
+        for f in dataclasses.fields(obj)
+    }
   else:
     return obj
 
+
 def _bytes_repr(num_bytes):
-  count, units = ((f'{num_bytes / 1e9 :,.1f}', 'GB') if num_bytes > 1e9 else
-                  (f'{num_bytes / 1e6 :,.1f}', 'MB') if num_bytes > 1e6 else
-                  (f'{num_bytes / 1e3 :,.1f}', 'KB') if num_bytes > 1e3 else
-                  (f'{num_bytes:,}', 'B'))
+  count, units = (
+      (f'{num_bytes / 1e9 :,.1f}', 'GB')
+      if num_bytes > 1e9
+      else (f'{num_bytes / 1e6 :,.1f}', 'MB')
+      if num_bytes > 1e6
+      else (f'{num_bytes / 1e3 :,.1f}', 'KB')
+      if num_bytes > 1e3
+      else (f'{num_bytes:,}', 'B')
+  )
 
   return f'{count} {units}'
 
 
 def _get_value_representation(x: Any) -> _ValueRepresentation:
   if isinstance(x, (int, float, bool, type(None))) or (
-    isinstance(x, np.ndarray) and np.isscalar(x)):
+      isinstance(x, np.ndarray) and np.isscalar(x)
+  ):
     return _ObjectRepresentation(x)
   elif isinstance(x, meta.Partitioned):
     return _PartitionedArrayRepresentation.from_partitioned(x)
@@ -502,12 +558,16 @@ def _get_value_representation(x: Any) -> _ValueRepresentation:
   except:
     return _ObjectRepresentation(x)
 
+
 def _represent_tree(x):
   """Returns a tree with the same structure as `x` but with each leaf replaced
   by a `_ValueRepresentation` object."""
   return jax.tree_util.tree_map(
-    _get_value_representation, x,
-    is_leaf=lambda x: x is None or isinstance(x, meta.Partitioned))
+      _get_value_representation,
+      x,
+      is_leaf=lambda x: x is None or isinstance(x, meta.Partitioned),
+  )
+
 
 def _maybe_render(x):
   return x.render() if hasattr(x, 'render') else repr(x)

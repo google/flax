@@ -86,8 +86,9 @@ class LazyInitError(FlaxError):
 
   def __init__(self, partial_val):
     super().__init__(
-        f'Lazy init encountered a value that could with '
-        f'the given inputs (shape: {partial_val}).')
+        'Lazy init encountered a value that could with '
+        f'the given inputs (shape: {partial_val}).'
+    )
 
 
 #################################################
@@ -164,9 +165,11 @@ class ApplyScopeInvalidVariablesTypeError(FlaxError):
   """
 
   def __init__(self):
-    super().__init__('The first argument passed to an apply function should be '
-                     'a dictionary of collections. Each collection should be a '
-                     'dictionary with string keys.')
+    super().__init__(
+        'The first argument passed to an apply function should be '
+        'a dictionary of collections. Each collection should be a '
+        'dictionary with string keys.'
+    )
 
 
 class ApplyScopeInvalidVariablesStructureError(FlaxError):
@@ -178,10 +181,11 @@ class ApplyScopeInvalidVariablesStructureError(FlaxError):
 
   def __init__(self, variables):
     super().__init__(
-        'Expect the `variables` (first argument) passed to apply() '
-        'to be a dict with the structure {"params": ...}, but got a dict '
-        'with an extra params layer, i.e.  {"params": {"params": ... } }. '
-        f'You should instead pass in your dict\'s ["params"].')
+        f'Expect the `variables` (first argument) passed to apply() '
+        f'to be a dict with the structure {{"params": ...}}, but got a dict '
+        f'with an extra params layer, i.e.  {{"params": {{"params": ... }} }}. '
+        f'You should instead pass in your dict\'s ["params"].'
+    )
 
 
 class ScopeParamNotFoundError(FlaxError):
@@ -208,8 +212,10 @@ class ScopeParamNotFoundError(FlaxError):
   """
 
   def __init__(self, param_name, scope_path):
-    super().__init__(f'Could not find parameter named "{param_name}" in scope '
-                     f'"{scope_path}".')
+    super().__init__(
+        f'Could not find parameter named "{param_name}" in scope '
+        f'"{scope_path}".'
+    )
 
 
 class ScopeCollectionNotFound(FlaxError):
@@ -228,7 +234,8 @@ class ScopeCollectionNotFound(FlaxError):
   def __init__(self, col_name, var_name, scope_path):
     super().__init__(
         f'Tried to access "{var_name}" from collection "{col_name}" in '
-        f'"{scope_path}" but the collection is empty.')
+        f'"{scope_path}" but the collection is empty.'
+    )
 
 
 class ScopeParamShapeError(FlaxError):
@@ -260,9 +267,11 @@ class ScopeParamShapeError(FlaxError):
   """
 
   def __init__(self, param_name, scope_path, value_shape, init_shape):
-    super().__init__(f'Initializer expected to generate shape {init_shape} '
-                     f'but got shape {value_shape} instead for parameter '
-                     f'"{param_name}" in "{scope_path}".')
+    super().__init__(
+        f'Initializer expected to generate shape {init_shape} '
+        f'but got shape {value_shape} instead for parameter '
+        f'"{param_name}" in "{scope_path}".'
+    )
 
 
 class ScopeVariableNotFoundError(FlaxError):
@@ -274,8 +283,10 @@ class ScopeVariableNotFoundError(FlaxError):
   """
 
   def __init__(self, name, col, scope_path):
-    super().__init__(f'No Variable named "{name}" for collection "{col}" '
-                     f'exists in "{scope_path}".')
+    super().__init__(
+        f'No Variable named "{name}" for collection "{col}" '
+        f'exists in "{scope_path}".'
+    )
 
 
 class InvalidFilterError(FlaxError):
@@ -288,10 +299,10 @@ class InvalidFilterError(FlaxError):
 class InvalidScopeError(FlaxError):
   """A temporary Scope is only valid within the context in which it is created::
 
-    with Scope(variables, rngs=rngs).temporary() as root:
-      y = fn(root, *args, **kwargs)
-      # Here root is valid.
-    # Here root is invalid.
+  with Scope(variables, rngs=rngs).temporary() as root:
+    y = fn(root, *args, **kwargs)
+    # Here root is valid.
+  # Here root is invalid.
   """
 
   def __init__(self, scope_name):
@@ -319,8 +330,10 @@ class ModifyScopeVariableError(FlaxError):
   """
 
   def __init__(self, col, variable_name, scope_path):
-    super().__init__(f'Cannot update variable "{variable_name}" in '
-                     f'"{scope_path}" because collection "{col}" is immutable.')
+    super().__init__(
+        f'Cannot update variable "{variable_name}" in '
+        f'"{scope_path}" because collection "{col}" is immutable.'
+    )
 
 
 class JaxTransformError(FlaxError):
@@ -350,8 +363,9 @@ class PartitioningUnspecifiedError(FlaxError):
 
   def __init__(self, target):
     super().__init__(
-        f'Trying to transform a Partitioned variable but "partition_name"'
-        f' is not specified in metadata_params: {target}')
+        'Trying to transform a Partitioned variable but "partition_name"'
+        f' is not specified in metadata_params: {target}'
+    )
 
 
 #################################################
@@ -410,8 +424,10 @@ class NameInUseError(FlaxError):
 
   def __init__(self, key_type, value, module_name):
     # key_type is in {param, variable, submodule}.
-    super().__init__(f'Could not create {key_type} "{value}" in Module '
-                     f'{module_name}: Name in use.')
+    super().__init__(
+        f'Could not create {key_type} "{value}" in Module '
+        f'{module_name}: Name in use.'
+    )
 
 
 class AssignSubModuleError(FlaxError):
@@ -453,8 +469,10 @@ class AssignSubModuleError(FlaxError):
   """
 
   def __init__(self, cls):
-    super().__init__(f'Submodule {cls} must be defined in `setup()` or in a '
-                     'method wrapped in `@compact`')
+    super().__init__(
+        f'Submodule {cls} must be defined in `setup()` or in a '
+        'method wrapped in `@compact`'
+    )
 
 
 class SetAttributeInModuleSetupError(FlaxError):
@@ -525,9 +543,11 @@ class SetAttributeFrozenModuleError(FlaxError):
   """
 
   def __init__(self, module_cls, attr_name, attr_val):
-    super().__init__(f'Can\'t set {attr_name}={attr_val} for Module of type '
-                     f'{module_cls}: Module instance is frozen outside of '
-                     'setup method.')
+    super().__init__(
+        f"Can't set {attr_name}={attr_val} for Module of type "
+        f'{module_cls}: Module instance is frozen outside of '
+        'setup method.'
+    )
 
 
 class MultipleMethodsCompactError(FlaxError):
@@ -558,8 +578,9 @@ class ReservedModuleAttributeError(FlaxError):
   """
 
   def __init__(self, annotations):
-    super().__init__(f'properties `parent` and `name` are reserved: '
-                     f'{annotations}')
+    super().__init__(
+        f'properties `parent` and `name` are reserved: {annotations}'
+    )
 
 
 class ApplyModuleInvalidMethodError(FlaxError):
@@ -574,8 +595,9 @@ class ApplyModuleInvalidMethodError(FlaxError):
   """
 
   def __init__(self, method):
-    super().__init__(f'Cannot call apply(): {method} is not a valid function '
-                     'for apply().')
+    super().__init__(
+        f'Cannot call apply(): {method} is not a valid function for apply().'
+    )
 
 
 class CallCompactUnboundModuleError(FlaxError):
@@ -601,7 +623,7 @@ class CallCompactUnboundModuleError(FlaxError):
   """
 
   def __init__(self):
-    super().__init__('Can\'t call compact methods on unbound modules')
+    super().__init__("Can't call compact methods on unbound modules")
 
 
 class CallSetupUnboundModuleError(FlaxError):
@@ -634,7 +656,8 @@ class CallSetupUnboundModuleError(FlaxError):
   """
 
   def __init__(self):
-    super().__init__('Can\'t call compact methods on unbound modules')
+    super().__init__("Can't call compact methods on unbound modules")
+
 
 class CallUnbindOnUnboundModuleError(FlaxError):
   """This error occurs when you are trying to call ``.unbind()`` on an unbound
@@ -658,8 +681,10 @@ class CallUnbindOnUnboundModuleError(FlaxError):
     ... # do something with bound_module
     module = bound_module.unbind() # <-- OK!
   """
+
   def __init__(self):
-    super().__init__('Can\'t call `unbind()` on unbound modules')
+    super().__init__("Can't call `unbind()` on unbound modules")
+
 
 class InvalidInstanceModuleError(FlaxError):
   """This error occurs when you are trying to call `.init()`, `.init_with_output()`, `.apply() or `.bind()`
@@ -708,7 +733,8 @@ class IncorrectPostInitOverrideError(FlaxError):
 
   def __init__(self):
     super().__init__(
-        'Overrode `.__post_init__()` without calling `super().__post_init__()`')
+        'Overrode `.__post_init__()` without calling `super().__post_init__()`'
+    )
 
 
 class DescriptorAttributeError(FlaxError):
@@ -763,7 +789,8 @@ class MPACheckpointingRequiredError(FlaxError):
     super().__init__(
         f'Checkpoint failed at step: "{step}" and path: "{path}": Target '
         'contains a multiprocess array should be saved/restored with a '
-        'GlobalAsyncCheckpointManager.')
+        'GlobalAsyncCheckpointManager.'
+    )
 
 
 class MPARestoreTargetRequiredError(FlaxError):
@@ -781,7 +808,8 @@ class MPARestoreTargetRequiredError(FlaxError):
         f'Restore checkpoint failed at step: "{step}" and path: "{path}": '
         'Checkpoints containing a multiprocess array need to be restored with '
         'a target with pre-created arrays. If you cannot provide a full valid '
-        'target, consider ``allow_partial_mpa_restoration=True``. ')
+        'target, consider ``allow_partial_mpa_restoration=True``. '
+    )
     if key:
       error_msg += f'This error fired when trying to restore array at {key}.'
     super().__init__(error_msg)
@@ -797,7 +825,8 @@ class MPARestoreDataCorruptedError(FlaxError):
     super().__init__(
         f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
         f' "{path}": No "commit_success.txt" found on this "_gda" directory. '
-        'Was its save halted before completion?')
+        'Was its save halted before completion?'
+    )
 
 
 #################################################
@@ -810,7 +839,8 @@ class TransformedMethodReturnValueError(FlaxError):
 
   def __init__(self, name):
     super().__init__(
-        f'Transformed module method {name} cannot return Modules or Variables.')
+        f'Transformed module method {name} cannot return Modules or Variables.'
+    )
 
 
 class TransformTargetError(FlaxError):
@@ -842,7 +872,8 @@ class TransformTargetError(FlaxError):
     super().__init__(
         'Linen transformations must be applied to Modules classes or'
         ' functions taking a Module instance as the first argument.'
-        f' The provided target is not a Module class or callable: {target}')
+        f' The provided target is not a Module class or callable: {target}'
+    )
 
 
 #################################################

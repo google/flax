@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from flax.core import Scope, Array, init, unfreeze, lift, nn
 
 from absl.testing import absltest
@@ -21,10 +20,9 @@ import jax
 from jax import random, numpy as jnp
 
 
-def mlp_scan(scope: Scope, xs: Array,
-             share_params: bool = False):
-
+def mlp_scan(scope: Scope, xs: Array, share_params: bool = False):
   scope.variable('counter', 'i', jnp.zeros, ())
+
   def body_fn(scope, c, x):
     counter = scope.variable('counter', 'i', jnp.zeros, ())
     counter.value += 1
@@ -36,13 +34,15 @@ def mlp_scan(scope: Scope, xs: Array,
         body_fn,
         variable_carry='counter',
         variable_broadcast='params',
-        split_rngs={'params': False})(scope, (), xs)
+        split_rngs={'params': False},
+    )(scope, (), xs)
   else:
     _, ys = lift.scan(
         body_fn,
         variable_carry='counter',
         variable_axes={'params': 0},
-        split_rngs={'params': True})(scope, (), xs)
+        split_rngs={'params': True},
+    )(scope, (), xs)
 
   # output layer
   return ys
@@ -56,11 +56,15 @@ class ScanTest(absltest.TestCase):
     y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=False)
 
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(variables['counter']['i'], 2)
-    self.assertEqual(param_shapes, {
-      'dense_0': {'kernel': (2, 4, 1), 'bias': (2, 1)},
-    })
+    self.assertEqual(
+        param_shapes,
+        {
+            'dense_0': {'kernel': (2, 4, 1), 'bias': (2, 1)},
+        },
+    )
 
     self.assertNotEqual(y[0], y[1])
     k1, k2 = variables['params']['dense_0']['kernel']
@@ -72,11 +76,15 @@ class ScanTest(absltest.TestCase):
     y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=True)
 
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(variables['counter']['i'], 2)
-    self.assertEqual(param_shapes, {
-      'dense_0': {'kernel': (4, 1), 'bias': (1,)},
-    })
+    self.assertEqual(
+        param_shapes,
+        {
+            'dense_0': {'kernel': (4, 1), 'bias': (1,)},
+        },
+    )
 
     self.assertEqual(y[0], y[1])
 

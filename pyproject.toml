@@ -55,6 +55,8 @@ testing = [
     "tensorflow",
     "torch",
     "nbstripout",
+    "black[jupyter]==23.7.0",
+    "pyink==23.5.0",
 ]
 
 [project.urls]
@@ -144,3 +146,7 @@ exclude_lines = [
     "@abc.abstractmethod",
     "raise NotImplementedError",
 ]
+
+[tool.pyink]
+pyink-indentation = 2
+pyink-use-majority-quotes = true

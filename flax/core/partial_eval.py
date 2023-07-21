@@ -48,6 +48,7 @@ def lazy_init(fn):
     A new function that accepts a mix of concrete values and
     ``jax.ShapeDtypeStruct`` instances.
   """
+
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
     # TODO(mattjj,jheek): use a public JAX API

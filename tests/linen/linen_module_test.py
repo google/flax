@@ -22,26 +22,37 @@ import gc
 import inspect
 import operator
 import sys
-from typing import (Any, Callable, Generic, Mapping, NamedTuple, Sequence,
-                    Tuple, TypeVar, get_type_hints, Optional)
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    get_type_hints,
+)
+from unittest.mock import patch
 
 from absl.testing import absltest
 from flax import config
 from flax import errors
 from flax import linen as nn
 from flax import struct
-from flax.core import Scope, freeze, FrozenDict, tracers
-from flax.linen import compact
 from flax.configurations import temp_flip_flag
+from flax.core import FrozenDict, Scope, freeze, tracers
+from flax.linen import compact
 import jax
 from jax import random
 from jax.nn import initializers
 import jax.numpy as jnp
 import numpy as np
-from unittest.mock import patch
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
+
 
 def tree_equals(x, y):
   return jax.tree_util.tree_all(jax.tree_util.tree_map(operator.eq, x, y))
@@ -70,8 +81,9 @@ class Dense(nn.Module):
 
   @compact
   def __call__(self, x):
-    kernel = self.param('kernel', initializers.lecun_normal(),
-                        (x.shape[-1], self.features))
+    kernel = self.param(
+        'kernel', initializers.lecun_normal(), (x.shape[-1], self.features)
+    )
     y = jnp.dot(x, kernel)
     return y
 
@@ -80,31 +92,39 @@ class ModuleTest(absltest.TestCase):
 
   def test_init_module(self):
     rngkey = jax.random.PRNGKey(0)
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = DummyModule(parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModule(parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
-    np.testing.assert_allclose(y, jnp.array([2.]))
-    self.assertEqual(params, {'bias': jnp.array([1.])})
+    np.testing.assert_allclose(y, jnp.array([2.0]))
+    self.assertEqual(params, {'bias': jnp.array([1.0])})
 
   def test_lazy_init(self):
 
     class Foo(nn.Module):
+
       @compact
       def __call__(self, x):
-        k = self.param("kernel", nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1]))
+        k = self.param(
+            'kernel', nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1])
+        )
         return x @ k
+
     # provide a massive input message which would OOM if any compute ops were actually executed
-    variables = Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((1024 * 1024 * 1024, 128), jnp.float32))
-    self.assertEqual(variables["params"]["kernel"].shape, (128, 128))
+    variables = Foo().lazy_init(
+        random.PRNGKey(0),
+        jax.ShapeDtypeStruct((1024 * 1024 * 1024, 128), jnp.float32),
+    )
+    self.assertEqual(variables['params']['kernel'].shape, (128, 128))
 
   def test_lazy_init_fails_on_data_dependence(self):
     class Foo(nn.Module):
+
       @compact
       def __call__(self, x):
-        k = self.param("kernel", lambda _: x)
+        k = self.param('kernel', lambda _: x)
         return x * k
 
     with self.assertRaises(errors.LazyInitError):
@@ -141,14 +161,10 @@ class ModuleTest(absltest.TestCase):
     y2 = MLP(parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_util.tree_map(jnp.shape, params)
-    self.assertEqual(param_shape, {
-        'Dense_0': {
-            'kernel': (10, 3)
-        },
-        'Dense_1': {
-            'kernel': (3, 3)
-        }
-    })
+    self.assertEqual(
+        param_shape,
+        {'Dense_0': {'kernel': (10, 3)}, 'Dense_1': {'kernel': (3, 3)}},
+    )
 
   def test_nested_module_reuse(self):
     rngkey = jax.random.PRNGKey(0)
@@ -180,16 +196,15 @@ class ModuleTest(absltest.TestCase):
     y2 = Top(parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_util.tree_map(jnp.shape, params)
-    self.assertEqual(param_shape, {
-        'MLP_0': {
-            'Dense_0': {
-                'kernel': (10, 3)
-            },
-            'Dense_1': {
-                'kernel': (3, 3)
+    self.assertEqual(
+        param_shape,
+        {
+            'MLP_0': {
+                'Dense_0': {'kernel': (10, 3)},
+                'Dense_1': {'kernel': (3, 3)},
             }
-        }
-    })
+        },
+    )
 
   def test_setup_dict_assignment(self):
     rngkey = jax.random.PRNGKey(0)
@@ -215,17 +230,12 @@ class ModuleTest(absltest.TestCase):
     y2 = MLP(parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
     param_shape = jax.tree_util.tree_map(jnp.shape, params)
-    self.assertEqual(param_shape, {
-        'lyrs1_a': {
-            'kernel': (10, 3)
-        },
-        'lyrs1_b': {
-            'kernel': (3, 3)
-        }
-    })
+    self.assertEqual(
+        param_shape,
+        {'lyrs1_a': {'kernel': (10, 3)}, 'lyrs1_b': {'kernel': (3, 3)}},
+    )
 
   def test_setup_dict_nonstring_keys(self):
-
     class Foo(nn.Module):
 
       def setup(self):
@@ -239,14 +249,11 @@ class ModuleTest(absltest.TestCase):
     x = jnp.ones(shape=(1, 3))
     params = foo.init(random.PRNGKey(0), x)['params']
     param_shape = jax.tree_util.tree_map(jnp.shape, params)
-    self.assertEqual(param_shape,
-                     {'a_(1, 2)': {
-                         'kernel': (3, 2),
-                         'bias': (2,)
-                     }})
+    self.assertEqual(
+        param_shape, {'a_(1, 2)': {'kernel': (3, 2), 'bias': (2,)}}
+    )
 
   def test_setup_cloning(self):
-
     class MLP(nn.Module):
 
       def setup(self):
@@ -300,14 +307,14 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = DummyModuleWithoutCompact(x.shape, parent=scope)(x)
     params = scope.variables()['params']
     y2 = DummyModuleWithoutCompact(x.shape, parent=scope.rewound())(x)
     np.testing.assert_allclose(y, y2)
-    np.testing.assert_allclose(y, jnp.array([2.]))
-    self.assertEqual(params, {'bias': jnp.array([1.])})
+    np.testing.assert_allclose(y, jnp.array([2.0]))
+    self.assertEqual(params, {'bias': jnp.array([1.0])})
 
   def test_init_outside_setup_without_compact(self):
     rngkey = jax.random.PRNGKey(0)
@@ -318,7 +325,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       unused_y = DummyModuleWithoutCompact(parent=scope)(x)
@@ -337,7 +344,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, x.shape)
         return x + bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     with self.assertRaisesRegex(ValueError, 'must be initialized.*setup'):
       unused_y = Dummy(parent=scope).foo(x)
@@ -356,7 +363,7 @@ class ModuleTest(absltest.TestCase):
         unused_bias = self.param('bias', initializers.ones, x.shape)
         return x + self.bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     msg = 'Could not create param "bias" in Module Dummy: Name in use'
     with self.assertRaisesRegex(errors.NameInUseError, msg):
@@ -374,7 +381,7 @@ class ModuleTest(absltest.TestCase):
         bias = self.param('bias', initializers.ones, self.xshape)
         return x + bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     msg = 'Could not create param "bias" in Module Dummy: Name in use'
     with self.assertRaisesRegex(errors.NameInUseError, msg):
@@ -393,7 +400,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     msg = 'Could not create param "bias" in Module Dummy: Name in use'
     with self.assertRaisesRegex(errors.NameInUseError, msg):
@@ -414,10 +421,10 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.biases[0]
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = Dummy(x.shape, parent=scope)(x)
-    self.assertEqual(y, jnp.array([2.]))
+    self.assertEqual(y, jnp.array([2.0]))
 
   def test_setattr_name_var_disagreement_allowed_in_dicts(self):
     rngkey = jax.random.PRNGKey(0)
@@ -439,10 +446,10 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.biases['0']
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
     y = Dummy(x.shape, parent=scope)(x)
-    self.assertEqual(y, jnp.array([2.]))
+    self.assertEqual(y, jnp.array([2.0]))
 
   def test_submodule_var_collision_with_scope(self):
     rngkey = jax.random.PRNGKey(0)
@@ -457,7 +464,7 @@ class ModuleTest(absltest.TestCase):
       def __call__(self, x):
         return x + self.bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
 
     with self.assertRaises(errors.NameInUseError):
@@ -477,7 +484,7 @@ class ModuleTest(absltest.TestCase):
         unused_bias = DummyModule(name='bias')
         return x + self.bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
 
     msg = 'Could not create submodule "bias" in Module Dummy: Name in use'
@@ -498,7 +505,7 @@ class ModuleTest(absltest.TestCase):
         unused_bias = self.param('bias', initializers.ones, self.xshape)
         return x + self.bias
 
-    x = jnp.array([1.])
+    x = jnp.array([1.0])
     scope = Scope({}, {'params': rngkey}, mutable=['params'])
 
     msg = 'Could not create param "bias" in Module Dummy: Name in use'
@@ -506,7 +513,6 @@ class ModuleTest(absltest.TestCase):
       unused_y = Dummy(x.shape, parent=scope)(x)
 
   def test_attr_empty_container(self):
-
     class Foo(nn.Module):
       bar: Mapping[str, Any]
 
@@ -531,7 +537,6 @@ class ModuleTest(absltest.TestCase):
           pass
 
   def test_only_one_compact_method_subclass(self):
-
     class Dummy(nn.Module):
 
       @nn.compact
@@ -552,7 +557,6 @@ class ModuleTest(absltest.TestCase):
     subdummy()
 
   def test_forgotten_compact_annotation(self):
-
     class Bar(nn.Module):
 
       # user forgot to add @compact
@@ -568,13 +572,14 @@ class ModuleTest(absltest.TestCase):
         x = bar(x)
         return x
 
-    msg = (r'Submodule Dense must be defined in `setup\(\)` or in a method '
-           'wrapped in `@compact`')
+    msg = (
+        r'Submodule Dense must be defined in `setup\(\)` or in a method '
+        'wrapped in `@compact`'
+    )
     with self.assertRaisesRegex(errors.AssignSubModuleError, msg):
       Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
 
   def test_forgotten_compact_annotation_with_explicit_parent(self):
-
     class Bar(nn.Module):
 
       def __call__(self, x):
@@ -589,13 +594,14 @@ class ModuleTest(absltest.TestCase):
         x = bar(x)
         return x
 
-    msg = (r'Submodule Dense must be defined in `setup\(\)` or in a method '
-           'wrapped in `@compact`')
+    msg = (
+        r'Submodule Dense must be defined in `setup\(\)` or in a method '
+        'wrapped in `@compact`'
+    )
     with self.assertRaisesRegex(errors.AssignSubModuleError, msg):
       Foo().init(random.PRNGKey(0), jnp.ones((1, 3)))
 
   def test_numpy_array_shape_class_args(self):
-
     class MLP(nn.Module):
       widths: Sequence[int]
 
@@ -610,7 +616,6 @@ class ModuleTest(absltest.TestCase):
     _ = test.apply(params, jnp.ones((3, 3)))
 
   def test_get_local_methods(self):
-
     class Base:
 
       @staticmethod
@@ -643,11 +648,11 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(nn.module._get_local_method_names(Base), ('bleep',))
     self.assertEqual(nn.module._get_local_method_names(Derived1), ('bloop',))
     self.assertEqual(
-        nn.module._get_local_method_names(Derived1, exclude=('bloop',)), ())
+        nn.module._get_local_method_names(Derived1, exclude=('bloop',)), ()
+    )
     self.assertEqual(nn.module._get_local_method_names(Derived2), ())
 
   def test_inheritance_dataclass_attribs(self):
-
     class Test(nn.Module):
       bar: int
 
@@ -697,38 +702,42 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(hasattr(test4, 'name'))
     self.assertTrue(hasattr(test4, 'parent'))
     self.assertEqual(
-        list(Test.__dataclass_fields__.keys()), ['bar', 'parent', 'name'])
+        list(Test.__dataclass_fields__.keys()), ['bar', 'parent', 'name']
+    )
     self.assertEqual(
         list(Test2.__dataclass_fields__.keys()),
-        ['bar', 'baz', 'parent', 'name'])
+        ['bar', 'baz', 'parent', 'name'],
+    )
     self.assertEqual(
         list(Test3.__dataclass_fields__.keys()),
-        ['bar', 'baz', 'parent', 'name'])
+        ['bar', 'baz', 'parent', 'name'],
+    )
     self.assertEqual(
         list(Test4.__dataclass_fields__.keys()),
-        ['bar', 'baz', 'parent', 'name'])
+        ['bar', 'baz', 'parent', 'name'],
+    )
 
   def test_get_suffix_value_pairs(self):
     for x in [(), [], {}, None, 0, set()]:
       self.assertEqual(nn.module._get_suffix_value_pairs(x), [('', x)])
     self.assertEqual(
-        nn.module._get_suffix_value_pairs({
-            'a': 1,
-            'b': 2
-        }), [('_a', 1), ('_b', 2)])
+        nn.module._get_suffix_value_pairs({'a': 1, 'b': 2}),
+        [('_a', 1), ('_b', 2)],
+    )
     self.assertEqual(
-        nn.module._get_suffix_value_pairs([1, 2, 3]), [('_0', 1), ('_1', 2),
-                                                       ('_2', 3)])
+        nn.module._get_suffix_value_pairs([1, 2, 3]),
+        [('_0', 1), ('_1', 2), ('_2', 3)],
+    )
     x1 = [nn.Dense(10), nn.relu, nn.Dense(10)]
     y1 = nn.module._get_suffix_value_pairs(x1)
     self.assertEqual(y1, [('_0', x1[0]), ('_1', x1[1]), ('_2', x1[2])])
     x2 = {'a': 1, 'b': {'c': nn.Dense(10), 'd': nn.relu}}
     y2 = nn.module._get_suffix_value_pairs(x2)
-    self.assertEqual(y2, [('_a', 1), ('_b_c', x2['b']['c']),
-                          ('_b_d', x2['b']['d'])])
+    self.assertEqual(
+        y2, [('_a', 1), ('_b_c', x2['b']['c']), ('_b_d', x2['b']['d'])]
+    )
 
   def test_mixed_list_assignment_in_setup(self):
-
     class Test(nn.Module):
 
       def setup(self):
@@ -754,7 +763,6 @@ class ModuleTest(absltest.TestCase):
     self.assertNotEqual(hash(module_a), hash(module_b))
 
   def test_module_custom_hash(self):
-
     class Test(nn.Module):
       x: int = 3
       y: int = 5
@@ -770,12 +778,11 @@ class ModuleTest(absltest.TestCase):
 
   def test_module_with_scope_is_not_hashable(self):
     module_a = nn.Dense(10, parent=Scope({}))
-    msg = 'Can\'t call __hash__ on modules that hold variables.'
+    msg = "Can't call __hash__ on modules that hold variables."
     with self.assertRaisesWithLiteralMatch(TypeError, msg):
       hash(module_a)
 
   def test_module_trace(self):
-
     class MLP(nn.Module):
       act: Callable = nn.relu
       sizes: Sequence[int] = (3, 2)
@@ -823,7 +830,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(trace, expected_trace)
 
   def test_module_apply_method(self):
-
     class Foo(nn.Module):
       not_callable: int = 1
 
@@ -855,7 +861,7 @@ class ModuleTest(absltest.TestCase):
     Foo().init({}, method='test')
 
     # non-existent attribute names will yield AttributeError.
-    with self.assertRaisesRegex(AttributeError, "allowed_apply_fn"):
+    with self.assertRaisesRegex(AttributeError, 'allowed_apply_fn'):
       Foo().apply({}, method='allowed_apply_fn')
       # test same for init.
       Foo().init({}, method='allowed_apply_fn')
@@ -873,7 +879,6 @@ class ModuleTest(absltest.TestCase):
       dense(jnp.ones((1,)))
 
   def test_call_unbound_has_variable(self):
-
     class EmptyModule(nn.Module):
 
       def foo(self):
@@ -884,7 +889,6 @@ class ModuleTest(absltest.TestCase):
       empty.foo()
 
   def test_call_unbound_make_rng(self):
-
     class EmptyModule(nn.Module):
 
       def foo(self):
@@ -895,7 +899,6 @@ class ModuleTest(absltest.TestCase):
       empty.foo()
 
   def test_call_unbound_variables(self):
-
     class EmptyModule(nn.Module):
 
       def foo(self):
@@ -906,7 +909,6 @@ class ModuleTest(absltest.TestCase):
       empty.foo()
 
   def test_call_unbound_noncompact_module_methods(self):
-
     class EmptyModule(nn.Module):
       foo: int = 3
 
@@ -919,7 +921,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(empty.bar(), 3)
 
   def test_call_unbound_noncompact_module_methods_depending_on_setup(self):
-
     class EmptyModule(nn.Module):
 
       def setup(self):
@@ -934,7 +935,6 @@ class ModuleTest(absltest.TestCase):
       empty.bar()
 
   def test_module_with_attrs(self):
-
     class Foo(nn.Module):
       bar: nn.Dense = dataclasses.field(init=False)
 
@@ -950,7 +950,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(variables['params']['bar']['kernel'].shape, (2, 3))
 
   def test_noncompact_module_frozen(self):
-
     class Foo(nn.Module):
 
       def setup(self):
@@ -959,26 +958,28 @@ class ModuleTest(absltest.TestCase):
       def __call__(self):
         self.i = 2  # This is not allowed.
 
-    msg = ('Can\'t set i=2 for Module of type Foo: Module instance is frozen '
-           'outside of setup method.')
+    msg = (
+        "Can't set i=2 for Module of type Foo: Module instance is frozen "
+        'outside of setup method.'
+    )
     with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
       Foo().init(random.PRNGKey(0))
 
   def test_compact_module_frozen(self):
-
     class Foo(nn.Module):
 
       @nn.compact
       def __call__(self):
         self.i = 2
 
-    msg = ('Can\'t set i=2 for Module of type Foo: Module instance is frozen '
-           'outside of setup method.')
+    msg = (
+        "Can't set i=2 for Module of type Foo: Module instance is frozen "
+        'outside of setup method.'
+    )
     with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
       Foo().init(random.PRNGKey(0))
 
   def test_submodule_frozen(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -986,13 +987,14 @@ class ModuleTest(absltest.TestCase):
         dense = nn.Dense(10)
         dense.features = 20  # <--- This is not allowed
 
-    msg = ('Can\'t set features=20 for Module of type Dense: Module instance '
-           'is frozen outside of setup method.')
+    msg = (
+        "Can't set features=20 for Module of type Dense: Module instance "
+        'is frozen outside of setup method.'
+    )
     with self.assertRaisesRegex(errors.SetAttributeFrozenModuleError, msg):
       Foo().init(random.PRNGKey(0))
 
   def test_module_call_not_implemented(self):
-
     class Foo(nn.Module):
       pass
 
@@ -1001,7 +1003,6 @@ class ModuleTest(absltest.TestCase):
       Foo().init(random.PRNGKey(0))
 
   def test_is_mutable_collection(self):
-
     class EmptyModule(nn.Module):
 
       def __call__(self):
@@ -1012,7 +1013,6 @@ class ModuleTest(absltest.TestCase):
     self.assertFalse(empty.apply({}, mutable=False))
 
   def test_module_lazy_getattr_setup(self):
-
     class A(nn.Module):
 
       def setup(self):
@@ -1038,7 +1038,6 @@ class ModuleTest(absltest.TestCase):
     np.testing.assert_array_equal(y1, y2)
 
   def test_module_lazy_dir_setup(self):
-
     class A(nn.Module):
 
       def setup(self):
@@ -1063,7 +1062,6 @@ class ModuleTest(absltest.TestCase):
     _ = B().init_with_output(key, x)
 
   def test_module_unbound_getattr(self):
-
     class A(nn.Module):
 
       def setup(self):
@@ -1099,7 +1097,6 @@ class ModuleTest(absltest.TestCase):
     self.assertFalse(setup_called)
 
   def test_module_pass_as_attr(self):
-
     class A(nn.Module):
 
       def setup(self):
@@ -1153,7 +1150,6 @@ class ModuleTest(absltest.TestCase):
     self.assertIsNone(a.name)
 
   def test_toplevel_submodule_adoption(self):
-
     class Encoder(nn.Module):
       n_layers: int
       ch: int
@@ -1208,7 +1204,6 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
   def test_toplevel_submodule_adoption_pytree(self):
-
     class A(nn.Module):
 
       @nn.compact
@@ -1248,7 +1243,11 @@ class ModuleTest(absltest.TestCase):
         jax.tree_util.tree_all(
             jax.tree_util.tree_map(
                 lambda x, y: np.testing.assert_allclose(x, y, atol=1e-7),
-                counters, ref_counters)))
+                counters,
+                ref_counters,
+            )
+        )
+    )
 
   def test_toplevel_submodule_adoption_sharing(self):
     dense = functools.partial(nn.Dense, use_bias=False)
@@ -1355,7 +1354,6 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(tree_equals(var_shapes, ref_var_shapes))
 
   def test_toplevel_submodule_pytree_adoption_sharing(self):
-
     class A(nn.Module):
 
       @nn.compact
@@ -1391,7 +1389,6 @@ class ModuleTest(absltest.TestCase):
     self.assertTrue(tree_equals(counters, ref_counters))
 
   def test_inner_class_def(self):
-
     class X(nn.Module):
 
       class Hyper(struct.PyTreeNode):
@@ -1406,7 +1403,6 @@ class ModuleTest(absltest.TestCase):
     self.assertIsInstance(X.Hyper(a=1), X.Hyper)
 
   def test_sow(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -1424,16 +1420,17 @@ class ModuleTest(absltest.TestCase):
 
     _, state = Foo().apply({}, 1, mutable=['intermediates'])
     self.assertEqual(state, {'intermediates': {'h': (1, 2)}})
-    _, state = Foo().apply({},
-                           1,
-                           init_fn=lambda: 0,
-                           reduce_fn=lambda a, b: a + b,
-                           mutable=['intermediates'])
+    _, state = Foo().apply(
+        {},
+        1,
+        init_fn=lambda: 0,
+        reduce_fn=lambda a, b: a + b,
+        mutable=['intermediates'],
+    )
     self.assertEqual(state, {'intermediates': {'h': 3}})
     self.assertEqual(Foo().apply({}, 1), 3)
 
   def test_capture_intermediates(self):
-
     class Bar(nn.Module):
 
       def test(self, x):
@@ -1452,7 +1449,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(state, {'intermediates': {'Bar_0': {'test': (2,)}}})
 
   def test_perturb(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -1471,15 +1467,18 @@ class ModuleTest(absltest.TestCase):
     x = jax.random.uniform(jax.random.PRNGKey(1), shape=(10,))
     y = jax.random.uniform(jax.random.PRNGKey(2), shape=(10,))
     variables = Foo().init(jax.random.PRNGKey(0), x)
-    intm_grads = jax.grad(
-        loss, argnums=1)(variables['params'], variables['perturbations'], x, y)
+    intm_grads = jax.grad(loss, argnums=1)(
+        variables['params'], variables['perturbations'], x, y
+    )
     # activation * 4 so reverse gradient also * 4
     self.assertTrue(
-        all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply']))
+        all(intm_grads['after_multiply'] * 4 == intm_grads['before_multiply'])
+    )
 
   def test_perturb_noop(self):
 
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         x = nn.Dense(10)(x)
@@ -1505,7 +1504,6 @@ class ModuleTest(absltest.TestCase):
     module.apply({'params': params, 'perturbations': perturbations}, x)
 
   def test_functional_apply(self):
-
     class Foo(nn.Module):
 
       def setup(self):
@@ -1525,7 +1523,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y1, y2)
 
   def test_bind(self):
-
     class Foo(nn.Module):
 
       def setup(self):
@@ -1544,7 +1541,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y1, y2)
 
   def test_bind_stateful(self):
-
     class Foo(nn.Module):
 
       def setup(self):
@@ -1569,12 +1565,14 @@ class ModuleTest(absltest.TestCase):
     bs_1 = new_state['batch_stats']
     bs_2 = foo_b.variables['batch_stats']
     for x, y in zip(
-        jax.tree_util.tree_leaves(bs_1), jax.tree_util.tree_leaves(bs_2)):
+        jax.tree_util.tree_leaves(bs_1), jax.tree_util.tree_leaves(bs_2)
+    ):
       np.testing.assert_allclose(x, y)
 
   def test_unbind(self):
 
     class Foo(nn.Module):
+
       def setup(self):
         self.encoder = nn.Dense(4)
         self.decoder = nn.Dense(2)
@@ -1599,7 +1597,6 @@ class ModuleTest(absltest.TestCase):
     np.testing.assert_equal(variables['params']['decoder'], decoder_vars['params'])
 
   def test_passing_mutable_variables(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -1612,7 +1609,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y.shape, (2,))
 
   def test_super_compact(self):
-
     class Foo(nn.Module):
 
       @nn.compact
@@ -1632,21 +1628,16 @@ class ModuleTest(absltest.TestCase):
     variables = Bar().init(k, x)
     shapes = jax.tree_util.tree_map(np.shape, variables['params'])
     self.assertEqual(
-        shapes, {
-            'Dense_0': {
-                'kernel': (7, 4),
-                'bias': (4,)
-            },
-            'Dense_1': {
-                'kernel': (4, 3),
-                'bias': (3,)
-            },
-        })
+        shapes,
+        {
+            'Dense_0': {'kernel': (7, 4), 'bias': (4,)},
+            'Dense_1': {'kernel': (4, 3), 'bias': (3,)},
+        },
+    )
     y = Bar().apply(variables, x)
     self.assertEqual(y.shape, (4, 3))
 
   def test_super_setup(self):
-
     class Foo(nn.Module):
 
       def setup(self):
@@ -1670,7 +1661,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(y.shape, (4, 3))
 
   def test_freeze_attr(self):
-
     class Foo(NamedTuple):
       a: int
       b: int
@@ -1678,8 +1668,9 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(nn.module._freeze_attr([1, 2]), (1, 2))
     xs = nn.module._freeze_attr(Foo(1, 2))
     self.assertEqual(xs, (1, 2))
-    self.assertEqual(type(xs),
-                     Foo)  # equality test for NamedTuple doesn't check class!
+    self.assertEqual(
+        type(xs), Foo
+    )  # equality test for NamedTuple doesn't check class!
 
   def test_generic_multiple_inheritance(self):
     T = TypeVar('T')
@@ -1700,12 +1691,12 @@ class ModuleTest(absltest.TestCase):
     model = nn.Dense(1, use_bias=False)
     jit_model = nn.jit(nn.Dense)(1, use_bias=False)
     param = model.init(random.PRNGKey(0), np.ones((1, 1)))['params']['kernel']
-    param_2 = jit_model.init(random.PRNGKey(0), np.ones(
-        (1, 1)))['params']['kernel']
+    param_2 = jit_model.init(random.PRNGKey(0), np.ones((1, 1)))['params'][
+        'kernel'
+    ]
     self.assertEqual(param, param_2)
 
   def test_rng_reuse_after_rewind(self):
-
     class C(nn.Module):
 
       @nn.compact
@@ -1736,7 +1727,6 @@ class ModuleTest(absltest.TestCase):
     self.assertFalse(rng_equals)
 
   def test_module_get_put_has_variable(self):
-
     class A(nn.Module):
 
       @nn.compact
@@ -1755,7 +1745,13 @@ class ModuleTest(absltest.TestCase):
     class C(nn.Module):
 
       def setup(self):
-        self.put_variable('test_col', 'a', jnp.ones(2,))
+        self.put_variable(
+            'test_col',
+            'a',
+            jnp.ones(
+                2,
+            ),
+        )
         assert self.has_variable('test_col', 'a')
 
       def __call__(self):
@@ -1796,7 +1792,6 @@ class ModuleTest(absltest.TestCase):
     D().init(rngs)
 
   def test_modifying_attribs_in_post_init(self):
-
     class Foo(nn.Module):
       love: int = 99
 
@@ -1819,7 +1814,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(bar.love, 101)
 
   def test_has_rng(self):
-
     class Foo(nn.Module):
 
       def __call__(self):
@@ -1833,7 +1827,6 @@ class ModuleTest(absltest.TestCase):
     self.assertFalse(foo.apply({}, rngs={'baz': k}))
 
   def test_is_initializing(self):
-
     class Foo(nn.Module):
 
       def __call__(self):
@@ -1845,7 +1838,6 @@ class ModuleTest(absltest.TestCase):
     self.assertFalse(foo.apply({}))
 
   def test_throws_invalid_instance_module_error(self):
-
     class B(nn.Module):
 
       @nn.compact
@@ -1860,14 +1852,15 @@ class ModuleTest(absltest.TestCase):
     with self.assertRaises(errors.InvalidInstanceModuleError):
       B.init_with_output(k, x)
     with self.assertRaises(errors.InvalidInstanceModuleError):
-      B.apply({},
-              x)  # similar issue w. apply called on class instead of instance.
+      B.apply(
+          {}, x
+      )  # similar issue w. apply called on class instead of instance.
     with self.assertRaises(errors.InvalidInstanceModuleError):
-      B.bind({},
-             x)  # similar issue w. apply called on class instead of instance.
+      B.bind(
+          {}, x
+      )  # similar issue w. apply called on class instead of instance.
 
   def test_throws_incorrect_post_init_override_error(self):
-
     class A(nn.Module):
       x: float
 
@@ -1892,7 +1885,6 @@ class ModuleTest(absltest.TestCase):
     self.assertIs(unspecified_parent, copy.deepcopy(unspecified_parent))
 
   def test_type_hints(self):
-
     class Network(nn.Module):
       layers: int
 
@@ -1900,7 +1892,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(type_hints['layers'], int)
 
   def test_incorrect_property(self):
-
     class Foo(nn.Module):
 
       @property
@@ -1911,12 +1902,12 @@ class ModuleTest(absltest.TestCase):
         return self.prop
 
     foo = Foo()
-    with self.assertRaisesRegex(errors.DescriptorAttributeError,
-                                'Trying to access a property that'):
+    with self.assertRaisesRegex(
+        errors.DescriptorAttributeError, 'Trying to access a property that'
+    ):
       foo.apply({})
 
   def test_custom_descriptor(self):
-
     class Descriptor:
 
       def __get__(self, obj, objtype=None):
@@ -1933,7 +1924,6 @@ class ModuleTest(absltest.TestCase):
     self.assertEqual(res, 10)
 
   def test_custom_descriptor_error(self):
-
     class Descriptor:
 
       def __get__(self, obj, objtype=None):
@@ -1946,8 +1936,9 @@ class ModuleTest(absltest.TestCase):
         return self.prop
 
     foo = Foo()
-    with self.assertRaisesRegex(errors.DescriptorAttributeError,
-                                'Trying to access a property that'):
+    with self.assertRaisesRegex(
+        errors.DescriptorAttributeError, 'Trying to access a property that'
+    ):
       foo.apply({})
 
   def test_nested_external_modules(self):
@@ -1967,6 +1958,7 @@ class ModuleTest(absltest.TestCase):
         return self.baz(x)
 
     class Foo(nn.Module):
+
       def setup(self):
         self.bar = Bar(baz=Baz(a=1))
 
@@ -1979,23 +1971,29 @@ class ModuleTest(absltest.TestCase):
 
   def test_getattribute_triggers_setup(self):
     class B(nn.Module):
+
       def setup(self):
         self.p1 = self.param('p1', lambda k: jnp.ones((2,)))
+
       def fn1(self, x):
         return self.p1 + x
+
     class A(nn.Module):
       b: nn.Module
+
       def __call__(self, x):
         return self.b.fn1(x)
+
     a = A(b=B())
     k = random.PRNGKey(0)
     x = jnp.zeros((2,))
-    vs = nn.init(lambda a,x: a(x), a)(k, x)
-    y = nn.apply(lambda a,x: a.b.fn1(x), a)(vs, x)
+    vs = nn.init(lambda a, x: a(x), a)(k, x)
+    y = nn.apply(lambda a, x: a.b.fn1(x), a)(vs, x)
     np.testing.assert_array_equal(y, jnp.ones((2,)))
 
   def test_nested_sequential_in_call(self):
     class Foo(nn.Module):
+
       def setup(self):
         self.seq = nn.Sequential([nn.Dense(10) for i in range(10)])
 
@@ -2008,13 +2006,13 @@ class ModuleTest(absltest.TestCase):
 
   def test_setup_called_bounded_submodules(self):
     module = nn.Sequential([
-      nn.Sequential([
-        nn.Dense(2),
+        nn.Sequential([
+            nn.Dense(2),
+            nn.relu,
+            nn.Dense(2),
+        ]),
         nn.relu,
         nn.Dense(2),
-      ]),
-      nn.relu,
-      nn.Dense(2),
     ])
     x = jnp.ones((1, 3))
     variables = module.init(jax.random.PRNGKey(0), x)
@@ -2041,7 +2039,6 @@ class ModuleTest(absltest.TestCase):
         for bar in self.bars:
           x = bar(x)
         return x
-
 
     module = Foo(bars=[])
     module.bars = [Bar(a=1)]
@@ -2086,31 +2083,36 @@ class ModuleTest(absltest.TestCase):
 
     # run foo
     (y, bar_vars), variables = module.init_with_output(
-      jax.random.PRNGKey(0), jnp.ones(()))
+        jax.random.PRNGKey(0), jnp.ones(())
+    )
 
     self.assertIn('params', bar_vars)
 
   def test_nested_shared(self):
     class Shared(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         return nn.Dense(1)(x)
 
     class Unshared(nn.Module):
       shared: nn.Module
+
       def __call__(self, x):
         return self.shared(x)
 
     class Super(nn.Module):
       a: nn.Module
       b: nn.Module
+
       def run_a(self, x):
         return self.a(x)
+
       def run_b(self, x):
         return self.b(x)
+
       def __call__(self, x):
         return self.a(x) + self.b(x)
-
 
     sh = Shared()
     a = Unshared(shared=sh)
@@ -2118,14 +2120,17 @@ class ModuleTest(absltest.TestCase):
     module = Super(a=a, b=b)
 
     rng = jax.random.PRNGKey(0)
-    params = module.init(rng, jnp.ones(1))["params"]
+    params = module.init(rng, jnp.ones(1))['params']
 
-    module.apply({"params": params}, jnp.ones(1))  # works as expected
-    module.apply({"params": params}, jnp.ones(1), method="run_a")  # works as expected
-    module.apply({"params": params}, jnp.ones(1), method="run_b")  # ScopeParamNotFoundError: Could not find parameter named "kernel" in scope "/b/shared/Dense_0"
+    module.apply({'params': params}, jnp.ones(1))  # works as expected
+    module.apply(
+        {'params': params}, jnp.ones(1), method='run_a'
+    )  # works as expected
+    module.apply(
+        {'params': params}, jnp.ones(1), method='run_b'
+    )  # ScopeParamNotFoundError: Could not find parameter named "kernel" in scope "/b/shared/Dense_0"
 
   def test_repr(self):
-
     class Base1(nn.Module):
       a: int
 
@@ -2172,8 +2177,10 @@ class ModuleTest(absltest.TestCase):
 
       class ChildLayer(BaseLayer):
         child_multiplier: int  # Don't want to have to set a default argument!
+
         def __call__(self, x):
           return x * self.child_multiplier * self.base_multiplier
+
       return BaseLayer, ChildLayer
 
     if tuple(sys.version_info)[:3] < (3, 10, 0):
@@ -2218,6 +2225,7 @@ class RelaxedNamingTests(absltest.TestCase):
 
   def test_relaxed_adoption(self):
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         p = self.param('p', nn.initializers.zeros, x.shape)
@@ -2225,6 +2233,7 @@ class RelaxedNamingTests(absltest.TestCase):
 
     class Bar(nn.Module):
       sub: nn.Module
+
       def __call__(self, x):
         return self.sub(x)
 
@@ -2234,7 +2243,7 @@ class RelaxedNamingTests(absltest.TestCase):
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
-      self.assertTrue("foo" in vs['params'], "relaxed naming failure")
+      self.assertTrue('foo' in vs['params'], 'relaxed naming failure')
       y = bar.apply(vs, x)
 
     with set_config('flax_preserve_adopted_names', False):
@@ -2243,11 +2252,12 @@ class RelaxedNamingTests(absltest.TestCase):
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
-      self.assertTrue("sub" in vs['params'], "old policy naming failure")
+      self.assertTrue('sub' in vs['params'], 'old policy naming failure')
       y = bar.apply(vs, x)
 
   def test_class_optional_adoption_name_preservation(self):
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         p = self.param('p', nn.initializers.zeros, x.shape)
@@ -2256,12 +2266,14 @@ class RelaxedNamingTests(absltest.TestCase):
     class Bar1(nn.Module):
       sub: nn.Module
       preserve_adopted_names = True
+
       def __call__(self, x):
         return self.sub(x)
 
     class Bar2(nn.Module):
       sub: nn.Module
       preserve_adopted_names = False
+
       def __call__(self, x):
         return self.sub(x)
 
@@ -2271,7 +2283,7 @@ class RelaxedNamingTests(absltest.TestCase):
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
-      self.assertTrue("foo" in vs['params'], "adoption naming failure")
+      self.assertTrue('foo' in vs['params'], 'adoption naming failure')
       y = bar.apply(vs, x)
 
     with set_config('flax_preserve_adopted_names', True):
@@ -2280,12 +2292,13 @@ class RelaxedNamingTests(absltest.TestCase):
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
-      self.assertTrue("sub" in vs['params'], "adoption naming failure")
+      self.assertTrue('sub' in vs['params'], 'adoption naming failure')
       y = bar.apply(vs, x)
 
   def test_nested_class_optional_adoption_name_preservation(self):
 
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         p = self.param('p', nn.initializers.zeros, x.shape)
@@ -2294,12 +2307,14 @@ class RelaxedNamingTests(absltest.TestCase):
     class Bar(nn.Module):
       sub: nn.Module
       preserve_adopted_names = True
+
       def __call__(self, x):
         return self.sub(x)
 
     class Baz(nn.Module):
       sub: nn.Module
       preserve_adopted_names = True
+
       def __call__(self, x):
         return self.sub(x)
 
@@ -2310,12 +2325,13 @@ class RelaxedNamingTests(absltest.TestCase):
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = baz.init(k, x)
-      self.assertTrue("bar" in vs['params'], "adoption naming failure")
-      self.assertTrue("foo" in vs['params']['bar'], "adoption naming failure")
+      self.assertTrue('bar' in vs['params'], 'adoption naming failure')
+      self.assertTrue('foo' in vs['params']['bar'], 'adoption naming failure')
       y = baz.apply(vs, x)
 
   def test_relaxed_adoption_still_conflict_checks(self):
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         p = self.param('p', nn.initializers.zeros, x.shape)
@@ -2324,6 +2340,7 @@ class RelaxedNamingTests(absltest.TestCase):
     class Bar(nn.Module):
       sub1: nn.Module
       sub2: nn.Module
+
       def __call__(self, x):
         return self.sub(x)
 
@@ -2338,6 +2355,7 @@ class RelaxedNamingTests(absltest.TestCase):
 
   def test_relaxed_adoption_unnamed_adoptee(self):
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         p = self.param('p', nn.initializers.zeros, x.shape)
@@ -2345,6 +2363,7 @@ class RelaxedNamingTests(absltest.TestCase):
 
     class Bar(nn.Module):
       sub: nn.Module
+
       def __call__(self, x):
         return self.sub(x)
 
@@ -2354,7 +2373,7 @@ class RelaxedNamingTests(absltest.TestCase):
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
-      self.assertTrue("sub" in vs['params'], "relaxed naming failure")
+      self.assertTrue('sub' in vs['params'], 'relaxed naming failure')
       y = bar.apply(vs, x)
 
     with set_config('flax_preserve_adopted_names', False):
@@ -2363,13 +2382,13 @@ class RelaxedNamingTests(absltest.TestCase):
       k = random.PRNGKey(0)
       x = jnp.zeros((1,))
       vs = bar.init(k, x)
-      self.assertTrue("sub" in vs['params'], "old policy naming failure")
+      self.assertTrue('sub' in vs['params'], 'old policy naming failure')
       y = bar.apply(vs, x)
 
   def test_relaxed_python_conflict(self):
-
     class Foo(nn.Module):
       dummy = 0
+
       @nn.compact
       def __call__(self, x):
         p = self.param('dummy', nn.initializers.zeros, x.shape)
@@ -2383,6 +2402,7 @@ class RelaxedNamingTests(absltest.TestCase):
   def test_relaxed_intercollection_conflict(self):
 
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         v1 = self.variable('col1', 'v', lambda x: jnp.zeros(x), x.shape)
@@ -2397,6 +2417,7 @@ class RelaxedNamingTests(absltest.TestCase):
   def test_relaxed_intercollection_conflict_set(self):
 
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         v1 = self.variable('col1', 'v', lambda x: jnp.zeros(x), x.shape)
@@ -2414,15 +2435,14 @@ class RelaxedNamingTests(absltest.TestCase):
 class FrozenDictTests(absltest.TestCase):
 
   def test_frozendict_flag(self):
-
     with set_config('flax_return_frozendict', True):
-      x = jnp.zeros((2,3))
+      x = jnp.zeros((2, 3))
       layer = nn.Dense(5)
       params = layer.init(random.PRNGKey(0), x)
       self.assertTrue(isinstance(params, FrozenDict))
 
     with set_config('flax_return_frozendict', False):
-      x = jnp.zeros((2,3))
+      x = jnp.zeros((2, 3))
       layer = nn.Dense(5)
       params = layer.init(random.PRNGKey(0), x)
       self.assertTrue(isinstance(params, dict))

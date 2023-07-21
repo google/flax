@@ -15,12 +15,11 @@
 """Tests for sst2.models."""
 from absl.testing import absltest
 from absl.testing import parameterized
+import models
 import jax
 from jax import numpy as jnp
 import jax.test_util
 import numpy as np
-
-import models
 
 
 # Parse absl flags test_srcdir and test_tmpdir.
@@ -34,8 +33,8 @@ class ModelTest(parameterized.TestCase):
     vocab_size = 5
     embedding_size = 3
     model = models.Embedder(
-        vocab_size=vocab_size,
-        embedding_size=embedding_size)
+        vocab_size=vocab_size, embedding_size=embedding_size
+    )
     rng = jax.random.PRNGKey(0)
     token_ids = np.array([[2, 4, 3], [2, 6, 3]], dtype=np.int32)
     output, _ = model.init_with_output(rng, token_ids, deterministic=True)
@@ -50,7 +49,8 @@ class ModelTest(parameterized.TestCase):
     model = models.SimpleLSTM(5)
     rng = jax.random.PRNGKey(0)
     inputs = np.random.RandomState(0).normal(
-        size=[batch_size, seq_len, embedding_size])
+        size=[batch_size, seq_len, embedding_size]
+    )
     initial_state = model.initialize_carry(inputs[:, 0].shape)
     (_, output), _ = model.init_with_output(rng, initial_state, inputs)
     self.assertEqual((batch_size, seq_len, hidden_size), output.shape)
@@ -64,7 +64,8 @@ class ModelTest(parameterized.TestCase):
     model = models.SimpleBiLSTM(hidden_size=hidden_size)
     rng = jax.random.PRNGKey(0)
     inputs = np.random.RandomState(0).normal(
-        size=[batch_size, seq_len, embedding_size])
+        size=[batch_size, seq_len, embedding_size]
+    )
     lengths = np.array([2, 3], dtype=np.int32)
     outputs, _ = model.init_with_output(rng, inputs, lengths)
     # We expect 2*hidden_size because we concatenate forward+backward LSTMs.
@@ -88,7 +89,8 @@ class ModelTest(parameterized.TestCase):
         dropout_rate=dropout_rate,
         word_dropout_rate=word_dropout_rate,
         unk_idx=unk_idx,
-        deterministic=True)
+        deterministic=True,
+    )
 
     rng = jax.random.PRNGKey(0)
     token_ids = np.array([[2, 4, 3], [2, 6, 3]], dtype=np.int32)

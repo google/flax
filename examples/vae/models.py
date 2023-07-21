@@ -21,6 +21,7 @@ import jax.numpy as jnp
 
 class Encoder(nn.Module):
   """VAE Encoder."""
+
   latents: int
 
   @nn.compact
@@ -45,6 +46,7 @@ class Decoder(nn.Module):
 
 class VAE(nn.Module):
   """Full VAE model."""
+
   latents: int = 20
 
   def setup(self):

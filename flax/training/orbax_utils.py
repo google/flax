@@ -66,6 +66,7 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
   Returns:
     A Pytree of Orbax `RestoreArgs` or `ArrayRestoreArgs`
   """
+
   def find_sharding(x):
     if is_multi_device_array(x):
       return x.sharding

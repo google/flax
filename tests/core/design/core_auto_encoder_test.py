@@ -36,7 +36,6 @@ def mlp(scope: Scope, x: Array, hidden: int, out: int):
 
 @dataclass
 class AutoEncoder:
-
   latents: int
   features: int
   hidden: int
@@ -60,6 +59,7 @@ def module_method(fn, name=None):
     scope = self.scope.rewound()
     mod_fn = lambda scope: fn(self, scope, *args, **kwargs)
     return scope.child(mod_fn, name)()
+
   return wrapper
 
 
@@ -107,16 +107,19 @@ class AutoEncoderTest(absltest.TestCase):
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(variable_shapes, {
-        'encoder': {
-            'hidden': {'kernel': (4, 3), 'bias': (3,)},
-            'out': {'kernel': (3, 2), 'bias': (2,)},
+    self.assertEqual(
+        variable_shapes,
+        {
+            'encoder': {
+                'hidden': {'kernel': (4, 3), 'bias': (3,)},
+                'out': {'kernel': (3, 2), 'bias': (2,)},
+            },
+            'decoder': {
+                'hidden': {'kernel': (2, 3), 'bias': (3,)},
+                'out': {'kernel': (3, 4), 'bias': (4,)},
+            },
         },
-        'decoder': {
-            'hidden': {'kernel': (2, 3), 'bias': (3,)},
-            'out': {'kernel': (3, 4), 'bias': (4,)},
-        },
-    })
+    )
 
   def test_auto_encoder_with_scope(self):
     ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(x)
@@ -125,16 +128,19 @@ class AutoEncoderTest(absltest.TestCase):
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(variable_shapes, {
-        'encode': {
-            'hidden': {'kernel': (4, 3), 'bias': (3,)},
-            'out': {'kernel': (3, 2), 'bias': (2,)},
+    self.assertEqual(
+        variable_shapes,
+        {
+            'encode': {
+                'hidden': {'kernel': (4, 3), 'bias': (3,)},
+                'out': {'kernel': (3, 2), 'bias': (2,)},
+            },
+            'decode': {
+                'hidden': {'kernel': (2, 3), 'bias': (3,)},
+                'out': {'kernel': (3, 4), 'bias': (4,)},
+            },
         },
-        'decode': {
-            'hidden': {'kernel': (2, 3), 'bias': (3,)},
-            'out': {'kernel': (3, 4), 'bias': (4,)},
-        },
-    })
+    )
 
   def test_auto_encoder_bind_method(self):
     ae = lambda scope, x: AutoEncoder3.create(scope, latents=2, features=4, hidden=3)(x)
@@ -143,16 +149,19 @@ class AutoEncoderTest(absltest.TestCase):
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(variable_shapes, {
-        'encode': {
-            'hidden': {'kernel': (4, 3), 'bias': (3,)},
-            'out': {'kernel': (3, 2), 'bias': (2,)},
+    self.assertEqual(
+        variable_shapes,
+        {
+            'encode': {
+                'hidden': {'kernel': (4, 3), 'bias': (3,)},
+                'out': {'kernel': (3, 2), 'bias': (2,)},
+            },
+            'decode': {
+                'hidden': {'kernel': (2, 3), 'bias': (3,)},
+                'out': {'kernel': (3, 4), 'bias': (4,)},
+            },
         },
-        'decode': {
-            'hidden': {'kernel': (2, 3), 'bias': (3,)},
-            'out': {'kernel': (3, 4), 'bias': (4,)},
-        },
-    })
+    )
 
 
 if __name__ == '__main__':

@@ -60,12 +60,11 @@ class StructTest(absltest.TestCase):
 
   def test_keypath_error(self):
     # TODO(mattjj): avoid using internal prefix_errors by testing vmap error msg
-    e, = prefix_errors(Point(1., [2.],  meta={}), Point(1., 2., meta={}))
+    (e,) = prefix_errors(Point(1.0, [2.0], meta={}), Point(1.0, 2.0, meta={}))
     with self.assertRaisesRegex(ValueError, r'in_axes\.y'):
       raise e('in_axes')
 
   def test_double_wrap_no_op(self):
-
     class A:
       a: int
 
@@ -74,13 +73,14 @@ class StructTest(absltest.TestCase):
     A = struct.dataclass(A)
     self.assertTrue(hasattr(A, '_flax_dataclass'))
 
-    A = struct.dataclass(A) # no-op
+    A = struct.dataclass(A)  # no-op
     self.assertTrue(hasattr(A, '_flax_dataclass'))
 
   def test_wrap_pytree_node_no_error(self):
     @struct.dataclass
     class A(struct.PyTreeNode):
       a: int
+
 
 if __name__ == '__main__':
   absltest.main()

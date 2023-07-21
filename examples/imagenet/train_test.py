@@ -62,9 +62,7 @@ class TrainTest(parameterized.TestCase):
     y = model.apply(variables, x, train=False)
     self.assertEqual(y.shape, (1, 1000))
 
-  @parameterized.product(
-      model=('_ResNet1', '_ResNet1Local')
-  )
+  @parameterized.product(model=('_ResNet1', '_ResNet1Local'))
   def test_train_and_evaluate(self, model):
     """Tests training and evaluation loop using mocked data."""
     # Create a temporary directory where tensorboard metrics are written.

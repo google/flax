@@ -19,7 +19,6 @@ Use directive as follows:
 .. flax_module::
   :module: flax.linen
   :class: Dense
-
 """
 
 from docutils import nodes
@@ -37,24 +36,35 @@ def render_module(modname: str, qualname: str, app):
   parent = importlib.import_module(modname)
   obj = getattr(parent, qualname)
   template = ag.AutosummaryRenderer(app)
-  template_name = "flax_module"
+  template_name = 'flax_module'
   imported_members = False
   recursive = False
   context = {}
   return generate_autosummary_content(
-    qualname, obj, parent, template, template_name, imported_members,
-    app, recursive, context, modname, qualname)
+      qualname,
+      obj,
+      parent,
+      template,
+      template_name,
+      imported_members,
+      app,
+      recursive,
+      context,
+      modname,
+      qualname,
+  )
+
 
 class FlaxModuleDirective(SphinxDirective):
   has_content = True
   option_spec = {
-    'module': directives.unchanged,
-    'class': directives.unchanged,
+      'module': directives.unchanged,
+      'class': directives.unchanged,
   }
 
   def run(self):
     module_template = render_module(
-      self.options['module'], self.options['class'], self.env.app
+        self.options['module'], self.options['class'], self.env.app
     )
     module_template = module_template.splitlines()
 

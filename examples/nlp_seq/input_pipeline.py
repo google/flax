@@ -43,6 +43,7 @@ class CoNLLAttributes(enum.Enum):
 
   For details, please see: http://universaldependencies.org/format.html.
   """
+
   ID = 0
   FORM = 1
   LEMMA = 2
@@ -79,17 +80,25 @@ def create_vocabs(filename, max_num_forms=100000):
   # create word form vocab
   vocabs = {'forms': {}, 'xpos': {}}
   vocabs['forms'].update(special_tokens)
-  vocabs['forms'].update({
-      form[0]: id for id, form in enumerate(
-          form_counter.most_common(max_num_forms), start=ROOT_ID + 1)
-  })
+  vocabs['forms'].update(
+      {
+          form[0]: id
+          for id, form in enumerate(
+              form_counter.most_common(max_num_forms), start=ROOT_ID + 1
+          )
+      }
+  )
 
   # create xpos vocab
   vocabs['xpos'].update(special_tokens)
-  vocabs['xpos'].update({
-      tag[0]: id
-      for id, tag in enumerate(xpos_counter.most_common(), start=ROOT_ID + 1)
-  })
+  vocabs['xpos'].update(
+      {
+          tag[0]: id
+          for id, tag in enumerate(
+              xpos_counter.most_common(), start=ROOT_ID + 1
+          )
+      }
+  )
 
   return vocabs
 
@@ -124,8 +133,9 @@ def create_token(token, attributes, vocabs):
     elif attribute == CoNLLAttributes.HEAD:
       selected_attributes.append(int(token[index]))
     else:
-      raise ValueError('CoNLL index %s not covered by mapping.' %
-                       str(attribute.name))
+      raise ValueError(
+          'CoNLL index %s not covered by mapping.' % str(attribute.name)
+      )
   return selected_attributes
 
 
@@ -150,10 +160,9 @@ def create_sentence_with_root(attributes, vocabs):
   return [token]
 
 
-def sentences_from_conll_data(corpus_filename,
-                              vocabs,
-                              attributes,
-                              max_sentence_length=1000):
+def sentences_from_conll_data(
+    corpus_filename, vocabs, attributes, max_sentence_length=1000
+):
   """Load and returns conll data in list format.
 
   Args:
@@ -187,14 +196,16 @@ def sentences_from_conll_data(corpus_filename,
       yield sentence
 
 
-def sentence_dataset_dict(filename,
-                          vocabs,
-                          attributes_input,
-                          attributes_target,
-                          batch_size,
-                          bucket_size,
-                          repeat=None,
-                          prefetch_size=tf.data.experimental.AUTOTUNE):
+def sentence_dataset_dict(
+    filename,
+    vocabs,
+    attributes_input,
+    attributes_target,
+    batch_size,
+    bucket_size,
+    repeat=None,
+    prefetch_size=tf.data.experimental.AUTOTUNE,
+):
   """Combines sentences into a dataset of padded batches.
 
   Args:
@@ -217,11 +228,13 @@ def sentence_dataset_dict(filename,
   def generator():
     """Generator to create the data."""
     input_generator = sentences_from_conll_data(
-        filename, vocabs, attributes_input, max_sentence_length=bucket_size)
+        filename, vocabs, attributes_input, max_sentence_length=bucket_size
+    )
 
     if attributes_target:
       target_generator = sentences_from_conll_data(
-          filename, vocabs, attributes_target, max_sentence_length=bucket_size)
+          filename, vocabs, attributes_target, max_sentence_length=bucket_size
+      )
 
     for inputs in input_generator:
       data = {'inputs': inputs}
@@ -232,7 +245,8 @@ def sentence_dataset_dict(filename,
   output_types = {k: tf.float32 for k in data_keys}
   output_shapes = {k: (None,) for k in data_keys}
   dataset = tf.data.Dataset.from_generator(
-      generator, output_types=output_types, output_shapes=output_shapes)
+      generator, output_types=output_types, output_shapes=output_shapes
+  )
 
   # cache the dataset in memory and repeat.
   dataset = dataset.cache()
@@ -241,7 +255,8 @@ def sentence_dataset_dict(filename,
   # static padding up to bucket size.
   padded_shapes = {k: [bucket_size] for k in data_keys}
   dataset = dataset.padded_batch(
-      batch_size=batch_size, padded_shapes=(padded_shapes))
+      batch_size=batch_size, padded_shapes=(padded_shapes)
+  )
 
   dataset = dataset.prefetch(prefetch_size)
   return dataset
