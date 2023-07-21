@@ -40,8 +40,8 @@ class FrozenDictTest(parameterized.TestCase):
 
   def test_frozen_dict_partially_maps(self):
     x = jax.tree_util.tree_map(
-        lambda a, b: (a, b),
-        freeze({'a': 2}), freeze({'a': {'b': 1}}))
+        lambda a, b: (a, b), freeze({'a': 2}), freeze({'a': {'b': 1}})
+    )
     self.assertEqual(unfreeze(x), {'a': (2, {'b': 1})})
 
   def test_frozen_dict_hash(self):
@@ -96,12 +96,8 @@ class FrozenDictTest(parameterized.TestCase):
   )
   def test_utility_pop(self, x, key, actual_new_x, actual_value):
     new_x, value = pop(x, key)
-    self.assertTrue(
-        new_x == actual_new_x and isinstance(new_x, type(actual_new_x))
-    )
-    self.assertTrue(
-        value == actual_value and isinstance(value, type(actual_value))
-    )
+    self.assertTrue(new_x == actual_new_x and isinstance(new_x, type(actual_new_x)))
+    self.assertTrue(value == actual_value and isinstance(value, type(actual_value)))
 
   @parameterized.parameters(
       {
@@ -117,9 +113,7 @@ class FrozenDictTest(parameterized.TestCase):
   )
   def test_utility_copy(self, x, add_or_replace, actual_new_x):
     new_x = copy(x, add_or_replace=add_or_replace)
-    self.assertTrue(
-        new_x == actual_new_x and isinstance(new_x, type(actual_new_x))
-    )
+    self.assertTrue(new_x == actual_new_x and isinstance(new_x, type(actual_new_x)))
 
   @parameterized.parameters(
       {
@@ -149,13 +143,16 @@ class FrozenDictTest(parameterized.TestCase):
     flat_path_leaves, tdef = jax.tree_util.tree_flatten_with_path(frozen)
     self.assertEqual(
         flat_path_leaves,
-        [((jax.tree_util.DictKey('b'), jax.tree_util.DictKey('a')), 2),
-         ((jax.tree_util.DictKey('c'),), 1)],
+        [
+            ((jax.tree_util.DictKey('b'), jax.tree_util.DictKey('a')), 2),
+            ((jax.tree_util.DictKey('c'),), 1),
+        ],
     )
     self.assertEqual(
         jax.tree_util.tree_unflatten(tdef, [l for _, l in flat_path_leaves]),
         frozen,
     )
+
 
 if __name__ == '__main__':
   absltest.main()

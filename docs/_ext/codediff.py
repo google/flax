@@ -38,22 +38,25 @@ from sphinx.util.docutils import SphinxDirective
 
 MISSING = object()
 
+
 class CodeDiffParser:
 
   def parse(
-    self, lines, title_left='Base', title_right='Diff', code_sep='---', sync=MISSING):
+      self, lines, title_left='Base', title_right='Diff', code_sep='---', sync=MISSING
+  ):
     sync = sync is not MISSING
 
     if code_sep not in lines:
-      raise ValueError('Code separator not found! Code snippets should be '
-                       f'separated by {code_sep}.')
+      raise ValueError(
+          'Code separator not found! Code snippets should be '
+          f'separated by {code_sep}.'
+      )
     idx = lines.index(code_sep)
-    code_left = self._code_block(lines[0: idx])
-    test_code = lines[idx+1:]
+    code_left = self._code_block(lines[0:idx])
+    test_code = lines[idx + 1 :]
     code_right = self._code_block(test_code)
 
-    output = self._tabs(
-      (title_left, code_left), (title_right, code_right), sync=sync)
+    output = self._tabs((title_left, code_left), (title_right, code_right), sync=sync)
 
     return output, test_code
 
@@ -88,6 +91,7 @@ class CodeDiffParser:
 
     return output
 
+
 class CodeDiffDirective(SphinxDirective):
   has_content = True
   option_spec = {
@@ -98,8 +102,7 @@ class CodeDiffDirective(SphinxDirective):
   }
 
   def run(self):
-    table_code, test_code = CodeDiffParser().parse(
-        list(self.content), **self.options)
+    table_code, test_code = CodeDiffParser().parse(list(self.content), **self.options)
 
     # Create a test node as a comment node so it won't show up in the docs.
     # We add attribute "testnodetype" so it is be picked up by the doctest

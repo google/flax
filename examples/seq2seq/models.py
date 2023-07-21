@@ -37,6 +37,7 @@ class DecoderLSTMCell(nn.RNNCellBase):
     teacher_force: See docstring on Seq2seq module.
     vocab_size: Size of the vocabulary.
   """
+
   features: int
   teacher_force: bool
   vocab_size: int
@@ -56,8 +57,7 @@ class DecoderLSTMCell(nn.RNNCellBase):
     categorical_rng = self.make_rng('lstm')
     predicted_token = jax.random.categorical(categorical_rng, logits)
     # Convert to one-hot encoding.
-    prediction = jax.nn.one_hot(
-        predicted_token, self.vocab_size, dtype=jnp.float32)
+    prediction = jax.nn.one_hot(predicted_token, self.vocab_size, dtype=jnp.float32)
 
     return (lstm_state, prediction), (logits, prediction)
 
@@ -78,14 +78,16 @@ class Seq2seq(nn.Module):
     vocab_size: the size of the vocabulary.
     eos_id: EOS id.
   """
+
   teacher_force: bool
   hidden_size: int
   vocab_size: int
   eos_id: int = 1
 
   @nn.compact
-  def __call__(self, encoder_inputs: Array,
-               decoder_inputs: Array) -> Tuple[Array, Array]:
+  def __call__(
+      self, encoder_inputs: Array, decoder_inputs: Array
+  ) -> Tuple[Array, Array]:
     """Applies the seq2seq model.
 
     Args:
@@ -106,13 +108,18 @@ class Seq2seq(nn.Module):
     """
     # Encode inputs.
     encoder = nn.RNN(nn.LSTMCell(self.hidden_size), return_carry=True, name='encoder')
-    decoder = nn.RNN(DecoderLSTMCell(decoder_inputs.shape[-1], self.teacher_force, self.vocab_size),
-      split_rngs={'params': False, 'lstm': True}, name='decoder')
+    decoder = nn.RNN(
+        DecoderLSTMCell(decoder_inputs.shape[-1], self.teacher_force, self.vocab_size),
+        split_rngs={'params': False, 'lstm': True},
+        name='decoder',
+    )
 
     seq_lengths = self.get_seq_lengths(encoder_inputs)
 
     encoder_state, _ = encoder(encoder_inputs, seq_lengths=seq_lengths)
-    logits, predictions = decoder(decoder_inputs[:, :-1], initial_carry=(encoder_state, decoder_inputs[:, 0]))
+    logits, predictions = decoder(
+        decoder_inputs[:, :-1], initial_carry=(encoder_state, decoder_inputs[:, 0])
+    )
 
     return logits, predictions
 
@@ -124,4 +131,3 @@ class Seq2seq(nn.Module):
     seq_lengths = jnp.argmax(inputs == self.eos_id, axis=-1)
 
     return seq_lengths
-

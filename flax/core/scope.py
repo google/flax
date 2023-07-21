@@ -20,8 +20,20 @@ import dataclasses
 import functools
 import hashlib
 import typing
-from typing import (Any, Callable, Dict, Generic, Iterable, Mapping, Optional,
-                    Sequence, Set, Tuple, TypeVar, Union)
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generic,
+    Iterable,
+    Mapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from flax.ids import uuid
 from flax import config as config
@@ -57,6 +69,7 @@ Filter = Union[bool, str, typing.Collection[str], 'DenyList']
 # When conditioning on filters we require explicit boolean comparisons.
 # pylint: disable=g-bool-id-comparison
 
+
 @dataclasses.dataclass(frozen=True, eq=True)
 class DenyList:
   """DenyList represents an opt-out based mutability filter.
@@ -71,6 +84,7 @@ class DenyList:
     deny: The filter representing the collections that are not mutable.
 
   """
+
   deny: Filter
 
 
@@ -89,6 +103,7 @@ PRNGFoldable = Union[int, str]
 
 class LazyRng(struct.PyTreeNode):
   """Wrapper around JAX PRNGKey that lazily maintains a tuple of static data to be folded into the rng."""
+
   rng: PRNGKey
   suffix: Tuple[PRNGFoldable, ...] = struct.field(pytree_node=False)
 
@@ -96,8 +111,7 @@ class LazyRng(struct.PyTreeNode):
     return _fold_in_static(self.rng, self.suffix)
 
   @staticmethod
-  def create(rng: Union['LazyRng', PRNGKey],
-             *suffix: PRNGFoldable) -> 'LazyRng':
+  def create(rng: Union['LazyRng', PRNGKey], *suffix: PRNGFoldable) -> 'LazyRng':
     if not legacy_config.flax_lazy_rng:
       if isinstance(rng, LazyRng):
         assert not rng.suffix
@@ -125,8 +139,7 @@ def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
   return rng
 
 
-def _fold_in_static(rng: PRNGKey,
-                    data: typing.Collection[PRNGFoldable]) -> PRNGKey:
+def _fold_in_static(rng: PRNGKey, data: typing.Collection[PRNGFoldable]) -> PRNGKey:
   """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
   This is faster than splitting an PRNGKey because it allows generating new PRNG
@@ -154,7 +167,7 @@ def _fold_in_static(rng: PRNGKey,
       raise ValueError(f'Expected int or string, got: {x}')
   d = m.digest()
   hash_int = int.from_bytes(d[:4], byteorder='big')
-  return random.fold_in(rng, jnp.uint32(hash_int)) # type: ignore
+  return random.fold_in(rng, jnp.uint32(hash_int))  # type: ignore
 
 
 def is_filter_empty(filter_like: Filter) -> bool:
@@ -303,8 +316,8 @@ def intersect_filters(a: Filter, b: Filter) -> Filter:
 
 
 def group_collections(
-    xs: VariableDict,
-    col_filters: Sequence[CollectionFilter]) -> Sequence[MutableVariableDict]:
+    xs: VariableDict, col_filters: Sequence[CollectionFilter]
+) -> Sequence[MutableVariableDict]:
   """Groups variables by collection filters.
 
   Iteratively applies the filters in `col_filters` to `xs`, and adds the result
@@ -343,8 +356,7 @@ class Variable(Generic[T]):
   content and can be assigned to for mutation.
   """
 
-  def __init__(
-      self, scope: 'Scope', collection: str, name: str, unbox: bool):
+  def __init__(self, scope: 'Scope', collection: str, name: str, unbox: bool):
     """Initializes a variable.
 
     Args:
@@ -370,12 +382,9 @@ class Variable(Generic[T]):
     """Updates the value of this Variable."""
     if self.unbox:
       cur = self.scope.get_variable(self.collection, self.name)
-      cur_struct = tree_util.tree_structure(cur,
-                                            is_leaf=meta.is_axis_metadata)
-      value_struct = tree_util.tree_structure(value,
-                                              is_leaf=meta.is_axis_metadata)
-      has_meta = any(map(meta.is_axis_metadata,
-                         cur_struct.flatten_up_to(cur)))
+      cur_struct = tree_util.tree_structure(cur, is_leaf=meta.is_axis_metadata)
+      value_struct = tree_util.tree_structure(value, is_leaf=meta.is_axis_metadata)
+      has_meta = any(map(meta.is_axis_metadata, cur_struct.flatten_up_to(cur)))
       if cur_struct == value_struct and has_meta:
         value = meta.replace_boxed(cur, value)
 
@@ -388,12 +397,16 @@ class Variable(Generic[T]):
 
 class _ChildRNGSentinel:
   pass
+
+
 # used to identify that an rng counter is meant for a child scope
 child_rng_token = _ChildRNGSentinel()
 
 
 class _DefaultSentinel:
   pass
+
+
 # used to denote no default flag value on scope
 no_flag = _DefaultSentinel()
 
@@ -409,16 +422,19 @@ class Scope:
   <https://github.com/google/flax/tree/main/tests/core/design>`_
   for a number of examples using ``Scopes``.
   """
+
   reservations: Dict[str, Set[Optional[str]]]
 
-  def __init__(self,
-               variables: MutableVariableDict,
-               rngs: Optional[Dict[str, Union[PRNGKey, LazyRng]]] = None,
-               name: Optional[str] = None,
-               mutable: CollectionFilter = False,
-               parent: Optional['Scope'] = None,
-               path: Iterable[str] = (),
-               flags: Optional[Mapping] = None):
+  def __init__(
+      self,
+      variables: MutableVariableDict,
+      rngs: Optional[Dict[str, Union[PRNGKey, LazyRng]]] = None,
+      name: Optional[str] = None,
+      mutable: CollectionFilter = False,
+      parent: Optional['Scope'] = None,
+      path: Iterable[str] = (),
+      flags: Optional[Mapping] = None,
+  ):
     """Initializes a Scope.
 
     Args:
@@ -455,7 +471,11 @@ class Scope:
       return False
     if self is other:
       return True
-    return self.root._variables is other.root._variables and self.path == other.path and self.rng_counters is other.rng_counters
+    return (
+        self.root._variables is other.root._variables
+        and self.path == other.path
+        and self.rng_counters is other.rng_counters
+    )
 
   def __hash__(self) -> int:
     # see __eq__
@@ -494,8 +514,7 @@ class Scope:
   def mutable_variables(self) -> Union[VariableDict, Dict[str, Any]]:
     """Returns an immutable copy of the mutable variables belonging to this Scope."""
     self._populate_collections()
-    xs = {k: v for k, v in self._variables.items()
-          if in_filter(self.mutable, k)}
+    xs = {k: v for k, v in self._variables.items() if in_filter(self.mutable, k)}
     if config.flax_return_frozendict:
       return freeze(xs)
     return xs
@@ -521,8 +540,15 @@ class Scope:
       emptied, and the rng counter is optionally rewound.
     """
     self._check_valid()
-    scope = Scope(self._variables, self.rngs, self.name, self.mutable,
-                  self.parent, path=self.path, flags=self.flags)
+    scope = Scope(
+        self._variables,
+        self.rngs,
+        self.name,
+        self.mutable,
+        self.parent,
+        path=self.path,
+        flags=self.flags,
+    )
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
     return scope
@@ -537,9 +563,12 @@ class Scope:
     if name in self.reservations:
       # allow the same name for two variables in
       # different collections, otherwise raise error.
-      if (None in self.reservations[name] or col is None
-          or col in self.reservations[name]):
-          return True
+      if (
+          None in self.reservations[name]
+          or col is None
+          or col in self.reservations[name]
+      ):
+        return True
     return False
 
   def reserve(self, name: str, col: Optional[str] = None):
@@ -552,8 +581,9 @@ class Scope:
       col: if a variable, the collection used.
     """
     if not isinstance(name, str):
-      raise TypeError('The type of scope "{name}" should be string but '
-                      f'it is {type(name)}')
+      raise TypeError(
+          'The type of scope "{name}" should be string but ' f'it is {type(name)}'
+      )
     if self.name_reserved(name, col):
       raise ValueError(f'Duplicate use of scope name: "{name}"')
     self.reservations[name].add(col)
@@ -574,10 +604,7 @@ class Scope:
         return name
       i += 1
 
-  def push(self,
-           name: Optional[str] = None,
-           prefix: str = '',
-           reuse=False) -> 'Scope':
+  def push(self, name: Optional[str] = None, prefix: str = '', reuse=False) -> 'Scope':
     """Creates a child Scope.
 
     Args:
@@ -598,26 +625,30 @@ class Scope:
     rngs = {key: LazyRng.create(rng, name) for key, rng in self.rngs.items()}
     rng_key = (child_rng_token, name)
     if rng_key in self.rng_counters:
-      rng_counters = self.rng_counters.get(rng_key) # type: ignore
+      rng_counters = self.rng_counters.get(rng_key)  # type: ignore
     else:
       rng_counters = {key: 0 for key in rngs}
-      self.rng_counters[rng_key] = rng_counters # type: ignore
-    scope = Scope({},
-                  name=name,
-                  rngs=rngs,
-                  parent=self,
-                  mutable=self.mutable,
-                  path=self.path + (name,),
-                  flags=self.flags)
+      self.rng_counters[rng_key] = rng_counters  # type: ignore
+    scope = Scope(
+        {},
+        name=name,
+        rngs=rngs,
+        parent=self,
+        mutable=self.mutable,
+        path=self.path + (name,),
+        flags=self.flags,
+    )
     scope.rng_counters = rng_counters
     return scope
 
-  def child(self,
-            fn: Callable[..., Any],
-            name: Optional[str] = None,
-            prefix: Optional[str] = None,
-            named_call: bool = True,
-            **partial_kwargs) -> Callable[..., Any]:
+  def child(
+      self,
+      fn: Callable[..., Any],
+      name: Optional[str] = None,
+      prefix: Optional[str] = None,
+      named_call: bool = True,
+      **partial_kwargs,
+  ) -> Callable[..., Any]:
     """Partially applies a child scope to fn.
 
     When calling the returned function multiple times variables will be reused.
@@ -761,8 +792,7 @@ class Scope:
     # Make sure reference sharing of child variable dictionaries isn't broken.
     # See https://github.com/google/flax/issues/2022 for more details.
     def put(target, key, val):
-      if (key in target and isinstance(target[key], dict) and
-          isinstance(val, Mapping)):
+      if key in target and isinstance(target[key], dict) and isinstance(val, Mapping):
         for k, v in val.items():
           put(target[key], k, v)
       else:
@@ -770,9 +800,14 @@ class Scope:
 
     put(variables, name, value)
 
-  def variable(self, col: str, name: str,  # pylint: disable=keyword-arg-before-vararg
-               init_fn: Optional[Callable[..., T]] = None,
-               *init_args, unbox: bool = True) -> Variable[T]:
+  def variable(
+      self,
+      col: str,
+      name: str,  # pylint: disable=keyword-arg-before-vararg
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: bool = True,
+  ) -> Variable[T]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
     Args:
@@ -798,8 +833,9 @@ class Scope:
       self.put_variable(col, name, init_value)
     return Variable(self, col, name, unbox=unbox)
 
-  def param(self, name: str, init_fn: Callable[..., T], *init_args,
-            unbox: bool = True) -> T:
+  def param(
+      self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
+  ) -> T:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
     If the parameter exists already, the existing value is simply returned.
@@ -817,8 +853,7 @@ class Scope:
     """
     self.reserve(name, 'params')
     if self.has_variable('params', name):
-      abs_rng = jax.ShapeDtypeStruct(random.default_prng_impl().key_shape,
-                                     jnp.uint32)
+      abs_rng = jax.ShapeDtypeStruct(random.default_prng_impl().key_shape, jnp.uint32)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
@@ -833,8 +868,9 @@ class Scope:
         # usefuleness is less obvious. We might intentionally change the dtype
         # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
-          raise errors.ScopeParamShapeError(name, self.path_text,
-                                            jnp.shape(abs_val), jnp.shape(val))
+          raise errors.ScopeParamShapeError(
+              name, self.path_text, jnp.shape(abs_val), jnp.shape(val)
+          )
     else:
       if not self.is_mutable_collection('params'):
         if self.is_collection_empty('params'):
@@ -870,10 +906,12 @@ def _unfreeze_variables(variables, mutable):
   return new_variables
 
 
-def bind(variables: VariableDict,
-         rngs: Optional[RNGSequences] = None,
-         mutable: CollectionFilter = False,
-         flags: Optional[Mapping] = None):
+def bind(
+    variables: VariableDict,
+    rngs: Optional[RNGSequences] = None,
+    mutable: CollectionFilter = False,
+    flags: Optional[Mapping] = None,
+):
   """Binds variables and rngs to a new ``Scope``.
 
   bind provides a ``Scope`` instance without transforming a function with
@@ -899,14 +937,17 @@ def bind(variables: VariableDict,
     raise errors.ApplyScopeInvalidVariablesTypeError()
   if rngs is not None and not _is_valid_rngs(rngs):
     raise errors.InvalidRngError(
-        'rngs should be a dictionary mapping strings to `jax.PRNGKey`.')
+        'rngs should be a dictionary mapping strings to `jax.PRNGKey`.'
+    )
   new_variables = _unfreeze_variables(variables, mutable)
   return Scope(new_variables, rngs=rngs, mutable=mutable, flags=flags)
 
 
-def apply(fn: Callable[..., Any],
-          mutable: CollectionFilter = False,
-          flags: Optional[Mapping] = None) -> Callable[..., Any]:
+def apply(
+    fn: Callable[..., Any],
+    mutable: CollectionFilter = False,
+    flags: Optional[Mapping] = None,
+) -> Callable[..., Any]:
   """Functionalize a `Scope` function.
 
   Args:
@@ -919,18 +960,18 @@ def apply(fn: Callable[..., Any],
   """
 
   @functools.wraps(fn)
-  def wrapper(variables: VariableDict,
-              *args,
-              rngs: Optional[RNGSequences] = None,
-              **kwargs) -> Union[Any, Tuple[Any, Union[VariableDict, Dict[str, Any]]]]:
+  def wrapper(
+      variables: VariableDict, *args, rngs: Optional[RNGSequences] = None, **kwargs
+  ) -> Union[Any, Tuple[Any, Union[VariableDict, Dict[str, Any]]]]:
     # Try to detect if user accidentally passed {'params': {'params': ...}.
-    if 'params' in variables and isinstance(
-        variables['params'],
-        (dict, FrozenDict)) and 'params' in variables['params']:
+    if (
+        'params' in variables
+        and isinstance(variables['params'], (dict, FrozenDict))
+        and 'params' in variables['params']
+    ):
       raise errors.ApplyScopeInvalidVariablesStructureError(variables)
 
-    with bind(variables, rngs=rngs, mutable=mutable,
-              flags=flags).temporary() as root:
+    with bind(variables, rngs=rngs, mutable=mutable, flags=flags).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:
       return y, root.mutable_variables()
@@ -940,9 +981,11 @@ def apply(fn: Callable[..., Any],
   return wrapper
 
 
-def init(fn: Callable[..., Any],
-         mutable: CollectionFilter = True,
-         flags: Optional[Mapping] = None) -> Callable[..., Any]:
+def init(
+    fn: Callable[..., Any],
+    mutable: CollectionFilter = True,
+    flags: Optional[Mapping] = None,
+) -> Callable[..., Any]:
   """Functionalize a `Scope` function for initialization.
 
   Args:
@@ -957,21 +1000,24 @@ def init(fn: Callable[..., Any],
   @functools.wraps(fn)
   def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
-      raise ValueError('First argument passed to an init function should be a '
-                       '`jax.PRNGKey` or a dictionary mapping strings to '
-                       '`jax.PRNGKey`.')
+      raise ValueError(
+          'First argument passed to an init function should be a '
+          '`jax.PRNGKey` or a dictionary mapping strings to '
+          '`jax.PRNGKey`.'
+      )
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
     init_flags = {**(flags if flags is not None else {}), 'initializing': True}
-    return apply(fn, mutable=mutable, flags=init_flags)({}, *args, rngs=rngs,
-                                                        **kwargs)
+    return apply(fn, mutable=mutable, flags=init_flags)({}, *args, rngs=rngs, **kwargs)
 
   return wrapper
 
 
-def lazy_init(fn: Callable[..., Any],
-         mutable: CollectionFilter = True,
-         flags: Optional[Mapping] = None) -> Callable[..., Any]:
+def lazy_init(
+    fn: Callable[..., Any],
+    mutable: CollectionFilter = True,
+    flags: Optional[Mapping] = None,
+) -> Callable[..., Any]:
   """Functionalizes a `Scope` function for lazy initialization.
 
   Similair to ``init`` except that the init function now accepts
@@ -998,7 +1044,9 @@ def lazy_init(fn: Callable[..., Any],
     `fn` with the scope partially applied. Unlike ``init`` which returns a tuple of function
     output and variables, the lazy init function only returns the variables.
   """
-  return partial_eval.lazy_init(lambda *args, **kwargs: init(fn, mutable, flags)(*args, **kwargs)[1])
+  return partial_eval.lazy_init(
+      lambda *args, **kwargs: init(fn, mutable, flags)(*args, **kwargs)[1]
+  )
 
 
 def _is_valid_collection(col: VariableDict):
@@ -1031,15 +1079,14 @@ def _is_valid_variables(variables: VariableDict) -> bool:
 def _is_valid_rng(rng: Array):
   """Checks whether rng is a valid JAX PRNGKey, also handling custom prngs."""
   # New-style JAX KeyArrays have a base type.
-  if jax_config.jax_enable_custom_prng: # type: ignore[attr-defined]
+  if jax_config.jax_enable_custom_prng:  # type: ignore[attr-defined]
     if not isinstance(rng, jax.random.KeyArray):
       return False
   # Old-style JAX PRNGKeys are plain uint32 arrays.
   else:
     if not isinstance(rng, (np.ndarray, jnp.ndarray)):
       return False
-    if (rng.shape != random.default_prng_impl().key_shape or
-        rng.dtype != jnp.uint32):
+    if rng.shape != random.default_prng_impl().key_shape or rng.dtype != jnp.uint32:
       return False
   return True
 

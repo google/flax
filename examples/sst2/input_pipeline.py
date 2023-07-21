@@ -113,40 +113,45 @@ def get_bucketed_batches(
       bucket_batch_sizes,
       padded_shapes=padded_shapes,
       pad_to_bucket_boundary=True,
-      drop_remainder=drop_remainder)
+      drop_remainder=drop_remainder,
+  )
 
   if shuffle:
     # For shuffling we need to know how many training examples we have.
     num_examples = get_num_examples(dataset)
     num_batches = num_examples // batch_size
-    return dataset.shuffle(
-        num_examples, seed=shuffle_seed,
-        reshuffle_each_iteration=True).apply(bucket_fn).shuffle(
-            num_batches,
-            seed=shuffle_seed,
-            reshuffle_each_iteration=True).prefetch(
-                tf.data.experimental.AUTOTUNE)
+    return (
+        dataset.shuffle(num_examples, seed=shuffle_seed, reshuffle_each_iteration=True)
+        .apply(bucket_fn)
+        .shuffle(num_batches, seed=shuffle_seed, reshuffle_each_iteration=True)
+        .prefetch(tf.data.experimental.AUTOTUNE)
+    )
   return dataset.apply(bucket_fn).prefetch(tf.data.experimental.AUTOTUNE)
 
 
-def vocab_to_hashtable(vocab: vocabulary.Vocabulary,
-                       unk_idx: int) -> tf.lookup.StaticHashTable:
+def vocab_to_hashtable(
+    vocab: vocabulary.Vocabulary, unk_idx: int
+) -> tf.lookup.StaticHashTable:
   """Returns a TF lookup table (token -> ID) from a vocabulary."""
   return tf.lookup.StaticHashTable(
-      tf.lookup.KeyValueTensorInitializer(
-          list(vocab.keys()), list(vocab.values())), default_value=unk_idx)
+      tf.lookup.KeyValueTensorInitializer(list(vocab.keys()), list(vocab.values())),
+      default_value=unk_idx,
+  )
 
 
-def vocab_to_inverse_hashtable(vocab: vocabulary.Vocabulary,
-                               unk_token: bytes) -> tf.lookup.StaticHashTable:
+def vocab_to_inverse_hashtable(
+    vocab: vocabulary.Vocabulary, unk_token: bytes
+) -> tf.lookup.StaticHashTable:
   """Returns an inverse TF lookup table (ID -> token) from a vocabulary."""
   return tf.lookup.StaticHashTable(
       tf.lookup.KeyValueTensorInitializer(
           list(vocab.values()),
           list(vocab.keys()),
           key_dtype=tf.int64,
-          value_dtype=tf.string),
-      default_value=unk_token)
+          value_dtype=tf.string,
+      ),
+      default_value=unk_token,
+  )
 
 
 def _is_text_field(feature_name_and_type):
@@ -164,11 +169,13 @@ def _is_class_label(feature_name_and_type):
 class TextDataset:
   """A text dataset with one sequence as input and a label."""
 
-  def __init__(self,
-               tfds_name: str = 'glue/sst2',
-               vocab_path: str = 'vocab.txt',
-               tokenizer: text.Tokenizer = text.WhitespaceTokenizer(),
-               split='train'):
+  def __init__(
+      self,
+      tfds_name: str = 'glue/sst2',
+      vocab_path: str = 'vocab.txt',
+      tokenizer: text.Tokenizer = text.WhitespaceTokenizer(),
+      split='train',
+  ):
     """Initializes the SST2 data source."""
     self.dataset, self.info = tfds.load(tfds_name, split=split, with_info=True)
 
@@ -186,7 +193,8 @@ class TextDataset:
     self.tokenizer = tokenizer
     self.tf_vocab = vocab_to_hashtable(self.vocab, unk_idx=self.vocab.unk_idx)
     self.examples = self.dataset.map(
-        self.prepare_example, num_parallel_calls=AUTOTUNE).cache()
+        self.prepare_example, num_parallel_calls=AUTOTUNE
+    ).cache()
 
   @property
   def padded_shapes(self):
@@ -200,8 +208,7 @@ class TextDataset:
 
   def add_bos_eos(self, sequence: tf.Tensor) -> tf.Tensor:
     """Prepends BOS ID and appends EOS ID to a sequence of token IDs."""
-    return tf.concat(
-        [[self.vocab.bos_idx], sequence, [self.vocab.eos_idx]], 0)
+    return tf.concat([[self.vocab.bos_idx], sequence, [self.vocab.eos_idx]], 0)
 
   def prepare_example(self, example: Example) -> Example:
     """Prepares an example by converting text to token IDs."""
@@ -214,34 +221,40 @@ class TextDataset:
     example['label'] = label
     return example
 
-  def get_batches(self,
-                  batch_size: int,
-                  drop_remainder: bool = False,
-                  shuffle: bool = False,
-                  shuffle_seed: Optional[int] = None,
-                  fixed_pad_length: Optional[int] = None,
-                  dataset: Optional[tf.data.Dataset] = None):
+  def get_batches(
+      self,
+      batch_size: int,
+      drop_remainder: bool = False,
+      shuffle: bool = False,
+      shuffle_seed: Optional[int] = None,
+      fixed_pad_length: Optional[int] = None,
+      dataset: Optional[tf.data.Dataset] = None,
+  ):
     """Returns an iterator with padded batches for the provided dataset."""
     if dataset is None:
       dataset = self.examples
     if shuffle:
       buffer_size = get_num_examples(dataset)
       dataset = dataset.shuffle(
-          buffer_size, seed=shuffle_seed, reshuffle_each_iteration=True)
+          buffer_size, seed=shuffle_seed, reshuffle_each_iteration=True
+      )
     padded_shapes = {k: v for k, v in self.padded_shapes.items()}
     if fixed_pad_length is not None:
       padded_shapes['token_ids'] = fixed_pad_length
     return dataset.padded_batch(
-        batch_size, padded_shapes=padded_shapes, drop_remainder=drop_remainder)
+        batch_size, padded_shapes=padded_shapes, drop_remainder=drop_remainder
+    )
 
-  def get_bucketed_batches(self,
-                           batch_size: int,
-                           bucket_size: int,
-                           max_input_length: int,
-                           drop_remainder: bool = False,
-                           shuffle: bool = False,
-                           shuffle_seed: Optional[int] = None,
-                           dataset: Optional[tf.data.Dataset] = None):
+  def get_bucketed_batches(
+      self,
+      batch_size: int,
+      bucket_size: int,
+      max_input_length: int,
+      drop_remainder: bool = False,
+      shuffle: bool = False,
+      shuffle_seed: Optional[int] = None,
+      dataset: Optional[tf.data.Dataset] = None,
+  ):
     """Returns an iterator with bucketed batches for the provided dataset."""
     if dataset is None:
       dataset = self.examples
@@ -254,4 +267,5 @@ class TextDataset:
         self.example_length_fn,
         shuffle=shuffle,
         shuffle_seed=shuffle_seed,
-        drop_remainder=drop_remainder)
+        drop_remainder=drop_remainder,
+    )

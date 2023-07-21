@@ -22,20 +22,27 @@ import jax
 from jax import random, numpy as jnp
 
 
-def mlp_vmap(scope: Scope, x: Array,
-             sizes: Sequence[int] = (8, 1),
-             act_fn: Callable[[Array], Array] = nn.relu,
-             share_params: bool = False):
+def mlp_vmap(
+    scope: Scope,
+    x: Array,
+    sizes: Sequence[int] = (8, 1),
+    act_fn: Callable[[Array], Array] = nn.relu,
+    share_params: bool = False,
+):
   if share_params:
-    dense_vmap = lift.vmap(nn.dense,
-                           in_axes=(0, None),
-                           variable_axes={'params': None},
-                           split_rngs={'params': False})
+    dense_vmap = lift.vmap(
+        nn.dense,
+        in_axes=(0, None),
+        variable_axes={'params': None},
+        split_rngs={'params': False},
+    )
   else:
-    dense_vmap = lift.vmap(nn.dense,
-                           in_axes=(0, None),
-                           variable_axes={'params': 0},
-                           split_rngs={'params': True})
+    dense_vmap = lift.vmap(
+        nn.dense,
+        in_axes=(0, None),
+        variable_axes={'params': 0},
+        split_rngs={'params': True},
+    )
 
   # hidden layers
   for size in sizes[:-1]:
@@ -54,12 +61,14 @@ class VMapTest(absltest.TestCase):
 
     y, variables = init(mlp_vmap)(random.PRNGKey(1), x, share_params=True)
 
-    param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(param_shapes, {
-        'hidden_0' : {'kernel': (4, 8), 'bias': (8,)},
-        'out': {'kernel': (8, 1), 'bias': (1,)},
-    })
+    param_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(
+        param_shapes,
+        {
+            'hidden_0': {'kernel': (4, 8), 'bias': (8,)},
+            'out': {'kernel': (8, 1), 'bias': (1,)},
+        },
+    )
     self.assertEqual(y.shape, (2, 1))
     self.assertTrue(jnp.allclose(y[0], y[1]))
 
@@ -69,12 +78,14 @@ class VMapTest(absltest.TestCase):
 
     y, variables = init(mlp_vmap)(random.PRNGKey(1), x, share_params=False)
 
-    param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(param_shapes, {
-        'hidden_0': {'kernel': (2, 4, 8), 'bias': (2, 8)},
-        'out': {'kernel': (2, 8, 1), 'bias': (2, 1)},
-    })
+    param_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(
+        param_shapes,
+        {
+            'hidden_0': {'kernel': (2, 4, 8), 'bias': (2, 8)},
+            'out': {'kernel': (2, 8, 1), 'bias': (2, 1)},
+        },
+    )
     self.assertEqual(y.shape, (2, 1))
     self.assertFalse(jnp.allclose(y[0], y[1]))
 

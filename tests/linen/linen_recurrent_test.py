@@ -30,6 +30,7 @@ jax.config.parse_flags_with_absl()
 
 
 class RNNTest(absltest.TestCase):
+
   def test_rnn_basic_forward(self):
     batch_size = 10
     seq_len = 40
@@ -129,7 +130,7 @@ class RNNTest(absltest.TestCase):
     channels_out = 15
 
     rnn = nn.RNN(
-      nn.ConvLSTMCell(channels_out, kernel_size),
+        nn.ConvLSTMCell(channels_out, kernel_size),
     )
 
     xs = jnp.ones((batch_size, seq_len, *image_size, channels_in))
@@ -148,8 +149,10 @@ class RNNTest(absltest.TestCase):
 
     for layer_params in variables['params']['cell'].values():
       if 'bias' in layer_params:
-          self.assertEqual(layer_params['bias'].shape, (channels_out * 4,))
-      self.assertIn(layer_params['kernel'].shape[2], [channels_in, channels_out, channels_out * 4])
+        self.assertEqual(layer_params['bias'].shape, (channels_out * 4,))
+      self.assertIn(
+          layer_params['kernel'].shape[2], [channels_in, channels_out, channels_out * 4]
+      )
       self.assertEqual(layer_params['kernel'].shape[3], channels_out * 4)
 
   def test_numerical_equivalence(self):
@@ -186,7 +189,9 @@ class RNNTest(absltest.TestCase):
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
     ys: jnp.ndarray
-    (carry, ys), variables = rnn.init_with_output(jax.random.PRNGKey(0), xs, seq_lengths=seq_lengths)
+    (carry, ys), variables = rnn.init_with_output(
+        jax.random.PRNGKey(0), xs, seq_lengths=seq_lengths
+    )
 
     cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), xs[:, 0].shape)
     cell_params = variables['params']['cell']
@@ -220,10 +225,12 @@ class RNNTest(absltest.TestCase):
       cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), xs[:1, 0].shape)
 
       for i in range(seq_len):
-        cell_carry, y = rnn.cell.apply({'params': cell_params}, cell_carry, xs[batch_idx, i, :][None])
+        cell_carry, y = rnn.cell.apply(
+            {'params': cell_params}, cell_carry, xs[batch_idx, i, :][None]
+        )
         np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-6)
 
-      carry_i = jax.tree_map(lambda x: x[batch_idx:batch_idx+1], carry)
+      carry_i = jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry)
       np.testing.assert_allclose(cell_carry, carry_i, rtol=1e-6)
 
   def test_numerical_equivalence_single_batch_nn_scan(self):
@@ -233,9 +240,13 @@ class RNNTest(absltest.TestCase):
     channels_out = 6
 
     cell: nn.LSTMCell = nn.LSTMCell(channels_out)
-    rnn: nn.LSTMCell = nn.scan(nn.LSTMCell, in_axes=1, out_axes=1,
-                   variable_broadcast='params',
-                   split_rngs={'params': False})(channels_out)
+    rnn: nn.LSTMCell = nn.scan(
+        nn.LSTMCell,
+        in_axes=1,
+        out_axes=1,
+        variable_broadcast='params',
+        split_rngs={'params': False},
+    )(channels_out)
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
     carry = rnn.initialize_carry(jax.random.PRNGKey(0), xs[:, 0].shape)
@@ -248,10 +259,12 @@ class RNNTest(absltest.TestCase):
       cell_carry = cell.initialize_carry(jax.random.PRNGKey(0), xs[:1, 0].shape)
 
       for i in range(seq_len):
-        cell_carry, y = cell.apply({'params': cell_params}, cell_carry, xs[batch_idx:batch_idx+1, i, :])
+        cell_carry, y = cell.apply(
+            {'params': cell_params}, cell_carry, xs[batch_idx : batch_idx + 1, i, :]
+        )
         np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-5)
 
-      carry_i = jax.tree_map(lambda x: x[batch_idx:batch_idx+1], carry)
+      carry_i = jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry)
       np.testing.assert_allclose(cell_carry, carry_i, rtol=1e-5)
 
   def test_numerical_equivalence_single_batch_jax_scan(self):
@@ -299,11 +312,16 @@ class RNNTest(absltest.TestCase):
       cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), xs[:1, 0].shape)
 
       for i in range(seq_len):
-        cell_carry, y = rnn.cell.apply({'params': cell_params}, cell_carry, xs[batch_idx, seq_len - i - 1, :][None])
+        cell_carry, y = rnn.cell.apply(
+            {'params': cell_params}, cell_carry, xs[batch_idx, seq_len - i - 1, :][None]
+        )
         np.testing.assert_allclose(y[0], ys[batch_idx, i, :], rtol=1e-5)
 
       np.testing.assert_allclose(
-        cell_carry, jax.tree_map(lambda x: x[batch_idx:batch_idx+1], carry), rtol=1e-5)
+          cell_carry,
+          jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry),
+          rtol=1e-5,
+      )
 
   def test_reverse_but_keep_order(self):
     batch_size = 3
@@ -311,7 +329,9 @@ class RNNTest(absltest.TestCase):
     channels_in = 5
     channels_out = 6
 
-    rnn = nn.RNN(nn.LSTMCell(channels_out), return_carry=True, reverse=True, keep_order=True)
+    rnn = nn.RNN(
+        nn.LSTMCell(channels_out), return_carry=True, reverse=True, keep_order=True
+    )
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
     ys: jnp.ndarray
@@ -323,11 +343,16 @@ class RNNTest(absltest.TestCase):
       cell_carry = rnn.cell.initialize_carry(jax.random.PRNGKey(0), xs[:1, 0].shape)
 
       for i in range(seq_len):
-        cell_carry, y = rnn.cell.apply({'params': cell_params}, cell_carry, xs[batch_idx, seq_len - i - 1, :][None])
+        cell_carry, y = rnn.cell.apply(
+            {'params': cell_params}, cell_carry, xs[batch_idx, seq_len - i - 1, :][None]
+        )
         np.testing.assert_allclose(y[0], ys[batch_idx, seq_len - i - 1, :], rtol=1e-5)
 
       np.testing.assert_allclose(
-        cell_carry, jax.tree_map(lambda x: x[batch_idx:batch_idx+1], carry), rtol=1e-5)
+          cell_carry,
+          jax.tree_map(lambda x: x[batch_idx : batch_idx + 1], carry),
+          rtol=1e-5,
+      )
 
   def test_flip_sequence(self):
     x = jnp.arange(2 * 5).reshape((2, 5))
@@ -370,7 +395,6 @@ class RNNTest(absltest.TestCase):
     np.testing.assert_allclose(flipped[:2, 1], x[:2, 1][::-1])
 
   def test_basic_seq_lengths(self):
-
     x = jnp.ones((2, 10, 6))
     lstm = nn.RNN(nn.LSTMCell(265))
     variables = lstm.init(jax.random.PRNGKey(0), x)
@@ -386,8 +410,7 @@ class BidirectionalTest(absltest.TestCase):
     channels_out = 6
 
     bdirectional = nn.Bidirectional(
-      nn.RNN(nn.LSTMCell(channels_out)),
-      nn.RNN(nn.LSTMCell(channels_out))
+        nn.RNN(nn.LSTMCell(channels_out)), nn.RNN(nn.LSTMCell(channels_out))
     )
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
@@ -403,10 +426,7 @@ class BidirectionalTest(absltest.TestCase):
     channels_out = 6
 
     cell = nn.LSTMCell(channels_out)
-    bdirectional = nn.Bidirectional(
-      nn.RNN(cell),
-      nn.RNN(cell)
-    )
+    bdirectional = nn.Bidirectional(nn.RNN(cell), nn.RNN(cell))
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
     ys: jnp.ndarray
@@ -421,9 +441,9 @@ class BidirectionalTest(absltest.TestCase):
     channels_out = 6
 
     bdirectional = nn.Bidirectional(
-      nn.RNN(nn.LSTMCell(channels_out)),
-      nn.RNN(nn.LSTMCell(channels_out)),
-      merge_fn=lambda x, y: x + y
+        nn.RNN(nn.LSTMCell(channels_out)),
+        nn.RNN(nn.LSTMCell(channels_out)),
+        merge_fn=lambda x, y: x + y,
     )
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
@@ -439,9 +459,9 @@ class BidirectionalTest(absltest.TestCase):
     channels_out = 6
 
     bdirectional = nn.Bidirectional(
-      nn.RNN(nn.LSTMCell(channels_out)),
-      nn.RNN(nn.LSTMCell(channels_out)),
-      return_carry=True
+        nn.RNN(nn.LSTMCell(channels_out)),
+        nn.RNN(nn.LSTMCell(channels_out)),
+        return_carry=True,
     )
 
     xs = jnp.ones((batch_size, seq_len, channels_in))
@@ -451,44 +471,31 @@ class BidirectionalTest(absltest.TestCase):
 
     self.assertEqual(ys.shape, (batch_size, seq_len, channels_out * 2))
     self.assertEqual(
-      jax.tree_map(jnp.shape, carry_forward),
-      ((batch_size, channels_out), (batch_size, channels_out))
+        jax.tree_map(jnp.shape, carry_forward),
+        ((batch_size, channels_out), (batch_size, channels_out)),
     )
     self.assertEqual(
-      jax.tree_map(jnp.shape, carry_backward),
-      ((batch_size, channels_out), (batch_size, channels_out))
+        jax.tree_map(jnp.shape, carry_backward),
+        ((batch_size, channels_out), (batch_size, channels_out)),
     )
+
 
 class TestRecurrentDeprecation(parameterized.TestCase):
 
-  @parameterized.product(
-    cell_type=[nn.LSTMCell, nn.GRUCell, nn.OptimizedLSTMCell]
-  )
+  @parameterized.product(cell_type=[nn.LSTMCell, nn.GRUCell, nn.OptimizedLSTMCell])
   def test_constructor(self, cell_type):
-
-    with self.assertRaisesRegex(
-      TypeError,
-      "The RNNCellBase API has changed"
-    ):
+    with self.assertRaisesRegex(TypeError, 'The RNNCellBase API has changed'):
       cell_type()
 
-  @parameterized.product(
-    cell_type=[nn.LSTMCell, nn.GRUCell, nn.OptimizedLSTMCell]
-  )
+  @parameterized.product(cell_type=[nn.LSTMCell, nn.GRUCell, nn.OptimizedLSTMCell])
   def test_initialize_carry(self, cell_type):
     key = jax.random.PRNGKey(0)
-    with self.assertRaisesRegex(
-      TypeError,
-      "The RNNCellBase API has changed"
-    ):
+    with self.assertRaisesRegex(TypeError, 'The RNNCellBase API has changed'):
       cell_type.initialize_carry(key, (2,), 3)
 
   def test_rnn(self):
     cell = nn.LSTMCell(3)
-    with self.assertRaisesRegex(
-      TypeError,
-      "The RNNCellBase API has changed"
-    ):
+    with self.assertRaisesRegex(TypeError, 'The RNNCellBase API has changed'):
       nn.RNN(cell, cell_size=8)
 
 

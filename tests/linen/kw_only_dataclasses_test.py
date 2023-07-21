@@ -24,7 +24,6 @@ from flax.linen import kw_only_dataclasses
 class KwOnlyDataclassesTest(absltest.TestCase):
 
   def test_kwonly_args_moved_to_end(self):
-
     @kw_only_dataclasses.dataclass
     class TestClass:
       a: int = 1
@@ -47,7 +46,6 @@ class KwOnlyDataclassesTest(absltest.TestCase):
     self.assertDictEqual(dataclasses.asdict(v3), dict(a=1, b=2, c=30))
 
   def test_base_optional_subclass_required(self):
-
     @kw_only_dataclasses.dataclass
     class Parent:
       a: int = kw_only_dataclasses.field(default=2, kw_only=True)
@@ -103,11 +101,9 @@ class KwOnlyDataclassesTest(absltest.TestCase):
     self.assertEqual(c_params['size'].default, inspect.Parameter.empty)
 
     value = C(4, 'foo')  # pylint: disable=too-many-function-args
-    self.assertDictEqual(
-        dataclasses.asdict(value), dict(name='foo', size=4, x=2, y=3))
+    self.assertDictEqual(dataclasses.asdict(value), dict(name='foo', size=4, x=2, y=3))
 
   def test_kwonly_marker(self):
-
     @kw_only_dataclasses.dataclass
     class A:
       x: float

@@ -30,9 +30,10 @@ class MLP(Module):
   @compact
   def __call__(self, x):
     for size in self.sizes[:-1]:
-        x = Dense(size)(x)
-        x = nn.relu(x)
+      x = Dense(size)(x)
+      x = nn.relu(x)
     return Dense(self.sizes[-1])(x)
+
 
 # Return an initialized instance of MLP by calling `__call__` with an input batch,
 # initializing all variables.

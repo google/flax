@@ -30,9 +30,7 @@ Features = Dict[str, tf.Tensor]
 
 
 def _dump_chars_to_textfile(
-    dataset: tf.data.Dataset,
-    maxchars: int = int(1e7),
-    data_keys=('inputs', 'targets')
+    dataset: tf.data.Dataset, maxchars: int = int(1e7), data_keys=('inputs', 'targets')
 ) -> Tuple[str, int]:
   """Write part of a TFDS sentence dataset to lines in a text file.
 
@@ -46,8 +44,7 @@ def _dump_chars_to_textfile(
   """
   char_count = 0
   ds_iter = dataset.as_numpy_iterator()
-  with tempfile.NamedTemporaryFile(
-      delete=False, prefix='/tmp/ds_chars') as outfp:
+  with tempfile.NamedTemporaryFile(delete=False, prefix='/tmp/ds_chars') as outfp:
     while char_count < maxchars:
       example = next(ds_iter)
       for k in data_keys:
@@ -57,14 +54,16 @@ def _dump_chars_to_textfile(
   return outfp.name, char_count
 
 
-def _train_sentencepiece(dataset: tf.data.Dataset,
-                         *,
-                         vocab_size: int,
-                         maxchars: int = int(1e7),
-                         model_path: str,
-                         model_type: str = 'unigram',
-                         character_coverage: float = 1.0,
-                         data_keys=('inputs', 'targets')):
+def _train_sentencepiece(
+    dataset: tf.data.Dataset,
+    *,
+    vocab_size: int,
+    maxchars: int = int(1e7),
+    model_path: str,
+    model_type: str = 'unigram',
+    character_coverage: float = 1.0,
+    data_keys=('inputs', 'targets'),
+):
   """Train SentencePiece tokenizer from subset of tf dataset.
 
   Args:
@@ -85,15 +84,15 @@ def _train_sentencepiece(dataset: tf.data.Dataset,
     abs_model_path = model_path
   else:
     abs_model_path = os.path.abspath(os.path.expanduser(model_path))
-  fname, _ = _dump_chars_to_textfile(
-      dataset, maxchars=maxchars, data_keys=data_keys)
-  with tempfile.NamedTemporaryFile(
-      delete=False, prefix='/tmp/sp_tmp') as model_fp:
+  fname, _ = _dump_chars_to_textfile(dataset, maxchars=maxchars, data_keys=data_keys)
+  with tempfile.NamedTemporaryFile(delete=False, prefix='/tmp/sp_tmp') as model_fp:
     pass  # we just want a prefix'd tmp-filename
   argstr = ' '.join([
-      f'--input={fname}', f'--vocab_size={vocab_size}',
+      f'--input={fname}',
+      f'--vocab_size={vocab_size}',
       f'--character_coverage={character_coverage}',
-      f'--model_prefix={model_fp.name}', f'--model_type={model_type}'
+      f'--model_prefix={model_fp.name}',
+      f'--model_type={model_type}',
   ])
   SentencePieceTrainer.Train(argstr)
   if jax.process_index() == 0:
@@ -110,24 +109,26 @@ def _train_sentencepiece(dataset: tf.data.Dataset,
   return abs_model_path
 
 
-def _load_sentencepiece_tokenizer(model_path: str,
-                                  add_bos: bool = False,
-                                  add_eos: bool = True,
-                                  reverse: bool = False):
+def _load_sentencepiece_tokenizer(
+    model_path: str, add_bos: bool = False, add_eos: bool = True, reverse: bool = False
+):
   """Load a tf-text SentencePiece tokenizer from given model filepath."""
   with tf.io.gfile.GFile(model_path, 'rb') as model_fp:
     sp_model = model_fp.read()
   sp_tokenizer = tftxt.SentencepieceTokenizer(
-      model=sp_model, add_bos=add_bos, add_eos=add_eos, reverse=reverse)
+      model=sp_model, add_bos=add_bos, add_eos=add_eos, reverse=reverse
+  )
   return sp_tokenizer
 
 
-def load_or_train_tokenizer(dataset: tf.data.Dataset,
-                            *,
-                            vocab_path: str,
-                            vocab_size: int,
-                            max_corpus_chars: int,
-                            data_keys: Tuple[str, str] = ('inputs', 'targets')):
+def load_or_train_tokenizer(
+    dataset: tf.data.Dataset,
+    *,
+    vocab_path: str,
+    vocab_size: int,
+    max_corpus_chars: int,
+    data_keys: Tuple[str, str] = ('inputs', 'targets'),
+):
   """Loads the tokenizer at `vocab_path` or trains a one from `dataset`."""
   try:
     return _load_sentencepiece_tokenizer(vocab_path)
@@ -138,13 +139,13 @@ def load_or_train_tokenizer(dataset: tf.data.Dataset,
         vocab_size=vocab_size,
         maxchars=max_corpus_chars,
         model_path=vocab_path,
-        data_keys=data_keys)
+        data_keys=data_keys,
+    )
     return _load_sentencepiece_tokenizer(vocab_path)
 
 
 @dataclasses.dataclass
 class TokenizeOp:
-
   sp_tokenizer: Any
   data_keys: Iterable[str] = ('inputs', 'targets')
 

@@ -48,7 +48,10 @@ class TrainTest(absltest.TestCase):
     self.assertEqual((1, 10), output.shape)
     self.assertEqual(
         CNN_PARAMS,
-        sum(np.prod(arr.shape) for arr in jax.tree_util.tree_leaves(variables["params"])))
+        sum(
+            np.prod(arr.shape) for arr in jax.tree_util.tree_leaves(variables["params"])
+        ),
+    )
 
   def test_train_and_evaluate(self):
     """Tests training and evaluation code by running a single step."""

@@ -28,10 +28,13 @@ from flax.core import Scope
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
+
 class Dummy(nn.Module):
+
   @nn.compact
   def __call__(self):
     self.param('foo', lambda rng: 1)
+
 
 class ModuleTopLevelTest(absltest.TestCase):
   pass

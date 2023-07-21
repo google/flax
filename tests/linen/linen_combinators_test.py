@@ -41,8 +41,8 @@ class MLP(nn.Module):
       if self.activation is not None:
         x = self.activation(x)
     x = nn.Dense(
-        features=self.layer_sizes[-1], kernel_init=nn.initializers.ones_init())(
-            x)
+        features=self.layer_sizes[-1], kernel_init=nn.initializers.ones_init()
+    )(x)
     if self.activation_final is None:
       return x
     return self.activation_final(x)
@@ -55,8 +55,8 @@ class AttentionTuple(nn.Module):
   @nn.compact
   def __call__(self, query, key_value):
     output = nn.MultiHeadDotProductAttention(
-        num_heads=self.num_heads, qkv_features=self.qkv_features)(query,
-                                                                  key_value)
+        num_heads=self.num_heads, qkv_features=self.qkv_features
+    )(query, key_value)
     return output, key_value
 
 
@@ -67,8 +67,8 @@ class AttentionDict(nn.Module):
   @nn.compact
   def __call__(self, query, key_value):
     output = nn.MultiHeadDotProductAttention(
-        num_heads=self.num_heads, qkv_features=self.qkv_features)(query,
-                                                                  key_value)
+        num_heads=self.num_heads, qkv_features=self.qkv_features
+    )(query, key_value)
     return dict(query=output, key_value=key_value)
 
 
@@ -84,15 +84,14 @@ class SequentialTest(absltest.TestCase):
 
   def test_fails_if_layers_empty(self):
     sequential = nn.Sequential([])
-    with self.assertRaisesRegex(ValueError,
-                                'Empty Sequential module'):
+    with self.assertRaisesRegex(ValueError, 'Empty Sequential module'):
       sequential.init(random.PRNGKey(42), jnp.ones((3, 5)))
 
   def test_same_output_as_mlp(self):
     sequential = nn.Sequential([
         nn.Dense(4, kernel_init=nn.initializers.ones_init()),
         nn.Dense(8, kernel_init=nn.initializers.ones_init()),
-        nn.Dense(2, kernel_init=nn.initializers.ones_init())
+        nn.Dense(2, kernel_init=nn.initializers.ones_init()),
     ])
     mlp = MLP(layer_sizes=[4, 8, 2])
 
@@ -107,15 +106,17 @@ class SequentialTest(absltest.TestCase):
 
   def test_same_output_as_mlp_with_activation(self):
     sequential = nn.Sequential([
-        nn.Dense(4, kernel_init=nn.initializers.ones_init()), nn.relu,
-        nn.Dense(8, kernel_init=nn.initializers.ones_init()), nn.relu,
-        nn.Dense(2, kernel_init=nn.initializers.ones_init()), nn.log_softmax
+        nn.Dense(4, kernel_init=nn.initializers.ones_init()),
+        nn.relu,
+        nn.Dense(8, kernel_init=nn.initializers.ones_init()),
+        nn.relu,
+        nn.Dense(2, kernel_init=nn.initializers.ones_init()),
+        nn.log_softmax,
     ])
 
     mlp = MLP(
-        layer_sizes=[4, 8, 2],
-        activation=nn.relu,
-        activation_final=nn.log_softmax)
+        layer_sizes=[4, 8, 2], activation=nn.relu, activation_final=nn.log_softmax
+    )
 
     key1, key2 = random.split(random.PRNGKey(0), 2)
     x = random.uniform(key1, (3, 5))
@@ -125,7 +126,6 @@ class SequentialTest(absltest.TestCase):
     output_1 = sequential.apply(params_1, x)
     output_2 = mlp.apply(params_2, x)
     np.testing.assert_array_equal(output_1, output_2)
-
 
   def test_tuple_output(self):
     sequential = nn.Sequential([

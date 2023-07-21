@@ -35,7 +35,8 @@ config_flags.DEFINE_config_file(
     'config',
     None,
     'File path to the training hyperparameter configuration.',
-    lock_config=True)
+    lock_config=True,
+)
 flags.mark_flags_as_required(['config', 'workdir'])
 
 
@@ -52,10 +53,12 @@ def main(argv):
 
   # Add a note so that we can tell which task is which JAX host.
   # (Depending on the platform task 0 is not guaranteed to be host 0)
-  platform.work_unit().set_task_status(f'process_index: {jax.process_index()}, '
-                                       f'process_count: {jax.process_count()}')
-  platform.work_unit().create_artifact(platform.ArtifactType.DIRECTORY,
-                                       FLAGS.workdir, 'workdir')
+  platform.work_unit().set_task_status(
+      f'process_index: {jax.process_index()}, ' f'process_count: {jax.process_count()}'
+  )
+  platform.work_unit().create_artifact(
+      platform.ArtifactType.DIRECTORY, FLAGS.workdir, 'workdir'
+  )
 
   train.train_and_evaluate(FLAGS.config, FLAGS.workdir)
 

@@ -30,16 +30,20 @@ flags.DEFINE_bool(
     'dry_run',
     False,
     help='If set, then the command to launch the GCE instance will only be '
-    'printed to stdout.')
+    'printed to stdout.',
+)
 flags.DEFINE_bool(
     'connect',
     False,
-    help='Same as --wait, but directly connect to VM once it is ready.')
+    help='Same as --wait, but directly connect to VM once it is ready.',
+)
 flags.DEFINE_bool(
-    'wait', False,
+    'wait',
+    False,
     help='If set, then the script will wait until VM is ready. If VM_READY_CMD '
     'is set in environment, then that command will be executed once the VM '
-    'is ready. Useful for sending a notification, e.g. "osascript" (mac).')
+    'is ready. Useful for sending a notification, e.g. "osascript" (mac).',
+)
 
 # Machine configuration.
 flags.DEFINE_string('project', None, help='Name of the Google Cloud project.')
@@ -47,60 +51,63 @@ flags.DEFINE_string('zone', None, help='Zone in which the VM will be created.')
 flags.DEFINE_string(
     'machine_type',
     None,
-    help='Machine type to use for VM. See "gcloud compute machine-types list".')
+    help='Machine type to use for VM. See "gcloud compute machine-types list".',
+)
 flags.DEFINE_string(
     'accelerator_type',
     '',
     help='Type of accelerator to use, or empty. '
-    'See "gcloud compute accelerator-types list".'
+    'See "gcloud compute accelerator-types list".',
 )
 flags.DEFINE_integer(
     'shutdown_secs',
     300,
     help='How long to wait (after successful/failed training) before shutting '
-    'down the VM. Set to 0 to disable.'
+    'down the VM. Set to 0 to disable.',
 )
-flags.DEFINE_integer(
-    'accelerator_count', 8, help='Number of accelerators to use.')
+flags.DEFINE_integer('accelerator_count', 8, help='Number of accelerators to use.')
 
 # GCS configuration.
 flags.DEFINE_string(
     'gcs_workdir_base',
     None,
     help='GCS base directory for model output. The --workdir argument will be '
-    'constructed from {gcs_workdir_base}/{example}/{name}/{timestamp} .')
+    'constructed from {gcs_workdir_base}/{example}/{name}/{timestamp} .',
+)
 flags.DEFINE_string(
     'tfds_data_dir',
     '',
     help='Optional tfds data directory. This can be useful to prepare datasets '
     'on GCS and then point the jobs to this preloaded directory. Dataset will '
-    'be downloaded from the web if not specified.')
+    'be downloaded from the web if not specified.',
+)
 
 # Repo configuration.
-flags.DEFINE_string(
-    'repo', 'https://github.com/google/flax', help='Git repository')
+flags.DEFINE_string('repo', 'https://github.com/google/flax', help='Git repository')
 flags.DEFINE_string('branch', 'main', help='Git repository')
 
 # Example configuration.
-flags.DEFINE_string(
-    'example', None, help='Name of Flax example (e.g. "imagenet").')
+flags.DEFINE_string('example', None, help='Name of Flax example (e.g. "imagenet").')
 flags.DEFINE_string(
     'args',
     '',
     help='Any additional command line arguments for {example}_main.py, like '
     'for example --config. Note that --workdir will be provided by the '
-    'script.')
+    'script.',
+)
 
 # Run configuration.
 flags.DEFINE_string(
     'name',
     None,
     help='Name of the experiment. Note that the provided name will be '
-    'extended to {example}/{name}/{timestamp}')
+    'extended to {example}/{name}/{timestamp}',
+)
 
 FLAGS = flags.FLAGS
 flags.mark_flags_as_required(
-    ['project', 'zone', 'machine_type', 'gcs_workdir_base', 'example', 'name'])
+    ['project', 'zone', 'machine_type', 'gcs_workdir_base', 'example', 'name']
+)
 
 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
 
@@ -122,7 +129,7 @@ def generate_startup_file(vm_name: str) -> str:
       ('__GCS_WORKDIR_BASE__', FLAGS.gcs_workdir_base),
       ('__TFDS_DATA_DIR__', FLAGS.tfds_data_dir),
       ('__ACCELERATOR_TYPE__', FLAGS.accelerator_type),
-      ('__SHUTDOWN_SECS__', str(FLAGS.shutdown_secs))
+      ('__SHUTDOWN_SECS__', str(FLAGS.shutdown_secs)),
   ):
     startup_script_content = startup_script_content.replace(from_str, to_str)
   with open(startup_script_dst, 'w', encoding='utf8') as f:
@@ -134,13 +141,21 @@ def launch_gce(*, vm_name: str, startup_script: str):
   # Note : Use `gcloud compute images list --project ml-images` to get a list
   # of available VM images.
   args = [
-      'gcloud', 'compute', 'instances', 'create', vm_name,
-      f'--project={FLAGS.project}', f'--zone={FLAGS.zone}',
+      'gcloud',
+      'compute',
+      'instances',
+      'create',
+      vm_name,
+      f'--project={FLAGS.project}',
+      f'--zone={FLAGS.zone}',
       '--image=c1-deeplearning-tf-2-10-cu113-v20221107-debian-10',
-      '--image-project=ml-images', f'--machine-type={FLAGS.machine_type}',
-      '--scopes=cloud-platform,storage-full', '--boot-disk-size=256GB',
-      '--boot-disk-type=pd-ssd', '--metadata=install-nvidia-driver=True',
-      f'--metadata-from-file=startup-script={startup_script}'
+      '--image-project=ml-images',
+      f'--machine-type={FLAGS.machine_type}',
+      '--scopes=cloud-platform,storage-full',
+      '--boot-disk-size=256GB',
+      '--boot-disk-type=pd-ssd',
+      '--metadata=install-nvidia-driver=True',
+      f'--metadata-from-file=startup-script={startup_script}',
   ]
   if FLAGS.accelerator_type and FLAGS.accelerator_count:
     args.extend([
@@ -165,7 +180,8 @@ def launch_gce(*, vm_name: str, startup_script: str):
 
 
 def print_howto(login_args: Sequence[str]):
-  print(f'''
+  print(
+      f"""
 ###############################################################################
 ###############################################################################
 
@@ -189,7 +205,8 @@ https://console.cloud.google.com/storage/browser/{FLAGS.gcs_workdir_base.replace
 
 ###############################################################################
 ###############################################################################
-''')
+"""
+  )
 
 
 def main(_):
@@ -237,8 +254,7 @@ def main(_):
     login_true_args = login_args[:-1] + ['true']
     while True:
       try:
-        result = subprocess.run(
-            login_true_args, timeout=10, stderr=subprocess.PIPE)
+        result = subprocess.run(login_true_args, timeout=10, stderr=subprocess.PIPE)
         if result.returncode == 0:
           break
         stderr = result.stderr.decode('utf8')

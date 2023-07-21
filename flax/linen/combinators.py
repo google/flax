@@ -69,17 +69,19 @@ class Sequential(Module):
         return nn.Sequential([CrossAttentionBlock() for _ in
                               range(self.num_layers)])(query, key_value)
   """
+
   layers: Sequence[Callable[..., Any]]
 
   def __post_init__(self):
     if not isinstance(self.layers, Sequence):
-      raise ValueError('\'layers\' must be a sequence, '
-                       f'got \'{type(self.layers).__name__}\'.')
+      raise ValueError(
+          "'layers' must be a sequence, " f"got '{type(self.layers).__name__}'."
+      )
     super().__post_init__()
 
   def __call__(self, *args, **kwargs):
     if not self.layers:
-      raise ValueError(f'Empty Sequential module {self.name}.')
+      raise ValueError(f"Empty Sequential module {self.name}.")
 
     outputs = self.layers[0](*args, **kwargs)
     for layer in self.layers[1:]:

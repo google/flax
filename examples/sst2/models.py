@@ -85,6 +85,7 @@ class WordDropout(nn.Module):
   This is basically the same as `nn.Dropout`, but allows specifying the
   value of dropped out items.
   """
+
   dropout_rate: float
   unk_idx: int
   deterministic: Optional[bool] = None
@@ -92,8 +93,9 @@ class WordDropout(nn.Module):
   @nn.compact
   def __call__(self, inputs: Array, deterministic: Optional[bool] = None):
     deterministic = nn.module.merge_param(
-        'deterministic', self.deterministic, deterministic)
-    if deterministic or self.dropout_rate == 0.:
+        'deterministic', self.deterministic, deterministic
+    )
+    if deterministic or self.dropout_rate == 0.0:
       return inputs
     rng = self.make_rng('dropout')
     mask = jax.random.bernoulli(rng, p=self.dropout_rate, shape=inputs.shape)
@@ -112,13 +114,13 @@ class Embedder(nn.Module):
     word_dropout_rate: Percentage of input words to replace with unk_idx.
     unk_idx: The index (integer) to use to replace inputs for word dropout.
   """
+
   vocab_size: int
   embedding_size: int
-  embedding_init: Callable[...,
-                           Array] = nn.initializers.normal(stddev=0.1)
+  embedding_init: Callable[..., Array] = nn.initializers.normal(stddev=0.1)
   frozen: bool = False
-  dropout_rate: float = 0.
-  word_dropout_rate: float = 0.
+  dropout_rate: float = 0.0
+  word_dropout_rate: float = 0.0
   unk_idx: Optional[int] = None
   deterministic: Optional[bool] = None
   dtype: jnp.dtype = jnp.float32
@@ -127,16 +129,15 @@ class Embedder(nn.Module):
     self.embedding = self.param(
         'embedding',
         self.embedding_init,
-        (self.vocab_size,
-         self.embedding_size),
-        self.dtype)
+        (self.vocab_size, self.embedding_size),
+        self.dtype,
+    )
     self.dropout_layer = nn.Dropout(rate=self.dropout_rate)
     self.word_dropout_layer = WordDropout(
-        dropout_rate=self.word_dropout_rate,
-        unk_idx=self.unk_idx)
+        dropout_rate=self.word_dropout_rate, unk_idx=self.unk_idx
+    )
 
-  def __call__(self, inputs: Array,
-               deterministic: Optional[bool] = None) -> Array:
+  def __call__(self, inputs: Array, deterministic: Optional[bool] = None) -> Array:
     """Embeds the input sequences and applies word dropout and dropout.
 
     Args:
@@ -148,7 +149,8 @@ class Embedder(nn.Module):
       embedding_size].
     """
     deterministic = nn.module.merge_param(
-        'deterministic', self.deterministic, deterministic)
+        'deterministic', self.deterministic, deterministic
+    )
     inputs = self.word_dropout_layer(inputs, deterministic=deterministic)
     embedded_inputs = self.embedding[inputs]
 
@@ -161,13 +163,16 @@ class Embedder(nn.Module):
 
 class SimpleLSTM(nn.Module):
   """A simple unidirectional LSTM."""
+
   hidden_size: int
 
   @functools.partial(
       nn.transforms.scan,
       variable_broadcast='params',
-      in_axes=1, out_axes=1,
-      split_rngs={'params': False})
+      in_axes=1,
+      out_axes=1,
+      split_rngs={'params': False},
+  )
   @nn.compact
   def __call__(self, carry, x):
     return nn.OptimizedLSTMCell(self.hidden_size)(carry, x)
@@ -175,11 +180,13 @@ class SimpleLSTM(nn.Module):
   def initialize_carry(self, input_shape):
     # Use fixed random key since default state init fn is just zeros.
     return nn.OptimizedLSTMCell(self.hidden_size, parent=None).initialize_carry(
-        jax.random.PRNGKey(0), input_shape)
+        jax.random.PRNGKey(0), input_shape
+    )
 
 
 class SimpleBiLSTM(nn.Module):
   """A simple bi-directional LSTM."""
+
   hidden_size: int
 
   def setup(self):
@@ -213,6 +220,7 @@ class MLP(nn.Module):
     output_bias: If False, do not use a bias term in the last layer.
     deterministic: Disables dropout if set to True.
   """
+
   hidden_size: int
   output_size: int
   activation: Callable[..., Any] = nn.tanh
@@ -236,7 +244,8 @@ class MLP(nn.Module):
       The MLP output <float32>[batch_size, ..., output_size]
     """
     deterministic = nn.module.merge_param(
-        'deterministic', self.deterministic, deterministic)
+        'deterministic', self.deterministic, deterministic
+    )
     hidden = self.intermediate_layer(inputs)
     hidden = self.activation(hidden)
     hidden = self.dropout_layer(hidden, deterministic=deterministic)
@@ -260,6 +269,7 @@ class KeysOnlyMlpAttention(nn.Module):
   Attributes:
     hidden_size: The hidden size of the MLP that computes the attention score.
   """
+
   hidden_size: int
 
   @nn.compact
@@ -299,23 +309,25 @@ class AttentionClassifier(nn.Module):
       of the inputs, and inside the MLP. Applied when `deterministic` is False.
     deterministic: Disables dropout if True.
   """
+
   hidden_size: int
   output_size: int
-  dropout_rate: float = 0.
+  dropout_rate: float = 0.0
   deterministic: Optional[bool] = None
 
   def setup(self):
     self.dropout_layer = nn.Dropout(rate=self.dropout_rate)
-    self.keys_only_mlp_attention = KeysOnlyMlpAttention(
-        hidden_size=self.hidden_size)
+    self.keys_only_mlp_attention = KeysOnlyMlpAttention(hidden_size=self.hidden_size)
     self.mlp = MLP(
         hidden_size=self.hidden_size,
         output_size=self.output_size,
         output_bias=False,
-        dropout_rate=self.dropout_rate)
+        dropout_rate=self.dropout_rate,
+    )
 
-  def __call__(self, encoded_inputs: Array, lengths: Array,
-               deterministic: Optional[bool] = None) -> Array:
+  def __call__(
+      self, encoded_inputs: Array, lengths: Array, deterministic: Optional[bool] = None
+  ) -> Array:
     """Applies model to the encoded inputs.
 
     Args:
@@ -329,9 +341,9 @@ class AttentionClassifier(nn.Module):
       An array of logits <float32>[batch_size, output_size].
     """
     deterministic = nn.module.merge_param(
-        'deterministic', self.deterministic, deterministic)
-    encoded_inputs = self.dropout_layer(
-        encoded_inputs, deterministic=deterministic)
+        'deterministic', self.deterministic, deterministic
+    )
+    encoded_inputs = self.dropout_layer(encoded_inputs, deterministic=deterministic)
 
     # Compute attention. attention.shape: <float32>[batch_size, seq_len].
     mask = sequence_mask(lengths, encoded_inputs.shape[1])
@@ -366,33 +378,38 @@ class TextClassifier(nn.Module):
         embedding_size=self.embedding_size,
         dropout_rate=self.dropout_rate,
         word_dropout_rate=self.word_dropout_rate,
-        unk_idx=self.unk_idx)
+        unk_idx=self.unk_idx,
+    )
     self.encoder = SimpleBiLSTM(hidden_size=self.hidden_size)
     self.classifier = AttentionClassifier(
         hidden_size=self.hidden_size,
         output_size=self.output_size,
-        dropout_rate=self.dropout_rate)
+        dropout_rate=self.dropout_rate,
+    )
 
-  def embed_token_ids(self, token_ids: Array,
-                      deterministic: Optional[bool] = None) -> Array:
+  def embed_token_ids(
+      self, token_ids: Array, deterministic: Optional[bool] = None
+  ) -> Array:
     deterministic = nn.module.merge_param(
-        'deterministic', self.deterministic, deterministic)
+        'deterministic', self.deterministic, deterministic
+    )
     return self.embedder(token_ids, deterministic=deterministic)
 
   def logits_from_embedded_inputs(
-      self, embedded_inputs: Array, lengths: Array,
-      deterministic: Optional[bool] = None) -> Array:
+      self, embedded_inputs: Array, lengths: Array, deterministic: Optional[bool] = None
+  ) -> Array:
     deterministic = nn.module.merge_param(
-        'deterministic', self.deterministic, deterministic)
+        'deterministic', self.deterministic, deterministic
+    )
     encoded_inputs = self.encoder(embedded_inputs, lengths)
-    return self.classifier(
-        encoded_inputs, lengths, deterministic=deterministic)
+    return self.classifier(encoded_inputs, lengths, deterministic=deterministic)
 
-  def __call__(self, token_ids: Array, lengths: Array,
-               deterministic: Optional[bool] = None) -> Array:
+  def __call__(
+      self, token_ids: Array, lengths: Array, deterministic: Optional[bool] = None
+  ) -> Array:
     """Embeds the token IDs, encodes them, and classifies with attention."""
-    embedded_inputs = self.embed_token_ids(
-        token_ids, deterministic=deterministic)
+    embedded_inputs = self.embed_token_ids(token_ids, deterministic=deterministic)
     logits = self.logits_from_embedded_inputs(
-        embedded_inputs, lengths, deterministic=deterministic)
+        embedded_inputs, lengths, deterministic=deterministic
+    )
     return logits

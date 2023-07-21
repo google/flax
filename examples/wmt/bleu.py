@@ -60,7 +60,8 @@ class UnicodeRegex:
     return "".join(
         chr(x)
         for x in range(sys.maxunicode)
-        if unicodedata.category(chr(x)).startswith(prefix))
+        if unicodedata.category(chr(x)).startswith(prefix)
+    )
 
 
 uregex = UnicodeRegex()
@@ -109,14 +110,12 @@ def _get_ngrams(segment, max_order):
   ngram_counts = collections.Counter()
   for order in range(1, max_order + 1):
     for i in range(0, len(segment) - order + 1):
-      ngram = tuple(segment[i:i + order])
+      ngram = tuple(segment[i : i + order])
       ngram_counts[ngram] += 1
   return ngram_counts
 
 
-def compute_bleu_matches(reference_corpus,
-                 translation_corpus,
-                 max_order=4):
+def compute_bleu_matches(reference_corpus, translation_corpus, max_order=4):
   """Computes BLEU match stats of translations against one or more references.
 
   Args:
@@ -138,32 +137,36 @@ def compute_bleu_matches(reference_corpus,
   possible_matches_by_order = [0] * max_order
   precisions = []
 
-  for (references, translations) in zip(reference_corpus, translation_corpus):
+  for references, translations in zip(reference_corpus, translation_corpus):
     reference_length += len(references)
     translation_length += len(translations)
     ref_ngram_counts = _get_ngrams(references, max_order)
     translation_ngram_counts = _get_ngrams(translations, max_order)
 
-    overlap = {ngram: min(count, translation_ngram_counts[ngram])
-                   for ngram, count in ref_ngram_counts.items()}
+    overlap = {
+        ngram: min(count, translation_ngram_counts[ngram])
+        for ngram, count in ref_ngram_counts.items()
+    }
 
     for ngram in overlap:
       matches_by_order[len(ngram) - 1] += overlap[ngram]
     for ngram in translation_ngram_counts:
-      possible_matches_by_order[len(ngram) -
-                                1] += translation_ngram_counts[ngram]
+      possible_matches_by_order[len(ngram) - 1] += translation_ngram_counts[ngram]
 
-  return (np.array(matches_by_order),
-          np.array(possible_matches_by_order),
-          np.array(reference_length),
-          np.array(translation_length))
+  return (
+      np.array(matches_by_order),
+      np.array(possible_matches_by_order),
+      np.array(reference_length),
+      np.array(translation_length),
+  )
 
 
 def bleu_partial(ref_lines, hyp_lines, case_sensitive=False):
   """Compute n-gram statistics for two lists of references and translations."""
   if len(ref_lines) != len(hyp_lines):
-    raise ValueError("Reference and translation lists have different "
-                     "numbers of lines.")
+    raise ValueError(
+        "Reference and translation lists have different " "numbers of lines."
+    )
   if not case_sensitive:
     ref_lines = [x.lower() for x in ref_lines]
     hyp_lines = [x.lower() for x in hyp_lines]
@@ -172,12 +175,14 @@ def bleu_partial(ref_lines, hyp_lines, case_sensitive=False):
   return compute_bleu_matches(ref_tokens, hyp_tokens)
 
 
-def complete_bleu(matches_by_order,
-                  possible_matches_by_order,
-                  reference_length,
-                  translation_length,
-                  max_order=4,
-                  use_bp=True):
+def complete_bleu(
+    matches_by_order,
+    possible_matches_by_order,
+    reference_length,
+    translation_length,
+    max_order=4,
+    use_bp=True,
+):
   """Compute BLEU score from aggregated n-gram statistics."""
   precisions = [0] * max_order
   smooth = 1.0
@@ -207,7 +212,7 @@ def complete_bleu(matches_by_order,
       elif ratio >= 1.0:
         bp = 1.0
       else:
-        bp = math.exp(1 - 1. / ratio)
+        bp = math.exp(1 - 1.0 / ratio)
   bleu = geo_mean * bp
   return float(bleu) * 100.0
 

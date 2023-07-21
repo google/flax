@@ -38,7 +38,7 @@ https://github.com/google/flax/actions/workflows/build.yml
 
 Alternatively, the list can also be provided from the local environment with:
 
-python dev --versions="$(pip freeze | sed s/==/-/g) flax-0.3.6"
+python dev --versions="$(pip freeze | sed s/==/-/g) flax-0.3.6" 
 """
 
 import pathlib
@@ -58,7 +58,8 @@ flags.DEFINE_string(
     '`--version="$(pip freeze | sed s/==/-/g) flax-0.3.6"` '
     '(note the flax version "override") '
     'or from the "install dependencies" step in the github build action '
-    'https://github.com/google/flax/actions/workflows/build.yml')
+    'https://github.com/google/flax/actions/workflows/build.yml',
+)
 flags.mark_flag_as_required('versions')
 flags.DEFINE_bool('verbose', False, 'enables verbose output.')
 flags.DEFINE_list('ignore', ['jax'], 'packages not to add to requirements.')
@@ -67,22 +68,26 @@ flags.DEFINE_list('ignore', ['jax'], 'packages not to add to requirements.')
 import_re = re.compile(r'(?:from|import)\s+(\w+)')
 # maps `import cv2` to `pip install opencv-python`
 pkg_map = {
-  'absl': 'absl-py',
-  'atari_py': 'atari-py',
-  'cv2': 'opencv-python',
-  'ml_collections': 'ml-collections',
-  'PIL': 'Pillow',
-  'tensorflow_datasets': 'tensorflow-datasets',
-  'tensorflow_text': 'tensorflow-text',
+    'absl': 'absl-py',
+    'atari_py': 'atari-py',
+    'cv2': 'opencv-python',
+    'ml_collections': 'ml-collections',
+    'PIL': 'Pillow',
+    'tensorflow_datasets': 'tensorflow-datasets',
+    'tensorflow_text': 'tensorflow-text',
 }
-standard_libs = set('codecs collections dataclasses datetime enum functools math multiprocessing itertools os pathlib random re sys tempfile time typing unicodedata warnings'.split(' '))
+standard_libs = set(
+    'codecs collections dataclasses datetime enum functools math multiprocessing itertools os pathlib random re sys tempfile time typing unicodedata warnings'.split(
+        ' '
+    )
+)
 
 
 def main(argv):
   del argv
 
   versions = {
-      pkg_version[:pkg_version.rindex('-')]: pkg_version[pkg_version.rindex('-') + 1:]
+      pkg_version[: pkg_version.rindex('-')]: pkg_version[pkg_version.rindex('-') + 1 :]
       for pkg_version in FLAGS.versions.replace('\n', ' ').split(' ')
       if '-' in pkg_version
   }
@@ -117,7 +122,8 @@ def main(argv):
     print(f'{requirements} -', end=' ')
     with requirements.open('w') as f:
       for pkg in sorted(pkgs, key=str.casefold):
-        if pkg in ignore: continue
+        if pkg in ignore:
+          continue
         pkg = pkg_map.get(pkg, pkg)
         print(f'{pkg}-{versions[pkg]}', end=' ')
         f.write(f'{pkg}=={versions[pkg]}\n')

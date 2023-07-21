@@ -53,7 +53,8 @@ class InputPipelineTest(absltest.TestCase):
 
     with tfds.testing.mock_data(num_examples=128, data_dir=data_dir):
       train_ds, eval_ds, predict_ds, _ = input_pipeline.get_wmt_datasets(
-          n_devices=2, config=config, vocab_path=vocab_path)
+          n_devices=2, config=config, vocab_path=vocab_path
+      )
     return train_ds, eval_ds, predict_ds
 
   def test_train_ds(self):
@@ -61,30 +62,39 @@ class InputPipelineTest(absltest.TestCase):
     # For training we pack multiple short examples in one example.
     # *_position and *_segmentation indicate the boundaries.
     for batch in self.train_ds.take(3):
-      self.assertEqual({k: v.shape.as_list() for k, v in batch.items()}, {
-          'inputs': expected_shape,
-          'inputs_position': expected_shape,
-          'inputs_segmentation': expected_shape,
-          'targets': expected_shape,
-          'targets_position': expected_shape,
-          'targets_segmentation': expected_shape,
-      })
+      self.assertEqual(
+          {k: v.shape.as_list() for k, v in batch.items()},
+          {
+              'inputs': expected_shape,
+              'inputs_position': expected_shape,
+              'inputs_segmentation': expected_shape,
+              'targets': expected_shape,
+              'targets_position': expected_shape,
+              'targets_segmentation': expected_shape,
+          },
+      )
 
   def test_eval_ds(self):
     expected_shape = [2, _EVAL_TARGET_LENGTH]  # 2 devices.
     for batch in self.eval_ds.take(3):
-      self.assertEqual({k: v.shape.as_list() for k, v in batch.items()}, {
-          'inputs': expected_shape,
-          'targets': expected_shape,
-      })
+      self.assertEqual(
+          {k: v.shape.as_list() for k, v in batch.items()},
+          {
+              'inputs': expected_shape,
+              'targets': expected_shape,
+          },
+      )
 
   def test_predict_ds(self):
     expected_shape = [2, _PREDICT_TARGET_LENGTH]  # 2 devices.
     for batch in self.predict_ds.take(3):
-      self.assertEqual({k: v.shape.as_list() for k, v in batch.items()}, {
-          'inputs': expected_shape,
-          'targets': expected_shape,
-      })
+      self.assertEqual(
+          {k: v.shape.as_list() for k, v in batch.items()},
+          {
+              'inputs': expected_shape,
+              'targets': expected_shape,
+          },
+      )
 
 
 if __name__ == '__main__':

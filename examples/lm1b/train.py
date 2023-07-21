@@ -63,25 +63,25 @@ def rsqrt_schedule(
   """
 
   def schedule(count):
-    return init_value * (count + shift)**-.5 * shift**.5
+    return init_value * (count + shift) ** -0.5 * shift**0.5
 
   return schedule
 
 
 def create_learning_rate_schedule(learning_rate: float, warmup_steps: int):
   """Creates a rsqrt schedule with linear warmup."""
-  return optax.join_schedules([
-      optax.linear_schedule(
-          init_value=0, end_value=learning_rate, transition_steps=warmup_steps),
-      rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
-  ],
-                              boundaries=[warmup_steps])
+  return optax.join_schedules(
+      [
+          optax.linear_schedule(
+              init_value=0, end_value=learning_rate, transition_steps=warmup_steps
+          ),
+          rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
+      ],
+      boundaries=[warmup_steps],
+  )
 
 
-def compute_weighted_cross_entropy(logits,
-                                   targets,
-                                   weights=None,
-                                   label_smoothing=0.0):
+def compute_weighted_cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
   """Compute weighted cross entropy and entropy for log probs and targets.
 
   Args:
@@ -95,16 +95,20 @@ def compute_weighted_cross_entropy(logits,
     Tuple of scalar loss and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
-    raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
-                     (str(logits.shape), str(targets.shape)))
+    raise ValueError(
+        "Incorrect shapes. Got shape %s logits and %s targets"
+        % (str(logits.shape), str(targets.shape))
+    )
   vocab_size = logits.shape[-1]
   confidence = 1.0 - label_smoothing
   low_confidence = (1.0 - confidence) / (vocab_size - 1)
   normalizing_constant = -(
-      confidence * jnp.log(confidence) +
-      (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20))
+      confidence * jnp.log(confidence)
+      + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+  )
   soft_targets = common_utils.onehot(
-      targets, vocab_size, on_value=confidence, off_value=low_confidence)
+      targets, vocab_size, on_value=confidence, off_value=low_confidence
+  )
 
   loss = -jnp.sum(soft_targets * nn.log_softmax(logits), axis=-1)
   loss = loss - normalizing_constant
@@ -129,8 +133,10 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     Tuple of scalar loss and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
-    raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
-                     (str(logits.shape), str(targets.shape)))
+    raise ValueError(
+        "Incorrect shapes. Got shape %s logits and %s targets"
+        % (str(logits.shape), str(targets.shape))
+    )
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
   normalizing_factor = np.prod(logits.shape[:-1])
   if weights is not None:
@@ -142,8 +148,9 @@ def compute_weighted_accuracy(logits, targets, weights=None):
 
 def compute_metrics(logits, labels, weights, label_smoothing=0.0):
   """Compute summary metrics."""
-  loss, weight_sum = compute_weighted_cross_entropy(logits, labels, weights,
-                                                    label_smoothing)
+  loss, weight_sum = compute_weighted_cross_entropy(
+      logits, labels, weights, label_smoothing
+  )
   acc, _ = compute_weighted_accuracy(logits, labels, weights)
   metrics = {
       "loss": loss,
@@ -158,12 +165,9 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
 # -----------------------------------------------------------------------------
 
 
-def train_step(state,
-               batch,
-               config,
-               learning_rate_fn,
-               label_smoothing=0.0,
-               dropout_rng=None):
+def train_step(
+    state, batch, config, learning_rate_fn, label_smoothing=0.0, dropout_rng=None
+):
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using "packed examples"
   # where multiple sequences are packed into the same example with this
@@ -171,8 +175,9 @@ def train_step(state,
   # if such features are not present they are ignored and the example is treated
   # like a normal, unpacked sequence example.
   train_keys = ["inputs", "inputs_position", "inputs_segmentation"]
-  (inputs, inputs_positions, inputs_segmentation
-   ) = (batch.get(k, None) for k in train_keys)
+  (inputs, inputs_positions, inputs_segmentation) = (
+      batch.get(k, None) for k in train_keys
+  )
 
   weights = jnp.where(inputs > 0, 1, 0).astype(jnp.float32)
 
@@ -185,10 +190,12 @@ def train_step(state,
         inputs,
         inputs_positions=inputs_positions,
         inputs_segmentation=inputs_segmentation,
-        rngs={"dropout": dropout_rng})
+        rngs={"dropout": dropout_rng},
+    )
 
-    loss, weight_sum = compute_weighted_cross_entropy(logits, inputs, weights,
-                                                      label_smoothing)
+    loss, weight_sum = compute_weighted_cross_entropy(
+        logits, inputs, weights, label_smoothing
+    )
     mean_loss = loss / weight_sum
     return mean_loss, logits
 
@@ -213,31 +220,22 @@ def eval_step(params, batch, config, label_smoothing=0.0):
   return compute_metrics(logits, inputs, weights, label_smoothing)
 
 
-def predict_step(inputs,
-                 params,
-                 rngkey,
-                 eos_id,
-                 max_decode_len,
-                 config,
-                 temperature,
-                 top_k):
+def predict_step(
+    inputs, params, rngkey, eos_id, max_decode_len, config, temperature, top_k
+):
   """Predict language model on a batch."""
   target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
   initial_variables = models.TransformerLM(config).init(
-      jax.random.PRNGKey(0),
-      jnp.ones(target_shape, config.dtype))
+      jax.random.PRNGKey(0), jnp.ones(target_shape, config.dtype)
+  )
   cache = initial_variables["cache"]
 
   def tokens_ids_to_logits(flat_ids, flat_cache):
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
     flat_logits, new_vars = models.TransformerLM(config).apply(
-        {
-            "params": params,
-            "cache": flat_cache
-        },
-        flat_ids,
-        mutable=["cache"])
+        {"params": params, "cache": flat_cache}, flat_ids, mutable=["cache"]
+    )
     new_flat_cache = new_vars["cache"]
     # Remove singleton sequence-length dimension:
     # [batch, 1, vocab] --> [batch, vocab]
@@ -253,7 +251,8 @@ def predict_step(inputs,
       rngkey,
       temperature=temperature,
       topk=top_k,
-      eos_token=eos_id)
+      eos_token=eos_id,
+  )
 
   return seqs
 
@@ -291,8 +290,7 @@ def tohost(x):
   return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
 
 
-def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset,
-             num_eval_steps: int):
+def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset, num_eval_steps: int):
   """Evaluate the target an return a dictionary with the metrics."""
   logging.info("Gathering evaluation metrics.")
   eval_metrics = []
@@ -307,16 +305,21 @@ def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset,
   eval_denominator = eval_metrics_sums.pop("denominator")
   eval_summary = jax.tree_util.tree_map(
       lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
-      eval_metrics_sums)
+      eval_metrics_sums,
+  )
   return eval_summary
 
 
-def generate_prediction(*, p_pred_step, params,
-                        tokenized_prompts,
-                        eos_id,
-                        inference_rng,
-                        decode_tokens,
-                        max_predict_length: int):
+def generate_prediction(
+    *,
+    p_pred_step,
+    params,
+    tokenized_prompts,
+    eos_id,
+    inference_rng,
+    decode_tokens,
+    max_predict_length: int,
+):
   """Generate text from the prompt."""
   n_devices = jax.local_device_count()
 
@@ -324,19 +327,21 @@ def generate_prediction(*, p_pred_step, params,
   predictions = []
   # Use batch of prompts provided by user.
   for pred_batch in jnp.array_split(
-      tokenized_prompts, int(np.ceil(len(tokenized_prompts) / n_devices))):
+      tokenized_prompts, int(np.ceil(len(tokenized_prompts) / n_devices))
+  ):
     cur_pred_batch_size = pred_batch.shape[0]
     if cur_pred_batch_size % n_devices:
-      padded_size = int(
-          np.ceil(cur_pred_batch_size / n_devices) * n_devices)
+      padded_size = int(np.ceil(cur_pred_batch_size / n_devices) * n_devices)
       pred_batch = jax.tree_util.tree_map(
-          lambda x: pad_examples(x, padded_size), pred_batch)  # pylint: disable=cell-var-from-loop
+          lambda x: pad_examples(x, padded_size), pred_batch
+      )  # pylint: disable=cell-var-from-loop
     pred_batch = common_utils.shard(pred_batch)
     inference_rng, sub_rng = random.split(inference_rng)
     inference_rngs = random.split(sub_rng, n_devices)
 
-    predicted = p_pred_step(pred_batch, params, inference_rngs,
-                            eos_id, max_predict_length)
+    predicted = p_pred_step(
+        pred_batch, params, inference_rngs, eos_id, max_predict_length
+    )
     predicted = tohost(predicted)
     # Iterate through non-padding examples of batch.
     for s in predicted[:cur_pred_batch_size]:
@@ -371,16 +376,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # ---------------------------------------------------------------------------
   logging.info("Initializing dataset.")
   train_ds, eval_ds, _, encoder = input_pipeline.get_datasets(
-      n_devices=jax.local_device_count(),
-      config=config,
-      vocab_path=vocab_path)
+      n_devices=jax.local_device_count(), config=config, vocab_path=vocab_path
+  )
 
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
   eos_id = temperature_sampler.EOS_ID  # Default Sentencepiece EOS token.
 
   def decode_tokens(toks):
-    valid_toks = toks[:np.argmax(toks == eos_id) + 1].astype(np.int32)
+    valid_toks = toks[: np.argmax(toks == eos_id) + 1].astype(np.int32)
     return encoder.detokenize(valid_toks).numpy().decode("utf-8")
 
   def encode_strings(strs, max_len):
@@ -388,11 +392,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     for i, s in enumerate(strs):
       toks = encoder.tokenize(s).numpy()
       # Remove EOS token in prompt.
-      tokenized_batch[i, :toks.shape[0]-1] = toks[:-1]
+      tokenized_batch[i, : toks.shape[0] - 1] = toks[:-1]
     return tokenized_batch
 
-  tokenized_prompts = encode_strings(
-      [config.prompts], config.max_predict_length)
+  tokenized_prompts = encode_strings([config.prompts], config.max_predict_length)
 
   logging.info("Initializing model, optimizer, and step functions.")
   # Build Model and Optimizer
@@ -413,7 +416,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       deterministic=False,
       decode=False,
       kernel_init=nn.initializers.xavier_uniform(),
-      bias_init=nn.initializers.normal(stddev=1e-6))
+      bias_init=nn.initializers.normal(stddev=1e-6),
+  )
   eval_config = train_config.replace(deterministic=True)
   predict_config = train_config.replace(deterministic=True, decode=True)
 
@@ -424,21 +428,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   input_shape = (config.per_device_batch_size, config.max_target_length)
 
   m = models.TransformerLM(eval_config)
-  initial_variables = jax.jit(m.init)(init_rng,
-                                      jnp.ones(input_shape, jnp.float32))
+  initial_variables = jax.jit(m.init)(init_rng, jnp.ones(input_shape, jnp.float32))
 
   learning_rate_fn = create_learning_rate_schedule(
-      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
+      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
+  )
 
   optimizer = optax.adamw(
-      learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9,
-      weight_decay=config.weight_decay
-      )
+      learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9, weight_decay=config.weight_decay
+  )
   state = train_state.TrainState.create(
-      apply_fn=m.apply,
-      params=initial_variables["params"],
-      tx=optimizer
-      )
+      apply_fn=m.apply, params=initial_variables["params"], tx=optimizer
+  )
   # We access model params only from optimizer below.
   del initial_variables
 
@@ -449,7 +450,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     start_step = int(state.step)
 
   writer = metric_writers.create_default_writer(
-      workdir, just_logging=jax.process_index() > 0)
+      workdir, just_logging=jax.process_index() > 0
+  )
   if start_step == 0:
     writer.write_hparams(dict(config))
 
@@ -459,23 +461,25 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   # compile multidevice versions of train/eval/predict step fn.
   p_train_step = jax.pmap(
       functools.partial(
-          train_step,
-          config=train_config,
-          learning_rate_fn=learning_rate_fn),
+          train_step, config=train_config, learning_rate_fn=learning_rate_fn
+      ),
       axis_name="batch",
-      donate_argnums=(0,))  # pytype: disable=wrong-arg-types
+      donate_argnums=(0,),
+  )  # pytype: disable=wrong-arg-types
   p_eval_step = jax.pmap(
-      functools.partial(
-          eval_step, config=eval_config),
-      axis_name="batch")
+      functools.partial(eval_step, config=eval_config), axis_name="batch"
+  )
 
   p_pred_step = jax.pmap(
       functools.partial(
-          predict_step, config=predict_config,
+          predict_step,
+          config=predict_config,
           temperature=config.sampling_temperature,
-          top_k=config.sampling_top_k),
+          top_k=config.sampling_top_k,
+      ),
       axis_name="batch",
-      static_broadcasted_argnums=(3, 4))  # eos token, max_length are constant
+      static_broadcasted_argnums=(3, 4),
+  )  # eos token, max_length are constant
 
   # Main Train Loop
   # ---------------------------------------------------------------------------
@@ -488,11 +492,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   logging.info("Starting training loop.")
   hooks = []
   report_progress = periodic_actions.ReportProgress(
-      num_train_steps=config.num_train_steps, writer=writer)
+      num_train_steps=config.num_train_steps, writer=writer
+  )
   if jax.process_index() == 0:
     hooks += [
         report_progress,
-        periodic_actions.Profile(logdir=workdir, num_profile_steps=5)
+        periodic_actions.Profile(logdir=workdir, num_profile_steps=5),
     ]
   train_metrics = []
   with metric_writers.ensure_flushes(writer):
@@ -502,8 +507,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = common_utils.shard(jax.tree_util.tree_map(np.asarray, next(train_iter)))
-        state, metrics = p_train_step(
-            state, batch, dropout_rng=dropout_rngs)
+        state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -521,8 +525,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           denominator = metrics_sums.pop("denominator")
           summary = jax.tree_util.tree_map(lambda x: x / denominator, metrics_sums)  # pylint: disable=cell-var-from-loop
           summary["learning_rate"] = lr
-          summary["perplexity"] = jnp.clip(
-              jnp.exp(summary["loss"]), a_max=1.0e4)
+          summary["perplexity"] = jnp.clip(jnp.exp(summary["loss"]), a_max=1.0e4)
           summary = {"train_" + k: v for k, v in summary.items()}
           writer.write_scalars(step, summary)
           train_metrics = []
@@ -532,12 +535,13 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
               p_eval_step=p_eval_step,
               params=state.params,
               eval_ds=eval_ds,
-              num_eval_steps=config.num_eval_steps)
+              num_eval_steps=config.num_eval_steps,
+          )
           # (clipped) perplexity after averaging log-perplexitie
           eval_results["perplexity"] = jnp.clip(
-              jnp.exp(eval_results["loss"]), a_max=1.0e4)
-          writer.write_scalars(
-              step, {"eval_" + k: v for k, v in eval_results.items()})
+              jnp.exp(eval_results["loss"]), a_max=1.0e4
+          )
+          writer.write_scalars(step, {"eval_" + k: v for k, v in eval_results.items()})
 
         with report_progress.timed("generate_text"):
           exemplars = generate_prediction(
@@ -547,12 +551,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
               eos_id=eos_id,
               inference_rng=inference_rng,
               decode_tokens=decode_tokens,
-              max_predict_length=config.max_predict_length)
+              max_predict_length=config.max_predict_length,
+          )
           writer.write_texts(step, {"samples": exemplars})
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
-      save_checkpoint = (step % config.checkpoint_every_steps == 0 or
-                         is_last_step)
+      save_checkpoint = step % config.checkpoint_every_steps == 0 or is_last_step
       if config.save_checkpoints and save_checkpoint:
         logging.info("Saving checkpoint step %d.", step)
         with report_progress.timed("checkpoint"):

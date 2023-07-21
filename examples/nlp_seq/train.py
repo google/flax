@@ -46,29 +46,25 @@ flags.DEFINE_string('model_dir', default='', help=('Directory for model data.'))
 
 flags.DEFINE_string('experiment', default='xpos', help=('Experiment name.'))
 
-flags.DEFINE_integer(
-    'batch_size', default=64, help=('Batch size for training.'))
+flags.DEFINE_integer('batch_size', default=64, help=('Batch size for training.'))
 
 flags.DEFINE_integer(
     'eval_frequency',
     default=100,
-    help=('Frequency of eval during training, e.g. every 1000 steps.'))
+    help=('Frequency of eval during training, e.g. every 1000 steps.'),
+)
 
-flags.DEFINE_integer(
-    'num_train_steps', default=75000, help=('Number of train steps.'))
+flags.DEFINE_integer('num_train_steps', default=75000, help=('Number of train steps.'))
 
 flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
 
 flags.DEFINE_float(
-    'weight_decay',
-    default=1e-1,
-    help=('Decay factor for AdamW style weight decay.'))
+    'weight_decay', default=1e-1, help=('Decay factor for AdamW style weight decay.')
+)
 
-flags.DEFINE_integer('max_length', default=256,
-                     help=('Maximum length of examples.'))
+flags.DEFINE_integer('max_length', default=256, help=('Maximum length of examples.'))
 
-flags.DEFINE_integer(
-    'random_seed', default=0, help=('Integer for PRNG random seed.'))
+flags.DEFINE_integer('random_seed', default=0, help=('Integer for PRNG random seed.'))
 
 flags.DEFINE_string('train', default='', help=('Path to training data.'))
 
@@ -81,7 +77,8 @@ def create_learning_rate_scheduler(
     warmup_steps=8000,
     decay_factor=0.5,
     steps_per_decay=20000,
-    steps_per_cycle=100000):
+    steps_per_cycle=100000,
+):
   """creates learning rate schedule.
 
   Interprets factors in the factors string which can consist of:
@@ -119,12 +116,10 @@ def create_learning_rate_scheduler(
         ret *= jnp.sqrt(warmup_steps)
         ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
       elif name == 'decay_every':
-        ret *= (decay_factor**(step // steps_per_decay))
+        ret *= decay_factor ** (step // steps_per_decay)
       elif name == 'cosine_decay':
-        progress = jnp.maximum(0.0,
-                               (step - warmup_steps) / float(steps_per_cycle))
-        ret *= jnp.maximum(0.0,
-                           0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
+        progress = jnp.maximum(0.0, (step - warmup_steps) / float(steps_per_cycle))
+        ret *= jnp.maximum(0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
       else:
         raise ValueError('Unknown factor %s.' % name)
     return jnp.asarray(ret, dtype=jnp.float32)
@@ -144,8 +139,10 @@ def compute_weighted_cross_entropy(logits, targets, weights=None):
     Tuple of scalar loss and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
-    raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
-                     (str(logits.shape), str(targets.shape)))
+    raise ValueError(
+        'Incorrect shapes. Got shape %s logits and %s targets'
+        % (str(logits.shape), str(targets.shape))
+    )
   onehot_targets = common_utils.onehot(targets, logits.shape[-1])
   loss = -jnp.sum(onehot_targets * nn.log_softmax(logits), axis=-1)
   normalizing_factor = onehot_targets.sum()
@@ -168,8 +165,10 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     Tuple of scalar accuracy and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
-    raise ValueError('Incorrect shapes. Got shape %s logits and %s targets' %
-                     (str(logits.shape), str(targets.shape)))
+    raise ValueError(
+        'Incorrect shapes. Got shape %s logits and %s targets'
+        % (str(logits.shape), str(targets.shape))
+    )
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
   normalizing_factor = np.prod(logits.shape[:-1])
   if weights is not None:
@@ -192,11 +191,7 @@ def compute_metrics(logits, labels, weights):
   return metrics
 
 
-def train_step(state,
-               batch,
-               model,
-               learning_rate_fn,
-               dropout_rng=None):
+def train_step(state, batch, model, learning_rate_fn, dropout_rng=None):
   """Perform a single training step."""
   train_keys = ['inputs', 'targets']
   (inputs, targets) = (batch.get(k, None) for k in train_keys)
@@ -207,8 +202,9 @@ def train_step(state,
 
   def loss_fn(params):
     """loss function used for training."""
-    logits = model.apply({'params': params}, inputs=inputs, train=True,
-                         rngs={'dropout': dropout_rng})
+    logits = model.apply(
+        {'params': params}, inputs=inputs, train=True, rngs={'dropout': dropout_rng}
+    )
     loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights)
 
     mean_loss = loss / weight_sum
@@ -217,10 +213,10 @@ def train_step(state,
   lr = learning_rate_fn(state.step)
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grads = grad_fn(state.params)
-  grads = jax.lax.pmean(grads, "batch")
+  grads = jax.lax.pmean(grads, 'batch')
   new_state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, targets, weights)
-  metrics["learning_rate"] = lr
+  metrics['learning_rate'] = lr
 
   return new_state, metrics
 
@@ -255,16 +251,19 @@ def main(argv):
 
   if jax.process_index() == 0:
     train_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, FLAGS.experiment + '_train'))
+        os.path.join(FLAGS.model_dir, FLAGS.experiment + '_train')
+    )
     eval_summary_writer = tensorboard.SummaryWriter(
-        os.path.join(FLAGS.model_dir, FLAGS.experiment + '_eval'))
+        os.path.join(FLAGS.model_dir, FLAGS.experiment + '_eval')
+    )
 
   # create the training and development dataset
   vocabs = input_pipeline.create_vocabs(FLAGS.train)
   config = models.TransformerConfig(
       vocab_size=len(vocabs['forms']),
       output_vocab_size=len(vocabs['xpos']),
-      max_len=FLAGS.max_length)
+      max_len=FLAGS.max_length,
+  )
 
   attributes_input = [input_pipeline.CoNLLAttributes.FORM]
   attributes_target = [input_pipeline.CoNLLAttributes.XPOS]
@@ -274,7 +273,8 @@ def main(argv):
       attributes_input,
       attributes_target,
       batch_size=batch_size,
-      bucket_size=config.max_len)
+      bucket_size=config.max_len,
+  )
   train_iter = iter(train_ds)
 
   eval_ds = input_pipeline.sentence_dataset_dict(
@@ -284,7 +284,8 @@ def main(argv):
       attributes_target,
       batch_size=batch_size,
       bucket_size=config.max_len,
-      repeat=1)
+      repeat=1,
+  )
 
   model = models.Transformer(config)
 
@@ -297,29 +298,26 @@ def main(argv):
     init_batch = jnp.ones((config.max_len, 1), jnp.float32)
     init_variables = model.init(init_rng, inputs=init_batch, train=False)
     return init_variables
+
   init_variables = initialize_variables(init_rng)
 
-  learning_rate_fn = create_learning_rate_scheduler(
-      base_learning_rate=learning_rate)
+  learning_rate_fn = create_learning_rate_scheduler(base_learning_rate=learning_rate)
 
   optimizer = optax.adamw(
-      learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9,
-      weight_decay=1e-1)
+      learning_rate_fn, b1=0.9, b2=0.98, eps=1e-9, weight_decay=1e-1
+  )
   state = train_state.TrainState.create(
-      apply_fn=model.apply,
-      params=init_variables["params"],
-      tx=optimizer)
+      apply_fn=model.apply, params=init_variables['params'], tx=optimizer
+  )
 
   # Replicate optimizer.
   state = jax_utils.replicate(state)
 
   p_train_step = jax.pmap(
-      functools.partial(
-          train_step,
-          model=model,
-          learning_rate_fn=learning_rate_fn),
+      functools.partial(train_step, model=model, learning_rate_fn=learning_rate_fn),
       axis_name='batch',
-      donate_argnums=(0,))  # pytype: disable=wrong-arg-types
+      donate_argnums=(0,),
+  )  # pytype: disable=wrong-arg-types
 
   def eval_step(params, batch):
     """Calculate evaluation metrics on a batch."""
@@ -370,7 +368,8 @@ def main(argv):
         if cur_pred_batch_size != batch_size:
           # pad up to batch size
           eval_batch = jax.tree_util.tree_map(
-              lambda x: pad_examples(x, batch_size), eval_batch)
+              lambda x: pad_examples(x, batch_size), eval_batch
+          )
         eval_batch = common_utils.shard(eval_batch)
 
         metrics = p_eval_step(state.params, eval_batch)
@@ -381,10 +380,15 @@ def main(argv):
       eval_denominator = eval_metrics_sums.pop('denominator')
       eval_summary = jax.tree_util.tree_map(
           lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
-          eval_metrics_sums)
+          eval_metrics_sums,
+      )
 
-      logging.info('eval in step: %d, loss: %.4f, accuracy: %.4f', step,
-                   eval_summary['loss'], eval_summary['accuracy'])
+      logging.info(
+          'eval in step: %d, loss: %.4f, accuracy: %.4f',
+          step,
+          eval_summary['loss'],
+          eval_summary['accuracy'],
+      )
 
       if best_dev_score < eval_summary['accuracy']:
         best_dev_score = eval_summary['accuracy']

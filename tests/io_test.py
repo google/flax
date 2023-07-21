@@ -31,16 +31,15 @@ jax.config.parse_flags_with_absl()
 class IOTest(parameterized.TestCase):
 
   @parameterized.parameters(
-    {'backend_mode': io.BackendMode.DEFAULT},
-    {'backend_mode': io.BackendMode.TF}
+      {'backend_mode': io.BackendMode.DEFAULT}, {'backend_mode': io.BackendMode.TF}
   )
   def test_override(self, backend_mode):
     with io.override_mode(backend_mode):
       self.assertEqual(io.io_mode, backend_mode)
 
   @parameterized.parameters(
-    {'write_mode': io.BackendMode.DEFAULT, 'read_mode': io.BackendMode.TF},
-    {'write_mode': io.BackendMode.TF, 'read_mode': io.BackendMode.DEFAULT}
+      {'write_mode': io.BackendMode.DEFAULT, 'read_mode': io.BackendMode.TF},
+      {'write_mode': io.BackendMode.TF, 'read_mode': io.BackendMode.DEFAULT},
   )
   def test_GFile(self, write_mode, read_mode):
     test_string = b'testing write and read'
@@ -72,8 +71,8 @@ class IOTest(parameterized.TestCase):
       self.assertEqual(default_dir_set, tf_dir_set)
 
   @parameterized.parameters(
-    {'create_temp_fn': tempfile.TemporaryDirectory},
-    {'create_temp_fn': tempfile.NamedTemporaryFile}
+      {'create_temp_fn': tempfile.TemporaryDirectory},
+      {'create_temp_fn': tempfile.NamedTemporaryFile},
   )
   def test_isdir(self, create_temp_fn):
     with create_temp_fn() as temp:
@@ -107,8 +106,8 @@ class IOTest(parameterized.TestCase):
         self.assertEqual(file.read(), test_string)
 
   @parameterized.parameters(
-    {'backend_mode': io.BackendMode.DEFAULT, 'error_type': errors.AlreadyExistsError},
-    {'backend_mode': io.BackendMode.TF, 'error_type': tf.errors.AlreadyExistsError},
+      {'backend_mode': io.BackendMode.DEFAULT, 'error_type': errors.AlreadyExistsError},
+      {'backend_mode': io.BackendMode.TF, 'error_type': tf.errors.AlreadyExistsError},
   )
   def test_copy_raises_error(self, backend_mode, error_type):
     with tempfile.NamedTemporaryFile() as temp_file:
@@ -135,8 +134,8 @@ class IOTest(parameterized.TestCase):
         self.assertTrue(os.path.exists(rename2_path))
 
   @parameterized.parameters(
-    {'backend_mode': io.BackendMode.DEFAULT, 'error_type': errors.AlreadyExistsError},
-    {'backend_mode': io.BackendMode.TF, 'error_type': tf.errors.AlreadyExistsError},
+      {'backend_mode': io.BackendMode.DEFAULT, 'error_type': errors.AlreadyExistsError},
+      {'backend_mode': io.BackendMode.TF, 'error_type': tf.errors.AlreadyExistsError},
   )
   def test_rename_raises_error(self, backend_mode, error_type):
     with tempfile.NamedTemporaryFile() as temp_file:
@@ -146,7 +145,6 @@ class IOTest(parameterized.TestCase):
 
   def test_exists(self):
     with tempfile.NamedTemporaryFile() as temp_file:
-
       with io.override_mode(io.BackendMode.DEFAULT):
         default_exists = io.exists(temp_file.name)
 
@@ -156,8 +154,7 @@ class IOTest(parameterized.TestCase):
       self.assertEqual(default_exists, tf_exists)
 
   @parameterized.parameters(
-    {'backend_mode': io.BackendMode.DEFAULT},
-    {'backend_mode': io.BackendMode.TF}
+      {'backend_mode': io.BackendMode.DEFAULT}, {'backend_mode': io.BackendMode.TF}
   )
   def test_makedirs(self, backend_mode):
     with tempfile.TemporaryDirectory() as temp_dir_path:
@@ -184,8 +181,7 @@ class IOTest(parameterized.TestCase):
     self.assertEqual(default_glob_set, tf_glob_set)
 
   @parameterized.parameters(
-    {'backend_mode': io.BackendMode.DEFAULT},
-    {'backend_mode': io.BackendMode.TF}
+      {'backend_mode': io.BackendMode.DEFAULT}, {'backend_mode': io.BackendMode.TF}
   )
   def test_remove(self, backend_mode):
     with tempfile.TemporaryDirectory() as temp_dir_path:
@@ -200,8 +196,7 @@ class IOTest(parameterized.TestCase):
       self.assertTrue(not os.path.exists(test_path))
 
   @parameterized.parameters(
-    {'backend_mode': io.BackendMode.DEFAULT},
-    {'backend_mode': io.BackendMode.TF}
+      {'backend_mode': io.BackendMode.DEFAULT}, {'backend_mode': io.BackendMode.TF}
   )
   def test_rmtree(self, backend_mode):
     with tempfile.TemporaryDirectory() as temp_dir_path:
@@ -220,10 +215,8 @@ class IOTest(parameterized.TestCase):
 
       self.assertTrue(not os.path.exists(dir0_path))
 
-
   @parameterized.parameters(
-    {'backend_mode': io.BackendMode.DEFAULT},
-    {'backend_mode': io.BackendMode.TF}
+      {'backend_mode': io.BackendMode.DEFAULT}, {'backend_mode': io.BackendMode.TF}
   )
   def test_getsize(self, backend_mode):
     with tempfile.TemporaryDirectory() as temp_dir_path:

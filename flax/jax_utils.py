@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Utilities we could consider upstreaming to Jax.
-"""
+"""Utilities we could consider upstreaming to Jax."""
 
 import collections
 from collections.abc import Iterable  # pylint: disable=g-importing-member
@@ -53,8 +52,7 @@ def unreplicate(tree):
 
 
 def pmean(xs, axis_name):
-  warnings.warn('use jax.lax.pmean instead',
-                DeprecationWarning)
+  warnings.warn("use jax.lax.pmean instead", DeprecationWarning)
   return lax.pmean(xs, axis_name)
 
 
@@ -83,11 +81,14 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   input_structs = [_parse_spec(spec) for spec in input_spec]
   inputs_flat, in_tree = jax.tree_util.tree_flatten(input_structs)
   f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(f), in_tree)
-  in_pvals = [pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
-              for x in inputs_flat]
+  in_pvals = [
+      pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype)) for x in inputs_flat
+  ]
   _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
-  out_flat = [const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
-              for pv, const in out_pvals]
+  out_flat = [
+      const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
+      for pv, const in out_pvals
+  ]
   return jax.tree_util.tree_unflatten(out_tree(), out_flat)
 
 
@@ -160,8 +161,10 @@ def _scan_nd(body_fn, init, xs, n=1, unroll=(1,)):
   if n == 1:
     return lax.scan(body_fn, init, xs, unroll=unroll[0])
   else:
+
     def scan_body(c, x):
-      return _scan_nd(body_fn, c, x, n=n-1, unroll=unroll[1:])
+      return _scan_nd(body_fn, c, x, n=n - 1, unroll=unroll[1:])
+
     return lax.scan(scan_body, init, xs, unroll=unroll[0])
 
 
@@ -207,6 +210,7 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
   def transpose_in(x):
     perm = axis + tuple(np.delete(np.arange(x.ndim), axis))
     return x.transpose(perm)
+
   def transpose_out(x):
     perm = axis + tuple(np.delete(np.arange(x.ndim), axis))
     return x.transpose(_invert_perm(perm))
@@ -218,7 +222,7 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
     c, ys = body_fn(c, xs)
     if keepdims:
       ys = jax.tree_util.tree_map(transpose_in, ys)
-      ys = jax.tree_util.tree_map(lambda x: x.reshape(x.shape[len(axis):]), ys)
+      ys = jax.tree_util.tree_map(lambda x: x.reshape(x.shape[len(axis) :]), ys)
     return c, ys
 
   xs = jax.tree_util.tree_map(transpose_in, xs)
@@ -228,8 +232,9 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
 
 
 # Copied from https://github.com/google-research/big_vision
-def pad_shard_unpad(wrapped, static_argnums=(0,), static_argnames=(),
-                    static_return=False):
+def pad_shard_unpad(
+    wrapped, static_argnums=(0,), static_argnames=(), static_return=False
+):
   """Wraps a function with code that pads, shards, then un-shards, un-pads.
 
   Args:
@@ -284,12 +289,14 @@ def pad_shard_unpad(wrapped, static_argnums=(0,), static_argnames=(),
         db += 1
       if min_device_batch and db < min_device_batch:
         x = np.concatenate(
-            [x, np.zeros((d * (min_device_batch - db), *shape), x.dtype)])
+            [x, np.zeros((d * (min_device_batch - db), *shape), x.dtype)]
+        )
         db = min_device_batch
       return x.reshape(d, db, *shape)
 
     def maybe_pad(tree, actually_pad=True):
-      if not actually_pad: return tree  # For call-site convenience below.
+      if not actually_pad:
+        return tree  # For call-site convenience below.
       return jax.tree_util.tree_map(pad, tree)
 
     args = [maybe_pad(a, i not in static_argnums) for i, a in enumerate(args)]
@@ -299,6 +306,7 @@ def pad_shard_unpad(wrapped, static_argnums=(0,), static_argnames=(),
     def unpad(x):
       # Transfer back before cutting, to reduce on-device shape diversity.
       return jax.device_get(x).reshape([np.prod(x.shape[:2]), *x.shape[2:]])[:b]
+
     return out if static_return else jax.tree_util.tree_map(unpad, out)
 
   return pad_shard_unpad_wrapper

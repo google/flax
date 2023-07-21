@@ -38,8 +38,7 @@ class ImagenetBenchmark(Benchmark):
   """Benchmarks for the ImageNet Flax example."""
 
   @flagsaver
-  def _test_8x_v100_half_precision(self, num_epochs: int, min_accuracy,
-                                   max_accuracy):
+  def _test_8x_v100_half_precision(self, num_epochs: int, min_accuracy, max_accuracy):
     """Utility to benchmark ImageNet on 8xV100 GPUs. Use in your test func."""
     # Prepare and set flags defined in main.py.
     config = config_lib.get_config()
@@ -68,13 +67,13 @@ class ImagenetBenchmark(Benchmark):
 
     # Use the reporting API to report single or multiple metrics/extras.
     self.report_wall_time(benchmark_time)
-    self.report_metrics({'sec_per_epoch': sec_per_epoch,
-                         'accuracy': end_accuracy})
+    self.report_metrics({'sec_per_epoch': sec_per_epoch, 'accuracy': end_accuracy})
 
   def test_8x_v100_half_precision_short(self):
     """Run ImageNet on 8x V100 GPUs in half precision for 2 epochs."""
     self._test_8x_v100_half_precision(
-        num_epochs=2, min_accuracy=0.06, max_accuracy=0.09)
+        num_epochs=2, min_accuracy=0.06, max_accuracy=0.09
+    )
     self.report_extras({
         'description': 'Short (2 epochs) 8 x V100 test for ImageNet ResNet50.',
         'model_name': 'resnet50',
@@ -85,7 +84,8 @@ class ImagenetBenchmark(Benchmark):
   def test_8x_v100_half_precision_full(self):
     """Run ImageNet on 8x V100 GPUs in half precision for full 90 epochs."""
     self._test_8x_v100_half_precision(
-        num_epochs=90, min_accuracy=0.76, max_accuracy=0.77)
+        num_epochs=90, min_accuracy=0.76, max_accuracy=0.77
+    )
     self.report_extras({
         'description': 'Full (90 epochs) 8 x V100 test for ImageNet ResNet50.',
         'model_name': 'resnet50',

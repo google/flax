@@ -45,20 +45,22 @@ from tensorboard.util import tensor_util
 
 
 flags.DEFINE_string(
-    'benchmark_output_dir', default=None, help='Benchmark output directory.')
+    'benchmark_output_dir', default=None, help='Benchmark output directory.'
+)
 
 
 FLAGS = flags.FLAGS
 
-_SCALAR_PLUGIN_NAME = summary_lib.scalar_pb(
-    '', 0).value[0].metadata.plugin_data.plugin_name
+_SCALAR_PLUGIN_NAME = (
+    summary_lib.scalar_pb('', 0).value[0].metadata.plugin_data.plugin_name
+)
 
 
 def _make_events_generator(path):
   """Makes a generator yielding TensorBoard events from files in `path`."""
   return directory_watcher.DirectoryWatcher(
-      path, event_file_loader.EventFileLoader,
-      io_wrapper.IsSummaryEventsFile).Load()
+      path, event_file_loader.EventFileLoader, io_wrapper.IsSummaryEventsFile
+  ).Load()
 
 
 def _is_scalar_value(value):
@@ -76,8 +78,12 @@ def _process_event(event):
       continue
 
     if value.HasField('tensor'):
-      yield (value.tag, event.wall_time,
-             event.step, tensor_util.make_ndarray(value.tensor).item())
+      yield (
+          value.tag,
+          event.wall_time,
+          event.step,
+          tensor_util.make_ndarray(value.tensor).item(),
+      )
 
 
 def _get_tensorboard_scalars(path):
@@ -118,13 +124,11 @@ class Benchmark(absltest.TestCase):
     for func_name in dir(self):
       if func_name.startswith('assert'):
         func = getattr(self, func_name)
-        patched_func = functools.partial(
-            self._collect_assert_wrapper, fn=func)
+        patched_func = functools.partial(self._collect_assert_wrapper, fn=func)
         setattr(self, func_name, patched_func)
 
     # Create target directory if defined.
-    if FLAGS.benchmark_output_dir and not io.exists(
-        FLAGS.benchmark_output_dir):
+    if FLAGS.benchmark_output_dir and not io.exists(FLAGS.benchmark_output_dir):
       io.makedirs(FLAGS.benchmark_output_dir)
 
   # pylint: disable=invalid-name
@@ -162,8 +166,9 @@ class Benchmark(absltest.TestCase):
       model_dir = FLAGS.benchmark_output_dir
     else:
       model_dir = tempfile.mkdtemp()
-    model_dir_path = os.path.join(model_dir, self._reported_name or
-                                  self._get_test_name())
+    model_dir_path = os.path.join(
+        model_dir, self._reported_name or self._get_test_name()
+    )
     # Create directories if they don't exist.
     if not io.exists(model_dir_path):
       io.makedirs(model_dir_path)
@@ -255,15 +260,19 @@ class Benchmark(absltest.TestCase):
     """
     name = self._reported_name
     if not name:
-      raise ValueError('Unable to determine test name for reporting '
-                       'benchmark results. Make sure you are using '
-                       '`self.report_*` methods.')
+      raise ValueError(
+          'Unable to determine test name for reporting '
+          'benchmark results. Make sure you are using '
+          '`self.report_*` methods.'
+      )
 
     succeeded = not self.has_outstanding_fails()
-    results = {'name': name,
-               'succeeded': succeeded,
-               'metrics': self._reported_metrics,
-               'extras': self._reported_extras}
+    results = {
+        'name': name,
+        'succeeded': succeeded,
+        'metrics': self._reported_metrics,
+        'extras': self._reported_extras,
+    }
     if self._reported_wall_time is not None:
       results['wall_time'] = self._reported_wall_time
     if not succeeded:

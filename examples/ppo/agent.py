@@ -28,9 +28,10 @@ import env_utils
 
 @functools.partial(jax.jit, static_argnums=0)
 def policy_action(
-  apply_fn: Callable[..., Any],
-  params: flax.core.frozen_dict.FrozenDict,
-  state: np.ndarray):
+    apply_fn: Callable[..., Any],
+    params: flax.core.frozen_dict.FrozenDict,
+    state: np.ndarray,
+):
   """Forward pass of the network.
 
   Args:
@@ -46,7 +47,8 @@ def policy_action(
 
 
 ExpTuple = collections.namedtuple(
-    'ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done'])
+    'ExpTuple', ['state', 'action', 'reward', 'value', 'log_prob', 'done']
+)
 
 
 class RemoteSimulator:
@@ -59,7 +61,8 @@ class RemoteSimulator:
     """Start the remote process and create Pipe() to communicate with it."""
     parent_conn, child_conn = multiprocessing.Pipe()
     self.proc = multiprocessing.Process(
-        target=rcv_action_send_exp, args=(child_conn, game))
+        target=rcv_action_send_exp, args=(child_conn, game)
+    )
     self.proc.daemon = True
     self.conn = parent_conn
     self.proc.start()

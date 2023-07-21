@@ -15,8 +15,7 @@
 """Linear modules."""
 
 import dataclasses
-from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple,
-                    Union)
+from typing import (Any, Callable, Iterable, List, Optional, Sequence, Tuple, Union)
 
 from flax.core import meta
 from flax.linen import initializers
@@ -36,8 +35,9 @@ PRNGKey = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Array = Any
-PrecisionLike = Union[None, str, lax.Precision, Tuple[str, str],
-                      Tuple[lax.Precision, lax.Precision]]
+PrecisionLike = Union[
+    None, str, lax.Precision, Tuple[str, str], Tuple[lax.Precision, lax.Precision]
+]
 DotGeneralT = Callable[..., Array]
 ConvGeneralDilatedT = Callable[..., Array]
 
@@ -72,6 +72,7 @@ class DenseGeneral(Module):
     precision: numerical precision of the computation see `jax.lax.Precision`
       for details.
   """
+
   features: Union[int, Sequence[int]]
   axis: Union[int, Sequence[int]] = -1
   batch_dims: Sequence[int] = ()
@@ -99,8 +100,10 @@ class DenseGeneral(Module):
     if batch_dims:
       max_dim = np.max(batch_dims)
       if set(batch_dims) != set(range(max_dim + 1)):
-        raise ValueError('batch_dims %s must be consecutive leading '
-                         'dimensions starting from 0.' % str(batch_dims))
+        raise ValueError(
+            'batch_dims %s must be consecutive leading '
+            'dimensions starting from 0.' % str(batch_dims)
+        )
 
     ndim = inputs.ndim
     n_batch_dims = len(batch_dims)
@@ -109,9 +112,11 @@ class DenseGeneral(Module):
     n_axis, n_features = len(axis), len(features)
 
     def kernel_init_wrap(rng, shape, dtype=jnp.float32):
-      flat_shape = (np.prod(shape[:n_batch_dims]) *
-                    np.prod(shape[n_batch_dims:n_axis + n_batch_dims]),
-                    np.prod(shape[-n_features:]),)
+      flat_shape = (
+          np.prod(shape[:n_batch_dims])
+          * np.prod(shape[n_batch_dims : n_axis + n_batch_dims]),
+          np.prod(shape[-n_features:]),
+      )
       flat_shape = jax.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
       if isinstance(kernel, meta.AxisMetadata):
@@ -122,26 +127,30 @@ class DenseGeneral(Module):
     # batch and non-contracting dims of input with 1s for batch dims.
     expanded_batch_shape = tuple(
         inputs.shape[ax] if ax in batch_dims else 1
-        for ax in range(inputs.ndim) if ax not in axis)
+        for ax in range(inputs.ndim)
+        if ax not in axis
+    )
     kernel_shape = tuple(inputs.shape[ax] for ax in axis) + features
-    kernel = self.param('kernel', kernel_init_wrap, batch_shape + kernel_shape,
-                        self.param_dtype)
+    kernel = self.param(
+        'kernel', kernel_init_wrap, batch_shape + kernel_shape, self.param_dtype
+    )
 
     batch_ind = tuple(range(n_batch_dims))
     contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
 
     if self.use_bias:
+
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
-        flat_shape = (np.prod(shape[:n_batch_dims]) *
-                      np.prod(shape[-n_features:]),)
+        flat_shape = (np.prod(shape[:n_batch_dims]) * np.prod(shape[-n_features:]),)
         flat_shape = jax.tree_map(int, flat_shape)
         bias = self.bias_init(rng, flat_shape, dtype)
         if isinstance(bias, meta.AxisMetadata):
           return meta.replace_boxed(bias, jnp.reshape(bias.unbox(), shape))
         return jnp.reshape(bias, shape)
 
-      bias = self.param('bias', bias_init_wrap, batch_shape + features,
-                        self.param_dtype)
+      bias = self.param(
+          'bias', bias_init_wrap, batch_shape + features, self.param_dtype
+      )
     else:
       bias = None
 
@@ -174,6 +183,7 @@ class Dense(Module):
     kernel_init: initializer function for the weight matrix.
     bias_init: initializer function for the bias.
   """
+
   features: int
   use_bias: bool = True
   dtype: Optional[Dtype] = None
@@ -193,13 +203,14 @@ class Dense(Module):
     Returns:
       The transformed input.
     """
-    kernel = self.param('kernel',
-                        self.kernel_init,
-                        (jnp.shape(inputs)[-1], self.features),
-                        self.param_dtype)
+    kernel = self.param(
+        'kernel',
+        self.kernel_init,
+        (jnp.shape(inputs)[-1], self.features),
+        self.param_dtype,
+    )
     if self.use_bias:
-      bias = self.param('bias', self.bias_init, (self.features,),
-                        self.param_dtype)
+      bias = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
     else:
       bias = None
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
@@ -228,7 +239,7 @@ LaxPadding = Union[str, Sequence[Tuple[int, int]]]
 
 
 def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
-  """"Canonicalizes conv padding to a jax.lax supported format."""
+  """ "Canonicalizes conv padding to a jax.lax supported format."""
   if isinstance(padding, str):
     return padding
   if isinstance(padding, int):
@@ -245,9 +256,10 @@ def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
     if len(new_pad) == rank:
       return new_pad
   raise ValueError(
-    f'Invalid padding format: {padding}, should be str, int,'
-    f' or a sequence of len {rank} where each element is an'
-    f' int or pair of ints.')
+      f'Invalid padding format: {padding}, should be str, int,'
+      f' or a sequence of len {rank} where each element is an'
+      f' int or pair of ints.'
+  )
 
 
 class _Conv(Module):
@@ -287,6 +299,7 @@ class _Conv(Module):
     kernel_init: initializer for the convolutional kernel.
     bias_init: initializer for the bias.
   """
+
   features: int
   kernel_size: Sequence[int]
   strides: Union[None, int, Sequence[int]] = 1
@@ -337,14 +350,15 @@ class _Conv(Module):
     """
 
     if isinstance(self.kernel_size, int):
-      raise TypeError('Expected Conv kernel_size to be a'
-                      ' tuple/list of integers (eg.: [3, 3]) but got'
-                      f' {self.kernel_size}.')
+      raise TypeError(
+          'Expected Conv kernel_size to be a'
+          ' tuple/list of integers (eg.: [3, 3]) but got'
+          f' {self.kernel_size}.'
+      )
     else:
       kernel_size = tuple(self.kernel_size)
 
-    def maybe_broadcast(x: Optional[Union[int, Sequence[int]]]) -> (
-        Tuple[int, ...]):
+    def maybe_broadcast(x: Optional[Union[int, Sequence[int]]]) -> Tuple[int, ...]:
       if x is None:
         # backward compatibility with using None as sentinel for
         # broadcast 1
@@ -358,8 +372,7 @@ class _Conv(Module):
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       total_batch_size = int(np.prod(input_batch_shape))
-      flat_input_shape = (
-          (total_batch_size,) + inputs.shape[num_batch_dimensions:])
+      flat_input_shape = (total_batch_size,) + inputs.shape[num_batch_dimensions:]
       inputs = jnp.reshape(inputs, flat_input_shape)
 
     # self.strides or (1,) * (inputs.ndim - 2)
@@ -373,14 +386,12 @@ class _Conv(Module):
           (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
       zero_pad: List[Tuple[int, int]] = [(0, 0)]
-      pads = (zero_pad + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] +
-              [(0, 0)])
+      pads = zero_pad + [((k - 1) // 2, k // 2) for k in kernel_size_dilated] + [(0, 0)]
       inputs = jnp.pad(inputs, pads, mode='wrap')
       padding_lax = 'VALID'
     elif padding_lax == 'CAUSAL':
       if len(kernel_size) != 1:
-        raise ValueError(
-            'Causal padding is only implemented for 1D convolutions.')
+        raise ValueError('Causal padding is only implemented for 1D convolutions.')
       left_pad = kernel_dilation[0] * (kernel_size[0] - 1)
       pads = [(0, 0), (left_pad, 0), (0, 0)]
       inputs = jnp.pad(inputs, pads)
@@ -393,7 +404,9 @@ class _Conv(Module):
       # One shared convolutional kernel for all pixels in the output.
       assert in_features % self.feature_group_count == 0
       kernel_shape = kernel_size + (
-          in_features // self.feature_group_count, self.features)
+          in_features // self.feature_group_count,
+          self.features,
+      )
 
     else:
       if self.feature_group_count != 1:
@@ -419,15 +432,18 @@ class _Conv(Module):
       ).shape
 
       # One (unshared) convolutional kernel per each pixel in the output.
-      kernel_shape = conv_output_shape[1:-1] + (np.prod(kernel_size) *
-                                                in_features, self.features)
+      kernel_shape = conv_output_shape[1:-1] + (
+          np.prod(kernel_size) * in_features,
+          self.features,
+      )
 
     if self.mask is not None and self.mask.shape != kernel_shape:
-      raise ValueError('Mask needs to have the same shape as weights. '
-                       f'Shapes are: {self.mask.shape}, {kernel_shape}')
+      raise ValueError(
+          'Mask needs to have the same shape as weights. '
+          f'Shapes are: {self.mask.shape}, {kernel_shape}'
+      )
 
-    kernel = self.param('kernel', self.kernel_init, kernel_shape,
-                        self.param_dtype)
+    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
 
     if self.mask is not None:
       kernel *= self.mask
@@ -467,7 +483,7 @@ class _Conv(Module):
           lhs_dilation=input_dilation,
           rhs_dilation=kernel_dilation,
           dimension_numbers=dimension_numbers,
-          precision=self.precision
+          precision=self.precision,
       )
 
     if self.use_bias:
@@ -597,6 +613,7 @@ class ConvTranspose(Module):
     transpose_kernel: if True flips spatial axes and swaps the input/output
       channel axes of the kernel.
   """
+
   features: int
   kernel_size: Union[int, Sequence[int]]
   strides: Optional[Sequence[int]] = None
@@ -644,8 +661,7 @@ class ConvTranspose(Module):
     if num_batch_dimensions != 1:
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       total_batch_size = int(np.prod(input_batch_shape))
-      flat_input_shape = (
-          (total_batch_size,) + inputs.shape[num_batch_dimensions:])
+      flat_input_shape = (total_batch_size,) + inputs.shape[num_batch_dimensions:]
       inputs = jnp.reshape(inputs, flat_input_shape)
 
     strides: Tuple[int, ...]
@@ -661,11 +677,12 @@ class ConvTranspose(Module):
       kernel_shape = kernel_size + (in_features, self.features)
 
     if self.mask is not None and self.mask.shape != kernel_shape:
-      raise ValueError('Mask needs to have the same shape as weights. '
-                       f'Shapes are: {self.mask.shape}, {kernel_shape}')
+      raise ValueError(
+          'Mask needs to have the same shape as weights. '
+          f'Shapes are: {self.mask.shape}, {kernel_shape}'
+      )
 
-    kernel = self.param('kernel', self.kernel_init, kernel_shape,
-                        self.param_dtype)
+    kernel = self.param('kernel', self.kernel_init, kernel_shape, self.param_dtype)
 
     if self.mask is not None:
       kernel *= self.mask
@@ -675,13 +692,11 @@ class ConvTranspose(Module):
       padding_lax = 'VALID'
 
     if self.use_bias:
-      bias = self.param('bias', self.bias_init, (self.features,),
-                        self.param_dtype)
+      bias = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
     else:
       bias = None
 
-    inputs, kernel, bias = promote_dtype(inputs, kernel, bias,
-                                         dtype=self.dtype)
+    inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
 
     y = lax.conv_transpose(
         inputs,
@@ -690,7 +705,8 @@ class ConvTranspose(Module):
         padding_lax,
         rhs_dilation=self.kernel_dilation,
         transpose_kernel=self.transpose_kernel,
-        precision=self.precision)
+        precision=self.precision,
+    )
 
     if self.padding == 'CIRCULAR':
       # For circular padding, we need to identify the size of the final output
@@ -716,22 +732,17 @@ class ConvTranspose(Module):
         # If the kernel is transposed, the "+1" is put on the right to
         # mirror the regular convolution. If the same kernel parameters are used
         # as for Conv, this layer then computes the proper transpose convolution.
-        total_pad = [
-            (size_diff // 2, (size_diff + 1) // 2) for size_diff in size_diffs
-        ]
+        total_pad = [(size_diff // 2, (size_diff + 1) // 2) for size_diff in size_diffs]
       else:
         # Divide the padding equally between left and right. The choice to put
         # "+1" on the left (and not on the right) represents a convention for
         # aligning even-sized kernels.
-        total_pad = [
-            ((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs
-        ]
+        total_pad = [((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs]
       y = jnp.pad(y, [(0, 0)] + total_pad + [(0, 0)])
       # Wrap the result periodically around each spatial dimension,
       # one by one.
       for i in range(1, y.ndim - 1):
-        y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) +
-                      y.shape[i + 1:])
+        y = y.reshape(y.shape[:i] + (-1, scaled_x_dims[i - 1]) + y.shape[i + 1 :])
         y = y.sum(axis=i)
 
     if self.use_bias:
@@ -759,6 +770,7 @@ class Embed(Module):
     param_dtype: the dtype passed to parameter initializers (default: float32).
     embedding_init: embedding initializer.
   """
+
   num_embeddings: int
   features: int
   dtype: Optional[Dtype] = None
@@ -768,10 +780,12 @@ class Embed(Module):
   embedding: Array = dataclasses.field(init=False)
 
   def setup(self):
-    self.embedding = self.param('embedding',
-                                self.embedding_init,
-                                (self.num_embeddings, self.features),
-                                self.param_dtype)
+    self.embedding = self.param(
+        'embedding',
+        self.embedding_init,
+        (self.num_embeddings, self.features),
+        self.param_dtype,
+    )
 
   def __call__(self, inputs: Array) -> Array:
     """Embeds the inputs along the last dimension.
@@ -787,7 +801,7 @@ class Embed(Module):
       raise ValueError('Input type must be an integer or unsigned integer.')
     # Use take because fancy indexing numpy arrays with JAX indices does not
     # work correctly.
-    embedding, = promote_dtype(self.embedding, dtype=self.dtype, inexact=False)
+    (embedding,) = promote_dtype(self.embedding, dtype=self.dtype, inexact=False)
     return jnp.take(embedding, inputs, axis=0)
 
   def attend(self, query: Array) -> Array:

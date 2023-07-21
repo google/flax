@@ -18,7 +18,6 @@ Now a wrapper over jax.config, in which all config vars have a 'flax\_' prefix.
 
 To modify a config value on run time, call:
 ``flax.config.update('flax_<config_name>', <value>)``
-
 """
 
 import os
@@ -31,6 +30,7 @@ from contextlib import contextmanager
 config = jax_config
 
 # Config parsing utils
+
 
 def define_bool_state(name, default, help):
   """Set up a boolean flag using JAX's config system.
@@ -65,7 +65,8 @@ def static_bool_env(varname: str, default: bool) -> bool:
     return False
   else:
     raise ValueError(
-        'invalid truth value {!r} for environment {!r}'.format(val, varname))
+        'invalid truth value {!r} for environment {!r}'.format(val, varname)
+    )
 
 
 @contextmanager
@@ -92,22 +93,26 @@ flax_lazy_rng = static_bool_env('FLAX_LAZY_RNG', True)
 flax_filter_frames = define_bool_state(
     name='filter_frames',
     default=True,
-    help=('Whether to hide flax-internal stack frames from tracebacks.'))
+    help=('Whether to hide flax-internal stack frames from tracebacks.'),
+)
 
 flax_profile = define_bool_state(
     name='profile',
     default=True,
-    help=('Whether to run Module methods under jax.named_scope for profiles.'))
+    help=('Whether to run Module methods under jax.named_scope for profiles.'),
+)
 
 flax_use_orbax_checkpointing = define_bool_state(
     name='use_orbax_checkpointing',
     default=True,
-    help=('Whether to use Orbax to save checkpoints.'))
+    help=('Whether to use Orbax to save checkpoints.'),
+)
 
 flax_preserve_adopted_names = define_bool_state(
     name='preserve_adopted_names',
     default=False,
-    help=("When adopting outside modules, don't clobber existing names."))
+    help=("When adopting outside modules, don't clobber existing names."),
+)
 
 # TODO(marcuschiam): remove this feature flag once regular dict migration is complete
 flax_return_frozendict = define_bool_state(
@@ -117,7 +122,9 @@ flax_return_frozendict = define_bool_state(
 )
 
 flax_fix_rng = define_bool_state(
-    name ='fix_rng_separator',
+    name='fix_rng_separator',
     default=False,
-    help=('Whether to add separator characters when folding in static data into PRNG keys.')
+    help=(
+        'Whether to add separator characters when folding in static data into PRNG keys.'
+    ),
 )

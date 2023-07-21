@@ -35,7 +35,8 @@ def shard(xs):
   """
   local_device_count = jax.local_device_count()
   return jax.tree_util.tree_map(
-      lambda x: x.reshape((local_device_count, -1) + x.shape[1:]), xs)
+      lambda x: x.reshape((local_device_count, -1) + x.shape[1:]), xs
+  )
 
 
 def shard_prng_key(prng_key):
@@ -99,6 +100,6 @@ def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
     A (n+1)-dim array whose last dimension contains one-hot vectors of length
     num_classes.
   """
-  x = (labels[..., None] == jnp.arange(num_classes).reshape((1,) * labels.ndim + (-1,)))
+  x = labels[..., None] == jnp.arange(num_classes).reshape((1,) * labels.ndim + (-1,))
   x = lax.select(x, jnp.full(x.shape, on_value), jnp.full(x.shape, off_value))
   return x.astype(jnp.float32)

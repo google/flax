@@ -36,6 +36,7 @@ class _ErrorContext(threading.local):
   def __init__(self):
     self.path = []
 
+
 _error_context = _ErrorContext()
 
 
@@ -55,6 +56,7 @@ def current_path():
 
 class _NamedTuple:
   """Fake type marker for namedtuple for registry."""
+
   pass
 
 
@@ -109,8 +111,9 @@ def to_state_dict(target) -> Dict[str, Any]:
   return state_dict
 
 
-def register_serialization_state(ty, ty_to_state_dict, ty_from_state_dict,
-                                 override=False):
+def register_serialization_state(
+    ty, ty_to_state_dict, ty_from_state_dict, override=False
+):
   """Register a type for serialization.
 
   Args:
@@ -123,8 +126,9 @@ def register_serialization_state(ty, ty_to_state_dict, ty_from_state_dict,
       (default: False).
   """
   if ty in _STATE_DICT_REGISTRY and not override:
-    raise ValueError(f'a serialization handler for "{ty.__name__}"'
-                     ' is already registered')
+    raise ValueError(
+        f'a serialization handler for "{ty.__name__}"' ' is already registered'
+    )
   _STATE_DICT_REGISTRY[ty] = (ty_to_state_dict, ty_from_state_dict)
 
 
@@ -134,9 +138,11 @@ def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
 
 def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
   if len(state_dict) != len(xs):
-    raise ValueError('The size of the list and the state dict do not match,'
-                     f' got {len(xs)} and {len(state_dict)} '
-                     f'at path {current_path()}')
+    raise ValueError(
+        'The size of the list and the state dict do not match,'
+        f' got {len(xs)} and {len(state_dict)} '
+        f'at path {current_path()}'
+    )
   ys = []
   for i in range(len(state_dict)):
     y = from_state_dict(xs[i], state_dict[str(i)], name=str(i))
@@ -157,12 +163,16 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
 def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
   diff = set(map(str, xs.keys())).difference(states.keys())
   if diff:
-    raise ValueError('The target dict keys and state dict keys do not match,'
-                   f' target dict contains keys {diff} which are not present in state dict '
-                   f'at path {current_path()}')
+    raise ValueError(
+        'The target dict keys and state dict keys do not match,'
+        f' target dict contains keys {diff} which are not present in state dict '
+        f'at path {current_path()}'
+    )
 
-  return {key: from_state_dict(value, states[str(key)], name=str(key))
-          for key, value in xs.items()}
+  return {
+      key: from_state_dict(value, states[str(key)], name=str(key))
+      for key, value in xs.items()
+  }
 
 
 def _namedtuple_state_dict(nt) -> Dict[str, Any]:
@@ -173,8 +183,10 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
   """Rebuild namedtuple from serialized dict."""
   if set(state_dict.keys()) == {'name', 'fields', 'values'}:
     # TODO(jheek): remove backward compatible named tuple restoration early 2022
-    state_dict = {state_dict['fields'][str(i)]: state_dict['values'][str(i)]
-                  for i in range(len(state_dict['fields']))}
+    state_dict = {
+        state_dict['fields'][str(i)]: state_dict['values'][str(i)]
+        for i in range(len(state_dict['fields']))
+    }
 
   sd_keys = set(state_dict.keys())
   nt_keys = set(xs._fields)
@@ -182,10 +194,10 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
   if sd_keys != nt_keys:
     raise ValueError(
         'The field names of the state dict and the named tuple do not match,'
-        f' got {sd_keys} and {nt_keys} at path {current_path()}')
+        f' got {sd_keys} and {nt_keys} at path {current_path()}'
+    )
   fields = {
-      k: from_state_dict(getattr(xs, k), v, name=k)
-      for k, v in state_dict.items()
+      k: from_state_dict(getattr(xs, k), v, name=k) for k, v in state_dict.items()
   }
   return type(xs)(**fields)
 
@@ -193,24 +205,22 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
 register_serialization_state(dict, _dict_state_dict, _restore_dict)
 register_serialization_state(list, _list_state_dict, _restore_list)
 register_serialization_state(
-    tuple, _list_state_dict,
-    lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)))
-register_serialization_state(_NamedTuple,
-                             _namedtuple_state_dict,
-                             _restore_namedtuple)
+    tuple,
+    _list_state_dict,
+    lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)),
+)
+register_serialization_state(_NamedTuple, _namedtuple_state_dict, _restore_namedtuple)
 
 register_serialization_state(
     jax.tree_util.Partial,
-    lambda x: (
-        {
-            "args": to_state_dict(x.args),
-            "keywords": to_state_dict(x.keywords),
-        }
-    ),
+    lambda x: ({
+        'args': to_state_dict(x.args),
+        'keywords': to_state_dict(x.keywords),
+    }),
     lambda x, sd: jax.tree_util.Partial(
         x.func,
-        *from_state_dict(x.args, sd["args"]),
-        **from_state_dict(x.keywords, sd["keywords"]),
+        *from_state_dict(x.args, sd['args']),
+        **from_state_dict(x.keywords, sd['keywords']),
     ),
 )
 
@@ -232,8 +242,9 @@ def _ndarray_to_bytes(arr) -> bytes:
   if isinstance(arr, jax.Array):
     arr = np.array(arr)
   if arr.dtype.hasobject or arr.dtype.isalignedstruct:
-    raise ValueError('Object and structured dtypes not supported '
-                     'for serialization of ndarrays.')
+    raise ValueError(
+        'Object and structured dtypes not supported ' 'for serialization of ndarrays.'
+    )
   tpl = (arr.shape, arr.dtype.name, arr.tobytes('C'))
   return msgpack.packb(tpl, use_bin_type=True)
 
@@ -249,14 +260,14 @@ def _dtype_from_name(name: str):
 def _ndarray_from_bytes(data: bytes) -> np.ndarray:
   """Load ndarray from simple msgpack encoding."""
   shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
-  return np.frombuffer(buffer,
-                       dtype=_dtype_from_name(dtype_name),
-                       count=-1,
-                       offset=0).reshape(shape, order='C')
+  return np.frombuffer(
+      buffer, dtype=_dtype_from_name(dtype_name), count=-1, offset=0
+  ).reshape(shape, order='C')
 
 
 class _MsgpackExtType(enum.IntEnum):
   """Messagepack custom type ids."""
+
   ndarray = 1
   native_complex = 2
   npscalar = 3
@@ -270,11 +281,11 @@ def _msgpack_ext_pack(x):
     return msgpack.ExtType(_MsgpackExtType.ndarray, _ndarray_to_bytes(x))
   if np.issctype(type(x)):
     # pack scalar as ndarray
-    return msgpack.ExtType(_MsgpackExtType.npscalar,
-                           _ndarray_to_bytes(np.asarray(x)))
+    return msgpack.ExtType(_MsgpackExtType.npscalar, _ndarray_to_bytes(np.asarray(x)))
   elif isinstance(x, complex):
-    return msgpack.ExtType(_MsgpackExtType.native_complex,
-                           msgpack.packb((x.real, x.imag)))
+    return msgpack.ExtType(
+        _MsgpackExtType.native_complex, msgpack.packb((x.real, x.imag))
+    )
   return x
 
 
@@ -321,10 +332,9 @@ _dict_to_tuple = lambda dct: tuple(dct[str(i)] for i in range(len(dct)))
 def _chunk(arr) -> Dict[str, Any]:
   """Convert array to a canonical dictionary of chunked arrays."""
   chunksize = max(1, int(MAX_CHUNK_SIZE / arr.dtype.itemsize))
-  data = {'__msgpack_chunked_array__': True,
-          'shape': _tuple_to_dict(arr.shape)}
+  data = {'__msgpack_chunked_array__': True, 'shape': _tuple_to_dict(arr.shape)}
   flatarr = arr.reshape(-1)
-  chunks = [flatarr[i:i + chunksize] for i in range(0, flatarr.size, chunksize)]
+  chunks = [flatarr[i : i + chunksize] for i in range(0, flatarr.size, chunksize)]
   data['chunks'] = _tuple_to_dict(chunks)
   return data
 
@@ -404,8 +414,7 @@ def msgpack_restore(encoded_pytree: bytes):
     Python tree of dict, list, tuple with python primitive
     and array leaves.
   """
-  state_dict = msgpack.unpackb(
-      encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False)
+  state_dict = msgpack.unpackb(encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False)
   return _unchunk_array_leaves_in_place(state_dict)
 
 

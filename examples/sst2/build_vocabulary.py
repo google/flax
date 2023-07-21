@@ -26,13 +26,15 @@ import vocabulary
 
 
 def get_tokenized_sequences(
-        dataset: tf.data.Dataset,
-        tokenizer: tftext.Tokenizer = tftext.WhitespaceTokenizer(),
-        input_key: str = 'sentence') -> Iterable[Sequence[bytes]]:
+    dataset: tf.data.Dataset,
+    tokenizer: tftext.Tokenizer = tftext.WhitespaceTokenizer(),
+    input_key: str = 'sentence',
+) -> Iterable[Sequence[bytes]]:
   """Returns tokenized sequences for vocabulary building."""
   dataset = dataset.map(
       lambda example: tokenizer.tokenize(example[input_key]),
-      num_parallel_calls=tf.data.experimental.AUTOTUNE)
+      num_parallel_calls=tf.data.experimental.AUTOTUNE,
+  )
   yield from tfds.as_numpy(dataset)
 
 
@@ -49,8 +51,7 @@ if __name__ == '__main__':
   # Builds the vocabulary from the tokenized sequences.
   # A token needs to appear at least 3 times to be in the vocabulary. You can
   # play with this. It is there to make sure we don't overfit on rare words.
-  vocab = vocabulary.Vocabulary(
-      tokenized_sequences=tokenized_sequences, min_freq=3)
+  vocab = vocabulary.Vocabulary(tokenized_sequences=tokenized_sequences, min_freq=3)
   vocab.save('vocab.txt')
 
   logging.info('Total time elapsed: %f s', time.time() - start_time)

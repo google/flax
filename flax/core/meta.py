@@ -31,7 +31,7 @@ import jax
 from jax.experimental import maps
 
 
-TAxisMetadata = Any # TypeVar('TAxisMetadata', bound='AxisMetadata')
+TAxisMetadata = Any  # TypeVar('TAxisMetadata', bound='AxisMetadata')
 
 
 class AxisMetadata(metaclass=abc.ABCMeta):
@@ -82,8 +82,9 @@ class AxisMetadata(metaclass=abc.ABCMeta):
     pass
 
   @abc.abstractmethod
-  def add_axis(self: TAxisMetadata, index: int,
-               params: Dict[Any, Any]) -> TAxisMetadata:
+  def add_axis(
+      self: TAxisMetadata, index: int, params: Dict[Any, Any]
+  ) -> TAxisMetadata:
     """Adds a new axis to the axis metadata.
 
     Note that add_axis and remove_axis should act as each other's inverse
@@ -102,8 +103,9 @@ class AxisMetadata(metaclass=abc.ABCMeta):
     pass
 
   @abc.abstractmethod
-  def remove_axis(self: TAxisMetadata, index: int,
-                  params: Dict[Any, Any]) -> TAxisMetadata:
+  def remove_axis(
+      self: TAxisMetadata, index: int, params: Dict[Any, Any]
+  ) -> TAxisMetadata:
     """Removes an axis from the axis metadata.
 
     Note that add_axis and remove_axis should act as each other's inverse
@@ -129,11 +131,13 @@ def is_axis_metadata(val: Any) -> bool:
 
 def map_axis_meta(fn: Callable[[AxisMetadata], Any], tree: Any) -> Any:
   """Maps over all PyTree nodes that are AxisMetadata instances."""
+
   def wrapper(x):
     if isinstance(x, AxisMetadata):
       return fn(x)
     else:
       return x
+
   return jax.tree_map(wrapper, tree, is_leaf=is_axis_metadata)
 
 
@@ -154,11 +158,13 @@ def unbox(tree: Any) -> Any:
 
 def replace_boxed(tree: Any, updates: Any) -> Any:
   """Updates all AxisMetadata boxes with the values in updates."""
+
   def inner_update(c, v):
     if isinstance(c, AxisMetadata):
       return c.replace_boxed(replace_boxed(c.unbox(), v))
     else:
       return v
+
   return jax.tree_map(inner_update, tree, updates, is_leaf=is_axis_metadata)
 
 
@@ -228,6 +234,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
       return c
 
   """
+
   value: Any
   names: LogicalNames = struct.field(pytree_node=False)
   mesh: Optional[jax.sharding.Mesh] = struct.field(default=None, pytree_node=False)
@@ -239,8 +246,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
       if self.mesh is not None:
         sharding = jax.sharding.NamedSharding(self.mesh, axis_resource)
         return jax.lax.with_sharding_constraint(self.value, sharding)
-      return jax.lax.with_sharding_constraint(
-          self.value, axis_resource)
+      return jax.lax.with_sharding_constraint(self.value, axis_resource)
     else:
       return self.value
 
@@ -256,8 +262,8 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
     axis_name = self._get_partition_name(params)
     names = list(self.names)
     while len(names) < index:
-      names.append(None) # type: ignore
-    names.insert(index, axis_name) # type: ignore
+      names.append(None)  # type: ignore
+    names.insert(index, axis_name)  # type: ignore
     return self.replace(names=tuple(names))
 
   def remove_axis(self, index: int, params: Dict[Any, Any]) -> TAxisMetadata:
@@ -279,7 +285,7 @@ def with_partitioning(
     fn: Callable[..., Any],
     names: LogicalNames,
     mesh: Optional[jax.sharding.Mesh] = None,
-  ) ->  Callable[..., Partitioned]:
+) -> Callable[..., Partitioned]:
   """Wraps a function's return value with Partitioned.
 
   Example::
@@ -296,14 +302,17 @@ def with_partitioning(
   Returns:
     A function wrapping ``fn`` that will return an instance of ``Partitioned``.
   """
+
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
     return Partitioned(fn(*args, **kwargs), names, mesh=mesh)
+
   return wrapper
 
 
 def get_partition_spec(tree: Any) -> Any:
   """Extracts a PartitionSpec tree from a PyTree containing ``Partitioned`` values."""
+
   def f(x):
     if isinstance(x, Partitioned):
       return x.get_partition_spec()
@@ -312,8 +321,8 @@ def get_partition_spec(tree: Any) -> Any:
       return jax.sharding.PartitionSpec()
     else:
       return None
-  return jax.tree_map(f, tree,
-                      is_leaf=lambda x: isinstance(x, Partitioned))
+
+  return jax.tree_map(f, tree, is_leaf=lambda x: isinstance(x, Partitioned))
 
 
 def get_sharding(tree: Any, mesh: jax.sharding.Mesh) -> Any:

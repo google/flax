@@ -29,6 +29,7 @@ def standardize(x, axis, eps=1e-8):
   x = x / jnp.sqrt(jnp.mean(jnp.square(x), axis=axis, keepdims=True) + eps)
   return x
 
+
 # TODO(avital, levskaya): resurrect this example once interactive api is restored.
 
 # A wrapper that calls through a simple module with standardized parameters.

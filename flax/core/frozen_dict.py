@@ -50,6 +50,7 @@ def _indent(x, num_spaces):
 @jax.tree_util.register_pytree_with_keys_class
 class FrozenDict(Mapping[K, V]):
   """An immutable variant of the Python dict."""
+
   __slots__ = ('_dict', '_hash')
 
   def __init__(self, *args, __unsafe_skip_copy__=False, **kwargs):  # pylint: disable=invalid-name
@@ -88,6 +89,7 @@ class FrozenDict(Mapping[K, V]):
 
   def pretty_repr(self, num_spaces=4):
     """Returns an indented representation of the nested dictionary."""
+
     def pretty_dict(x):
       if not isinstance(x, dict):
         return repr(x)
@@ -98,6 +100,7 @@ class FrozenDict(Mapping[K, V]):
         return '{\n' + _indent(rep, num_spaces) + '}'
       else:
         return '{}'
+
     return f'FrozenDict({pretty_dict(self._dict)})'
 
   def __hash__(self):
@@ -110,7 +113,7 @@ class FrozenDict(Mapping[K, V]):
 
   def copy(self, add_or_replace: Mapping[K, V]) -> 'FrozenDict[K, V]':
     """Create a new FrozenDict with additional or replaced entries."""
-    return type(self)({**self, **unfreeze(add_or_replace)}) # type: ignore[arg-type]
+    return type(self)({**self, **unfreeze(add_or_replace)})  # type: ignore[arg-type]
 
   def keys(self):
     return FrozenKeysView(self)
@@ -218,7 +221,10 @@ def unfreeze(x: Union[FrozenDict, Dict[str, Any]]) -> Dict[Any, Any]:
     return x
 
 
-def copy(x: Union[FrozenDict, Dict[str, Any]], add_or_replace: Union[FrozenDict, Dict[str, Any]]) -> Union[FrozenDict, Dict[str, Any]]:
+def copy(
+    x: Union[FrozenDict, Dict[str, Any]],
+    add_or_replace: Union[FrozenDict, Dict[str, Any]],
+) -> Union[FrozenDict, Dict[str, Any]]:
   """Create a new dict with additional and/or replaced entries. This is a utility
   function that can act on either a FrozenDict or regular dict and mimics the
   behavior of `FrozenDict.copy`.
@@ -237,13 +243,15 @@ def copy(x: Union[FrozenDict, Dict[str, Any]], add_or_replace: Union[FrozenDict,
   if isinstance(x, FrozenDict):
     return x.copy(add_or_replace)
   elif isinstance(x, dict):
-    new_dict = jax.tree_map(lambda x: x, x) # make a deep copy of dict x
+    new_dict = jax.tree_map(lambda x: x, x)  # make a deep copy of dict x
     new_dict.update(add_or_replace)
     return new_dict
   raise TypeError(f'Expected FrozenDict or dict, got {type(x)}')
 
 
-def pop(x: Union[FrozenDict, Dict[str, Any]], key: str) -> Tuple[Union[FrozenDict, Dict[str, Any]], Any]:
+def pop(
+    x: Union[FrozenDict, Dict[str, Any]], key: str
+) -> Tuple[Union[FrozenDict, Dict[str, Any]], Any]:
   """Create a new dict where one entry is removed. This is a utility
   function that can act on either a FrozenDict or regular dict and
   mimics the behavior of `FrozenDict.pop`.
@@ -262,7 +270,7 @@ def pop(x: Union[FrozenDict, Dict[str, Any]], key: str) -> Tuple[Union[FrozenDic
   if isinstance(x, FrozenDict):
     return x.pop(key)
   elif isinstance(x, dict):
-    new_dict = jax.tree_map(lambda x: x, x) # make a deep copy of dict x
+    new_dict = jax.tree_map(lambda x: x, x)  # make a deep copy of dict x
     value = new_dict.pop(key)
     return new_dict, value
   raise TypeError(f'Expected FrozenDict or dict, got {type(x)}')
@@ -284,6 +292,7 @@ def pretty_repr(x: Any, num_spaces: int = 4) -> str:
   if isinstance(x, FrozenDict):
     return x.pretty_repr()
   else:
+
     def pretty_dict(x):
       if not isinstance(x, dict):
         return repr(x)
@@ -294,6 +303,7 @@ def pretty_repr(x: Any, num_spaces: int = 4) -> str:
         return '{\n' + _indent(rep, num_spaces) + '}'
       else:
         return '{}'
+
     return pretty_dict(x)
 
 
@@ -304,16 +314,20 @@ def _frozen_dict_state_dict(xs):
 def _restore_frozen_dict(xs, states):
   diff = set(map(str, xs.keys())).difference(states.keys())
   if diff:
-    raise ValueError('The target dict keys and state dict keys do not match,'
-                   f' target dict contains keys {diff} which are not present in state dict '
-                   f'at path {serialization.current_path()}')
+    raise ValueError(
+        'The target dict keys and state dict keys do not match,'
+        f' target dict contains keys {diff} which are not present in state dict '
+        f'at path {serialization.current_path()}'
+    )
 
   return FrozenDict(
-      {key: serialization.from_state_dict(value, states[key], name=key)
-       for key, value in xs.items()})
+      {
+          key: serialization.from_state_dict(value, states[key], name=key)
+          for key, value in xs.items()
+      }
+  )
 
 
 serialization.register_serialization_state(
-    FrozenDict,
-    _frozen_dict_state_dict,
-    _restore_frozen_dict)
+    FrozenDict, _frozen_dict_state_dict, _restore_frozen_dict
+)

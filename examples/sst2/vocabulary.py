@@ -23,14 +23,16 @@ from absl import logging
 class Vocabulary:
   """Represents a vocabulary that can be built from a dataset."""
 
-  def __init__(self,
-               vocab_path: Optional[str] = None,
-               tokenized_sequences: Optional[Iterable[Sequence[bytes]]] = None,
-               min_freq: int = 1,
-               pad_token: bytes = b'<pad>',
-               unk_token: bytes = b'<unk>',
-               bos_token: bytes = b'<s>',
-               eos_token: bytes = b'</s>'):
+  def __init__(
+      self,
+      vocab_path: Optional[str] = None,
+      tokenized_sequences: Optional[Iterable[Sequence[bytes]]] = None,
+      min_freq: int = 1,
+      pad_token: bytes = b'<pad>',
+      unk_token: bytes = b'<unk>',
+      bos_token: bytes = b'<s>',
+      eos_token: bytes = b'</s>',
+  ):
     """Loads the vocab from disk (if `vocab_path` is given) or builds it from `tokenized_sequences`."""
     self.pad_token = pad_token
     self.unk_token = unk_token
@@ -44,12 +46,14 @@ class Vocabulary:
       self.build(tokenized_sequences, min_freq=min_freq)
     else:
       raise ValueError(
-          ('Vocabulary needs either `vocab_path` or `tokenized_sequences` to '
-           'be provided, got %r and %r.') % (vocab_path, tokenized_sequences))
+          (
+              'Vocabulary needs either `vocab_path` or `tokenized_sequences` to '
+              'be provided, got %r and %r.'
+          )
+          % (vocab_path, tokenized_sequences)
+      )
 
-  def build(self,
-            tokenized_sequences: Iterable[Sequence[bytes]],
-            min_freq: int = 1):
+  def build(self, tokenized_sequences: Iterable[Sequence[bytes]], min_freq: int = 1):
     """Builds a vocabulary over tokens with optional minimum frequency.
 
     Args:
@@ -71,7 +75,8 @@ class Vocabulary:
         # Sort by frequency (from high to low), and then by token string.
         # This makes sure high frequency tokens get a low token ID.
         counter.items(),
-        key=lambda token_freq: (-token_freq[1], token_freq[0])):
+        key=lambda token_freq: (-token_freq[1], token_freq[0]),
+    ):
       if freq >= min_freq:
         vocab[token] = len(vocab)
 

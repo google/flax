@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Utility for constructing an iterator which prefetches data asynchronously.
-"""
+"""Utility for constructing an iterator which prefetches data asynchronously."""
 
 import threading
 import warnings
@@ -43,8 +42,11 @@ class PrefetchIterator:
       data_iter: the Iterator that should be prefetched.
       buffer_size: how many items to prefetch (default: 1).
     """
-    warnings.warn('PrefetchIterator is deprecated. Use the standard `tf.data`'
-                  ' prefetch method instead', DeprecationWarning)
+    warnings.warn(
+        'PrefetchIterator is deprecated. Use the standard `tf.data`'
+        ' prefetch method instead',
+        DeprecationWarning,
+    )
 
     self._data_iter = data_iter
     self.buffer_size = buffer_size
@@ -77,6 +79,7 @@ class PrefetchIterator:
 
   def _prefetch_loop(self):
     """Prefetch loop that prefetches a tf dataset."""
+
     def _predicate():
       return len(self._buffer) < self.buffer_size or not self._active
 

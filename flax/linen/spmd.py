@@ -52,10 +52,13 @@ PartitionSpecPytree = Any  # pylint: disable=invalid-name
 # Dynamic Axis Mapping Context
 # ------------------------------------------------------------------------------
 
+
 @dataclasses.dataclass
 class _AxisRules(threading.local):
   """Dynamic logical axis to mesh axis binding context."""
+
   rules: LogicalRules = ()
+
 
 # Global axis binding context.
 _axis_rules = _AxisRules()
@@ -114,11 +117,11 @@ def _logical_to_mesh_axes(
   if rules is None:
     rules = _axis_rules.rules
   axis_name_counts = collections.Counter(array_dim_names)
-  dups = tuple(
-      k for k, v in axis_name_counts.items() if v > 1 and k is not None)
+  dups = tuple(k for k, v in axis_name_counts.items() if v > 1 and k is not None)
   if dups:
     raise ValueError(
-        f'Unsupported: Dimensions {dups} occur more than once in array names.')
+        f'Unsupported: Dimensions {dups} occur more than once in array names.'
+    )
   if not isinstance(rules, (tuple, list)):
     raise ValueError('Unknown axis rule specification type.')
   # We assign mesh axes using a priority based ruleset over logical axis names.
@@ -127,8 +130,10 @@ def _logical_to_mesh_axes(
   for rule_model_name, rule_mesh_names in rules:
     if rule_model_name in array_dim_names:
       pos = array_dim_names.index(rule_model_name)
-      if (_mesh_assignment_free(rule_mesh_names, result) and
-          result[pos] == _unassigned_axis):
+      if (
+          _mesh_assignment_free(rule_mesh_names, result)
+          and result[pos] == _unassigned_axis
+      ):
         result[pos] = rule_mesh_names
   return result
 
@@ -177,10 +182,7 @@ def logical_to_mesh_axes(
   return jax.sharding.PartitionSpec(*result)
 
 
-def logical_to_mesh(
-    tree: Any,
-    rules: Optional[LogicalRules] = None
-) -> Any:
+def logical_to_mesh(tree: Any, rules: Optional[LogicalRules] = None) -> Any:
   """Applies logical_to_mesh_axes to pytrees of logical PartitionSpecs."""
   return jax.tree_map(
       lambda x: logical_to_mesh_axes(x, rules),
@@ -210,6 +212,7 @@ def _global_mesh_defined() -> bool:
 
 class RulesFallback(enum.Enum):
   """How a sharding constraint should behave when no matching rule is found."""
+
   AXIS_IS_UNSHARDED = 'axis_is_unsharded'
   RAISE_ERROR = 'raise_error'
   NO_CONSTRAINT = 'no_constraint'
@@ -218,9 +221,12 @@ class RulesFallback(enum.Enum):
 def _with_sharding_constraint(
     x: Array,
     axis_resources: Optional[jax.sharding.PartitionSpec],
-    mesh: Optional[jax.sharding.Mesh] = None):
+    mesh: Optional[jax.sharding.Mesh] = None,
+):
   """Wrapper for pjit with_sharding_constraint, no-op on cpu or outside pjit."""
-  if jax.devices()[0].platform == 'cpu' or (not _global_mesh_defined() and mesh is None):
+  if jax.devices()[0].platform == 'cpu' or (
+      not _global_mesh_defined() and mesh is None
+  ):
     return x
   else:
     if mesh is not None and axis_resources is not None:
@@ -234,7 +240,8 @@ def _with_sharding_constraint_one_fallback(
     x: Array,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
     rules: Optional[LogicalRules] = None,
-    mesh: Optional[jax.sharding.Mesh] = None):
+    mesh: Optional[jax.sharding.Mesh] = None,
+):
   """Either imposes a sharding constraint or applies fallback."""
   mesh_axes = _logical_to_mesh_axes(axis_resources, rules)
   if mesh_axes is None:
@@ -253,7 +260,8 @@ def _with_sharding_constraint_one_fallback(
 
 def _is_logical_spec(x):
   return x is None or (
-      isinstance(x, tuple) and all(isinstance(e, str) or e is None for e in x))
+      isinstance(x, tuple) and all(isinstance(e, str) or e is None for e in x)
+  )
 
 
 def with_logical_constraint(
@@ -261,7 +269,8 @@ def with_logical_constraint(
     logical_axis_resources: LogicalPartitionSpecPytree,
     rules: Optional[LogicalRules] = None,
     mesh: Optional[jax.sharding.Mesh] = None,
-    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
+):
   """Version of pjit's with_sharding_constraint that uses logical axis names."""
   # If no axis binding is set, this is a no-op.
   if rules is None:
@@ -271,11 +280,15 @@ def with_logical_constraint(
   # Translate logical names to mesh assignments.
   return jax.tree_util.tree_map(
       functools.partial(
-          _with_sharding_constraint_one_fallback, fallback=fallback,
-          rules=rules, mesh=mesh),
+          _with_sharding_constraint_one_fallback,
+          fallback=fallback,
+          rules=rules,
+          mesh=mesh,
+      ),
       logical_axis_resources,
       x,
-      is_leaf=_is_logical_spec)
+      is_leaf=_is_logical_spec,
+  )
 
 
 # Logical Partitioning Axis Metadata
@@ -284,12 +297,13 @@ def with_logical_constraint(
 
 class LogicallyPartitioned(meta.Partitioned):
   rules: Optional[LogicalRules] = struct.field(default=None, pytree_node=False)
+
   def unbox(self, apply_constraint=True) -> Any:
     """Returns the wrapped value with the partitioning constraint applied."""
     if apply_constraint and (_global_mesh_defined() or self.mesh is not None):
       return with_logical_constraint(
-          self.value, self.get_partition_spec(),
-          rules=self.rules, mesh=self.mesh)
+          self.value, self.get_partition_spec(), rules=self.rules, mesh=self.mesh
+      )
     else:
       return self.value
 
@@ -299,7 +313,7 @@ def with_logical_partitioning(
     names: meta.LogicalNames,
     mesh: Optional[jax.sharding.Mesh] = None,
     rules: Optional[LogicalRules] = None,
-  ) ->  Callable[..., LogicallyPartitioned]:
+) -> Callable[..., LogicallyPartitioned]:
   """Wraps a function's return value with LogicallyPartitioned.
 
   Example::
@@ -319,8 +333,9 @@ def with_logical_partitioning(
     A function wrapping ``fn`` that will return an instance of
     ``LogicallyPartitioned``.
   """
+
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
-    return LogicallyPartitioned(fn(*args, **kwargs), names,
-                                rules=rules, mesh=mesh)
+    return LogicallyPartitioned(fn(*args, **kwargs), names, rules=rules, mesh=mesh)
+
   return wrapper

@@ -37,6 +37,7 @@ from jax.nn.initializers import zeros as zeros
 from jax.nn.initializers import Initializer as Initializer
 # pylint: enable=unused-import
 
+
 def zeros_init() -> Initializer:
   """Builds an initializer that returns a constant array full of zeros.
 
@@ -48,6 +49,7 @@ def zeros_init() -> Initializer:
          [0., 0., 0.]], dtype=float32)
   """
   return zeros
+
 
 def ones_init() -> Initializer:
   """Builds an initializer that returns a constant array full of ones.

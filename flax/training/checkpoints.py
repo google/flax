@@ -50,20 +50,21 @@ _IMPORT_GDAM_SUCCESSFUL = False
 try:
   from jax.experimental.array_serialization.serialization import get_tensorstore_spec
   from jax.experimental.array_serialization.serialization import GlobalAsyncCheckpointManager
+
   _IMPORT_GDAM_SUCCESSFUL = True
 except ImportError:
-  logging.warning('GlobalAsyncCheckpointManager is not imported correctly. '
-                  'Checkpointing of GlobalDeviceArrays will not be available.'
-                  'To use the feature, install tensorstore.')
+  logging.warning(
+      'GlobalAsyncCheckpointManager is not imported correctly. '
+      'Checkpointing of GlobalDeviceArrays will not be available.'
+      'To use the feature, install tensorstore.'
+  )
 
 
 # Single-group reg-exps for int or float numerical substrings.
 # captures sign:
-SIGNED_FLOAT_RE = re.compile(
-    r'([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
+SIGNED_FLOAT_RE = re.compile(r'([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
 # does not capture sign:
-UNSIGNED_FLOAT_RE = re.compile(
-    r'[-+]?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
+UNSIGNED_FLOAT_RE = re.compile(r'[-+]?((?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)')
 # Module name followed by number.
 MODULE_NUM_RE = re.compile(r'(.*)_\d+$')
 # Alternative schemes handled by `gfile`, e.g. on Google Cloud Storage (GCS).
@@ -99,9 +100,9 @@ def _is_multiprocess_array(value: Any) -> bool:
   return False
 
 
-def _checkpoint_path(ckpt_dir: str,
-                     step: Union[int, float, str],
-                     prefix: str = 'checkpoint_') -> str:
+def _checkpoint_path(
+    ckpt_dir: str, step: Union[int, float, str], prefix: str = 'checkpoint_'
+) -> str:
   return os.path.join(ckpt_dir, f'{prefix}{step}')
 
 
@@ -112,11 +113,13 @@ def _checkpoint_path_step(path: str) -> Optional[float]:
       return float(s)
   return None
 
+
 def _allowempty_listdir(path: str):
   try:
     return io.listdir(path)
   except io.NotFoundError:
     return []
+
 
 def _safe_remove(path: str):
   """Identify whether a path is a dir or list and choose the correct remove method."""
@@ -125,7 +128,8 @@ def _safe_remove(path: str):
   else:
     io.remove(path)
 
-class AsyncManager():
+
+class AsyncManager:
   """A simple object to track async checkpointing.
 
   How to use: create an instance and pass to save_checkpoint() calls:
@@ -155,7 +159,7 @@ class AsyncManager():
       task: The callable to be executed asynchronously.
     """
     self.wait_previous_save()
-    self.save_future = self.executor.submit(task) # type: ignore
+    self.save_future = self.executor.submit(task)  # type: ignore
 
 
 def _split_mp_arrays(
@@ -179,8 +183,7 @@ def _split_mp_arrays(
   return target, mpa_targets
 
 
-def _make_mpa_dirs(mpa_targets: List[Tuple[MultiprocessArrayType, str]],
-                   tmp_path: str):
+def _make_mpa_dirs(mpa_targets: List[Tuple[MultiprocessArrayType, str]], tmp_path: str):
   # Temporary array path is not used in GCS.
   if tmp_path.startswith('gs://'):
     return
@@ -195,14 +198,24 @@ def _make_mpa_dirs(mpa_targets: List[Tuple[MultiprocessArrayType, str]],
     io.makedirs(os.path.join(mpa_tmp_path, subpath))
 
 
-def _save_mpas(gda_manager, mpa_targets: List[Tuple[MultiprocessArrayType, str]],
-               tmp_path: str, final_path: str, base_path: str, keep: int,
-               overwrite: bool, keep_every_n_steps: Optional[int],
-               ckpt_start_time: float,
-               async_manager: Optional[AsyncManager] = None):
+def _save_mpas(
+    gda_manager,
+    mpa_targets: List[Tuple[MultiprocessArrayType, str]],
+    tmp_path: str,
+    final_path: str,
+    base_path: str,
+    keep: int,
+    overwrite: bool,
+    keep_every_n_steps: Optional[int],
+    ckpt_start_time: float,
+    async_manager: Optional[AsyncManager] = None,
+):
   """Save the multiprocess arrays given the paths."""
   mpa_list, mpa_subpaths = zip(*mpa_targets)
-  mpa_tmp_path, mpa_final_path = tmp_path + MP_ARRAY_POSTFIX, final_path + MP_ARRAY_POSTFIX
+  mpa_tmp_path, mpa_final_path = (
+      tmp_path + MP_ARRAY_POSTFIX,
+      final_path + MP_ARRAY_POSTFIX,
+  )
   write_commit_success = False
   # If the checkpoint directory is a GCS directory, then keep the final
   # checkpoint directory as the temporary checkpoint directory. This is because
@@ -228,15 +241,19 @@ def _save_mpas(gda_manager, mpa_targets: List[Tuple[MultiprocessArrayType, str]]
           ckpt_start_time,
           has_mpa=True,
           write_commit_success=write_commit_success,
-          async_manager=async_manager))
+          async_manager=async_manager,
+      ),
+  )
 
 
-def _restore_mpas(state_dict,
-                  target: Optional[Any],
-                  ckpt_path: str,
-                  step: Optional[Union[int, float]],
-                  gda_manager: Optional[Any],
-                  allow_partial: bool = False):
+def _restore_mpas(
+    state_dict,
+    target: Optional[Any],
+    ckpt_path: str,
+    step: Optional[Union[int, float]],
+    gda_manager: Optional[Any],
+    allow_partial: bool = False,
+):
   """Restore the multiprocess arrays given the target structure and type."""
 
   def _check_mpa_errors():
@@ -247,12 +264,14 @@ def _restore_mpas(state_dict,
 
   def _safe_deserialize(
       target_mpas: List[Tuple[Tuple[Any, ...], MultiprocessArrayType, str]],
-      gda_manager: Any) -> List[MultiprocessArrayType]:
+      gda_manager: Any,
+  ) -> List[MultiprocessArrayType]:
     gda_manager.wait_until_finished()
 
     # Check if reading from GCS and the array dir is potentially corrupted.
     if ckpt_path.startswith('gs://') and not io.exists(
-        os.path.join(ckpt_path + MP_ARRAY_POSTFIX, COMMIT_SUCCESS_FILE)):
+        os.path.join(ckpt_path + MP_ARRAY_POSTFIX, COMMIT_SUCCESS_FILE)
+    ):
       raise errors.MPARestoreDataCorruptedError(step, ckpt_path)
 
     # Check if the given target array types are valid.
@@ -267,11 +286,15 @@ def _restore_mpas(state_dict,
 
   # When target is a single leaf instead of a pytree dict.
   if not isinstance(state_dict, (core.FrozenDict, dict)):
-    if _is_multiprocess_array(target) and isinstance(
-        state_dict, str) and state_dict.startswith(MP_ARRAY_PH):
+    if (
+        _is_multiprocess_array(target)
+        and isinstance(state_dict, str)
+        and state_dict.startswith(MP_ARRAY_PH)
+    ):
       _check_mpa_errors()
-      return _safe_deserialize([((), target, ckpt_path + MP_ARRAY_POSTFIX)],
-                               gda_manager)[0]
+      return _safe_deserialize(
+          [((), target, ckpt_path + MP_ARRAY_POSTFIX)], gda_manager
+      )[0]
     return state_dict
 
   # Go through the restored checkpoint pytree for all MPAs
@@ -279,15 +302,19 @@ def _restore_mpas(state_dict,
   target_flattened = {}
   if target:
     target_flattened = traverse_util.flatten_dict(
-        serialization.to_state_dict(target), keep_empty_nodes=True)
+        serialization.to_state_dict(target), keep_empty_nodes=True
+    )
   # A list of (state_dict_key, target_array, array_file_path) for every array
   # to be restored
   target_mpas = []
   for key, value in flattened.items():
     if isinstance(value, str) and value.startswith(MP_ARRAY_PH):
       _check_mpa_errors()
-      if not target or (key not in target_flattened) or (
-          not _is_multiprocess_array(target_flattened[key])):
+      if (
+          not target
+          or (key not in target_flattened)
+          or (not _is_multiprocess_array(target_flattened[key]))
+      ):
         if allow_partial:
           logging.warning(
               'Multiprocess array %s could not be restored because a valid'
@@ -299,8 +326,7 @@ def _restore_mpas(state_dict,
         else:
           raise errors.MPARestoreTargetRequiredError(ckpt_path, step, key)
       else:
-        mpa_path = os.path.join(ckpt_path + MP_ARRAY_POSTFIX,
-                                value[len(MP_ARRAY_PH):])
+        mpa_path = os.path.join(ckpt_path + MP_ARRAY_POSTFIX, value[len(MP_ARRAY_PH) :])
         target_mpas.append((key, target_flattened[key], mpa_path))
 
   # If any MPA needs to be restored, call deserialize
@@ -327,13 +353,16 @@ def natural_sort(file_list: Iterable[str], signed: bool = True) -> List[str]:
     file_0.1, file_-0.2, file_2.0  -->  file_-0.2, file_0.1, file_2.0
   """
   float_re = SIGNED_FLOAT_RE if signed else UNSIGNED_FLOAT_RE
+
   def maybe_num(s):
     if float_re.match(s):
       return float(s)
     else:
       return s
+
   def split_keys(s):
     return [maybe_num(c) for c in float_re.split(s)]
+
   return sorted(file_list, key=split_keys)
 
 
@@ -345,11 +374,15 @@ def safe_normpath(path: str) -> str:
   return (d['scheme'] or '') + os.path.normpath(d['path'])
 
 
-def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
-                          overwrite: bool, keep_every_n_steps: Optional[int],
-                          has_mpa: bool) -> None:
-  """Clean up the checkpoint space according to `overwrite`, `keep`, and `keep_every_n_steps` parameters.
-  """
+def _remove_invalid_ckpts(
+    ckpt_path: str,
+    base_path: str,
+    keep: int,
+    overwrite: bool,
+    keep_every_n_steps: Optional[int],
+    has_mpa: bool,
+) -> None:
+  """Clean up the checkpoint space according to `overwrite`, `keep`, and `keep_every_n_steps` parameters."""
   dir_path, prefix = os.path.split(base_path)
   checkpoint_files: List[Any] = [
       pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)
@@ -385,9 +418,12 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
       if keep_every_n_steps:
         step_number = _checkpoint_path_step(path)
         if step_number and (step_number - last_kept) >= keep_every_n_steps:
-          logging.debug('Not deleting %s, because last_kept=%f and keeping '
-                        'every %d steps.',
-                        path, last_kept, keep_every_n_steps)
+          logging.debug(
+              'Not deleting %s, because last_kept=%f and keeping ' 'every %d steps.',
+              path,
+              last_kept,
+              keep_every_n_steps,
+          )
           last_kept = step_number
           continue
       logging.info('Removing checkpoint at %s', path)
@@ -398,11 +434,18 @@ def _remove_invalid_ckpts(ckpt_path: str, base_path: str, keep: int,
       _safe_remove(path)
 
 
-def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
-                 overwrite: bool, keep_every_n_steps: Optional[int],
-                 ckpt_start_time: float, has_mpa: bool,
-                 write_commit_success: bool,
-                 async_manager: Optional[AsyncManager] = None) -> None:
+def _save_commit(
+    ckpt_tmp_path: str,
+    ckpt_path: str,
+    base_path: str,
+    keep: int,
+    overwrite: bool,
+    keep_every_n_steps: Optional[int],
+    ckpt_start_time: float,
+    has_mpa: bool,
+    write_commit_success: bool,
+    async_manager: Optional[AsyncManager] = None,
+) -> None:
   """Commit changes after saving checkpoints to disk.
 
   This function does the following, sequentially:
@@ -413,7 +456,10 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
     3. Remove old checkpoint files based on `keep` and `keep_every_n_steps`.
     4. Record program duration saved by this checkpoint.
   """
-  mpa_ckpt_tmp_path, mpa_ckpt_path = ckpt_tmp_path + MP_ARRAY_POSTFIX, ckpt_path + MP_ARRAY_POSTFIX
+  mpa_ckpt_tmp_path, mpa_ckpt_path = (
+      ckpt_tmp_path + MP_ARRAY_POSTFIX,
+      ckpt_path + MP_ARRAY_POSTFIX,
+  )
   # Rename the multiprocess array path once serialization and writing finished.
   if has_mpa:
     if write_commit_success:
@@ -437,21 +483,25 @@ def _save_commit(ckpt_tmp_path: str, ckpt_path: str, base_path: str, keep: int,
   logging.info('Saved checkpoint at %s', ckpt_path)
 
   # Remove newer and older invalid checkpoints.
-  _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
-                        keep_every_n_steps, has_mpa)
+  _remove_invalid_ckpts(
+      ckpt_path, base_path, keep, overwrite, keep_every_n_steps, has_mpa
+  )
   # Record checkpoint-related metrics.
   ocp.utils.record_saved_duration(ckpt_start_time)
   if async_manager:
     jax.monitoring.record_event_duration_secs(
-        '/jax/checkpoint/write/async/total_duration_secs',
-        time.time() - ckpt_start_time)
+        '/jax/checkpoint/write/async/total_duration_secs', time.time() - ckpt_start_time
+    )
 
 
-def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
-                           step: int):
+def _check_overwrite_error(
+    ckpt_tmp_path: str, ckpt_path: str, base_path: str, step: int
+):
   """Throw error if a ckpt file of this step or higher already exists."""
   dir_path, prefix = os.path.split(base_path)
-  checkpoint_files: List[Any] = [pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)]
+  checkpoint_files: List[Any] = [
+      pathlib.PurePath(c) for c in _allowempty_listdir(dir_path)
+  ]
   checkpoint_files = [
       os.path.join(dir_path, c)
       for c in checkpoint_files
@@ -470,11 +520,17 @@ def _check_overwrite_error(ckpt_tmp_path: str, ckpt_path: str, base_path: str,
     raise errors.InvalidCheckpointError(ckpt_path, step)
 
 
-def _save_main_ckpt_file(target: bytes, has_mpa: bool, paths: Tuple[str, str],
-                         base_path: str, step: int,
-                         keep: int, overwrite: bool,
-                         keep_every_n_steps: Optional[int],
-                         ckpt_start_time: float):
+def _save_main_ckpt_file(
+    target: bytes,
+    has_mpa: bool,
+    paths: Tuple[str, str],
+    base_path: str,
+    step: int,
+    keep: int,
+    overwrite: bool,
+    keep_every_n_steps: Optional[int],
+    ckpt_start_time: float,
+):
   """Save the main checkpoint file via file system."""
   ckpt_tmp_path, ckpt_path = paths
   io.makedirs(os.path.dirname(ckpt_path))
@@ -493,13 +549,15 @@ def _save_main_ckpt_file(target: bytes, has_mpa: bool, paths: Tuple[str, str],
         keep_every_n_steps,
         ckpt_start_time,
         has_mpa=False,
-        write_commit_success=False)
+        write_commit_success=False,
+    )
 
 
 def _get_checkpoint_paths(
     ckpt_dir: Union[str, os.PathLike],
     step: Union[int, float],
-    prefix: str = 'checkpoint_') -> Tuple[str, str, str]:
+    prefix: str = 'checkpoint_',
+) -> Tuple[str, str, str]:
   """Generate the checkpoint paths used in this save operation."""
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
   logging.info('Saving checkpoint at step: %s', step)
@@ -564,8 +622,7 @@ def save_checkpoint(
   if async_manager:
     async_manager.wait_previous_save()
 
-  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
-      ckpt_dir, step, prefix)
+  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(ckpt_dir, step, prefix)
 
   if config.flax_use_orbax_checkpointing or orbax_checkpointer:
     logging.info(
@@ -582,9 +639,7 @@ def save_checkpoint(
       )
 
     # Make sure any previous work is done before making file changes.
-    if orbax_checkpointer and isinstance(
-        orbax_checkpointer, ocp.AsyncCheckpointer
-    ):
+    if orbax_checkpointer and isinstance(orbax_checkpointer, ocp.AsyncCheckpointer):
       orbax_checkpointer.wait_until_finished()
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
@@ -602,15 +657,16 @@ def save_checkpoint(
       )
 
     save_args = orbax_utils.save_args_from_target(target)
-    orbax_checkpointer.save(
-        ckpt_path, target, save_args=save_args, force=overwrite)
+    orbax_checkpointer.save(ckpt_path, target, save_args=save_args, force=overwrite)
     # Do a process check here in case people call this for multihost.
     if process_index() == 0:
-      _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
-                            keep_every_n_steps, True)
+      _remove_invalid_ckpts(
+          ckpt_path, base_path, keep, overwrite, keep_every_n_steps, True
+      )
     end_time = time.time()
-    monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT,
-                                          end_time - start_time)
+    monitoring.record_event_duration_secs(
+        _WRITE_CHECKPOINT_EVENT, end_time - start_time
+    )
     return ckpt_path
 
   warnings.warn(
@@ -624,22 +680,31 @@ def save_checkpoint(
       DeprecationWarning,
   )
   if not overwrite:
-    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step) # type: ignore
+    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)  # type: ignore
 
   target = serialization.to_bytes(target)
+
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
     jax.monitoring.record_event('/jax/flax/checkpoint/save_main_ckpt_task')
-    return _save_main_ckpt_file(target, False, (ckpt_tmp_path, ckpt_path),
-                                base_path, step, keep, overwrite,
-                                keep_every_n_steps, start_time)
+    return _save_main_ckpt_file(
+        target,
+        False,
+        (ckpt_tmp_path, ckpt_path),
+        base_path,
+        step,
+        keep,
+        overwrite,
+        keep_every_n_steps,
+        start_time,
+    )
+
   if async_manager:
     async_manager.save_async(save_main_ckpt_task)
   else:
     save_main_ckpt_task()
   end_time = time.time()
-  monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT,
-                                        end_time - start_time)
+  monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT, end_time - start_time)
   return ckpt_path
 
 
@@ -703,8 +768,7 @@ def save_checkpoint_multiprocess(
     gda_manager.wait_until_finished()
     sync_global_devices('Flax:Checkpoint:WaitLastSaveDone')
 
-  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(
-      ckpt_dir, step, prefix)
+  ckpt_path, ckpt_tmp_path, base_path = _get_checkpoint_paths(ckpt_dir, step, prefix)
 
   if config.flax_use_orbax_checkpointing or orbax_checkpointer:
     logging.info(
@@ -713,9 +777,7 @@ def save_checkpoint_multiprocess(
         ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#orbax-as-backend-troubleshooting'
     )
     # Make sure any previous work is done before making file changes.
-    if orbax_checkpointer and isinstance(
-        orbax_checkpointer, ocp.AsyncCheckpointer
-    ):
+    if orbax_checkpointer and isinstance(orbax_checkpointer, ocp.AsyncCheckpointer):
       orbax_checkpointer.wait_until_finished()
 
     # If no checkpointer provided, save synchronously with default setting.
@@ -734,14 +796,15 @@ def save_checkpoint_multiprocess(
       )
 
     if process_index() == 0:
-      _remove_invalid_ckpts(ckpt_path, base_path, keep, overwrite,
-                            keep_every_n_steps, True)
+      _remove_invalid_ckpts(
+          ckpt_path, base_path, keep, overwrite, keep_every_n_steps, True
+      )
     save_args = orbax_utils.save_args_from_target(target)
-    orbax_checkpointer.save(
-        ckpt_path, target, save_args=save_args, force=overwrite)
+    orbax_checkpointer.save(ckpt_path, target, save_args=save_args, force=overwrite)
     end_time = time.time()
-    monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT,
-                                          end_time - start_time)
+    monitoring.record_event_duration_secs(
+        _WRITE_CHECKPOINT_EVENT, end_time - start_time
+    )
     return ckpt_path
 
   warnings.warn(
@@ -761,14 +824,24 @@ def save_checkpoint_multiprocess(
   has_mpa = mpa_targets and _IMPORT_GDAM_SUCCESSFUL
 
   if not overwrite:
-    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step) # type: ignore
+    _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)  # type: ignore
     sync_global_devices('Flax:Checkpoint:CheckOverwriteBeforeSave')
+
   # Save the files via I/O sync or async.
   def save_main_ckpt_task():
     jax.monitoring.record_event('/jax/flax/checkpoint/save_main_ckpt_task')
-    return _save_main_ckpt_file(target, has_mpa, (ckpt_tmp_path, ckpt_path),
-                                base_path, step, keep, overwrite,
-                                keep_every_n_steps, start_time)
+    return _save_main_ckpt_file(
+        target,
+        has_mpa,
+        (ckpt_tmp_path, ckpt_path),
+        base_path,
+        step,
+        keep,
+        overwrite,
+        keep_every_n_steps,
+        start_time,
+    )
+
   # Write the main checkpoint file only via process 0, to avoid race condition.
   if process_index() == 0:
     if async_manager:
@@ -784,17 +857,27 @@ def save_checkpoint_multiprocess(
     if process_index() == 0:
       _make_mpa_dirs(mpa_targets, ckpt_tmp_path)
     sync_global_devices('Flax:Checkpoint:AfterCreateMPADir')
-    _save_mpas(gda_manager, mpa_targets, ckpt_tmp_path, ckpt_path, base_path,
-               keep, overwrite, keep_every_n_steps, start_time, async_manager)
+    _save_mpas(
+        gda_manager,
+        mpa_targets,
+        ckpt_tmp_path,
+        ckpt_path,
+        base_path,
+        keep,
+        overwrite,
+        keep_every_n_steps,
+        start_time,
+        async_manager,
+    )
 
   end_time = time.time()
-  monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT,
-                                        end_time - start_time)
+  monitoring.record_event_duration_secs(_WRITE_CHECKPOINT_EVENT, end_time - start_time)
   return ckpt_path
 
 
-def _all_checkpoints(ckpt_dir: Union[str, os.PathLike],
-                     prefix: str = 'checkpoint_') -> List[str]:
+def _all_checkpoints(
+    ckpt_dir: Union[str, os.PathLike], prefix: str = 'checkpoint_'
+) -> List[str]:
   """Retrieve all checkpoint paths in directory.
 
   Args:
@@ -823,8 +906,9 @@ def _all_checkpoints(ckpt_dir: Union[str, os.PathLike],
     return []
 
 
-def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
-                      prefix: str = 'checkpoint_') -> Optional[str]:
+def latest_checkpoint(
+    ckpt_dir: Union[str, os.PathLike], prefix: str = 'checkpoint_'
+) -> Optional[str]:
   """Retrieve the path of the latest checkpoint in a directory.
 
   Args:
@@ -841,9 +925,11 @@ def latest_checkpoint(ckpt_dir: Union[str, os.PathLike],
     return None
 
 
-def available_steps(ckpt_dir: Union[str, os.PathLike],
-                    prefix: str = 'checkpoint_',
-                    step_type: Type = int) -> List[Union[int, float]]:
+def available_steps(
+    ckpt_dir: Union[str, os.PathLike],
+    prefix: str = 'checkpoint_',
+    step_type: Type = int,
+) -> List[Union[int, float]]:
   """Return step numbers of available checkpoints in a directory.
 
 
@@ -919,9 +1005,7 @@ def restore_checkpoint(
   """
   start_time = time.time()
   # Make sure any previous work is done before checking files.
-  if orbax_checkpointer and isinstance(
-      orbax_checkpointer, ocp.AsyncCheckpointer
-  ):
+  if orbax_checkpointer and isinstance(orbax_checkpointer, ocp.AsyncCheckpointer):
     orbax_checkpointer.wait_until_finished()
 
   ckpt_dir = os.fspath(ckpt_dir)  # Pathlib -> str
@@ -939,10 +1023,11 @@ def restore_checkpoint(
       if io.exists(os.path.join(ckpt_dir, ORBAX_CKPT_FILENAME)):
         ckpt_path = ckpt_dir
       else:
-        ckpt_path = latest_checkpoint(ckpt_dir, prefix) # type: ignore
+        ckpt_path = latest_checkpoint(ckpt_dir, prefix)  # type: ignore
         if not ckpt_path:
-          logging.info('Found no checkpoint files in %s with prefix %s',
-                       ckpt_dir, prefix)
+          logging.info(
+              'Found no checkpoint files in %s with prefix %s', ckpt_dir, prefix
+          )
           return target
     else:
       ckpt_path = ckpt_dir
@@ -959,23 +1044,17 @@ def restore_checkpoint(
 
     restore_kwargs = {}
     if target is not None:
-      restore_kwargs['restore_args'] = orbax_utils.restore_args_from_target(
-          target
-      )
+      restore_kwargs['restore_args'] = orbax_utils.restore_args_from_target(target)
       if isinstance(orbax_checkpointer._handler, ocp.PyTreeCheckpointHandler):  # pylint: disable=protected-access
-        restore_kwargs['transforms'] = (
-            orbax_utils.maybe_construct_transformations(
-                target, orbax_transforms
-            )
+        restore_kwargs['transforms'] = orbax_utils.maybe_construct_transformations(
+            target, orbax_transforms
         )
-    restored = orbax_checkpointer.restore(
-        ckpt_path, item=target, **restore_kwargs)
+    restored = orbax_checkpointer.restore(ckpt_path, item=target, **restore_kwargs)
     restored = serialization.to_state_dict(restored)
     if target is not None:
       restored = serialization.from_state_dict(target, restored)
     end_time = time.time()
-    monitoring.record_event_duration_secs(_READ_CHECKPOINT_EVENT,
-                                          end_time - start_time)
+    monitoring.record_event_duration_secs(_READ_CHECKPOINT_EVENT, end_time - start_time)
     return restored
 
   ckpt_size = io.getsize(ckpt_path)
@@ -994,7 +1073,7 @@ def restore_checkpoint(
           f.seek(i * buf_size)
           buf = f.read(buf_size)
           if buf:
-            checkpoint_contents[i * buf_size:i * buf_size + len(buf)] = buf
+            checkpoint_contents[i * buf_size : i * buf_size + len(buf)] = buf
           return len(buf) / buf_size
 
       pool_size = 32
@@ -1007,8 +1086,9 @@ def restore_checkpoint(
 
   state_dict = serialization.msgpack_restore(checkpoint_contents)
   if _IMPORT_GDAM_SUCCESSFUL:
-    state_dict = _restore_mpas(state_dict, target, ckpt_path, step, gda_manager,
-                               allow_partial_mpa_restoration)
+    state_dict = _restore_mpas(
+        state_dict, target, ckpt_path, step, gda_manager, allow_partial_mpa_restoration
+    )
 
   if target is None:
     restored_checkpoint = state_dict
@@ -1016,8 +1096,7 @@ def restore_checkpoint(
     restored_checkpoint = serialization.from_state_dict(target, state_dict)
 
   end_time = time.time()
-  monitoring.record_event_duration_secs(_READ_CHECKPOINT_EVENT,
-                                        end_time - start_time)
+  monitoring.record_event_duration_secs(_READ_CHECKPOINT_EVENT, end_time - start_time)
 
   return restored_checkpoint
 
@@ -1088,5 +1167,5 @@ def convert_pre_linen(params: PyTree) -> PyTree:
     params_renamed[name] = convert_pre_linen(value)
 
   if isinstance(params, core.FrozenDict):
-    params_renamed = core.freeze(params_renamed) # type: ignore
+    params_renamed = core.freeze(params_renamed)  # type: ignore
   return params_renamed

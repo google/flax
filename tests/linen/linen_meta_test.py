@@ -32,8 +32,7 @@ class LinenMetaTest(absltest.TestCase):
 
       @nn.compact
       def __call__(mdl_self, x):  # pylint: disable=no-self-argument
-        kernel_init = nn.with_partitioning(nn.initializers.ones_init(),
-                                           ('in', 'out'))
+        kernel_init = nn.with_partitioning(nn.initializers.ones_init(), ('in', 'out'))
         kernel = mdl_self.param('kernel', kernel_init, (x.shape[-1], 2))
         kernel_box = mdl_self.get_variable('params', 'kernel')
         self.assertIsInstance(kernel_box, nn.Partitioned)
@@ -45,27 +44,31 @@ class LinenMetaTest(absltest.TestCase):
       @nn.compact
       def __call__(self, xs):
         return nn.vmap(
-            Bar, in_axes=0,
-            variable_axes={'params': 0}, split_rngs={'params': True},
-            metadata_params={nn.PARTITION_NAME: 'batch'})(name='bar')(xs)
+            Bar,
+            in_axes=0,
+            variable_axes={'params': 0},
+            split_rngs={'params': True},
+            metadata_params={nn.PARTITION_NAME: 'batch'},
+        )(name='bar')(xs)
 
     m = Foo()
     variables = m.init(random.PRNGKey(0), jnp.zeros((8, 3)))
-    self.assertEqual(variables['params']['bar']['kernel'].names,
-                     ('batch', 'in', 'out'))
-
+    self.assertEqual(variables['params']['bar']['kernel'].names, ('batch', 'in', 'out'))
 
   def test_boxed_variable(self):
     class Bar(nn.Module):
 
       @nn.compact
       def __call__(mdl_self, x):  # pylint: disable=no-self-argument
-        kernel_init = nn.with_partitioning(nn.initializers.ones_init(),
-                                           ('in', 'out'))
+        kernel_init = nn.with_partitioning(nn.initializers.ones_init(), ('in', 'out'))
         kernel = mdl_self.variable(
-            'params', 'kernel', kernel_init,
-            mdl_self.make_rng('params'), (x.shape[-1], 2))
-        kernel.value += 1.
+            'params',
+            'kernel',
+            kernel_init,
+            mdl_self.make_rng('params'),
+            (x.shape[-1], 2),
+        )
+        kernel.value += 1.0
         self.assertEqual(kernel.value.sum(), kernel.value.size * 2)
         kernel_box = mdl_self.get_variable('params', 'kernel')
         self.assertIsInstance(kernel_box, nn.Partitioned)
@@ -77,29 +80,30 @@ class LinenMetaTest(absltest.TestCase):
       @nn.compact
       def __call__(self, xs):
         return nn.vmap(
-            Bar, in_axes=0,
-            variable_axes={'params': 0}, split_rngs={'params': True},
-            metadata_params={nn.PARTITION_NAME: 'batch'})(name='bar')(xs)
+            Bar,
+            in_axes=0,
+            variable_axes={'params': 0},
+            split_rngs={'params': True},
+            metadata_params={nn.PARTITION_NAME: 'batch'},
+        )(name='bar')(xs)
 
     m = Foo()
     variables = m.init(random.PRNGKey(0), jnp.zeros((8, 3)))
-    self.assertEqual(variables['params']['bar']['kernel'].names,
-                     ('batch', 'in', 'out'))
-
+    self.assertEqual(variables['params']['bar']['kernel'].names, ('batch', 'in', 'out'))
 
   # def test_boxed_variable(self):
   #   def f(scope, xs):
   #     def g(scope, x):
-        # kernel_init = nn.with_partitioning(nn.initializers.ones_init(),
-        #                                      ('in', 'out'))
-        # kernel = scope.variable('params', 'kernel', kernel_init,
-        #                         scope.make_rng('params'), (x.shape[-1], 2))
-        # kernel.value += 1.
-        # self.assertEqual(kernel.value.sum(), kernel.value.size * 2)
-        # kernel_box = scope.get_variable('params', 'kernel')
-        # self.assertIsInstance(kernel_box, nn.Partitioned)
-        # self.assertEqual(kernel_box.names, ('in', 'out'))
-        # return x @ kernel.value
+  # kernel_init = nn.with_partitioning(nn.initializers.ones_init(),
+  #                                      ('in', 'out'))
+  # kernel = scope.variable('params', 'kernel', kernel_init,
+  #                         scope.make_rng('params'), (x.shape[-1], 2))
+  # kernel.value += 1.
+  # self.assertEqual(kernel.value.sum(), kernel.value.size * 2)
+  # kernel_box = scope.get_variable('params', 'kernel')
+  # self.assertIsInstance(kernel_box, nn.Partitioned)
+  # self.assertEqual(kernel_box.names, ('in', 'out'))
+  # return x @ kernel.value
 
   #     nn.vmap(
   #         g, in_axes=0,
@@ -118,12 +122,12 @@ class LinenMetaTest(absltest.TestCase):
       def __call__(self, x):
         ki = nn.linear.default_kernel_init
         h = nn.Dense(
-            self.hidden_size,
-            kernel_init=nn.with_partitioning(ki, ('data', 'model')))(x)
+            self.hidden_size, kernel_init=nn.with_partitioning(ki, ('data', 'model'))
+        )(x)
         h = nn.relu(h)
         return nn.Dense(
-            x.shape[-1],
-            kernel_init=nn.with_partitioning(ki, ('model', 'data')))(h)
+            x.shape[-1], kernel_init=nn.with_partitioning(ki, ('model', 'data'))
+        )(h)
 
     class Model(nn.Module):
 
@@ -132,47 +136,58 @@ class LinenMetaTest(absltest.TestCase):
         def body(_, c):
           c = MLP(512)(c)
           return c, ()
+
         c, _ = nn.scan(
-            body, variable_axes={'params': 0}, split_rngs={'params': 0},
-            length=8, metadata_params={nn.PARTITION_NAME: None})(
-                self, x)
+            body,
+            variable_axes={'params': 0},
+            split_rngs={'params': 0},
+            length=8,
+            metadata_params={nn.PARTITION_NAME: None},
+        )(self, x)
         return c
 
     devs = mesh_utils.create_device_mesh((jax.device_count(), 1))
     mesh = Mesh(devs, ['data', 'model'])
     model = Model()
     x = jnp.ones((8, 128))
-    spec = nn.get_partition_spec(
-        jax.eval_shape(model.init, random.PRNGKey(0), x))
-    self.assertEqual(spec, {
-        'params': {
-            'MLP_0': {
-                'Dense_0': {
-                    'bias': PartitionSpec(),
-                    'kernel': PartitionSpec(None, 'data', 'model'),
-                },
-                'Dense_1': {
-                    'bias': PartitionSpec(),
-                    'kernel': PartitionSpec(None, 'model', 'data'),
+    spec = nn.get_partition_spec(jax.eval_shape(model.init, random.PRNGKey(0), x))
+    self.assertEqual(
+        spec,
+        {
+            'params': {
+                'MLP_0': {
+                    'Dense_0': {
+                        'bias': PartitionSpec(),
+                        'kernel': PartitionSpec(None, 'data', 'model'),
+                    },
+                    'Dense_1': {
+                        'bias': PartitionSpec(),
+                        'kernel': PartitionSpec(None, 'model', 'data'),
+                    },
                 },
             },
         },
-    })
+    )
     x_spec = PartitionSpec('data', 'model')
     f = lambda x: jax.sharding.NamedSharding(mesh, x)
     if jax.config.jax_enable_custom_prng:
       key_spec = PartitionSpec()
     else:
       key_spec = PartitionSpec(None)
-    init_fn = jax.jit(model.init,
-                      in_shardings=jax.tree_map(f, (key_spec, x_spec)),
-                      out_shardings=jax.tree_map(f, spec))
+    init_fn = jax.jit(
+        model.init,
+        in_shardings=jax.tree_map(f, (key_spec, x_spec)),
+        out_shardings=jax.tree_map(f, spec),
+    )
     variables = init_fn(random.PRNGKey(0), x)
-    apply_fn = jax.jit(model.apply,
-                       in_shardings=jax.tree_map(f, (spec, x_spec)),
-                       out_shardings=jax.tree_map(f, x_spec))
+    apply_fn = jax.jit(
+        model.apply,
+        in_shardings=jax.tree_map(f, (spec, x_spec)),
+        out_shardings=jax.tree_map(f, x_spec),
+    )
     y = apply_fn(variables, x)
     self.assertEqual(y.shape, (8, 128))
+
 
 if __name__ == '__main__':
   absltest.main()

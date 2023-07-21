@@ -76,9 +76,10 @@ def field(*, metadata=None, kw_only=dataclasses.MISSING, **kwargs):
     A `dataclasses.Field` object.
   """
   if kw_only is not dataclasses.MISSING and kw_only:
-    if (kwargs.get('default', dataclasses.MISSING) is dataclasses.MISSING and
-        kwargs.get('default_factory',
-                   dataclasses.MISSING) is dataclasses.MISSING):
+    if (
+        kwargs.get('default', dataclasses.MISSING) is dataclasses.MISSING
+        and kwargs.get('default_factory', dataclasses.MISSING) is dataclasses.MISSING
+    ):
       raise ValueError('Keyword-only fields with no default are not supported.')
     if metadata is None:
       metadata = {}
@@ -131,8 +132,7 @@ def _process_class(cls, extra_fields=None, **kwargs):
       kw_only_name = name
     elif kw_only_name is not None:
       if not hasattr(cls, name):
-        raise ValueError(
-            'Keyword-only fields with no default are not supported.')
+        raise ValueError('Keyword-only fields with no default are not supported.')
       default = getattr(cls, name)
       if isinstance(default, dataclasses.Field):
         default.metadata = {**default.metadata, **{KW_ONLY: True}}
@@ -146,8 +146,9 @@ def _process_class(cls, extra_fields=None, **kwargs):
   if extra_fields:
     for name, annotation, default in extra_fields:
       if not (isinstance(name, str) and isinstance(default, dataclasses.Field)):
-        raise ValueError('Expected extra_fields to a be a list of '
-                         '(name, type, Field) tuples.')
+        raise ValueError(
+            'Expected extra_fields to a be a list of ' '(name, type, Field) tuples.'
+        )
       setattr(cls, name, default)
       cls.__annotations__[name] = annotation
 
@@ -156,21 +157,20 @@ def _process_class(cls, extra_fields=None, **kwargs):
     if not dataclasses.is_dataclass(base):
       continue
     base_annotations = base.__dict__.get('__annotations__', {})
-    base_dataclass_fields[base] = dict(
-        getattr(base, '__dataclass_fields__', {}))
+    base_dataclass_fields[base] = dict(getattr(base, '__dataclass_fields__', {}))
     for base_field in list(dataclasses.fields(base)):
       field_name = base_field.name
       if base_field.metadata.get(KW_ONLY) or field_name in kw_only_fields:
-        kw_only_fields[field_name] = (base_annotations.get(field_name),
-                                      base_field)
+        kw_only_fields[field_name] = (base_annotations.get(field_name), base_field)
         del base.__dataclass_fields__[field_name]
 
   # Remove any keyword-only fields from this class.
   cls_annotations = cls.__dict__['__annotations__']
   for name, annotation in list(cls_annotations.items()):
     value = getattr(cls, name, None)
-    if ((isinstance(value, dataclasses.Field) and value.metadata.get(KW_ONLY))
-        or name in kw_only_fields):
+    if (
+        isinstance(value, dataclasses.Field) and value.metadata.get(KW_ONLY)
+    ) or name in kw_only_fields:
       del cls_annotations[name]
       kw_only_fields[name] = (annotation, value)
 
@@ -185,7 +185,7 @@ def _process_class(cls, extra_fields=None, **kwargs):
   transformed_cls = dataclasses.dataclass(cls, **kwargs)
 
   # Restore the base classes' __dataclass_fields__.
-  for (cls, dataclass_fields) in base_dataclass_fields.items():
+  for cls, dataclass_fields in base_dataclass_fields.items():
     cls.__dataclass_fields__ = dataclass_fields
 
   # Return the transformed dataclass

@@ -28,13 +28,12 @@ def transpose(fn):
     return jax.tree_util.tree_map(lambda x: x.T, variables)
 
   return lift.map_variables(
-      fn, "params", map_in_fn=trans, map_out_fn=trans,
-      mutable=True)
+      fn, 'params', map_in_fn=trans, map_out_fn=trans, mutable=True
+  )
 
 
 @dataclass
 class TiedAutoEncoder:
-
   latents: int
   features: int
 
@@ -46,8 +45,7 @@ class TiedAutoEncoder:
     return nn.dense(scope, x, self.latents, bias=False)
 
   def decode(self, scope, z):
-    return transpose(nn.dense)(
-        scope, z, self.features, bias=False)
+    return transpose(nn.dense)(scope, z, self.features, bias=False)
 
 
 class TiedAutoEncoderTest(absltest.TestCase):
@@ -57,11 +55,13 @@ class TiedAutoEncoderTest(absltest.TestCase):
     x = jnp.ones((1, ae.features))
     x_r, variables = init(ae)(random.PRNGKey(0), x)
 
-    param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(param_shapes, {
-        'kernel': (4, 2),
-    })
+    param_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(
+        param_shapes,
+        {
+            'kernel': (4, 2),
+        },
+    )
     self.assertEqual(x.shape, x_r.shape)
 
   def test_init_from_decoder(self):
@@ -69,11 +69,13 @@ class TiedAutoEncoderTest(absltest.TestCase):
     z = jnp.ones((1, ae.latents))
     x_r, variables = init(ae.decode)(random.PRNGKey(0), z)
 
-    param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
-    self.assertEqual(param_shapes, {
-        'kernel': (4, 2),
-    })
+    param_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
+    self.assertEqual(
+        param_shapes,
+        {
+            'kernel': (4, 2),
+        },
+    )
     self.assertEqual(x_r.shape, (1, 4))
 
 

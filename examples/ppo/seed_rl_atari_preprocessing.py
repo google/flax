@@ -51,8 +51,14 @@ class AtariPreprocessing:
   and R2D2 papers.
   """
 
-  def __init__(self, environment: gym.Env, frame_skip=4, terminal_on_life_loss=False,
-               screen_size=84, max_random_noops=0):
+  def __init__(
+      self,
+      environment: gym.Env,
+      frame_skip=4,
+      terminal_on_life_loss=False,
+      screen_size=84,
+      max_random_noops=0,
+  ):
     """Constructor for an Atari 2600 preprocessor.
     Args:
       environment: Gym environment whose observations are preprocessed.
@@ -67,11 +73,13 @@ class AtariPreprocessing:
       ValueError: if frame_skip or screen_size are not strictly positive.
     """
     if frame_skip <= 0:
-      raise ValueError('Frame skip should be strictly positive, got {}'.
-                       format(frame_skip))
+      raise ValueError(
+          'Frame skip should be strictly positive, got {}'.format(frame_skip)
+      )
     if screen_size <= 0:
-      raise ValueError('Target screen size should be strictly positive, got {}'.
-                       format(screen_size))
+      raise ValueError(
+          'Target screen size should be strictly positive, got {}'.format(screen_size)
+      )
 
     self.environment = environment
     self.terminal_on_life_loss = terminal_on_life_loss
@@ -84,7 +92,7 @@ class AtariPreprocessing:
     # frames.
     self.screen_buffer = [
         np.empty((obs_dims.shape[0], obs_dims.shape[1]), dtype=np.uint8),
-        np.empty((obs_dims.shape[0], obs_dims.shape[1]), dtype=np.uint8)
+        np.empty((obs_dims.shape[0], obs_dims.shape[1]), dtype=np.uint8),
     ]
 
     self.game_over = False
@@ -94,8 +102,9 @@ class AtariPreprocessing:
   def observation_space(self):
     # Return the observation space adjusted to match the shape of the processed
     # observations.
-    return Box(low=0, high=255, shape=(self.screen_size, self.screen_size, 1),
-               dtype=np.uint8)
+    return Box(
+        low=0, high=255, shape=(self.screen_size, self.screen_size, 1), dtype=np.uint8
+    )
 
   @property
   def action_space(self):
@@ -169,7 +178,7 @@ class AtariPreprocessing:
         episode is over.
       info: Gym API's info data structure.
     """
-    accumulated_reward = 0.
+    accumulated_reward = 0.0
 
     for time_step in range(self.frame_skip):
       # We bypass the Gym observation altogether and directly fetch the
@@ -216,11 +225,14 @@ class AtariPreprocessing:
     """
     # Pool if there are enough screens to do so.
     if self.frame_skip > 1:
-      np.maximum(self.screen_buffer[0], self.screen_buffer[1],
-                 out=self.screen_buffer[0])
+      np.maximum(
+          self.screen_buffer[0], self.screen_buffer[1], out=self.screen_buffer[0]
+      )
 
-    transformed_image = cv2.resize(self.screen_buffer[0],
-                                   (self.screen_size, self.screen_size),
-                                   interpolation=cv2.INTER_LINEAR)
+    transformed_image = cv2.resize(
+        self.screen_buffer[0],
+        (self.screen_size, self.screen_size),
+        interpolation=cv2.INTER_LINEAR,
+    )
     int_image = np.asarray(transformed_image, dtype=np.uint8)
     return np.expand_dims(int_image, axis=2)

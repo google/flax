@@ -49,6 +49,7 @@ class TrainState(struct.PyTreeNode):
     tx: An Optax gradient transformation.
     opt_state: The state for `tx`.
   """
+
   step: int
   apply_fn: Callable = struct.field(pytree_node=False)
   params: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
@@ -70,8 +71,7 @@ class TrainState(struct.PyTreeNode):
       and `opt_state` updated by applying `grads`, and additional attributes
       replaced as specified by `kwargs`.
     """
-    updates, new_opt_state = self.tx.update(
-        grads, self.opt_state, self.params)
+    updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
     new_params = optax.apply_updates(self.params, updates)
     return self.replace(
         step=self.step + 1,

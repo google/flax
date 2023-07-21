@@ -48,7 +48,8 @@ class ModelsTest(parameterized.TestCase):
     )
 
   @parameterized.product(
-      dropout_rate=[0., 0.5, 1.], output_size=[50, 100], num_layers=[2])
+      dropout_rate=[0.0, 0.5, 1.0], output_size=[50, 100], num_layers=[2]
+  )
   def test_mlp(self, dropout_rate, output_size, num_layers):
     # Input definition.
     nodes = self.graphs.nodes
@@ -58,16 +59,15 @@ class ModelsTest(parameterized.TestCase):
         feature_sizes=[output_size] * num_layers,
         dropout_rate=dropout_rate,
         activation=lambda x: x,
-        deterministic=False)
+        deterministic=False,
+    )
     nodes_after_mlp, _ = mlp.init_with_output(self.rngs, nodes)
 
     # Test that dropout actually worked.
     num_masked_entries = jnp.sum(nodes_after_mlp == 0)
     num_total_entries = jnp.size(nodes_after_mlp)
-    self.assertLessEqual(num_masked_entries,
-                         (dropout_rate + 0.05) * num_total_entries)
-    self.assertLessEqual((dropout_rate - 0.05) * num_total_entries,
-                         num_masked_entries)
+    self.assertLessEqual(num_masked_entries, (dropout_rate + 0.05) * num_total_entries)
+    self.assertLessEqual((dropout_rate - 0.05) * num_total_entries, num_masked_entries)
 
     # Test the shape of the output.
     self.assertEqual(nodes_after_mlp.shape[-1], output_size)
@@ -77,13 +77,16 @@ class ModelsTest(parameterized.TestCase):
           'latent_size': 5,
           'output_globals_size': 15,
           'use_edge_model': True,
-      }, {
+      },
+      {
           'latent_size': 5,
           'output_globals_size': 15,
           'use_edge_model': False,
-      })
-  def test_graph_net(self, latent_size: int, output_globals_size: int,
-                     use_edge_model: bool):
+      },
+  )
+  def test_graph_net(
+      self, latent_size: int, output_globals_size: int, use_edge_model: bool
+  ):
     # Input definition.
     graphs = self.graphs
     num_nodes = jnp.sum(graphs.n_node)
@@ -96,7 +99,8 @@ class ModelsTest(parameterized.TestCase):
         num_mlp_layers=2,
         message_passing_steps=2,
         output_globals_size=output_globals_size,
-        use_edge_model=use_edge_model)
+        use_edge_model=use_edge_model,
+    )
     output, _ = net.init_with_output(self.rngs, graphs)
 
     # Output should be graph with the same topology, but a
@@ -110,13 +114,10 @@ class ModelsTest(parameterized.TestCase):
     self.assertEqual(output.edges.shape, (num_edges, latent_size))
     self.assertEqual(output.globals.shape, (num_graphs, output_globals_size))
 
-  @parameterized.parameters({
-      'latent_size': 15,
-      'output_globals_size': 15
-  }, {
-      'latent_size': 5,
-      'output_globals_size': 5
-  })
+  @parameterized.parameters(
+      {'latent_size': 15, 'output_globals_size': 15},
+      {'latent_size': 5, 'output_globals_size': 5},
+  )
   def test_graph_conv_net(self, latent_size: int, output_globals_size: int):
     graphs = self.graphs
     num_nodes = jnp.sum(graphs.n_node)
@@ -127,7 +128,8 @@ class ModelsTest(parameterized.TestCase):
         latent_size=latent_size,
         num_mlp_layers=2,
         message_passing_steps=2,
-        output_globals_size=output_globals_size)
+        output_globals_size=output_globals_size,
+    )
     output, _ = net.init_with_output(self.rngs, graphs)
 
     # Output should be graph with the same topology, but a
@@ -135,8 +137,7 @@ class ModelsTest(parameterized.TestCase):
     self.assertIsInstance(output, jraph.GraphsTuple)
     self.assertSequenceAlmostEqual(output.n_node, graphs.n_node)
     self.assertSequenceAlmostEqual(output.n_edge, graphs.n_edge)
-    self.assertSequenceAlmostEqual(output.edges.flatten(),
-                                   graphs.edges.flatten())
+    self.assertSequenceAlmostEqual(output.edges.flatten(), graphs.edges.flatten())
     self.assertSequenceAlmostEqual(output.senders, graphs.senders)
     self.assertSequenceAlmostEqual(output.receivers, graphs.receivers)
     self.assertEqual(output.nodes.shape, (num_nodes, latent_size))

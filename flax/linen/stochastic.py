@@ -31,19 +31,20 @@ KeyArray = Union[jax.Array, jax.random.KeyArray]
 class Dropout(Module):
   """Create a dropout layer.
 
-    Note: When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
-    to include an RNG seed named `'dropout'`. For example::
+  Note: When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
+  to include an RNG seed named `'dropout'`. For example::
 
-      model.apply({'params': params}, inputs=inputs, train=True, rngs={'dropout': dropout_rng})`
+    model.apply({'params': params}, inputs=inputs, train=True, rngs={'dropout': dropout_rng})`
 
-    Attributes:
-      rate: the dropout probability.  (_not_ the keep rate!)
-      broadcast_dims: dimensions that will share the same dropout mask
-      deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
-        masked, whereas if true, no mask is applied and the inputs are returned
-        as is.
-      rng_collection: the rng collection name to use when requesting an rng key.
+  Attributes:
+    rate: the dropout probability.  (_not_ the keep rate!)
+    broadcast_dims: dimensions that will share the same dropout mask
+    deterministic: if false the inputs are scaled by `1 / (1 - rate)` and
+      masked, whereas if true, no mask is applied and the inputs are returned
+      as is.
+    rng_collection: the rng collection name to use when requesting an rng key.
   """
+
   rate: float
   broadcast_dims: Sequence[int] = ()
   deterministic: Optional[bool] = None
@@ -51,7 +52,7 @@ class Dropout(Module):
 
   @compact
   def __call__(
-    self, inputs, deterministic: Optional[bool] = None, rng: Optional[KeyArray] = None
+      self, inputs, deterministic: Optional[bool] = None, rng: Optional[KeyArray] = None
   ):
     """Applies a random dropout mask to the input.
 
@@ -66,17 +67,16 @@ class Dropout(Module):
     Returns:
       The masked inputs reweighted to preserve mean.
     """
-    deterministic = merge_param(
-        'deterministic', self.deterministic, deterministic)
+    deterministic = merge_param('deterministic', self.deterministic, deterministic)
 
-    if (self.rate == 0.) or deterministic:
+    if (self.rate == 0.0) or deterministic:
       return inputs
 
     # Prevent gradient NaNs in 1.0 edge-case.
     if self.rate == 1.0:
       return jnp.zeros_like(inputs)
 
-    keep_prob = 1. - self.rate
+    keep_prob = 1.0 - self.rate
     if rng is None:
       rng = self.make_rng(self.rng_collection)
     broadcast_shape = list(inputs.shape)

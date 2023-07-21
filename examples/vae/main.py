@@ -29,24 +29,14 @@ import train
 FLAGS = flags.FLAGS
 
 flags.DEFINE_float(
-    'learning_rate', default=1e-3,
-    help=('The learning rate for the Adam optimizer.')
+    'learning_rate', default=1e-3, help=('The learning rate for the Adam optimizer.')
 )
 
-flags.DEFINE_integer(
-    'batch_size', default=128,
-    help=('Batch size for training.')
-)
+flags.DEFINE_integer('batch_size', default=128, help=('Batch size for training.'))
 
-flags.DEFINE_integer(
-    'num_epochs', default=30,
-    help=('Number of training epochs.')
-)
+flags.DEFINE_integer('num_epochs', default=30, help=('Number of training epochs.'))
 
-flags.DEFINE_integer(
-    'latents', default=20,
-    help=('Number of latent variables.')
-)
+flags.DEFINE_integer('latents', default=20, help=('Number of latent variables.'))
 
 
 def main(argv):
@@ -56,12 +46,10 @@ def main(argv):
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
 
-  train.train_and_evaluate(FLAGS.batch_size,
-                           FLAGS.learning_rate,
-                           FLAGS.num_epochs,
-                           FLAGS.latents)
+  train.train_and_evaluate(
+      FLAGS.batch_size, FLAGS.learning_rate, FLAGS.num_epochs, FLAGS.latents
+  )
 
 
 if __name__ == '__main__':
-
   app.run(main)

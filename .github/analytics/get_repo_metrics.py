@@ -25,16 +25,17 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 
-token = os.environ["GITHUB_TOKEN"]
-endpoint = r"https://api.github.com/graphql"
-headers = {"Authorization": f"bearer {token}"}
+token = os.environ['GITHUB_TOKEN']
+endpoint = r'https://api.github.com/graphql'
+headers = {'Authorization': f'bearer {token}'}
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # GraphQL
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # NOTE: This GraphQL logic was ported and adapted from this script:
 # https://github.com/scientific-python/devstats-data/blob/4c022961abc4ca6061f8719d9c3387e98734b90c/query.py
 # It contains style differences from Google's style guide.
+
 
 def load_query_from_file(fname, repo_owner, repo_name) -> str:
   with open(fname) as fh:
@@ -75,9 +76,7 @@ def send_query(query, query_type, cursor=None):
   # TODO: Expand this, either by parsing the query type from the query
   # directly or manually adding more query_types to the set
   if query_type not in {'issues', 'pullRequests'}:
-      raise ValueError(
-          'Only \'issues\' and \'pullRequests\' queries are currently supported'
-      )
+    raise ValueError("Only 'issues' and 'pullRequests' queries are currently supported")
   # TODO: Generalize this
   # WARNING: The cursor injection depends on the specific structure of the
   # query, this is the main reason why query types are limited to issues/PRs
@@ -86,12 +85,13 @@ def send_query(query, query_type, cursor=None):
     cursor_ind = query.find(cursor_insertion_key) + len(cursor_insertion_key)
     query = query[:cursor_ind] + f'after:"{cursor}", ' + query[cursor_ind:]
   # Build request payload
-  payload = {'query' : query}
+  payload = {'query': query}
   response = requests.post(endpoint, json=payload, headers=headers)
   return json.loads(response.content)
 
+
 def get_all_responses(query, query_type):
-  "Helper function to bypass GitHub GraphQL API node limit."
+  'Helper function to bypass GitHub GraphQL API node limit.'
   # Get data from a single response
   initial_data = send_query(query, query_type)
   data, last_cursor, total_count = parse_single_query(initial_data, query_type)
@@ -104,6 +104,7 @@ def get_all_responses(query, query_type):
     print(f'Retrieving {len(data)} out of {total_count} values...')
   print('Done.')
   return data
+
 
 def parse_single_query(data, query_type):
   """
@@ -159,19 +160,20 @@ class GithubGrabber:
     self.load_query()
 
   def load_query(self):
-    self.query = load_query_from_file(
-      self.query_fname, self.repo_owner, self.repo_name
-    )
+    self.query = load_query_from_file(self.query_fname, self.repo_owner, self.repo_name)
 
   def get(self):
     self.raw_data = get_all_responses(self.query, self.query_type)
 
-#------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
 # metrics helpers
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+
 
 def _to_datetime(date_str: str) -> datetime:
   return datetime.fromisoformat(date_str.replace('Z', ''))
+
 
 def _get_issues_features(issues):
   for issue in issues:
@@ -191,11 +193,12 @@ def _get_issues_features(issues):
         time_issue_closed = _to_datetime(event['createdAt'])
 
     yield {
-      'created_at': created_at,
-      'time_labeled_or_converted': time_labeled_or_converted,
-      'time_issue_closed': time_issue_closed,
-      'issue_closed': issue['state'] == 'CLOSED',
+        'created_at': created_at,
+        'time_labeled_or_converted': time_labeled_or_converted,
+        'time_issue_closed': time_issue_closed,
+        'issue_closed': issue['state'] == 'CLOSED',
     }
+
 
 def _get_pr_features(prs):
   for pr in prs:
@@ -207,24 +210,21 @@ def _get_pr_features(prs):
     time_merged_or_closed = None
     time_review = None
 
-    if pr["reviews"]["nodes"]:
-      review = pr["reviews"]["nodes"][0]
-      time_review = _to_datetime(review["createdAt"])
+    if pr['reviews']['nodes']:
+      review = pr['reviews']['nodes'][0]
+      time_review = _to_datetime(review['createdAt'])
 
     for event in pr['timelineItems']['edges']:
       event = event['node']
 
       if (
-        time_labeled_or_assigned is None
-        and event['__typename'] == 'LabeledEvent'
-        and 'cla:' not in event['label']['name']
+          time_labeled_or_assigned is None
+          and event['__typename'] == 'LabeledEvent'
+          and 'cla:' not in event['label']['name']
       ):
         time_labeled_or_assigned = _to_datetime(event['createdAt'])
 
-      if (
-        time_labeled_or_assigned is None
-        and event['__typename'] == 'AssignedEvent'
-      ):
+      if time_labeled_or_assigned is None and event['__typename'] == 'AssignedEvent':
         time_labeled_or_assigned = _to_datetime(event['createdAt'])
 
       if event['__typename'] in {'ClosedEvent', 'MergedEvent'}:
@@ -234,16 +234,18 @@ def _get_pr_features(prs):
         ready_for_review_at = _to_datetime(event['createdAt'])
 
     yield {
-      'created_at': created_at,
-      'ready_for_review_at': ready_for_review_at,
-      'time_labeled_or_assigned': time_labeled_or_assigned,
-      'time_merged_or_closed': time_merged_or_closed,
-      'time_review': time_review,
-      'pr_closed': pr['state'] != 'OPEN',
+        'created_at': created_at,
+        'ready_for_review_at': ready_for_review_at,
+        'time_labeled_or_assigned': time_labeled_or_assigned,
+        'time_merged_or_closed': time_merged_or_closed,
+        'time_review': time_review,
+        'pr_closed': pr['state'] != 'OPEN',
     }
+
 
 def _start_of_month(date: datetime) -> datetime:
   return date.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
 
 def _shift_n_months(date: datetime, n: int) -> datetime:
   month = ((date.month + n - 1) % 12) + 1
@@ -258,14 +260,14 @@ def _shift_n_months(date: datetime, n: int) -> datetime:
 
 
 def _rolling_window(
-  df: pd.DataFrame,
-  f: Callable[[pd.DataFrame], pd.Series],
-  window_size: int = 6,
-  step: int = 1,
+    df: pd.DataFrame,
+    f: Callable[[pd.DataFrame], pd.Series],
+    window_size: int = 6,
+    step: int = 1,
 ) -> pd.DataFrame:
   # start of month of the first issue
   start: datetime = df.iloc[0]['created_at'].replace(
-    day=1, hour=0, minute=0, second=0, microsecond=0
+      day=1, hour=0, minute=0, second=0, microsecond=0
   )
   end = _shift_n_months(start, window_size)
 
@@ -286,24 +288,28 @@ def _rolling_window(
 
   return df
 
+
 def _process_prs(df: pd.DataFrame) -> pd.Series:
   return pd.Series({
-    'pr_response_time': df['pr_response_time'].dt.days.mean(),
-    'pr_resolution_time': df['pr_resolution_time'].dt.days.mean(),
+      'pr_response_time': df['pr_response_time'].dt.days.mean(),
+      'pr_resolution_time': df['pr_resolution_time'].dt.days.mean(),
   })
+
 
 def _process_issues(df: pd.DataFrame) -> pd.Series:
   return pd.Series({
-    'issue_response_time': df['issue_response_time'].dt.days.mean(),
-    'issue_resolution_time': df['issue_resolution_time'].dt.days.mean(),
+      'issue_response_time': df['issue_response_time'].dt.days.mean(),
+      'issue_resolution_time': df['issue_resolution_time'].dt.days.mean(),
   })
 
-#-----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
 # main
-#-----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 FLAGS = flags.FLAGS
 flags.DEFINE_string('repo_owner', 'google', 'User name or organization')
 flags.DEFINE_string('repo_name', 'flax', 'Name of the repository')
+
 
 def main(_):
   repo_owner: str = FLAGS.repo_owner
@@ -311,31 +317,37 @@ def main(_):
 
   # Download issue data
   issues = GithubGrabber(
-    '.github/analytics/issue_activity_since_date.gql',
-    'issues',
-    repo_owner=repo_owner,
-    repo_name=repo_name,
+      '.github/analytics/issue_activity_since_date.gql',
+      'issues',
+      repo_owner=repo_owner,
+      repo_name=repo_name,
   )
   issues.get()
 
   df_issues = df_issues0 = pd.DataFrame(list(_get_issues_features(issues.raw_data)))
-  df_issues['issue_response_time'] = df_issues['time_labeled_or_converted'] - df_issues['created_at']
-  df_issues['issue_resolution_time'] = df_issues['time_issue_closed'] - df_issues['created_at']
+  df_issues['issue_response_time'] = (
+      df_issues['time_labeled_or_converted'] - df_issues['created_at']
+  )
+  df_issues['issue_resolution_time'] = (
+      df_issues['time_issue_closed'] - df_issues['created_at']
+  )
 
   df_issues = _rolling_window(df_issues, _process_issues)
 
   prs = GithubGrabber(
-    '.github/analytics/pr_data_query.gql',
-    'pullRequests',
-    repo_owner=repo_owner,
-    repo_name=repo_name,
+      '.github/analytics/pr_data_query.gql',
+      'pullRequests',
+      repo_owner=repo_owner,
+      repo_name=repo_name,
   )
   prs.get()
 
   df_prs = df_prs0 = pd.DataFrame(list(_get_pr_features(prs.raw_data)))
   time_response = df_prs[['time_labeled_or_assigned', 'time_review']].min(axis=1)
   df_prs['pr_response_time'] = time_response - df_prs['ready_for_review_at']
-  df_prs['pr_resolution_time'] = df_prs['time_merged_or_closed'] - df_prs['ready_for_review_at']
+  df_prs['pr_resolution_time'] = (
+      df_prs['time_merged_or_closed'] - df_prs['ready_for_review_at']
+  )
 
   df_prs = _rolling_window(df_prs, _process_prs)
 
@@ -366,7 +378,6 @@ def main(_):
   plt.title('Number of PRs')
   plt.gca().xaxis.set_major_locator(plt.MaxNLocator(5))
   plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-
 
   # plot for isssue_response_time
   plt.figure()
@@ -410,6 +421,7 @@ def main(_):
 
   # show plots
   plt.show()
+
 
 if __name__ == '__main__':
   app.run(main)

@@ -20,7 +20,7 @@ from typing import Any, Dict, Generator, Optional, Tuple
 import jax.numpy as jnp
 import numpy as np
 
-Array = Any    # pylint: disable=invalid-name
+Array = Any  # pylint: disable=invalid-name
 
 
 class CharacterTable:
@@ -28,10 +28,8 @@ class CharacterTable:
 
   def __init__(self, chars: str, max_len_query_digit: int = 3) -> None:
     self._chars = sorted(set(chars))
-    self._char_indices = {
-        ch: idx + 2 for idx, ch in enumerate(self._chars)}
-    self._indices_char = {
-        idx + 2: ch for idx, ch in enumerate(self._chars)}
+    self._char_indices = {ch: idx + 2 for idx, ch in enumerate(self._chars)}
+    self._indices_char = {idx + 2: ch for idx, ch in enumerate(self._chars)}
     self._indices_char[self.pad_id] = '_'
     # Maximum length of a single input digit.
     self._max_len_query_digit = max_len_query_digit
@@ -74,8 +72,7 @@ class CharacterTable:
 
   def encode(self, inputs: str) -> np.ndarray:
     """Encodes from string to list of integers."""
-    return np.array(
-        [self._char_indices[char] for char in inputs] + [self.eos_id])
+    return np.array([self._char_indices[char] for char in inputs] + [self.eos_id])
 
   def decode(self, inputs: Array) -> str:
     """Decodes from list of integers to string."""
@@ -92,7 +89,8 @@ class CharacterTable:
     return vecs
 
   def encode_onehot(
-      self, batch_inputs: Array, max_len: Optional[int] = None) -> np.ndarray:
+      self, batch_inputs: Array, max_len: Optional[int] = None
+  ) -> np.ndarray:
     """One-hot encodes a string input."""
 
     if max_len is None:
@@ -102,8 +100,7 @@ class CharacterTable:
       tokens = self.encode(s)
       unpadded_len = len(tokens)
       if unpadded_len > max_len:
-        raise ValueError(
-            f'Sequence too long ({len(tokens)}>{max_len}): \'{s}\'')
+        raise ValueError(f"Sequence too long ({len(tokens)}>{max_len}): '{s}'")
       tokens = np.pad(tokens, [(0, max_len - len(tokens))], mode='constant')
       return self.one_hot(tokens)
 
@@ -115,7 +112,8 @@ class CharacterTable:
     return np.array(list(map(decode_inputs, batch_inputs)))
 
   def generate_examples(
-      self, num_examples: int) -> Generator[Tuple[str, str], None, None]:
+      self, num_examples: int
+  ) -> Generator[Tuple[str, str], None, None]:
     """Yields `num_examples` examples."""
     for _ in range(num_examples):
       max_digit = pow(10, self._max_len_query_digit) - 1
@@ -138,7 +136,8 @@ class CharacterTable:
 def mask_sequences(sequence_batch: Array, lengths: Array) -> Array:
   """Sets positions beyond the length of each sequence to 0."""
   return sequence_batch * (
-      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1])[np.newaxis])
+      lengths[:, np.newaxis] > np.arange(sequence_batch.shape[1])[np.newaxis]
+  )
 
 
 def get_sequence_lengths(sequence_batch: Array, eos_id: int) -> Array:
@@ -150,5 +149,5 @@ def get_sequence_lengths(sequence_batch: Array, eos_id: int) -> Array:
   return jnp.where(
       eos_row[jnp.arange(eos_row.shape[0]), eos_idx],
       eos_idx + 1,
-      sequence_batch.shape[1]  # if there is no EOS, use full length
+      sequence_batch.shape[1],  # if there is no EOS, use full length
   )

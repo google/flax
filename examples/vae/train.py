@@ -50,28 +50,26 @@ def kl_divergence(mean, logvar):
 @jax.vmap
 def binary_cross_entropy_with_logits(logits, labels):
   logits = nn.log_sigmoid(logits)
-  return -jnp.sum(labels * logits + (1. - labels) * jnp.log(-jnp.expm1(logits)))
+  return -jnp.sum(labels * logits + (1.0 - labels) * jnp.log(-jnp.expm1(logits)))
 
 
 def compute_metrics(recon_x, x, mean, logvar):
   bce_loss = binary_cross_entropy_with_logits(recon_x, x).mean()
   kld_loss = kl_divergence(mean, logvar).mean()
-  return {
-      'bce': bce_loss,
-      'kld': kld_loss,
-      'loss': bce_loss + kld_loss
-  }
+  return {'bce': bce_loss, 'kld': kld_loss, 'loss': bce_loss + kld_loss}
 
 
 def train_step(state, batch, z_rng, latents):
   def loss_fn(params):
-    recon_x, mean, logvar = models.model(latents).apply({'params': params},
-                                                      batch, z_rng)
+    recon_x, mean, logvar = models.model(latents).apply(
+        {'params': params}, batch, z_rng
+    )
 
     bce_loss = binary_cross_entropy_with_logits(recon_x, batch).mean()
     kld_loss = kl_divergence(mean, logvar).mean()
     loss = bce_loss + kld_loss
     return loss
+
   grads = jax.grad(loss_fn)(state.params)
   return state.apply_gradients(grads=grads)
 
@@ -79,8 +77,9 @@ def train_step(state, batch, z_rng, latents):
 def eval_f(params, images, z, z_rng, latents):
   def eval_model(vae):
     recon_images, mean, logvar = vae(images, z_rng)
-    comparison = jnp.concatenate([images[:8].reshape(-1, 28, 28, 1),
-                                  recon_images[:8].reshape(-1, 28, 28, 1)])
+    comparison = jnp.concatenate(
+        [images[:8].reshape(-1, 28, 28, 1), recon_images[:8].reshape(-1, 28, 28, 1)]
+    )
 
     generate_images = vae.generate(z)
     generate_images = generate_images.reshape(-1, 28, 28, 1)
@@ -115,7 +114,7 @@ def train_and_evaluate(batch_size, learning_rate, num_epochs, latents):
   rng, z_key, eval_rng = random.split(rng, 3)
   z = random.normal(z_key, (64, latents))
 
-  steps_per_epoch = ds_builder.info.splits["train"].num_examples // batch_size
+  steps_per_epoch = ds_builder.info.splits['train'].num_examples // batch_size
 
   for epoch in range(num_epochs):
     for _ in range(steps_per_epoch):
@@ -123,13 +122,12 @@ def train_and_evaluate(batch_size, learning_rate, num_epochs, latents):
       rng, key = random.split(rng)
       state = train_step(state, batch, key, latents)
 
-    metrics, comparison, sample = eval_f(state.params, test_ds, z, eval_rng,
-                                         latents)
-    vae_utils.save_image(
-        comparison, f'results/reconstruction_{epoch}.png', nrow=8)
+    metrics, comparison, sample = eval_f(state.params, test_ds, z, eval_rng, latents)
+    vae_utils.save_image(comparison, f'results/reconstruction_{epoch}.png', nrow=8)
     vae_utils.save_image(sample, f'results/sample_{epoch}.png', nrow=8)
 
-    print('eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}'.format(
-        epoch + 1, metrics['loss'], metrics['bce'], metrics['kld']
-    ))
-
+    print(
+        'eval epoch: {}, loss: {:.4f}, BCE: {:.4f}, KLD: {:.4f}'.format(
+            epoch + 1, metrics['loss'], metrics['bce'], metrics['kld']
+        )
+    )

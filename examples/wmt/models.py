@@ -32,6 +32,7 @@ import numpy as np
 @struct.dataclass
 class TransformerConfig:
   """Global hyperparameters used to minimize obnoxious kwarg plumbing."""
+
   vocab_size: int
   output_vocab_size: int
   share_embeddings: bool = False
@@ -56,14 +57,11 @@ def shift_right(x, axis=1):
   """Shift the input to the right by padding on axis 1."""
   pad_widths = [(0, 0)] * len(x.shape)
   pad_widths[axis] = (1, 0)
-  padded = jnp.pad(
-      x, pad_widths, mode='constant', constant_values=x.dtype.type(0))
+  padded = jnp.pad(x, pad_widths, mode='constant', constant_values=x.dtype.type(0))
   return padded[:, :-1]
 
 
-def sinusoidal_init(max_len=2048,
-                    min_scale=1.0,
-                    max_scale=10000.0):
+def sinusoidal_init(max_len=2048, min_scale=1.0, max_scale=10000.0):
   """1D Sinusoidal Position Embedding Initializer.
 
   Args:
@@ -83,8 +81,8 @@ def sinusoidal_init(max_len=2048,
     position = np.arange(0, max_len)[:, np.newaxis]
     scale_factor = -np.log(max_scale / min_scale) / (d_feature // 2 - 1)
     div_term = min_scale * np.exp(np.arange(0, d_feature // 2) * scale_factor)
-    pe[:, :d_feature // 2] = np.sin(position * div_term)
-    pe[:, d_feature // 2: 2 * (d_feature // 2)] = np.cos(position * div_term)
+    pe[:, : d_feature // 2] = np.sin(position * div_term)
+    pe[:, d_feature // 2 : 2 * (d_feature // 2)] = np.cos(position * div_term)
     pe = pe[np.newaxis, :, :]  # [1, max_len, d_feature]
     return jnp.array(pe)
 
@@ -98,13 +96,12 @@ class AddPositionEmbs(nn.Module):
     config: TransformerConfig dataclass containing hyperparameters.
     decode: whether to run in single-position autoregressive mode.
   """
+
   config: TransformerConfig
   decode: bool = False
 
   @nn.compact
-  def __call__(self,
-               inputs,
-               inputs_positions=None):
+  def __call__(self, inputs, inputs_positions=None):
     """Applies AddPositionEmbs module.
 
     By default this layer uses a fixed sinusoidal embedding table. If a
@@ -120,32 +117,29 @@ class AddPositionEmbs(nn.Module):
     """
     config = self.config
     # inputs.shape is (batch_size, seq_len, emb_dim)
-    assert inputs.ndim == 3, ('Number of dimensions should be 3,'
-                              ' but it is: %d' % inputs.ndim)
+    assert inputs.ndim == 3, (
+        'Number of dimensions should be 3,' ' but it is: %d' % inputs.ndim
+    )
     length = inputs.shape[1]
     pos_emb_shape = (1, config.max_len, inputs.shape[-1])
     if config.posemb_init is None:
       # Use a fixed (non-learned) sinusoidal position embedding.
-      pos_embedding = sinusoidal_init(max_len=config.max_len)(None,
-                                                              pos_emb_shape,
-                                                              None)
+      pos_embedding = sinusoidal_init(max_len=config.max_len)(None, pos_emb_shape, None)
     else:
-      pos_embedding = self.param('pos_embedding', config.posemb_init,
-                                 pos_emb_shape)
+      pos_embedding = self.param('pos_embedding', config.posemb_init, pos_emb_shape)
     pe = pos_embedding[:, :length, :]
 
     # We use a cache position index for tracking decoding position.
     if self.decode:
       is_initialized = self.has_variable('cache', 'cache_index')
-      cache_index = self.variable('cache', 'cache_index',
-                                  lambda: jnp.array(0, dtype=jnp.uint32))
+      cache_index = self.variable(
+          'cache', 'cache_index', lambda: jnp.array(0, dtype=jnp.uint32)
+      )
       if is_initialized:
         i = cache_index.value
         cache_index.value = i + 1
         _, _, df = pos_embedding.shape
-        pe = lax.dynamic_slice(pos_embedding,
-                               jnp.array((0, i, 0)),
-                               (1, 1, df))
+        pe = lax.dynamic_slice(pos_embedding, jnp.array((0, i, 0)), (1, 1, df))
     if inputs_positions is None:
       # normal unpacked case:
       return inputs + pe
@@ -161,6 +155,7 @@ class MlpBlock(nn.Module):
     config: TransformerConfig dataclass containing hyperparameters.
     out_dim: optionally specify out dimension.
   """
+
   config: TransformerConfig
   out_dim: Optional[int] = None
 
@@ -168,25 +163,24 @@ class MlpBlock(nn.Module):
   def __call__(self, inputs):
     """Applies Transformer MlpBlock module."""
     config = self.config
-    actual_out_dim = (inputs.shape[-1] if self.out_dim is None
-                      else self.out_dim)
+    actual_out_dim = inputs.shape[-1] if self.out_dim is None else self.out_dim
     x = nn.Dense(
         config.mlp_dim,
         dtype=config.dtype,
         kernel_init=config.kernel_init,
-        bias_init=config.bias_init)(
-            inputs)
+        bias_init=config.bias_init,
+    )(inputs)
     x = nn.relu(x)
-    x = nn.Dropout(rate=config.dropout_rate)(
-        x, deterministic=config.deterministic)
+    x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=config.deterministic)
     output = nn.Dense(
         actual_out_dim,
         dtype=config.dtype,
         kernel_init=config.kernel_init,
-        bias_init=config.bias_init)(
-            x)
+        bias_init=config.bias_init,
+    )(x)
     output = nn.Dropout(rate=config.dropout_rate)(
-        output, deterministic=config.deterministic)
+        output, deterministic=config.deterministic
+    )
     return output
 
 
@@ -196,12 +190,11 @@ class Encoder1DBlock(nn.Module):
   Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
+
   config: TransformerConfig
 
   @nn.compact
-  def __call__(self,
-               inputs,
-               encoder_mask=None):
+  def __call__(self, inputs, encoder_mask=None):
     """Applies Encoder1DBlock module.
 
     Args:
@@ -225,10 +218,10 @@ class Encoder1DBlock(nn.Module):
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=config.attention_dropout_rate,
-        deterministic=config.deterministic)(x, encoder_mask)
+        deterministic=config.deterministic,
+    )(x, encoder_mask)
 
-    x = nn.Dropout(rate=config.dropout_rate)(
-        x, deterministic=config.deterministic)
+    x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=config.deterministic)
     x = x + inputs
 
     # MLP block.
@@ -244,14 +237,11 @@ class EncoderDecoder1DBlock(nn.Module):
   Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
+
   config: TransformerConfig
 
   @nn.compact
-  def __call__(self,
-               targets,
-               encoded,
-               decoder_mask=None,
-               encoder_decoder_mask=None):
+  def __call__(self, targets, encoded, decoder_mask=None, encoder_decoder_mask=None):
     """Applies EncoderDecoder1DBlock module.
 
     Args:
@@ -278,9 +268,9 @@ class EncoderDecoder1DBlock(nn.Module):
         broadcast_dropout=False,
         dropout_rate=config.attention_dropout_rate,
         deterministic=config.deterministic,
-        decode=config.decode)(x, decoder_mask)
-    x = nn.Dropout(rate=config.dropout_rate)(
-        x, deterministic=config.deterministic)
+        decode=config.decode,
+    )(x, decoder_mask)
+    x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=config.deterministic)
     x = x + targets
 
     # Encoder-Decoder block.
@@ -294,10 +284,10 @@ class EncoderDecoder1DBlock(nn.Module):
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=config.attention_dropout_rate,
-        deterministic=config.deterministic)(y, encoded, encoder_decoder_mask)
+        deterministic=config.deterministic,
+    )(y, encoded, encoder_decoder_mask)
 
-    y = nn.Dropout(rate=config.dropout_rate)(
-        y, deterministic=config.deterministic)
+    y = nn.Dropout(rate=config.dropout_rate)(y, deterministic=config.deterministic)
     y = y + x
 
     # MLP block.
@@ -314,14 +304,12 @@ class Encoder(nn.Module):
     config: TransformerConfig dataclass containing hyperparameters.
     shared_embedding: a shared embedding layer to use.
   """
+
   config: TransformerConfig
   shared_embedding: Any = None
 
   @nn.compact
-  def __call__(self,
-               inputs,
-               inputs_positions=None,
-               encoder_mask=None):
+  def __call__(self, inputs, inputs_positions=None, encoder_mask=None):
     """Applies Transformer model on the inputs.
 
     Args:
@@ -340,23 +328,22 @@ class Encoder(nn.Module):
       input_embed = nn.Embed(
           num_embeddings=config.vocab_size,
           features=config.emb_dim,
-          embedding_init=nn.initializers.normal(stddev=1.0))
+          embedding_init=nn.initializers.normal(stddev=1.0),
+      )
     else:
       input_embed = self.shared_embedding
     x = inputs.astype('int32')
     x = input_embed(x)
-    x = AddPositionEmbs(
-        config=config, decode=False, name='posembed_input')(
-            x, inputs_positions=inputs_positions)
-    x = nn.Dropout(rate=config.dropout_rate)(
-        x, deterministic=config.deterministic)
+    x = AddPositionEmbs(config=config, decode=False, name='posembed_input')(
+        x, inputs_positions=inputs_positions
+    )
+    x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=config.deterministic)
 
     x = x.astype(config.dtype)
 
     # Input Encoder
     for lyr in range(config.num_layers):
-      x = Encoder1DBlock(
-          config=config, name=f'encoderblock_{lyr}')(x, encoder_mask)
+      x = Encoder1DBlock(config=config, name=f'encoderblock_{lyr}')(x, encoder_mask)
 
     encoded = nn.LayerNorm(dtype=config.dtype, name='encoder_norm')(x)
 
@@ -370,16 +357,19 @@ class Decoder(nn.Module):
     config: TransformerConfig dataclass containing hyperparameters.
     shared_embedding: a shared embedding layer to use.
   """
+
   config: TransformerConfig
   shared_embedding: Any = None
 
   @nn.compact
-  def __call__(self,
-               encoded,
-               targets,
-               targets_positions=None,
-               decoder_mask=None,
-               encoder_decoder_mask=None):
+  def __call__(
+      self,
+      encoded,
+      targets,
+      targets_positions=None,
+      decoder_mask=None,
+      encoder_decoder_mask=None,
+  ):
     """Applies Transformer model on the inputs.
 
     Args:
@@ -402,7 +392,8 @@ class Decoder(nn.Module):
       output_embed = nn.Embed(
           num_embeddings=config.output_vocab_size,
           features=config.emb_dim,
-          embedding_init=nn.initializers.normal(stddev=1.0))
+          embedding_init=nn.initializers.normal(stddev=1.0),
+      )
     else:
       output_embed = self.shared_embedding
 
@@ -410,22 +401,21 @@ class Decoder(nn.Module):
     if not config.decode:
       y = shift_right(y)
     y = output_embed(y)
-    y = AddPositionEmbs(
-        config=config, decode=config.decode, name='posembed_output')(
-            y, inputs_positions=targets_positions)
-    y = nn.Dropout(rate=config.dropout_rate)(
-        y, deterministic=config.deterministic)
+    y = AddPositionEmbs(config=config, decode=config.decode, name='posembed_output')(
+        y, inputs_positions=targets_positions
+    )
+    y = nn.Dropout(rate=config.dropout_rate)(y, deterministic=config.deterministic)
 
     y = y.astype(config.dtype)
 
     # Target-Input Decoder
     for lyr in range(config.num_layers):
-      y = EncoderDecoder1DBlock(
-          config=config, name=f'encoderdecoderblock_{lyr}')(
-              y,
-              encoded,
-              decoder_mask=decoder_mask,
-              encoder_decoder_mask=encoder_decoder_mask)
+      y = EncoderDecoder1DBlock(config=config, name=f'encoderdecoderblock_{lyr}')(
+          y,
+          encoded,
+          decoder_mask=decoder_mask,
+          encoder_decoder_mask=encoder_decoder_mask,
+      )
     y = nn.LayerNorm(dtype=config.dtype, name='encoderdecoder_norm')(y)
 
     # Decoded Logits
@@ -440,8 +430,8 @@ class Decoder(nn.Module):
           dtype=config.dtype,
           kernel_init=config.kernel_init,
           bias_init=config.bias_init,
-          name='logitdense')(
-              y)
+          name='logitdense',
+      )(y)
     return logits
 
 
@@ -451,6 +441,7 @@ class Transformer(nn.Module):
   Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
+
   config: TransformerConfig
 
   def setup(self):
@@ -458,24 +449,21 @@ class Transformer(nn.Module):
 
     if config.share_embeddings:
       if config.output_vocab_size is not None:
-        assert config.output_vocab_size == config.vocab_size, (
-            "can't share embedding with different vocab sizes.")
+        assert (
+            config.output_vocab_size == config.vocab_size
+        ), "can't share embedding with different vocab sizes."
       self.shared_embedding = nn.Embed(
           num_embeddings=config.vocab_size,
           features=config.emb_dim,
-          embedding_init=nn.initializers.normal(stddev=1.0))
+          embedding_init=nn.initializers.normal(stddev=1.0),
+      )
     else:
       self.shared_embedding = None
 
-    self.encoder = Encoder(
-        config=config, shared_embedding=self.shared_embedding)
-    self.decoder = Decoder(
-        config=config, shared_embedding=self.shared_embedding)
+    self.encoder = Encoder(config=config, shared_embedding=self.shared_embedding)
+    self.decoder = Decoder(config=config, shared_embedding=self.shared_embedding)
 
-  def encode(self,
-             inputs,
-             inputs_positions=None,
-             inputs_segmentation=None):
+  def encode(self, inputs, inputs_positions=None, inputs_segmentation=None):
     """Applies Transformer encoder-branch on the inputs.
 
     Args:
@@ -488,29 +476,28 @@ class Transformer(nn.Module):
     """
     config = self.config
     # Make padding attention mask.
-    encoder_mask = nn.make_attention_mask(
-        inputs > 0, inputs > 0, dtype=config.dtype)
+    encoder_mask = nn.make_attention_mask(inputs > 0, inputs > 0, dtype=config.dtype)
     # Add segmentation block-diagonal attention mask if using segmented data.
     if inputs_segmentation is not None:
       encoder_mask = nn.combine_masks(
           encoder_mask,
           nn.make_attention_mask(
-              inputs_segmentation,
-              inputs_segmentation,
-              jnp.equal,
-              dtype=config.dtype))
+              inputs_segmentation, inputs_segmentation, jnp.equal, dtype=config.dtype
+          ),
+      )
     return self.encoder(
-        inputs,
-        inputs_positions=inputs_positions,
-        encoder_mask=encoder_mask)
+        inputs, inputs_positions=inputs_positions, encoder_mask=encoder_mask
+    )
 
-  def decode(self,
-             encoded,
-             inputs,  # only needed for masks
-             targets,
-             targets_positions=None,
-             inputs_segmentation=None,
-             targets_segmentation=None):
+  def decode(
+      self,
+      encoded,
+      inputs,  # only needed for masks
+      targets,
+      targets_positions=None,
+      inputs_segmentation=None,
+      targets_segmentation=None,
+  ):
     """Applies Transformer decoder-branch on encoded-input and target.
 
     Args:
@@ -531,45 +518,49 @@ class Transformer(nn.Module):
       # for fast autoregressive decoding only a special encoder-decoder mask is used
       decoder_mask = None
       encoder_decoder_mask = nn.make_attention_mask(
-          jnp.ones_like(targets) > 0, inputs > 0, dtype=config.dtype)
+          jnp.ones_like(targets) > 0, inputs > 0, dtype=config.dtype
+      )
     else:
       decoder_mask = nn.combine_masks(
           nn.make_attention_mask(targets > 0, targets > 0, dtype=config.dtype),
-          nn.make_causal_mask(targets, dtype=config.dtype))
+          nn.make_causal_mask(targets, dtype=config.dtype),
+      )
       encoder_decoder_mask = nn.make_attention_mask(
-          targets > 0, inputs > 0, dtype=config.dtype)
+          targets > 0, inputs > 0, dtype=config.dtype
+      )
 
     # Add segmentation block-diagonal attention masks if using segmented data.
     if inputs_segmentation is not None:
       decoder_mask = nn.combine_masks(
           decoder_mask,
           nn.make_attention_mask(
-              targets_segmentation,
-              targets_segmentation,
-              jnp.equal,
-              dtype=config.dtype))
+              targets_segmentation, targets_segmentation, jnp.equal, dtype=config.dtype
+          ),
+      )
       encoder_decoder_mask = nn.combine_masks(
           encoder_decoder_mask,
           nn.make_attention_mask(
-              targets_segmentation,
-              inputs_segmentation,
-              jnp.equal,
-              dtype=config.dtype))
+              targets_segmentation, inputs_segmentation, jnp.equal, dtype=config.dtype
+          ),
+      )
     logits = self.decoder(
         encoded,
         targets,
         targets_positions=targets_positions,
         decoder_mask=decoder_mask,
-        encoder_decoder_mask=encoder_decoder_mask)
+        encoder_decoder_mask=encoder_decoder_mask,
+    )
     return logits.astype(self.config.dtype)
 
-  def __call__(self,
-               inputs,
-               targets,
-               inputs_positions=None,
-               targets_positions=None,
-               inputs_segmentation=None,
-               targets_segmentation=None):
+  def __call__(
+      self,
+      inputs,
+      targets,
+      inputs_positions=None,
+      targets_positions=None,
+      inputs_segmentation=None,
+      targets_segmentation=None,
+  ):
     """Applies Transformer model on the inputs.
 
     Args:
@@ -583,13 +574,17 @@ class Transformer(nn.Module):
     Returns:
       logits array from full transformer.
     """
-    encoded = self.encode(inputs,
-                          inputs_positions=inputs_positions,
-                          inputs_segmentation=inputs_segmentation)
+    encoded = self.encode(
+        inputs,
+        inputs_positions=inputs_positions,
+        inputs_segmentation=inputs_segmentation,
+    )
 
-    return self.decode(encoded,
-                       inputs,  # only used for masks
-                       targets,
-                       targets_positions=targets_positions,
-                       inputs_segmentation=inputs_segmentation,
-                       targets_segmentation=targets_segmentation)
+    return self.decode(
+        encoded,
+        inputs,  # only used for masks
+        targets,
+        targets_positions=targets_positions,
+        inputs_segmentation=inputs_segmentation,
+        targets_segmentation=targets_segmentation,
+    )

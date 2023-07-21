@@ -43,7 +43,8 @@ PyTree = Any
 
 def check_eq(xs, ys):
   return jax.tree_util.tree_all(
-      jax.tree_util.tree_map(np.testing.assert_allclose, xs, ys))
+      jax.tree_util.tree_map(np.testing.assert_allclose, xs, ys)
+  )
 
 
 def shuffle(l):
@@ -111,52 +112,51 @@ class CheckpointsTest(parameterized.TestCase):
   def test_save_restore_checkpoints(self, use_orbax):
     config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
-    test_object1 = {'a': np.array([1, 2, 3], np.int32),
-                    'b': np.array([1, 1, 1], np.int32)}
-    test_object2 = {'a': np.array([4, 5, 6], np.int32),
-                    'b': np.array([2, 2, 2], np.int32)}
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
+    test_object1 = {
+        'a': np.array([1, 2, 3], np.int32),
+        'b': np.array([1, 1, 1], np.int32),
+    }
+    test_object2 = {
+        'a': np.array([4, 5, 6], np.int32),
+        'b': np.array([2, 2, 2], np.int32),
+    }
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0, prefix='test_')
     check_eq(new_object, test_object0)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0, prefix='test_', keep=1)
+    checkpoints.save_checkpoint(tmp_dir, test_object1, 0, prefix='test_', keep=1)
     self.assertIn('test_0', os.listdir(tmp_dir))
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0, prefix='test_')
     check_eq(new_object, test_object1)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 1, prefix='test_', keep=1)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 2, prefix='test_', keep=1)
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+    checkpoints.save_checkpoint(tmp_dir, test_object1, 1, prefix='test_', keep=1)
+    checkpoints.save_checkpoint(tmp_dir, test_object2, 2, prefix='test_', keep=1)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0, prefix='test_')
     check_eq(new_object, test_object2)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 3, prefix='test_', keep=2)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 4, prefix='test_', keep=2)
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+    checkpoints.save_checkpoint(tmp_dir, test_object2, 3, prefix='test_', keep=2)
+    checkpoints.save_checkpoint(tmp_dir, test_object1, 4, prefix='test_', keep=2)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0, prefix='test_')
     check_eq(new_object, test_object1)
     new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, step=3, prefix='test_')
+        tmp_dir, test_object0, step=3, prefix='test_'
+    )
     check_eq(new_object, test_object2)
 
     # Restore with a specific checkpoint path, not the directory path.
     new_object = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_3'), test_object0)
+        os.path.join(tmp_dir, 'test_3'), test_object0
+    )
     check_eq(new_object, test_object2)
     # If a specific path is specified, but it does not exist, the same behavior
     # as when a directory is empty should apply: the target is returned
     # unchanged.
     new_object = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_not_there'), test_object0)
+        os.path.join(tmp_dir, 'test_not_there'), test_object0
+    )
     check_eq(new_object, test_object0)
     with self.assertRaises(ValueError):
-      checkpoints.restore_checkpoint(
-          tmp_dir, test_object0, step=5, prefix='test_')
+      checkpoints.restore_checkpoint(tmp_dir, test_object0, step=5, prefix='test_')
 
   @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
   def test_overwrite_checkpoints(self, use_orbax):
@@ -183,8 +183,10 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(non_norm_dir_path, test_object0)
     check_eq(new_object, test_object)
 
-  @parameterized.parameters({'use_orbax': True, 'keep_every_n_steps': None},
-                            {'use_orbax': False, 'keep_every_n_steps': 7})
+  @parameterized.parameters(
+      {'use_orbax': True, 'keep_every_n_steps': None},
+      {'use_orbax': False, 'keep_every_n_steps': 7},
+  )
   def test_keep(self, use_orbax, keep_every_n_steps):
     config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
@@ -195,18 +197,20 @@ class CheckpointsTest(parameterized.TestCase):
     increment = 5
 
     for step in range(steps_start, steps_end, increment):
-      checkpoints.save_checkpoint(tmp_dir,
-                                  test_object,
-                                  step=step,
-                                  keep=keep,
-                                  keep_every_n_steps=keep_every_n_steps)
+      checkpoints.save_checkpoint(
+          tmp_dir,
+          test_object,
+          step=step,
+          keep=keep,
+          keep_every_n_steps=keep_every_n_steps,
+      )
 
     last_checkpoint = -float('inf')
     for step in range(steps_start, steps_end, increment):
-      if ((steps_end - step) / increment <= keep) or (keep_every_n_steps and (
-          step - last_checkpoint) >= keep_every_n_steps):
-        restored = checkpoints.restore_checkpoint(
-            tmp_dir, target=None, step=step)
+      if ((steps_end - step) / increment <= keep) or (
+          keep_every_n_steps and (step - last_checkpoint) >= keep_every_n_steps
+      ):
+        restored = checkpoints.restore_checkpoint(tmp_dir, target=None, step=step)
         check_eq(restored, test_object)
         last_checkpoint = step
       else:
@@ -217,22 +221,24 @@ class CheckpointsTest(parameterized.TestCase):
   def test_save_restore_checkpoints_w_float_steps(self, use_orbax):
     config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
-    test_object1 = {'a': np.array([1, 2, 3], np.int32),
-                    'b': np.array([1, 1, 1], np.int32)}
-    test_object2 = {'a': np.array([4, 5, 6], np.int32),
-                    'b': np.array([2, 2, 2], np.int32)}
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0.0, prefix='test_', keep=1)
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
+    test_object1 = {
+        'a': np.array([1, 2, 3], np.int32),
+        'b': np.array([1, 1, 1], np.int32),
+    }
+    test_object2 = {
+        'a': np.array([4, 5, 6], np.int32),
+        'b': np.array([2, 2, 2], np.int32),
+    }
+    checkpoints.save_checkpoint(tmp_dir, test_object1, 0.0, prefix='test_', keep=1)
     self.assertIn('test_0.0', os.listdir(tmp_dir))
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object0, prefix='test_')
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0, prefix='test_')
     check_eq(new_object, test_object1)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 2.0, prefix='test_', keep=1)
-    checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 3.0, prefix='test_', keep=2)
+    checkpoints.save_checkpoint(tmp_dir, test_object1, 2.0, prefix='test_', keep=1)
+    checkpoints.save_checkpoint(tmp_dir, test_object2, 3.0, prefix='test_', keep=2)
     self.assertIn('test_3.0', os.listdir(tmp_dir))
     self.assertIn('test_2.0', os.listdir(tmp_dir))
     check_eq(new_object, test_object1)
@@ -241,15 +247,16 @@ class CheckpointsTest(parameterized.TestCase):
   def test_save_restore_checkpoints_target_none(self, use_orbax):
     config.update('flax_use_orbax_checkpointing', use_orbax)
     tmp_dir = self.create_tempdir().full_path
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
     # Target pytree is a dictionary, so it's equal to a restored state_dict.
     checkpoints.save_checkpoint(tmp_dir, test_object0, 0)
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
     check_eq(new_object, test_object0)
     # Target pytree it's a tuple, check the expected state_dict is recovered.
-    test_object1 = (np.array([0, 0, 0], np.int32),
-                    np.array([1, 1, 1], np.int32))
+    test_object1 = (np.array([0, 0, 0], np.int32), np.array([1, 1, 1], np.int32))
     checkpoints.save_checkpoint(tmp_dir, test_object1, 1)
     new_object = checkpoints.restore_checkpoint(tmp_dir, target=None)
     expected_new_object = {str(k): v for k, v in enumerate(test_object1)}
@@ -294,32 +301,41 @@ class CheckpointsTest(parameterized.TestCase):
 
   def test_async_save_checkpoints(self):
     tmp_dir = pathlib.Path(self.create_tempdir().full_path)
-    test_object0 = {'a': np.array([0, 0, 0], np.int32),
-                    'b': np.array([0, 0, 0], np.int32)}
-    test_object1 = {'a': np.random.normal(size=(1000, 1000)),
-                    'b': np.random.normal(size=(1000, 1000))}
-    test_object2 = {'a': np.random.normal(size=(1000, 1000)),
-                    'b': np.random.normal(size=(1000, 1000))}
-    test_object3 = {'a': np.random.normal(size=(1000, 1000)),
-                    'b': np.random.normal(size=(1000, 1000))}
+    test_object0 = {
+        'a': np.array([0, 0, 0], np.int32),
+        'b': np.array([0, 0, 0], np.int32),
+    }
+    test_object1 = {
+        'a': np.random.normal(size=(1000, 1000)),
+        'b': np.random.normal(size=(1000, 1000)),
+    }
+    test_object2 = {
+        'a': np.random.normal(size=(1000, 1000)),
+        'b': np.random.normal(size=(1000, 1000)),
+    }
+    test_object3 = {
+        'a': np.random.normal(size=(1000, 1000)),
+        'b': np.random.normal(size=(1000, 1000)),
+    }
     am = checkpoints.AsyncManager()
     checkpoints.save_checkpoint(
-        tmp_dir, test_object1, 0, prefix='test_', keep=1, async_manager=am)
+        tmp_dir, test_object1, 0, prefix='test_', keep=1, async_manager=am
+    )
     # Hard-wait the write to be done, then check its content.
     am.save_future.result()
     self.assertIn('test_0', os.listdir(tmp_dir))
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object1, prefix='test_')
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object1, prefix='test_')
     check_eq(new_object, test_object1)
     # Check two consecutive saves happen in the right order.
     checkpoints.save_checkpoint(
-        tmp_dir, test_object2, 1, prefix='test_', keep=1, async_manager=am)
+        tmp_dir, test_object2, 1, prefix='test_', keep=1, async_manager=am
+    )
     checkpoints.save_checkpoint(
-        tmp_dir, test_object3, 2, prefix='test_', keep=1, async_manager=am)
+        tmp_dir, test_object3, 2, prefix='test_', keep=1, async_manager=am
+    )
     am.save_future.result()
     self.assertIn('test_2', os.listdir(tmp_dir))
-    new_object = checkpoints.restore_checkpoint(
-        tmp_dir, test_object1, prefix='test_')
+    new_object = checkpoints.restore_checkpoint(tmp_dir, test_object1, prefix='test_')
     check_eq(new_object, test_object3)
 
   def test_last_checkpoint(self):
@@ -400,10 +416,12 @@ class CheckpointsTest(parameterized.TestCase):
 
     # Both gets restored with same API.
     restored = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_0'), target=target)
+        os.path.join(tmp_dir, 'test_0'), target=target
+    )
     check_eq(restored, to_save)
     restored = checkpoints.restore_checkpoint(
-        os.path.join(tmp_dir, 'test_1'), target=target)
+        os.path.join(tmp_dir, 'test_1'), target=target
+    )
     check_eq(restored, to_save)
 
   def test_convert_pre_linen(self):
@@ -413,33 +431,23 @@ class CheckpointsTest(parameterized.TestCase):
             'submod2_1': {},
             'submod1_2': {},
         },
-        'mod2_2': {
-            'submod2_2_0': {}
-        },
-        'mod2_11': {
-            'submod2_11_0': {}
-        },
-        'mod2_1': {
-            'submod2_1_0': {}
-        },
+        'mod2_2': {'submod2_2_0': {}},
+        'mod2_11': {'submod2_11_0': {}},
+        'mod2_1': {'submod2_1_0': {}},
     })
     self.assertDictEqual(
-        core.unfreeze(params), {
+        core.unfreeze(params),
+        {
             'mod_0': {
                 'submod1_0': {},
                 'submod1_1': {},
                 'submod2_0': {},
             },
-            'mod2_0': {
-                'submod2_1_0': {}
-            },
-            'mod2_1': {
-                'submod2_2_0': {}
-            },
-            'mod2_2': {
-                'submod2_11_0': {}
-            },
-        })
+            'mod2_0': {'submod2_1_0': {}},
+            'mod2_1': {'submod2_2_0': {}},
+            'mod2_2': {'submod2_11_0': {}},
+        },
+    )
 
 
 if __name__ == '__main__':

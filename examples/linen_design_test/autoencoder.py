@@ -22,7 +22,6 @@ from flax import linen as nn
 from flax.linen import Module, Dense, compact
 
 
-
 # A concise MLP defined via lazy submodule initialization
 class MLP(Module):
   widths: Iterable
@@ -44,13 +43,13 @@ class AutoEncoder(Module):
   def setup(self):
     # Submodules attached in `setup` get names via attribute assignment
     self.encoder = MLP(self.encoder_widths)
-    self.decoder = MLP(self.decoder_widths + (jnp.prod(self.input_shape), ))
+    self.decoder = MLP(self.decoder_widths + (jnp.prod(self.input_shape),))
 
   def __call__(self, x):
     return self.decode(self.encode(x))
 
   def encode(self, x):
-    assert x.shape[-len(self.input_shape):] == self.input_shape
+    assert x.shape[-len(self.input_shape) :] == self.input_shape
     return self.encoder(jnp.reshape(x, (x.shape[0], -1)))
 
   def decode(self, z):
@@ -62,21 +61,20 @@ class AutoEncoder(Module):
 
 # `ae` is a detached module, which has no variables.
 ae = AutoEncoder(
-    encoder_widths=(32, 32, 32),
-    decoder_widths=(32, 32, 32),
-    input_shape=(28, 28, 1))
+    encoder_widths=(32, 32, 32), decoder_widths=(32, 32, 32), input_shape=(28, 28, 1)
+)
 
 
 # `ae.initialized` returns a materialized copy of `ae` by
 # running through an input to create submodules defined lazily.
-params = ae.init(
-    {'params': random.PRNGKey(42)},
-    jnp.ones((1, 28, 28, 1)))
+params = ae.init({"params": random.PRNGKey(42)}, jnp.ones((1, 28, 28, 1)))
 
 
 # Now you can use `ae` as a normal object, calling any methods defined on AutoEncoder
 print("reconstruct", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)))))
-print("encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method=ae.encode)))
+print(
+    "encoder", jnp.shape(ae.apply(params, jnp.ones((1, 28, 28, 1)), method=ae.encode))
+)
 
 
 # `ae.variables` is a frozen dict that looks like

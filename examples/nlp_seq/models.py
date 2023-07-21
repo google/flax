@@ -25,6 +25,7 @@ import numpy as np
 @struct.dataclass
 class TransformerConfig:
   """Global hyperparameters used to minimize obnoxious kwarg plumbing."""
+
   vocab_size: int
   output_vocab_size: int
   dtype: Any = jnp.float32
@@ -57,8 +58,7 @@ def sinusoidal_init(max_len=2048):
     d_feature = shape[-1]
     pe = np.zeros((max_len, d_feature), dtype=np.float32)
     position = np.arange(0, max_len)[:, np.newaxis]
-    div_term = np.exp(
-        np.arange(0, d_feature, 2) * -(np.log(10000.0) / d_feature))
+    div_term = np.exp(np.arange(0, d_feature, 2) * -(np.log(10000.0) / d_feature))
     pe[:, 0::2] = np.sin(position * div_term)
     pe[:, 1::2] = np.cos(position * div_term)
     pe = pe[np.newaxis, :, :]  # [1, max_len, d_feature]
@@ -73,6 +73,7 @@ class AddPositionEmbs(nn.Module):
   Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
+
   config: TransformerConfig
 
   @nn.compact
@@ -91,18 +92,16 @@ class AddPositionEmbs(nn.Module):
     """
     config = self.config
     # inputs.shape is (batch_size, seq_len, emb_dim)
-    assert inputs.ndim == 3, ('Number of dimensions should be 3,'
-                              ' but it is: %d' % inputs.ndim)
+    assert inputs.ndim == 3, (
+        'Number of dimensions should be 3,' ' but it is: %d' % inputs.ndim
+    )
     length = inputs.shape[1]
     pos_emb_shape = (1, config.max_len, inputs.shape[-1])
     if config.posemb_init is None:
       # Use a fixed (non-learned) sinusoidal position embedding.
-      pos_embedding = sinusoidal_init(max_len=config.max_len)(None,
-                                                              pos_emb_shape,
-                                                              None)
+      pos_embedding = sinusoidal_init(max_len=config.max_len)(None, pos_emb_shape, None)
     else:
-      pos_embedding = self.param('pos_embedding', config.posemb_init,
-                                 pos_emb_shape)
+      pos_embedding = self.param('pos_embedding', config.posemb_init, pos_emb_shape)
     pe = pos_embedding[:, :length, :]
     return inputs + pe
 
@@ -114,6 +113,7 @@ class MlpBlock(nn.Module):
     config: TransformerConfig dataclass containing hyperparameters.
     out_dim: optionally specify out dimension.
   """
+
   config: TransformerConfig
   out_dim: Optional[int] = None
 
@@ -121,24 +121,22 @@ class MlpBlock(nn.Module):
   def __call__(self, inputs, deterministic=True):
     """Applies Transformer MlpBlock module."""
     config = self.config
-    actual_out_dim = (inputs.shape[-1] if self.out_dim is None
-                      else self.out_dim)
+    actual_out_dim = inputs.shape[-1] if self.out_dim is None else self.out_dim
     x = nn.Dense(
         config.mlp_dim,
         dtype=config.dtype,
         kernel_init=config.kernel_init,
-        bias_init=config.bias_init)(
-            inputs)
+        bias_init=config.bias_init,
+    )(inputs)
     x = nn.elu(x)
     x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=deterministic)
     output = nn.Dense(
         actual_out_dim,
         dtype=config.dtype,
         kernel_init=config.kernel_init,
-        bias_init=config.bias_init)(
-            x)
-    output = nn.Dropout(rate=config.dropout_rate)(
-        output, deterministic=deterministic)
+        bias_init=config.bias_init,
+    )(x)
+    output = nn.Dropout(rate=config.dropout_rate)(output, deterministic=deterministic)
     return output
 
 
@@ -148,6 +146,7 @@ class Encoder1DBlock(nn.Module):
   Attributes:
     config: TransformerConfig dataclass containing hyperparameters.
   """
+
   config: TransformerConfig
 
   @nn.compact
@@ -175,8 +174,8 @@ class Encoder1DBlock(nn.Module):
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=config.attention_dropout_rate,
-        deterministic=deterministic)(
-            x)
+        deterministic=deterministic,
+    )(x)
 
     x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=deterministic)
     x = x + inputs
@@ -210,9 +209,8 @@ class Transformer(nn.Module):
 
     x = inputs.astype('int32')
     x = nn.Embed(
-        num_embeddings=config.vocab_size, features=config.emb_dim,
-        name='embed')(
-            x)
+        num_embeddings=config.vocab_size, features=config.emb_dim, name='embed'
+    )(x)
     x = nn.Dropout(rate=config.dropout_rate)(x, deterministic=not train)
     x = AddPositionEmbs(config)(x)
 
@@ -223,6 +221,6 @@ class Transformer(nn.Module):
     logits = nn.Dense(
         config.output_vocab_size,
         kernel_init=config.kernel_init,
-        bias_init=config.bias_init)(
-            x)
+        bias_init=config.bias_init,
+    )(x)
     return logits

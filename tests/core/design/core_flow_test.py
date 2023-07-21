@@ -40,13 +40,11 @@ class DenseFlow:
 
   def forward(self, scope: Scope, x: Array):
     kernel, bias = self.params(scope, x.shape[-1])
-    return jnp.dot(
-      x, expm(kernel)) + bias.reshape((1,) * (x.ndim - 1) + (-1,))
+    return jnp.dot(x, expm(kernel)) + bias.reshape((1,) * (x.ndim - 1) + (-1,))
 
   def backward(self, scope: Scope, y: Array):
     kernel, bias = self.params(scope, y.shape[-1])
-    return jnp.dot(
-      y - bias.reshape((1,) * (y.ndim - 1) + (-1,)), expm(-kernel))
+    return jnp.dot(y - bias.reshape((1,) * (y.ndim - 1) + (-1,)), expm(-kernel))
 
 
 @dataclass
@@ -70,14 +68,16 @@ class FlowTest(absltest.TestCase):
     x = jnp.ones((1, 3))
     flow = StackFlow((DenseFlow(),) * 3)
     y, variables = init(flow.forward)(random.PRNGKey(0), x)
-    param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params']))
+    param_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
     self.assertEqual(y.shape, (1, 3))
-    self.assertEqual(param_shapes, {
-        '0': {'kernel': (3, 3), 'bias': (3,)},
-        '1': {'kernel': (3, 3), 'bias': (3,)},
-        '2': {'kernel': (3, 3), 'bias': (3,)},
-    })
+    self.assertEqual(
+        param_shapes,
+        {
+            '0': {'kernel': (3, 3), 'bias': (3,)},
+            '1': {'kernel': (3, 3), 'bias': (3,)},
+            '2': {'kernel': (3, 3), 'bias': (3,)},
+        },
+    )
     x_restored = apply(flow.backward)(variables, y)
     self.assertTrue(jnp.allclose(x, x_restored))
 

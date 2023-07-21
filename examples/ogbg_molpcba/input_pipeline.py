@@ -25,6 +25,7 @@ import tensorflow_datasets as tfds
 
 class GraphsTupleSize(NamedTuple):
   """Helper class to represent padding and graph sizes."""
+
   n_node: int
   n_edge: int
   n_graph: int
@@ -35,16 +36,16 @@ def get_raw_datasets() -> Dict[str, tf.data.Dataset]:
   ds_builder = tfds.builder('ogbg_molpcba')
   ds_builder.download_and_prepare()
   ds_splits = ['train', 'validation', 'test']
-  datasets = {
-      split: ds_builder.as_dataset(split=split) for split in ds_splits
-  }
+  datasets = {split: ds_builder.as_dataset(split=split) for split in ds_splits}
   return datasets
 
 
-def get_datasets(batch_size: int,
-                 add_virtual_node: bool = True,
-                 add_undirected_edges: bool = True,
-                 add_self_loops: bool = True) -> Dict[str, tf.data.Dataset]:
+def get_datasets(
+    batch_size: int,
+    add_virtual_node: bool = True,
+    add_undirected_edges: bool = True,
+    add_self_loops: bool = True,
+) -> Dict[str, tf.data.Dataset]:
   """Returns datasets of batched GraphsTuples, organized by split."""
   if batch_size <= 1:
     raise ValueError('Batch size must be > 1 to account for padding graphs.')
@@ -62,16 +63,17 @@ def get_datasets(batch_size: int,
 
   # Process each split separately.
   for split_name in datasets:
-
     # Convert to GraphsTuple.
     datasets[split_name] = datasets[split_name].map(
         convert_to_graphs_tuple_fn,
         num_parallel_calls=tf.data.AUTOTUNE,
-        deterministic=True)
+        deterministic=True,
+    )
 
   # Compute the padding budget for the requested batch size.
-  budget = estimate_padding_budget_for_batch_size(datasets['train'], batch_size,
-                                                  num_estimation_graphs=100)
+  budget = estimate_padding_budget_for_batch_size(
+      datasets['train'], batch_size, num_estimation_graphs=100
+  )
 
   # Pad an example graph to see what the output shapes will be.
   # We will use this shape information when creating the tf.data.Dataset.
@@ -81,7 +83,6 @@ def get_datasets(batch_size: int,
 
   # Process each split separately.
   for split_name, dataset_split in datasets.items():
-
     # Repeat and shuffle the training split.
     if split_name == 'train':
       dataset_split = dataset_split.shuffle(100, reshuffle_each_iteration=True)
@@ -93,10 +94,11 @@ def get_datasets(batch_size: int,
         graphs_tuple_iterator=iter(dataset_split),
         n_node=budget.n_node,
         n_edge=budget.n_edge,
-        n_graph=budget.n_graph)
+        n_graph=budget.n_graph,
+    )
     dataset_split = tf.data.Dataset.from_generator(
-        batching_fn,
-        output_signature=padded_graphs_spec)
+        batching_fn, output_signature=padded_graphs_spec
+    )
 
     # We cache the validation and test sets, since these are small.
     if split_name in ['validation', 'test']:
@@ -106,10 +108,12 @@ def get_datasets(batch_size: int,
   return datasets
 
 
-def convert_to_graphs_tuple(graph: Dict[str, tf.Tensor],
-                            add_virtual_node: bool,
-                            add_undirected_edges: bool,
-                            add_self_loops: bool) -> jraph.GraphsTuple:
+def convert_to_graphs_tuple(
+    graph: Dict[str, tf.Tensor],
+    add_virtual_node: bool,
+    add_undirected_edges: bool,
+    add_self_loops: bool,
+) -> jraph.GraphsTuple:
   """Converts a dictionary of tf.Tensors to a GraphsTuple."""
   num_nodes = tf.squeeze(graph['num_nodes'])
   num_edges = tf.squeeze(graph['num_edges'])
@@ -124,14 +128,10 @@ def convert_to_graphs_tuple(graph: Dict[str, tf.Tensor],
   # The feature vectors for the virtual node
   # and the new edges are set to all zeros.
   if add_virtual_node:
-    nodes = tf.concat(
-        [nodes, tf.zeros_like(nodes[0, None])], axis=0)
-    senders = tf.concat(
-        [senders, tf.range(num_nodes)], axis=0)
-    receivers = tf.concat(
-        [receivers, tf.fill((num_nodes,), num_nodes + 1)], axis=0)
-    edges = tf.concat(
-        [edges, tf.zeros((num_nodes, edge_feature_dim))], axis=0)
+    nodes = tf.concat([nodes, tf.zeros_like(nodes[0, None])], axis=0)
+    senders = tf.concat([senders, tf.range(num_nodes)], axis=0)
+    receivers = tf.concat([receivers, tf.fill((num_nodes,), num_nodes + 1)], axis=0)
+    edges = tf.concat([edges, tf.zeros((num_nodes, edge_feature_dim))], axis=0)
     num_edges += num_nodes
     num_nodes += 1
 
@@ -164,9 +164,8 @@ def convert_to_graphs_tuple(graph: Dict[str, tf.Tensor],
 
 
 def estimate_padding_budget_for_batch_size(
-    dataset: tf.data.Dataset,
-    batch_size: int,
-    num_estimation_graphs: int) -> GraphsTupleSize:
+    dataset: tf.data.Dataset, batch_size: int, num_estimation_graphs: int
+) -> GraphsTupleSize:
   """Estimates the padding budget for a dataset of unbatched GraphsTuples.
 
   Args:
@@ -204,7 +203,8 @@ def estimate_padding_budget_for_batch_size(
   padding_budget = GraphsTupleSize(
       n_node=next_multiple_of_64(num_nodes_per_graph_estimate * batch_size),
       n_edge=next_multiple_of_64(num_edges_per_graph_estimate * batch_size),
-      n_graph=batch_size)
+      n_graph=batch_size,
+  )
   return padding_budget
 
 
@@ -218,7 +218,13 @@ def specs_from_graphs_tuple(graph: jraph.GraphsTuple):
 
   specs = {}
   for field in [
-      'nodes', 'edges', 'senders', 'receivers', 'globals', 'n_node', 'n_edge'
+      'nodes',
+      'edges',
+      'senders',
+      'receivers',
+      'globals',
+      'n_node',
+      'n_edge',
   ]:
     field_sample = getattr(graph, field)
     specs[field] = get_tensor_spec(field_sample)
@@ -230,4 +236,5 @@ def get_graphs_tuple_size(graph: jraph.GraphsTuple):
   return GraphsTupleSize(
       n_node=np.sum(graph.n_node),
       n_edge=np.sum(graph.n_edge),
-      n_graph=np.shape(graph.n_node)[0])
+      n_graph=np.shape(graph.n_node)[0],
+  )

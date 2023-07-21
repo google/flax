@@ -33,6 +33,7 @@ import numpy as np
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
+
 class AttentionTest(parameterized.TestCase):
 
   def test_multihead_self_attention(self):
@@ -141,7 +142,10 @@ class AttentionTest(parameterized.TestCase):
     ts = np.arange(16)
     mask_1d_simple = (ts[:, None] >= ts[None, :])[None, None, :, :]
     mask_1d_simple = jnp.broadcast_to(mask_1d_simple, (3, 1, 16, 16))
-    np.testing.assert_allclose(mask_1d, mask_1d_simple,)
+    np.testing.assert_allclose(
+        mask_1d,
+        mask_1d_simple,
+    )
 
   @parameterized.parameters([((5,), (1,)), ((6, 5), (2,))])
   def test_decoding(self, spatial_shape, attn_dims):
@@ -150,29 +154,28 @@ class AttentionTest(parameterized.TestCase):
     num_features = 4
     rng = random.PRNGKey(0)
     key1, key2 = random.split(rng)
-    inputs = random.normal(
-        key1, (bs,) + spatial_shape + (num_heads * num_features,))
+    inputs = random.normal(key1, (bs,) + spatial_shape + (num_heads * num_features,))
     module = nn.SelfAttention(
         num_heads=num_heads,
         qkv_features=num_heads * num_features,
         precision=lax.Precision.HIGHEST,
         deterministic=False,
-        decode=False)
+        decode=False,
+    )
     decode_module = module.clone(decode=True)
 
     initial_vars = decode_module.init(key2, inputs)
     state, params = pop(initial_vars, 'params')
     causal_mask = nn.attention.make_causal_mask(jnp.ones((bs,) + spatial_shape))
-    y_ref = jax.jit(lambda x, y: module.apply(initial_vars, x, y))(
-        inputs, causal_mask)
+    y_ref = jax.jit(lambda x, y: module.apply(initial_vars, x, y))(inputs, causal_mask)
+
     # feed the inputs sequentially to simulate decoding
     def body_fn(state, x):
-      y, state = decode_module.apply(
-          {'params': params, **state}, x, mutable=['cache'])
+      y, state = decode_module.apply({'params': params, **state}, x, mutable=['cache'])
       return state, y
+
     # scan_in_dim supports scanning multiple dims
-    _, y = jax_utils.scan_in_dim(body_fn, state, inputs,
-                                 axis=attn_dims, keepdims=True)
+    _, y = jax_utils.scan_in_dim(body_fn, state, inputs, axis=attn_dims, keepdims=True)
 
     np.testing.assert_allclose(y_ref, y, atol=1e-5)
 
@@ -188,9 +191,8 @@ class AttentionTest(parameterized.TestCase):
     inputs = random.normal(rng2, input_shape)
 
     module = nn.MultiHeadDotProductAttention(
-        num_heads=num_heads,
-        kernel_init=jax.nn.initializers.ones,
-        deterministic=False)
+        num_heads=num_heads, kernel_init=jax.nn.initializers.ones, deterministic=False
+    )
 
     initial_vars = module.init(rng1, inputs, inputs)
     causal_mask = nn.attention.make_causal_mask(jnp.ones(input_shape[:-1]))
@@ -209,14 +211,18 @@ class AttentionTest(parameterized.TestCase):
 
     for i in range(length):
       deps = get_receptive_field_1d(i)
-      assert (deps[:i] == 1).all(), ('Receptive Field Error: Some of the '
-                                     'previous postions are not reachable '
-                                     'in autoregressive self-attention.')
+      assert (deps[:i] == 1).all(), (
+          'Receptive Field Error: Some of the '
+          'previous postions are not reachable '
+          'in autoregressive self-attention.'
+      )
       if i != length - 1:
         k = i + 1
-        assert (deps[k:] == 0).all(), ('Receptive Field Error: Some of the '
-                                       'future postions are reachable in '
-                                       'autoregressive self-attention.')
+        assert (deps[k:] == 0).all(), (
+            'Receptive Field Error: Some of the '
+            'future postions are reachable in '
+            'autoregressive self-attention.'
+        )
 
 
 if __name__ == '__main__':

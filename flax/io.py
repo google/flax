@@ -34,16 +34,20 @@ class BackendMode(Enum):
   DEFAULT = 0
   TF = 1
 
+
 io_mode = None
 gfile = None
 
-if importlib.util.find_spec('tensorflow'):
+if importlib.util.find_spec("tensorflow"):
   from tensorflow.io import gfile  # type: ignore
+
   io_mode = BackendMode.TF
 else:
-  logging.warning("Tensorflow library not found, tensorflow.io.gfile "
-                  "operations will use native shim calls. "
-                  "GCS paths (i.e. 'gs://...') cannot be accessed.")
+  logging.warning(
+      "Tensorflow library not found, tensorflow.io.gfile "
+      "operations will use native shim calls. "
+      "GCS paths (i.e. 'gs://...') cannot be accessed."
+  )
   io_mode = BackendMode.DEFAULT
 
 
@@ -52,6 +56,7 @@ else:
 
 if io_mode == BackendMode.TF:
   from tensorflow import errors as tf_errors  # type: ignore
+
   NotFoundError = tf_errors.NotFoundError
 else:
   NotFoundError = FileNotFoundError
@@ -91,10 +96,10 @@ def set_mode(override: BackendMode):
 
 def GFile(name, mode):  # pylint: disable=invalid-name
   if io_mode == BackendMode.DEFAULT:
-    if 'b' in mode:
+    if "b" in mode:
       return open(name, mode)  # pylint: disable=unspecified-encoding
     else:
-      return open(name, mode, encoding='utf-8')
+      return open(name, mode, encoding="utf-8")
   elif io_mode == BackendMode.TF:
     return gfile.GFile(name, mode)
   else:
@@ -162,7 +167,7 @@ def makedirs(path):
 
 def glob(pattern):
   if io_mode == BackendMode.DEFAULT:
-    return [ path.rstrip('/') for path in glob_module.glob(pattern, recursive=False) ]
+    return [path.rstrip("/") for path in glob_module.glob(pattern, recursive=False)]
   elif io_mode == BackendMode.TF:
     return gfile.glob(pattern)
   else:

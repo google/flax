@@ -24,13 +24,15 @@ import jax.numpy as jnp
 EOS_ID = 2
 
 
-def temperature_sample(prompt_inputs,
-                       init_cache,
-                       tokens_to_logits,
-                       prng_key,
-                       temperature=1.0,
-                       topk=20,
-                       eos_token=EOS_ID):
+def temperature_sample(
+    prompt_inputs,
+    init_cache,
+    tokens_to_logits,
+    prng_key,
+    temperature=1.0,
+    topk=20,
+    eos_token=EOS_ID,
+):
   """Temperature sampling for language model generation.
 
   Args:
@@ -72,7 +74,7 @@ def temperature_sample(prompt_inputs,
     """Sampling loop termination condition."""
     (i, _, _, _, ended, _) = state
     # Have we reached max decoding length?
-    not_at_end = (i < max_decode_len - 1)
+    not_at_end = i < max_decode_len - 1
     # Have all sampled sequences reached an end marker?
     all_sequences_ended = jnp.all(ended)
     return not_at_end & (~all_sequences_ended)
@@ -89,30 +91,31 @@ def temperature_sample(prompt_inputs,
     if topk:
       # Get top-k logits and their indices, sample within these top-k tokens.
       topk_logits, topk_idxs = lax.top_k(logits, topk)
-      topk_token = jnp.expand_dims(random.categorical(
-          rng1, topk_logits / temperature).astype(jnp.int32), axis=-1)
+      topk_token = jnp.expand_dims(
+          random.categorical(rng1, topk_logits / temperature).astype(jnp.int32), axis=-1
+      )
       # Return the original indices corresponding to the sampled top-k tokens.
       next_token = jnp.squeeze(
-          jnp.take_along_axis(topk_idxs, topk_token, axis=-1), axis=-1)
+          jnp.take_along_axis(topk_idxs, topk_token, axis=-1), axis=-1
+      )
     else:
-      next_token = random.categorical(
-          rng1, logits / temperature).astype(jnp.int32)
+      next_token = random.categorical(rng1, logits / temperature).astype(jnp.int32)
     # Only use sampled tokens if we're past provided prefix tokens.
-    out_of_prompt = (sequences[:, i+1] == 0)
-    next_token = (next_token * out_of_prompt +
-                  sequences[:, i+1] * ~out_of_prompt)
+    out_of_prompt = sequences[:, i + 1] == 0
+    next_token = next_token * out_of_prompt + sequences[:, i + 1] * ~out_of_prompt
     # If end-marker reached for batch item, only emit padding tokens.
-    next_token_or_endpad = (next_token[None] * ~ended)
-    ended |= (next_token_or_endpad == end_marker)
+    next_token_or_endpad = next_token[None] * ~ended
+    ended |= next_token_or_endpad == end_marker
     # Add current sampled tokens to recorded sequences.
     new_sequences = lax.dynamic_update_slice(
-        sequences, next_token_or_endpad, (0, i+1))
-    return (i+1, new_sequences, new_cache, next_token_or_endpad, ended, rng2)
+        sequences, next_token_or_endpad, (0, i + 1)
+    )
+    return (i + 1, new_sequences, new_cache, next_token_or_endpad, ended, rng2)
 
   # Run sampling loop and collect final state.
-  final_state = lax.while_loop(sampling_loop_cond_fn,
-                               sampling_loop_body_fn,
-                               sampling_loop_init_state)
+  final_state = lax.while_loop(
+      sampling_loop_cond_fn, sampling_loop_body_fn, sampling_loop_init_state
+  )
 
   # Pick part of the state corresponding to the sampled sequences.
   final_sequences = final_state[1]

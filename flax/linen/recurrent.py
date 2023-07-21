@@ -19,7 +19,7 @@ see: https://flax.readthedocs.io/en/latest/developer_notes/lift.html.
 """
 
 from abc import ABCMeta
-from functools import partial   # pylint: disable=g-importing-member
+from functools import partial  # pylint: disable=g-importing-member
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union, TypeVar, cast
 from typing_extensions import Protocol
 from absl import logging
@@ -51,18 +51,21 @@ Carry = Any
 CarryHistory = Any
 Output = Any
 
+
 class _Never:
   pass
+
 
 NEVER = _Never()
 
 LEGACY_UPDATE_MESSAGE = (
-  "The RNNCellBase API has changed, "
-  "the error you are experiencing might be caused by this change. Please "
-  "update your code to the new API, for more information on how to do this "
-  "please check out the RNNCellBase migration guide: "
-  "https://flax.readthedocs.io/en/latest/guides/rnncell_upgrade_guide.html"
+    'The RNNCellBase API has changed, '
+    'the error you are experiencing might be caused by this change. Please '
+    'update your code to the new API, for more information on how to do this '
+    'please check out the RNNCellBase migration guide: '
+    'https://flax.readthedocs.io/en/latest/guides/rnncell_upgrade_guide.html'
 )
+
 
 class RNNCellCompatibilityMeta(ABCMeta):
   """Metaclass for RNNCell compatibility."""
@@ -74,12 +77,15 @@ class RNNCellCompatibilityMeta(ABCMeta):
       msg = e.args[0]
       raise TypeError(f'{msg} \n\n {LEGACY_UPDATE_MESSAGE}') from e
 
+
 def deprecation_method_decorator(f):
   def wrapper(*args, **kwargs):
     if len(args) < 1 or not isinstance(args[0], RNNCellBase):
       raise TypeError(LEGACY_UPDATE_MESSAGE)
     return f(*args, **kwargs)
+
   return wrapper
+
 
 class RNNCellBase(Module):
   """RNN cell base class."""
@@ -96,7 +102,6 @@ class RNNCellBase(Module):
       An initialized carry for the given RNN cell.
     """
     raise NotImplementedError
-
 
   @property
   def num_feature_axes(self) -> int:
@@ -161,19 +166,23 @@ class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     c, h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(Dense,
-                      features=hidden_features,
-                      use_bias=True,
-                      kernel_init=self.recurrent_kernel_init,
-                      bias_init=self.bias_init,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype)
-    dense_i = partial(Dense,
-                      features=hidden_features,
-                      use_bias=False,
-                      kernel_init=self.kernel_init,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype)
+    dense_h = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=True,
+        kernel_init=self.recurrent_kernel_init,
+        bias_init=self.bias_init,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+    )
+    dense_i = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=False,
+        kernel_init=self.kernel_init,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+    )
     i = self.gate_fn(dense_i(name='ii')(inputs) + dense_h(name='hi')(h))
     f = self.gate_fn(dense_i(name='if')(inputs) + dense_h(name='hf')(h))
     g = self.activation_fn(dense_i(name='ig')(inputs) + dense_h(name='hg')(h))
@@ -185,7 +194,8 @@ class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
   @nowrap
   @deprecation_method_decorator
   def initialize_carry(
-      self, rng: PRNGKey, input_shape: Tuple[int, ...]) -> Tuple[Array, Array]:
+      self, rng: PRNGKey, input_shape: Tuple[int, ...]
+  ) -> Tuple[Array, Array]:
     """Initialize the RNN cell carry.
 
     Args:
@@ -219,8 +229,8 @@ class DenseParams(Module):
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Optional[Array]]:
     k = self.param(
-        'kernel', self.kernel_init, (inputs.shape[-1], self.features),
-        self.param_dtype)
+        'kernel', self.kernel_init, (inputs.shape[-1], self.features), self.param_dtype
+    )
     if self.use_bias:
       b = self.param('bias', self.bias_init, (self.features,), self.param_dtype)
     else:
@@ -274,8 +284,9 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
   carry_init: initializers.Initializer = initializers.zeros_init()
 
   @compact
-  def __call__(self, carry: Tuple[Array, Array],
-               inputs: Array) -> Tuple[Tuple[Array, Array], Array]:
+  def __call__(
+      self, carry: Tuple[Array, Array], inputs: Array
+  ) -> Tuple[Tuple[Array, Array], Array]:
     r"""An optimized long short-term memory (LSTM) cell.
 
     Args:
@@ -290,9 +301,11 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     c, h = carry
     hidden_features = h.shape[-1]
 
-    def _concat_dense(inputs: Array,
-                      params: Mapping[str, Tuple[Array, Optional[Array]]],
-                      use_bias: bool = True) -> Dict[str, Array]:
+    def _concat_dense(
+        inputs: Array,
+        params: Mapping[str, Tuple[Array, Optional[Array]]],
+        use_bias: bool = True,
+    ) -> Dict[str, Array]:
       # Concatenates the individual kernels and biases, given in params, into a
       # single kernel and single bias for efficiency before applying them using
       # dot_general.
@@ -324,15 +337,25 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     dense_params_i = {}
     for component in ['i', 'f', 'g', 'o']:
       dense_params_i[component] = DenseParams(
-          features=hidden_features, use_bias=False,
+          features=hidden_features,
+          use_bias=False,
           param_dtype=self.param_dtype,
-          kernel_init=self.kernel_init, bias_init=self.bias_init,
-          name=f'i{component}')(inputs) # type: ignore[call-arg]
+          kernel_init=self.kernel_init,
+          bias_init=self.bias_init,
+          name=f'i{component}',
+      )(
+          inputs
+      )  # type: ignore[call-arg]
       dense_params_h[component] = DenseParams(
-          features=hidden_features, use_bias=True,
+          features=hidden_features,
+          use_bias=True,
           param_dtype=self.param_dtype,
-          kernel_init=self.recurrent_kernel_init, bias_init=self.bias_init,
-          name=f'h{component}')(h) # type: ignore[call-arg]
+          kernel_init=self.recurrent_kernel_init,
+          bias_init=self.bias_init,
+          name=f'h{component}',
+      )(
+          h
+      )  # type: ignore[call-arg]
     dense_h = _concat_dense(h, dense_params_h, use_bias=True)
     dense_i = _concat_dense(inputs, dense_params_i, use_bias=False)
 
@@ -348,7 +371,8 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
   @nowrap
   @deprecation_method_decorator
   def initialize_carry(
-      self, rng: PRNGKey, input_shape: Tuple[int, ...]) -> Tuple[Array, Array]:
+      self, rng: PRNGKey, input_shape: Tuple[int, ...]
+  ) -> Tuple[Array, Array]:
     """Initialize the RNN cell carry.
 
     Args:
@@ -368,6 +392,7 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
   @property
   def num_feature_axes(self) -> int:
     return 1
+
 
 class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
   r"""GRU cell.
@@ -423,26 +448,31 @@ class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     h = carry
     hidden_features = h.shape[-1]
     # input and recurrent layers are summed so only one needs a bias.
-    dense_h = partial(Dense,
-                      features=hidden_features,
-                      use_bias=False,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype,
-                      kernel_init=self.recurrent_kernel_init,
-                      bias_init=self.bias_init)
-    dense_i = partial(Dense,
-                      features=hidden_features,
-                      use_bias=True,
-                      dtype=self.dtype,
-                      param_dtype=self.param_dtype,
-                      kernel_init=self.kernel_init,
-                      bias_init=self.bias_init)
+    dense_h = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=False,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        kernel_init=self.recurrent_kernel_init,
+        bias_init=self.bias_init,
+    )
+    dense_i = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=True,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        kernel_init=self.kernel_init,
+        bias_init=self.bias_init,
+    )
     r = self.gate_fn(dense_i(name='ir')(inputs) + dense_h(name='hr')(h))
     z = self.gate_fn(dense_i(name='iz')(inputs) + dense_h(name='hz')(h))
     # add bias because the linear transformations aren't directly summed.
-    n = self.activation_fn(dense_i(name='in')(inputs) +
-                           r * dense_h(name='hn', use_bias=True)(h))
-    new_h = (1. - z) * n + z * h
+    n = self.activation_fn(
+        dense_i(name='in')(inputs) + r * dense_h(name='hn', use_bias=True)(h)
+    )
+    new_h = (1.0 - z) * n + z * h
     return new_h, new_h
 
   @nowrap
@@ -528,25 +558,29 @@ class ConvLSTMCell(RNNCellBase):
       A tuple with the new carry and the output.
     """
     c, h = carry
-    input_to_hidden = partial(Conv,
-                              features=4*self.features,
-                              kernel_size=self.kernel_size,
-                              strides=self.strides,
-                              padding=self.padding,
-                              use_bias=self.use_bias,
-                              dtype=self.dtype,
-                              param_dtype=self.param_dtype,
-                              name='ih')
+    input_to_hidden = partial(
+        Conv,
+        features=4 * self.features,
+        kernel_size=self.kernel_size,
+        strides=self.strides,
+        padding=self.padding,
+        use_bias=self.use_bias,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        name='ih',
+    )
 
-    hidden_to_hidden = partial(Conv,
-                               features=4*self.features,
-                               kernel_size=self.kernel_size,
-                               strides=self.strides,
-                               padding=self.padding,
-                               use_bias=self.use_bias,
-                               dtype=self.dtype,
-                               param_dtype=self.param_dtype,
-                               name='hh')
+    hidden_to_hidden = partial(
+        Conv,
+        features=4 * self.features,
+        kernel_size=self.kernel_size,
+        strides=self.strides,
+        padding=self.padding,
+        use_bias=self.use_bias,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        name='hh',
+    )
 
     gates = input_to_hidden()(inputs) + hidden_to_hidden()(h)
     i, g, f, o = jnp.split(gates, indices_or_sections=4, axis=-1)
@@ -569,8 +603,8 @@ class ConvLSTMCell(RNNCellBase):
       An initialized carry for the given RNN cell.
     """
     # (*batch_dims, *signal_dims, features)
-    signal_dims = input_shape[-self.num_feature_axes:-1]
-    batch_dims = input_shape[:-self.num_feature_axes]
+    signal_dims = input_shape[-self.num_feature_axes : -1]
+    batch_dims = input_shape[: -self.num_feature_axes]
     key1, key2 = random.split(rng)
     mem_shape = batch_dims + signal_dims + (self.features,)
     c = self.carry_init(key1, mem_shape, self.param_dtype)
@@ -580,6 +614,7 @@ class ConvLSTMCell(RNNCellBase):
   @property
   def num_feature_axes(self) -> int:
     return len(self.kernel_size) + 1
+
 
 class RNN(Module):
   """The ``RNN`` module takes any :class:`RNNCellBase` instance and applies it over a sequence
@@ -681,6 +716,7 @@ class RNN(Module):
       PRNG key should be split such that its values are different at each step, or replicated
       such that its values remain the same at each step. This argument is forwarded to `nn.scan`.
   """
+
   cell: RNNCellBase
   cell_size: Any = NEVER
   time_major: bool = False
@@ -688,7 +724,7 @@ class RNN(Module):
   reverse: bool = False
   keep_order: bool = False
   unroll: int = 1
-  variable_axes: Mapping[lift.CollectionFilter,lift.InOutScanAxis] = FrozenDict()
+  variable_axes: Mapping[lift.CollectionFilter, lift.InOutScanAxis] = FrozenDict()
   variable_broadcast: lift.CollectionFilter = 'params'
   variable_carry: lift.CollectionFilter = False
   split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict({'params': False})
@@ -696,21 +732,21 @@ class RNN(Module):
   def __post_init__(self) -> None:
     if self.cell_size is not NEVER:
       raise TypeError(
-        f'The `cell_size` argument is no longer available`. ' + LEGACY_UPDATE_MESSAGE
+          f'The `cell_size` argument is no longer available`. ' + LEGACY_UPDATE_MESSAGE
       )
     return super().__post_init__()
 
   def __call__(
-    self,
-    inputs: jax.Array,
-    *,
-    initial_carry: Optional[Carry] = None,
-    init_key: Optional[random.KeyArray] = None,
-    seq_lengths: Optional[Array] = None,
-    return_carry: Optional[bool] = None,
-    time_major: Optional[bool] = None,
-    reverse: Optional[bool] = None,
-    keep_order: Optional[bool] = None,
+      self,
+      inputs: jax.Array,
+      *,
+      initial_carry: Optional[Carry] = None,
+      init_key: Optional[random.KeyArray] = None,
+      seq_lengths: Optional[Array] = None,
+      return_carry: Optional[bool] = None,
+      time_major: Optional[bool] = None,
+      reverse: Optional[bool] = None,
+      keep_order: Optional[bool] = None,
   ) -> Union[Output, Tuple[Carry, Output]]:
     """
     Applies the RNN to the inputs.
@@ -765,23 +801,25 @@ class RNN(Module):
 
     if time_major:
       # we add +1 because we moved the time axis to the front
-      batch_dims = inputs.shape[1:-self.cell.num_feature_axes]
+      batch_dims = inputs.shape[1 : -self.cell.num_feature_axes]
     else:
       batch_dims = inputs.shape[:time_axis]
 
     # maybe reverse the sequence
     if reverse:
       inputs = jax.tree_map(
-        lambda x: flip_sequences(
-          x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
-        inputs)
+          lambda x: flip_sequences(
+              x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major
+          ),  # type: ignore
+          inputs,
+      )
 
     carry: Carry
     if initial_carry is None:
       if init_key is None:
         init_key = random.PRNGKey(0)
 
-      input_shape = inputs.shape[:time_axis] + inputs.shape[time_axis + 1:]
+      input_shape = inputs.shape[:time_axis] + inputs.shape[time_axis + 1 :]
       carry = self.cell.initialize_carry(init_key, input_shape)
     else:
       carry = initial_carry
@@ -789,7 +827,7 @@ class RNN(Module):
     slice_carry = seq_lengths is not None and return_carry
 
     def scan_fn(
-      cell: RNNCellBase, carry: Carry, x: Array
+        cell: RNNCellBase, carry: Carry, x: Array
     ) -> Union[Tuple[Carry, Array], Tuple[Carry, Tuple[Carry, Array]]]:
       carry, y = cell(carry, x)
       # When we have a segmentation mask we return the carry as an output
@@ -802,14 +840,14 @@ class RNN(Module):
         return carry, y
 
     scan = transforms.scan(
-      scan_fn,
-      in_axes=time_axis,
-      out_axes=(0, time_axis) if slice_carry else time_axis,
-      unroll=self.unroll,
-      variable_axes=self.variable_axes,
-      variable_broadcast=self.variable_broadcast,
-      variable_carry=self.variable_carry,
-      split_rngs=self.split_rngs,
+        scan_fn,
+        in_axes=time_axis,
+        out_axes=(0, time_axis) if slice_carry else time_axis,
+        unroll=self.unroll,
+        variable_axes=self.variable_axes,
+        variable_broadcast=self.variable_broadcast,
+        variable_carry=self.variable_carry,
+        split_rngs=self.split_rngs,
     )
 
     scan_output = scan(self.cell, carry, inputs)
@@ -828,14 +866,17 @@ class RNN(Module):
 
     if reverse and keep_order:
       outputs = jax.tree_map(
-        lambda x: flip_sequences(
-          x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major), # type: ignore
-        outputs)
+          lambda x: flip_sequences(
+              x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major
+          ),  # type: ignore
+          outputs,
+      )
 
     if return_carry:
       return carry, outputs
     else:
       return outputs
+
 
 def _select_last_carry(sequence: A, seq_lengths: jnp.ndarray) -> A:
   last_idx = seq_lengths - 1
@@ -845,12 +886,14 @@ def _select_last_carry(sequence: A, seq_lengths: jnp.ndarray) -> A:
 
   return jax.tree_map(_slice_array, sequence)
 
+
 def _expand_dims_like(x, target):
   """Expands the shape of `x` to match `target`'s shape by adding singleton dimensions."""
   return x.reshape(list(x.shape) + [1] * (target.ndim - x.ndim))
 
+
 def flip_sequences(
-  inputs: Array, seq_lengths: Optional[Array], num_batch_dims: int, time_major: bool
+    inputs: Array, seq_lengths: Optional[Array], num_batch_dims: int, time_major: bool
 ) -> Array:
   """Flips a sequence of inputs along the time axis.
 
@@ -890,13 +933,13 @@ def flip_sequences(
   seq_lengths = jnp.expand_dims(seq_lengths, axis=time_axis)
 
   # create indexes
-  idxs = jnp.arange(max_steps - 1, -1, -1) # [max_steps]
+  idxs = jnp.arange(max_steps - 1, -1, -1)  # [max_steps]
   if time_major:
     idxs = jnp.reshape(idxs, [max_steps] + [1] * num_batch_dims)
   else:
-    idxs = jnp.reshape(idxs, [1] * num_batch_dims + [max_steps]) # [1, ..., max_steps]
-  idxs = (idxs + seq_lengths) % max_steps # [*batch, max_steps]
-  idxs = _expand_dims_like(idxs, target=inputs) # [*batch, max_steps, *features]
+    idxs = jnp.reshape(idxs, [1] * num_batch_dims + [max_steps])  # [1, ..., max_steps]
+  idxs = (idxs + seq_lengths) % max_steps  # [*batch, max_steps]
+  idxs = _expand_dims_like(idxs, target=inputs)  # [*batch, max_steps, *features]
   # Select the inputs in flipped order.
   outputs = jnp.take_along_axis(inputs, idxs, axis=time_axis)
 
@@ -907,23 +950,27 @@ def _concatenate(a: Array, b: Array) -> Array:
   """Concatenates two arrays along the last dimension."""
   return jnp.concatenate([a, b], axis=-1)
 
+
 class RNNBase(Protocol):
+
   def __call__(
-    self,
-    inputs: jax.Array,
-    *,
-    initial_carry: Optional[Carry] = None,
-    init_key: Optional[random.KeyArray] = None,
-    seq_lengths: Optional[Array] = None,
-    return_carry: Optional[bool] = None,
-    time_major: Optional[bool] = None,
-    reverse: Optional[bool] = None,
-    keep_order: Optional[bool] = None,
+      self,
+      inputs: jax.Array,
+      *,
+      initial_carry: Optional[Carry] = None,
+      init_key: Optional[random.KeyArray] = None,
+      seq_lengths: Optional[Array] = None,
+      return_carry: Optional[bool] = None,
+      time_major: Optional[bool] = None,
+      reverse: Optional[bool] = None,
+      keep_order: Optional[bool] = None,
   ) -> Union[Output, Tuple[Carry, Output]]:
     ...
 
+
 class Bidirectional(Module):
   """Processes the input in both directions and merges the results."""
+
   forward_rnn: RNNBase
   backward_rnn: RNNBase
   merge_fn: Callable[[Array, Array], Array] = _concatenate
@@ -931,16 +978,16 @@ class Bidirectional(Module):
   return_carry: bool = False
 
   def __call__(
-    self,
-    inputs: jax.Array,
-    *,
-    initial_carry: Optional[Carry] = None,
-    init_key: Optional[random.KeyArray] = None,
-    seq_lengths: Optional[Array] = None,
-    return_carry: Optional[bool] = None,
-    time_major: Optional[bool] = None,
-    reverse: Optional[bool] = None,
-    keep_order: Optional[bool] = None,
+      self,
+      inputs: jax.Array,
+      *,
+      initial_carry: Optional[Carry] = None,
+      init_key: Optional[random.KeyArray] = None,
+      seq_lengths: Optional[Array] = None,
+      return_carry: Optional[bool] = None,
+      time_major: Optional[bool] = None,
+      reverse: Optional[bool] = None,
+      keep_order: Optional[bool] = None,
   ) -> Union[Output, Tuple[Carry, Output]]:
     if time_major is None:
       time_major = self.time_major
@@ -957,19 +1004,34 @@ class Bidirectional(Module):
     # Throw a warning in case the user accidentally re-uses the forward RNN
     # for the backward pass and does not intend for them to share parameters.
     if self.forward_rnn is self.backward_rnn:
-      logging.warning(("forward_rnn and backward_rnn is the same object, so "
-      "they will share parameters."))
+      logging.warning(
+          (
+              'forward_rnn and backward_rnn is the same object, so '
+              'they will share parameters.'
+          )
+      )
 
     # Encode in the forward direction.
     carry_forward, outputs_forward = self.forward_rnn(
-      inputs, initial_carry=initial_carry_forward, init_key=key_forward,
-      seq_lengths=seq_lengths, return_carry=True,
-      time_major=time_major, reverse=False)
+        inputs,
+        initial_carry=initial_carry_forward,
+        init_key=key_forward,
+        seq_lengths=seq_lengths,
+        return_carry=True,
+        time_major=time_major,
+        reverse=False,
+    )
 
     carry_backward, outputs_backward = self.backward_rnn(
-      inputs, initial_carry=initial_carry_backward, init_key=key_backward,
-      seq_lengths=seq_lengths, return_carry=True,
-      time_major=time_major, reverse=True, keep_order=True)
+        inputs,
+        initial_carry=initial_carry_backward,
+        init_key=key_backward,
+        seq_lengths=seq_lengths,
+        return_carry=True,
+        time_major=time_major,
+        reverse=True,
+        keep_order=True,
+    )
 
     carry = (carry_forward, carry_backward)
     outputs = jax.tree_map(self.merge_fn, outputs_forward, outputs_backward)

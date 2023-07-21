@@ -73,13 +73,14 @@ def get_dummy_raw_datasets(dataset_length) -> Dict[str, tf.data.Dataset]:
   datasets = {}
   for split in ['train', 'validation', 'test']:
     datasets[split] = tf.data.Dataset.from_generator(
-        get_dummy_graphs, output_signature=dummy_graph_spec)
+        get_dummy_graphs, output_signature=dummy_graph_spec
+    )
   return datasets
 
 
 def get_dummy_datasets(
-    dataset_length: int,
-    batch_size: Optional[int] = None) -> Dict[str, tf.data.Dataset]:
+    dataset_length: int, batch_size: Optional[int] = None
+) -> Dict[str, tf.data.Dataset]:
   """Returns dummy datasets, mocking input_pipeline.get_datasets()."""
 
   datasets = get_dummy_raw_datasets(dataset_length)
@@ -94,24 +95,24 @@ def get_dummy_datasets(
 
   # Process each split separately.
   for split_name in datasets:
-
     # Convert to GraphsTuple.
     datasets[split_name] = datasets[split_name].map(
         convert_to_graphs_tuple_fn,
         num_parallel_calls=tf.data.AUTOTUNE,
-        deterministic=True)
+        deterministic=True,
+    )
 
   # If batch size is None, do not batch.
   if batch_size is not None:
     budget = input_pipeline.estimate_padding_budget_for_batch_size(
-        datasets['train'], batch_size, num_estimation_graphs=1)
+        datasets['train'], batch_size, num_estimation_graphs=1
+    )
 
     # Pad an example graph to see what the output shapes will be.
     # We will use this shape information when creating the tf.data.Dataset.
     example_graph = next(datasets['train'].as_numpy_iterator())
     example_padded_graph = jraph.pad_with_graphs(example_graph, *budget)
-    padded_graphs_spec = input_pipeline.specs_from_graphs_tuple(
-        example_padded_graph)
+    padded_graphs_spec = input_pipeline.specs_from_graphs_tuple(example_padded_graph)
 
     # Batch and pad each split separately.
     for split, dataset_split in datasets.items():
@@ -120,10 +121,11 @@ def get_dummy_datasets(
           graphs_tuple_iterator=iter(dataset_split),
           n_node=budget.n_node,
           n_edge=budget.n_edge,
-          n_graph=budget.n_graph)
+          n_graph=budget.n_graph,
+      )
       datasets[split] = tf.data.Dataset.from_generator(
-          batching_fn,
-          output_signature=padded_graphs_spec)
+          batching_fn, output_signature=padded_graphs_spec
+      )
   return datasets
 
 
@@ -147,8 +149,12 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
 
   @parameterized.product(
       probs=[[[0.8, 0.9, 0.3, 0.5]]],
-      labels=[[[1, 0, 1, 1]], [[1, 0, 1, jnp.nan]], [[1, 0, jnp.nan, jnp.nan]],
-              [[1, jnp.nan, jnp.nan, jnp.nan]]],
+      labels=[
+          [[1, 0, 1, 1]],
+          [[1, 0, 1, jnp.nan]],
+          [[1, 0, jnp.nan, jnp.nan]],
+          [[1, jnp.nan, jnp.nan, jnp.nan]],
+      ],
   )
   def test_binary_cross_entropy_loss(self, probs, labels):
     probs = jnp.asarray(probs)
@@ -158,10 +164,12 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     mask = ~jnp.isnan(labels)
 
     loss_array = train.binary_cross_entropy_with_mask(
-        logits=logits, labels=labels, mask=mask)
+        logits=logits, labels=labels, mask=mask
+    )
     loss = average_with_mask(loss_array, mask)
     expected_loss_array = -(jnp.log(probs) * labels) - (
-        jnp.log(1 - probs) * (1 - labels))
+        jnp.log(1 - probs) * (1 - labels)
+    )
     expected_loss = average_with_mask(expected_loss_array, mask)
 
     self.assertAlmostEqual(loss, expected_loss, places=5)
@@ -169,19 +177,22 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
   @parameterized.named_parameters(
       dict(
           testcase_name='no_valid_tasks',
-          logits=[[-1., 1.], [1., 1.], [2., -1.]],
+          logits=[[-1.0, 1.0], [1.0, 1.0], [2.0, -1.0]],
           labels=[[jnp.nan, jnp.nan], [jnp.nan, jnp.nan], [jnp.nan, jnp.nan]],
-          expected_result=jnp.nan),
+          expected_result=jnp.nan,
+      ),
       dict(
           testcase_name='1_valid_task',
-          logits=[[-1., 1.], [1., 1.], [2., -1.]],
+          logits=[[-1.0, 1.0], [1.0, 1.0], [2.0, -1.0]],
           labels=[[0, jnp.nan], [1, jnp.nan], [1, jnp.nan]],
-          expected_result=1.),
+          expected_result=1.0,
+      ),
       dict(
           testcase_name='2_valid_tasks',
-          logits=[[-1., 1.], [1., 1.], [2., -1.]],
+          logits=[[-1.0, 1.0], [1.0, 1.0], [2.0, -1.0]],
           labels=[[0, jnp.nan], [1, 0], [1, 1]],
-          expected_result=0.75),
+          expected_result=0.75,
+      ),
   )
   def test_mean_average_precision(self, logits, labels, expected_result):
     logits = jnp.asarray(logits)
@@ -189,7 +200,8 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     mask = ~jnp.isnan(labels)
 
     mean_average_precision = train.MeanAveragePrecision.from_model_output(
-        logits=logits, labels=labels, mask=mask).compute()
+        logits=logits, labels=labels, mask=mask
+    ).compute()
 
     if jnp.isnan(expected_result):
       self.assertTrue(jnp.isnan(mean_average_precision))
@@ -198,12 +210,16 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
 
   @parameterized.parameters(
       dict(
-          loss=[[0.5, 1.], [1.5, 1.3], [2., 1.2]],
-          logits=[[-1., 1.], [1., 1.], [2., 0.]],
+          loss=[[0.5, 1.0], [1.5, 1.3], [2.0, 1.2]],
+          logits=[[-1.0, 1.0], [1.0, 1.0], [2.0, 0.0]],
           labels=[[0, jnp.nan], [1, 0], [0, 1]],
           mask=[[True, False], [True, True], [False, False]],
-          expected_results={'loss': 1.1, 'accuracy': 2/3,
-                            'mean_average_precision': 1.0}),
+          expected_results={
+              'loss': 1.1,
+              'accuracy': 2 / 3,
+              'mean_average_precision': 1.0,
+          },
+      ),
   )
   def test_eval_metrics(self, loss, logits, labels, mask, expected_results):
     loss = jnp.asarray(loss)
@@ -215,17 +231,20 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     with warnings.catch_warnings():
       warnings.simplefilter('ignore', category=RuntimeWarning)
       eval_metrics = train.EvalMetrics.single_from_model_output(
-          loss=loss, logits=logits, labels=labels, mask=mask).compute()
+          loss=loss, logits=logits, labels=labels, mask=mask
+      ).compute()
 
     for metric in expected_results:
       self.assertAlmostEqual(expected_results[metric], eval_metrics[metric])
 
   @parameterized.parameters(
-      dict(loss=[[0.5, 1.], [1.5, 1.3], [2., 1.2]],
-           logits=[[-1., 1.], [1., 1.], [2., 0.]],
-           labels=[[0, jnp.nan], [1, 0], [0, 1]],
-           mask=[[True, False], [True, True], [False, False]],
-           expected_results={'loss': 1.1, 'accuracy': 2/3}),
+      dict(
+          loss=[[0.5, 1.0], [1.5, 1.3], [2.0, 1.2]],
+          logits=[[-1.0, 1.0], [1.0, 1.0], [2.0, 0.0]],
+          labels=[[0, jnp.nan], [1, 0], [0, 1]],
+          mask=[[True, False], [True, True], [False, False]],
+          expected_results={'loss': 1.1, 'accuracy': 2 / 3},
+      ),
   )
   def test_train_metrics(self, loss, logits, labels, mask, expected_results):
     loss = jnp.asarray(loss)
@@ -234,7 +253,8 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     mask = jnp.asarray(mask)
 
     train_metrics = train.TrainMetrics.single_from_model_output(
-        loss=loss, logits=logits, labels=labels, mask=mask).compute()
+        loss=loss, logits=logits, labels=labels, mask=mask
+    ).compute()
     for metric in expected_results:
       self.assertAlmostEqual(expected_results[metric], train_metrics[metric])
 
@@ -255,18 +275,17 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     # Create the training state.
     net = train.create_model(config, deterministic=False)
     state = train_state.TrainState.create(
-        apply_fn=net.apply, params=params, tx=optimizer)
+        apply_fn=net.apply, params=params, tx=optimizer
+    )
 
     # Perform one step of updates.
     # We use the same batch of graphs that we used for initialization.
-    state, train_metrics = train.train_step(
-        state, init_graphs, rngs={'dropout': rng})
+    state, train_metrics = train.train_step(state, init_graphs, rngs={'dropout': rng})
 
     # Check that none of the parameters are NaNs!
     params = flax.core.unfreeze(state.params)
     flat_params = {
-        '/'.join(k): v
-        for k, v in flax.traverse_util.flatten_dict(params).items()
+        '/'.join(k): v for k, v in flax.traverse_util.flatten_dict(params).items()
     }
     for array in flat_params.values():
       self.assertTrue(jnp.all(~jnp.isnan(array)))
@@ -285,7 +304,8 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     _, init_rng = jax.random.split(self.rng)
     init_graphs = next(self.datasets['train'].as_numpy_iterator())
     init_graphs_preprocessed = init_graphs._replace(
-        globals=jnp.zeros([init_graphs.n_node.shape[0], 1]))
+        globals=jnp.zeros([init_graphs.n_node.shape[0], 1])
+    )
     init_net = train.create_model(config, deterministic=True)
     params = jax.jit(init_net.init)(init_rng, init_graphs_preprocessed)
 
@@ -295,7 +315,8 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     # Create the evaluation state.
     eval_net = train.create_model(config, deterministic=True)
     eval_state = train_state.TrainState.create(
-        apply_fn=eval_net.apply, params=params, tx=optimizer)
+        apply_fn=eval_net.apply, params=params, tx=optimizer
+    )
 
     # Perform one step of evaluation.
     # We use the same batch of graphs that we used for initialization.

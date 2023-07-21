@@ -31,6 +31,7 @@
 
 import os
 import sys
+
 sys.path.insert(0, os.path.abspath('..'))
 # Include local extension.
 sys.path.append(os.path.abspath('./_ext'))
@@ -110,9 +111,9 @@ html_static_path = ['_static']
 
 html_theme_options = {
     'repository_url': 'https://github.com/google/flax',
-    'use_repository_button': True,     # add a 'link to repository' button
-    'use_issues_button': False,        # add an 'Open an Issue' button
-    'path_to_docs': 'docs',            # used to compute the path to launch notebooks in colab
+    'use_repository_button': True,  # add a 'link to repository' button
+    'use_issues_button': False,  # add an 'Open an Issue' button
+    'path_to_docs': 'docs',  # used to compute the path to launch notebooks in colab
     'launch_buttons': {
         'colab_url': 'https://colab.research.google.com/',
     },
@@ -129,8 +130,8 @@ nb_execution_timeout = 100
 # files that will not be executed.
 myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
-  'getting_started.ipynb', # <-- times out
-  'optax_update_guide.ipynb', # <-- requires flax<=0.5.3
+    'getting_started.ipynb',  # <-- times out
+    'optax_update_guide.ipynb',  # <-- requires flax<=0.5.3
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False

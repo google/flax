@@ -46,8 +46,7 @@ class InputPipelineTest(absltest.TestCase):
     """Uses mock data to create the dataset."""
     # Go two directories up to the root of the flax directory.
     flax_root_dir = pathlib.Path(__file__).parents[2]
-    data_dir = str(flax_root_dir) + \
-        '/.tfds/metadata'  # pylint: disable=unused-variable
+    data_dir = str(flax_root_dir) + '/.tfds/metadata'  # pylint: disable=unused-variable
     with tfds.testing.mock_data(num_examples=128, data_dir=data_dir):
       return input_pipeline.TextDataset(vocab_path=vocab_path, split='train')
 
@@ -56,8 +55,11 @@ class InputPipelineTest(absltest.TestCase):
     batch_size = 2
     bucket_size = 8
     for batch in self.dataset.get_bucketed_batches(
-            batch_size=batch_size,
-            bucket_size=bucket_size, max_input_length=60, shuffle=False).take(3):
+        batch_size=batch_size,
+        bucket_size=bucket_size,
+        max_input_length=60,
+        shuffle=False,
+    ).take(3):
       # Because of bucketing, sequence length must be multiple of bucket_size.
       length = batch['token_ids'].numpy().shape[-1]
       self.assertEqual(0, length % bucket_size)
@@ -67,8 +69,7 @@ class InputPipelineTest(absltest.TestCase):
   def test_batched_dataset(self):
     """Tests that the length of a batch matches the longest sequence."""
     batch_size = 2
-    for batch in self.dataset.get_batches(
-            batch_size=batch_size, shuffle=False).take(1):
+    for batch in self.dataset.get_batches(batch_size=batch_size, shuffle=False).take(1):
       # Each batch is padded to the maximum sentence length in the batch.
       max_length_in_batch = max(batch['length'].numpy())
       length = batch['token_ids'].numpy().shape[-1]
@@ -81,8 +82,8 @@ class InputPipelineTest(absltest.TestCase):
     batch_size = 2
     fixed_pad_length = 77
     for batch in self.dataset.get_batches(
-            batch_size=batch_size, shuffle=False,
-            fixed_pad_length=fixed_pad_length).take(1):
+        batch_size=batch_size, shuffle=False, fixed_pad_length=fixed_pad_length
+    ).take(1):
       length = batch['token_ids'].numpy().shape[-1]
       self.assertEqual(fixed_pad_length, length)
 

@@ -54,6 +54,7 @@ class CNN(nn.Module):
 @jax.jit
 def apply_model(state, images, labels):
   """Computes gradients, loss and accuracy for a single batch."""
+
   def loss_fn(params):
     logits = state.apply_fn({'params': params}, images)
     one_hot = jax.nn.one_hot(labels, 10)
@@ -77,7 +78,7 @@ def train_epoch(state, train_ds, batch_size, rng):
   steps_per_epoch = train_ds_size // batch_size
 
   perms = jax.random.permutation(rng, len(train_ds['image']))
-  perms = perms[:steps_per_epoch * batch_size]  # skip incomplete batch
+  perms = perms[: steps_per_epoch * batch_size]  # skip incomplete batch
   perms = perms.reshape((steps_per_epoch, batch_size))
 
   epoch_loss = []
@@ -101,8 +102,8 @@ def get_datasets():
   ds_builder.download_and_prepare()
   train_ds = tfds.as_numpy(ds_builder.as_dataset(split='train', batch_size=-1))
   test_ds = tfds.as_numpy(ds_builder.as_dataset(split='test', batch_size=-1))
-  train_ds['image'] = jnp.float32(train_ds['image']) / 255.
-  test_ds['image'] = jnp.float32(test_ds['image']) / 255.
+  train_ds['image'] = jnp.float32(train_ds['image']) / 255.0
+  test_ds['image'] = jnp.float32(test_ds['image']) / 255.0
   return train_ds, test_ds
 
 
@@ -111,12 +112,12 @@ def create_train_state(rng, config):
   cnn = CNN()
   params = cnn.init(rng, jnp.ones([1, 28, 28, 1]))['params']
   tx = optax.sgd(config.learning_rate, config.momentum)
-  return train_state.TrainState.create(
-      apply_fn=cnn.apply, params=params, tx=tx)
+  return train_state.TrainState.create(apply_fn=cnn.apply, params=params, tx=tx)
 
 
-def train_and_evaluate(config: ml_collections.ConfigDict,
-                       workdir: str) -> train_state.TrainState:
+def train_and_evaluate(
+    config: ml_collections.ConfigDict, workdir: str
+) -> train_state.TrainState:
   """Execute model training and evaluation loop.
 
   Args:
@@ -137,16 +138,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict,
 
   for epoch in range(1, config.num_epochs + 1):
     rng, input_rng = jax.random.split(rng)
-    state, train_loss, train_accuracy = train_epoch(state, train_ds,
-                                                    config.batch_size,
-                                                    input_rng)
-    _, test_loss, test_accuracy = apply_model(state, test_ds['image'],
-                                              test_ds['label'])
+    state, train_loss, train_accuracy = train_epoch(
+        state, train_ds, config.batch_size, input_rng
+    )
+    _, test_loss, test_accuracy = apply_model(state, test_ds['image'], test_ds['label'])
 
     logging.info(
         'epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, test_loss: %.4f, test_accuracy: %.2f'
-        % (epoch, train_loss, train_accuracy * 100, test_loss,
-           test_accuracy * 100))
+        % (epoch, train_loss, train_accuracy * 100, test_loss, test_accuracy * 100)
+    )
 
     summary_writer.scalar('train_loss', train_loss, epoch)
     summary_writer.scalar('train_accuracy', train_accuracy, epoch)

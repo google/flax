@@ -44,6 +44,7 @@ class EarlyStopping(struct.PyTreeNode):
     should_stop: Whether the training loop should stop to avoid
         overfitting.
   """
+
   min_delta: float = 0
   patience: int = 0
   best_metric: float = float('inf')
@@ -51,9 +52,7 @@ class EarlyStopping(struct.PyTreeNode):
   should_stop: bool = False
 
   def reset(self):
-    return self.replace(best_metric=float('inf'),
-                        patience_count=0,
-                        should_stop=False)
+    return self.replace(best_metric=float('inf'), patience_count=0, should_stop=False)
 
   def update(self, metric):
     """Update the state based on metric.
@@ -65,9 +64,9 @@ class EarlyStopping(struct.PyTreeNode):
     """
 
     if math.isinf(self.best_metric) or self.best_metric - metric > self.min_delta:
-      return True, self.replace(best_metric=metric,
-                                patience_count=0)
+      return True, self.replace(best_metric=metric, patience_count=0)
     else:
       should_stop = self.patience_count >= self.patience or self.should_stop
-      return False, self.replace(patience_count=self.patience_count + 1,
-                                 should_stop=should_stop)
+      return False, self.replace(
+          patience_count=self.patience_count + 1, should_stop=should_stop
+      )

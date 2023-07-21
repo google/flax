@@ -24,16 +24,22 @@ def _absolute_dims(ndim, dims):
   return tuple(ndim + dim if dim < 0 else dim for dim in dims)
 
 
-def batch_norm(scope: Scope,
-               x,
-               use_running_average=False,
-               axis=-1, momentum=0.99, epsilon=1e-5,
-               dtype=jnp.float32,
-               bias=True, scale=True,
-               bias_init=initializers.zeros_init(), scale_init=initializers.ones_init(),
-               axis_name=None, axis_index_groups=None,
-               kind='batch_stats'):
-
+def batch_norm(
+    scope: Scope,
+    x,
+    use_running_average=False,
+    axis=-1,
+    momentum=0.99,
+    epsilon=1e-5,
+    dtype=jnp.float32,
+    bias=True,
+    scale=True,
+    bias_init=initializers.zeros_init(),
+    scale_init=initializers.ones_init(),
+    axis_name=None,
+    axis_index_groups=None,
+    kind='batch_stats',
+):
   x = jnp.asarray(x, jnp.float32)
   axis = axis if isinstance(axis, tuple) else (axis,)
   axis = _absolute_dims(x.ndim, axis)
@@ -61,18 +67,16 @@ def batch_norm(scope: Scope,
     var = jnp.reshape(ra_var.value, var.shape)
   else:
     if not is_init:
-      beta = 1. - momentum
+      beta = 1.0 - momentum
       ra_mean.value += beta * (jnp.squeeze(mean) - ra_mean.value)
       ra_var.value += beta * (jnp.squeeze(var) - ra_var.value)
   y = x - mean
   mul = lax.rsqrt(var + epsilon)
   if scale:
-    mul = mul * scope.param(
-        'scale', scale_init, squeeze_shape).reshape(mean.shape)
+    mul = mul * scope.param('scale', scale_init, squeeze_shape).reshape(mean.shape)
   y = y * mul
   if bias:
-    y = y + scope.param(
-        'bias', bias_init, squeeze_shape).reshape(mean.shape)
+    y = y + scope.param('bias', bias_init, squeeze_shape).reshape(mean.shape)
   return jnp.asarray(y, dtype)
 
 
@@ -84,7 +88,8 @@ def layer_norm(
     bias=True,
     scale=True,
     bias_init=initializers.zeros_init(),
-    scale_init=initializers.ones_init()):
+    scale_init=initializers.ones_init(),
+):
   """Applies layer normalization on the input.
   It normalizes the activations of the layer for each given example in a
   batch independently, rather than across a batch like Batch Normalization.
@@ -109,24 +114,25 @@ def layer_norm(
   var = mean2 - lax.square(mean)
   mul = lax.rsqrt(var + epsilon)
   if scale:
-    mul = mul * jnp.asarray(scope.param('scale', scale_init, (features,)),
-                            dtype)
+    mul = mul * jnp.asarray(scope.param('scale', scale_init, (features,)), dtype)
   y = (x - mean) * mul
   if bias:
     y = y + jnp.asarray(scope.param('bias', bias_init, (features,)), dtype)
   return y
 
 
-def group_norm(scope,
-               x,
-               num_groups=32,
-               group_size=None,
-               epsilon=1e-6,
-               dtype=jnp.float32,
-               bias=True,
-               scale=True,
-               bias_init=initializers.zeros_init(),
-               scale_init=initializers.ones_init()):
+def group_norm(
+    scope,
+    x,
+    num_groups=32,
+    group_size=None,
+    epsilon=1e-6,
+    dtype=jnp.float32,
+    bias=True,
+    scale=True,
+    bias_init=initializers.zeros_init(),
+    scale_init=initializers.ones_init(),
+):
   """Applies group normalization to the input (arxiv.org/abs/1803.08494).
   This op is similar to batch normalization, but statistics are shared across
   equally-sized groups of channels and not shared across batch dimension.
@@ -153,16 +159,21 @@ def group_norm(scope,
     Normalized inputs (the same shape as inputs).
   """
   x = jnp.asarray(x, jnp.float32)
-  if ((num_groups is None and group_size is None) or
-      (num_groups is not None and group_size is not None)):
-    raise ValueError('Either `num_groups` or `group_size` should be '
-                     'specified, but not both of them.')
+  if (num_groups is None and group_size is None) or (
+      num_groups is not None and group_size is not None
+  ):
+    raise ValueError(
+        'Either `num_groups` or `group_size` should be '
+        'specified, but not both of them.'
+    )
 
   if group_size is not None:
     channels = x.shape[-1]
     if channels % group_size != 0:
-      raise ValueError('Number of channels ({}) is not multiple of the '
-                       'group size ({}).'.format(channels, group_size))
+      raise ValueError(
+          'Number of channels ({}) is not multiple of the '
+          'group size ({}).'.format(channels, group_size)
+      )
     num_groups = channels // group_size
 
   input_shape = x.shape
@@ -173,8 +184,7 @@ def group_norm(scope,
   reduction_axis = list(range(1, x.ndim - 2)) + [x.ndim - 1]
 
   mean = jnp.mean(x, axis=reduction_axis, keepdims=True)
-  mean_of_squares = jnp.mean(jnp.square(x), axis=reduction_axis,
-                             keepdims=True)
+  mean_of_squares = jnp.mean(jnp.square(x), axis=reduction_axis, keepdims=True)
   var = mean_of_squares - jnp.square(mean)
 
   x = (x - mean) * lax.rsqrt(var + epsilon)

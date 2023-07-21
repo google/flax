@@ -42,18 +42,22 @@ class TracebackTest(absltest.TestCase):
     traceback_util.hide_flax_in_tracebacks()
     exclusion_len_w_flax = len(jax_traceback_util._exclude_paths)
     self.assertLen(
-        traceback_util._flax_exclusions,
-        exclusion_len_w_flax - exclusion_len_wo_flax)
+        traceback_util._flax_exclusions, exclusion_len_w_flax - exclusion_len_wo_flax
+    )
 
   def test_simple_exclusion_tracebackhide(self):
     if not TRACEBACKHIDE_SUPPORTED:
       return
+
     class Test1(nn.Module):
+
       @nn.remat
       @nn.compact
       def __call__(self, x):
         return Test2()(x)
+
     class Test2(nn.Module):
+
       @nn.jit
       @nn.compact
       def __call__(self, x):
@@ -81,14 +85,16 @@ class TracebackTest(absltest.TestCase):
     self.assertEqual(filtered_frames, 3)
     self.assertGreater(unfiltered_frames, filtered_frames)
 
-
   def test_simple_exclusion_remove_frames(self):
     class Test1(nn.Module):
+
       @nn.remat
       @nn.compact
       def __call__(self, x):
         return Test2()(x)
+
     class Test2(nn.Module):
+
       @nn.jit
       @nn.compact
       def __call__(self, x):
@@ -119,18 +125,19 @@ class TracebackTest(absltest.TestCase):
     self.assertEqual(filtered_frames, 3)
     self.assertGreater(unfiltered_frames, filtered_frames)
 
-
   def test_dynamic_exclusion(self):
-
     if not TRACEBACKHIDE_SUPPORTED:
       return
 
     class Test1(nn.Module):
+
       @nn.remat
       @nn.compact
       def __call__(self, x):
         return Test2()(x)
+
     class Test2(nn.Module):
+
       @nn.jit
       @nn.compact
       def __call__(self, x):
@@ -185,10 +192,14 @@ class TracebackTest(absltest.TestCase):
       else:
         filtered_frames_w_flax += 1
 
-    self.assertEqual(unfiltered_frames_all + filtered_frames_all,
-                     unfiltered_frames_w_flax + filtered_frames_w_flax)
-    self.assertEqual(unfiltered_frames_all + filtered_frames_all,
-                     unfiltered_frames_no_flax + filtered_frames_no_flax)
+    self.assertEqual(
+        unfiltered_frames_all + filtered_frames_all,
+        unfiltered_frames_w_flax + filtered_frames_w_flax,
+    )
+    self.assertEqual(
+        unfiltered_frames_all + filtered_frames_all,
+        unfiltered_frames_no_flax + filtered_frames_no_flax,
+    )
     self.assertEqual(unfiltered_frames_no_flax, 3)
     self.assertGreater(unfiltered_frames_all, unfiltered_frames_w_flax)
     self.assertGreater(unfiltered_frames_w_flax, unfiltered_frames_no_flax)

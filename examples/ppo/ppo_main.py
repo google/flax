@@ -30,13 +30,15 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string(
     'workdir',
     default='/tmp/ppo_training',
-    help=('Directory to save checkpoints and logging info.'))
+    help=('Directory to save checkpoints and logging info.'),
+)
 
 config_flags.DEFINE_config_file(
     'config',
-    "configs/default.py",
+    'configs/default.py',
     'File path to the default configuration file.',
-    lock_config=True)
+    lock_config=True,
+)
 
 
 def main(argv):
@@ -48,6 +50,7 @@ def main(argv):
   print(f'Playing {game} with {num_actions} actions')
   model = models.ActorCritic(num_outputs=num_actions)
   ppo_lib.train(model, config, FLAGS.workdir)
+
 
 if __name__ == '__main__':
   app.run(main)

@@ -31,13 +31,16 @@ jax.config.parse_flags_with_absl()
 
 CONSOLE_TEST_KWARGS = dict(force_terminal=False, no_color=True, width=10_000)
 
+
 def _get_shapes(pytree):
-  return jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, 'shape') else x, pytree)
+  return jax.tree_util.tree_map(lambda x: x.shape if hasattr(x, "shape") else x, pytree)
+
 
 def _get_obj_repr_value(x):
   if isinstance(x, summary._ObjectRepresentation):
     return x.obj
   return x
+
 
 class ConvBlock(nn.Module):
   features: int
@@ -53,7 +56,7 @@ class ConvBlock(nn.Module):
     x = self.conv(x)
 
     if self.test_sow:
-      self.sow('intermediates', 'INTERM', x)
+      self.sow("intermediates", "INTERM", x)
 
     x = self.bn(x, use_running_average=not training)
     x = self.dropout(x, deterministic=not training)
@@ -64,12 +67,13 @@ class ConvBlock(nn.Module):
     x = self.conv(x)
 
     if self.test_sow:
-      self.sow('intermediates', 'INTERM', x)
+      self.sow("intermediates", "INTERM", x)
 
     x = self.bn(x, use_running_average=not training)
     x = self.dropout(x, deterministic=not training)
     x = nn.relu(x)
     return x
+
 
 class CNN(nn.Module):
   test_sow: bool
@@ -85,11 +89,11 @@ class CNN(nn.Module):
     x = x.mean(axis=(1, 2))
 
     if self.test_sow:
-      self.sow('intermediates', 'INTERM', x)
+      self.sow("intermediates", "INTERM", x)
 
     x = self.dense(x)
 
-    return x, dict(a=x, b=x+1.0)
+    return x, dict(a=x, b=x + 1.0)
 
   def __call__(self, x: Array, training: bool) -> Array:
     x = self.block1.block_method(x, training=training)
@@ -97,11 +101,12 @@ class CNN(nn.Module):
     x = x.mean(axis=(1, 2))
 
     if self.test_sow:
-      self.sow('intermediates', 'INTERM', x)
+      self.sow("intermediates", "INTERM", x)
 
     x = self.dense(x)
 
-    return x, dict(a=x, b=x+1.0)
+    return x, dict(a=x, b=x + 1.0)
+
 
 class SummaryTest(absltest.TestCase):
 
@@ -117,8 +122,10 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     table = summary._get_module_table(module, depth=None, show_repeated=True)(
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
-      x, training=True, mutable=True,
+        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        x,
+        training=True,
+        mutable=True,
     )
     # get values for inputs and outputs from their _ValueRepresentation
     for row in table:
@@ -145,30 +152,46 @@ class SummaryTest(absltest.TestCase):
 
     # check outputs shapes
     self.assertEqual(
-      (table[0].inputs[0].shape, table[0].inputs[1]),
-      (x.shape, dict(training=True)),
+        (table[0].inputs[0].shape, table[0].inputs[1]),
+        (x.shape, dict(training=True)),
     )
     self.assertEqual(
-      _get_shapes(table[0].outputs),
-      ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
+        _get_shapes(table[0].outputs),
+        ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
     )
 
-    self.assertEqual(_get_shapes(table[1].inputs), ((batch_size, 28, 28, 1), {'training': True}))
+    self.assertEqual(
+        _get_shapes(table[1].inputs), ((batch_size, 28, 28, 1), {"training": True})
+    )
     self.assertEqual(table[1].outputs.shape, (batch_size, 28, 28, 32))
     self.assertEqual(table[2].inputs.shape, (batch_size, 28, 28, 1))
     self.assertEqual(table[2].outputs.shape, (batch_size, 28, 28, 32))
-    self.assertEqual(_get_shapes(table[3].inputs), ((batch_size, 28, 28, 32), {'use_running_average': False}))
+    self.assertEqual(
+        _get_shapes(table[3].inputs),
+        ((batch_size, 28, 28, 32), {"use_running_average": False}),
+    )
     self.assertEqual(table[3].outputs.shape, (batch_size, 28, 28, 32))
-    self.assertEqual(_get_shapes(table[4].inputs), ((batch_size, 28, 28, 32), {'deterministic': False}))
+    self.assertEqual(
+        _get_shapes(table[4].inputs),
+        ((batch_size, 28, 28, 32), {"deterministic": False}),
+    )
     self.assertEqual(table[4].outputs.shape, (batch_size, 28, 28, 32))
 
-    self.assertEqual(_get_shapes(table[5].inputs), ((batch_size, 28, 28, 32), {'training': True}))
+    self.assertEqual(
+        _get_shapes(table[5].inputs), ((batch_size, 28, 28, 32), {"training": True})
+    )
     self.assertEqual(table[5].outputs.shape, (batch_size, 28, 28, 64))
     self.assertEqual(table[6].inputs.shape, (batch_size, 28, 28, 32))
     self.assertEqual(table[6].outputs.shape, (batch_size, 28, 28, 64))
-    self.assertEqual(_get_shapes(table[7].inputs), ((batch_size, 28, 28, 64), {'use_running_average': False}))
+    self.assertEqual(
+        _get_shapes(table[7].inputs),
+        ((batch_size, 28, 28, 64), {"use_running_average": False}),
+    )
     self.assertEqual(table[7].outputs.shape, (batch_size, 28, 28, 64))
-    self.assertEqual(_get_shapes(table[8].inputs), ((batch_size, 28, 28, 64), {'deterministic': False}))
+    self.assertEqual(
+        _get_shapes(table[8].inputs),
+        ((batch_size, 28, 28, 64), {"deterministic": False}),
+    )
     self.assertEqual(table[8].outputs.shape, (batch_size, 28, 28, 64))
 
     self.assertEqual(table[9].inputs.shape, (batch_size, 64))
@@ -177,8 +200,8 @@ class SummaryTest(absltest.TestCase):
     # check no summary is performed
     for row in table:
       self.assertEqual(
-        row.module_variables,
-        row.counted_variables,
+          row.module_variables,
+          row.counted_variables,
       )
 
   def test_module_summary_with_depth(self):
@@ -192,8 +215,10 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     table = summary._get_module_table(module, depth=1, show_repeated=True)(
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
-      x, training=True, mutable=True,
+        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        x,
+        training=True,
+        mutable=True,
     )
     # get values for inputs and outputs from their _ValueRepresentation
 
@@ -213,18 +238,22 @@ class SummaryTest(absltest.TestCase):
 
     # check outputs shapes
     self.assertEqual(
-      (table[0].inputs[0].shape, table[0].inputs[1]),
-      (x.shape, dict(training=True)),
+        (table[0].inputs[0].shape, table[0].inputs[1]),
+        (x.shape, dict(training=True)),
     )
     self.assertEqual(
-      _get_shapes(table[0].outputs),
-      ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
+        _get_shapes(table[0].outputs),
+        ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
     )
 
-    self.assertEqual(_get_shapes(table[1].inputs), ((batch_size, 28, 28, 1), {'training': True}))
+    self.assertEqual(
+        _get_shapes(table[1].inputs), ((batch_size, 28, 28, 1), {"training": True})
+    )
     self.assertEqual(table[1].outputs.shape, (batch_size, 28, 28, 32))
 
-    self.assertEqual(_get_shapes(table[2].inputs), ((batch_size, 28, 28, 32), {'training': True}))
+    self.assertEqual(
+        _get_shapes(table[2].inputs), ((batch_size, 28, 28, 32), {"training": True})
+    )
     self.assertEqual(table[2].outputs.shape, (batch_size, 28, 28, 64))
 
     self.assertEqual(table[3].inputs.shape, (batch_size, 64))
@@ -238,7 +267,6 @@ class SummaryTest(absltest.TestCase):
     self.assertEqual(table[0].module_variables, table[0].counted_variables)
     self.assertEqual(table[3].module_variables, table[3].counted_variables)
 
-
   def test_tabulate(self):
     """
     This test creates a string representation of a Module using `Module.tabulate`
@@ -250,7 +278,7 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-        {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
+        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
         x,
         training=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
@@ -285,37 +313,34 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("19,850", lines[-3])
     self.assertIn("79.4 KB", lines[-3])
 
-
   def test_tabulate_with_sow(self):
-
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
     module = CNN(test_sow=True)
 
     module_repr = module.tabulate(
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
-      x,
-      training=True,
-      console_kwargs=CONSOLE_TEST_KWARGS,
+        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        x,
+        training=True,
+        console_kwargs=CONSOLE_TEST_KWARGS,
     )
 
     self.assertIn("intermediates", module_repr)
     self.assertIn("INTERM", module_repr)
 
   def test_tabulate_with_method(self):
-
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
-      x,
-      training=True,
-      method=CNN.cnn_method,
-      console_kwargs=CONSOLE_TEST_KWARGS,
+        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        x,
+        training=True,
+        method=CNN.cnn_method,
+        console_kwargs=CONSOLE_TEST_KWARGS,
     )
 
     self.assertIn("(block_method)", module_repr)
@@ -332,12 +357,12 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = nn.tabulate(
-      module,
-      {"dropout":random.PRNGKey(0), "params": random.PRNGKey(1)},
-      console_kwargs=CONSOLE_TEST_KWARGS,
+        module,
+        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        console_kwargs=CONSOLE_TEST_KWARGS,
     )(
-      x,
-      training=True,
+        x,
+        training=True,
     )
 
     lines = module_repr.split("\n")
@@ -366,33 +391,32 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("19,850", lines[-3])
     self.assertIn("79.4 KB", lines[-3])
 
-
   def test_lifted_transform(self):
     class LSTM(nn.Module):
       features: int
 
       @nn.compact
       def __call__(self, x):
-          carry = nn.LSTMCell(self.features).initialize_carry(
-              random.PRNGKey(0), x[:, 0].shape
-          )
-          ScanLSTM = nn.scan(
-              nn.LSTMCell,
-              variable_broadcast="params",
-              split_rngs={"params": False},
-              in_axes=1,
-              out_axes=1,
-          )
-          return ScanLSTM(self.features, name="ScanLSTM")(carry, x)
-
+        carry = nn.LSTMCell(self.features).initialize_carry(
+            random.PRNGKey(0), x[:, 0].shape
+        )
+        ScanLSTM = nn.scan(
+            nn.LSTMCell,
+            variable_broadcast="params",
+            split_rngs={"params": False},
+            in_axes=1,
+            out_axes=1,
+        )
+        return ScanLSTM(self.features, name="ScanLSTM")(carry, x)
 
     lstm = LSTM(features=128)
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
-        random.PRNGKey(0),
-        x=jnp.ones((32, 128, 64)),
-        console_kwargs=CONSOLE_TEST_KWARGS)
+          random.PRNGKey(0),
+          x=jnp.ones((32, 128, 64)),
+          console_kwargs=CONSOLE_TEST_KWARGS,
+      )
 
     lines = module_repr.splitlines()
 
@@ -408,26 +432,26 @@ class SummaryTest(absltest.TestCase):
 
       @nn.compact
       def __call__(self, x):
-          carry = nn.LSTMCell(self.features).initialize_carry(
-              random.PRNGKey(0), x[:, 0].shape
-          )
-          ScanLSTM = nn.scan(
-              nn.LSTMCell,
-              variable_broadcast="params",
-              split_rngs={"params": False},
-              in_axes=1,
-              out_axes=1,
-          )
-          return ScanLSTM(self.features)(carry, x)
-
+        carry = nn.LSTMCell(self.features).initialize_carry(
+            random.PRNGKey(0), x[:, 0].shape
+        )
+        ScanLSTM = nn.scan(
+            nn.LSTMCell,
+            variable_broadcast="params",
+            split_rngs={"params": False},
+            in_axes=1,
+            out_axes=1,
+        )
+        return ScanLSTM(self.features)(carry, x)
 
     lstm = LSTM(features=128)
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
-        random.PRNGKey(0),
-        x=jnp.ones((32, 128, 64)),
-        console_kwargs=CONSOLE_TEST_KWARGS)
+          random.PRNGKey(0),
+          x=jnp.ones((32, 128, 64)),
+          console_kwargs=CONSOLE_TEST_KWARGS,
+      )
 
     lines = module_repr.splitlines()
 
@@ -439,6 +463,7 @@ class SummaryTest(absltest.TestCase):
 
   def test_module_reuse(self):
     class ConvBlock(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         x = nn.Conv(32, [3, 3])(x)
@@ -448,6 +473,7 @@ class SummaryTest(absltest.TestCase):
         return x
 
     class CNN(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         block = ConvBlock()
@@ -458,10 +484,11 @@ class SummaryTest(absltest.TestCase):
 
     x = jnp.ones((4, 28, 28, 32))
     module_repr = CNN().tabulate(
-      jax.random.PRNGKey(0),
-      x=x,
-      show_repeated=True,
-      console_kwargs=CONSOLE_TEST_KWARGS)
+        jax.random.PRNGKey(0),
+        x=x,
+        show_repeated=True,
+        console_kwargs=CONSOLE_TEST_KWARGS,
+    )
     lines = module_repr.splitlines()
 
     # first call
@@ -490,6 +517,7 @@ class SummaryTest(absltest.TestCase):
 
   def test_empty_input(self):
     class EmptyInput(nn.Module):
+
       @nn.compact
       def __call__(self):
         return 1
@@ -498,14 +526,16 @@ class SummaryTest(absltest.TestCase):
     module_repr = module.tabulate({}, console_kwargs=CONSOLE_TEST_KWARGS)
     lines = module_repr.splitlines()
 
-    self.assertRegex(lines[5], r'|\s*|\s*EmptyInput\s*|\s*|\s*1\s*|')
+    self.assertRegex(lines[5], r"|\s*|\s*EmptyInput\s*|\s*|\s*1\s*|")
 
   def test_numpy_scalar(self):
     class Submodule(nn.Module):
+
       def __call__(self, x):
         return x + 1
 
     class EmptyInput(nn.Module):
+
       @nn.compact
       def __call__(self):
         return Submodule()(x=np.pi)
@@ -514,56 +544,57 @@ class SummaryTest(absltest.TestCase):
     module_repr = module.tabulate({}, console_kwargs=CONSOLE_TEST_KWARGS)
     lines = module_repr.splitlines()
 
-    self.assertIn('4.141592', lines[5])
-    self.assertIn('x: 3.141592', lines[7])
-    self.assertIn('4.141592', lines[7])
+    self.assertIn("4.141592", lines[5])
+    self.assertIn("x: 3.141592", lines[7])
+    self.assertIn("4.141592", lines[7])
 
   def test_partitioned_params(self):
-
     class Classifier(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         hidden = nn.Dense(
-          features=1024,
-          kernel_init=nn.with_partitioning(
-            nn.initializers.lecun_normal(), (None, 'data')
-          ),
-          bias_init=nn.with_partitioning(
-            nn.initializers.zeros, (None,)
-          ),
-          name='hidden',
+            features=1024,
+            kernel_init=nn.with_partitioning(
+                nn.initializers.lecun_normal(), (None, "data")
+            ),
+            bias_init=nn.with_partitioning(nn.initializers.zeros, (None,)),
+            name="hidden",
         )
         x = x / 255.0
         x = x.reshape((x.shape[0], -1))  # flatten
         x = nn.relu(hidden(x))
-        x = nn.Dense(features=10, name='head')(x)
+        x = nn.Dense(features=10, name="head")(x)
         return x
 
     module = Classifier()
-    lines = module.tabulate(jax.random.PRNGKey(0), jnp.empty((1, 28, 28, 1)),
-                            console_kwargs=CONSOLE_TEST_KWARGS).splitlines()
-    self.assertIn('P(None,)', lines[7])
-    self.assertIn('P(None, data)', lines[8])
+    lines = module.tabulate(
+        jax.random.PRNGKey(0),
+        jnp.empty((1, 28, 28, 1)),
+        console_kwargs=CONSOLE_TEST_KWARGS,
+    ).splitlines()
+    self.assertIn("P(None,)", lines[7])
+    self.assertIn("P(None, data)", lines[8])
 
   def test_non_array_variables(self):
-
     class Metadata(struct.PyTreeNode):
       names: tuple = struct.field(pytree_node=False)
 
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self):
-        self.sow('foo', 'bar', Metadata(('baz', 'qux')))
+        self.sow("foo", "bar", Metadata(("baz", "qux")))
 
     module = Foo()
-    lines = module.tabulate({},
-                            console_kwargs=CONSOLE_TEST_KWARGS).splitlines()
-    self.assertIn('names', lines[6])
-    self.assertIn('baz', lines[7])
-    self.assertIn('qux', lines[8])
+    lines = module.tabulate({}, console_kwargs=CONSOLE_TEST_KWARGS).splitlines()
+    self.assertIn("names", lines[6])
+    self.assertIn("baz", lines[7])
+    self.assertIn("qux", lines[8])
 
   def test_tabulate_param_count(self):
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         h = nn.Dense(4)(x)
@@ -572,8 +603,8 @@ class SummaryTest(absltest.TestCase):
     x = jnp.ones((16, 9))
     rep = Foo().tabulate(jax.random.PRNGKey(0), x, console_kwargs=CONSOLE_TEST_KWARGS)
     lines = rep.splitlines()
-    self.assertIn('Total Parameters: 50', lines[-2])
+    self.assertIn("Total Parameters: 50", lines[-2])
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   absltest.main()

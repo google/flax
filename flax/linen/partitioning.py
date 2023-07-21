@@ -77,6 +77,7 @@ import jax
 @struct.dataclass
 class AxisMetadata:
   """Contains a tuple of axis names, which is passed through FLAX."""
+
   names: LogicalPartitionSpecPytree = struct.field(pytree_node=False)
 
 
@@ -102,8 +103,9 @@ def _param_with_axes_sow_reduce_fn(x, y):
 
   if isinstance(x, AxisMetadata):
     if x != y:
-      raise ValueError('If axis names are sown twice, expected them to match. '
-                       f'Got {x} and {y}.')
+      raise ValueError(
+          'If axis names are sown twice, expected them to match. ' f'Got {x} and {y}.'
+      )
   elif x:
     # Shouldn't happen, so raise a fairly internal error.
     raise AssertionError(f'Non-initial-or-AxisMetadata value encountered: {x}')
@@ -115,7 +117,8 @@ def param_with_axes(
     init_fn,
     *init_args,
     axes: Optional[Tuple[str, ...]] = None,
-    module: Optional['nn.Module'] = None):
+    module: Optional['nn.Module'] = None,
+):
   """Declares and returns a parameter with logical axes in the current Module.
 
   See :mod:`flax.linen.module.param` for original docstring.
@@ -145,12 +148,16 @@ def param_with_axes(
   module_param = module.param(name, init_fn, *init_args)
   if axes is not None:
     # apply logical axis constraint immediately
-    module_param = with_sharding_constraint(module_param,
-                                            jax.sharding.PartitionSpec(*axes))
+    module_param = with_sharding_constraint(
+        module_param, jax.sharding.PartitionSpec(*axes)
+    )
     # record logical axis constraint for global axis metadata
     module.sow(
-        'params_axes', f'{name}_axes', AxisMetadata(axes),  # type: ignore
-        reduce_fn=_param_with_axes_sow_reduce_fn)
+        'params_axes',
+        f'{name}_axes',
+        AxisMetadata(axes),  # type: ignore
+        reduce_fn=_param_with_axes_sow_reduce_fn,
+    )
   return module_param
 
 
@@ -164,12 +171,14 @@ class PartitionedVariable(flax.core.scope.Variable):
   and assignment.
   """
 
-  def __init__(self,
-               scope,
-               collection: str,
-               name: str,
-               axes: Optional[Tuple[str, ...]] = None,
-               fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
+  def __init__(
+      self,
+      scope,
+      collection: str,
+      name: str,
+      axes: Optional[Tuple[str, ...]] = None,
+      fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
+  ):
     """Initializes a partitioned variable.
 
     Args:
@@ -208,7 +217,8 @@ def _core_variable_with_axes(
     init_fn: Callable[..., Any],
     *init_args,
     axes: Optional[Tuple[str, ...]] = None,
-    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
+):
   """Variant of flax core variable scope call with sharding constraints."""
   scope.reserve(name)
   if not scope.has_variable(col, name):
@@ -228,7 +238,8 @@ def variable_with_axes(
     *init_args,
     axes: Optional[Tuple[str, ...]] = None,
     module: Optional['nn.Module'] = None,
-    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED):
+    fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
+):
   """Declares and returns a variable with logical axes in the current Module.
 
   See :mod:`flax.linen.module.variable` for original docstring.
@@ -258,18 +269,16 @@ def variable_with_axes(
     module = nn.module._context.module_stack[-1]  # pylint: disable=protected-access
     assert module is not None
   module_var = _core_variable_with_axes(
-      module.scope,
-      collection,
-      name,
-      init_fn,
-      *init_args,
-      axes=axes,
-      fallback=fallback)
+      module.scope, collection, name, init_fn, *init_args, axes=axes, fallback=fallback
+  )
   if axes is not None:
     # record logical axis constraint for global axis metadata
     module.sow(
-        f'{collection}_axes', f'{name}_axes', AxisMetadata(axes),  # type: ignore
-        reduce_fn=_param_with_axes_sow_reduce_fn)
+        f'{collection}_axes',
+        f'{name}_axes',
+        AxisMetadata(axes),  # type: ignore
+        reduce_fn=_param_with_axes_sow_reduce_fn,
+    )
   return module_var
 
 
@@ -285,17 +294,19 @@ def get_axis_names(axes_metadata):
     suffix on variable names removed to match original variable collection for
     annotations.
   """
+
   def leaf_rewrite(x):
     return None if x is None else jax.sharding.PartitionSpec(*x)
+
   def rewrite(tree):
     return jax.tree_util.tree_map(leaf_rewrite, tree, is_leaf=_is_logical_spec)
+
   axes_metadata = unfreeze(axes_metadata)  # pytype: disable=wrong-arg-types
   flat_dict = {
       re.sub(r'_axes$', '', '/'.join(k)): rewrite(v.names)
       for k, v in flatten_dict(axes_metadata).items()
   }
-  return freeze(unflatten_dict(
-      {tuple(k.split('/')): v for k, v in flat_dict.items()}))
+  return freeze(unflatten_dict({tuple(k.split('/')): v for k, v in flat_dict.items()}))
 
 
 # Metadata Aware Scan
@@ -306,7 +317,8 @@ def _tree_map_axes(fn, tree):
   """Only map over AxisMetadata leaves in pytree - identity for other leaves."""
   safe_fn = lambda x: fn(x) if isinstance(x, AxisMetadata) else x
   return jax.tree_util.tree_map(
-      safe_fn, tree, is_leaf=lambda x: isinstance(x, AxisMetadata))
+      safe_fn, tree, is_leaf=lambda x: isinstance(x, AxisMetadata)
+  )
 
 
 def _is_mutable(axis_col: str) -> bool:
@@ -346,8 +358,9 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
     return tuple(names)
 
   def insert_fn(x):
-    new_names = jax.tree_util.tree_map(insert_fn_leaf, x.names,
-                                       is_leaf=_is_logical_spec)
+    new_names = jax.tree_util.tree_map(
+        insert_fn_leaf, x.names, is_leaf=_is_logical_spec
+    )
     return x.replace(names=new_names)
 
   def remove_fn_leaf(names):
@@ -355,14 +368,17 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
       return names
     names = list(names)
     if names[axis_pos] != axis_name:
-      raise ValueError(f'Expected axis {axis_name} at position {axis_pos} in '
-                       f'axis metadata {names}.')
+      raise ValueError(
+          f'Expected axis {axis_name} at position {axis_pos} in '
+          f'axis metadata {names}.'
+      )
     names.pop(axis_pos)
     return tuple(names)
 
   def remove_fn(x):
-    new_names = jax.tree_util.tree_map(remove_fn_leaf, x.names,
-                                       is_leaf=_is_logical_spec)
+    new_names = jax.tree_util.tree_map(
+        remove_fn_leaf, x.names, is_leaf=_is_logical_spec
+    )
     return x.replace(names=new_names)
 
   return nn.transforms.map_variables(
@@ -370,15 +386,16 @@ def _add_axis_to_metadata(fn, axis_pos, axis_name, axis_col='params_axes'):
       axis_col,
       mutable=_is_mutable(axis_col),
       trans_in_fn=lambda tree: _tree_map_axes(remove_fn, tree),
-      trans_out_fn=lambda tree: _tree_map_axes(insert_fn, tree)
-      )
+      trans_out_fn=lambda tree: _tree_map_axes(insert_fn, tree),
+  )
 
 
 # pylint: disable=dangerous-default-value
 def scan_with_axes(
     target: 'flax.linen.transforms.Target',
-    variable_axes: Mapping[flax.core.lift.CollectionFilter,
-                           flax.core.lift.InOutScanAxis] = {},
+    variable_axes: Mapping[
+        flax.core.lift.CollectionFilter, flax.core.lift.InOutScanAxis
+    ] = {},
     variable_broadcast: flax.core.lift.CollectionFilter = False,
     variable_carry: flax.core.lift.CollectionFilter = False,
     split_rngs: Mapping[flax.core.lift.PRNGSequenceFilter, bool] = {},
@@ -390,13 +407,13 @@ def scan_with_axes(
     axis_name: str = 'layers',
     axes_collections: Tuple[str, ...] = ('params',),
     data_transform: Optional[Callable[..., Any]] = None,
-    methods=None) -> 'flax.linen.transforms.Target':
+    methods=None,
+) -> 'flax.linen.transforms.Target':
   """Wrapped version of nn.scan that handles logical axis metadata."""
 
   # we broadcast the static metadata collections.
   axes_filters = tuple(f'{col}_axes' for col in axes_collections)
-  variable_broadcast = flax.core.scope.union_filters(
-      variable_broadcast, axes_filters)
+  variable_broadcast = flax.core.scope.union_filters(variable_broadcast, axes_filters)
 
   # perform usual lifted scan
   scanned = flax.linen.transforms.lift_transform(
@@ -412,31 +429,34 @@ def scan_with_axes(
       reverse=reverse,
       unroll=unroll,
       data_transform=data_transform,
-      methods=methods)
+      methods=methods,
+  )
 
   # add scan axis to logical axes metadata
   for col in axes_collections:
     if col in variable_axes:
-      scanned = _add_axis_to_metadata(scanned,
-                                      axis_pos=variable_axes[col],
-                                      axis_name=axis_name,
-                                      axis_col=f'{col}_axes')
+      scanned = _add_axis_to_metadata(
+          scanned,
+          axis_pos=variable_axes[col],
+          axis_name=axis_name,
+          axis_col=f'{col}_axes',
+      )
   return scanned
 
 
 # pylint: disable=dangerous-default-value
-def vmap_with_axes(target: 'flax.linen.transforms.Target',
-                   variable_axes: Mapping[flax.core.lift.CollectionFilter,
-                                          flax.core.lift.InOutAxis],
-                   split_rngs: Mapping[flax.core.lift.PRNGSequenceFilter,
-                                       bool] = {},
-                   in_axes=0,
-                   out_axes=0,
-                   axis_size: Optional[int] = None,
-                   axis_name: Optional[str] = None,
-                   partitioning_axis_names: Mapping[Any, str] = {},
-                   spmd_axis_name: Optional[str] = None,
-                   methods=None) -> 'flax.linen.transforms.Target':
+def vmap_with_axes(
+    target: 'flax.linen.transforms.Target',
+    variable_axes: Mapping[flax.core.lift.CollectionFilter, flax.core.lift.InOutAxis],
+    split_rngs: Mapping[flax.core.lift.PRNGSequenceFilter, bool] = {},
+    in_axes=0,
+    out_axes=0,
+    axis_size: Optional[int] = None,
+    axis_name: Optional[str] = None,
+    partitioning_axis_names: Mapping[Any, str] = {},
+    spmd_axis_name: Optional[str] = None,
+    methods=None,
+) -> 'flax.linen.transforms.Target':
   """Wrapped version of nn.vmap that handles logical axis metadata."""
 
   # tell normal vmap to broadcast axis metadata.
@@ -455,7 +475,8 @@ def vmap_with_axes(target: 'flax.linen.transforms.Target',
       axis_size=axis_size,
       axis_name=axis_name,
       spmd_axis_name=spmd_axis_name,
-      methods=methods)
+      methods=methods,
+  )
 
   for collection_name, axis in variable_axes.items():
     if collection_name in partitioning_axis_names:
@@ -463,7 +484,8 @@ def vmap_with_axes(target: 'flax.linen.transforms.Target',
           vmapped,
           axis_pos=axis,
           axis_name=partitioning_axis_names[collection_name],
-          axis_col=f'{collection_name}_axes')
+          axis_col=f'{collection_name}_axes',
+      )
 
   return vmapped
 
@@ -475,13 +497,15 @@ def vmap_with_axes(target: 'flax.linen.transforms.Target',
 # static_argnums behavior for flax remat via closure before applying jax remat.
 
 
-def core_remat_static(fn,
-                      variables=True,
-                      rngs=True,
-                      concrete=False,
-                      prevent_cse=True,
-                      static_argnums=(),
-                      policy=None):
+def core_remat_static(
+    fn,
+    variables=True,
+    rngs=True,
+    concrete=False,
+    prevent_cse=True,
+    static_argnums=(),
+    policy=None,
+):
   """Flax functional core remat version with static_argnums."""
 
   static_argnums = tuple(sorted(static_argnums))
@@ -504,7 +528,8 @@ def core_remat_static(fn,
     dyn_args = tuple(x for i, x in enumerate(args) if i not in static_argnums)
 
     @functools.partial(
-        jax.remat, concrete=concrete, prevent_cse=prevent_cse, policy=policy)
+        jax.remat, concrete=concrete, prevent_cse=prevent_cse, policy=policy
+    )
     @functools.wraps(fn)
     def rematted(variable_groups, rng_groups, *dyn_args):
       args = _repack_remat_args(dyn_args, static_args)
@@ -514,18 +539,19 @@ def core_remat_static(fn,
 
     return rematted(variable_groups, rng_groups, *dyn_args)
 
-  return flax.core.lift.pack(
-      inner, (variables,), (variables,), (rngs,), name='remat')
+  return flax.core.lift.pack(inner, (variables,), (variables,), (rngs,), name='remat')
 
 
-def remat(target,
-          variables=True,
-          rngs=True,
-          concrete=False,
-          prevent_cse=True,
-          static_argnums=(),
-          policy=None,
-          methods=None):
+def remat(
+    target,
+    variables=True,
+    rngs=True,
+    concrete=False,
+    prevent_cse=True,
+    static_argnums=(),
+    policy=None,
+    methods=None,
+):
   """Flax lifted remat that supports static_argnums."""
   return flax.linen.transforms.lift_transform(
       core_remat_static,
@@ -536,4 +562,5 @@ def remat(target,
       prevent_cse=prevent_cse,
       static_argnums=static_argnums,
       policy=policy,
-      methods=methods)
+      methods=methods,
+  )

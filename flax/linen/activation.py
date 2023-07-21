@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Activation functions.
-"""
+"""Activation functions."""
 
 # pylint: disable=unused-import
 # re-export activation functions from jax.nn
@@ -70,6 +69,7 @@ class PReLU(Module):
     negative_slope_init: the value to initialize the negative slope
       (default 0.01).
   """
+
   param_dtype: Dtype = jnp.float32
   negative_slope_init: float = 0.01
 
@@ -85,6 +85,8 @@ class PReLU(Module):
     """
     negative_slope = self.param(
         'negative_slope',
-        lambda k: jnp.asarray(self.negative_slope_init, self.param_dtype))
-    return jnp.where(inputs >= 0, inputs,
-                     jnp.asarray(negative_slope, inputs.dtype) * inputs)
+        lambda k: jnp.asarray(self.negative_slope_init, self.param_dtype),
+    )
+    return jnp.where(
+        inputs >= 0, inputs, jnp.asarray(negative_slope, inputs.dtype) * inputs
+    )

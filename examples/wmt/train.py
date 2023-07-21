@@ -68,25 +68,25 @@ def rsqrt_schedule(
   """
 
   def schedule(count):
-    return init_value * (count + shift)**-.5 * shift**.5
+    return init_value * (count + shift) ** -0.5 * shift**0.5
 
   return schedule
 
 
 def create_learning_rate_schedule(learning_rate: float, warmup_steps: int):
   """Creates a rsqrt schedule with linear warmup."""
-  return optax.join_schedules([
-      optax.linear_schedule(
-          init_value=0, end_value=learning_rate, transition_steps=warmup_steps),
-      rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
-  ],
-                              boundaries=[warmup_steps])
+  return optax.join_schedules(
+      [
+          optax.linear_schedule(
+              init_value=0, end_value=learning_rate, transition_steps=warmup_steps
+          ),
+          rsqrt_schedule(init_value=learning_rate, shift=warmup_steps),
+      ],
+      boundaries=[warmup_steps],
+  )
 
 
-def compute_weighted_cross_entropy(logits,
-                                   targets,
-                                   weights=None,
-                                   label_smoothing=0.0):
+def compute_weighted_cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
   """Compute weighted cross entropy and entropy for log probs and targets.
 
   Args:
@@ -100,16 +100,20 @@ def compute_weighted_cross_entropy(logits,
     Tuple of scalar loss and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
-    raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
-                     (str(logits.shape), str(targets.shape)))
+    raise ValueError(
+        "Incorrect shapes. Got shape %s logits and %s targets"
+        % (str(logits.shape), str(targets.shape))
+    )
   vocab_size = logits.shape[-1]
   confidence = 1.0 - label_smoothing
   low_confidence = (1.0 - confidence) / (vocab_size - 1)
   normalizing_constant = -(
-      confidence * jnp.log(confidence) +
-      (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20))
+      confidence * jnp.log(confidence)
+      + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+  )
   soft_targets = common_utils.onehot(
-      targets, vocab_size, on_value=confidence, off_value=low_confidence)
+      targets, vocab_size, on_value=confidence, off_value=low_confidence
+  )
 
   loss = -jnp.sum(soft_targets * nn.log_softmax(logits), axis=-1)
   loss = loss - normalizing_constant
@@ -134,8 +138,10 @@ def compute_weighted_accuracy(logits, targets, weights=None):
     Tuple of scalar loss and batch normalizing factor.
   """
   if logits.ndim != targets.ndim + 1:
-    raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
-                     (str(logits.shape), str(targets.shape)))
+    raise ValueError(
+        "Incorrect shapes. Got shape %s logits and %s targets"
+        % (str(logits.shape), str(targets.shape))
+    )
   loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
   normalizing_factor = np.prod(logits.shape[:-1])
   if weights is not None:
@@ -147,8 +153,9 @@ def compute_weighted_accuracy(logits, targets, weights=None):
 
 def compute_metrics(logits, labels, weights, label_smoothing=0.0):
   """Compute summary metrics."""
-  loss, weight_sum = compute_weighted_cross_entropy(logits, labels, weights,
-                                                    label_smoothing)
+  loss, weight_sum = compute_weighted_cross_entropy(
+      logits, labels, weights, label_smoothing
+  )
   acc, _ = compute_weighted_accuracy(logits, labels, weights)
   metrics = {
       "loss": loss,
@@ -163,12 +170,9 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
 # -----------------------------------------------------------------------------
 
 
-def train_step(state,
-               batch,
-               config,
-               learning_rate_fn,
-               label_smoothing=0.0,
-               dropout_rng=None):
+def train_step(
+    state, batch, config, learning_rate_fn, label_smoothing=0.0, dropout_rng=None
+):
   """Perform a single training step."""
   # X_position and X_segmentation are needed only when using "packed examples"
   # where multiple sequences are packed into the same example with this
@@ -176,11 +180,21 @@ def train_step(state,
   # if such features are not present they are ignored and the example is treated
   # like a normal, unpacked sequence example.
   train_keys = [
-      "inputs", "targets", "inputs_position", "targets_position",
-      "inputs_segmentation", "targets_segmentation"
+      "inputs",
+      "targets",
+      "inputs_position",
+      "targets_position",
+      "inputs_segmentation",
+      "targets_segmentation",
   ]
-  (inputs, targets, inputs_positions, targets_positions, inputs_segmentation,
-   targets_segmentation) = (batch.get(k, None) for k in train_keys)
+  (
+      inputs,
+      targets,
+      inputs_positions,
+      targets_positions,
+      inputs_segmentation,
+      targets_segmentation,
+  ) = (batch.get(k, None) for k in train_keys)
 
   weights = jnp.where(targets > 0, 1, 0).astype(jnp.float32)
 
@@ -196,18 +210,22 @@ def train_step(state,
         targets_positions=targets_positions,
         inputs_segmentation=inputs_segmentation,
         targets_segmentation=targets_segmentation,
-        rngs={"dropout": dropout_rng})
+        rngs={"dropout": dropout_rng},
+    )
 
-    loss, weight_sum = compute_weighted_cross_entropy(logits, targets, weights,
-                                                      label_smoothing)
+    loss, weight_sum = compute_weighted_cross_entropy(
+        logits, targets, weights, label_smoothing
+    )
     mean_loss = loss / weight_sum
     return mean_loss, logits
+
   step = state.step
 
   if state.dynamic_scale:
     # dynamic scale takes care of averaging gradients across replicas
     grad_fn = state.dynamic_scale.value_and_grad(
-        loss_fn, has_aux=True, axis_name="batch")
+        loss_fn, has_aux=True, axis_name="batch"
+    )
     dynamic_scale, is_fin, (_, logits), grads = grad_fn(state.params)
     state = state.replace(dynamic_scale=dynamic_scale)
   else:
@@ -225,10 +243,10 @@ def train_step(state,
     select_fn = functools.partial(jnp.where, is_fin)
     new_state = new_state.replace(
         opt_state=jax.tree_util.tree_map(
-            select_fn, new_state.opt_state, state.opt_state),
-        params=jax.tree_util.tree_map(
-            select_fn, new_state.params, state.params)
-        )
+            select_fn, new_state.opt_state, state.opt_state
+        ),
+        params=jax.tree_util.tree_map(select_fn, new_state.params, state.params),
+    )
     metrics["loss_scale"] = dynamic_scale.scale * metrics["denominator"]
 
   return new_state, metrics
@@ -247,18 +265,14 @@ def initialize_cache(inputs, max_decode_len, config):
   """Initialize a cache for a given input shape and max decode length."""
   target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
   initial_variables = models.Transformer(config).init(
-      jax.random.PRNGKey(0), jnp.ones(inputs.shape, config.dtype),
-      jnp.ones(target_shape, config.dtype))
+      jax.random.PRNGKey(0),
+      jnp.ones(inputs.shape, config.dtype),
+      jnp.ones(target_shape, config.dtype),
+  )
   return initial_variables["cache"]
 
 
-def predict_step(inputs,
-                 params,
-                 cache,
-                 eos_id,
-                 max_decode_len,
-                 config,
-                 beam_size=4):
+def predict_step(inputs, params, cache, eos_id, max_decode_len, config, beam_size=4):
   """Predict translation with fast decoding beam search on a batch."""
   # Prepare transformer fast-decoder call for beam search: for beam search, we
   # need to set up our decoder model to handle a batch size equal to
@@ -267,25 +281,24 @@ def predict_step(inputs,
   # i.e. if we denote each batch element subtensor as el[n]:
   # [el0, el1, el2] --> beamsize=2 --> [el0,el0,el1,el1,el2,el2]
   encoded_inputs = decode.flat_batch_beam_expand(
-      models.Transformer(config).apply({"params": params},
-                                       inputs,
-                                       method=models.Transformer.encode),
-      beam_size)
+      models.Transformer(config).apply(
+          {"params": params}, inputs, method=models.Transformer.encode
+      ),
+      beam_size,
+  )
   raw_inputs = decode.flat_batch_beam_expand(inputs, beam_size)
 
   def tokens_ids_to_logits(flat_ids, flat_cache):
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
     flat_logits, new_vars = models.Transformer(config).apply(
-        {
-            "params": params,
-            "cache": flat_cache
-        },
+        {"params": params, "cache": flat_cache},
         encoded_inputs,
         raw_inputs,  # only needed for input padding mask
         flat_ids,
         mutable=["cache"],
-        method=models.Transformer.decode)
+        method=models.Transformer.decode,
+    )
     new_flat_cache = new_vars["cache"]
     # Remove singleton sequence-length dimension:
     # [batch * beam, 1, vocab] --> [batch * beam, vocab]
@@ -301,7 +314,8 @@ def predict_step(inputs,
       beam_size=beam_size,
       alpha=0.6,
       eos_id=eos_id,
-      max_decode_len=max_decode_len)
+      max_decode_len=max_decode_len,
+  )
 
   # Beam search returns [n_batch, n_beam, n_length + 1] with beam dimension
   # sorted in increasing order of log-probability.
@@ -342,8 +356,7 @@ def tohost(x):
   return np.array(x).reshape((n_device * n_batch,) + tuple(remaining_dims))
 
 
-def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset,
-             num_eval_steps: int):
+def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset, num_eval_steps: int):
   """Evaluate the params an return a dictionary with the metrics."""
   logging.info("Gathering evaluation metrics.")
   eval_metrics = []
@@ -358,13 +371,20 @@ def evaluate(*, p_eval_step, params, eval_ds: tf.data.Dataset,
   eval_denominator = eval_metrics_sums.pop("denominator")
   eval_summary = jax.tree_util.tree_map(
       lambda x: x / eval_denominator,  # pylint: disable=cell-var-from-loop
-      eval_metrics_sums)
+      eval_metrics_sums,
+  )
   return eval_summary
 
 
-def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, params,
-                                 predict_ds: tf.data.Dataset, decode_tokens,
-                                 max_predict_length: int):
+def translate_and_calculate_bleu(
+    *,
+    p_pred_step,
+    p_init_cache,
+    params,
+    predict_ds: tf.data.Dataset,
+    decode_tokens,
+    max_predict_length: int,
+):
   """Translates the `predict_ds` and calculates the BLEU score."""
   n_devices = jax.local_device_count()
   logging.info("Translating evaluation dataset.")
@@ -377,11 +397,13 @@ def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, params,
       padded_size = int(np.ceil(cur_pred_batch_size / n_devices) * n_devices)
       pred_batch = jax.tree_util.tree_map(
           lambda x: pad_examples(x, padded_size),  # pylint: disable=cell-var-from-loop
-          pred_batch)
+          pred_batch,
+      )
     pred_batch = common_utils.shard(pred_batch)
     cache = p_init_cache(pred_batch["inputs"])
-    predicted = p_pred_step(pred_batch["inputs"], params, cache, decode.EOS_ID,
-                            max_predict_length)
+    predicted = p_pred_step(
+        pred_batch["inputs"], params, cache, decode.EOS_ID, max_predict_length
+    )
     predicted = tohost(predicted)
     inputs = tohost(pred_batch["inputs"])
     targets = tohost(pred_batch["targets"])
@@ -390,8 +412,12 @@ def translate_and_calculate_bleu(*, p_pred_step, p_init_cache, params,
       sources.append(decode_tokens(inputs[i]))
       references.append(decode_tokens(targets[i]))
       predictions.append(decode_tokens(s))
-  logging.info("Translation: %d predictions %d references %d sources.",
-               len(predictions), len(references), len(sources))
+  logging.info(
+      "Translation: %d predictions %d references %d sources.",
+      len(predictions),
+      len(references),
+      len(sources),
+  )
 
   # Calculate BLEU score for translated eval corpus against reference.
   bleu_matches = bleu.bleu_partial(references, predictions)
@@ -437,14 +463,15 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       n_devices=jax.local_device_count(),
       config=config,
       reverse_translation=config.reverse_translation,
-      vocab_path=vocab_path)
+      vocab_path=vocab_path,
+  )
 
   train_iter = iter(train_ds)
   vocab_size = int(encoder.vocab_size())
   eos_id = decode.EOS_ID  # Default Sentencepiece EOS token.
 
   def decode_tokens(toks):
-    valid_toks = toks[:np.argmax(toks == eos_id) + 1].astype(np.int32)
+    valid_toks = toks[: np.argmax(toks == eos_id) + 1].astype(np.int32)
     return encoder.detokenize(valid_toks).numpy().decode("utf-8")
 
   if config.num_predict_steps > 0:
@@ -473,7 +500,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       deterministic=False,
       decode=False,
       kernel_init=nn.initializers.xavier_uniform(),
-      bias_init=nn.initializers.normal(stddev=1e-6))
+      bias_init=nn.initializers.normal(stddev=1e-6),
+  )
   eval_config = train_config.replace(deterministic=True)
   predict_config = train_config.replace(deterministic=True, decode=True)
 
@@ -484,13 +512,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   target_shape = (config.per_device_batch_size, config.max_target_length)
 
   m = models.Transformer(eval_config)
-  initial_variables = jax.jit(m.init)(init_rng,
-                                      jnp.ones(input_shape, jnp.float32),
-                                      jnp.ones(target_shape, jnp.float32))
+  initial_variables = jax.jit(m.init)(
+      init_rng, jnp.ones(input_shape, jnp.float32), jnp.ones(target_shape, jnp.float32)
+  )
 
   # Create train state with Adam optimizer and weight decay.
   learning_rate_fn = create_learning_rate_schedule(
-      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps)
+      learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
+  )
   dynamic_scale = None
   if dtype == jnp.float16:
     dynamic_scale = dynamic_scale_lib.DynamicScale()
@@ -517,7 +546,8 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
     start_step = int(state.step)
 
   writer = metric_writers.create_default_writer(
-      workdir, just_logging=jax.process_index() > 0)
+      workdir, just_logging=jax.process_index() > 0
+  )
   if start_step == 0:
     writer.write_hparams(dict(config))
 
@@ -530,24 +560,29 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           train_step,
           config=train_config,
           learning_rate_fn=learning_rate_fn,
-          label_smoothing=config.label_smoothing),
+          label_smoothing=config.label_smoothing,
+      ),
       axis_name="batch",
-      donate_argnums=(0,))  # pytype: disable=wrong-arg-types
+      donate_argnums=(0,),
+  )  # pytype: disable=wrong-arg-types
   p_eval_step = jax.pmap(
-      functools.partial(
-          eval_step, config=eval_config),
-      axis_name="batch")
+      functools.partial(eval_step, config=eval_config), axis_name="batch"
+  )
   p_init_cache = jax.pmap(
       functools.partial(
           initialize_cache,
           max_decode_len=config.max_predict_length,
-          config=predict_config),
-      axis_name="batch")
+          config=predict_config,
+      ),
+      axis_name="batch",
+  )
   p_pred_step = jax.pmap(
       functools.partial(
-          predict_step, config=predict_config, beam_size=config.beam_size),
+          predict_step, config=predict_config, beam_size=config.beam_size
+      ),
       axis_name="batch",
-      static_broadcasted_argnums=(3, 4))  # eos token, max_length are constant
+      static_broadcasted_argnums=(3, 4),
+  )  # eos token, max_length are constant
 
   # Main Train Loop
   # ---------------------------------------------------------------------------
@@ -560,11 +595,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   logging.info("Starting training loop.")
   hooks = []
   report_progress = periodic_actions.ReportProgress(
-      num_train_steps=config.num_train_steps, writer=writer)
+      num_train_steps=config.num_train_steps, writer=writer
+  )
   if jax.process_index() == 0:
     hooks += [
         report_progress,
-        periodic_actions.Profile(logdir=workdir, num_profile_steps=5)
+        periodic_actions.Profile(logdir=workdir, num_profile_steps=5),
     ]
   train_metrics = []
   with metric_writers.ensure_flushes(writer):
@@ -574,8 +610,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
         batch = common_utils.shard(jax.tree_util.tree_map(np.asarray, next(train_iter)))
-        state, metrics = p_train_step(
-            state, batch, dropout_rng=dropout_rngs)
+        state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -602,9 +637,9 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
               p_eval_step=p_eval_step,
               params=state.params,
               eval_ds=eval_ds,
-              num_eval_steps=config.num_eval_steps)
-          writer.write_scalars(
-              step, {"eval_" + k: v for k, v in eval_results.items()})
+              num_eval_steps=config.num_eval_steps,
+          )
+          writer.write_scalars(step, {"eval_" + k: v for k, v in eval_results.items()})
 
         with report_progress.timed("translate_and_bleu"):
           exemplars, bleu_score = translate_and_calculate_bleu(
@@ -613,14 +648,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
               params=state.params,
               predict_ds=predict_ds,
               decode_tokens=decode_tokens,
-              max_predict_length=config.max_predict_length)
+              max_predict_length=config.max_predict_length,
+          )
           writer.write_scalars(step, {"bleu": bleu_score})
           writer.write_texts(step, {"samples": exemplars})
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
-      save_checkpoint = (step % config.checkpoint_every_steps == 0 or
-                         is_last_step)
-      if (config.save_checkpoints and save_checkpoint):
+      save_checkpoint = step % config.checkpoint_every_steps == 0 or is_last_step
+      if config.save_checkpoints and save_checkpoint:
         logging.info("Saving checkpoint step %d.", step)
         with report_progress.timed("checkpoint"):
           checkpoints.save_checkpoint_multiprocess(
