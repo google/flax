@@ -342,20 +342,16 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
           param_dtype=self.param_dtype,
           kernel_init=self.kernel_init,
           bias_init=self.bias_init,
-          name=f'i{component}',
-      )(
-          inputs
-      )  # type: ignore[call-arg]
+          name=f'i{component}',  # type: ignore[call-arg]
+      )(inputs)
       dense_params_h[component] = DenseParams(
           features=hidden_features,
           use_bias=True,
           param_dtype=self.param_dtype,
           kernel_init=self.recurrent_kernel_init,
           bias_init=self.bias_init,
-          name=f'h{component}',
-      )(
-          h
-      )  # type: ignore[call-arg]
+          name=f'h{component}',  # type: ignore[call-arg]
+      )(h)
     dense_h = _concat_dense(h, dense_params_h, use_bias=True)
     dense_i = _concat_dense(inputs, dense_params_i, use_bias=False)
 
@@ -809,8 +805,8 @@ class RNN(Module):
     if reverse:
       inputs = jax.tree_map(
           lambda x: flip_sequences(
-              x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major
-          ),  # type: ignore
+              x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major  # type: ignore
+          ),
           inputs,
       )
 
@@ -867,8 +863,8 @@ class RNN(Module):
     if reverse and keep_order:
       outputs = jax.tree_map(
           lambda x: flip_sequences(
-              x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major
-          ),  # type: ignore
+              x, seq_lengths, num_batch_dims=len(batch_dims), time_major=time_major  # type: ignore
+          ),
           outputs,
       )
 

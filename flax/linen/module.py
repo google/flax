@@ -828,13 +828,11 @@ class Module(ModuleBase):
         for name, annotation, default in extra_fields:  # pytype: disable=invalid-annotation
           setattr(cls, name, default)
           cls.__annotations__[name] = annotation
-        dataclasses.dataclass(
+        dataclasses.dataclass(  # type: ignore[call-overload]
             unsafe_hash='__hash__' not in cls.__dict__,
             repr=False,
             kw_only=True,
-        )(
-            cls
-        )  # type: ignore[call-overload]
+        )(cls)
       else:
         raise TypeError('`kw_only` is not available before Py 3.10.')
     else:
@@ -1900,8 +1898,8 @@ class Module(ModuleBase):
       name: str,
       value: T,
       reduce_fn: Callable[[K, T], K] = tuple_reduce,
-      init_fn: Callable[[], K] = tuple_init,
-  ) -> bool:  # type: ignore
+      init_fn: Callable[[], K] = tuple_init,  # type: ignore
+  ) -> bool:
     ...
 
   def sow(
@@ -1910,8 +1908,8 @@ class Module(ModuleBase):
       name: str,
       value: T,
       reduce_fn: Callable[[K, T], K] = tuple_reduce,
-      init_fn: Callable[[], K] = tuple_init,
-  ) -> bool:  # type: ignore
+      init_fn: Callable[[], K] = tuple_init,  # type: ignore
+  ) -> bool:
     """Stores a value in a collection.
 
     Collections can be used to collect intermediate values without
