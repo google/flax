@@ -237,7 +237,9 @@ class MultiHeadDotProductAttention(Module):
   deterministic: Optional[bool] = None
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
+      initializers.zeros_init()
+  )
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
@@ -316,9 +318,12 @@ class MultiHeadDotProductAttention(Module):
           'cache', 'cache_index', lambda: jnp.array(0, dtype=jnp.int32)
       )
       if is_initialized:
-        *batch_dims, max_length, num_heads, depth_per_head = (
-            cached_key.value.shape
-        )
+        (
+            *batch_dims,
+            max_length,
+            num_heads,
+            depth_per_head,
+        ) = cached_key.value.shape
         # shape check of cached keys against query input
         expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
         if expected_shape != query.shape:

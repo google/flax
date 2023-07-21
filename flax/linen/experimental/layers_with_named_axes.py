@@ -39,7 +39,9 @@ Initializer = Callable[[PRNGKey, Shape, DType], Array]
 
 
 default_kernel_init = initializers.lecun_normal()
-default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal', out_axis=0)
+default_embed_init = initializers.variance_scaling(
+    1.0, 'fan_in', 'normal', out_axis=0
+)
 
 
 class Dense(nn.Module):
@@ -66,7 +68,9 @@ class Dense(nn.Module):
   param_dtype: DType = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, DType], Array] = (
+      initializers.zeros_init()
+  )
   kernel_axes: Tuple[str, ...] = ()
   dot_general: DotGeneralT = lax.dot_general
 
@@ -301,8 +305,12 @@ class LayerNorm(nn.Module):
   param_dtype: DType = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.zeros_init()
-  scale_init: Callable[[PRNGKey, Shape, DType], Array] = initializers.ones_init()
+  bias_init: Callable[[PRNGKey, Shape, DType], Array] = (
+      initializers.zeros_init()
+  )
+  scale_init: Callable[[PRNGKey, Shape, DType], Array] = (
+      initializers.ones_init()
+  )
 
   @nn.compact
   def __call__(self, x):

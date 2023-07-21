@@ -42,9 +42,9 @@ import models
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('model_dir', default='', help=('Directory for model data.'))
+flags.DEFINE_string('model_dir', default='', help='Directory for model data.')
 
-flags.DEFINE_string('experiment', default='xpos', help=('Experiment name.'))
+flags.DEFINE_string('experiment', default='xpos', help='Experiment name.')
 
 flags.DEFINE_integer('batch_size', default=64, help='Batch size for training.')
 
@@ -58,7 +58,7 @@ flags.DEFINE_integer(
     'num_train_steps', default=75000, help='Number of train steps.'
 )
 
-flags.DEFINE_float('learning_rate', default=0.05, help=('Learning rate.'))
+flags.DEFINE_float('learning_rate', default=0.05, help='Learning rate.')
 
 flags.DEFINE_float(
     'weight_decay',
@@ -74,9 +74,9 @@ flags.DEFINE_integer(
     'random_seed', default=0, help='Integer for PRNG random seed.'
 )
 
-flags.DEFINE_string('train', default='', help=('Path to training data.'))
+flags.DEFINE_string('train', default='', help='Path to training data.')
 
-flags.DEFINE_string('dev', default='', help=('Path to development data.'))
+flags.DEFINE_string('dev', default='', help='Path to development data.')
 
 
 def create_learning_rate_scheduler(
@@ -354,7 +354,9 @@ def main(argv):
   tick = time.time()
   best_dev_score = 0
   for step, batch in zip(range(num_train_steps), train_iter):
-    batch = common_utils.shard(jax.tree_util.tree_map(lambda x: x._numpy(), batch))  # pylint: disable=protected-access
+    batch = common_utils.shard(
+        jax.tree_util.tree_map(lambda x: x._numpy(), batch)
+    )  # pylint: disable=protected-access
 
     state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
     metrics_all.append(metrics)

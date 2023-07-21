@@ -257,7 +257,9 @@ def _with_sharding_constraint_one_fallback(
         raise ValueError(f'Axis names {axis_resources} did not match a rule')
       else:
         return x
-  return _with_sharding_constraint(x, jax.sharding.PartitionSpec(*mesh_axes), mesh=mesh)
+  return _with_sharding_constraint(
+      x, jax.sharding.PartitionSpec(*mesh_axes), mesh=mesh
+  )
 
 
 def _is_logical_spec(x):

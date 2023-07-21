@@ -195,7 +195,9 @@ def get_experience(
       sim_state = sim.conn.recv()
       sim_states.append(sim_state)
     sim_states = np.concatenate(sim_states, axis=0)
-    log_probs, values = agent.policy_action(state.apply_fn, state.params, sim_states)
+    log_probs, values = agent.policy_action(
+        state.apply_fn, state.params, sim_states
+    )
     log_probs, values = jax.device_get((log_probs, values))
     probs = np.exp(np.array(log_probs))
     for i, sim in enumerate(simulators):
@@ -343,7 +345,9 @@ def train(
       score = test_episodes.policy_test(1, state.apply_fn, state.params, game)
       frames = step * config.num_agents * config.actor_steps
       summary_writer.scalar('game_score', score, frames)
-      logging.info('Step %s:\nframes seen %s\nscore %s\n\n', step, frames, score)
+      logging.info(
+          'Step %s:\nframes seen %s\nscore %s\n\n', step, frames, score
+      )
 
     # Core training code.
     alpha = (

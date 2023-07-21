@@ -156,7 +156,9 @@ def scan(
             'broadcasted variable has a data dependency on the scan body.'
         )
       out_flat.append(const)
-    broadcast_in, constants_out = jax.tree_util.tree_unflatten(out_tree(), out_flat)
+    broadcast_in, constants_out = jax.tree_util.tree_unflatten(
+        out_tree(), out_flat
+    )
 
     c, ys = lax.scan(
         body_fn, init, xs, length=length, reverse=reverse, unroll=unroll

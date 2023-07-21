@@ -156,7 +156,9 @@ def dataclass(clz: _T) -> _T:
         )
       value = getattr(x, name)
       value_state = state.pop(name)
-      updates[name] = serialization.from_state_dict(value, value_state, name=name)
+      updates[name] = serialization.from_state_dict(
+          value, value_state, name=name
+      )
     if state:
       names = ','.join(state.keys())
       raise ValueError(

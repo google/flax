@@ -39,6 +39,8 @@ https://github.com/google/flax/actions/workflows/build.yml
 Alternatively, the list can also be provided from the local environment with:
 
 python dev --versions="$(pip freeze | sed s/==/-/g) flax-0.3.6"
+
+This will use the currently installed versions of all packages.
 """
 
 import pathlib

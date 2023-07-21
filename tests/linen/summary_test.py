@@ -555,7 +555,6 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("4.141592", lines[7])
 
   def test_partitioned_params(self):
-
     class Classifier(nn.Module):
 
       @nn.compact
@@ -608,7 +607,9 @@ class SummaryTest(absltest.TestCase):
         return nn.Dense(2)(h)
 
     x = jnp.ones((16, 9))
-    rep = Foo().tabulate(jax.random.PRNGKey(0), x, console_kwargs=CONSOLE_TEST_KWARGS)
+    rep = Foo().tabulate(
+        jax.random.PRNGKey(0), x, console_kwargs=CONSOLE_TEST_KWARGS
+    )
     lines = rep.splitlines()
     self.assertIn("Total Parameters: 50", lines[-2])
 

@@ -72,7 +72,9 @@ def resnet(
         strides = (2, 2)
       block_features = features * 2**i
       block_scope = scope.push(f'block_{i}_{j}')
-      x = residual_block(block_scope, x, conv, norm, act, block_features, strides)
+      x = residual_block(
+          block_scope, x, conv, norm, act, block_features, strides
+      )
       # we can access parameters of the sub module by operating on the scope
       # Example:
       # block_scope.get_kind('params')['conv_1']['kernel']

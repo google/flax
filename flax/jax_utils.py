@@ -218,7 +218,9 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
 
   def body_wrapper(c, xs):
     if keepdims:
-      xs = jax.tree_util.tree_map(lambda x: x.reshape((1,) * len(axis) + x.shape), xs)
+      xs = jax.tree_util.tree_map(
+          lambda x: x.reshape((1,) * len(axis) + x.shape), xs
+      )
       xs = jax.tree_util.tree_map(transpose_out, xs)
     c, ys = body_fn(c, xs)
     if keepdims:

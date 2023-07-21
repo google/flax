@@ -155,7 +155,9 @@ def beam_init(batch_size, beam_size, max_decode_len, cache):
   finished_seqs0 = jnp.zeros((batch_size, beam_size, max_decode_len), jnp.int32)
   finished_flags0 = jnp.zeros((batch_size, beam_size), jnp.bool_)
   # add beam dimension to attention cache pytree elements
-  beam_cache0 = jax.tree_util.tree_map(lambda x: add_beam_dim(x, beam_size), cache)
+  beam_cache0 = jax.tree_util.tree_map(
+      lambda x: add_beam_dim(x, beam_size), cache
+  )
   return BeamState(
       cur_index=cur_index0,
       live_logprobs=live_logprobs0,
@@ -350,13 +352,15 @@ def beam_search(
         [state.finished_flags, newly_finished], axis=1
     )
     # --> [batch, beams, length], [batch, beams], [batch, beams]
-    top_finished_seq, top_finished_scores, top_finished_flags = (
-        gather_topk_beams(
-            [finished_seqs, finished_scores, finished_flags],
-            finished_scores,
-            batch_size,
-            beam_size,
-        )
+    (
+        top_finished_seq,
+        top_finished_scores,
+        top_finished_flags,
+    ) = gather_topk_beams(
+        [finished_seqs, finished_scores, finished_flags],
+        finished_scores,
+        batch_size,
+        beam_size,
     )
 
     return BeamState(

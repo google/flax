@@ -106,7 +106,9 @@ class AutoEncoderTest(absltest.TestCase):
     x = jnp.ones((1, 4))
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
-    variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
+    variable_shapes = unfreeze(
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(
         variable_shapes,
         {
@@ -122,12 +124,16 @@ class AutoEncoderTest(absltest.TestCase):
     )
 
   def test_auto_encoder_with_scope(self):
-    ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(x)
+    ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(
+        x
+    )
     x = jnp.ones((1, 4))
 
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
-    variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
+    variable_shapes = unfreeze(
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(
         variable_shapes,
         {
@@ -143,12 +149,16 @@ class AutoEncoderTest(absltest.TestCase):
     )
 
   def test_auto_encoder_bind_method(self):
-    ae = lambda scope, x: AutoEncoder3.create(scope, latents=2, features=4, hidden=3)(x)
+    ae = lambda scope, x: AutoEncoder3.create(
+        scope, latents=2, features=4, hidden=3
+    )(x)
     x = jnp.ones((1, 4))
 
     x_r, variables = init(ae)(random.PRNGKey(0), x)
     self.assertEqual(x.shape, x_r.shape)
-    variable_shapes = unfreeze(jax.tree_util.tree_map(jnp.shape, variables['params']))
+    variable_shapes = unfreeze(
+        jax.tree_util.tree_map(jnp.shape, variables['params'])
+    )
     self.assertEqual(
         variable_shapes,
         {

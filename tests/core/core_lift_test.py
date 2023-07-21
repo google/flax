@@ -116,7 +116,9 @@ class LiftTest(absltest.TestCase):
       vars_t = jax.tree_util.tree_map(
           jnp.ones_like, scope.variables().get('params', {})
       )
-      _, out_t = lift.jvp(g, scope, (x,), (jnp.zeros_like(x),), {'params': vars_t})
+      _, out_t = lift.jvp(
+          g, scope, (x,), (jnp.zeros_like(x),), {'params': vars_t}
+      )
       return out_t
 
     x = jnp.ones((3,))

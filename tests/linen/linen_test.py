@@ -247,7 +247,9 @@ class NormalizationTest(parameterized.TestCase):
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 5, 4, 4, 32))
-    model_cls = nn.GroupNorm(num_groups=2, use_bias=False, use_scale=False, epsilon=e)
+    model_cls = nn.GroupNorm(
+        num_groups=2, use_bias=False, use_scale=False, epsilon=e
+    )
 
     y, _ = model_cls.init_with_output(key2, x)
     self.assertEqual(x.dtype, y.dtype)
@@ -266,7 +268,9 @@ class NormalizationTest(parameterized.TestCase):
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 5, 4, 4, 32))
-    model_cls = nn.GroupNorm(num_groups=3, use_bias=False, use_scale=False, epsilon=e)
+    model_cls = nn.GroupNorm(
+        num_groups=3, use_bias=False, use_scale=False, epsilon=e
+    )
 
     with self.assertRaises(ValueError):
       model_cls.init_with_output(key2, x)

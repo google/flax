@@ -71,7 +71,9 @@ class _PartitionedArrayRepresentation(_ValueRepresentation):
   def from_partitioned(
       cls, partitioned: meta.Partitioned
   ) -> '_PartitionedArrayRepresentation':
-    return cls(_ArrayRepresentation.from_array(partitioned.value), partitioned.names)
+    return cls(
+        _ArrayRepresentation.from_array(partitioned.value), partitioned.names
+    )
 
   def render(self):
     return self.array_representation.render() + f' [dim]P[/dim]{self.names}'
@@ -115,7 +117,9 @@ class Row:
     self.module_variables = self.module_variables
     self.counted_variables = self.counted_variables
 
-  def size_and_bytes(self, collections: Iterable[str]) -> Dict[str, Tuple[int, int]]:
+  def size_and_bytes(
+      self, collections: Iterable[str]
+  ) -> Dict[str, Tuple[int, int]]:
     return {
         col: (
             _size_and_bytes(self.counted_variables[col])
@@ -249,7 +253,9 @@ def tabulate(
   """
 
   def _tabulate_fn(*fn_args, **fn_kwargs):
-    table_fn = _get_module_table(module, depth=depth, show_repeated=show_repeated)
+    table_fn = _get_module_table(
+        module, depth=depth, show_repeated=show_repeated
+    )
     table = table_fn(rngs, *fn_args, mutable=mutable, **fn_kwargs, **kwargs)
     return _render_table(table, console_kwargs, table_kwargs, column_kwargs)
 
@@ -324,18 +330,26 @@ def _get_module_variables(
     all_paths: Set[Tuple[str, ...]],
 ) -> Tuple[MutableVariableDict, Any]:
   """A function that takes a path and variables structure and returns a
-  (module_variables, submodule_variables) tuple for that path. _get_module_variables
-  uses the `all_paths` set to determine if a variable belongs to a submodule or not."""
+
+  (module_variables, submodule_variables) tuple for that path.
+  _get_module_variables
+  uses the `all_paths` set to determine if a variable belongs to a submodule or
+  not.
+  """
   module_variables = _get_path_variables(path, variables)
   submodule_variables: Any = {collection: {} for collection in module_variables}
-  all_keys = set(key for collection in module_variables.values() for key in collection)
+  all_keys = set(
+      key for collection in module_variables.values() for key in collection
+  )
 
   for key in all_keys:
     submodule_path = path + (key,)
     if submodule_path in all_paths:
       for collection in module_variables:
         if key in module_variables[collection]:
-          submodule_variables[collection][key] = module_variables[collection].pop(key)
+          submodule_variables[collection][key] = module_variables[
+              collection
+          ].pop(key)
 
   return module_variables, submodule_variables
 
@@ -470,7 +484,9 @@ def _render_table(
     )
 
   rich_table.caption_style = 'bold'
-  rich_table.caption = f'\nTotal Parameters: {_size_and_bytes_repr(*caption_totals)}'
+  rich_table.caption = (
+      f'\nTotal Parameters: {_size_and_bytes_repr(*caption_totals)}'
+  )
 
   return '\n' + _get_rich_repr(rich_table, console_kwargs) + '\n'
 
@@ -489,7 +505,9 @@ def _size_and_bytes_repr(size: int, num_bytes: int) -> str:
 def _size_and_bytes(pytree: Any) -> Tuple[int, int]:
   leaves = jax.tree_util.tree_leaves(pytree)
   size = sum(x.size for x in leaves if hasattr(x, 'size'))
-  num_bytes = sum(x.size * x.dtype.itemsize for x in leaves if hasattr(x, 'size'))
+  num_bytes = sum(
+      x.size * x.dtype.itemsize for x in leaves if hasattr(x, 'size')
+  )
   return size, num_bytes
 
 

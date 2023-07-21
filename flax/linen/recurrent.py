@@ -90,7 +90,9 @@ class RNNCellBase(Module):
   """RNN cell base class."""
 
   @nowrap
-  def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]) -> Carry:
+  def initialize_carry(
+      self, rng: PRNGKey, input_shape: Tuple[int, ...]
+  ) -> Carry:
     """Initialize the RNN cell carry.
 
     Args:
@@ -223,7 +225,9 @@ class DenseParams(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
+      initializers.zeros_init()
+  )
 
   @compact
   def __call__(self, inputs: Array) -> Tuple[Array, Optional[Array]]:
@@ -322,7 +326,9 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
         bias = jnp.concatenate(biases, axis=-1)
       else:
         bias = None
-      inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
+      inputs, kernel, bias = promote_dtype(
+          inputs, kernel, bias, dtype=self.dtype
+      )
       y = jnp.dot(inputs, kernel)
       if use_bias:
         # This assert is here since mypy can't infer that bias cannot be None
@@ -727,7 +733,9 @@ class RNN(Module):
   )
   variable_broadcast: lift.CollectionFilter = 'params'
   variable_carry: lift.CollectionFilter = False
-  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict({'params': False})
+  split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(
+      {'params': False}
+  )
 
   def __post_init__(self) -> None:
     if self.cell_size is not NEVER:
@@ -794,7 +802,9 @@ class RNN(Module):
 
     # Infer the number of batch dimensions from the input shape.
     # Cells like ConvLSTM have additional spatial dimensions.
-    time_axis = 0 if time_major else inputs.ndim - (self.cell.num_feature_axes + 1)
+    time_axis = (
+        0 if time_major else inputs.ndim - (self.cell.num_feature_axes + 1)
+    )
 
     # make time_axis positive
     if time_axis < 0:

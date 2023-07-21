@@ -93,7 +93,9 @@ class DenseGeneral(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
+      initializers.zeros_init()
+  )
   precision: PrecisionLike = None
   dot_general: DotGeneralT = lax.dot_general
 
@@ -206,7 +208,9 @@ class Dense(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
+      initializers.zeros_init()
+  )
   dot_general: DotGeneralT = lax.dot_general
 
   @compact
@@ -331,7 +335,9 @@ class _Conv(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
+      initializers.zeros_init()
+  )
   conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated
 
   @property
@@ -439,7 +445,7 @@ class _Conv(Module):
     else:
       if self.feature_group_count != 1:
         raise NotImplementedError(
-            f'`lax.conv_general_dilated_local` does not support '
+            '`lax.conv_general_dilated_local` does not support '
             f'`feature_group_count != 1`, got `{self.feature_group_count}`.'
         )
 
@@ -655,7 +661,9 @@ class ConvTranspose(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros_init()
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
+      initializers.zeros_init()
+  )
   transpose_kernel: bool = False
 
   @compact
@@ -755,7 +763,8 @@ class ConvTranspose(Module):
       # Compute period along each spatial dimension - it's input size scaled
       # by the stride.
       scaled_x_dims = [
-          x_dim * stride for x_dim, stride in zip(jnp.shape(inputs)[1:-1], strides)
+          x_dim * stride
+          for x_dim, stride in zip(jnp.shape(inputs)[1:-1], strides)
       ]
       # Compute difference between the current size of y and the final output
       # size, and complement this difference to 2 * period - that gives how
@@ -797,7 +806,9 @@ class ConvTranspose(Module):
     return y
 
 
-default_embed_init = initializers.variance_scaling(1.0, 'fan_in', 'normal', out_axis=0)
+default_embed_init = initializers.variance_scaling(
+    1.0, 'fan_in', 'normal', out_axis=0
+)
 
 
 class Embed(Module):

@@ -33,7 +33,9 @@ class Dense:
   bias_init: Any = nn.initializers.zeros_init()
 
   def __call__(self, scope, x):
-    kernel = scope.param('kernel', self.kernel_init, (x.shape[-1], self.features))
+    kernel = scope.param(
+        'kernel', self.kernel_init, (x.shape[-1], self.features)
+    )
     y = x @ kernel
     if self.bias:
       bias = scope.param('bias', self.bias_init, (self.features,))

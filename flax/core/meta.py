@@ -237,7 +237,9 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
 
   value: Any
   names: LogicalNames = struct.field(pytree_node=False)
-  mesh: Optional[jax.sharding.Mesh] = struct.field(default=None, pytree_node=False)
+  mesh: Optional[jax.sharding.Mesh] = struct.field(
+      default=None, pytree_node=False
+  )
 
   def unbox(self, apply_constraint=True) -> Any:
     """Returns the wrapped value with the partitioning applied as a sharding constraint."""
