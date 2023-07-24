@@ -110,7 +110,6 @@ if $RUN_PYTEST; then
   pytest -n auto tests $PYTEST_OPTS $PYTEST_IGNORE
 
   # Per-example tests.
-  #
   # we apply pytest within each example to avoid pytest's annoying test-filename collision.
   # In pytest foo/bar/baz_test.py and baz/bleep/baz_test.py will collide and error out when
   # /foo/bar and /baz/bleep aren't set up as packages.
