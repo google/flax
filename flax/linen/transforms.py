@@ -834,8 +834,8 @@ def scan(
      is broadcasted they are typically initialized inside the loop body but
      independent of the loop variables.
 
-  The loop body should have the signature
-  ``(scope, body, carry, *xs) -> (carry, ys)``, where ``xs`` and ``ys``
+  The ``target`` should have the signature
+  ``(module, carry, *xs) -> (carry, ys)``, where ``xs`` and ``ys``
   are the scan values that go in and out of the loop.
 
   Example::
@@ -951,8 +951,8 @@ def scan(
     methods: If `target` is a `Module`, the methods of `Module` to scan over.
 
   Returns:
-    The scan function with the signature ``(scope, carry, *xxs) -> (carry,
-    yys)``, where ``xxs`` and ``yys`` are the scan values that go in and out of
+    The scan function with the signature ``(module, carry, *xs) -> (carry,
+    ys)``, where ``xs`` and ``ys`` are the scan values that go in and out of
     the loop.
   """
   return lift_transform(
