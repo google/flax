@@ -187,8 +187,13 @@ class _CallInfoContext(threading.local):
 
 
 @contextlib.contextmanager
-def _tabulate_context():
-  _context.call_info_stack.append(_CallInfoContext(0, []))
+def tabulate_context(add_call_info: bool = True):
+  if _context.call_info_stack and _context.call_info_stack[-1] is None:
+    _context.call_info_stack.append(None)
+  elif add_call_info:
+    _context.call_info_stack.append(_CallInfoContext(0, []))
+  else:
+    _context.call_info_stack.append(None)
   try:
     yield
   finally:
@@ -204,11 +209,9 @@ class _DynamicContext(threading.local):
   # 3.7
 
   def __init__(self):
-    self.module_stack = [
-        None,
-    ]
+    self.module_stack = [None]
     self.capture_stack = []
-    self.call_info_stack = []
+    self.call_info_stack: list[Optional[_CallInfoContext]] = []
 
 
 # The global context
@@ -937,7 +940,11 @@ class Module(ModuleBase):
     is_compact_method = hasattr(fun, 'compact')
     fun_name = getattr(fun, '__name__', 'unnamed_function')
     is_setup_method = fun_name == 'setup'
-    add_call_info = not is_setup_method and len(_context.call_info_stack) > 0
+    add_call_info = (
+        not is_setup_method
+        and _context.call_info_stack
+        and _context.call_info_stack[-1] is not None
+    )
     # We lazily call setup() only when needed.
     if is_setup_method:
       if self.scope is None:
@@ -957,6 +964,7 @@ class Module(ModuleBase):
       # get call info
       if add_call_info:
         assert self.scope is not None
+        assert _context.call_info_stack[-1] is not None
         call_index = _context.call_info_stack[-1].get_call_index(self)
         scope_path = jax.tree_util.tree_map(_fix_path_part, self.scope.path)
 
@@ -972,6 +980,7 @@ class Module(ModuleBase):
         if filter_fn and filter_fn(self, fun_name):
           self.sow('intermediates', fun_name, y)
       if add_call_info:
+        assert _context.call_info_stack[-1] is not None
         _args, _kwargs, _y = flax.linen.summary._represent_tree(
             (args, kwargs, y)
         )
