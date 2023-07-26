@@ -461,6 +461,17 @@ class CheckpointsTest(parameterized.TestCase):
     )
     check_eq(restored, to_save)
 
+  @parameterized.parameters({'use_orbax': True}, {'use_orbax': False})
+  def test_smaller_target(self, use_orbax):
+    config.update('flax_use_orbax_checkpointing', use_orbax)
+    tmp_dir = self.create_tempdir().full_path
+    to_save = {'a': jnp.ones((16, 256, 1024))}
+    target = {'a': jnp.zeros((2, 3))}
+
+    checkpoints.save_checkpoint(tmp_dir, to_save, 0, keep=1)
+    new_object = checkpoints.restore_checkpoint(tmp_dir, target)
+    check_eq(new_object, to_save)
+
   def test_convert_pre_linen(self):
     params = checkpoints.convert_pre_linen({
         'mod_0': {
