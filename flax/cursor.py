@@ -143,28 +143,3 @@ class Cursor(Generic[A]):
 
 def cursor(obj: A) -> Cursor[A]:
   return Cursor(obj, None)
-
-
-# EXMAPLE
-t = freeze({'a': 1, 'b': (2, 3), 'c': [4, 5]})
-
-# set API
-print(cursor(t)['b'][0].set(10))
-print()
-
-# build API
-c = cursor(t)
-c['b'][0] = 10
-c['a'] = (100, 200)
-t2 = c.build()
-
-print(t2)
-print()
-
-
-state = TrainState.create(
-    apply_fn=lambda x: x,
-    params=t,
-    tx=optax.adam(1e-3),
-)
-print(cursor(state).params['b'][0].set(10))
