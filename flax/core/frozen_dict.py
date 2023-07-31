@@ -15,7 +15,7 @@
 """Frozen Dictionary."""
 
 import collections
-from typing import Any, TypeVar, Mapping, Dict, Tuple, Union, Hashable
+from typing import Any, Dict, Hashable, Optional, Mapping, Tuple, TypeVar, Union
 
 from flax import serialization
 import jax
@@ -111,7 +111,11 @@ class FrozenDict(Mapping[K, V]):
       self._hash = h
     return self._hash
 
-  def copy(self, add_or_replace: Mapping[K, V]) -> 'FrozenDict[K, V]':
+  def copy(
+      self, add_or_replace: Optional[Mapping[K, V]] = None
+  ) -> 'FrozenDict[K, V]':
+    if add_or_replace is None:
+      add_or_replace = {}
     """Create a new FrozenDict with additional or replaced entries."""
     return type(self)({**self, **unfreeze(add_or_replace)})  # type: ignore[arg-type]
 
