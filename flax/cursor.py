@@ -1,4 +1,6 @@
-from typing import Any, Generic, Mapping, Optional, Protocol, Sequence, TypeVar, Union, runtime_checkable
+import enum
+from sqlite3 import Cursor
+from typing import Any, Callable, Generic, Mapping, NamedTuple, Optional, Protocol, Sequence, TypeVar, Union, runtime_checkable
 import jax
 from flax.core import freeze, FrozenDict
 import dataclasses
@@ -6,6 +8,7 @@ from flax.training.train_state import TrainState
 import optax
 
 A = TypeVar('A')
+Key = Any
 
 
 @runtime_checkable
@@ -15,30 +18,28 @@ class Indexable(Protocol):
     ...
 
 
-@runtime_checkable
-class Settable(Protocol):
-
-  def __setitem__(self, key, value) -> None:
-    ...
+class AccessType(enum.Enum):
+  GETATTR = enum.auto()
+  GETITEM = enum.auto()
 
 
-def flatten_until_found(tree: Any, targets: Sequence[Any]):
-  remaining = len(targets)
+# def flatten_until_found(tree: Any, targets: Sequence[Any]):
+#   remaining = len(targets)
 
-  def is_leaf(x):
-    nonlocal remaining
-    leaf = False
-    if x in targets:
-      remaining -= 1
-      leaf = True
-    return leaf or remaining <= 0
+#   def is_leaf(x):
+#     nonlocal remaining
+#     leaf = False
+#     if x in targets:
+#       remaining -= 1
+#       leaf = True
+#     return leaf or remaining <= 0
 
-  value = jax.tree_util.tree_flatten(tree, is_leaf=is_leaf)
+#   value = jax.tree_util.tree_flatten(tree, is_leaf=is_leaf)
 
-  if remaining > 0:
-    return None
-  else:
-    return value
+#   if remaining > 0:
+#     return None
+#   else:
+#     return value
 
 
 @dataclasses.dataclass
@@ -57,6 +58,13 @@ class Cursor(Generic[A]):
     vars(self)['parent_key'] = parent_key
     vars(self)['changes'] = {}
 
+  @property
+  def root(self) -> 'Cursor[A]':
+    if self.parent_key is None:
+      return self
+    else:
+      return self.parent_key.parent.root
+
   def __getitem__(self, key) -> 'Cursor[A]':
     if key in self.changes:
       return self.changes[key]
@@ -71,16 +79,6 @@ class Cursor(Generic[A]):
     self.changes[key] = child
     return child
 
-  @property
-  def root(self) -> 'Cursor[A]':
-    if self.parent_key is None:
-      return self
-    else:
-      return self.parent_key.parent.root
-
-  def __setitem__(self, key, value):
-    self.changes[key] = value
-
   def __getattr__(self, name) -> 'Cursor[A]':
     if name in self.changes:
       return self.changes[name]
@@ -92,8 +90,25 @@ class Cursor(Generic[A]):
     self.changes[name] = child
     return child
 
+  def __setitem__(self, key, value):
+    self.changes[key] = value
+
   def __setattr__(self, name, value):
     self.changes[name] = value
+
+  def apply(self, change_fn: Callable[[str, Any], tuple[bool, Any]]):
+    """
+    def increment_ints_at_layer1(path: str, value):
+      if 'layer1' in path and isinstance(value, int)
+        return True, value + 1
+      else:
+        return False, value
+
+    c = cursor(config)
+    c.apply(increment_ints_at_layer1)
+    config = c.build()
+    """
+    ...
 
   def build(self) -> A:
     changes = {
