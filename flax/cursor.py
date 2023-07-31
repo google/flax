@@ -54,6 +54,8 @@ class Cursor(Generic[A]):
   changes: dict[Any, Union[Any, 'Cursor[A]']]
 
   def __init__(self, obj: A, parent_key: Optional[ParentKey[A]]):
+    # NOTE: we use `vars` here to avoid calling `__setattr__`
+    # vars(self) = self.__dict__
     vars(self)['obj'] = obj
     vars(self)['parent_key'] = parent_key
     vars(self)['changes'] = {}
