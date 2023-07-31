@@ -23,7 +23,7 @@ to keep track of how variables should be partitioned with ``jax.pjit``.
 
 import abc
 import functools
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Mapping, Optional, Tuple, TypeVar, Union
 
 from flax import errors
 from flax import struct
@@ -31,10 +31,12 @@ import jax
 from jax.experimental import maps
 
 
-TAxisMetadata = Any  # TypeVar('TAxisMetadata', bound='AxisMetadata')
+A = TypeVar('A')
+B = TypeVar('B')
+TAxisMetadata = TypeVar('TAxisMetadata', bound='AxisMetadata[Any]')
 
 
-class AxisMetadata(metaclass=abc.ABCMeta):
+class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
   """Abstract base class for boxed Metadata.
 
   ``AxisMetadata`` enables arbitrary, per axis metadata for variables.
@@ -53,7 +55,7 @@ class AxisMetadata(metaclass=abc.ABCMeta):
   """
 
   @abc.abstractmethod
-  def unbox(self) -> Any:
+  def unbox(self) -> A:
     """Returns the content of the AxisMetadata box.
 
     Note that unlike ``meta.unbox`` the unbox call should recursively unbox
@@ -70,7 +72,7 @@ class AxisMetadata(metaclass=abc.ABCMeta):
     pass
 
   @abc.abstractmethod
-  def replace_boxed(self, val: Any) -> TAxisMetadata:
+  def replace_boxed(self, val: B) -> 'AxisMetadata[B]':
     """Replaces the boxed value with the provided value.
 
     Args:
@@ -129,7 +131,7 @@ def is_axis_metadata(val: Any) -> bool:
   return isinstance(val, AxisMetadata)
 
 
-def map_axis_meta(fn: Callable[[AxisMetadata], Any], tree: Any) -> Any:
+def map_axis_meta(fn: Callable[[AxisMetadata[Any]], Any], tree: Any) -> Any:
   """Maps over all PyTree nodes that are AxisMetadata instances."""
 
   def wrapper(x):
@@ -178,7 +180,7 @@ def _global_mesh_defined() -> bool:
   return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
 
-class Partitioned(struct.PyTreeNode, AxisMetadata):
+class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
   """Wrapper for partitioning metadata.
 
   ``Partitioned`` is used to extend variables with partitioning information
@@ -241,7 +243,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
       default=None, pytree_node=False
   )
 
-  def unbox(self, apply_constraint=True) -> Any:
+  def unbox(self, apply_constraint=True) -> A:
     """Returns the wrapped value with the partitioning applied as a sharding constraint."""
     if apply_constraint and (_global_mesh_defined() or self.mesh is not None):
       axis_resource = self.get_partition_spec()
@@ -252,15 +254,15 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
     else:
       return self.value
 
-  def replace_boxed(self, val: Any) -> TAxisMetadata:
-    return self.replace(value=val)
+  def replace_boxed(self, val: B) -> 'Partitioned[B]':
+    return self.replace(value=val)  # type: ignore
 
   def _get_partition_name(self, params: Dict[Any, Any]) -> str:
     if PARTITION_NAME not in params:
       raise errors.PartitioningUnspecifiedError(self)
     return params[PARTITION_NAME]
 
-  def add_axis(self, index: int, params: Dict[Any, Any]) -> TAxisMetadata:
+  def add_axis(self, index: int, params: Dict[Any, Any]) -> 'Partitioned[A]':
     axis_name = self._get_partition_name(params)
     names = list(self.names)
     while len(names) < index:
@@ -268,7 +270,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata):
     names.insert(index, axis_name)  # type: ignore
     return self.replace(names=tuple(names))
 
-  def remove_axis(self, index: int, params: Dict[Any, Any]) -> TAxisMetadata:
+  def remove_axis(self, index: int, params: Dict[Any, Any]) -> 'Partitioned[A]':
     axis_name = self._get_partition_name(params)
     names = list(self.names)
     assert names.pop(index) == axis_name
@@ -287,7 +289,7 @@ def with_partitioning(
     fn: Callable[..., Any],
     names: LogicalNames,
     mesh: Optional[jax.sharding.Mesh] = None,
-) -> Callable[..., Partitioned]:
+) -> Callable[..., Partitioned[Any]]:
   """Wraps a function's return value with Partitioned.
 
   Example::

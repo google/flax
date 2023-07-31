@@ -26,6 +26,7 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -33,6 +34,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    overload,
 )
 
 from flax import config as config
@@ -849,9 +851,39 @@ class Scope:
       self.put_variable(col, name, init_value)
     return Variable(self, col, name, unbox=unbox)
 
+  @overload
+  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[True],
+  ) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[False],
+  ) -> meta.AxisMetadata[T]:
+    ...
+
+  @overload
+  def param(
+      self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
+  ) -> Union[T, meta.AxisMetadata[T]]:
+    ...
+
   def param(
       self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
-  ) -> T:
+  ) -> Union[T, meta.AxisMetadata[T]]:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
     If the parameter exists already, the existing value is simply returned.

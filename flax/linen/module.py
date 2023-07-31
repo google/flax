@@ -29,11 +29,9 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Literal,
     Mapping,
-    NamedTuple,
     Optional,
-    Sequence,
-    Set,
     Tuple,
     Type,
     TypeVar,
@@ -53,6 +51,7 @@ from flax import (
 )
 from flax.core import partial_eval
 from flax.core import Scope
+from flax.core import meta
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (  # pylint: disable=g-multiple-import
     CollectionFilter,
@@ -1382,9 +1381,39 @@ class Module(ModuleBase):
     self._state.children[name] = col
     return v
 
+  @overload
+  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[True],
+  ) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[False],
+  ) -> meta.AxisMetadata[T]:
+    ...
+
+  @overload
+  def param(
+      self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
+  ) -> Union[T, meta.AxisMetadata[T]]:
+    ...
+
   def param(
       self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
-  ) -> T:
+  ) -> Union[T, meta.AxisMetadata[T]]:
     """Declares and returns a parameter in this Module.
 
     Parameters are read-only variables in the collection named "params". See
