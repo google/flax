@@ -34,6 +34,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
     overload,
 )
 
@@ -892,7 +893,11 @@ class Scope:
         raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
-    return Variable(self, col, name, unbox=unbox)
+    # cast to make static analyzers happy
+    return cast(
+        Union[Variable[T], Variable[meta.AxisMetadata[T]]],
+        Variable(self, col, name, unbox=unbox),
+    )
 
   @overload
   def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
