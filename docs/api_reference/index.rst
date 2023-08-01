@@ -6,6 +6,7 @@ API Reference
 
    flax.config
    flax.core.frozen_dict
+   flax.cursor
    flax.errors
    flax.jax_utils
    flax.linen/index
