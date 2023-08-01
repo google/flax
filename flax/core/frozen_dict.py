@@ -16,6 +16,7 @@
 
 import collections
 from typing import Any, Dict, Hashable, Optional, Mapping, Tuple, TypeVar, Union
+from types import MappingProxyType
 
 from flax import serialization
 import jax
@@ -225,7 +226,9 @@ def unfreeze(x: Union[FrozenDict, Dict[str, Any]]) -> Dict[Any, Any]:
 
 def copy(
     x: Union[FrozenDict, Dict[str, Any]],
-    add_or_replace: Union[FrozenDict[str, Any], Dict[str, Any]] = FrozenDict({}),
+    add_or_replace: Union[FrozenDict[str, Any], Dict[str, Any]] = FrozenDict(
+        {}
+    ),
 ) -> Union[FrozenDict, Dict[str, Any]]:
   """Create a new dict with additional and/or replaced entries. This is a utility
   function that can act on either a FrozenDict or regular dict and mimics the
@@ -246,8 +249,7 @@ def copy(
     return x.copy(add_or_replace)
   elif isinstance(x, dict):
     new_dict = jax.tree_map(lambda x: x, x)  # make a deep copy of dict x
-    if add_or_replace is not None:
-      new_dict.update(add_or_replace)
+    new_dict.update(add_or_replace)
     return new_dict
   raise TypeError(f'Expected FrozenDict or dict, got {type(x)}')
 
