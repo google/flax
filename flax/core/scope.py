@@ -818,6 +818,49 @@ class Scope:
 
     put(variables, name, value)
 
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[True],
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[False],
+  ) -> Variable[meta.AxisMetadata[T]]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: bool = True,
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+    ...
+
   def variable(
       self,
       col: str,
@@ -825,7 +868,7 @@ class Scope:
       init_fn: Optional[Callable[..., T]] = None,
       *init_args,
       unbox: bool = True,
-  ) -> Variable[T]:
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
     Args:

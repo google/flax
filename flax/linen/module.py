@@ -1330,14 +1330,57 @@ class Module(ModuleBase):
 
     return module
 
+  @overload
   def variable(
       self,
       col: str,
       name: str,
-      init_fn: Optional[Callable[..., Any]] = None,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[True],
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[False],
+  ) -> Variable[meta.AxisMetadata[T]]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
       *init_args,
       unbox: bool = True,
-  ) -> Variable:
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+    ...
+
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: bool = True,
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     """Declares and returns a variable in this Module.
 
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
