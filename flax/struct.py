@@ -30,7 +30,7 @@ def field(pytree_node=True, **kwargs):
   return dataclasses.field(metadata={'pytree_node': pytree_node}, **kwargs)
 
 
-@dataclass_transform(field_descriptors=(field,))  # type: ignore[literal-required]
+@dataclass_transform(field_specifiers=(field,))  # type: ignore[literal-required]
 def dataclass(clz: _T) -> _T:
   """Create a class which can be passed to functional transformations.
 
@@ -181,7 +181,7 @@ def dataclass(clz: _T) -> _T:
 TNode = TypeVar('TNode', bound='PyTreeNode')
 
 
-@dataclass_transform(field_descriptors=(field,))  # type: ignore[literal-required]
+@dataclass_transform(field_specifiers=(field,))  # type: ignore[literal-required]
 class PyTreeNode:
   """Base class for dataclasses that should act like a JAX pytree node.
 
