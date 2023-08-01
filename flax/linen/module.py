@@ -736,6 +736,7 @@ def create_descriptor_wrapper(descriptor: Descriptor):
 @dataclass_transform()
 class ModuleBase:
   if typing.TYPE_CHECKING:
+    name: Optional[str] = None
     scope: Optional[Scope]
     _state: _ModuleInternalState
     _parent_ref: Union['Module', weakref.ReferenceType['Module'], None]
