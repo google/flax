@@ -912,17 +912,14 @@ def scan(
       new_scan_vars.append(meta.remove_axis(scan_group, axis, metadata_params))
 
     # compute new carry vars
-    with tabulate_context(
-        add_call_info=False
-    ):  # dont add call info while tracing
-      carry_vars_new = jax.eval_shape(
-          scan_partial(length, unroll),
-          broadcast_vars,
-          (carry_vars, init),
-          tuple(new_scan_vars),
-          rng_groups,
-          args,
-      )[2][2]
+    carry_vars_new = jax.eval_shape(
+        scan_partial(length, unroll),
+        broadcast_vars,
+        (carry_vars, init),
+        tuple(new_scan_vars),
+        rng_groups,
+        args,
+    )[2][2]
     has_new_carry_vars = len(jax.tree_util.tree_leaves(carry_vars_new)) > 0
 
     if has_new_carry_vars:
@@ -936,9 +933,7 @@ def scan(
       )
       # run scan for 1 step
       partial_length = 1 if length is not None else None
-      with tabulate_context(
-          add_call_info=False
-      ):  # dont add call info on first step
+      with tabulate_context(add_call_info=False):  # tabulate already called
         (
             broadcast_vars,
             (carry_vars, init),
@@ -969,17 +964,18 @@ def scan(
       )
       # run scan on the rest of the inputs
       partial_length = length - 1 if length is not None else None
-      (
-          broadcast_vars,
-          (carry_vars, c),
-          (ys_rest, scan_vars_rest, carry_vars_new),
-      ) = scan_partial(partial_length, unroll)(
-          broadcast_vars,
-          (carry_vars, init),
-          new_scan_vars_rest,
-          rng_groups_rest,
-          args_rest,
-      )
+      with tabulate_context(add_call_info=False):  # tabulate already called
+        (
+            broadcast_vars,
+            (carry_vars, c),
+            (ys_rest, scan_vars_rest, carry_vars_new),
+        ) = scan_partial(partial_length, unroll)(
+            broadcast_vars,
+            (carry_vars, init),
+            new_scan_vars_rest,
+            rng_groups_rest,
+            args_rest,
+        )
       # concat ys and scan_vars
       ys = tree_map_upto_left(
           lambda axis, tuple_tree: jax.tree_map(
@@ -998,17 +994,18 @@ def scan(
           right=((scan_vars1, scan_vars_rest),),
       )[0]
     else:
-      (
-          broadcast_vars,
-          (carry_vars, c),
-          (ys, scan_vars, carry_vars_new),
-      ) = scan_partial(length, unroll)(
-          broadcast_vars,
-          (carry_vars, init),
-          tuple(new_scan_vars),
-          rng_groups,
-          args,
-      )
+      with tabulate_context(add_call_info=False):  # tabulate already called
+        (
+            broadcast_vars,
+            (carry_vars, c),
+            (ys, scan_vars, carry_vars_new),
+        ) = scan_partial(length, unroll)(
+            broadcast_vars,
+            (carry_vars, init),
+            tuple(new_scan_vars),
+            rng_groups,
+            args,
+        )
 
     has_new_carry_vars = len(jax.tree_util.tree_leaves(carry_vars_new)) > 0
     assert not has_new_carry_vars
