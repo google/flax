@@ -5,8 +5,23 @@ This code follows [pytorch/examples/vae](https://github.com/pytorch/examples/blo
 
 ```bash
 pip install -r requirements.txt
-python main.py
+python main.py --workdir=/tmp/mnist --config=configs/default.py
 ```
+
+## Overriding Hyperparameter configurations
+
+This VAE example allows specifying a hyperparameter configuration by the means of
+setting `--config` flag. Configuration flag is defined using
+[config_flags](https://github.com/google/ml_collections/tree/master#config-flags).
+`config_flags` allows overriding configuration fields. This can be done as
+follows:
+
+```shell
+python main.py \
+--workdir=/tmp/mnist --config=configs/default.py \
+--config.learning_rate=0.01 --config.num_epochs=10
+```
+
 
 ## Examples
 
