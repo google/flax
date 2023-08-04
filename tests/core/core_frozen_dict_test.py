@@ -124,6 +124,18 @@ class FrozenDictTest(parameterized.TestCase):
   @parameterized.parameters(
       {
           'x': {'a': 1, 'b': {'c': 2}},
+      },
+      {
+          'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
+      },
+  )
+  def test_utility_copy_singlearg(self, x):
+    new_x = copy(x)
+    self.assertTrue(new_x == x and isinstance(new_x, type(x)))
+
+  @parameterized.parameters(
+      {
+          'x': {'a': 1, 'b': {'c': 2}},
           'pretty_str': '{\n    a: 1,\n    b: {\n        c: 2,\n    },\n}',
       },
       {

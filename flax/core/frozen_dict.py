@@ -15,7 +15,8 @@
 """Frozen Dictionary."""
 
 import collections
-from typing import Any, TypeVar, Mapping, Dict, Tuple, Union, Hashable
+from typing import Any, Dict, Hashable, Optional, Mapping, Tuple, TypeVar, Union
+from types import MappingProxyType
 
 from flax import serialization
 import jax
@@ -111,7 +112,9 @@ class FrozenDict(Mapping[K, V]):
       self._hash = h
     return self._hash
 
-  def copy(self, add_or_replace: Mapping[K, V]) -> 'FrozenDict[K, V]':
+  def copy(
+      self, add_or_replace: Mapping[K, V] = MappingProxyType({})
+  ) -> 'FrozenDict[K, V]':
     """Create a new FrozenDict with additional or replaced entries."""
     return type(self)({**self, **unfreeze(add_or_replace)})  # type: ignore[arg-type]
 
@@ -223,7 +226,9 @@ def unfreeze(x: Union[FrozenDict, Dict[str, Any]]) -> Dict[Any, Any]:
 
 def copy(
     x: Union[FrozenDict, Dict[str, Any]],
-    add_or_replace: Union[FrozenDict, Dict[str, Any]],
+    add_or_replace: Union[FrozenDict[str, Any], Dict[str, Any]] = FrozenDict(
+        {}
+    ),
 ) -> Union[FrozenDict, Dict[str, Any]]:
   """Create a new dict with additional and/or replaced entries. This is a utility
   function that can act on either a FrozenDict or regular dict and mimics the
