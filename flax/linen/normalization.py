@@ -229,6 +229,8 @@ class BatchNorm(Module):
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over
       the examples on the first two and last two devices. See `jax.lax.psum`
       for more details.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
   """
 
   use_running_average: Optional[bool] = None
@@ -243,6 +245,7 @@ class BatchNorm(Module):
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
+  use_fast_variance: bool = True
 
   @compact
   def __call__(self, x, use_running_average: Optional[bool] = None):
@@ -290,6 +293,7 @@ class BatchNorm(Module):
           dtype=self.dtype,
           axis_name=self.axis_name if not self.is_initializing() else None,
           axis_index_groups=self.axis_index_groups,
+          use_fast_variance=self.use_fast_variance,
       )
 
       if not self.is_initializing():
@@ -515,6 +519,8 @@ class GroupNorm(Module):
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
       examples on the first two and last two devices. See `jax.lax.psum` for
       more details.
+    use_fast_variance: If true, use a faster, but less numerically stable,
+      calculation for the variance.
   """
 
   num_groups: Optional[int] = 32
@@ -528,6 +534,7 @@ class GroupNorm(Module):
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
   axis_name: Optional[str] = None
   axis_index_groups: Any = None
+  use_fast_variance: bool = True
 
   @compact
   def __call__(self, x):
@@ -581,6 +588,7 @@ class GroupNorm(Module):
         self.dtype,
         self.axis_name,
         self.axis_index_groups,
+        use_fast_variance=self.use_fast_variance,
     )
     mean = jnp.repeat(mean, group_size, axis=-1)
     var = jnp.repeat(var, group_size, axis=-1)
