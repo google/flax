@@ -33,7 +33,8 @@ import threading
 from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 
 import jax
-from jax.experimental import maps, pjit
+from jax import lax
+from jax.experimental import maps
 from flax import struct
 
 from flax.core import meta
@@ -225,7 +226,7 @@ def _with_sharding_constraint(
     axis_resources: Optional[jax.sharding.PartitionSpec],
     mesh: Optional[jax.sharding.Mesh] = None,
 ):
-  """Wrapper for pjit with_sharding_constraint, no-op on cpu or outside pjit."""
+  """Wrapper for lax.with_sharding_constraint, no-op on cpu or outside pjit."""
   if jax.devices()[0].platform == 'cpu' or (
       not _global_mesh_defined() and mesh is None
   ):
@@ -233,8 +234,8 @@ def _with_sharding_constraint(
   else:
     if mesh is not None and axis_resources is not None:
       sharding = jax.sharding.NamedSharding(mesh, axis_resources)
-      return pjit.with_sharding_constraint(x, sharding)
-    return pjit.with_sharding_constraint(x, axis_resources)
+      return lax.with_sharding_constraint(x, sharding)
+    return lax.with_sharding_constraint(x, axis_resources)
 
 
 def _with_sharding_constraint_one_fallback(
