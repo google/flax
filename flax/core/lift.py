@@ -923,13 +923,13 @@ def scan(
     has_new_carry_vars = len(jax.tree_util.tree_leaves(carry_vars_new)) > 0
 
     if has_new_carry_vars:
-      new_scan_vars0, rng_groups0, args0 = tree_map_upto_left(
+      new_scan_vars0, rng_groups0, args0 = jax.tree_map(
           lambda axis, tree: jax.tree_map(
               lambda x: jax.lax.dynamic_slice_in_dim(x, 0, 1, axis),
               tree,
           ),
-          left=(variable_in_axes, rng_axes, in_axes),
-          right=(tuple(new_scan_vars), rng_groups, args),
+          (variable_in_axes, rng_axes, in_axes),
+          (tuple(new_scan_vars), rng_groups, args),
       )
       # run scan for 1 step
       partial_length = 1 if length is not None else None
@@ -952,15 +952,15 @@ def scan(
           for existing, new in zip(carry_vars, carry_vars_new)
       )
       # slice rest of the inputs
-      new_scan_vars_rest, rng_groups_rest, args_rest = tree_map_upto_left(
+      new_scan_vars_rest, rng_groups_rest, args_rest = jax.tree_map(
           lambda axis, tree: jax.tree_map(
               lambda x: jax.lax.dynamic_slice_in_dim(
                   x, 1, x.shape[axis] - 1, axis
               ),
               tree,
           ),
-          left=(variable_in_axes, rng_axes, in_axes),
-          right=(tuple(new_scan_vars), rng_groups, args),
+          (variable_in_axes, rng_axes, in_axes),
+          (tuple(new_scan_vars), rng_groups, args),
       )
       # run scan on the rest of the inputs
       partial_length = length - 1 if length is not None else None
@@ -977,21 +977,21 @@ def scan(
             args_rest,
         )
       # concat ys and scan_vars
-      ys = tree_map_upto_left(
+      ys = jax.tree_map(
           lambda axis, tuple_tree: jax.tree_map(
               lambda a, b: jnp.concatenate((a, b), axis=axis),
               *tuple_tree,
           ),
-          left=out_axes,
-          right=(ys1, ys_rest),
+          out_axes,
+          (ys1, ys_rest),
       )
-      scan_vars = tree_map_upto_left(
+      scan_vars = jax.tree_map(
           lambda axis, tuple_tree: jax.tree_map(
               lambda a, b: jnp.concatenate((a, b), axis=axis),
               *tuple_tree,
           ),
-          left=variable_out_axes,
-          right=((scan_vars1, scan_vars_rest),),
+          variable_out_axes,
+          ((scan_vars1, scan_vars_rest),),
       )[0]
     else:
       with tabulate_context(add_call_info=False):  # tabulate already called
@@ -1657,15 +1657,3 @@ def vars_merge(a, b):
   a.update(b)
   c = traverse_util.unflatten_dict(a, sep='/')
   return c
-
-
-def tree_map_upto_left(
-    f: Callable[[Any, Any], Any], left: Any, right: Any
-) -> Any:
-  leaves_left, treedef = jax.tree_util.tree_flatten(left)
-  leaves_right = treedef.flatten_up_to(right)
-
-  return treedef.unflatten(
-      f(left_leaf, right_leaf)
-      for left_leaf, right_leaf in zip(leaves_left, leaves_right)
-  )
