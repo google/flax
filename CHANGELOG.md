@@ -23,6 +23,17 @@ vNext
 -
 -
 
+0.7.2
+-----
+New features:
+- make `flax.core.copy` `add_or_replace` optional
+- Add `use_fast_variance` option to `GroupNorm` and `BatchNorm` to allow disabling it.
+
+Bug fixes:
+- Use `field_specifiers` instead of `field_descriptors` in `@dataclass_transform`.
+- Fix `nn.Module` typing.
+- [JAX] Replace uses of `jax.experimental.pjit.with_sharding_constraint` with `jax.lax.with_sharding_constraint`.
+
 0.7.1
 -----
 Breaking changes:
