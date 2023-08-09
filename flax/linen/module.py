@@ -1666,51 +1666,6 @@ class Module(ModuleBase):
     module = self.clone()
     return module, variables
 
-  @overload
-  def apply(
-      self,
-      variables: VariableDict,
-      *args,
-      rngs: Optional[RNGSequences] = None,
-      method: Union[Callable[..., Any], str, None] = None,
-      mutable: Literal[False],
-      capture_intermediates: Union[
-          bool, Callable[['Module', str], bool]
-      ] = False,
-      **kwargs,
-  ) -> Any:
-    ...
-
-  @overload
-  def apply(
-      self,
-      variables: VariableDict,
-      *args,
-      rngs: Optional[RNGSequences] = None,
-      method: Union[Callable[..., Any], str, None] = None,
-      mutable: CollectionFilter,
-      capture_intermediates: Union[
-          bool, Callable[['Module', str], bool]
-      ] = False,
-      **kwargs,
-  ) -> Tuple[Any, Union[FrozenVariableDict, Dict[str, Any]]]:
-    ...
-
-  @overload
-  def apply(
-      self,
-      variables: VariableDict,
-      *args,
-      rngs: Optional[RNGSequences] = None,
-      method: Union[Callable[..., Any], str, None] = None,
-      mutable: CollectionFilter = False,
-      capture_intermediates: Union[
-          bool, Callable[['Module', str], bool]
-      ] = False,
-      **kwargs,
-  ) -> Union[Any, Tuple[Any, Union[FrozenVariableDict, Dict[str, Any]]]]:
-    ...
-
   @traceback_util.api_boundary
   def apply(
       self,
