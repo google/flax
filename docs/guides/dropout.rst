@@ -23,7 +23,7 @@ Split the PRNG key
 
 Since dropout is a random operation, it requires a pseudorandom number generator
 (PRNG) state. Flax uses JAX's (splittable) PRNG keys, which have a number of
-desirable properties for neutral networks. To learn more, refer to the
+desirable properties for neural networks. To learn more, refer to the
 `Pseudorandom numbers in JAX tutorial <https://jax.readthedocs.io/en/latest/jax-101/05-random-numbers.html>`__.
 
 **Note:** Recall that JAX has an explicit way of giving you PRNG keys:
