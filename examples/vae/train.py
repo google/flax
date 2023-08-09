@@ -92,8 +92,7 @@ def eval_f(params, images, z, z_rng, latents):
   return nn.apply(eval_model, models.model(latents))({'params': params})
 
 
-def train_and_evaluate(
-    config: ml_collections.ConfigDict, workdir: str):
+def train_and_evaluate(config: ml_collections.ConfigDict):
   """Train and evaulate pipeline."""
   rng = random.PRNGKey(0)
   rng, key = random.split(rng)
@@ -103,7 +102,7 @@ def train_and_evaluate(
 
   logging.info('Initializing dataset.')
   train_ds = input_pipeline.build_train_set(config.batch_size, ds_builder)
-  test_ds = input_pipeline.build_test_set(config.ds_builder)
+  test_ds = input_pipeline.build_test_set(ds_builder)
 
   logging.info('Initializing model.')
   init_data = jnp.ones((config.batch_size, 784), jnp.float32)
@@ -118,7 +117,9 @@ def train_and_evaluate(
   rng, z_key, eval_rng = random.split(rng, 3)
   z = random.normal(z_key, (64, config.latents))
 
-  steps_per_epoch = ds_builder.info.splits['train'].num_examples // config.batch_size
+  steps_per_epoch = (
+      ds_builder.info.splits['train'].num_examples // config.batch_size
+  )
 
   for epoch in range(config.num_epochs):
     for _ in range(steps_per_epoch):
