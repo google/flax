@@ -29,11 +29,9 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Literal,
     Mapping,
-    NamedTuple,
     Optional,
-    Sequence,
-    Set,
     Tuple,
     Type,
     TypeVar,
@@ -53,6 +51,7 @@ from flax import (
 )
 from flax.core import partial_eval
 from flax.core import Scope
+from flax.core import meta
 from flax.core.frozen_dict import FrozenDict
 from flax.core.scope import (  # pylint: disable=g-multiple-import
     CollectionFilter,
@@ -1332,14 +1331,57 @@ class Module(ModuleBase):
 
     return module
 
+  @overload
   def variable(
       self,
       col: str,
       name: str,
-      init_fn: Optional[Callable[..., Any]] = None,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[True],
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[False],
+  ) -> Variable[meta.AxisMetadata[T]]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
       *init_args,
       unbox: bool = True,
-  ) -> Variable:
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+    ...
+
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: bool = True,
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     """Declares and returns a variable in this Module.
 
     See :mod:`flax.core.variables` for more information. See also :meth:`param`
@@ -1383,9 +1425,39 @@ class Module(ModuleBase):
     self._state.children[name] = col
     return v
 
+  @overload
+  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[True],
+  ) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[False],
+  ) -> meta.AxisMetadata[T]:
+    ...
+
+  @overload
+  def param(
+      self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
+  ) -> Union[T, meta.AxisMetadata[T]]:
+    ...
+
   def param(
       self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
-  ) -> T:
+  ) -> Union[T, meta.AxisMetadata[T]]:
     """Declares and returns a parameter in this Module.
 
     Parameters are read-only variables in the collection named "params". See

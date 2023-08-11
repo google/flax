@@ -26,6 +26,7 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -33,6 +34,8 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    cast,
+    overload,
 )
 
 from flax import config as config
@@ -816,6 +819,49 @@ class Scope:
 
     put(variables, name, value)
 
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[True],
+  ) -> Variable[T]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: Literal[False],
+  ) -> Variable[meta.AxisMetadata[T]]:
+    ...
+
+  @overload
+  def variable(
+      self,
+      col: str,
+      name: str,
+      init_fn: Optional[Callable[..., T]] = None,
+      *init_args,
+      unbox: bool = True,
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
+    ...
+
   def variable(
       self,
       col: str,
@@ -823,7 +869,7 @@ class Scope:
       init_fn: Optional[Callable[..., T]] = None,
       *init_args,
       unbox: bool = True,
-  ) -> Variable[T]:
+  ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
     Args:
@@ -847,11 +893,45 @@ class Scope:
         raise errors.ScopeVariableNotFoundError(name, col, self.path_text)
       init_value = init_fn(*init_args)
       self.put_variable(col, name, init_value)
-    return Variable(self, col, name, unbox=unbox)
+    # cast to make static analyzers happy
+    return cast(
+        Union[Variable[T], Variable[meta.AxisMetadata[T]]],
+        Variable(self, col, name, unbox=unbox),
+    )
+
+  @overload
+  def param(self, name: str, init_fn: Callable[..., T], *init_args) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[True],
+  ) -> T:
+    ...
+
+  @overload
+  def param(
+      self,
+      name: str,
+      init_fn: Callable[..., T],
+      *init_args,
+      unbox: Literal[False],
+  ) -> meta.AxisMetadata[T]:
+    ...
+
+  @overload
+  def param(
+      self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
+  ) -> Union[T, meta.AxisMetadata[T]]:
+    ...
 
   def param(
       self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
-  ) -> T:
+  ) -> Union[T, meta.AxisMetadata[T]]:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
     If the parameter exists already, the existing value is simply returned.

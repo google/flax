@@ -15,7 +15,7 @@
 """Attention core modules for Flax."""
 
 import functools
-from typing import (Any, Callable, Optional, Tuple)
+from typing import (Any, Callable, Optional, Tuple, Union)
 from flax.linen.dtypes import promote_dtype
 
 from flax.linen import initializers
@@ -334,7 +334,11 @@ class MultiHeadDotProductAttention(Module):
           )
         # update key, value caches with our new 1d spatial slices
         cur_index = cache_index.value
-        indices = (0,) * len(batch_dims) + (cur_index, 0, 0)
+        indices: tuple[Union[int, jax.Array], ...] = (0,) * len(batch_dims) + (
+            cur_index,
+            0,
+            0,
+        )
         key = lax.dynamic_update_slice(cached_key.value, key, indices)
         value = lax.dynamic_update_slice(cached_value.value, value, indices)
         cached_key.value = key
