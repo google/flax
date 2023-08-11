@@ -88,6 +88,18 @@ class Dense(nn.Module):
     return y
 
 
+class IdentityModule(nn.Module):
+
+  def __call__(self, x):
+    return x
+
+
+class RaisesModule(nn.Module):
+
+  def __call__(self):
+    assert False
+
+
 class ModuleTest(absltest.TestCase):
 
   def test_init_module(self):
@@ -2200,6 +2212,192 @@ class ModuleTest(absltest.TestCase):
       # Like in Python dataclass, `kw_only` is not inherited, so ChildLayer can
       # take positional arg. It takes BaseLayer's default kwargs though.
       np.testing.assert_equal(ChildLayer(8)(np.ones(10)), -8 * np.ones(10))
+
+  def test_intercept_methods(self):
+    mod = IdentityModule(parent=None)
+    x = jnp.ones([])
+    call_count = []
+
+    def add_one_interceptor(f, args, kwargs, context):
+      call_count.append(None)
+      self.assertLen(dataclasses.fields(context), 3)
+      self.assertIs(context.module, mod)
+      self.assertEqual(context.method_name, '__call__')
+      self.assertEqual(context.orig_method(3), 3)
+      self.assertEqual(args, (x,))
+      self.assertEmpty(kwargs)
+      y = f(*args, **kwargs)
+      return y + 1
+
+    y1 = mod(x)
+    with nn.intercept_methods(add_one_interceptor):
+      y2 = mod(x)
+    y3 = mod(x)
+
+    self.assertLen(call_count, 1)
+    self.assertEqual(y1, 1)
+    self.assertEqual(y2, 2)
+    self.assertEqual(y3, 1)
+
+  def test_intercept_methods_compact(self):
+    class CompactModule(nn.Module):
+
+      @compact
+      def __call__(self, x):
+        return nn.Dense(2)(x)
+
+    mod = CompactModule()
+    x = jnp.ones(shape=(1, 3))
+    variables = mod.init(jax.random.PRNGKey(0), x)
+    call_modules = []
+
+    def log_interceptor(f, args, kwargs, context):
+      call_modules.append(context.module)
+      self.assertLen(dataclasses.fields(context), 3)
+      self.assertEqual(context.method_name, '__call__')
+      self.assertEqual(args, (x,))
+      self.assertEmpty(kwargs)
+      return f(*args, **kwargs)
+
+    with nn.intercept_methods(log_interceptor):
+      _ = mod.apply(variables, x)
+
+    self.assertLen(call_modules, 2)
+    self.assertIsInstance(call_modules[0], CompactModule)
+    self.assertIsInstance(call_modules[1], nn.Dense)
+
+  def test_intercept_methods_setup(self):
+    class SetupModule(nn.Module):
+
+      def setup(self):
+        self.layer = nn.Dense(2)
+
+      def __call__(self, x):
+        return self.layer(x)
+
+    mod = SetupModule()
+    x = jnp.ones(shape=(1, 3))
+    variables = mod.init(jax.random.PRNGKey(0), x)
+    call_modules = []
+    log = []
+
+    def log_interceptor(f, args, kwargs, context):
+      call_modules.append(context.module)
+      log.append((context.method_name, args, kwargs))
+      return f(*args, **kwargs)
+
+    with nn.intercept_methods(log_interceptor):
+      _ = mod.apply(variables, x)
+
+    self.assertLen(call_modules, 3)
+    self.assertIsInstance(call_modules[0], SetupModule)
+    self.assertIsInstance(call_modules[1], SetupModule)
+    self.assertIsInstance(call_modules[2], nn.Dense)
+    self.assertEqual(
+        log, [('setup', (), {}), ('__call__', (x,), {}), ('__call__', (x,), {})]
+    )
+
+  def test_intercept_methods_calling_underlying_optional(self):
+    def do_nothing_interceptor(f, args, kwargs, context):
+      del f, context
+      self.assertEmpty(args)
+      self.assertEmpty(kwargs)
+
+    m = RaisesModule()
+    with nn.intercept_methods(do_nothing_interceptor):
+      m()
+
+    with self.assertRaises(AssertionError):
+      m()
+
+    with nn.intercept_methods(do_nothing_interceptor):
+      m()
+
+  def test_intercept_methods_run_in_lifo_order(self):
+    def op_interceptor(op):
+      def _interceptor(f, args, kwargs, context):
+        del context
+        y = f(*args, **kwargs)
+        return op(y)
+
+      return _interceptor
+
+    mod = IdentityModule(parent=None)
+    x = 7
+    with nn.intercept_methods(
+        op_interceptor(lambda a: a + 1)
+    ), nn.intercept_methods(op_interceptor(lambda a: a**2)):
+      y = mod(x)
+
+    self.assertEqual(y, (x**2) + 1)
+
+    with nn.intercept_methods(
+        op_interceptor(lambda a: a**2)
+    ), nn.intercept_methods(op_interceptor(lambda a: a + 1)):
+      y = mod(x)
+
+    self.assertEqual(y, (x + 1) ** 2)
+
+  def test_intercept_methods_subclasses(self):
+    class Foo(IdentityModule):
+
+      def __call__(self, x):  # pylint: disable=useless-parent-delegation
+        return super().__call__(x)
+
+    class Bar(Foo):
+
+      def __call__(self, x):  # pylint: disable=useless-parent-delegation
+        return super().__call__(x)
+
+    bar = Bar(parent=None)
+    x = jnp.ones([])
+    called = []
+
+    def record_interceptor(f, args, kwargs, context):
+      called.append(None)
+      self.assertIs(context.module, bar)
+      self.assertEqual(context.method_name, '__call__')
+      self.assertEqual(args, (x,))
+      self.assertEmpty(kwargs)
+      return f(*args, **kwargs)
+
+    with nn.intercept_methods(record_interceptor):
+      bar(x)
+
+    # Bar.__call__, Foo.__call__ and IdenityModule.__call__
+    self.assertLen(called, 3)
+
+  def test_intercept_methods_nested_module(self):
+    class Foo(nn.Module):
+
+      def __call__(self, x):
+        return x
+
+    class Bar(nn.Module):
+      sub: nn.Module
+
+      def __call__(self, x):
+        return self.sub(x)
+
+    foo = Foo()
+    bar = Bar(sub=foo)
+    x = jnp.ones([])
+    called = []
+
+    def record_interceptor(f, args, kwargs, context):
+      called.append(context.module)
+      self.assertEqual(context.method_name, '__call__')
+      self.assertEqual(args, (x,))
+      self.assertEmpty(kwargs)
+      return f(*args, **kwargs)
+
+    with nn.intercept_methods(record_interceptor):
+      bar(x)
+
+    # bar.__call__ and foo.__call__
+    self.assertLen(called, 2)
+    self.assertIs(called[0], bar)
+    self.assertIs(called[1], foo)
 
 
 class LeakTests(absltest.TestCase):

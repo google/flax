@@ -92,6 +92,7 @@ from .module import (
     enable_named_call as enable_named_call,
     init_with_output as init_with_output,
     init as init,
+    intercept_methods as intercept_methods,
     merge_param as merge_param,
     nowrap as nowrap,
     override_named_call as override_named_call,
