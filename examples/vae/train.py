@@ -27,19 +27,19 @@
 # limitations under the License.
 """Traininga and evaluation logic."""
 
+import input_pipeline
+import jax
+import jax.numpy as jnp
+import ml_collections
+import models
+import optax
+import tensorflow_datasets as tfds
+import utils as vae_utils
 from absl import logging
+from jax import random
 
 from flax import linen as nn
 from flax.training import train_state
-import jax
-from jax import random
-import jax.numpy as jnp
-import optax
-import tensorflow_datasets as tfds
-
-import input_pipeline
-import models
-import utils as vae_utils
 
 
 @jax.vmap
@@ -92,7 +92,7 @@ def eval_f(params, images, z, z_rng, latents):
   return nn.apply(eval_model, models.model(latents))({'params': params})
 
 
-def train_and_evaluate(batch_size, learning_rate, num_epochs, latents):
+def train_and_evaluate(config: ml_collections.ConfigDict):
   """Train and evaulate pipeline."""
   rng = random.PRNGKey(0)
   rng, key = random.split(rng)
@@ -101,32 +101,34 @@ def train_and_evaluate(batch_size, learning_rate, num_epochs, latents):
   ds_builder.download_and_prepare()
 
   logging.info('Initializing dataset.')
-  train_ds = input_pipeline.build_train_set(batch_size, ds_builder)
+  train_ds = input_pipeline.build_train_set(config.batch_size, ds_builder)
   test_ds = input_pipeline.build_test_set(ds_builder)
 
   logging.info('Initializing model.')
-  init_data = jnp.ones((batch_size, 784), jnp.float32)
-  params = models.model(latents).init(key, init_data, rng)['params']
+  init_data = jnp.ones((config.batch_size, 784), jnp.float32)
+  params = models.model(config.latents).init(key, init_data, rng)['params']
 
   state = train_state.TrainState.create(
-      apply_fn=models.model(latents).apply,
+      apply_fn=models.model(config.latents).apply,
       params=params,
-      tx=optax.adam(learning_rate),
+      tx=optax.adam(config.learning_rate),
   )
 
   rng, z_key, eval_rng = random.split(rng, 3)
-  z = random.normal(z_key, (64, latents))
+  z = random.normal(z_key, (64, config.latents))
 
-  steps_per_epoch = ds_builder.info.splits['train'].num_examples // batch_size
+  steps_per_epoch = (
+      ds_builder.info.splits['train'].num_examples // config.batch_size
+  )
 
-  for epoch in range(num_epochs):
+  for epoch in range(config.num_epochs):
     for _ in range(steps_per_epoch):
       batch = next(train_ds)
       rng, key = random.split(rng)
-      state = train_step(state, batch, key, latents)
+      state = train_step(state, batch, key, config.latents)
 
     metrics, comparison, sample = eval_f(
-        state.params, test_ds, z, eval_rng, latents
+        state.params, test_ds, z, eval_rng, config.latents
     )
     vae_utils.save_image(
         comparison, f'results/reconstruction_{epoch}.png', nrow=8

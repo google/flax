@@ -20,7 +20,10 @@ that can be easily tested and imported in Colab.
 
 from absl import app
 from absl import flags
+from absl import logging
+from clu import platform
 import jax
+from ml_collections import config_flags
 import tensorflow as tf
 
 import train
@@ -28,19 +31,12 @@ import train
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_float(
-    'learning_rate',
-    default=1e-3,
-    help='The learning rate for the Adam optimizer.',
+config_flags.DEFINE_config_file(
+    'config',
+    None,
+    'File path to the training hyperparameter configuration.',
+    lock_config=True,
 )
-
-flags.DEFINE_integer('batch_size', default=128, help='Batch size for training.')
-
-flags.DEFINE_integer(
-    'num_epochs', default=30, help='Number of training epochs.'
-)
-
-flags.DEFINE_integer('latents', default=20, help='Number of latent variables.')
 
 
 def main(argv):
@@ -50,9 +46,17 @@ def main(argv):
   # Make sure tf does not allocate gpu memory.
   tf.config.experimental.set_visible_devices([], 'GPU')
 
-  train.train_and_evaluate(
-      FLAGS.batch_size, FLAGS.learning_rate, FLAGS.num_epochs, FLAGS.latents
+  logging.info('JAX process: %d / %d', jax.process_index(), jax.process_count())
+  logging.info('JAX local devices: %r', jax.local_devices())
+
+  # Add a note so that we can tell which task is which JAX host.
+  # (Depending on the platform task 0 is not guaranteed to be host 0)
+  platform.work_unit().set_task_status(
+      f'process_index: {jax.process_index()}, '
+      f'process_count: {jax.process_count()}'
   )
+
+  train.train_and_evaluate(FLAGS.config)
 
 
 if __name__ == '__main__':
