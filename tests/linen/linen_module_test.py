@@ -22,6 +22,7 @@ import gc
 import inspect
 import operator
 import sys
+from tempfile import TemporaryDirectory
 from typing import (
     Any,
     Callable,
@@ -2398,6 +2399,31 @@ class ModuleTest(absltest.TestCase):
     self.assertLen(called, 2)
     self.assertIs(called[0], bar)
     self.assertIs(called[1], foo)
+
+  def test_cloudpickle_module(self):
+    from cloudpickle import cloudpickle_fast
+
+    class NNModuleWithProperty(nn.Module):
+      a: int
+      b: str
+
+      @property
+      def my_property(self):
+        return self.b * self.a
+
+    m = NNModuleWithProperty(a=2, b='ok')
+
+    with TemporaryDirectory() as tmpdir:
+      filename = f'{tmpdir}/module.pkl'
+      with open(filename, 'wb') as f:
+        cloudpickle_fast.dump(m, f)
+
+      with open(filename, 'rb') as f:
+        obj_loaded = cloudpickle_fast.load(f)
+
+    self.assertEqual(obj_loaded.a, 2)
+    self.assertEqual(obj_loaded.b, 'ok')
+    self.assertEqual(obj_loaded.my_property, 'okok')
 
 
 class LeakTests(absltest.TestCase):
