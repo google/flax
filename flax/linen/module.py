@@ -862,6 +862,8 @@ def create_descriptor_wrapper(descriptor: Descriptor):
         self.wrapped.__set_name__(*args, **kwargs)
 
     def __getattr__(self, name):
+      if 'wrapped' not in vars(self):
+        raise AttributeError()
       return getattr(self.wrapped, name)
 
   return _DescriptorWrapper(descriptor)
