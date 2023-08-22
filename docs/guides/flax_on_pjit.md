@@ -450,7 +450,7 @@ class LogicalDotReluDot(nn.Module):
   @nn.compact
   def __call__(self, x):    
     y = nn.Dense(self.depth, 
-                 kernel_init=nn.with_partitioning(self.dense_init, ('embed', 'hidden')),
+                 kernel_init=nn.with_logical_partitioning(self.dense_init, ('embed', 'hidden')),
                  use_bias=False,  # or overwrite with `bias_init`
                  )(x)
 
@@ -460,7 +460,7 @@ class LogicalDotReluDot(nn.Module):
 
     W2 = self.param(
         'W2', 
-        nn.with_partitioning(self.dense_init, ('hidden', 'embed')),
+        nn.with_logical_partitioning(self.dense_init, ('hidden', 'embed')),
         (self.depth, x.shape[-1]))
 
     z = jnp.dot(y, W2)
