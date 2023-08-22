@@ -111,8 +111,8 @@ state = train_state.TrainState.create(
 # Perform a simple gradient update similar to the one during a normal training workflow.
 state = state.apply_gradients(grads=jax.tree_map(jnp.ones_like, state.params))
 
-# Some arbitrary nested pytree with a dictionary, a string, and a NumPy array.
-config = {'dimensions': np.array([5, 3]), 'name': 'dense'}
+# Some arbitrary nested pytree with a dictionary and a NumPy array.
+config = {'dimensions': np.array([5, 3])}
 
 # Bundle everything together.
 ckpt = {'model': state, 'config': config, 'data': [x1]}
@@ -224,7 +224,7 @@ empty_state = train_state.TrainState.create(
     params=jax.tree_map(np.zeros_like, variables['params']),  # values of the tree leaf doesn't matter
     tx=tx,
 )
-empty_config = {'dimensions': np.array([0, 0]), 'name': ''}
+empty_config = {'dimensions': np.array([0, 0])}
 target = {'model': empty_state, 'config': empty_config, 'data': [jnp.zeros_like(x1)]}
 state_restored = orbax_checkpointer.restore('tmp/orbax/single_save', item=target)
 state_restored

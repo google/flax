@@ -345,7 +345,7 @@ def with_logical_partitioning(
   @functools.wraps(fn)
   def wrapper(*args, **kwargs):
     return LogicallyPartitioned(
-        fn(*args, **kwargs), names, rules=rules, mesh=mesh
-    )
+        fn(*args, **kwargs), names, mesh=mesh, rules=rules
+    )  # pytype: disable=wrong-keyword-args
 
   return wrapper
