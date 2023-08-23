@@ -298,6 +298,10 @@ state. As before, in Flax you construct the Module directly.
 To initialize both the parameters and state you just call the ``init`` method
 as before. However, in Haiku you now get ``state`` as a second return value, and
 in Flax you get a new ``batch_stats`` collection in the ``variables`` dictionary.
+Note that since ``hk.BatchNorm`` only initializes batch statistics when
+``is_training=True``, we must set ``training=True`` when initializing parameters
+of a Haiku model with an ``hk.BatchNorm`` layer. In Flax, we can set
+``training=False`` as usual.
 
 .. codediff::
   :title_left: Haiku
@@ -307,7 +311,7 @@ in Flax you get a new ``batch_stats`` collection in the ``variables`` dictionary
   sample_x = jax.numpy.ones((1, 784))
   params, state = model.init(
     PRNGKey(0),
-    sample_x, training=True # <== inputs
+    sample_x, training=True # <== inputs #!
   )
   ...
 
@@ -315,7 +319,7 @@ in Flax you get a new ``batch_stats`` collection in the ``variables`` dictionary
 
   sample_x = jax.numpy.ones((1, 784))
   variables = model.init(
-    PRNGKey(0),
+    PRNGKey(0), #!
     sample_x, training=False # <== inputs
   )
   params, batch_stats = variables["params"], variables["batch_stats"]
