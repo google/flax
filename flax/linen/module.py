@@ -873,6 +873,10 @@ def create_descriptor_wrapper(descriptor: Descriptor):
 # -----------------------------------------------------------------------------
 
 
+def module_field(*, kw_only: bool = False, default: Optional[Any] = ...) -> Any:
+  ...
+
+
 # The ModuleBase class is created only to make static analyzers happy
 # mainly pytype and pyright. Some notes:
 # * pyright (correctly) complains that Module itself is not a dataclass, even
@@ -887,14 +891,12 @@ def create_descriptor_wrapper(descriptor: Descriptor):
 # * Other attributes are annotated for completeness. Because we are using
 #   the `if typing.TYPE_CHECKING` pattern, these annotations are not present
 #   at runtime so they don't affect the dataclass behavior.
-@dataclass_transform()
+@dataclass_transform(field_specifiers=(module_field,))  # type: ignore[literal-required]
 class ModuleBase:
   if typing.TYPE_CHECKING:
-    name: Optional[str] = None
     scope: Optional[Scope]
     _state: _ModuleInternalState
     _parent_ref: Union['Module', weakref.ReferenceType['Module'], None]
-    parent: Union['Module', _Sentinel, None]
     __dataclass_fields__: Dict[str, dataclasses.Field]
 
 
@@ -934,6 +936,10 @@ class Module(ModuleBase):
   """
 
   if typing.TYPE_CHECKING:
+    name: Optional[str] = module_field(kw_only=True, default=None)
+    parent: Union['Module', _Sentinel, None] = module_field(
+        kw_only=True, default=None
+    )
 
     def __init__(self, *args, **kwargs):
       # this stub makes sure pytype accepts constructor arguments.
