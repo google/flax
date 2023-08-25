@@ -51,6 +51,17 @@ end of the parameter list (after all non-keyword-only parameters).
 """
 
 import dataclasses
+import inspect
+import functools
+from types import MappingProxyType
+from typing import Any, TypeVar
+from typing_extensions import dataclass_transform
+import flax
+
+M = TypeVar('M', bound='flax.linen.Module')
+FieldName = str
+Annotation = Any
+Default = Any
 
 
 class _KwOnlyType:
@@ -88,6 +99,7 @@ def field(*, metadata=None, kw_only=dataclasses.MISSING, **kwargs):
   return dataclasses.field(metadata=metadata, **kwargs)
 
 
+@dataclass_transform(field_specifiers=(field,))  # type: ignore[literal-required]
 def dataclass(cls=None, extra_fields=None, **kwargs):
   """Wrapper for dataclasses.dataclass that adds support for kw_only fields.
 
@@ -111,7 +123,7 @@ def dataclass(cls=None, extra_fields=None, **kwargs):
   return wrap if cls is None else wrap(cls)
 
 
-def _process_class(cls, extra_fields=None, **kwargs):
+def _process_class(cls: type[M], extra_fields=None, **kwargs):
   """Transforms `cls` into a dataclass that supports kw_only fields."""
   if '__annotations__' not in cls.__dict__:
     cls.__annotations__ = {}
@@ -122,7 +134,7 @@ def _process_class(cls, extra_fields=None, **kwargs):
   base_dataclass_fields = {}  # dict[cls, cls.__dataclass_fields__.copy()]
 
   # The keyword only fields from `cls` or any of its base classes.
-  kw_only_fields = {}  # dict[field_name, tuple[annotation, default]]
+  kw_only_fields: dict[FieldName, tuple[Annotation, Default]] = {}
 
   # Scan for KW_ONLY marker.
   kw_only_name = None
@@ -138,7 +150,7 @@ def _process_class(cls, extra_fields=None, **kwargs):
         )
       default = getattr(cls, name)
       if isinstance(default, dataclasses.Field):
-        default.metadata = {**default.metadata, **{KW_ONLY: True}}
+        default.metadata = MappingProxyType({**default.metadata, KW_ONLY: True})
       else:
         default = field(default=default, kw_only=True)
       setattr(cls, name, default)
@@ -190,12 +202,38 @@ def _process_class(cls, extra_fields=None, **kwargs):
     cls_annotations.pop(name, None)
     cls_annotations[name] = annotation
 
+  create_init = '__init__' not in vars(cls) and kwargs.get('init', True)
+
   # Apply the dataclass transform.
-  transformed_cls = dataclasses.dataclass(cls, **kwargs)
+  transformed_cls: type[M] = dataclasses.dataclass(cls, **kwargs)
 
   # Restore the base classes' __dataclass_fields__.
-  for cls, dataclass_fields in base_dataclass_fields.items():
-    cls.__dataclass_fields__ = dataclass_fields
+  for _cls, fields in base_dataclass_fields.items():
+    _cls.__dataclass_fields__ = fields
+
+  if create_init:
+    dataclass_init = transformed_cls.__init__
+    # use sum to count the number of init fields that are not keyword-only
+    expected_num_args = sum(
+        f.init and not f.metadata.get(KW_ONLY, False)
+        for f in dataclasses.fields(transformed_cls)
+    )
+
+    @functools.wraps(dataclass_init)
+    def init_wrapper(self, *args, **kwargs):
+      num_args = len(args)
+      if num_args > expected_num_args:
+        # we add + 1 to each to account for `self`, matching python's
+        # default error message
+        raise TypeError(
+            f'__init__() takes {expected_num_args + 1} positional '
+            f'arguments but {num_args + 1} were given'
+        )
+
+      dataclass_init(self, *args, **kwargs)
+
+    init_wrapper.__signature__ = inspect.signature(dataclass_init)  # type: ignore
+    transformed_cls.__init__ = init_wrapper  # type: ignore[method-assign]
 
   # Return the transformed dataclass
   return transformed_cls

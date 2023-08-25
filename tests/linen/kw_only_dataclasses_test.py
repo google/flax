@@ -62,7 +62,7 @@ class KwOnlyDataclassesTest(absltest.TestCase):
     v1 = Child(4)
     self.assertDictEqual(dataclasses.asdict(v1), dict(a=2, b=4))
 
-    v2 = Child(4, 5)  # pylint: disable=too-many-function-args
+    v2 = Child(4, a=5)  # pylint: disable=too-many-function-args
     self.assertDictEqual(dataclasses.asdict(v2), dict(a=5, b=4))
 
   def test_subclass_overrides_base(self):
