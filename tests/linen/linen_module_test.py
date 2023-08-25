@@ -2214,6 +2214,18 @@ class ModuleTest(absltest.TestCase):
       # take positional arg. It takes BaseLayer's default kwargs though.
       np.testing.assert_equal(ChildLayer(8)(np.ones(10)), -8 * np.ones(10))
 
+  def test_positional_cannot_be_kw_only(self):
+    class Foo(nn.Module):
+      a: int
+
+    Foo(1)  # ok
+    Foo(a=1)  # ok
+    with self.assertRaisesRegex(
+        TypeError, r'takes 2 positional arguments but 3 were'
+    ):
+      Foo(1, None)
+    Foo(a=1, parent=None)  # type: ignore[call-arg]
+
   def test_intercept_methods(self):
     mod = IdentityModule(parent=None)
     x = jnp.ones([])
