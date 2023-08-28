@@ -46,6 +46,24 @@ class Point:
   meta: Any = struct.field(pytree_node=False)
 
 
+@struct.dataclass
+class Box:
+  value: int
+
+
+def to_state_dict(box: Box):
+  return box.value
+
+
+def from_state_dict(box: Box, state: Any):
+  return box.replace(value=state)
+
+
+serialization.register_serialization_state(
+    Box, to_state_dict, from_state_dict, override=True
+)
+
+
 class OriginalTuple(NamedTuple):
   value: Any
 
@@ -91,6 +109,17 @@ class SerializationTest(parameterized.TestCase):
       serialization.from_state_dict(p, {'z': 3})
     with self.assertRaises(ValueError):  # missing field
       serialization.from_state_dict(p, {'x': 3})
+
+  def test_pass_through_serialization(self):
+    p = Box(value=123)
+    state_dict = serialization.to_state_dict(p)
+    self.assertEqual(
+        state_dict,
+        123,
+    )
+    restored_box = serialization.from_state_dict(p, 123)
+    expected_box = Box(value=123)
+    self.assertEqual(restored_box, expected_box)
 
   def test_model_serialization(self):
     rng = random.PRNGKey(0)

@@ -105,9 +105,9 @@ def to_state_dict(target) -> Dict[str, Any]:
 
   ty_to_state_dict = _STATE_DICT_REGISTRY[ty][0]
   state_dict = ty_to_state_dict(target)
-  assert isinstance(state_dict, dict), 'A state dict must be a Python dict.'
-  for key in state_dict.keys():
-    assert isinstance(key, str), 'A state dict must only have string keys.'
+  if isinstance(state_dict, dict):
+    for key in state_dict.keys():
+      assert isinstance(key, str), 'A state dict must only have string keys.'
   return state_dict
 
 
