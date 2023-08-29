@@ -69,6 +69,75 @@ def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
     return (x,)
 
 
+class DotGeneral(Module):
+  """Wrapper around lax.dot_general used in standard Flax layers.
+
+  Allows injection of custom dot_general implementations into various Flax
+  layers.
+  Injection is useful if one wants to inject quantized or sparse op variant
+  without layer forking nor excessive layer branching.
+
+  Use of Module instead of a function allows these custom ops to use state e.g.:
+  to use variables for calibration stats and
+  to use random numbers e.g.: for stochastic rounding.
+  """
+
+  @compact
+  def __call__(
+      self,
+      lhs: Array,
+      rhs: Array,
+      dimension_numbers: lax.DotDimensionNumbers,
+      precision: PrecisionLike = None,
+  ) -> Array:
+    return lax.dot_general(
+        lhs, rhs, dimension_numbers=dimension_numbers, precision=precision
+    )
+
+
+class ConvGeneralDilated(Module):
+  """Wrapper around lax.conv_general_dilated used in standard Flax layers.
+
+  Allows injection of custom conv_general_dilated implementations into various
+  Flax layers.
+  Injection is useful if one wants to inject quantized or sparse op variant
+  without layer forking nor excessive layer branching.
+
+  Use of Module instead of a function allows these custom ops to use state e.g.:
+  to use variables for calibration stats and
+  to use random numbers e.g.: for stochastic rounding.
+  """
+
+  @compact
+  def __call__(
+      self,
+      lhs: Array,
+      rhs: Array,
+      window_strides: Sequence[int],
+      padding: Union[str, Sequence[tuple[int, int]]],
+      lhs_dilation: Optional[Sequence[int]] = None,
+      rhs_dilation: Optional[Sequence[int]] = None,
+      dimension_numbers: Any = None,
+      feature_group_count: int = 1,
+      batch_group_count: int = 1,
+      precision: PrecisionLike = None,
+      preferred_element_type: Any = None,
+  ) -> Array:
+    return lax.conv_general_dilated(
+        lhs=lhs,
+        rhs=rhs,
+        window_strides=window_strides,
+        padding=padding,
+        lhs_dilation=lhs_dilation,
+        rhs_dilation=rhs_dilation,
+        dimension_numbers=dimension_numbers,
+        feature_group_count=feature_group_count,
+        batch_group_count=batch_group_count,
+        precision=precision,
+        preferred_element_type=preferred_element_type,
+    )
+
+
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
 
@@ -97,7 +166,7 @@ class DenseGeneral(Module):
       initializers.zeros_init()
   )
   precision: PrecisionLike = None
-  dot_general: DotGeneralT = lax.dot_general
+  dot_general_cls: Any = DotGeneral
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -174,7 +243,8 @@ class DenseGeneral(Module):
 
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
 
-    out = self.dot_general(
+    dot_general = self.dot_general_cls()
+    out = dot_general(
         inputs,
         kernel,
         ((axis, contract_ind), (batch_dims, batch_ind)),
@@ -211,7 +281,7 @@ class Dense(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       initializers.zeros_init()
   )
-  dot_general: DotGeneralT = lax.dot_general
+  dot_general_cls: Any = DotGeneral
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -236,7 +306,9 @@ class Dense(Module):
     else:
       bias = None
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
-    y = self.dot_general(
+
+    dot_general = self.dot_general_cls()
+    y = dot_general(
         inputs,
         kernel,
         (((inputs.ndim - 1,), (0,)), ((), ())),
@@ -338,7 +410,7 @@ class _Conv(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       initializers.zeros_init()
   )
-  conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated
+  conv_general_dilated_cls: Any = ConvGeneralDilated
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -451,8 +523,9 @@ class _Conv(Module):
 
       # Need to know the spatial output shape of a standard convolution to
       # create the unshared convolution kernel.
+      conv_general_dilated = self.conv_general_dilated_cls()
       conv_output_shape = eval_shape(
-          lambda lhs, rhs: self.conv_general_dilated(  # pylint: disable=g-long-lambda
+          lambda lhs, rhs: conv_general_dilated(  # pylint: disable=g-long-lambda
               lhs=lhs,
               rhs=rhs,
               window_strides=strides,
@@ -498,7 +571,8 @@ class _Conv(Module):
 
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
     if self.shared_weights:
-      y = self.conv_general_dilated(
+      conv_general_dilated = self.conv_general_dilated_cls()
+      y = conv_general_dilated(
           inputs,
           kernel,
           strides,

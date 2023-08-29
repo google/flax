@@ -18,7 +18,7 @@ from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
 from flax import linen as nn
 from flax.linen import initializers
-from flax.linen.linear import DotGeneralT
+from flax.linen.linear import DotGeneral
 from flax.linen.linear import PrecisionLike
 from flax.linen.partitioning import param_with_axes
 from flax.linen.partitioning import with_sharding_constraint
@@ -72,7 +72,7 @@ class Dense(nn.Module):
       initializers.zeros_init()
   )
   kernel_axes: Tuple[str, ...] = ()
-  dot_general: DotGeneralT = lax.dot_general
+  dot_general_cls: Any = DotGeneral
 
   @nn.compact
   def __call__(self, inputs: Array) -> Array:
@@ -93,7 +93,9 @@ class Dense(nn.Module):
         axes=self.kernel_axes,
     )
     kernel = jnp.asarray(kernel, self.dtype)
-    y = self.dot_general(
+
+    dot_general = self.dot_general_cls()
+    y = dot_general(
         inputs,
         kernel,
         (((inputs.ndim - 1,), (0,)), ((), ())),

@@ -134,72 +134,98 @@ class SummaryTest(absltest.TestCase):
       row.inputs = jax.tree_util.tree_map(_get_obj_repr_value, row.inputs)
       row.outputs = jax.tree_util.tree_map(_get_obj_repr_value, row.outputs)
 
-    # 10 rows = 1 CNN + 4 ConvBlock_0 + 4 ConvBlock_1 + 1 Dense_0
-    self.assertEqual(len(table), 10)
+    for i in range(13):
+      print(table[i].path)
 
     # check paths
-    self.assertEqual(table[0].path, ())
+    ConvDimensionNumbers = jax.lax.ConvDimensionNumbers
+    expected_table = [
+        (
+            (),
+            ((32, 28, 28, 1), {"training": True}),
+            ((32, 10), {"a": (32, 10), "b": (32, 10)}),
+        ),
+        (("block1",), ((32, 28, 28, 1), {"training": True}), (32, 28, 28, 32)),
+        (("block1", "conv"), (32, 28, 28, 1), (32, 28, 28, 32)),
+        (
+            ("block1", "conv", "ConvGeneralDilated_0"),
+            (
+                (32, 28, 28, 1),
+                (3, 3, 1, 32),
+                (1, 1),
+                "SAME",
+                {
+                    "dimension_numbers": ConvDimensionNumbers(
+                        lhs_spec=(0, 3, 1, 2),
+                        rhs_spec=(3, 2, 0, 1),
+                        out_spec=(0, 3, 1, 2),
+                    ),
+                    "feature_group_count": 1,
+                    "lhs_dilation": (1, 1),
+                    "precision": None,
+                    "rhs_dilation": (1, 1),
+                },
+            ),
+            (32, 28, 28, 32),
+        ),
+        (
+            ("block1", "bn"),
+            ((32, 28, 28, 32), {"use_running_average": False}),
+            (32, 28, 28, 32),
+        ),
+        (
+            ("block1", "dropout"),
+            ((32, 28, 28, 32), {"deterministic": False}),
+            (32, 28, 28, 32),
+        ),
+        (("block2",), ((32, 28, 28, 32), {"training": True}), (32, 28, 28, 64)),
+        (("block2", "conv"), (32, 28, 28, 32), (32, 28, 28, 64)),
+        (
+            ("block2", "conv", "ConvGeneralDilated_0"),
+            (
+                (32, 28, 28, 32),
+                (3, 3, 32, 64),
+                (1, 1),
+                "SAME",
+                {
+                    "dimension_numbers": ConvDimensionNumbers(
+                        lhs_spec=(0, 3, 1, 2),
+                        rhs_spec=(3, 2, 0, 1),
+                        out_spec=(0, 3, 1, 2),
+                    ),
+                    "feature_group_count": 1,
+                    "lhs_dilation": (1, 1),
+                    "precision": None,
+                    "rhs_dilation": (1, 1),
+                },
+            ),
+            (32, 28, 28, 64),
+        ),
+        (
+            ("block2", "bn"),
+            ((32, 28, 28, 64), {"use_running_average": False}),
+            (32, 28, 28, 64),
+        ),
+        (
+            ("block2", "dropout"),
+            ((32, 28, 28, 64), {"deterministic": False}),
+            (32, 28, 28, 64),
+        ),
+        (("dense",), (32, 64), (32, 10)),
+        (
+            ("dense", "DotGeneral_0"),
+            ((32, 64), (64, 10), (((1,), (0,)), ((), ())), {"precision": None}),
+            (32, 10),
+        ),
+    ]
 
-    self.assertEqual(table[1].path, ("block1",))
-    self.assertEqual(table[2].path, ("block1", "conv"))
-    self.assertEqual(table[3].path, ("block1", "bn"))
-    self.assertEqual(table[4].path, ("block1", "dropout"))
-
-    self.assertEqual(table[5].path, ("block2",))
-    self.assertEqual(table[6].path, ("block2", "conv"))
-    self.assertEqual(table[7].path, ("block2", "bn"))
-    self.assertEqual(table[8].path, ("block2", "dropout"))
-
-    self.assertEqual(table[9].path, ("dense",))
-
-    # check outputs shapes
-    self.assertEqual(
-        (table[0].inputs[0].shape, table[0].inputs[1]),
-        (x.shape, dict(training=True)),
-    )
-    self.assertEqual(
-        _get_shapes(table[0].outputs),
-        ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
-    )
-
-    self.assertEqual(
-        _get_shapes(table[1].inputs),
-        ((batch_size, 28, 28, 1), {"training": True}),
-    )
-    self.assertEqual(table[1].outputs.shape, (batch_size, 28, 28, 32))
-    self.assertEqual(table[2].inputs.shape, (batch_size, 28, 28, 1))
-    self.assertEqual(table[2].outputs.shape, (batch_size, 28, 28, 32))
-    self.assertEqual(
-        _get_shapes(table[3].inputs),
-        ((batch_size, 28, 28, 32), {"use_running_average": False}),
-    )
-    self.assertEqual(table[3].outputs.shape, (batch_size, 28, 28, 32))
-    self.assertEqual(
-        _get_shapes(table[4].inputs),
-        ((batch_size, 28, 28, 32), {"deterministic": False}),
-    )
-    self.assertEqual(table[4].outputs.shape, (batch_size, 28, 28, 32))
-
-    self.assertEqual(
-        _get_shapes(table[5].inputs),
-        ((batch_size, 28, 28, 32), {"training": True}),
-    )
-    self.assertEqual(table[5].outputs.shape, (batch_size, 28, 28, 64))
-    self.assertEqual(table[6].inputs.shape, (batch_size, 28, 28, 32))
-    self.assertEqual(table[6].outputs.shape, (batch_size, 28, 28, 64))
-    self.assertEqual(
-        _get_shapes(table[7].inputs),
-        ((batch_size, 28, 28, 64), {"use_running_average": False}),
-    )
-    self.assertEqual(table[7].outputs.shape, (batch_size, 28, 28, 64))
-    self.assertEqual(
-        _get_shapes(table[8].inputs),
-        ((batch_size, 28, 28, 64), {"deterministic": False}),
-    )
-    self.assertEqual(table[8].outputs.shape, (batch_size, 28, 28, 64))
-
-    self.assertEqual(table[9].inputs.shape, (batch_size, 64))
-    self.assertEqual(table[9].outputs.shape, (batch_size, 10))
+    self.assertEqual(len(expected_table), len(table))
+    for (path, input_shapes, output_shapes), t in zip(expected_table, table):
+      # Uncomment to regenerate the table.
+      # print((t.path, _get_shapes(t.inputs), _get_shapes(t.outputs)), ",")
+      self.assertEqual(path, t.path)
+      self.assertEqual(input_shapes, _get_shapes(t.inputs))
+      self.assertEqual(output_shapes, _get_shapes(t.outputs))
 
     # check no summary is performed
     for row in table:
@@ -497,29 +523,32 @@ class SummaryTest(absltest.TestCase):
     )
     lines = module_repr.splitlines()
 
+    # for i, l in enumerate(lines):
+    #   print(f"{i:3}", l, flush=True)
+
     # first call
     self.assertIn("ConvBlock_0/Conv_0", lines[9])
     self.assertIn("bias", lines[9])
-    self.assertIn("ConvBlock_0/BatchNorm_0", lines[14])
-    self.assertIn("mean", lines[14])
-    self.assertIn("bias", lines[14])
-    self.assertIn("ConvBlock_0/Dropout_0", lines[19])
+    self.assertIn("ConvBlock_0/BatchNorm_0", lines[14 + 27])
+    self.assertIn("mean", lines[14 + 27])
+    self.assertIn("bias", lines[14 + 27])
+    self.assertIn("ConvBlock_0/Dropout_0", lines[19 + 27])
 
     # second call
-    self.assertIn("ConvBlock_0/Conv_0", lines[23])
-    self.assertNotIn("bias", lines[23])
-    self.assertIn("ConvBlock_0/BatchNorm_0", lines[25])
-    self.assertNotIn("mean", lines[25])
-    self.assertNotIn("bias", lines[25])
-    self.assertIn("ConvBlock_0/Dropout_0", lines[27])
+    self.assertIn("ConvBlock_0/Conv_0", lines[23 + 27])
+    self.assertNotIn("bias", lines[23 + 27])
+    self.assertIn("ConvBlock_0/BatchNorm_0", lines[25 + 27 * 2])
+    self.assertNotIn("mean", lines[25 + 27 * 2])
+    self.assertNotIn("bias", lines[25 + 27 * 2])
+    self.assertIn("ConvBlock_0/Dropout_0", lines[27 + 27 * 2])
 
     # third call
-    self.assertIn("ConvBlock_0/Conv_0", lines[31])
-    self.assertNotIn("bias", lines[31])
-    self.assertIn("ConvBlock_0/BatchNorm_0", lines[33])
-    self.assertNotIn("mean", lines[33])
-    self.assertNotIn("bias", lines[33])
-    self.assertIn("ConvBlock_0/Dropout_0", lines[35])
+    self.assertIn("ConvBlock_0/Conv_0", lines[31 + 27 * 2])
+    self.assertNotIn("bias", lines[31 + 27 * 2])
+    self.assertIn("ConvBlock_0/BatchNorm_0", lines[33 + 27 * 3])
+    self.assertNotIn("mean", lines[33 + 27 * 3])
+    self.assertNotIn("bias", lines[33 + 27 * 3])
+    self.assertIn("ConvBlock_0/Dropout_0", lines[35 + 27 * 3])
 
   def test_empty_input(self):
     class EmptyInput(nn.Module):

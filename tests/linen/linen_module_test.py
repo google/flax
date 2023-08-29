@@ -823,7 +823,9 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
-        dot_general = dot_general
+        dot_general_cls = DotGeneral
+        # children
+        DotGeneral_0 = DotGeneral()
     )
     Dense_1 = Dense(
         # attributes
@@ -834,7 +836,9 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
-        dot_general = dot_general
+        dot_general_cls = DotGeneral
+        # children
+        DotGeneral_0 = DotGeneral()
     )
 )"""
     x = jnp.ones((1, 2))
@@ -2257,7 +2261,7 @@ class ModuleTest(absltest.TestCase):
 
       @compact
       def __call__(self, x):
-        return nn.Dense(2)(x)
+        return x * x
 
     mod = CompactModule()
     x = jnp.ones(shape=(1, 3))
@@ -2275,15 +2279,20 @@ class ModuleTest(absltest.TestCase):
     with nn.intercept_methods(log_interceptor):
       _ = mod.apply(variables, x)
 
-    self.assertLen(call_modules, 2)
+    self.assertLen(call_modules, 1)
     self.assertIsInstance(call_modules[0], CompactModule)
-    self.assertIsInstance(call_modules[1], nn.Dense)
 
   def test_intercept_methods_setup(self):
+    class CompactModule(nn.Module):
+
+      @compact
+      def __call__(self, x):
+        return x * x
+
     class SetupModule(nn.Module):
 
       def setup(self):
-        self.layer = nn.Dense(2)
+        self.layer = CompactModule()
 
       def __call__(self, x):
         return self.layer(x)
@@ -2305,9 +2314,14 @@ class ModuleTest(absltest.TestCase):
     self.assertLen(call_modules, 3)
     self.assertIsInstance(call_modules[0], SetupModule)
     self.assertIsInstance(call_modules[1], SetupModule)
-    self.assertIsInstance(call_modules[2], nn.Dense)
+    self.assertIsInstance(call_modules[2], CompactModule)
     self.assertEqual(
-        log, [('setup', (), {}), ('__call__', (x,), {}), ('__call__', (x,), {})]
+        log,
+        [
+            ('setup', (), {}),
+            ('__call__', (x,), {}),
+            ('__call__', (x,), {}),
+        ],
     )
 
   def test_intercept_methods_calling_underlying_optional(self):
