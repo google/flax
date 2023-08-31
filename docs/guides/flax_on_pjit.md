@@ -377,8 +377,7 @@ def train_step(state, x):
   state = state.apply_gradients(grads=grads)
   return state
 
-with mesh:
-  new_state = train_step(initialized_state, x)
+new_state = train_step(initialized_state, x)
 ```
 
 ```{code-cell}
@@ -402,8 +401,7 @@ Then, create a compiled inference step. Note that the output is also sharded alo
 def apply_fn(state, x):
   return state.apply_fn({'params': state.params}, x)
 
-with mesh:
-  y = apply_fn(new_state, x)
+y = apply_fn(new_state, x)
 print(type(y))
 print(y.dtype)
 print(y.shape)
@@ -425,8 +423,7 @@ def block_all(xs):
   jax.tree_map(lambda x: x.block_until_ready(), xs)
   return xs
 
-with mesh:
-  new_state = block_all(train_step(initialized_state, x))
+new_state = block_all(train_step(initialized_state, x))
 ```
 
 +++ {"id": "51420b514d53"}
