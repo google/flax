@@ -37,9 +37,8 @@ from absl import logging
 from clu import metric_writers, periodic_actions
 from jax import random
 
-from flax import jax_utils
 from flax import linen as nn
-from flax.training import checkpoints, common_utils, train_state
+from flax.training import checkpoints, common_utils
 
 
 def rsqrt_schedule(
