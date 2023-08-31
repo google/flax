@@ -30,11 +30,11 @@ def get_config():
   config.max_corpus_chars = 10**7
 
   # Name of TFDS translation dataset to use.
-  config.dataset_name = "lm1b"
+  config.dataset_name = 'lm1b'
 
   # Optional name of TFDS translation dataset to use for evaluation.
-  config.eval_dataset_name = "lm1b"
-  config.eval_split = "test"
+  config.eval_dataset_name = 'lm1b'
+  config.eval_split = 'test'
 
   # Per device batch size for training.
   config.per_device_batch_size = 32
@@ -114,7 +114,44 @@ def get_config():
   # Integer for PRNG random seed.
   config.seed = 0
 
-  # Prompt for language model sampling.
-  config.prompts = "I love to "
+  # Prompt for language model sampling,
+  # taken from MaxText (https://github.com/google/maxtext/blob/main/MaxText/configs/base.yml).
+  config.prompts = 'I love to '
+
+  # Parallelism
+  config.mesh_axes = ['data', 'fsdp', 'tensor']
+  config.logical_axis_rules = [
+      ['activation_batch', ['data', 'fsdp']],
+      ['activation_length', ['data', 'fsdp']],
+      ['activation_embed', 'tensor'],
+      ['activation_mlp', 'tensor'],
+      ['activation_heads', 'tensor'],
+      ['activation_kv', 'tensor'],
+      ['activation_vocab', 'tensor'],
+      ['mlp', 'tensor'],
+      ['vocab', 'tensor'],
+      ['embed', 'fsdp'],
+      ['heads', 'tensor'],
+  ]
+  config.full_sharding = ['data', 'fsdp', 'tensor']
+  config.data_sharding = ['data']
+
+  # One axis for each parallelism type may hold a placeholder (-1)
+  # value to auto-shard based on available slices and devices.
+  # By default, product of the DCN axes should equal number of slices
+  # and product of the ICI axes should equal number of devices per slice.
+  # ICI (Inter-Chip Interconnection): A high-speed connection between
+  # sets of TPU chips, which form the TPU network.
+  # DCN (Data Center Network): A connection between the TPU networks;
+  # not as fast as ICI.
+  # ICI has around 100x the bandwidth of DCN, but it is not a general
+  # purpose connection, which is why DCN is necessary for scaling to
+  # extremely large ML models.
+  config.dcn_data_parallelism = -1  # recommended DCN axis to be auto-sharded
+  config.dcn_fsdp_parallelism = 1
+  config.dcn_tensor_parallelism = 1
+  config.ici_data_parallelism = 1
+  config.ici_fsdp_parallelism = -1  # recommended ICI axis to be auto-sharded
+  config.ici_tensor_parallelism = 1
 
   return config

@@ -21,20 +21,18 @@ This script trains a Transformer on a LM1B dataset.
 # pytype: disable=attribute-error
 
 import collections
-import functools
 import os
 
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
-from flax import jax_utils
 from flax import linen as nn
 from flax.training import checkpoints
 from flax.training import common_utils
-from flax.training import train_state
 import jax
 from jax import random
 import jax.numpy as jnp
+from jax.sharding import PartitionSpec as P, Mesh, NamedSharding
 import ml_collections
 import numpy as np
 import optax
@@ -43,6 +41,7 @@ import tensorflow as tf
 import input_pipeline
 import models
 import temperature_sampler
+import utils
 
 
 def rsqrt_schedule(
@@ -161,7 +160,6 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
       "accuracy": acc,
       "denominator": weight_sum,
   }
-  metrics = jax.lax.psum(metrics, axis_name="batch")
   return metrics
 
 
@@ -212,7 +210,6 @@ def train_step(
   lr = learning_rate_fn(step)
   grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
   (_, logits), grads = grad_fn(state.params)
-  grads = jax.lax.pmean(grads, "batch")
   new_state = state.apply_gradients(grads=grads)
   metrics = compute_metrics(logits, inputs, weights)
   metrics["learning_rate"] = lr
@@ -235,7 +232,7 @@ def predict_step(
   """Predict language model on a batch."""
   target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
   initial_variables = models.TransformerLM(config).init(
-      jax.random.key(0), jnp.ones(target_shape, config.dtype)
+      jax.random.PRNGKey(0), jnp.ones(target_shape, config.dtype)
   )
   cache = initial_variables["cache"]
 
@@ -302,7 +299,12 @@ def tohost(x):
 
 
 def evaluate(
-    *, p_eval_step, params, eval_ds: tf.data.Dataset, num_eval_steps: int
+    *,
+    jit_eval_step,
+    params,
+    eval_ds: tf.data.Dataset,
+    num_eval_steps: int,
+    config,
 ):
   """Evaluate the target an return a dictionary with the metrics."""
   logging.info("Gathering evaluation metrics.")
@@ -310,10 +312,9 @@ def evaluate(
   eval_iter = iter(eval_ds)  # pytype: disable=wrong-arg-types
   for _, eval_batch in zip(range(num_eval_steps), eval_iter):
     eval_batch = jax.tree_util.tree_map(lambda x: x._numpy(), eval_batch)  # pylint: disable=protected-access
-    eval_batch = common_utils.shard(eval_batch)
-    metrics = p_eval_step(params, eval_batch)
+    metrics = jit_eval_step(params, eval_batch, config)
     eval_metrics.append(metrics)
-  eval_metrics = common_utils.get_metrics(eval_metrics)
+  eval_metrics = common_utils.stack_forest(eval_metrics)
   eval_metrics_sums = jax.tree_util.tree_map(jnp.sum, eval_metrics)
   eval_denominator = eval_metrics_sums.pop("denominator")
   eval_summary = jax.tree_util.tree_map(
@@ -325,13 +326,14 @@ def evaluate(
 
 def generate_prediction(
     *,
-    p_pred_step,
+    jit_pred_step,
     params,
     tokenized_prompts,
     eos_id,
     inference_rng,
     decode_tokens,
-    max_predict_length: int,
+    config,
+    predict_config,
 ):
   """Generate text from the prompt."""
   n_devices = jax.local_device_count()
@@ -352,8 +354,15 @@ def generate_prediction(
     inference_rng, sub_rng = random.split(inference_rng)
     inference_rngs = random.split(sub_rng, n_devices)
 
-    predicted = p_pred_step(
-        pred_batch, params, inference_rngs, eos_id, max_predict_length
+    predicted = jit_pred_step(
+        pred_batch,
+        params,
+        inference_rngs,
+        eos_id,
+        config.max_predict_length,
+        predict_config,
+        config.sampling_temperature,
+        config.sampling_top_k,
     )
     predicted = tohost(predicted)
     # Iterate through non-padding examples of batch.
@@ -436,16 +445,16 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   eval_config = train_config.replace(deterministic=True)
   predict_config = train_config.replace(deterministic=True, decode=True)
 
+  # Mesh definition
+  devices_array = utils.create_device_mesh(config)
+  mesh = Mesh(devices_array, config.mesh_axes)
+
   start_step = 0
-  rng = jax.random.key(config.seed)
+  rng = jax.random.PRNGKey(config.seed)
   rng, init_rng = jax.random.split(rng)
   rng, inference_rng = random.split(rng)
-  input_shape = (config.per_device_batch_size, config.max_target_length)
 
   m = models.TransformerLM(eval_config)
-  initial_variables = jax.jit(m.init)(
-      init_rng, jnp.ones(input_shape, jnp.float32)
-  )
 
   learning_rate_fn = create_learning_rate_schedule(
       learning_rate=config.learning_rate, warmup_steps=config.warmup_steps
@@ -458,11 +467,12 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       eps=1e-9,
       weight_decay=config.weight_decay,
   )
-  state = train_state.TrainState.create(
-      apply_fn=m.apply, params=initial_variables["params"], tx=optimizer
+
+  state, state_mesh_annotations = utils.setup_initial_state(
+      m, optimizer, config, init_rng, mesh
   )
-  # We access model params only from optimizer below.
-  del initial_variables
+  data_sharding = NamedSharding(mesh, P(config.data_sharding))
+  full_sharding = NamedSharding(mesh, P(config.full_sharding))
 
   if config.restore_checkpoints:
     # Restore unreplicated optimizer + model state from last checkpoint.
@@ -476,39 +486,60 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   if start_step == 0:
     writer.write_hparams(dict(config))
 
-  # Replicate optimizer.
-  state = jax_utils.replicate(state)
-
   # compile multidevice versions of train/eval/predict step fn.
-  p_train_step = jax.pmap(
-      functools.partial(
-          train_step, config=train_config, learning_rate_fn=learning_rate_fn
-      ),
-      axis_name="batch",
-      donate_argnums=(0,),
-  )  # pytype: disable=wrong-arg-types
-  p_eval_step = jax.pmap(
-      functools.partial(eval_step, config=eval_config), axis_name="batch"
+  jit_train_step = jax.jit(
+      train_step,
+      in_shardings=(
+          state_mesh_annotations,
+          full_sharding,
+          None,
+      ),  # type: ignore
+      out_shardings=(state_mesh_annotations, None),  # type: ignore
+      static_argnums=(2, 3, 4),
+      donate_argnums=0,
   )
 
-  p_pred_step = jax.pmap(
-      functools.partial(
+  jit_eval_step = jax.jit(
+      eval_step,
+      in_shardings=(
+          state_mesh_annotations.params,
+          full_sharding,
+      ),  # type: ignore
+      out_shardings=None,  # type: ignore
+      static_argnums=(2, 3),
+  )
+
+  # Since the inputs and rngkey args for predict_step will be batched,
+  # we must vmap them, otherwise the global arrays will be seen in each device
+  jit_pred_step = jax.jit(
+      jax.vmap(
           predict_step,
-          config=predict_config,
-          temperature=config.sampling_temperature,
-          top_k=config.sampling_top_k,
+          in_axes=(
+              0,
+              jax.tree_map(lambda x: None, state.params),
+              0,
+              None,
+              None,
+              jax.tree_map(lambda x: None, predict_config),
+              None,
+              None,
+          ),
       ),
-      axis_name="batch",
-      static_broadcasted_argnums=(3, 4),
-  )  # eos token, max_length are constant
+      in_shardings=(
+          data_sharding,
+          state_mesh_annotations.params,
+          data_sharding,
+      ),  # type: ignore
+      out_shardings=data_sharding,  # type: ignore
+      static_argnums=(3, 4, 5, 6, 7),
+  )
 
   # Main Train Loop
   # ---------------------------------------------------------------------------
 
   # We init the first set of dropout PRNG keys, but update it afterwards inside
   # the main pmap"d training update for performance.
-  dropout_rngs = jax.random.split(rng, jax.local_device_count())
-  del rng
+  dropout_rngs = rng
 
   logging.info("Starting training loop.")
   hooks = []
@@ -527,10 +558,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
       # Shard data to devices and do a training step.
       with jax.profiler.StepTraceAnnotation("train", step_num=step):
-        batch = common_utils.shard(
-            jax.tree_util.tree_map(np.asarray, next(train_iter))
+        batch = next(train_iter)
+        batch = jax.tree_map(lambda x: jnp.array(x), batch)
+        state, metrics = jit_train_step(
+            state, batch, train_config, learning_rate_fn, 0.0, dropout_rngs
         )
-        state, metrics = p_train_step(state, batch, dropout_rng=dropout_rngs)
         train_metrics.append(metrics)
 
       # Quick indication that training is happening.
@@ -542,7 +574,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       if step % config.eval_every_steps == 0 or is_last_step:
         with report_progress.timed("training_metrics"):
           logging.info("Gathering training metrics.")
-          train_metrics = common_utils.get_metrics(train_metrics)
+          train_metrics = common_utils.stack_forest(train_metrics)
           lr = train_metrics.pop("learning_rate").mean()
           metrics_sums = jax.tree_util.tree_map(jnp.sum, train_metrics)
           denominator = metrics_sums.pop("denominator")
@@ -559,10 +591,11 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
         with report_progress.timed("eval"):
           eval_results = evaluate(
-              p_eval_step=p_eval_step,
+              jit_eval_step=jit_eval_step,
               params=state.params,
               eval_ds=eval_ds,
               num_eval_steps=config.num_eval_steps,
+              config=eval_config,
           )
           # (clipped) perplexity after averaging log-perplexitie
           eval_results["perplexity"] = jnp.clip(
@@ -574,13 +607,14 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
 
         with report_progress.timed("generate_text"):
           exemplars = generate_prediction(
-              p_pred_step=p_pred_step,
+              jit_pred_step=jit_pred_step,
               params=state.params,
               tokenized_prompts=tokenized_prompts,
               eos_id=eos_id,
               inference_rng=inference_rng,
               decode_tokens=decode_tokens,
-              max_predict_length=config.max_predict_length,
+              config=config,
+              predict_config=predict_config,
           )
           writer.write_texts(step, {"samples": exemplars})
 
@@ -591,6 +625,4 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       if config.save_checkpoints and save_checkpoint:
         logging.info("Saving checkpoint step %d.", step)
         with report_progress.timed("checkpoint"):
-          checkpoints.save_checkpoint_multiprocess(
-              workdir, jax_utils.unreplicate(state), step
-          )
+          checkpoints.save_checkpoint_multiprocess(workdir, state, step)
