@@ -72,7 +72,9 @@ class Dense(nn.Module):
       initializers.zeros_init()
   )
   kernel_axes: Tuple[str, ...] = ()
+  # Deprecated. Will be removed.
   dot_general: DotGeneralT = lax.dot_general
+  dot_general_cls: Any = None
 
   @nn.compact
   def __call__(self, inputs: Array) -> Array:
@@ -93,7 +95,12 @@ class Dense(nn.Module):
         axes=self.kernel_axes,
     )
     kernel = jnp.asarray(kernel, self.dtype)
-    y = self.dot_general(
+
+    if self.dot_general_cls is not None:
+      dot_general = self.dot_general_cls()
+    else:
+      dot_general = self.dot_general
+    y = dot_general(
         inputs,
         kernel,
         (((inputs.ndim - 1,), (0,)), ((), ())),

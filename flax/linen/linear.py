@@ -97,7 +97,9 @@ class DenseGeneral(Module):
       initializers.zeros_init()
   )
   precision: PrecisionLike = None
+  # Deprecated. Will be removed.
   dot_general: DotGeneralT = lax.dot_general
+  dot_general_cls: Any = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -174,7 +176,11 @@ class DenseGeneral(Module):
 
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
 
-    out = self.dot_general(
+    if self.dot_general_cls is not None:
+      dot_general = self.dot_general_cls()
+    else:
+      dot_general = self.dot_general
+    out = dot_general(
         inputs,
         kernel,
         ((axis, contract_ind), (batch_dims, batch_ind)),
@@ -211,7 +217,9 @@ class Dense(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       initializers.zeros_init()
   )
+  # Deprecated. Will be removed.
   dot_general: DotGeneralT = lax.dot_general
+  dot_general_cls: Any = None
 
   @compact
   def __call__(self, inputs: Array) -> Array:
@@ -236,7 +244,12 @@ class Dense(Module):
     else:
       bias = None
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
-    y = self.dot_general(
+
+    if self.dot_general_cls is not None:
+      dot_general = self.dot_general_cls()
+    else:
+      dot_general = self.dot_general
+    y = dot_general(
         inputs,
         kernel,
         (((inputs.ndim - 1,), (0,)), ((), ())),
@@ -338,7 +351,9 @@ class _Conv(Module):
   bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
       initializers.zeros_init()
   )
+  # Deprecated. Will be removed.
   conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated
+  conv_general_dilated_cls: Any = None
 
   @property
   def shared_weights(self) -> bool:  # type: ignore
@@ -451,8 +466,12 @@ class _Conv(Module):
 
       # Need to know the spatial output shape of a standard convolution to
       # create the unshared convolution kernel.
+      if self.conv_general_dilated_cls is not None:
+        conv_general_dilated = self.conv_general_dilated_cls()
+      else:
+        conv_general_dilated = self.conv_general_dilated
       conv_output_shape = eval_shape(
-          lambda lhs, rhs: self.conv_general_dilated(  # pylint: disable=g-long-lambda
+          lambda lhs, rhs: conv_general_dilated(  # pylint: disable=g-long-lambda
               lhs=lhs,
               rhs=rhs,
               window_strides=strides,
@@ -498,7 +517,11 @@ class _Conv(Module):
 
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
     if self.shared_weights:
-      y = self.conv_general_dilated(
+      if self.conv_general_dilated_cls is not None:
+        conv_general_dilated = self.conv_general_dilated_cls()
+      else:
+        conv_general_dilated = self.conv_general_dilated
+      y = conv_general_dilated(
           inputs,
           kernel,
           strides,

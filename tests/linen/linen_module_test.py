@@ -824,6 +824,7 @@ class ModuleTest(absltest.TestCase):
         kernel_init = init
         bias_init = zeros
         dot_general = dot_general
+        dot_general_cls = None
     )
     Dense_1 = Dense(
         # attributes
@@ -835,6 +836,7 @@ class ModuleTest(absltest.TestCase):
         kernel_init = init
         bias_init = zeros
         dot_general = dot_general
+        dot_general_cls = None
     )
 )"""
     x = jnp.ones((1, 2))
