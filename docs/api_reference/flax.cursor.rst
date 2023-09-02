@@ -18,7 +18,7 @@ To illustrate, consider the example below::
 
   a = A(A(A(A(A(A(A(0)))))))
 
-To replace the int 0 using ``dataclasses.replace``, we would have to write many nested calls::
+To replace the int ``0`` using ``dataclasses.replace``, we would have to write many nested calls::
 
   a2 = dataclasses.replace(
     a,
@@ -55,6 +55,6 @@ generating a new copy of the original object with the accumulated changes.
 .. autofunction:: cursor
 
 .. autoclass:: Cursor
-  :members: build, set, apply_update
+  :members: apply_update, build, find, find_all, set
 
 

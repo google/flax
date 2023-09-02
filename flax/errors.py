@@ -895,3 +895,53 @@ class AlreadyExistsError(FlaxError):
 
   def __init__(self, path):
     super().__init__(f'Trying overwrite an existing file: "{path}".')
+
+
+#################################################
+# cursor.py errors                                  #
+#################################################
+
+
+class CursorFindError(FlaxError):
+  """Error when calling :meth:`Cursor.find() <flax.cursor.Cursor.find>`.
+
+  This error occurs if no object or more than one object is found, given
+  the conditions of the ``cond_fn``.
+  """
+
+  def __init__(self, cursor=None, cursor2=None):
+    if cursor and cursor2:
+      super().__init__(
+          'More than one object found given the conditions of the cond_fn. '
+          'The first two objects found have the following paths: '
+          f'{cursor._path} and {cursor2._path}'
+      )
+    else:
+      super().__init__('No object found given the conditions of the cond_fn.')
+
+
+class TraverseTreeError(FlaxError):
+  """Error when calling ``Cursor._traverse_tree()``. This function has two
+  modes:
+
+  - if ``update_fn`` is not None, it will traverse the tree and return a
+    generator of tuples containing the path where the ``update_fn`` was
+    applied and the newly modified value.
+  - if ``cond_fn`` is not None, it will traverse the tree and return a
+    generator of tuple paths that fulfilled the conditions of the ``cond_fn``.
+
+  This error occurs if either both ``update_fn`` and ``cond_fn`` are None,
+  or both are not None.
+  """
+
+  def __init__(self, update_fn, cond_fn):
+    if update_fn is None and cond_fn is None:
+      super().__init__(
+          'Both update_fn and cond_fn are None. Exactly one of them must be'
+          ' None.'
+      )
+    else:
+      super().__init__(
+          'Both update_fn and cond_fn are not None. Exactly one of them must be'
+          ' not None.'
+      )
