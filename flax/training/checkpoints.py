@@ -656,7 +656,9 @@ def save_checkpoint(
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
       orbax_checkpointer = ocp.Checkpointer(
-          ocp.PyTreeCheckpointHandler(restore_with_serialized_types=False)
+          ocp.PyTreeCheckpointHandler(
+              restore_with_serialized_types=False, use_ocdbt=True
+          )
       )
     # Check singular target.
     if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
@@ -803,7 +805,9 @@ def save_checkpoint_multiprocess(
     # If no checkpointer provided, save synchronously with default setting.
     if not orbax_checkpointer:
       orbax_checkpointer = ocp.Checkpointer(
-          ocp.PyTreeCheckpointHandler(restore_with_serialized_types=False)
+          ocp.PyTreeCheckpointHandler(
+              restore_with_serialized_types=False, use_ocdbt=True
+          )
       )
     # Check singular target.
     if jtu.treedef_is_leaf(jtu.tree_structure(target)) and not isinstance(
@@ -1065,7 +1069,9 @@ def restore_checkpoint(
   if is_orbax:
     if not orbax_checkpointer:
       orbax_checkpointer = ocp.Checkpointer(
-          ocp.PyTreeCheckpointHandler(restore_with_serialized_types=False)
+          ocp.PyTreeCheckpointHandler(
+              restore_with_serialized_types=False, use_ocdbt=True
+          )
       )
 
     restore_kwargs = {}
