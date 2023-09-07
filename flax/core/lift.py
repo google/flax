@@ -206,19 +206,22 @@ def pack(
         scope_mutable = intersect_filters(
             intersect_filters(scope.mutable, mutable), mutable_filter
         )
-        new_path = scope.path
+        new_debug_path = scope.debug_path
         if name:
-          if new_path:
-            new_path = new_path[:-1] + (f'{name}({new_path[-1]})',)
+          if new_debug_path:
+            new_debug_path = new_debug_path[:-1] + (
+                f'{name}({new_debug_path[-1]})',
+            )
           else:
-            new_path = (f'{name}()',)
+            new_debug_path = (f'{name}()',)
         inner_scope = Scope(
             variables,
             name=scope.name,
             rngs=rngs,
             mutable=scope_mutable,
             parent=None,
-            path=new_path,
+            path=scope.path,
+            debug_path=new_debug_path,
             flags=scope.flags,
         )
         inner_scope.rng_counters = rng_counters

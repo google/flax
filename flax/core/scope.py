@@ -443,6 +443,7 @@ class Scope:
       mutable: CollectionFilter = False,
       parent: Optional['Scope'] = None,
       path: Iterable[str] = (),
+      debug_path: Iterable[str] = (),
       flags: Optional[Mapping] = None,
   ):
     """Initializes a Scope.
@@ -453,7 +454,9 @@ class Scope:
       name: name of this scope.
       mutable: A CollectionFilter determining which variables are mutable.
       parent: The parent scope.
-      path: The path in the variable tree from the root scope to this scope.
+      path: The path in the variable tree from the root scope to this scope. It
+        exactly matches the module path.
+      debug_path: Similar to path but could contain transformation decorators.
       flags: internal flags.
     """
     rngs = {k: LazyRng.create(v) for k, v in rngs.items()} if rngs else {}
@@ -461,6 +464,7 @@ class Scope:
     self.parent = parent
     self.name = name
     self.path = tuple(path)
+    self.debug_path = tuple(debug_path) or self.path
     self.rngs = rngs
     self.mutable = mutable
     self.flags = freeze({} if flags is None else flags)
@@ -497,8 +501,8 @@ class Scope:
 
   @property
   def path_text(self) -> str:
-    """Returns the path as a human readable string with slashes between parts."""
-    return '/' + '/'.join(self.path)
+    """Returns the debug path as a human readable string."""
+    return '/' + '/'.join(self.debug_path)
 
   @property
   def invalid(self) -> bool:
@@ -559,6 +563,7 @@ class Scope:
         self.mutable,
         self.parent,
         path=self.path,
+        debug_path=self.debug_path,
         flags=self.flags,
     )
     if not rewind_rngs:
@@ -651,6 +656,7 @@ class Scope:
         parent=self,
         mutable=self.mutable,
         path=self.path + (name,),
+        debug_path=self.debug_path + (name,),
         flags=self.flags,
     )
     scope.rng_counters = rng_counters

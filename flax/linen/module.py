@@ -155,21 +155,6 @@ def _module_repr(module: 'Module', num_spaces: int = 4):
 
 # Tabulation utilities.
 # -----------------------------------------------------------------------------
-
-_find_non_lifted_module = re.compile(r'.*\((.*)\)')
-
-
-def _fix_path_part(part: str):
-  """Fixes a path part by removing transformation name and parenthesis sometimes
-
-  inserted by lifted transformations
-  """
-  match = _find_non_lifted_module.match(part)
-  if match:
-    return match.group(1)
-  return part
-
-
 @dataclasses.dataclass
 class _CallInfo:
   index: int
@@ -1122,7 +1107,6 @@ class Module(ModuleBase):
       if add_call_info:
         assert self.scope is not None
         call_index = _context.call_info_stack[-1].get_call_index(self)
-        scope_path = jax.tree_util.tree_map(_fix_path_part, self.scope.path)
 
       if _global_interceptor_stack:
         run_fun = functools.partial(run_interceptors, fun)
@@ -1147,7 +1131,7 @@ class Module(ModuleBase):
         _context.call_info_stack[-1].calls.append(
             _CallInfo(
                 call_index,
-                scope_path,
+                self.path,
                 type(self),
                 fun.__name__,
                 _args,
@@ -1435,6 +1419,13 @@ class Module(ModuleBase):
         or self._state.in_setup
         or self._state.in_compact_method
     )
+
+  @property
+  def path(self):
+    if self.scope is None:
+      raise ValueError("Can't access module paths on unbound modules.")
+
+    return self.scope.path
 
   def clone(
       self: M,

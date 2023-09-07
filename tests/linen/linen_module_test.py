@@ -2228,6 +2228,96 @@ class ModuleTest(absltest.TestCase):
       Foo(1, None)
     Foo(a=1, parent=None)  # type: ignore[call-arg]
 
+  def test_module_path_empty(self):
+    rngkey = jax.random.PRNGKey(0)
+    scope = Scope({}, {'params': rngkey}, mutable=['params'])
+    m1 = DummyModule(parent=scope)
+
+    self.assertEqual(m1.path, ())
+
+    scope = Scope({}, {'params': rngkey}, mutable=['params'], path=['root'])
+    m2 = DummyModule(parent=scope)
+
+    self.assertEqual(m2.path, ('root',))
+
+    m3 = DummyModule(parent=scope.rewound())
+
+    self.assertEqual(m3.path, ('root',))
+
+  def test_module_path_unbound_module_error(self):
+    m1 = DummyModule()
+    with self.assertRaisesRegex(ValueError, 'unbound module'):
+      _ = m1.path
+
+  def test_module_path_in_nested_module(self):
+    module_paths = []
+    debug_paths = []
+
+    class A(nn.Module):
+
+      def setup(self):
+        self.b1 = B()
+        self.b2 = B()
+        self.c1 = C()
+
+        module_paths.append(self.path)
+        debug_paths.append(self.scope.debug_path)
+
+      def __call__(self, x):
+        return self.b1(x) + self.b2(x) + self.c1(x)
+
+    class B(nn.Module):
+
+      def setup(self):
+        self.c1 = nn.remat(nn.remat(C))()
+        self.c2 = C()
+
+        module_paths.append(self.path)
+        debug_paths.append(self.scope.debug_path)
+
+      def __call__(self, x):
+        return self.c1(x) + self.c2(x)
+
+    class C(nn.Module):
+
+      def setup(self):
+        super().setup()
+        if self.scope.__class__.__name__ != 'TestScope':
+          module_paths.append(self.path)
+          debug_paths.append(self.scope.debug_path)
+
+      @nn.compact
+      def __call__(self, x):
+        return x
+
+    a = A()
+    k = random.PRNGKey(0)
+    x = random.uniform(random.PRNGKey(42), (2,))
+    _ = a.init(k, x)
+    expected_module_paths = [
+        (),
+        ('b1',),
+        ('b1', 'c1'),
+        ('b1', 'c2'),
+        ('b2',),
+        ('b2', 'c1'),
+        ('b2', 'c2'),
+        ('c1',),
+    ]
+    expected_debug_paths = [
+        (),
+        ('b1',),
+        ('b1', 'remat(remat(c1))'),
+        ('b1', 'c2'),
+        ('b2',),
+        ('b2', 'remat(remat(c1))'),
+        ('b2', 'c2'),
+        ('c1',),
+    ]
+
+    self.assertEqual(module_paths, expected_module_paths)
+    self.assertEqual(debug_paths, expected_debug_paths)
+
   def test_intercept_methods(self):
     mod = IdentityModule(parent=None)
     x = jnp.ones([])
