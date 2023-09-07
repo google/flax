@@ -132,7 +132,7 @@ def prefetch_to_device(iterator, size, devices=None):
     the specified devices.
   """
   queue = collections.deque()
-  devices = devices or _pmap_device_order()
+  devices = _pmap_device_order() if devices is None else devices
 
   def _prefetch(xs):
     return jax.device_put_sharded(list(xs), devices)
