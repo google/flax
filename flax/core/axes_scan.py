@@ -19,7 +19,7 @@ from typing import Any, Callable, Optional
 import jax
 from jax import core
 from jax import lax
-from jax import linear_util as lu
+import jax.extend.linear_util as lu
 from jax.interpreters import partial_eval as pe
 import jax.numpy as jnp
 import numpy as np
