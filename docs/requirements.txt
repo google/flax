@@ -24,6 +24,7 @@ scikit-learn
 ml_collections
 tensorflow
 tensorflow_datasets
+tensorflow_text>=2.11.0 # WMT example
 
 # notebooks
 einops
