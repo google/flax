@@ -890,6 +890,19 @@ class ModuleTest(absltest.TestCase):
       # test same for init.
       Foo().init({}, method='not_callable')
 
+  def test_module_apply_method_submodule(self):
+    class Foo(nn.Module):
+      bar: nn.Module
+
+      @nn.compact
+      def __call__(self, x):
+        return self.bar(x)
+
+    foo = Foo(nn.Dense(3))
+    variables = foo.init(jax.random.PRNGKey(0), jnp.zeros(3))
+
+    foo.apply(variables, jnp.zeros(3), method='bar')
+
   def test_call_unbound_compact_module_methods(self):
     dense = Dense(3)
     msg = r'Can\'t call compact methods on unbound modules'
