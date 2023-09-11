@@ -16,6 +16,7 @@
 
 import functools
 from multiprocessing.sharedctypes import Value
+from typing import Callable, Optional
 
 from absl.testing import absltest
 from absl.testing import parameterized
@@ -1015,6 +1016,66 @@ class LinearTest(parameterized.TestCase):
         {'dense': {'kernel': (4, 6), 'bias': (6,)}},
     )
     self.assertEqual(y.shape, (2, 8, 6))
+
+  def test_fp8_dot_general_cls_injection(self):
+    # Used to cast the inputs to be representable in FP8, so that the difference
+    # of the results from the original gemm and fp8 gemm is small.
+    cast_to_representable = functools.partial(nn.fp8_quantize_dequantize,
+                                              scale=jnp.ones((1,)),
+                                              compute_dtype=jnp.float32)
+    class Foo(nn.Module):
+      dot_custom_op: Optional[Callable] = None
+      @nn.compact
+      def __call__(self, x):
+        return nn.DenseGeneral(features=64, name='dense',
+                               dot_general_cls=self.dot_custom_op)(x)
+    prng_key = jax.random.PRNGKey(seed=123)
+    prng_key, init_key, random_key = jax.random.split(prng_key, 3)
+
+    x = jax.random.uniform(random_key, (16, 32))
+    x = cast_to_representable(x, jnp.float8_e4m3fn)
+    dy = jax.random.uniform(random_key, (16, 64))
+    dy = cast_to_representable(dy, jnp.float8_e5m2)
+    def run(custom_op, expected_shapes):
+      p = Foo()
+      if custom_op:
+        p.dot_custom_op = custom_op
+      y, initial_vars = p.init_with_output(random.PRNGKey(0), x)
+      var_shapes = jax.tree_util.tree_map(jnp.shape, initial_vars)
+      if 'fp8_params_axes' in var_shapes:
+          var_shapes.pop('fp8_params_axes')
+      self.assertEqual(var_shapes, expected_shapes)
+
+      def _train(variables, x):
+        y = p.apply(variables, x)
+        loss = y * dy
+        return jnp.mean(loss)
+      train_fn = jax.jit(jax.value_and_grad(_train, argnums=[0, 1]))
+      outputs, grads = train_fn(initial_vars, x)
+      return outputs, grads
+     
+    #y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+    expected_shapes_original = {
+        'params': {'dense': {'kernel': (32, 64), 'bias': (64,)}},
+    }
+    expected_shapes_new = {
+        'params': {'dense': {'kernel': (32, 64), 'bias': (64,)}},
+        'fp8_params': {'dense': {'Fp8DenseGeneralOp_0': {'input_amax_history': (1024,),
+                                                         'kernel_amax_history': (1024,),
+                                                         'output_grad_amax_history': (1024,),
+                                                         'input_scale': (1,),
+                                                         'kernel_scale': (1,),
+                                                         'output_grad_scale': (1,),}}},
+    }
+
+    output1a, output1b = run(None, expected_shapes_original)
+    output2a, output2b = run(nn.Fp8DenseGeneralOp, expected_shapes_new)
+    dw1, dw2 = output1b[0]['params']['dense']['kernel'], output2b[0]['params']['dense']['kernel']
+    dx1, dx2 = output1b[1], output2b[1]
+
+    np.testing.assert_allclose(output1a, output2a, atol=1e-02)
+    np.testing.assert_allclose(dw1, dw2, atol=1e-04)
+    np.testing.assert_allclose(dx1, dx2, atol=1e-04)
 
   def test_non_final_axes(self):
     class Foo(nn.Module):
