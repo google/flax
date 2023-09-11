@@ -1910,6 +1910,12 @@ class Module(ModuleBase):
             f"'{class_name}.{attribute_name}' must be a callable, got"
             f' {type(method)}.'
         )
+      # if the `method` string is a submodule, we create a lambda function
+      # that calls the submodule, forwarding all arguments.
+      if isinstance(method, Module):
+        method = lambda self, *args, **kwargs: getattr(self, attribute_name)(
+            *args, **kwargs
+        )
     elif method is None:
       method = self.__call__
     method = _get_unbound_fn(method)
