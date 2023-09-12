@@ -102,6 +102,7 @@ from .normalization import (
     GroupNorm as GroupNorm,
     LayerNorm as LayerNorm,
     RMSNorm as RMSNorm,
+    SpectralNorm as SpectralNorm,
 )
 from .pooling import (avg_pool as avg_pool, max_pool as max_pool, pool as pool)
 from .recurrent import (

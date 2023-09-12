@@ -14,9 +14,14 @@
 
 """Normalization modules for Flax."""
 
+import dataclasses
+import functools
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
+
 from flax.linen.dtypes import canonicalize_dtype
 from flax.linen.module import Module, compact, merge_param  # pylint: disable=g-multiple-import
+from flax.linen.transforms import map_variables
+import jax
 from jax import lax
 from jax.nn import initializers
 import jax.numpy as jnp
@@ -120,7 +125,7 @@ def _compute_stats(
   return mu, var
 
 
-def _normalize(
+def _z_normalize_and_scale(
     mdl: Module,
     x: Array,
     mean: Array,
@@ -185,6 +190,24 @@ def _normalize(
     args.append(bias)
   dtype = canonicalize_dtype(*args, dtype=dtype)
   return jnp.asarray(y, dtype)
+
+
+def _l2_normalize(x, axis=None, eps=1e-12):
+  """Normalizes along dimension `axis` using an L2 norm.
+
+  This specialized function exists for numerical stability reasons.
+
+  Args:
+    x: An input ndarray.
+    axis: Dimension along which to normalize, e.g. `1` to separately normalize
+      vectors in a batch. Passing `None` views `t` as a flattened vector when
+      calculating the norm (equivalent to Frobenius norm).
+    eps: Epsilon to avoid dividing by zero.
+
+  Returns:
+    An array of the same shape as 'x' L2-normalized along 'axis'.
+  """
+  return x * jax.lax.rsqrt((x * x).sum(axis=axis, keepdims=True) + eps)
 
 
 class BatchNorm(Module):
@@ -312,7 +335,7 @@ class BatchNorm(Module):
         )
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
-    return _normalize(
+    return _z_normalize_and_scale(
         self,
         x,
         mean,
@@ -394,7 +417,7 @@ class LayerNorm(Module):
         use_fast_variance=self.use_fast_variance,
     )
 
-    return _normalize(
+    return _z_normalize_and_scale(
         self,
         x,
         mean,
@@ -480,7 +503,7 @@ class RMSNorm(Module):
         use_mean=False,
     )
 
-    return _normalize(
+    return _z_normalize_and_scale(
         self,
         x,
         mean,
@@ -603,7 +626,7 @@ class GroupNorm(Module):
     mean = jnp.repeat(mean, group_size, axis=-1)
     var = jnp.repeat(var, group_size, axis=-1)
 
-    return _normalize(
+    return _z_normalize_and_scale(
         self,
         x,
         mean,
@@ -618,3 +641,141 @@ class GroupNorm(Module):
         self.bias_init,
         self.scale_init,
     )
+
+
+class SpectralNorm(Module):
+  """Spectral normalization (https://arxiv.org/abs/2006.10108).
+
+  Spectral normalization normalizes the weight params so that the spectral
+  norm of the matrix is equal to 1.
+
+  Example::
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.SpectralNorm(nn.Dense(2))(x)
+        x = nn.Dense(2)(x)
+        return x
+    x = jax.random.uniform(jax.random.PRNGKey(0), (2, 3))
+    variables = Foo.init(jax.random.PRNGKey(1), x)
+    y = Foo.apply(variables, x)
+
+  Attributes:
+    layer: Module instance that you want to wrap in SpectralNorm
+    n_steps: How many steps of power iteration to perform to approximate the
+      singular value of the input.
+    epsilon: A small float added to l2-normalization to avoid dividing by zero.
+    dtype: the dtype of the result (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    error_on_non_matrix: Spectral normalization is only defined on matrices.
+      By default, this module will return scalars unchanged and flatten
+      higher-order tensors in their leading dimensions. Setting this flag to
+      True will instead throw errors in those cases.
+  """
+
+  # TODO: fix docstring
+
+  layer: Module
+  n_steps: int = 1
+  epsilon: float = 1e-12
+  dtype: Optional[Dtype] = None
+  param_dtype: Dtype = jnp.float32
+  error_on_non_matrix: bool = False
+
+  @compact
+  def __call__(self, x, update_stats: bool):
+    # update_stats = merge_param('update_stats', self.update_stats, update_stats)
+    # TODO: fix docstring
+    # x: the input to be normalized.
+    # use_running_average: if true, the statistics stored in batch_stats will be
+    #   used instead of computing the batch statistics on the input.
+    #
+
+    # TODO: figure out if there's a more elegant and robust way of unpacking a module instance and re-initializing it after it's been parametrized by map_variables
+    # TODO: or figure out how to elegantly pass in a module class with it's args into the SpectralNorm constructor
+    layer_class = type(self.layer)
+    layer_kwargs = {
+        f.name: (
+            getattr(self.layer, f.name)
+            if f.name != 'name'
+            else f'{self.name}({getattr(self.layer, f.name)})'
+        )
+        for f in dataclasses.fields(self.layer)
+    }
+    return map_variables(
+        layer_class,
+        'params',
+        trans_in_fn=lambda vs: jax.tree_map(
+            functools.partial(
+                self.spectral_normalize, update_stats=update_stats
+            ),
+            vs,
+        ),
+        init=True,
+        mutable=True,
+    )(**layer_kwargs)(x)
+
+  def spectral_normalize(self, x, update_stats):
+    # TODO: add docstring
+    """update_stats: A boolean defaulting to True. Regardless of this arg, this
+    function will return the normalized input. When
+    `update_stats` is True, the internal state of this object will also be
+    updated to reflect the input value. When `update_stats` is False the
+    internal stats will remain unchanged."""
+    value = jnp.asarray(x)
+    value_shape = value.shape
+
+    # Skip and return value if input is scalar, vector or if number of power iterations is less than 1
+    if value.ndim <= 1 or self.n_steps < 1:
+      return value
+    # Handle higher-order tensors.
+    elif value.ndim > 2:
+      if self.error_on_non_matrix:
+        raise ValueError(
+            f'Input is {value.ndim}D but error_on_non_matrix is True'
+        )
+      else:
+        value = jnp.reshape(value, (-1, value.shape[-1]))
+
+    # TODO: check if you need to make a separate u and sigma collection for each param in the same layer
+    # (e.g. transformer layer would need a separate u and sigma for query, key and value param)
+    # u0 = jax.random.normal(
+    #     jax.random.PRNGKey(0), (1, value.shape[-1]), self.param_dtype
+    # )
+    # TODO: maybe just change u_var and sigma_var to self.param instead of self.variable
+    u_var = self.variable(
+        'batch_stats',
+        'u',
+        jax.random.normal,
+        self.make_rng(
+            'spectral_norm'
+        ),  # TODO: figure out how to not require an RNG during apply (only needed in init), or how to derive an rng key from the one that's passed down to init
+        (1, value.shape[-1]),
+        self.param_dtype,
+    )
+    u0 = u_var.value
+    sigma_var = self.variable(
+        'batch_stats', 'sigma', jnp.ones, (), self.param_dtype
+    )
+
+    # Power iteration for the weight's singular value.
+    for _ in range(self.n_steps):
+      v0 = _l2_normalize(
+          jnp.matmul(u0, value.transpose([1, 0])), eps=self.epsilon
+      )
+      u0 = _l2_normalize(jnp.matmul(v0, value), eps=self.epsilon)
+
+    u0 = jax.lax.stop_gradient(u0)
+    v0 = jax.lax.stop_gradient(v0)
+
+    sigma = jnp.matmul(jnp.matmul(v0, value), jnp.transpose(u0))[0, 0]
+
+    value /= sigma
+    value_bar = value.reshape(value_shape)
+
+    if update_stats:
+      u_var.value = u0
+      sigma_var.value = sigma
+
+    dtype = canonicalize_dtype(x, u0, v0, sigma, dtype=self.dtype)
+    return jnp.asarray(value_bar, dtype)
