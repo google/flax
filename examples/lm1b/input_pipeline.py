@@ -322,7 +322,7 @@ def get_datasets(
     config: ml_collections.ConfigDict,
     *,
     n_devices: int,
-    vocab_path: Optional[str] = None
+    vocab_path: Optional[str] = None,
 ):
   """Load and return dataset of batched examples for use during training."""
   if vocab_path is None:

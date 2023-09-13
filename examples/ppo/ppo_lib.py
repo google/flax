@@ -139,7 +139,7 @@ def train_step(
     *,
     clip_param: float,
     vf_coeff: float,
-    entropy_coeff: float
+    entropy_coeff: float,
 ):
   """Compilable train step.
 
