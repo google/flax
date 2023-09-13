@@ -96,16 +96,15 @@ class TrainState(struct.PyTreeNode):
     updates, new_opt_state = self.tx.update(non_fp8_grads, self.opt_state,
                                             non_fp8_params)
     new_params = optax.apply_updates(non_fp8_params, updates)
-
-    # Without fp8, self.param is a dict like {'kernel':..,};
+    
+    # Without fp8, self.param is structured as {'param': {'kernel:...,'}};
     # With fp8, self.param is {'param': {'kernel:...,'}, 'fp8_params': {...},
     #                          'fp8_params_axes': {...}}
     if use_fp8:
       # For the fp8 variables in the fp8-params collection, we will simply
       # replace them with their grads, because their grads are actually new
-      # values defined in the custom_vjp functions.            
-      updated_params = {'params': new_params,
-                        'fp8_params': grads['fp8_params']}
+      # values defined in the custom_vjp functions.
+      updated_params = {'params': new_params, 'fp8_params': grads['fp8_params']}
       if 'fp8_params_axes' in self.params:
         updated_params['fp8_params_axes'] = self.params['fp8_params_axes']
     else:
@@ -121,8 +120,7 @@ class TrainState(struct.PyTreeNode):
   @classmethod
   def create(cls, *, apply_fn, params, tx, **kwargs):
     """Creates a new instance with `step=0` and initialized `opt_state`."""
-    use_fp8 = 'fp8_params' in params
-    if use_fp8:
+    if 'fp8_params' in params:
       fp8_params = params['fp8_params']
       if 'fp8_params_axes' in params:
         fp8_params_axes = params['fp8_params_axes']

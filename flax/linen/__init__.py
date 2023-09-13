@@ -70,6 +70,7 @@ from .attention import (
 )
 from .combinators import Sequential as Sequential
 from .fp8_ops import (
+  compute_scale as fp8_compute_scale,
   quantize_dequantize as fp8_quantize_dequantize,
   Fp8DenseGeneralOp as Fp8DenseGeneralOp,
 )
