@@ -54,7 +54,7 @@ import dataclasses
 import inspect
 import functools
 from types import MappingProxyType
-from typing import Any, TypeVar
+from typing import Any, Type, TypeVar
 from typing_extensions import dataclass_transform
 import flax
 
@@ -123,7 +123,7 @@ def dataclass(cls=None, extra_fields=None, **kwargs):
   return wrap if cls is None else wrap(cls)
 
 
-def _process_class(cls: type[M], extra_fields=None, **kwargs):
+def _process_class(cls: Type[M], extra_fields=None, **kwargs):
   """Transforms `cls` into a dataclass that supports kw_only fields."""
   if '__annotations__' not in cls.__dict__:
     cls.__annotations__ = {}
@@ -205,7 +205,7 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
   create_init = '__init__' not in vars(cls) and kwargs.get('init', True)
 
   # Apply the dataclass transform.
-  transformed_cls: type[M] = dataclasses.dataclass(cls, **kwargs)
+  transformed_cls: Type[M] = dataclasses.dataclass(cls, **kwargs)
 
   # Restore the base classes' __dataclass_fields__.
   for _cls, fields in base_dataclass_fields.items():
