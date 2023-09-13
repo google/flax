@@ -1,8 +1,6 @@
-from typing import Callable, Iterable, Union, Tuple
+from typing import Callable
 from functools import partial
 
-from flax import core
-from flax.core import scope as flax_scope
 from flax.linen import initializers
 from flax.linen.module import Module
 from flax.linen import partitioning as nn_partitioning
@@ -11,25 +9,13 @@ from jax import lax
 from jax import numpy as jnp
 from jax import random
 
-from fp8layers.jax_common.fp8 import fp8_dot_general
 
-param_with_axes = nn_partitioning.param_with_axes
 variable_with_axes = nn_partitioning.variable_with_axes
 
 # Type annotations
 Array = jnp.ndarray
 Dtype = jnp.dtype
 PRNGKey = jnp.ndarray
-Shape = Iterable[int]
-ActivationFn = Callable[..., Array]
-DotGeneralT = Callable[..., Array]
-PrecisionLike = Union[
-    None,
-    str,
-    lax.Precision,
-    Tuple[str, str],
-    Tuple[lax.Precision, lax.Precision],
-]
 
 class FP8Helper:
   FP8_COLLECTION_NAME: str = "fp8_params"

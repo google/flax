@@ -1023,24 +1023,20 @@ class LinearTest(parameterized.TestCase):
     cast_to_representable = functools.partial(nn.fp8_quantize_dequantize,
                                               scale=jnp.ones((1,)),
                                               compute_dtype=jnp.float32)
-    class Foo(nn.Module):
-      dot_custom_op: Optional[Callable] = None
-      @nn.compact
-      def __call__(self, x):
-        return nn.DenseGeneral(features=64, name='dense',
-                               dot_general_cls=self.dot_custom_op)(x)
-    prng_key = jax.random.PRNGKey(seed=123)
-    prng_key, init_key, random_key = jax.random.split(prng_key, 3)
+
+    init_key, random_key = jax.random.split(
+        jax.random.PRNGKey(seed=123), 2)
 
     x = jax.random.uniform(random_key, (16, 32))
     x = cast_to_representable(x, jnp.float8_e4m3fn)
     dy = jax.random.uniform(random_key, (16, 64))
     dy = cast_to_representable(dy, jnp.float8_e5m2)
-    def run(custom_op, expected_shapes):
-      p = Foo()
-      if custom_op:
-        p.dot_custom_op = custom_op
-      y, initial_vars = p.init_with_output(random.PRNGKey(0), x)
+    def run(fp8_injection, expected_shapes):
+      dg_args = {}
+      if fp8_injection:
+        dg_arg = {'dot_general_cls': nn.Fp8DenseGeneralOp}
+      p = nn.DenseGeneral(features=64, name='dense', **dg_args)
+      y, initial_vars = p.init_with_output(init_key, x)
       var_shapes = jax.tree_util.tree_map(jnp.shape, initial_vars)
       if 'fp8_params_axes' in var_shapes:
           var_shapes.pop('fp8_params_axes')
@@ -1053,8 +1049,7 @@ class LinearTest(parameterized.TestCase):
       train_fn = jax.jit(jax.value_and_grad(_train, argnums=[0, 1]))
       outputs, grads = train_fn(initial_vars, x)
       return outputs, grads
-     
-    #y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+
     expected_shapes_original = {
         'params': {'dense': {'kernel': (32, 64), 'bias': (64,)}},
     }
@@ -1065,11 +1060,11 @@ class LinearTest(parameterized.TestCase):
                                                          'output_grad_amax_history': (1024,),
                                                          'input_scale': (1,),
                                                          'kernel_scale': (1,),
-                                                         'output_grad_scale': (1,),}}},
+                                                         'output_grad_scale': (1,), }}},
     }
 
-    output1a, output1b = run(None, expected_shapes_original)
-    output2a, output2b = run(nn.Fp8DenseGeneralOp, expected_shapes_new)
+    output1a, output1b = run(False, expected_shapes_original)
+    output2a, output2b = run(True, expected_shapes_new)
     dw1, dw2 = output1b[0]['params']['dense']['kernel'], output2b[0]['params']['dense']['kernel']
     dx1, dx2 = output1b[1], output2b[1]
 

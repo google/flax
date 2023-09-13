@@ -15,8 +15,21 @@
 from typing import Any, Callable
 
 from flax import core
+from flax import linen as nn
 from flax import struct
+from flax import traverse_util
+
 import optax
+
+
+def _validate_params_axes(params_axes, params):
+  axis_names = nn.partitioning.get_axis_names(params_axes)
+  missing_params_axes = (
+      set(traverse_util.flatten_dict(params, sep='/')) -
+      set(traverse_util.flatten_dict(axis_names, sep='/')))
+  if missing_params_axes:
+    raise ValueError(
+        f'Missing axis names for parameters: {missing_params_axes}')
 
 
 class TrainState(struct.PyTreeNode):
@@ -71,11 +84,36 @@ class TrainState(struct.PyTreeNode):
       and `opt_state` updated by applying `grads`, and additional attributes
       replaced as specified by `kwargs`.
     """
-    updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
-    new_params = optax.apply_updates(self.params, updates)
+    use_fp8 = 'fp8_params' in self.params
+    if use_fp8:
+      assert 'fp8_params' in grads
+      non_fp8_params = self.params['params']
+      non_fp8_grads = grads['params']
+    else:
+      non_fp8_params = self.params
+      non_fp8_grads = grads
+
+    updates, new_opt_state = self.tx.update(non_fp8_grads, self.opt_state,
+                                            non_fp8_params)
+    new_params = optax.apply_updates(non_fp8_params, updates)
+
+    # Without fp8, self.param is a dict like {'kernel':..,};
+    # With fp8, self.param is {'param': {'kernel:...,'}, 'fp8_params': {...},
+    #                          'fp8_params_axes': {...}}
+    if use_fp8:
+      # For the fp8 variables in the fp8-params collection, we will simply
+      # replace them with their grads, because their grads are actually new
+      # values defined in the custom_vjp functions.            
+      updated_params = {'params': new_params,
+                        'fp8_params': grads['fp8_params']}
+      if 'fp8_params_axes' in self.params:
+        updated_params['fp8_params_axes'] = self.params['fp8_params_axes']
+    else:
+      updated_params = new_params
+
     return self.replace(
         step=self.step + 1,
-        params=new_params,
+        params=updated_params,
         opt_state=new_opt_state,
         **kwargs,
     )
@@ -83,7 +121,16 @@ class TrainState(struct.PyTreeNode):
   @classmethod
   def create(cls, *, apply_fn, params, tx, **kwargs):
     """Creates a new instance with `step=0` and initialized `opt_state`."""
-    opt_state = tx.init(params)
+    use_fp8 = 'fp8_params' in params
+    if use_fp8:
+      fp8_params = params['fp8_params']
+      if 'fp8_params_axes' in params:
+        fp8_params_axes = params['fp8_params_axes']
+        _validate_params_axes(fp8_params_axes, fp8_params)
+      opt_state = tx.init(params['params'])
+    else:
+      opt_state = tx.init(params)
+
     return cls(
         step=0,
         apply_fn=apply_fn,
