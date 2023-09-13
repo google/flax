@@ -184,19 +184,22 @@ class ScopeTest(absltest.TestCase):
 
     _ = apply(f)({}, np.array([0.0]), rngs=freeze({'a': random.PRNGKey(0)}))
 
-  @unittest.skipIf(
-      not hasattr(jax_config, 'jax_enable_custom_prng'),
-      'custom PRNG tests require config.jax_enable_custom_prng',
-  )
   def test_rng_check_w_old_and_new_keys(self):
-    old_setting = jax_config.jax_enable_custom_prng
-    try:
-      jax_config.update('jax_enable_custom_prng', False)
-      self.assertTrue(scope._is_valid_rng(random.PRNGKey(0)))
-      jax_config.update('jax_enable_custom_prng', True)
-      self.assertTrue(scope._is_valid_rng(random.PRNGKey(0)))
-    finally:
-      jax_config.update('jax_enable_custom_prng', old_setting)
+    # random.key always returns a new-style typed PRNG key.
+    key = random.key(0)
+    self.assertTrue(scope._is_valid_rng(key))
+    self.assertFalse(scope._is_valid_rng(random.split(key)))
+
+    # random.PRNGKey returns an old-style uint32 key by default.
+    old_key = random.PRNGKey(0)
+    self.assertTrue(scope._is_valid_rng(old_key))
+    self.assertFalse(scope._is_valid_rng(random.split(old_key)))
+
+    # Also explicitly test raw key data, because the jax_enable_custom_prng
+    # flag can make PRNGKey return new-style keys.
+    raw_key = random.key_data(key)
+    self.assertTrue(scope._is_valid_rng(raw_key))
+    self.assertFalse(scope._is_valid_rng(random.split(raw_key)))
 
   def test_jax_leak_detector(self):
     with jax.check_tracer_leaks(True):

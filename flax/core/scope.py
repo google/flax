@@ -1196,10 +1196,10 @@ def _is_valid_rng(rng: Array):
   # Handle new-style typed PRNG keys
   if hasattr(jax.dtypes, 'prng_key'):  # JAX 0.4.14 or newer
     if jax.dtypes.issubdtype(rng.dtype, jax.dtypes.prng_key):
-      return True
-  elif hasattr(jax.random, 'KeyArray'):  # Previous JAX versions
-    if isinstance(rng, jax.random.KeyArray):
-      return True
+      return rng.shape == ()
+  elif hasattr(jax.random, 'PRNGKeyArray'):  # Previous JAX versions
+    if isinstance(rng, jax.random.PRNGKeyArray):
+      return rng.shape == ()
 
   # Handle old-style raw PRNG keys
   if (
