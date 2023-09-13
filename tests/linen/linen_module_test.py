@@ -2442,16 +2442,18 @@ class ModuleTest(absltest.TestCase):
 
     mod = IdentityModule(parent=None)
     x = 7
-    with nn.intercept_methods(
-        op_interceptor(lambda a: a + 1)
-    ), nn.intercept_methods(op_interceptor(lambda a: a**2)):
+    with (
+        nn.intercept_methods(op_interceptor(lambda a: a + 1)),
+        nn.intercept_methods(op_interceptor(lambda a: a**2)),
+    ):
       y = mod(x)
 
     self.assertEqual(y, (x**2) + 1)
 
-    with nn.intercept_methods(
-        op_interceptor(lambda a: a**2)
-    ), nn.intercept_methods(op_interceptor(lambda a: a + 1)):
+    with (
+        nn.intercept_methods(op_interceptor(lambda a: a**2)),
+        nn.intercept_methods(op_interceptor(lambda a: a + 1)),
+    ):
       y = mod(x)
 
     self.assertEqual(y, (x + 1) ** 2)

@@ -47,7 +47,7 @@ def get_raw_dataset(
     dataset_builder: tfds.core.DatasetBuilder,
     split: str,
     *,
-    reverse_translation: bool = False
+    reverse_translation: bool = False,
 ) -> tf.data.Dataset:
   """Loads a raw WMT dataset and normalizes feature keys.
 
@@ -333,7 +333,7 @@ def get_wmt_datasets(
     *,
     n_devices: int,
     reverse_translation: bool = True,
-    vocab_path: Optional[str] = None
+    vocab_path: Optional[str] = None,
 ):
   """Load and return dataset of batched examples for use during training."""
   if vocab_path is None:
