@@ -23,6 +23,21 @@ vNext
 -
 -
 
+0.7.3
+-----
+New features:
+- Add QK-normalization to MultiHeadDotProductAttention
+- Allow apply's method argument to accept submodules
+- Add module path to nn.module.
+- [JAX] Generate new type of PRNG keys
+
+Bug fixes:
+- Directly call original method if method interceptor stack is empty.
+- fix stackoverflow when loading pickled module
+- Improve kw_only_dataclass.
+- Allow pass-through implementation of state dict
+- Promote dot_general injections from a function to a module.
+
 0.7.2
 -----
 New features:
