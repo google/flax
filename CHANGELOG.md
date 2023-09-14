@@ -15,7 +15,11 @@ vNext
 -
 -
 -
--
+- Use new typed PRNG keys throughout flax: this essentially involved changing
+  uses of `jax.random.PRNGKey` to `jax.random.key`.
+  (See [JEP 9263](https://github.com/google/jax/pull/17297) for details).
+  If you notice dispatch performance regressions after this change, be sure
+  you update `jax` to version 0.4.16 or newer.
 -
 -
 -

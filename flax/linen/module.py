@@ -89,7 +89,7 @@ _CallableT = TypeVar('_CallableT', bound=Callable)
 TestScope = type(
     'TestScope',
     (Scope,),
-    {'make_rng': lambda self, name: jax.random.PRNGKey(0)},
+    {'make_rng': lambda self, name: jax.random.key(0)},
 )
 
 
@@ -1767,7 +1767,7 @@ class Module(ModuleBase):
 
       x = jnp.ones((16, 9))
       ae = AutoEncoder()
-      variables = ae.init(jax.random.PRNGKey(0), x)
+      variables = ae.init(jax.random.key(0), x)
       model = ae.bind(variables)
       z = model.encoder(x)
       x_reconstructed = model.decoder(z)
@@ -1811,7 +1811,7 @@ class Module(ModuleBase):
           return self.decoder(self.encoder(x))
 
       module = AutoEncoder()
-      variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 784)))
+      variables = module.init(jax.random.key(0), jnp.ones((1, 784)))
       ...
       # Extract the Encoder sub-Module and its variables
       encoder, encoder_vars = module.bind(variables).encoder.unbind()
@@ -2027,7 +2027,7 @@ class Module(ModuleBase):
       ...     return nn.Dense(1)(x)
       ...
       >>> module = Foo()
-      >>> key = jax.random.PRNGKey(0)
+      >>> key = jax.random.key(0)
       >>> variables = module.init(key, jnp.empty((1, 7)), train=False)
 
     If you pass a single ``PRNGKey``, Flax will use it to feed the ``'params'``
@@ -2051,8 +2051,8 @@ class Module(ModuleBase):
       ...     return nn.Dense(1)(x)
       ...
       >>> module = Foo()
-      >>> rngs = {'params': jax.random.PRNGKey(0),
-      ...         'noise': jax.random.PRNGKey(1)}
+      >>> rngs = {'params': jax.random.key(0),
+      ...         'noise': jax.random.key(1)}
       >>> variables = module.init(rngs, jnp.empty((1, 7)), train=False)
 
     Jitting `init` initializes a model lazily using only the shapes of the
@@ -2061,7 +2061,7 @@ class Module(ModuleBase):
 
       >>> module = nn.Dense(1)
       >>> init_jit = jax.jit(module.init)
-      >>> variables = init_jit(jax.random.PRNGKey(0), jnp.empty((1, 7)))
+      >>> variables = init_jit(jax.random.key(0), jnp.empty((1, 7)))
 
     ``init`` is a light wrapper over ``apply``, so other ``apply`` arguments
     like ``method``, ``mutable``, and ``capture_intermediates`` are also
@@ -2234,7 +2234,7 @@ class Module(ModuleBase):
 
       x = jnp.ones((16, 9))
       model = Foo()
-      variables = model.init(jax.random.PRNGKey(0), x)
+      variables = model.init(jax.random.key(0), x)
       y, state = model.apply(variables, x, mutable=['intermediates'])
       print(state['intermediates'])  # {'h': (...,)}
 
@@ -2255,7 +2255,7 @@ class Module(ModuleBase):
           return x
 
       model = Foo2()
-      variables = model.init(jax.random.PRNGKey(0), x)
+      variables = model.init(jax.random.key(0), x)
       y, state = model.apply(
           variables, jnp.ones((1, 1)), mutable=['intermediates'])
       print(state['intermediates'])  # ==> {'h': [[3.]]}
@@ -2324,7 +2324,7 @@ class Module(ModuleBase):
       x = jnp.ones((2, 9))
       y = jnp.ones((2, 2))
       model = Foo()
-      variables = model.init(jax.random.PRNGKey(0), x)
+      variables = model.init(jax.random.key(0), x)
       intm_grads = jax.grad(loss, argnums=1)(
           variables['params'], variables['perturbations'], x, y)
       print(intm_grads['dense3']) # ==> [[-1.456924   -0.44332537  0.02422847]
@@ -2389,7 +2389,7 @@ class Module(ModuleBase):
 
       x = jnp.ones((16, 9))
 
-      print(Foo().tabulate(jax.random.PRNGKey(0), x))
+      print(Foo().tabulate(jax.random.key(0), x))
 
 
     This gives the following output::

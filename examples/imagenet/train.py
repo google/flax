@@ -288,7 +288,7 @@ def train_and_evaluate(
       logdir=workdir, just_logging=jax.process_index() != 0
   )
 
-  rng = random.PRNGKey(0)
+  rng = random.key(0)
 
   image_size = 224
 
@@ -427,6 +427,6 @@ def train_and_evaluate(
       save_checkpoint(state, workdir)
 
   # Wait until computations are done before exiting
-  jax.random.normal(jax.random.PRNGKey(0), ()).block_until_ready()
+  jax.random.normal(jax.random.key(0), ()).block_until_ready()
 
   return state

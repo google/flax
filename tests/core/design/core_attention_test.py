@@ -156,7 +156,7 @@ class AttentionTest(absltest.TestCase):
         attn_fn=with_dropout(softmax_attn, 0.1, deterministic=False),
     )
 
-    rngs = {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
+    rngs = {'params': random.key(0), 'dropout': random.key(1)}
     y, variables = jax.jit(init(model))(rngs, inputs, inputs)
     variable_shapes = jax.tree_util.tree_map(jnp.shape, variables['params'])
     self.assertEqual(y.shape, (2, 7, 16))

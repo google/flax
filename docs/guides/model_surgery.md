@@ -64,7 +64,7 @@ def get_initial_params(key):
     initial_params = CNN().init(key, init_shape)['params']
     return initial_params
 
-key = jax.random.PRNGKey(0)
+key = jax.random.key(0)
 params = get_initial_params(key)
 
 jax.tree_util.tree_map(jnp.shape, params)

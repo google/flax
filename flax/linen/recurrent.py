@@ -632,7 +632,7 @@ class RNN(Module):
     ...
     >>> x = jnp.ones((10, 50, 32)) # (batch, time, features)
     >>> lstm = nn.RNN(nn.LSTMCell(64))
-    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> variables = lstm.init(jax.random.key(0), x)
     >>> y = lstm.apply(variables, x)
     >>> y.shape # (batch, time, cell_size)
     (10, 50, 64)
@@ -645,7 +645,7 @@ class RNN(Module):
 
     >>> x = jnp.ones((10, 50, 32, 32, 3)) # (batch, time, height, width, features)
     >>> conv_lstm = nn.RNN(nn.ConvLSTMCell(64, kernel_size=(3, 3)))
-    >>> y, variables = conv_lstm.init_with_output(jax.random.PRNGKey(0), x)
+    >>> y, variables = conv_lstm.init_with_output(jax.random.key(0), x)
     >>> y.shape # (batch, time, height, width, features)
     (10, 50, 32, 32, 64)
 
@@ -655,7 +655,7 @@ class RNN(Module):
 
     >>> x = jnp.ones((50, 10, 32)) # (time, batch, features)
     >>> lstm = nn.RNN(nn.LSTMCell(64), time_major=True)
-    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> variables = lstm.init(jax.random.key(0), x)
     >>> y = lstm.apply(variables, x)
     >>> y.shape # (time, batch, cell_size)
     (50, 10, 64)
@@ -665,7 +665,7 @@ class RNN(Module):
 
     >>> x = jnp.ones((10, 50, 32)) # (batch, time, features)
     >>> lstm = nn.RNN(nn.LSTMCell(64), return_carry=True)
-    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> variables = lstm.init(jax.random.key(0), x)
     >>> carry, y = lstm.apply(variables, x)
     >>> jax.tree_map(jnp.shape, carry) # ((batch, cell_size), (batch, cell_size))
     ((10, 64), (10, 64))
@@ -768,7 +768,7 @@ class RNN(Module):
       initial_carry: the initial carry, if not provided it will be initialized
         using the cell's :meth:`RNNCellBase.initialize_carry` method.
       init_key: a PRNG key used to initialize the carry, if not provided
-        ``jax.random.PRNGKey(0)`` will be used. Most cells will ignore this
+        ``jax.random.key(0)`` will be used. Most cells will ignore this
         argument.
       seq_lengths: an optional integer array of shape ``(*batch)`` indicating
         the length of each sequence, elements whose index in the time dimension
@@ -828,7 +828,7 @@ class RNN(Module):
     carry: Carry
     if initial_carry is None:
       if init_key is None:
-        init_key = random.PRNGKey(0)
+        init_key = random.key(0)
 
       input_shape = inputs.shape[:time_axis] + inputs.shape[time_axis + 1 :]
       carry = self.cell.initialize_carry(init_key, input_shape)

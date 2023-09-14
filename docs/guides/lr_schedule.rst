@@ -222,7 +222,7 @@ And the ``create_train_state`` function:
   steps_per_epoch = train_ds_size // config.batch_size
   learning_rate_fn = create_learning_rate_fn(config, config.learning_rate, steps_per_epoch)
 
-  rng = jax.random.PRNGKey(0)
+  rng = jax.random.key(0)
   state = create_train_state(rng, config, learning_rate_fn)
 
   train_ds = get_dummy_data(config.train_ds_size)

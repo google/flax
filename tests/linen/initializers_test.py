@@ -45,7 +45,7 @@ class InitializersTest(parameterized.TestCase):
       },
   )
   def test_call_builder(self, builder_fn, params_shape, expected_params):
-    params = builder_fn()(random.PRNGKey(42), params_shape, jnp.float32)
+    params = builder_fn()(random.key(42), params_shape, jnp.float32)
     np.testing.assert_allclose(params, expected_params)
 
   @parameterized.parameters(
@@ -60,7 +60,7 @@ class InitializersTest(parameterized.TestCase):
   )
   def test_kernel_builder(self, builder_fn, expected_params):
     layer = nn.Dense(5, kernel_init=builder_fn())
-    params = layer.init(random.PRNGKey(42), jnp.empty((3, 2)))['params']
+    params = layer.init(random.key(42), jnp.empty((3, 2)))['params']
     np.testing.assert_allclose(params['kernel'], expected_params)
 
 

@@ -37,10 +37,10 @@ class ScopeTest(absltest.TestCase):
       self.assertFalse(scope.has_rng('dropout'))
       rng = scope.make_rng('params')
       self.assertTrue(
-          np.all(rng == LazyRng.create(random.PRNGKey(0), 1).as_jax_rng())
+          np.all(rng == LazyRng.create(random.key(0), 1).as_jax_rng())
       )
 
-    init(f)(random.PRNGKey(0))
+    init(f)(random.key(0))
 
   def test_in_filter(self):
     filter_true = lambda x, y: self.assertTrue(scope.in_filter(x, y))
@@ -160,7 +160,7 @@ class ScopeTest(absltest.TestCase):
         r' immutable.'
     )
     with self.assertRaisesRegex(errors.ModifyScopeVariableError, msg):
-      init(f, mutable='params')(random.PRNGKey(0))
+      init(f, mutable='params')(random.key(0))
 
   def test_undefined_param(self):
     def f(scope):
@@ -182,7 +182,7 @@ class ScopeTest(absltest.TestCase):
     def f(scope, x):
       return x
 
-    _ = apply(f)({}, np.array([0.0]), rngs=freeze({'a': random.PRNGKey(0)}))
+    _ = apply(f)({}, np.array([0.0]), rngs=freeze({'a': random.key(0)}))
 
   def test_rng_check_w_old_and_new_keys(self):
     # random.key always returns a new-style typed PRNG key.
@@ -210,10 +210,10 @@ class ScopeTest(absltest.TestCase):
 
         scope.child(g)()
 
-      jax.jit(init(f))(random.PRNGKey(0))
+      jax.jit(init(f))(random.key(0))
 
   def test_rng_counter_reuse(self):
-    root = Scope({}, {'dropout': random.PRNGKey(0)})
+    root = Scope({}, {'dropout': random.key(0)})
 
     def f(scope):
       return scope.make_rng('dropout')
@@ -267,7 +267,7 @@ class ScopeTest(absltest.TestCase):
     init_fn = lazy_init(f)
     # provide a massive input message which would OOM if any compute ops were actually executed
     variables = init_fn(
-        random.PRNGKey(0),
+        random.key(0),
         jax.ShapeDtypeStruct((1024 * 1024 * 1024, 128), jnp.float32),
     )
     self.assertEqual(variables['params']['kernel'].shape, (128, 128))
@@ -280,12 +280,12 @@ class ScopeTest(absltest.TestCase):
 
     init_fn = lazy_init(f)
     with self.assertRaises(errors.LazyInitError):
-      init_fn(random.PRNGKey(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
+      init_fn(random.key(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
 
   @temp_flip_flag('fix_rng_separator', True)
   def test_fold_in_static_seperator(self):
-    x = LazyRng(random.PRNGKey(0), ('ab', 'c'))
-    y = LazyRng(random.PRNGKey(0), ('a', 'bc'))
+    x = LazyRng(random.key(0), ('ab', 'c'))
+    y = LazyRng(random.key(0), ('a', 'bc'))
     self.assertFalse(np.all(x.as_jax_rng() == y.as_jax_rng()))
 
 

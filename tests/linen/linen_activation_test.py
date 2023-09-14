@@ -31,7 +31,7 @@ jax.config.parse_flags_with_absl()
 class ActivationTest(parameterized.TestCase):
 
   def test_prelu(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     x = jnp.ones((4, 6, 5))
     act = nn.PReLU()
     y, _ = act.init_with_output(rng, x)

@@ -115,7 +115,7 @@ class DenseTest(absltest.TestCase):
   def test_dense(self):
     model = Dense(features=4)
     x = jnp.ones((1, 3))
-    y, variables = init(model)(random.PRNGKey(0), x)
+    y, variables = init(model)(random.key(0), x)
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
@@ -130,7 +130,7 @@ class DenseTest(absltest.TestCase):
 
   def test_explicit_dense(self):
     x = jnp.ones((1, 3))
-    y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
+    y, variables = init(explicit_mlp)(random.key(0), x)
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
@@ -145,7 +145,7 @@ class DenseTest(absltest.TestCase):
 
   def test_explicit_dense(self):
     x = jnp.ones((1, 4))
-    y, variables = init(explicit_mlp)(random.PRNGKey(0), x)
+    y, variables = init(explicit_mlp)(random.key(0), x)
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
@@ -160,7 +160,7 @@ class DenseTest(absltest.TestCase):
 
   def test_semi_explicit_dense(self):
     x = jnp.ones((1, 4))
-    y, variables = init(semi_explicit_mlp)(random.PRNGKey(0), x)
+    y, variables = init(semi_explicit_mlp)(random.key(0), x)
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
     )

@@ -27,7 +27,7 @@ desirable properties for neural networks. To learn more, refer to the
 `Pseudorandom numbers in JAX tutorial <https://jax.readthedocs.io/en/latest/jax-101/05-random-numbers.html>`__.
 
 **Note:** Recall that JAX has an explicit way of giving you PRNG keys:
-you can fork the main PRNG state (such as ``key = jax.random.PRNGKey(seed=0)``)
+you can fork the main PRNG state (such as ``key = jax.random.key(seed=0)``)
 into multiple new PRNG keys with ``key, subkey = jax.random.split(key)``. You
 can refresh your memory in
 `🔪 JAX - The Sharp Bits 🔪 Randomness and PRNG keys <https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#jax-prng>`__.
@@ -41,10 +41,10 @@ into three keys, including one for Flax Linen ``Dropout``.
   :title_right: With Dropout
   :sync:
 
-  root_key = jax.random.PRNGKey(seed=0)
+  root_key = jax.random.key(seed=0)
   main_key, params_key = jax.random.split(key=root_key)
   ---
-  root_key = jax.random.PRNGKey(seed=0)
+  root_key = jax.random.key(seed=0)
   main_key, params_key, dropout_key = jax.random.split(key=root_key, num=3) #!
 
 **Note:** In Flax, you provide *PRNG streams* with *names*, so that you can use them later

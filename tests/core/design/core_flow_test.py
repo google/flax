@@ -67,7 +67,7 @@ class FlowTest(absltest.TestCase):
   def test_flow(self):
     x = jnp.ones((1, 3))
     flow = StackFlow((DenseFlow(),) * 3)
-    y, variables = init(flow.forward)(random.PRNGKey(0), x)
+    y, variables = init(flow.forward)(random.key(0), x)
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
     )

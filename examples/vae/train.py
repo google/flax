@@ -93,7 +93,7 @@ def eval_f(params, images, z, z_rng, latents):
 
 def train_and_evaluate(config: ml_collections.ConfigDict):
   """Train and evaulate pipeline."""
-  rng = random.PRNGKey(0)
+  rng = random.key(0)
   rng, key = random.split(rng)
 
   ds_builder = tfds.builder('binarized_mnist')

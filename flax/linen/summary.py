@@ -188,7 +188,7 @@ def tabulate(
         return nn.Dense(2)(h)
 
     x = jnp.ones((16, 9))
-    tabulate_fn = nn.tabulate(Foo(), jax.random.PRNGKey(0))
+    tabulate_fn = nn.tabulate(Foo(), jax.random.key(0))
 
     print(tabulate_fn(x))
 

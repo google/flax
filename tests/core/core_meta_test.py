@@ -45,7 +45,7 @@ class MetaTest(absltest.TestCase):
           metadata_params={meta.PARTITION_NAME: 'batch'},
       )(scope, xs)
 
-    _, variables = init(f)(random.PRNGKey(0), jnp.zeros((8, 3)))
+    _, variables = init(f)(random.key(0), jnp.zeros((8, 3)))
     self.assertEqual(
         variables['params']['kernel'].names, ('batch', 'in', 'out')
     )
@@ -78,7 +78,7 @@ class MetaTest(absltest.TestCase):
           metadata_params={meta.PARTITION_NAME: 'batch'},
       )(scope, xs)
 
-    _, variables = init(f)(random.PRNGKey(0), jnp.zeros((8, 3)))
+    _, variables = init(f)(random.key(0), jnp.zeros((8, 3)))
     self.assertEqual(
         variables['params']['kernel'].names, ('batch', 'in', 'out')
     )
@@ -101,7 +101,7 @@ class MetaTest(absltest.TestCase):
             metadata_params={},
         )(scope, xs)
 
-    init(f)(random.PRNGKey(0), jnp.zeros((8, 3)))
+    init(f)(random.key(0), jnp.zeros((8, 3)))
 
   def test_unbox(self):
     xs = {
@@ -141,7 +141,7 @@ class MetaTest(absltest.TestCase):
       )(scope, x)
       return c
 
-    _, variables = init(f)(random.PRNGKey(0), jnp.zeros((8, 3)))
+    _, variables = init(f)(random.key(0), jnp.zeros((8, 3)))
     boxed_shapes = jax.tree_map(jnp.shape, variables['params'])
     self.assertEqual(
         boxed_shapes,
@@ -209,7 +209,7 @@ class MetaTest(absltest.TestCase):
 
     @jax.jit
     def create_state():
-      y, variables = init(f)(random.PRNGKey(0), jnp.zeros((8, 4)))
+      y, variables = init(f)(random.key(0), jnp.zeros((8, 4)))
       spec = meta.get_partition_spec(variables)
       shardings = jax.tree_map(lambda s: sharding.NamedSharding(mesh, s), spec)
       variables = jax.lax.with_sharding_constraint(variables, shardings)

@@ -673,7 +673,7 @@ def checkpoint(
     ...     return x
     ...
     >>> model = CheckpointedMLP()
-    >>> variables = model.init(jax.random.PRNGKey(0), jnp.ones((1, 16)))
+    >>> variables = model.init(jax.random.key(0), jnp.ones((1, 16)))
 
   This function is aliased to ``remat`` just like ``jax.remat``.
 
@@ -855,13 +855,13 @@ def scan(
     ...
     ...     lstm = ScanLSTM(self.features)
     ...     input_shape =  x[:, 0].shape
-    ...     carry = lstm.initialize_carry(jax.random.PRNGKey(0), input_shape)
+    ...     carry = lstm.initialize_carry(jax.random.key(0), input_shape)
     ...     carry, x = lstm(carry, x)
     ...     return x
     ...
     >>> x = jnp.ones((4, 12, 7))
     >>> module = LSTM(features=32)
-    >>> y, variables = module.init_with_output(jax.random.PRNGKey(0), x)
+    >>> y, variables = module.init_with_output(jax.random.key(0), x)
 
   Note that when providing a function to ``nn.scan``, the scanning happens over
   all arguments starting from the third argument, as specified by ``in_axes``.
@@ -883,12 +883,12 @@ def scan(
     ...
     ...     input_shape =  x[:, 0].shape
     ...     carry = cell.initialize_carry(
-    ...       jax.random.PRNGKey(0), input_shape)
+    ...       jax.random.key(0), input_shape)
     ...     carry, x = scan(cell, carry, x)
     ...     return x
     ...
     >>> module = LSTM(features=32)
-    >>> variables = module.init(jax.random.PRNGKey(0), jnp.ones((4, 12, 7)))
+    >>> variables = module.init(jax.random.key(0), jnp.ones((4, 12, 7)))
 
   You can also use ``scan`` to reduce the compilation time of your JAX program
   by merging multiple layers into a single scan loop, you can do this when
@@ -915,7 +915,7 @@ def scan(
     ...     return x
     ...
     >>> model = ResidualMLP(n_layers=4)
-    >>> variables = model.init(jax.random.PRNGKey(42), jnp.ones((1, 2)))
+    >>> variables = model.init(jax.random.key(42), jnp.ones((1, 2)))
 
   To reduce both compilation and memory usage, you can use :func:`remat_scan`
   which will in addition checkpoint each layer in the scan loop.
@@ -1016,7 +1016,7 @@ def map_variables(
     ...     return self.dense(x)
     ...
     >>> module = CausalDense(features=5)
-    >>> variables = module.init(jax.random.PRNGKey(0), jnp.ones((1, 5)))
+    >>> variables = module.init(jax.random.key(0), jnp.ones((1, 5)))
 
   Args:
     target: the module or function to be transformed.
@@ -1262,7 +1262,7 @@ def while_loop(
           return nn.while_loop(cond_fn, body_fn, self, c,
                                carry_variables='state')
 
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     intial_vars = WhileLoopExample().init(k, x)
     result, state = WhileLoopExample().apply(intial_vars, x, mutable=['state'])
@@ -1516,7 +1516,7 @@ def custom_vjp(
         return sign_grad(nn.Dense(1), x).reshape(())
 
     x = jnp.ones((2,))
-    variables = Foo().init(random.PRNGKey(0), x)
+    variables = Foo().init(random.key(0), x)
     grad = jax.grad(Foo().apply)(variables, x)
 
   Args:

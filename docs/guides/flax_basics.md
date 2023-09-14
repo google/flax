@@ -79,7 +79,7 @@ Parameters are not stored with the models themselves. You need to initialize par
 :id: K529lhzeYtl8
 :outputId: 06feb9d2-db50-4f41-c169-6df4336f43a5
 
-key1, key2 = random.split(random.PRNGKey(0))
+key1, key2 = random.split(random.key(0))
 x = random.normal(key1, (10,)) # Dummy input data
 params = model.init(key2, x) # Initialization call
 jax.tree_util.tree_map(lambda x: x.shape, params) # Checking output shapes
@@ -127,7 +127,7 @@ x_dim = 10
 y_dim = 5
 
 # Generate random ground truth W and b.
-key = random.PRNGKey(0)
+key = random.key(0)
 k1, k2 = random.split(key)
 W = random.normal(k1, (x_dim, y_dim))
 b = random.normal(k2, (y_dim,))
@@ -299,7 +299,7 @@ class ExplicitMLP(nn.Module):
         x = nn.relu(x)
     return x
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 model = ExplicitMLP(features=[3,4,5])
@@ -355,7 +355,7 @@ class SimpleMLP(nn.Module):
       # the default autonames would be "Dense_0", "Dense_1", ...
     return x
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 model = SimpleMLP(features=[3,4,5])
@@ -400,7 +400,7 @@ class SimpleDense(nn.Module):
     y = y + bias
     return y
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 model = SimpleDense(features=3)
@@ -456,7 +456,7 @@ class BiasAdderWithRunningMean(nn.Module):
     return x - ra_mean.value + bias
 
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = jnp.ones((10,5))
 model = BiasAdderWithRunningMean()
 variables = model.init(key1, x)
@@ -508,7 +508,7 @@ def update_step(tx, apply_fn, x, opt_state, params, state):
   return opt_state, params, state
 
 x = jnp.ones((10,5))
-variables = model.init(random.PRNGKey(0), x)
+variables = model.init(random.key(0), x)
 state, params = flax.core.pop(variables, 'params')
 del variables
 tx = optax.sgd(learning_rate=0.02)

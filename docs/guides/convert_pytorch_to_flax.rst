@@ -31,7 +31,7 @@ and the Flax kernel has shape [inC, outC]. Transposing the kernel will do the tr
   # [outC, inC] -> [inC, outC]
   kernel = jnp.transpose(kernel, (1, 0))
 
-  key = random.PRNGKey(0)
+  key = random.key(0)
   x = random.normal(key, (1, 3))
 
   variables = {'params': {'kernel': kernel, 'bias': bias}}
@@ -62,7 +62,7 @@ and the Flax kernel has shape [kH, kW, inC, outC]. Transposing the kernel will d
   # [outC, inC, kH, kW] -> [kH, kW, inC, outC]
   kernel = jnp.transpose(kernel, (2, 3, 1, 0))
 
-  key = random.PRNGKey(0)
+  key = random.key(0)
   x = random.normal(key, (1, 6, 6, 3))
 
   variables = {'params': {'kernel': kernel, 'bias': bias}}
@@ -154,7 +154,7 @@ Other than the transpose operation before reshaping, we can convert the weights 
   variables = {'params': {'conv': {'kernel': conv_kernel, 'bias': conv_bias},
                           'fc': {'kernel': fc_kernel, 'bias': fc_bias}}}
 
-  key = random.PRNGKey(0)
+  key = random.key(0)
   x = random.normal(key, (1, 6, 6, 3))
 
   j_out = j_model.apply(variables, x)
@@ -192,7 +192,7 @@ while Flax multiplies the estimated statistic with ``momentum`` and the new obse
   variables = {'params': {'scale': scale, 'bias': bias},
                'batch_stats': {'mean': mean, 'var': var}}
 
-  key = random.PRNGKey(0)
+  key = random.key(0)
   x = random.normal(key, (1, 6, 6, 3))
 
   j_bn = nn.BatchNorm(momentum=0.9, use_running_average=True)
@@ -241,7 +241,7 @@ operation. ``nn.pool()`` is the core function behind |nn.avg_pool()|_ and |nn.ma
     return y
 
 
-  key = random.PRNGKey(0)
+  key = random.key(0)
   x = random.normal(key, (1, 6, 6, 3))
 
   j_out = avg_pool(x, window_shape=(2, 2), strides=(1, 1), padding=((1, 1), (1, 1)))

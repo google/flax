@@ -44,9 +44,9 @@ class TrainTest(parameterized.TestCase):
   def test_create_model(self):
     """Tests creating model."""
     model = train.create_model(model_cls=models._ResNet1, half_precision=False)  # pylint: disable=protected-access
-    params, batch_stats = train.initialized(random.PRNGKey(0), 224, model)
+    params, batch_stats = train.initialized(random.key(0), 224, model)
     variables = {'params': params, 'batch_stats': batch_stats}
-    x = random.normal(random.PRNGKey(1), (8, 224, 224, 3))
+    x = random.normal(random.key(1), (8, 224, 224, 3))
     y = model.apply(variables, x, train=False)
     self.assertEqual(y.shape, (8, 1000))
 
@@ -58,9 +58,9 @@ class TrainTest(parameterized.TestCase):
     model = train.create_model(
         model_cls=models._ResNet1Local, half_precision=False
     )  # pylint: disable=protected-access
-    params, batch_stats = train.initialized(random.PRNGKey(0), 64, model)
+    params, batch_stats = train.initialized(random.key(0), 64, model)
     variables = {'params': params, 'batch_stats': batch_stats}
-    x = random.normal(random.PRNGKey(1), (1, 64, 64, 3))
+    x = random.normal(random.key(1), (1, 64, 64, 3))
     y = model.apply(variables, x, train=False)
     self.assertEqual(y.shape, (1, 1000))
 

@@ -39,7 +39,7 @@ from dense import Dense
 
 # tae = TiedAutoEncoder(parent=None)
 # tae = tae.initialized(
-#   {'params': random.PRNGKey(42)},
+#   {'params': random.key(42)},
 #   jnp.ones((1, 16)))
 # print("reconstruct", jnp.shape(tae(jnp.ones((1, 16)))))
 # print("var shapes", jax.tree_util.tree_map(jnp.shape, tae.variables))

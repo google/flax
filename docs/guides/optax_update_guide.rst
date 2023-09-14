@@ -27,7 +27,7 @@ https://optax.readthedocs.io/en/latest/optax-101.html
   ds_train = [batch]
   get_ds_train = lambda: [batch]
   model = nn.Dense(1)
-  variables = model.init(jax.random.PRNGKey(0), batch['image'])
+  variables = model.init(jax.random.key(0), batch['image'])
   learning_rate, momentum, weight_decay, grad_clip_norm = .1, .9, 1e-3, 1.
   loss = lambda params, batch: jnp.array(0.)
 

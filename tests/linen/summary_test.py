@@ -124,7 +124,7 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     table = summary._get_module_table(module, depth=None, show_repeated=True)(
-        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
         mutable=True,
@@ -219,7 +219,7 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     table = summary._get_module_table(module, depth=1, show_repeated=True)(
-        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
         mutable=True,
@@ -284,7 +284,7 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
@@ -326,7 +326,7 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=True)
 
     module_repr = module.tabulate(
-        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
@@ -342,7 +342,7 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
         method=CNN.cnn_method,
@@ -364,7 +364,7 @@ class SummaryTest(absltest.TestCase):
 
     module_repr = nn.tabulate(
         module,
-        {"dropout": random.PRNGKey(0), "params": random.PRNGKey(1)},
+        {"dropout": random.key(0), "params": random.key(1)},
         console_kwargs=CONSOLE_TEST_KWARGS,
     )(
         x,
@@ -404,7 +404,7 @@ class SummaryTest(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         carry = nn.LSTMCell(self.features).initialize_carry(
-            random.PRNGKey(0), x[:, 0].shape
+            random.key(0), x[:, 0].shape
         )
         ScanLSTM = nn.scan(
             nn.LSTMCell,
@@ -419,7 +419,7 @@ class SummaryTest(absltest.TestCase):
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
-          random.PRNGKey(0),
+          random.key(0),
           x=jnp.ones((32, 128, 64)),
           console_kwargs=CONSOLE_TEST_KWARGS,
       )
@@ -439,7 +439,7 @@ class SummaryTest(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         carry = nn.LSTMCell(self.features).initialize_carry(
-            random.PRNGKey(0), x[:, 0].shape
+            random.key(0), x[:, 0].shape
         )
         ScanLSTM = nn.scan(
             nn.LSTMCell,
@@ -454,7 +454,7 @@ class SummaryTest(absltest.TestCase):
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
-          random.PRNGKey(0),
+          random.key(0),
           x=jnp.ones((32, 128, 64)),
           console_kwargs=CONSOLE_TEST_KWARGS,
       )
@@ -490,7 +490,7 @@ class SummaryTest(absltest.TestCase):
 
     x = jnp.ones((4, 28, 28, 32))
     module_repr = CNN().tabulate(
-        jax.random.PRNGKey(0),
+        jax.random.key(0),
         x=x,
         show_repeated=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
@@ -575,7 +575,7 @@ class SummaryTest(absltest.TestCase):
 
     module = Classifier()
     lines = module.tabulate(
-        jax.random.PRNGKey(0),
+        jax.random.key(0),
         jnp.empty((1, 28, 28, 1)),
         console_kwargs=CONSOLE_TEST_KWARGS,
     ).splitlines()
@@ -608,7 +608,7 @@ class SummaryTest(absltest.TestCase):
 
     x = jnp.ones((16, 9))
     rep = Foo().tabulate(
-        jax.random.PRNGKey(0), x, console_kwargs=CONSOLE_TEST_KWARGS
+        jax.random.key(0), x, console_kwargs=CONSOLE_TEST_KWARGS
     )
     lines = rep.splitlines()
     self.assertIn("Total Parameters: 50", lines[-2])

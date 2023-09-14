@@ -83,7 +83,7 @@ class LazyInitError(FlaxError):
         # this causes an error when using lazy_init.
         k = self.param("kernel", lambda _: x)
         return x * k
-    Foo().lazy_init(random.PRNGKey(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
+    Foo().lazy_init(random.key(0), jax.ShapeDtypeStruct((8, 4), jnp.float32))
   """
 
   def __init__(self, partial_val):
@@ -131,7 +131,7 @@ class InvalidRngError(FlaxError):
 
   So, ``Foo`` is initialized as follows::
 
-    init_rngs = {'params': random.PRNGKey(0), 'dropout': random.PRNGKey(1)}
+    init_rngs = {'params': random.key(0), 'dropout': random.key(1)}
     variables = Foo().init(init_rngs, init_inputs)
 
   If a Module only requires an rng for ``params``, you can use::
@@ -144,7 +144,7 @@ class InvalidRngError(FlaxError):
   When applying ``Foo``, only the rng for ``dropout`` is needed, because
   ``params`` is only used for initializing the Module parameters::
 
-    Foo().apply(variables, inputs, rngs={'dropout': random.PRNGKey(2)})
+    Foo().apply(variables, inputs, rngs={'dropout': random.key(2)})
 
   If a Module only requires an rng for ``params``, you don't have to provide
   rngs for apply at all::
@@ -209,7 +209,7 @@ class ScopeParamNotFoundError(FlaxError):
         return embedding[inputs]
 
     model = Embed(4, 8)
-    variables = model.init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
+    variables = model.init(random.key(0), jnp.ones((5, 5, 1)))
     _ = model.apply(variables, jnp.ones((5, 5, 1)), 'embed')
   """
 
@@ -264,7 +264,7 @@ class ScopeParamShapeError(FlaxError):
                             (((x.ndim - 1,), (0,)), ((), ())))
         return y
 
-    variables = NoBiasDense().init(random.PRNGKey(0), jnp.ones((5, 5, 1)))
+    variables = NoBiasDense().init(random.key(0), jnp.ones((5, 5, 1)))
     _ = NoBiasDense().apply(variables, jnp.ones((5, 5)))
   """
 
@@ -450,7 +450,7 @@ class AssignSubModuleError(FlaxError):
       def __call__(self, x):
         conv = nn.Conv(features=3, kernel_size=3)
 
-    Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
+    Foo().init(random.key(0), jnp.zeros((1,)))
 
   Note that this error is also thrown if you partially defined a Module inside
   setup::
@@ -463,7 +463,7 @@ class AssignSubModuleError(FlaxError):
         x = self.conv(kernel_size=4)(x)
         return x
 
-    Foo().init(random.PRNGKey(0), jnp.zeros((1,)))
+    Foo().init(random.key(0), jnp.zeros((1,)))
 
   In this case, ``self.conv(kernel_size=4)`` is called from ``__call__``, which
   is disallowed because it's neither within ``setup`` nor a method wrapped in
@@ -491,7 +491,7 @@ class SetAttributeInModuleSetupError(FlaxError):
       def __call__(self, x):
         return nn.Dense(self.features)(x)
 
-    variables = SomeModule().init(random.PRNGKey(0), jnp.ones((1, )))
+    variables = SomeModule().init(random.key(0), jnp.ones((1, )))
 
   Instead, these attributes should be set when initializing the Module::
 
@@ -502,7 +502,7 @@ class SetAttributeInModuleSetupError(FlaxError):
       def __call__(self, x):
         return nn.Dense(self.features)(x)
 
-    variables = SomeModule(features=3).init(random.PRNGKey(0), jnp.ones((1, )))
+    variables = SomeModule(features=3).init(random.key(0), jnp.ones((1, )))
 
   TODO(marcvanzee): Link to a design note explaining why it's necessary for
   modules to stay frozen (otherwise we can't safely clone them, which we use for
@@ -529,7 +529,7 @@ class SetAttributeFrozenModuleError(FlaxError):
         x = nn.Dense(self.num_features)(x)
         return x
 
-    s = SomeModule().init(random.PRNGKey(0), jnp.ones((5, 5)))
+    s = SomeModule().init(random.key(0), jnp.ones((5, 5)))
 
   Similarly, the error is raised when trying to modify a submodule's attributes
   after constructing it, even if this is done in the ``setup()`` method of the
@@ -619,7 +619,7 @@ class CallCompactUnboundModuleError(FlaxError):
   :meth:`Module.init() <flax.linen.Module.init>` to get initial variables)::
 
     from jax import random
-    variables = test_dense.init(random.PRNGKey(0), jnp.ones((5,5)))
+    variables = test_dense.init(random.key(0), jnp.ones((5,5)))
 
     y = test_dense.apply(variables, jnp.ones((5,5)))
   """
@@ -699,8 +699,8 @@ class InvalidInstanceModuleError(FlaxError):
       def __call__(self, x):
         return x
 
-    k = random.PRNGKey(0)
-    x = random.uniform(random.PRNGKey(1), (2,))
+    k = random.key(0)
+    x = random.uniform(random.key(1), (2,))
     B.init(k, x)   # B is module class, not B() a module instance
     B.apply(vs, x)   # similar issue with apply called on class instead of
     instance.
@@ -731,7 +731,7 @@ class IncorrectPostInitOverrideError(FlaxError):
         return input + 3
 
     r = A(x=3)
-    r.init(jax.random.PRNGKey(2), jnp.ones(3))
+    r.init(jax.random.key(2), jnp.ones(3))
   """
 
   def __init__(self):
@@ -753,7 +753,7 @@ class DescriptorAttributeError(FlaxError):
             return self.prop
 
     foo = Foo()
-    variables = foo.init(jax.random.PRNGKey(0), jnp.ones(shape=(1, 8)))
+    variables = foo.init(jax.random.key(0), jnp.ones(shape=(1, 8)))
   """
 
   def __init__(self):

@@ -148,7 +148,7 @@ class PoolTest(parameterized.TestCase):
 class NormalizationTest(parameterized.TestCase):
 
   def test_batch_norm(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (4, 3, 2))
     model_cls = nn.BatchNorm(momentum=0.9, use_running_average=False)
@@ -170,7 +170,7 @@ class NormalizationTest(parameterized.TestCase):
     )
 
   def test_batch_norm_complex(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (4, 3, 2), dtype=jnp.complex64)
     model_cls = nn.BatchNorm(
@@ -202,7 +202,7 @@ class NormalizationTest(parameterized.TestCase):
       {'reduction_axes': -1, 'use_fast_variance': False},
   )
   def test_layer_norm(self, reduction_axes, use_fast_variance=True):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 3, 4))
@@ -227,7 +227,7 @@ class NormalizationTest(parameterized.TestCase):
       {'reduction_axes': -1}, {'reduction_axes': 1}, {'reduction_axes': (1, 2)}
   )
   def test_rms_norm(self, reduction_axes):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 3, 4))
@@ -243,7 +243,7 @@ class NormalizationTest(parameterized.TestCase):
     np.testing.assert_allclose(y_one_liner, y, atol=1e-4)
 
   def test_group_norm(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 5, 4, 4, 32))
@@ -264,7 +264,7 @@ class NormalizationTest(parameterized.TestCase):
     np.testing.assert_allclose(y_test, y, atol=1e-4)
 
   def test_group_norm_raises(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     e = 1e-5
     x = random.normal(key1, (2, 5, 4, 4, 32))
@@ -288,9 +288,9 @@ class NormalizationTest(parameterized.TestCase):
         x = norm(x)
         return x, norm(x)
 
-    key = random.PRNGKey(0)
+    key = random.key(0)
     model = Foo()
-    x = random.normal(random.PRNGKey(1), (2, 4))
+    x = random.normal(random.key(1), (2, 4))
     (y1, y2), variables = model.init_with_output(key, x)
     np.testing.assert_allclose(y1, y2, rtol=1e-4)
 
@@ -298,7 +298,7 @@ class NormalizationTest(parameterized.TestCase):
 class StochasticTest(absltest.TestCase):
 
   def test_dropout(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     module = nn.Dropout(rate=0.5)
     y1 = module.apply(
@@ -318,7 +318,7 @@ class StochasticTest(absltest.TestCase):
     self.assertTrue(np.all(y1 == y2))
 
   def test_dropout_rate_stats(self):
-    rootkey = random.PRNGKey(0)
+    rootkey = random.key(0)
     for rate in np.arange(0.1, 1.0, 0.1):
       rootkey, subkey = random.split(rootkey)
       module = nn.Dropout(rate=rate)
@@ -337,7 +337,7 @@ class StochasticTest(absltest.TestCase):
       self.assertTrue(keep_rate - delta < frac < keep_rate + delta)
 
   def test_dropout_rate_limits(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2, key3 = random.split(rng, 3)
     inputs = jnp.ones((20, 20))
     d0 = nn.Dropout(rate=0.0)
@@ -363,7 +363,7 @@ class StochasticTest(absltest.TestCase):
 
     module = Foo()
     x1, x2 = module.apply(
-        {}, jnp.ones((20, 20)), rngs={'dropout': random.PRNGKey(0)}
+        {}, jnp.ones((20, 20)), rngs={'dropout': random.key(0)}
     )
 
     np.testing.assert_array_equal(x1, x2)
@@ -374,7 +374,7 @@ class RecurrentTest(absltest.TestCase):
 
   def test_lstm(self):
     lstm = nn.LSTMCell(features=4)
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
     c0, h0 = lstm.initialize_carry(rng, x.shape)
@@ -401,7 +401,7 @@ class RecurrentTest(absltest.TestCase):
 
   def test_gru(self):
     gru = nn.GRUCell(features=4)
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
     carry0 = gru.initialize_carry(rng, x.shape)
@@ -424,7 +424,7 @@ class RecurrentTest(absltest.TestCase):
 
   def test_complex_input_gru(self):
     gru = nn.GRUCell(features=4)
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3), dtype=jnp.complex64)
     carry0 = gru.initialize_carry(rng, x.shape)
@@ -435,7 +435,7 @@ class RecurrentTest(absltest.TestCase):
 
   def test_convlstm(self):
     lstm = nn.ConvLSTMCell(features=6, kernel_size=(3, 3))
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 4, 4, 3))
     c0, h0 = lstm.initialize_carry(rng, x.shape)
@@ -457,7 +457,7 @@ class RecurrentTest(absltest.TestCase):
   def test_optimized_lstm_cell_matches_regular(self):
     # Create regular LSTMCell.
     lstm = nn.LSTMCell(features=4)
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
     c0, h0 = lstm.initialize_carry(rng, x.shape)
@@ -467,7 +467,7 @@ class RecurrentTest(absltest.TestCase):
 
     # Create OptimizedLSTMCell.
     lstm_opt = nn.OptimizedLSTMCell(features=4)
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
     c0, h0 = lstm_opt.initialize_carry(rng, x.shape)

@@ -85,7 +85,7 @@ class ManualVmapMLP(nn.Module):
     return apply_fn({'params': mlp_params}, xs)
 
 xs = jnp.ones((3, 4))
-variables = ManualVmapMLP().init(random.PRNGKey(0), xs)
+variables = ManualVmapMLP().init(random.key(0), xs)
 print(jax.tree_util.tree_map(jnp.shape, variables['params']))
 """==>
 {
@@ -270,7 +270,7 @@ def lift_transpose(fn, target='params', variables=True, rngs=True):
       rng_filters=(rngs,))
 
 x = jnp.ones((3, 2))
-y, params = init(lift_transpose(core_nn.dense))(random.PRNGKey(0), x, 4)
+y, params = init(lift_transpose(core_nn.dense))(random.key(0), x, 4)
 ```
 
 NOTE that most users should not need to interact with `pack` directly.
@@ -310,7 +310,7 @@ class LinenVmapMLP(nn.Module):
     VmapMLP = nn.vmap(MLP, variable_axes={'params': 0}, split_rngs={'params': True}, in_axes=0)
     return VmapMLP(name='mlp')(xs)
 
-variables = LinenVmapMLP().init(random.PRNGKey(0), xs)
+variables = LinenVmapMLP().init(random.key(0), xs)
 print(jax.tree_util.tree_map(jnp.shape, variables['params']))
 """==>
 {
@@ -346,7 +346,7 @@ class LinenStatefulVmapMLP(nn.Module):
   def __call__(self, xs, *, train):
     VmapMLP = nn.vmap(StatefulMLP, variable_axes={'params': 0, 'batch_stats': 0}, split_rngs={'params': True}, in_axes=0)
     return VmapMLP(name='mlp')(xs, train=train)
-variables = LinenStatefulVmapMLP().init(random.PRNGKey(0), xs)
+variables = LinenStatefulVmapMLP().init(random.key(0), xs)
 ```
 
 All we had to add to `nn.vmap` is `'batch_stats': 0`, indicating that the batch stats are vectorized rather than shared along the first axis.

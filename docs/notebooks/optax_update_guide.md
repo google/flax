@@ -71,7 +71,7 @@ def loss(params, batch):
   return jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=one_hot))
 
 model = Perceptron([50, 10])
-variables = model.init(jax.random.PRNGKey(0), batch['image'])
+variables = model.init(jax.random.key(0), batch['image'])
 
 jax.tree_util.tree_map(jnp.shape, variables)
 ```

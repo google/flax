@@ -39,7 +39,7 @@ class MLP(Module):
 # initializing all variables.
 #
 # Variable shapes depend on the input shape passed in.
-rngkey = jax.random.PRNGKey(10)
+rngkey = jax.random.key(10)
 model = MLP((2, 1))
 x = jnp.ones((1, 3))
 mlp_variables = model.init(rngkey, x)

@@ -68,7 +68,7 @@ class TracebackTest(absltest.TestCase):
     traceback_util.hide_flax_in_tracebacks()
     jax.config.update('jax_traceback_filtering', 'tracebackhide')
 
-    key = random.PRNGKey(0)
+    key = random.key(0)
     try:
       nn.jit(Test1)().init(key, jnp.ones((5, 3)))
     except ValueError as e:
@@ -105,7 +105,7 @@ class TracebackTest(absltest.TestCase):
     traceback_util.hide_flax_in_tracebacks()
     jax.config.update('jax_traceback_filtering', 'remove_frames')
 
-    key = random.PRNGKey(0)
+    key = random.key(0)
     try:
       nn.jit(Test1)().init(key, jnp.ones((5, 3)))
     except ValueError as e:
@@ -145,7 +145,7 @@ class TracebackTest(absltest.TestCase):
         raise ValueError('error here.')
         return x  # pylint: disable=unreachable
 
-    key = random.PRNGKey(0)
+    key = random.key(0)
 
     traceback_util.show_flax_in_tracebacks()
     jax.config.update('jax_traceback_filtering', 'off')

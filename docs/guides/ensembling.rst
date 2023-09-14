@@ -224,7 +224,7 @@ directly.
 
   train_ds, test_ds = get_datasets()
   #!
-  rng = jax.random.PRNGKey(0)
+  rng = jax.random.key(0)
 
   rng, init_rng = jax.random.split(rng)
   state = create_train_state(init_rng, learning_rate, momentum)  #!
@@ -246,7 +246,7 @@ directly.
   ---
   train_ds, test_ds = get_datasets()
   test_ds = jax_utils.replicate(test_ds)  #!
-  rng = jax.random.PRNGKey(0)
+  rng = jax.random.key(0)
 
   rng, init_rng = jax.random.split(rng)
   state = create_train_state(jax.random.split(init_rng, jax.device_count()), #!

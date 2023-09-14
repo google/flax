@@ -12,7 +12,7 @@ authors = [
 ]
 dependencies = [
     "numpy>=1.12",
-    "jax>=0.4.2",
+    "jax>=0.4.11",
     "msgpack",
     "optax",
     "orbax-checkpoint",

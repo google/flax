@@ -235,7 +235,7 @@ def predict_step(
   """Predict language model on a batch."""
   target_shape = (inputs.shape[0], max_decode_len) + inputs.shape[2:]
   initial_variables = models.TransformerLM(config).init(
-      jax.random.PRNGKey(0), jnp.ones(target_shape, config.dtype)
+      jax.random.key(0), jnp.ones(target_shape, config.dtype)
   )
   cache = initial_variables["cache"]
 
@@ -437,7 +437,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   predict_config = train_config.replace(deterministic=True, decode=True)
 
   start_step = 0
-  rng = jax.random.PRNGKey(config.seed)
+  rng = jax.random.key(config.seed)
   rng, init_rng = jax.random.split(rng)
   rng, inference_rng = random.split(rng)
   input_shape = (config.per_device_batch_size, config.max_target_length)

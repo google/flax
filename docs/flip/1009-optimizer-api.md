@@ -496,7 +496,7 @@ def get_learning_rate(step):
 
 
 model = Model()
-rng = jax.random.PRNGKey(0)
+rng = jax.random.key(0)
 ds = tfds.load('mnist')['train'].take(160).map(pp).batch(16)
 batch = next(iter(ds))
 variables = model.init(rng, jnp.array(batch['image'][:1]))

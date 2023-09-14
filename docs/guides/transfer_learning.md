@@ -106,7 +106,7 @@ num_classes = 3
 model = Classifier(num_classes=num_classes, backbone=vision_model)
 
 x = jnp.empty((1, 224, 224, 3))
-variables = model.init(jax.random.PRNGKey(1), x)
+variables = model.init(jax.random.key(1), x)
 params = variables['params']
 ```
 

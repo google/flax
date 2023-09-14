@@ -39,7 +39,7 @@ class LiftTest(absltest.TestCase):
 
       lift.vmap(g, variable_axes={}, split_rngs={})((scope, a), jnp.ones((1,)))
 
-    init(f)(random.PRNGKey(0))
+    init(f)(random.key(0))
 
   def test_undefined_param(self):
     def f(scope):
@@ -70,8 +70,8 @@ class LiftTest(absltest.TestCase):
       return nn.dense(scope, x, 1)
 
     x = np.ones((3, 2))
-    _, params = init(f)(random.PRNGKey(0), x)
-    init(f)(random.PRNGKey(0), x)
+    _, params = init(f)(random.key(0), x)
+    init(f)(random.key(0), x)
     self.assertEqual(compiles, 1)
     apply(f)(params, x)
     self.assertEqual(compiles, 2)  # apply should cause a compile
@@ -95,7 +95,7 @@ class LiftTest(absltest.TestCase):
 
     x = jnp.array([1.0, 2.0, 3.0])
     y = jnp.array([4.0, 5.0, 6.0])
-    _, params = init(f)(random.PRNGKey(0), x, y)
+    _, params = init(f)(random.key(0), x, y)
     params_grad, x_grad, y_grad = apply(f)(params, x, y)
     self.assertEqual(
         params_grad,
@@ -122,13 +122,13 @@ class LiftTest(absltest.TestCase):
       return out_t
 
     x = jnp.ones((3,))
-    _, params = init(f)(random.PRNGKey(0), x)
+    _, params = init(f)(random.key(0), x)
     y_t = apply(f)(params, x)
     np.testing.assert_allclose(y_t, jnp.ones_like(x))
 
   def test_while_loop(self):
     def f(scope, x):
-      key_zero = random.PRNGKey(0)
+      key_zero = random.key(0)
       key_zero = jnp.broadcast_to(key_zero, (2, *key_zero.shape))
       scope.param('inc', lambda _: 1)
       scope.put_variable('state', 'acc', 0)
@@ -168,7 +168,7 @@ class LiftTest(absltest.TestCase):
 
     x = 2
     c, vars = apply(f, mutable=True)(
-        {}, x, rngs={'params': random.PRNGKey(1), 'loop': random.PRNGKey(2)}
+        {}, x, rngs={'params': random.key(1), 'loop': random.key(2)}
     )
     self.assertEqual(vars['state']['acc'], x)
     self.assertEqual(c, 2 * x)
@@ -197,7 +197,7 @@ class LiftTest(absltest.TestCase):
       return lift.cond(pred, true_fn, false_fn, scope, x)
 
     x = jnp.ones((1, 3))
-    y1, vars = init(f)(random.PRNGKey(0), x, True)
+    y1, vars = init(f)(random.key(0), x, True)
     self.assertEqual(vars['state'], {'true_count': 1, 'false_count': 0})
     y2, vars = apply(f, mutable='state')(vars, x, False)
     self.assertEqual(vars['state'], {'true_count': 1, 'false_count': 1})
@@ -224,7 +224,7 @@ class LiftTest(absltest.TestCase):
       return lift.switch(index, [a_fn, b_fn, c_fn], scope, x)
 
     x = jnp.ones((1, 3))
-    y1, vars = init(f)(random.PRNGKey(0), x, 0)
+    y1, vars = init(f)(random.key(0), x, 0)
     self.assertEqual(vars['state'], {'a_count': 1, 'b_count': 0, 'c_count': 0})
     y2, updates = apply(f, mutable='state')(vars, x, 1)
     vars = copy(vars, updates)
@@ -252,7 +252,7 @@ class LiftTest(absltest.TestCase):
       self.assertEqual(val0, val1)
       return x
 
-    init(test)(random.PRNGKey(0), 1.0)
+    init(test)(random.key(0), 1.0)
 
 
 if __name__ == '__main__':

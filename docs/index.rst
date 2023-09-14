@@ -110,7 +110,7 @@ Basic usage
 .. testsetup::
 
    import jax
-   from jax.random import PRNGKey
+   from jax import random
    import flax.linen as nn
    import jax.numpy as jnp
 
@@ -130,7 +130,7 @@ Basic usage
    model = MLP(out_dims=10)                 # instantiate the MLP model
 
    x = jnp.empty((4, 28, 28, 1))            # generate random data
-   variables = model.init(PRNGKey(42), x)   # initialize the weights
+   variables = model.init(random.key(42), x)# initialize the weights
    y = model.apply(variables, x)            # make forward pass
 
 ----

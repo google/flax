@@ -304,7 +304,7 @@ def main(argv):
 
   model = models.Transformer(config)
 
-  rng = random.PRNGKey(random_seed)
+  rng = random.key(random_seed)
   rng, init_rng = random.split(rng)
 
   # call a jitted initialization function to get the initial parameter tree

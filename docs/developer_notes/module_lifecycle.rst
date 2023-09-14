@@ -59,7 +59,7 @@ Now we want to construct and use the ``MLP`` Module:
 
   mlp = MLP(hidden_size=5, out_size=3)
   x = jax.numpy.ones((1, 2))
-  variables = mlp.init(random.PRNGKey(0), x)
+  variables = mlp.init(random.key(0), x)
   y = mlp.apply(variables, x)
 
 
@@ -70,8 +70,8 @@ Let's take a closer look at initialization. Surprisingly, there actually is no s
 
 .. testcode::
 
-  # equivalent to: variables = mlp.init(random.PRNGKey(0), x)
-  _, variables = mlp.apply({}, x, rngs={"params": random.PRNGKey(0)}, mutable=True)
+  # equivalent to: variables = mlp.init(random.key(0), x)
+  _, variables = mlp.apply({}, x, rngs={"params": random.key(0)}, mutable=True)
 
 
 Thus, ``init`` is nothing more than a wrapper around ``apply`` where:
@@ -155,7 +155,7 @@ Another benefit of defining submodules and/or variables inline is that you can a
 
   mdl = CompactScaledMLP(hidden_size=4, out_size=5)
   x = jax.numpy.ones((3, 2))
-  vars = mdl.init(random.PRNGKey(0), x)
+  vars = mdl.init(random.key(0), x)
   assert vars["params"]["scale"].shape == (2,)
 
 Many of the standard Linen Modules like ``nn.Dense`` use shape inference already to avoid the need to specify input shapes (like the number of input features to a Dense layer).
@@ -207,7 +207,7 @@ The latter is done as follows:
     return mdl(z, "decode")
 
   mdl = CorrectModule()
-  vars = nn.init(init_fn, mdl)(random.PRNGKey(0))
+  vars = nn.init(init_fn, mdl)(random.key(0))
   assert vars["params"]["Dense_0"]["kernel"].shape == (2, 8)
   assert vars["params"]["Dense_1"]["kernel"].shape == (8, 4)
 
@@ -348,7 +348,7 @@ Function closure is the most common way to accidentally hide a JAX array or Line
 
   x = jax.numpy.ones((3, 2))
   mdl = Foo()
-  vars = mdl.init(random.PRNGKey(0), x)
+  vars = mdl.init(random.key(0), x)
   assert vars['params']['Dense_0']['kernel'].shape == (3, 2, 2)
 
 

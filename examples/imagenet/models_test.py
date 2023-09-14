@@ -31,7 +31,7 @@ class ResNetV1Test(parameterized.TestCase):
 
   def test_resnet_v1_model(self):
     """Tests ResNet V1 model definition and output (variables)."""
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.key(0)
     model_def = models.ResNet50(num_classes=10, dtype=jnp.float32)
     variables = model_def.init(rng, jnp.ones((8, 224, 224, 3), jnp.float32))
 
@@ -45,7 +45,7 @@ class ResNetV1Test(parameterized.TestCase):
   @parameterized.product(model=(models.ResNet18, models.ResNet18Local))
   def test_resnet_18_v1_model(self, model):
     """Tests ResNet18 V1 model definition and output (variables)."""
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.key(0)
     model_def = model(num_classes=2, dtype=jnp.float32)
     variables = model_def.init(rng, jnp.ones((1, 64, 64, 3), jnp.float32))
 

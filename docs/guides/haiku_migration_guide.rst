@@ -9,7 +9,7 @@ and highlight the differences between the two libraries.
 
   import jax
   import jax.numpy as jnp
-  from jax.random import PRNGKey
+  from jax import random
   import optax
   import flax.linen as nn
 
@@ -106,7 +106,7 @@ and ``apply`` methods. In Flax, you simply instantiate your Module.
   model = Model(256, 10)
 
 To get the model parameters in both libraries you use the ``init`` method
-with a ``PRNGKey`` plus some inputs to run the model. The main difference here is
+with a ``random.key`` plus some inputs to run the model. The main difference here is
 that Flax returns a mapping from collection names to nested array dictionaries,
 ``params`` is just one of these possible collections. In Haiku, you get the ``params``
 structure directly.
@@ -118,7 +118,7 @@ structure directly.
 
   sample_x = jax.numpy.ones((1, 784))
   params = model.init(
-    PRNGKey(0),
+    random.key(0),
     sample_x, training=False # <== inputs
   )
   ...
@@ -127,7 +127,7 @@ structure directly.
 
   sample_x = jax.numpy.ones((1, 784))
   variables = model.init(
-    PRNGKey(0),
+    random.key(0),
     sample_x, training=False # <== inputs
   )
   params = variables["params"]
@@ -221,13 +221,13 @@ the random dropout masks.
 .. testcode::
   :hide:
 
-  train_step(PRNGKey(0), params, sample_x, jnp.ones((1,), dtype=jnp.int32))
+  train_step(random.key(0), params, sample_x, jnp.ones((1,), dtype=jnp.int32))
 
 The most notable differences is that in Flax you have to
 pass the parameters inside a dictionary with a ``params`` key, and the
-PRNGKey inside a dictionary with a ``dropout`` key. This is because in Flax
+key inside a dictionary with a ``dropout`` key. This is because in Flax
 you can have many types of model state and random state. In Haiku, you
-just pass the parameters and the PRNGKey directly.
+just pass the parameters and the key directly.
 
 Handling State
 -----------------
@@ -310,7 +310,7 @@ of a Haiku model with an ``hk.BatchNorm`` layer. In Flax, we can set
 
   sample_x = jax.numpy.ones((1, 784))
   params, state = model.init(
-    PRNGKey(0),
+    random.key(0),
     sample_x, training=True # <== inputs #!
   )
   ...
@@ -319,7 +319,7 @@ of a Haiku model with an ``hk.BatchNorm`` layer. In Flax, we can set
 
   sample_x = jax.numpy.ones((1, 784))
   variables = model.init(
-    PRNGKey(0), #!
+    random.key(0), #!
     sample_x, training=False # <== inputs
   )
   params, batch_stats = variables["params"], variables["batch_stats"]
@@ -490,7 +490,7 @@ method. This will create all the necessary parameters for the model.
   :sync:
 
   params = model.init(
-    PRNGKey(0),
+    random.key(0),
     x=jax.numpy.ones((1, 784)),
   )
   ...
@@ -498,7 +498,7 @@ method. This will create all the necessary parameters for the model.
   ---
 
   variables = model.init(
-    PRNGKey(0),
+    random.key(0),
     x=jax.numpy.ones((1, 784)),
   )
   params = variables["params"]
@@ -689,7 +689,7 @@ Finally, let's quickly view how the ``RNN`` Module would be used in both Haiku a
   model = hk.without_apply_rng(hk.transform(forward))
 
   params = model.init(
-    PRNGKey(0),
+    random.key(0),
     x=jax.numpy.ones((3, 12, 32)),
   )
 
@@ -706,7 +706,7 @@ Finally, let's quickly view how the ``RNN`` Module would be used in both Haiku a
   model = RNN(64)
 
   variables = model.init(
-    PRNGKey(0),
+    random.key(0),
     x=jax.numpy.ones((3, 12, 32)),
   )
   params = variables['params']
@@ -813,7 +813,7 @@ we will be specifying that we want to use ``5`` layers each with ``64`` features
 
   sample_x = jax.numpy.ones((1, 64))
   params = model.init(
-    PRNGKey(0),
+    random.key(0),
     sample_x, training=False # <== inputs
   )
   ...
@@ -827,7 +827,7 @@ we will be specifying that we want to use ``5`` layers each with ``64`` features
 
   sample_x = jax.numpy.ones((1, 64))
   variables = model.init(
-    PRNGKey(0),
+    random.key(0),
     sample_x, training=False # <== inputs
   )
   params = variables['params']

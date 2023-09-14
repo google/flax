@@ -96,7 +96,7 @@ First, create a pytree with many data structures and containers, and play with i
 
 ```python id="56dec3f6" outputId="f1856d96-1961-48ed-bb7c-cb63fbaa7567"
 # A simple model with one linear layer.
-key1, key2 = random.split(random.PRNGKey(0))
+key1, key2 = random.split(random.key(0))
 x1 = random.normal(key1, (5,))      # A simple JAX array.
 model = nn.Dense(features=3)
 variables = model.init(key2, x1)

@@ -218,7 +218,7 @@ BATCH, LAYERS, DEPTH, USE_SCAN = 8, 4, 1024, False
 # Create fake inputs.
 x = jnp.ones((BATCH, DEPTH))
 # Initialize a PRNG key.
-k = random.PRNGKey(0)
+k = random.key(0)
 
 # Create an Optax optimizer.
 optimizer = optax.adam(learning_rate=0.001)

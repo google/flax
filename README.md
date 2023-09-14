@@ -119,7 +119,7 @@ class MLP(nn.Module):
 
 model = MLP([12, 8, 4])
 batch = jnp.ones((32, 10))
-variables = model.init(jax.random.PRNGKey(0), batch)
+variables = model.init(jax.random.key(0), batch)
 output = model.apply(variables, batch)
 ```
 
@@ -142,7 +142,7 @@ class CNN(nn.Module):
 
 model = CNN()
 batch = jnp.ones((32, 64, 64, 10))  # (N, H, W, C) format
-variables = model.init(jax.random.PRNGKey(0), batch)
+variables = model.init(jax.random.key(0), batch)
 output = model.apply(variables, batch)
 ```
 
@@ -174,7 +174,7 @@ model = AutoEncoder(encoder_widths=[20, 10, 5],
                     decoder_widths=[5, 10, 20],
                     input_shape=(12,))
 batch = jnp.ones((16, 12))
-variables = model.init(jax.random.PRNGKey(0), batch)
+variables = model.init(jax.random.key(0), batch)
 encoded = model.apply(variables, batch, method=model.encode)
 decoded = model.apply(variables, encoded, method=model.decode)
 ```

@@ -131,7 +131,7 @@ import jax
 import jax.numpy as jnp  # JAX NumPy
 
 cnn = CNN()
-print(cnn.tabulate(jax.random.PRNGKey(0), jnp.ones((1, 28, 28, 1))))
+print(cnn.tabulate(jax.random.key(0), jnp.ones((1, 28, 28, 1))))
 ```
 
 +++ {"id": "4b5ac16e"}
@@ -332,7 +332,7 @@ executionInfo:
   timestamp: 1673483485436
 id: e4f6f4d3
 ---
-init_rng = jax.random.PRNGKey(0)
+init_rng = jax.random.key(0)
 ```
 
 +++ {"id": "80fbb60b"}

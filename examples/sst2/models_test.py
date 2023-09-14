@@ -35,7 +35,7 @@ class ModelTest(parameterized.TestCase):
     model = models.Embedder(
         vocab_size=vocab_size, embedding_size=embedding_size
     )
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.key(0)
     token_ids = np.array([[2, 4, 3], [2, 6, 3]], dtype=np.int32)
     output, _ = model.init_with_output(rng, token_ids, deterministic=True)
     self.assertEqual((token_ids.shape) + (embedding_size,), output.shape)
@@ -47,7 +47,7 @@ class ModelTest(parameterized.TestCase):
     embedding_size = 4
     hidden_size = 5
     model = models.SimpleLSTM(5)
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.key(0)
     inputs = np.random.RandomState(0).normal(
         size=[batch_size, seq_len, embedding_size]
     )
@@ -62,7 +62,7 @@ class ModelTest(parameterized.TestCase):
     embedding_size = 4
     hidden_size = 5
     model = models.SimpleBiLSTM(hidden_size=hidden_size)
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.key(0)
     inputs = np.random.RandomState(0).normal(
         size=[batch_size, seq_len, embedding_size]
     )
@@ -92,7 +92,7 @@ class ModelTest(parameterized.TestCase):
         deterministic=True,
     )
 
-    rng = jax.random.PRNGKey(0)
+    rng = jax.random.key(0)
     token_ids = np.array([[2, 4, 3], [2, 6, 3]], dtype=np.int32)
     lengths = np.array([2, 3], dtype=np.int32)
     output, _ = model.init_with_output(rng, token_ids, lengths)

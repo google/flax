@@ -83,7 +83,7 @@ We call the `init` method on the instantiated Module.  If the Module `__call__` 
 :outputId: 3adfaeaf-977e-4e82-8adf-d254fae6eb91
 
 # Make RNG Keys and a fake input.
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 # provide key and fake input to get initialized variables
@@ -147,7 +147,7 @@ class ExplicitMLP(nn.Module):
         x = nn.relu(x)
     return x
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 model = ExplicitMLP(features=[3,4,5])
@@ -182,7 +182,7 @@ class SimpleMLP(nn.Module):
       # x = nn.Dense(feat)(x)
     return x
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 model = SimpleMLP(features=[3,4,5])
@@ -233,7 +233,7 @@ class SimpleDense(nn.Module):
     y = y + bias
     return y
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 model = SimpleDense(features=3)
@@ -271,7 +271,7 @@ class ExplicitDense(nn.Module):
     y = y + self.bias
     return y
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 x = random.uniform(key1, (4,4))
 
 model = ExplicitDense(features_in=4, features=3)
@@ -316,7 +316,7 @@ class Counter(nn.Module):
     return counter.value
 
 
-key1 = random.PRNGKey(0)
+key1 = random.key(0)
 
 model = Counter()
 init_variables = model.init(key1)
@@ -351,7 +351,7 @@ class Block(nn.Module):
     x = nn.BatchNorm(use_running_average=not self.training)(x)
     return x
 
-key1, key2, key3, key4 = random.split(random.PRNGKey(0), 4)
+key1, key2, key3, key4 = random.split(random.key(0), 4)
 x = random.uniform(key1, (3,4,4))
 
 model = Block(features=3, training=True)
@@ -412,7 +412,7 @@ class MLP(nn.Module):
         x = nn.relu(x)
     return x
 
-key1, key2 = random.split(random.PRNGKey(3), 2)
+key1, key2 = random.split(random.key(3), 2)
 x = random.uniform(key1, (4,4))
 
 model = MLP(features=[3,4,5])
@@ -452,7 +452,7 @@ class RematMLP(nn.Module):
         x = nn.relu(x)
     return x
 
-key1, key2 = random.split(random.PRNGKey(3), 2)
+key1, key2 = random.split(random.key(3), 2)
 x = random.uniform(key1, (4,4))
 
 model = RematMLP(features=[3,4,5])
@@ -577,7 +577,7 @@ class MultiHeadDotProductAttention(nn.Module):
     return y.mean(axis=-2)
 
 
-key1, key2, key3, key4 = random.split(random.PRNGKey(0), 4)
+key1, key2, key3, key4 = random.split(random.key(0), 4)
 x = random.uniform(key1, (3, 13, 64))
 
 model = functools.partial(
@@ -623,13 +623,13 @@ class SimpleScan(nn.Module):
                    split_rngs={'params': False})
     lstm = LSTM(self.features, name="lstm_cell")
 
-    dummy_rng = random.PRNGKey(0)
+    dummy_rng = random.key(0)
     input_shape = xs[:, 0].shape
     init_carry = lstm.initialize_carry(dummy_rng, input_shape)
 
     return lstm(init_carry, xs)
 
-key1, key2 = random.split(random.PRNGKey(0), 2)
+key1, key2 = random.split(random.key(0), 2)
 xs = random.uniform(key1, (1, 5, 2))
 
 model = SimpleScan(2)

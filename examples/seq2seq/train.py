@@ -206,7 +206,7 @@ def train_and_evaluate(workdir: str) -> train_state.TrainState:
 
   # TODO(marcvanzee): Integrate ctable with train_state.
   ctable = CTable('0123456789+= ', FLAGS.max_len_query_digit)
-  rng = jax.random.PRNGKey(0)
+  rng = jax.random.key(0)
   state = get_train_state(rng, ctable)
 
   writer = metric_writers.create_default_writer(workdir)

@@ -41,7 +41,7 @@ def init_params(rng):
 
 
 # Get initial parameters
-params = init_params(jax.random.PRNGKey(42))
+params = init_params(jax.random.key(42))
 print("initial params", params)
 
 # Run SGD.

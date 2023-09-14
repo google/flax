@@ -37,7 +37,7 @@ jax.config.parse_flags_with_absl()
 class AttentionTest(parameterized.TestCase):
 
   def test_multihead_self_attention(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     x = jnp.ones((4, 6, 5))
     sa_module = nn.SelfAttention(
         num_heads=8,
@@ -51,7 +51,7 @@ class AttentionTest(parameterized.TestCase):
     self.assertEqual(y.dtype, jnp.float32)
 
   def test_dtype_infer(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     x = jnp.ones((4, 6, 5), jnp.complex64)
     sa_module = nn.SelfAttention(
         num_heads=8,
@@ -65,7 +65,7 @@ class AttentionTest(parameterized.TestCase):
     self.assertEqual(y.dtype, jnp.complex64)
 
   def test_multihead_encoder_decoder_attention(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     q = jnp.ones((4, 2, 3, 5))
     kv = jnp.ones((4, 2, 3, 5))
     sa_module = nn.MultiHeadDotProductAttention(
@@ -79,7 +79,7 @@ class AttentionTest(parameterized.TestCase):
     self.assertEqual(y.shape, q.shape)
 
   def test_multihead_self_attention_w_dropout(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     x = jnp.ones((4, 2, 3, 5))
     sa_module = nn.MultiHeadDotProductAttention(
         num_heads=8,
@@ -95,7 +95,7 @@ class AttentionTest(parameterized.TestCase):
     self.assertEqual(y.shape, x.shape)
 
   def test_multihead_self_attention_w_dropout_disabled(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     x = jnp.ones((4, 2, 3, 5))
     sa_module0 = nn.MultiHeadDotProductAttention(
         num_heads=8,
@@ -152,7 +152,7 @@ class AttentionTest(parameterized.TestCase):
     bs = 2
     num_heads = 3
     num_features = 4
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     key1, key2 = random.split(rng)
     inputs = random.normal(
         key1, (bs,) + spatial_shape + (num_heads * num_features,)
@@ -189,7 +189,7 @@ class AttentionTest(parameterized.TestCase):
 
   def test_autoregresive_receptive_field_1d(self):
     """Tests the autoregresive self-attention receptive field."""
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     rng1, rng2 = random.split(rng, num=2)
 
     length = 10

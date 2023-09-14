@@ -51,9 +51,9 @@ def mlp_scan(scope: Scope, xs: Array, share_params: bool = False):
 class ScanTest(absltest.TestCase):
 
   def test_scan_unshared_params(self):
-    x = random.normal(random.PRNGKey(0), (1, 4))
+    x = random.normal(random.key(0), (1, 4))
     x = jnp.concatenate([x, x], 0)
-    y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=False)
+    y, variables = init(mlp_scan)(random.key(1), x, share_params=False)
 
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
@@ -71,9 +71,9 @@ class ScanTest(absltest.TestCase):
     self.assertFalse(jnp.allclose(k1, k2))
 
   def test_scan_shared_params(self):
-    x = random.normal(random.PRNGKey(0), (1, 4))
+    x = random.normal(random.key(0), (1, 4))
     x = jnp.concatenate([x, x], 0)
-    y, variables = init(mlp_scan)(random.PRNGKey(1), x, share_params=True)
+    y, variables = init(mlp_scan)(random.key(1), x, share_params=True)
 
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])

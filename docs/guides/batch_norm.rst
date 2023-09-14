@@ -81,7 +81,7 @@ The ``batch_stats`` collection must be extracted from the ``variables`` for late
 
   mlp = MLP()
   x = jnp.ones((1, 3))
-  variables = mlp.init(jax.random.PRNGKey(0), x)
+  variables = mlp.init(jax.random.key(0), x)
   params = variables['params']
 
 
@@ -89,7 +89,7 @@ The ``batch_stats`` collection must be extracted from the ``variables`` for late
   ---
   mlp = MLP()
   x = jnp.ones((1, 3))
-  variables = mlp.init(jax.random.PRNGKey(0), x, train=False) #!
+  variables = mlp.init(jax.random.key(0), x, train=False) #!
   params = variables['params']
   batch_stats = variables['batch_stats'] #!
 

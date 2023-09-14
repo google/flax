@@ -34,7 +34,7 @@ class TrainTest(parameterized.TestCase):
     # Create model and a state that contains the parameters.
     config = default_config.get_config()
     config.vocab_size = 13
-    rng = jax.random.PRNGKey(config.seed)
+    rng = jax.random.key(config.seed)
     model = train.model_from_config(config)
     state = train.create_train_state(rng, config, model)
 

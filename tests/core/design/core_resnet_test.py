@@ -87,9 +87,9 @@ class ResNetTest(absltest.TestCase):
 
   def test_resnet(self):
     block_sizes = (2, 2)
-    x = random.normal(random.PRNGKey(0), (1, 64, 64, 3))
+    x = random.normal(random.key(0), (1, 64, 64, 3))
     y, variables = init(resnet)(
-        random.PRNGKey(1), x, block_sizes=block_sizes, features=16
+        random.key(1), x, block_sizes=block_sizes, features=16
     )
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])

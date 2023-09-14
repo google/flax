@@ -36,7 +36,7 @@ jax.config.parse_flags_with_absl()
 class LinearTest(parameterized.TestCase):
 
   def test_dense(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 3))
     dense_module = nn.Dense(
         features=4,
@@ -49,7 +49,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((1, 4), 4.0))
 
   def test_dense_extra_batch_dims(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 2, 3))
     dense_module = nn.Dense(
         features=4,
@@ -60,7 +60,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((1, 2, 4), 4.0))
 
   def test_dense_no_bias(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 3))
     dense_module = nn.Dense(
         features=4,
@@ -71,24 +71,24 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((1, 4), 3.0))
 
   def test_dense_is_dense_general(self):
-    x = jax.random.normal(random.PRNGKey(0), (5, 3))
+    x = jax.random.normal(random.key(0), (5, 3))
     dense_module = nn.Dense(
         features=4,
         use_bias=True,
         bias_init=initializers.normal(),
     )
-    y1, _ = dense_module.init_with_output(dict(params=random.PRNGKey(1)), x)
+    y1, _ = dense_module.init_with_output(dict(params=random.key(1)), x)
     dg_module = nn.DenseGeneral(
         features=4,
         use_bias=True,
         bias_init=initializers.normal(),
     )
-    y2, _ = dg_module.init_with_output(dict(params=random.PRNGKey(1)), x)
+    y2, _ = dg_module.init_with_output(dict(params=random.key(1)), x)
 
     np.testing.assert_allclose(y1, y2)
 
   def test_dense_general_batch_dim_raises(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 3, 2, 5))
     with self.assertRaises(ValueError):
       dg_module = nn.DenseGeneral(
@@ -100,7 +100,7 @@ class LinearTest(parameterized.TestCase):
       dg_module.init_with_output(rng, x)
 
   def test_dense_general_two_out(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 3))
     dg_module = nn.DenseGeneral(
         features=(2, 2),
@@ -111,7 +111,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((1, 2, 2), 4.0))
 
   def test_dense_general_two_in(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 2, 2))
     dg_module = nn.DenseGeneral(
         features=3,
@@ -123,7 +123,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((1, 3), 5.0))
 
   def test_dense_general_batch_dim(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((2, 1, 3, 5))
 
     state = {'counter': 0.0}
@@ -152,7 +152,7 @@ class LinearTest(parameterized.TestCase):
       ((-2, 3), (0,), 'bijk,bjklm->bilm'),
   ])
   def test_dense_general_vs_numpy(self, axis, batch_dims, einsum_expr):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((16, 8, 9, 10))
 
     dg_module = nn.DenseGeneral(
@@ -169,7 +169,7 @@ class LinearTest(parameterized.TestCase):
   def test_complex_params_dense(self):
     dense = nn.Dense(features=2, param_dtype=jnp.complex64)
     x = jnp.ones((1, 2), jnp.float32)
-    variables = dense.init(random.PRNGKey(0), x)
+    variables = dense.init(random.key(0), x)
     self.assertEqual(variables['params']['kernel'].dtype, jnp.complex64)
     self.assertEqual(variables['params']['bias'].dtype, jnp.complex64)
     y = dense.apply(variables, x)
@@ -178,7 +178,7 @@ class LinearTest(parameterized.TestCase):
   def test_complex_input_dense(self):
     dense = nn.Dense(features=2)
     x = jnp.ones((1, 2), jnp.complex64)
-    variables = dense.init(random.PRNGKey(0), x)
+    variables = dense.init(random.key(0), x)
     self.assertEqual(variables['params']['kernel'].dtype, jnp.float32)
     self.assertEqual(variables['params']['bias'].dtype, jnp.float32)
     y = dense.apply(variables, x)
@@ -186,7 +186,7 @@ class LinearTest(parameterized.TestCase):
 
   @parameterized.product(use_bias=(True, False))
   def test_conv(self, use_bias):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 8, 3))
     conv_module = nn.Conv(
         features=4,
@@ -203,7 +203,7 @@ class LinearTest(parameterized.TestCase):
 
   @parameterized.product(use_bias=(True, False))
   def test_multibatch_input_conv(self, use_bias):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((2, 5, 8, 3))
     conv_module = nn.Conv(
         features=4,
@@ -219,7 +219,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((2, 5, 6, 4), expected))
 
   def test_conv_local(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 8, 2))
     conv_module = nn.ConvLocal(
         features=4,
@@ -233,7 +233,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((1, 6, 4), 7.0))
 
   def test_single_input_conv(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((8, 3))
     conv_module = nn.Conv(
         features=4,
@@ -247,7 +247,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((6, 4), 10.0))
 
   def test_single_input_masked_conv(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((8, 3))
     m = jnp.tril(jnp.ones((3, 3, 4)))
     conv_module = nn.Conv(
@@ -271,7 +271,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, expected)
 
   def test_single_input_conv_local(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((8, 2))
     conv_module = nn.ConvLocal(
         features=4,
@@ -285,7 +285,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, np.full((6, 4), 7.0))
 
   def test_group_conv(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 8, 4))
     conv_module = nn.Conv(
         features=4,
@@ -323,7 +323,7 @@ class LinearTest(parameterized.TestCase):
     dimension) and have all elements equal to
     `n_input_features * kernel_lin_size`.
     """
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((n_batch, input_size, n_input_features))
     conv_module = module(
         features=n_features,
@@ -385,7 +385,7 @@ class LinearTest(parameterized.TestCase):
     dimension) and have all elements equal to
     `n_input_features * kernel_lin_size^2`.
     """
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((n_batch, input_x_size, input_y_size, n_input_features))
     kernel_size = (kernel_lin_size, kernel_lin_size)
     conv_module = module(
@@ -413,7 +413,7 @@ class LinearTest(parameterized.TestCase):
 
   def test_circular_conv_1d_custom(self):
     """Test 1d convolution with circular padding and a stride."""
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.arange(1, 6)
     x = np.expand_dims(x, (0, 2))
     kernel = np.array((1, 2, 1))
@@ -439,7 +439,7 @@ class LinearTest(parameterized.TestCase):
     """
     Test 1d local convolution with circular padding and a stride
     """
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.arange(1, 6)
     x = np.expand_dims(x, (0, 2))
     kernel = np.array(((-1, 2, 3), (4, 5, 6)))
@@ -462,7 +462,7 @@ class LinearTest(parameterized.TestCase):
 
   def test_circular_conv_1d_dilation(self):
     """Test 1d convolution with circular padding and kernel dilation."""
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.arange(1, 6)
     x = np.expand_dims(x, (0, 2))
     kernel = np.array((1, 2, 1))
@@ -494,7 +494,7 @@ class LinearTest(parameterized.TestCase):
     """
     Test 1d local convolution with circular padding and kernel dilation
     """
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.arange(1, 6)
     x = np.expand_dims(x, (0, 2))
     kernel = np.array(
@@ -526,7 +526,7 @@ class LinearTest(parameterized.TestCase):
 
   def test_circular_conv_2d_custom(self):
     """Test 2d convolution with circular padding on a 3x3 example."""
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.array(((1, 2, 3), (4, 5, 6), (7, 8, 9)))
     x = np.expand_dims(x, (0, 3))
     kernel = np.array(((0, 1, 0), (1, 2, 1), (0, 1, 0)))
@@ -555,7 +555,7 @@ class LinearTest(parameterized.TestCase):
     """
     Test 2d local convolution with circular padding on a 3x3 example
     """
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.array(((1, 2, 3), (4, 5, 6), (7, 8, 9)))
     x = np.expand_dims(x, (0, 3))
     kernel = np.array((
@@ -598,7 +598,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, correct_ans)
 
   def test_causal_conv1d(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 8, 4))
     conv_module = nn.Conv(
         features=4,
@@ -625,7 +625,7 @@ class LinearTest(parameterized.TestCase):
       use_bias=(True, False),
   )
   def test_conv_transpose(self, use_bias):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
@@ -657,7 +657,7 @@ class LinearTest(parameterized.TestCase):
       use_bias=(True, False),
   )
   def test_multibatch_input_conv_transpose(self, use_bias):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((2, 5, 8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
@@ -688,7 +688,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, correct_ans)
 
   def test_single_input_conv_transpose(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((8, 3))
     conv_transpose_module = nn.ConvTranspose(
         features=4,
@@ -714,7 +714,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(y, correct_ans)
 
   def test_single_input_masked_conv_transpose(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((8, 3))
     m = jnp.tril(jnp.ones((3, 3, 4)))
     conv_transpose_module = nn.ConvTranspose(
@@ -758,7 +758,7 @@ class LinearTest(parameterized.TestCase):
     dimension) and have all elements equal to
     `n_input_features * kernel_lin_size`.
     """
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((n_batch, input_size, n_input_features))
     conv_module = nn.ConvTranspose(
         features=n_features,
@@ -802,7 +802,7 @@ class LinearTest(parameterized.TestCase):
     dimension) and have all elements equal to
     `n_input_features * kernel_lin_size^2`.
     """
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((n_batch, input_x_size, input_y_size, n_input_features))
     conv_module = nn.ConvTranspose(
         features=n_features,
@@ -828,7 +828,7 @@ class LinearTest(parameterized.TestCase):
 
     # this is ok
     sample_input = jnp.ones((1, 32, 2))
-    out, vars = layer.init_with_output(jax.random.PRNGKey(0), sample_input)
+    out, vars = layer.init_with_output(jax.random.key(0), sample_input)
     self.assertEqual(out.shape, (1, 32, 5))
 
     batch_input = jnp.ones((8, 32, 2))
@@ -840,7 +840,7 @@ class LinearTest(parameterized.TestCase):
 
   def test_circular_conv_transpose_1d_custom(self):
     """Test 1d transposed convolution with circular padding and a stride."""
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.arange(1, 6)
     x = np.expand_dims(x, (0, 2))
     kernel = np.array((1, 2, 1))
@@ -880,7 +880,7 @@ class LinearTest(parameterized.TestCase):
 
   def test_circular_conv_transpose_2d_custom(self):
     """Test 2d transposed convolution with circular padding on a 3x3 example."""
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.array((
         (1, 2, 3),
         (4, 5, 6),
@@ -911,7 +911,7 @@ class LinearTest(parameterized.TestCase):
 
   def test_circular_conv_transpose_2d_custom_bias(self):
     """Test 2d transposed convolution with circular padding on a 2x2 example with bias."""
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = np.array(((1, 2), (3, 4)))
     x = np.expand_dims(x, (0, 3))
     kernel = np.array((
@@ -940,7 +940,7 @@ class LinearTest(parameterized.TestCase):
 
   @parameterized.product(use_bias=(True, False))
   def test_transpose_kernel_conv_transpose(self, use_bias):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.ones((1, 15, 15, 3))
     conv_module = nn.ConvTranspose(
         features=4,
@@ -959,10 +959,10 @@ class LinearTest(parameterized.TestCase):
     conv = module(features=4, kernel_size=3)
     x = jnp.ones((8, 3))
     with self.assertRaises(TypeError):
-      conv.init(random.PRNGKey(0), x)
+      conv.init(random.key(0), x)
 
   def test_embed(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.arange(4)[None]
     dummy_embedding = jnp.broadcast_to(jnp.arange(4)[..., None], (4, 3)).astype(
         jnp.float32
@@ -980,7 +980,7 @@ class LinearTest(parameterized.TestCase):
     np.testing.assert_allclose(z, 3.0 * jnp.arange(4))
 
   def test_embed_numpy(self):
-    rng = dict(params=random.PRNGKey(0))
+    rng = dict(params=random.key(0))
     x = jnp.arange(4)[None]
     dummy_embedding = np.broadcast_to(np.arange(4)[..., None], (4, 3)).astype(
         np.float32
@@ -1009,7 +1009,7 @@ class LinearTest(parameterized.TestCase):
         return nn.DenseGeneral(features=6, axis=1, name='dense')(x)
 
     x = jnp.ones((2, 4, 8))
-    y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+    y, variables = Foo().init_with_output(random.key(0), x)
     self.assertEqual(
         jax.tree_util.tree_map(jnp.shape, variables['params']),
         {'dense': {'kernel': (4, 6), 'bias': (6,)}},
@@ -1024,7 +1024,7 @@ class LinearTest(parameterized.TestCase):
         return nn.DenseGeneral(features=6, axis=(0, 1), name='dense')(x)
 
     x = jnp.ones((2, 4, 8))
-    y, variables = Foo().init_with_output(random.PRNGKey(0), x)
+    y, variables = Foo().init_with_output(random.key(0), x)
     self.assertEqual(
         jax.tree_util.tree_map(jnp.shape, variables['params']),
         {'dense': {'kernel': (2, 4, 6), 'bias': (6,)}},

@@ -60,8 +60,8 @@ def mlp_custom_grad(
 class CustomVJPTest(absltest.TestCase):
 
   def test_custom_vjp(self):
-    x = random.normal(random.PRNGKey(0), (1, 4))
-    y, variables = init(mlp_custom_grad)(random.PRNGKey(1), x)
+    x = random.normal(random.key(0), (1, 4))
+    y, variables = init(mlp_custom_grad)(random.key(1), x)
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
     )

@@ -325,7 +325,7 @@ def train(
       config.num_agents * config.actor_steps // config.batch_size
   )
 
-  initial_params = get_initial_params(jax.random.PRNGKey(0), model)
+  initial_params = get_initial_params(jax.random.key(0), model)
   state = create_train_state(
       initial_params,
       model,

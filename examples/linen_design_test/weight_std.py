@@ -58,5 +58,5 @@ def standardize(x, axis, eps=1e-8):
 #     std_module = StdWeight(module)
 #     return std_module(x)
 
-# m_variables = MyModule().init({'params': jax.random.PRNGKey(10)}, jnp.ones((1, 4)))
+# m_variables = MyModule().init({'params': jax.random.key(10)}, jnp.ones((1, 4)))
 # print(m_variables)

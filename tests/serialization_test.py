@@ -122,7 +122,7 @@ class SerializationTest(parameterized.TestCase):
     self.assertEqual(restored_box, expected_box)
 
   def test_model_serialization(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     x = jnp.ones((1, 1), jnp.float32)
     initial_params = module.init(rng, x)
@@ -153,7 +153,7 @@ class SerializationTest(parameterized.TestCase):
     self.assertEqual(add_one.args, restored_add_one.args)
 
   def test_optimizer_serialization(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     x = jnp.ones((1, 1), jnp.float32)
     initial_params = module.init(rng, x)
@@ -194,7 +194,7 @@ class SerializationTest(parameterized.TestCase):
         state = self.variable('state', 'dummy', DummyDataClass.initializer, ())
         state.value = state.value.replace(x=state.value.x + 1.0)
 
-    initial_variables = StatefulModule().init(random.PRNGKey(0))
+    initial_variables = StatefulModule().init(random.key(0))
     _, variables = StatefulModule().apply(initial_variables, mutable=['state'])
     serialized_state_dict = serialization.to_state_dict(variables)
     self.assertEqual(serialized_state_dict, {'state': {'dummy': {'x': 2.0}}})
@@ -401,7 +401,7 @@ class SerializationTest(parameterized.TestCase):
     self.assertEqual(x1, restored_x1)
 
   def test_model_serialization_to_bytes(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     initial_params = module.init(rng, jnp.ones((1, 1), jnp.float32))
     serialized_bytes = serialization.to_bytes(initial_params)
@@ -409,7 +409,7 @@ class SerializationTest(parameterized.TestCase):
     self.assertEqual(restored_params, initial_params)
 
   def test_optimizer_serialization_to_bytes(self):
-    rng = random.PRNGKey(0)
+    rng = random.key(0)
     module = nn.Dense(features=1, kernel_init=nn.initializers.ones_init())
     initial_params = module.init(rng, jnp.ones((1, 1), jnp.float32))
     # model = nn.Model(module, initial_params)
@@ -524,7 +524,7 @@ class SerializationTest(parameterized.TestCase):
   def test_serialization_errors(self, target, wrong_target, msg):
     if target == 'original_params':
       x = jnp.ones((1, 28, 28, 1))
-      rng = jax.random.PRNGKey(1)
+      rng = jax.random.key(1)
       original_module = OriginalModule()
       target = original_module.init(rng, x)
       wrong_module = WrongModule()
@@ -532,7 +532,7 @@ class SerializationTest(parameterized.TestCase):
 
     elif target == 'original_train_state':
       x = jnp.ones((1, 28, 28, 1))
-      rng = jax.random.PRNGKey(1)
+      rng = jax.random.key(1)
       original_module = OriginalModule()
       original_params = original_module.init(rng, x)
       wrong_module = WrongModule()

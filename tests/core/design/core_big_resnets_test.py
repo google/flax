@@ -68,8 +68,8 @@ def big_resnet(
 class BigResnetTest(absltest.TestCase):
 
   def test_big_resnet(self):
-    x = random.normal(random.PRNGKey(0), (1, 8, 8, 8))
-    y, variables = init(big_resnet)(random.PRNGKey(1), x)
+    x = random.normal(random.key(0), (1, 8, 8, 8))
+    y, variables = init(big_resnet)(random.key(1), x)
     self.assertEqual(y.shape, (1, 8, 8, 8))
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])

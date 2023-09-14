@@ -28,8 +28,8 @@ class ModelsTest(parameterized.TestCase):
   def setUp(self):
     super().setUp()
     self.rngs = {
-        'params': jax.random.PRNGKey(0),
-        'dropout': jax.random.PRNGKey(1),
+        'params': jax.random.key(0),
+        'dropout': jax.random.key(1),
     }
     n_node = jnp.arange(3, 11)
     n_edge = jnp.arange(4, 12)

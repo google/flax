@@ -54,7 +54,7 @@ class LinenMetaTest(absltest.TestCase):
         )(name='bar')(xs)
 
     m = Foo()
-    variables = m.init(random.PRNGKey(0), jnp.zeros((8, 3)))
+    variables = m.init(random.key(0), jnp.zeros((8, 3)))
     self.assertEqual(
         variables['params']['bar']['kernel'].names, ('batch', 'in', 'out')
     )
@@ -94,7 +94,7 @@ class LinenMetaTest(absltest.TestCase):
         )(name='bar')(xs)
 
     m = Foo()
-    variables = m.init(random.PRNGKey(0), jnp.zeros((8, 3)))
+    variables = m.init(random.key(0), jnp.zeros((8, 3)))
     self.assertEqual(
         variables['params']['bar']['kernel'].names, ('batch', 'in', 'out')
     )
@@ -118,7 +118,7 @@ class LinenMetaTest(absltest.TestCase):
   #         variable_axes={'params': 0}, split_rngs={'params': True},
   #         metadata_params={nn.PARTITION_NAME: 'batch'})(scope, xs)
 
-  #   _, variables = init(f)(random.PRNGKey(0), jnp.zeros((8, 3)))
+  #   _, variables = init(f)(random.key(0), jnp.zeros((8, 3)))
   #   self.assertEqual(variables['params']['kernel'].names,
   #                    ('batch', 'in', 'out'))
 
@@ -159,9 +159,7 @@ class LinenMetaTest(absltest.TestCase):
     mesh = Mesh(devs, ['data', 'model'])
     model = Model()
     x = jnp.ones((8, 128))
-    spec = nn.get_partition_spec(
-        jax.eval_shape(model.init, random.PRNGKey(0), x)
-    )
+    spec = nn.get_partition_spec(jax.eval_shape(model.init, random.key(0), x))
     self.assertEqual(
         spec,
         {
@@ -181,16 +179,13 @@ class LinenMetaTest(absltest.TestCase):
     )
     x_spec = PartitionSpec('data', 'model')
     f = lambda x: jax.sharding.NamedSharding(mesh, x)
-    if jax.config.jax_enable_custom_prng:
-      key_spec = PartitionSpec()
-    else:
-      key_spec = PartitionSpec(None)
+    key_spec = PartitionSpec()
     init_fn = jax.jit(
         model.init,
         in_shardings=jax.tree_map(f, (key_spec, x_spec)),
         out_shardings=jax.tree_map(f, spec),
     )
-    variables = init_fn(random.PRNGKey(0), x)
+    variables = init_fn(random.key(0), x)
     apply_fn = jax.jit(
         model.apply,
         in_shardings=jax.tree_map(f, (spec, x_spec)),

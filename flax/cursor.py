@@ -296,7 +296,7 @@ class Cursor(Generic[A]):
           x = nn.relu(x)
           return x
 
-      params = Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))['params']
+      params = Model().init(jax.random.key(0), jnp.empty((1, 2)))['params']
 
       def update_fn(path, value):
         '''Multiply all dense kernel params by 2 and add 1.
@@ -320,7 +320,7 @@ class Cursor(Generic[A]):
             jax.tree_util.tree_map(
                 lambda x, y: (x == y).all(),
                 params,
-                Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))[
+                Model().init(jax.random.key(0), jnp.empty((1, 2)))[
                     'params'
                 ],
             )

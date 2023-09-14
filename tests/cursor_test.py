@@ -170,7 +170,7 @@ class CursorTest(absltest.TestCase):
 
     for freeze_wrap in (lambda x: x, freeze):
       params = freeze_wrap(
-          Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))['params']
+          Model().init(jax.random.key(0), jnp.empty((1, 2)))['params']
       )
 
       c = cursor(params)
@@ -193,7 +193,7 @@ class CursorTest(absltest.TestCase):
                   lambda x, y: (x == y).all(),
                   params,
                   freeze_wrap(
-                      Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))[
+                      Model().init(jax.random.key(0), jnp.empty((1, 2)))[
                           'params'
                       ]
                   ),

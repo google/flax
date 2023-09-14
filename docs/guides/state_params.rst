@@ -68,7 +68,7 @@ Then we can write the actual training code.
 .. testcode::
 
   model = BiasAdderWithRunningMean()
-  variables = model.init(random.PRNGKey(0), dummy_input)
+  variables = model.init(random.key(0), dummy_input)
   # Split state and params (which are updated by optimizer).
   state, params = flax.core.pop(variables, 'params')
   del variables  # Delete variables to avoid wasting resources
@@ -105,7 +105,7 @@ the :code:`axis_name` argument of :code:`lax.pmean()` directly.
 
   # Create some fake data and run only for one epoch for testing.
   dummy_input = jnp.ones((100,))
-  key1, key2 = random.split(random.PRNGKey(0), num=2)
+  key1, key2 = random.split(random.key(0), num=2)
   batch_size = 64
   X = random.normal(key1, (batch_size, 100))
   Y = random.normal(key2, (batch_size, 1))
@@ -171,7 +171,7 @@ dimension. Now we are able to train the model:
 .. testcode::
 
   model = MLP(hidden_size=10, out_size=1)
-  variables = model.init(random.PRNGKey(0), dummy_input)
+  variables = model.init(random.key(0), dummy_input)
   # Split state and params (which are updated by optimizer).
   state, params = flax.core.pop(variables, 'params')
   del variables  # Delete variables to avoid wasting resources

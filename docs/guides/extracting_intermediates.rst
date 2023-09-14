@@ -124,7 +124,7 @@ Note that, by default ``sow`` appends values every time it is called:
     return output, features
 
   batch = jnp.ones((1,28,28,1))
-  variables = init(jax.random.PRNGKey(0), batch)
+  variables = init(jax.random.key(0), batch)
   preds, feats = predict(variables, batch)
 
   assert len(feats) == 2  # Tuple with two values since module was called twice.
@@ -180,7 +180,7 @@ avoid using ``nn.compact`` altogether.
     return RefactoredCNN().apply({"params": params}, x,
       method=lambda module, x: module.features(x))
 
-  params = init(jax.random.PRNGKey(0), batch)
+  params = init(jax.random.key(0), batch)
 
   features(params, batch)
 
@@ -209,7 +209,7 @@ In the following code example we check if any intermediate activations are non-f
     fin = jax.tree_util.tree_map(lambda xs: jnp.all(jnp.isfinite(xs)), intermediates)
     return y, fin
 
-  variables = init(jax.random.PRNGKey(0), batch)
+  variables = init(jax.random.key(0), batch)
   y, is_finite = predict(variables, batch)
   all_finite = all(jax.tree_util.tree_leaves(is_finite))
   assert all_finite, "non-finite intermediate detected!"
@@ -250,8 +250,8 @@ non-layer intermediates, but the filter function won't be applied to it.
   def predict(params, x):
     return Model().apply({"params": params}, x, capture_intermediates=True)
 
-  batch = jax.random.uniform(jax.random.PRNGKey(1), (1,3))
-  params = init(jax.random.PRNGKey(0), batch)
+  batch = jax.random.uniform(jax.random.key(1), (1,3))
+  params = init(jax.random.key(0), batch)
   preds, feats = predict(params, batch)
   feats # intermediate c in Model was not stored because it's not a Flax layer
   ---
@@ -276,8 +276,8 @@ non-layer intermediates, but the filter function won't be applied to it.
     filter_fn = lambda mdl, method_name: isinstance(mdl.name, str) and (mdl.name in {'Dense_0', 'Dense_2'}) #!
     return Model().apply({"params": params}, x, capture_intermediates=filter_fn) #!
 
-  batch = jax.random.uniform(jax.random.PRNGKey(1), (1,3))
-  params = init(jax.random.PRNGKey(0), batch)
+  batch = jax.random.uniform(jax.random.key(1), (1,3))
+  params = init(jax.random.key(0), batch)
   preds, feats = predict(params, batch)
   feats # intermediate c in Model is stored and isn't filtered out by the filter function #!
 
@@ -337,7 +337,7 @@ your model more explicitly.
     return Sequential(SeqCNN().layers[0:7]).apply({"params": params}, x)
 
   batch = jnp.ones((1,28,28,1))
-  params = init(jax.random.PRNGKey(0), batch)
+  params = init(jax.random.key(0), batch)
   features(params, batch)
 
 Extracting gradients of intermediate values
@@ -367,7 +367,7 @@ the model:
   y = jnp.empty((1, 2)) # random data
 
   model = Model()
-  variables = model.init(jax.random.PRNGKey(1), x)
+  variables = model.init(jax.random.key(1), x)
   params, perturbations = variables['params'], variables['perturbations']
 
 Finally compute the gradients of the loss with respect to the perturbations,

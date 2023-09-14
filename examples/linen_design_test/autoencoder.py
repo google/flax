@@ -69,7 +69,7 @@ ae = AutoEncoder(
 
 # `ae.initialized` returns a materialized copy of `ae` by
 # running through an input to create submodules defined lazily.
-params = ae.init({"params": random.PRNGKey(42)}, jnp.ones((1, 28, 28, 1)))
+params = ae.init({"params": random.key(42)}, jnp.ones((1, 28, 28, 1)))
 
 
 # Now you can use `ae` as a normal object, calling any methods defined on AutoEncoder

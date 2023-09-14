@@ -319,7 +319,7 @@ def train_and_evaluate(
 
   # Create and initialize the network.
   logging.info('Initializing network.')
-  rng = jax.random.PRNGKey(0)
+  rng = jax.random.key(0)
   rng, init_rng = jax.random.split(rng)
   init_graphs = next(datasets['train'].as_numpy_iterator())
   init_graphs = replace_globals(init_graphs)

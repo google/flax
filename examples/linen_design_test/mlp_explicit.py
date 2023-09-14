@@ -56,7 +56,7 @@ class MLP(Module):
 
 
 # Return an initialized instance of MLP by only calling `setup`.
-rngkey = jax.random.PRNGKey(10)
+rngkey = jax.random.key(10)
 init_variables = MLP().init({'params': rngkey}, jnp.ones((1, 3)))
 
 pprint(init_variables)

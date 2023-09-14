@@ -201,7 +201,7 @@ class PartitioningTest(parameterized.TestCase):
         )
         return x + foo
 
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     _ = ParamTest().init(k, x)
 
@@ -220,7 +220,7 @@ class PartitioningTest(parameterized.TestCase):
         return x + foo
 
     p_rules = (('foo', 'model'), ('bar', 'data'), ('baz', None))
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     with partitioning.axis_rules(p_rules):
       variables = ParamTest().init(k, x)
@@ -252,7 +252,7 @@ class PartitioningTest(parameterized.TestCase):
         return x + foo['a']
 
     p_rules = (('foo', 'model'), ('bar', 'data'), ('baz', None))
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     with partitioning.axis_rules(p_rules):
       variables = ParamTest().init(k, x)
@@ -287,7 +287,7 @@ class PartitioningTest(parameterized.TestCase):
         )
         return x + foo.value
 
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     _ = VarTest().init(k, x)
 
@@ -301,7 +301,7 @@ class PartitioningTest(parameterized.TestCase):
         )
         return x + foo.value
 
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     variables = VarTest().init(k, x)
     logical_axis_names = partitioning.get_axis_names(variables['test_axes'])
@@ -318,7 +318,7 @@ class PartitioningTest(parameterized.TestCase):
         return x + foo.value
 
     p_rules = (('foo', 'model'), ('bar', 'data'), ('baz', None))
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     with partitioning.axis_rules(p_rules):
       variables = VarTest().init(k, x)
@@ -355,7 +355,7 @@ class PartitioningTest(parameterized.TestCase):
         ('bar', 'data'),
         ('baz', None),
     )
-    k = random.PRNGKey(0)
+    k = random.key(0)
     x = jnp.ones((2, 2))
     with partitioning.axis_rules(p_rules):
       variables = VarTest().init(k, x)
@@ -377,7 +377,7 @@ class PartitioningTest(parameterized.TestCase):
     B, L, E = 8, 4, 32  # pylint: disable=invalid-name
     # fake inputs
     x = jnp.ones((B, E))
-    k = random.PRNGKey(0)
+    k = random.key(0)
 
     class SinDot(nn.Module):
       depth: int
@@ -487,7 +487,7 @@ class PartitioningTest(parameterized.TestCase):
 
     # check that regular Food module is correct
     with partitioning.axis_rules(p_rules):
-      variables = Foo().init(jax.random.PRNGKey(0), jnp.array([1, 2, 3]))
+      variables = Foo().init(jax.random.key(0), jnp.array([1, 2, 3]))
     variables = unfreeze(variables)
     variables['params'] = jax.tree_util.tree_map(
         lambda x: x.shape, variables['params']
@@ -505,7 +505,7 @@ class PartitioningTest(parameterized.TestCase):
     # check that FooVmapped adds 'vmap_axis' to axis 1
     with partitioning.axis_rules(p_rules):
       variables = Vmapped().init(
-          jax.random.PRNGKey(0), jnp.array([[1, 2, 3], [4, 5, 6]])
+          jax.random.key(0), jnp.array([[1, 2, 3], [4, 5, 6]])
       )
     variables = unfreeze(variables)
     variables['params'] = jax.tree_util.tree_map(
@@ -547,7 +547,7 @@ class PartitioningTest(parameterized.TestCase):
     @jax.jit
     def create_state():
       module = Foo()
-      variables = module.init(random.PRNGKey(0), jnp.zeros((8, 4)))
+      variables = module.init(random.key(0), jnp.zeros((8, 4)))
       logical_spec = nn.get_partition_spec(variables)
       shardings = nn.logical_to_mesh_sharding(logical_spec, mesh, rules)
       variables = jax.lax.with_sharding_constraint(variables, shardings)

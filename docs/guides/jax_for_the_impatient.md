@@ -136,7 +136,7 @@ In short, you need to explicitly manage the PRNGs (pseudo random number generato
 :id: 8iz9KGF4s7nN
 :outputId: c5bb1581-090b-42ed-cc42-08436154bc14
 
-key = random.PRNGKey(0)
+key = random.key(0)
 key
 ```
 
@@ -203,7 +203,7 @@ $$\nabla f(x) = x$$
 :id: zDOydrLMcIzp
 :outputId: 580c14ed-d1a3-4f92-c9b9-78d58c87bc76
 
-key = random.PRNGKey(0)
+key = random.key(0)
 def f(x):
   return jnp.dot(x.T,x)/2.0
 
@@ -383,7 +383,7 @@ x_dim = 10
 y_dim = 5
 
 # Generate random ground truth W and b.
-key = random.PRNGKey(0)
+key = random.key(0)
 k1, k2 = random.split(key)
 W = random.normal(k1, (x_dim, y_dim))
 b = random.normal(k2, (y_dim,))

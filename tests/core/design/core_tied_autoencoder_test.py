@@ -53,7 +53,7 @@ class TiedAutoEncoderTest(absltest.TestCase):
   def test_tied_auto_encoder(self):
     ae = TiedAutoEncoder(latents=2, features=4)
     x = jnp.ones((1, ae.features))
-    x_r, variables = init(ae)(random.PRNGKey(0), x)
+    x_r, variables = init(ae)(random.key(0), x)
 
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
@@ -69,7 +69,7 @@ class TiedAutoEncoderTest(absltest.TestCase):
   def test_init_from_decoder(self):
     ae = TiedAutoEncoder(latents=2, features=4)
     z = jnp.ones((1, ae.latents))
-    x_r, variables = init(ae.decode)(random.PRNGKey(0), z)
+    x_r, variables = init(ae.decode)(random.key(0), z)
 
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])

@@ -32,7 +32,7 @@ The following are the utility functions and example upgrade patterns:
   import jax.numpy as jnp
 
   x = jnp.empty((1,3))
-  variables = flax.core.freeze(nn.Dense(5).init(jax.random.PRNGKey(0), x))
+  variables = flax.core.freeze(nn.Dense(5).init(jax.random.key(0), x))
 
   other_variables = jnp.array([1, 1, 1, 1, 1], dtype=jnp.float32)
 
@@ -107,12 +107,12 @@ For example:
   x = jnp.empty((1,3))
 
   flax.config.update('flax_return_frozendict', True) # set Flax to return FrozenDicts
-  variables = nn.Dense(5).init(jax.random.PRNGKey(0), x)
+  variables = nn.Dense(5).init(jax.random.key(0), x)
 
   assert isinstance(variables, flax.core.FrozenDict)
 
   flax.config.update('flax_return_frozendict', False) # set Flax to return regular dicts
-  variables = nn.Dense(5).init(jax.random.PRNGKey(0), x)
+  variables = nn.Dense(5).init(jax.random.key(0), x)
 
   assert isinstance(variables, dict)
 

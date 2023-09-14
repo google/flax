@@ -104,7 +104,7 @@ class AutoEncoderTest(absltest.TestCase):
   def test_auto_encoder_hp_struct(self):
     ae = AutoEncoder(latents=2, features=4, hidden=3)
     x = jnp.ones((1, 4))
-    x_r, variables = init(ae)(random.PRNGKey(0), x)
+    x_r, variables = init(ae)(random.key(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
@@ -129,7 +129,7 @@ class AutoEncoderTest(absltest.TestCase):
     )
     x = jnp.ones((1, 4))
 
-    x_r, variables = init(ae)(random.PRNGKey(0), x)
+    x_r, variables = init(ae)(random.key(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])
@@ -154,7 +154,7 @@ class AutoEncoderTest(absltest.TestCase):
     )(x)
     x = jnp.ones((1, 4))
 
-    x_r, variables = init(ae)(random.PRNGKey(0), x)
+    x_r, variables = init(ae)(random.key(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])

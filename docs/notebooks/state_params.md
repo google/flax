@@ -49,12 +49,12 @@ from flax import linen as nn
 # Initialize random variables
 dummy_input = jnp.ones((32, 5))
 
-X = random.uniform(random.PRNGKey(0), (128, 5),  minval=0.0, maxval=1.0)
-noise = random.uniform(random.PRNGKey(0), (),  minval=0.0, maxval=0.1)
+X = random.uniform(random.key(0), (128, 5),  minval=0.0, maxval=1.0)
+noise = random.uniform(random.key(0), (),  minval=0.0, maxval=0.1)
 X += noise
 
-W = random.uniform(random.PRNGKey(0), (5, 1),  minval=0.0, maxval=1.0)
-b = random.uniform(random.PRNGKey(0), (),  minval=0.0, maxval=1.0)
+W = random.uniform(random.key(0), (5, 1),  minval=0.0, maxval=1.0)
+b = random.uniform(random.key(0), (),  minval=0.0, maxval=1.0)
 
 Y = jnp.matmul(X, W) + b
 
@@ -112,7 +112,7 @@ Then we can write the actual training code.
 :id: 8RUFi57GVktj
 
 model = BiasAdderWithRunningMean()
-variables = model.init(random.PRNGKey(0), dummy_input)
+variables = model.init(random.key(0), dummy_input)
 # Split state and params (which are updated by optimizer).
 state, params = flax.core.pop(variables, 'params')
 del variables  # Delete variables to avoid wasting resources
@@ -201,7 +201,7 @@ Note that we also need to specify that the model state does not have a batch dim
 :id: OdMTQcMoYUtk
 
 model = MLP(hidden_size=10, out_size=1)
-variables = model.init(random.PRNGKey(0), dummy_input)
+variables = model.init(random.key(0), dummy_input)
 # Split state and params (which are updated by optimizer).
 state, params = flax.core.pop(variables, 'params')
 del variables  # Delete variables to avoid wasting resources

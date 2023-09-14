@@ -55,13 +55,13 @@ class WeightStdTest(absltest.TestCase):
 
   def test_weight_std(self):
     x = random.normal(
-        random.PRNGKey(0),
+        random.key(0),
         (
             1,
             4,
         ),
     )
-    y, variables = init(mlp)(random.PRNGKey(1), x)
+    y, variables = init(mlp)(random.key(1), x)
 
     param_shapes = unfreeze(
         jax.tree_util.tree_map(jnp.shape, variables['params'])

@@ -425,9 +425,9 @@ class RMSNorm(Module):
     >>> import jax
     >>> import flax.linen as nn
     ...
-    >>> x = jax.random.uniform(jax.random.PRNGKey(0), (2, 3))
+    >>> x = jax.random.uniform(jax.random.key(0), (2, 3))
     >>> layer = nn.RMSNorm()
-    >>> variables = layer.init(jax.random.PRNGKey(1), x)
+    >>> variables = layer.init(jax.random.key(1), x)
     >>> y = layer.apply(variables, x)
 
   Attributes:

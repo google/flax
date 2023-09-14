@@ -1143,7 +1143,7 @@ def lazy_init(
         k = scope.param("kernel", nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1]))
         return x @ k
     init_fn = lazy_init(f)
-    variables = init_fn(random.PRNGKey(0), jax.ShapeDtypeStruct((1, 128), jnp.float32))
+    variables = init_fn(random.key(0), jax.ShapeDtypeStruct((1, 128), jnp.float32))
 
 
   Args:

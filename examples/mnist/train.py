@@ -128,7 +128,7 @@ def train_and_evaluate(
     The train state (which includes the `.params`).
   """
   train_ds, test_ds = get_datasets()
-  rng = jax.random.PRNGKey(0)
+  rng = jax.random.key(0)
 
   summary_writer = tensorboard.SummaryWriter(workdir)
   summary_writer.hparams(dict(config))

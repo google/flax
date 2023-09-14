@@ -53,18 +53,18 @@ signature only requires a PRNG key and a sample input:
   :title_right: New
   :sync:
 
-  carry = nn.LSTMCell.initialize_carry(jax.random.PRNGKey(0), (batch_size,), out_features)
+  carry = nn.LSTMCell.initialize_carry(jax.random.key(0), (batch_size,), out_features)
 
   ---
 
-  carry = cell.initialize_carry(jax.random.PRNGKey(0), x[:, 0].shape)
+  carry = cell.initialize_carry(jax.random.key(0), x[:, 0].shape)
 
 Here, ``x[:, 0].shape`` represents the input for the cell (without the time dimension).
 You can also just create the input shape directly when its more convenient:
 
 .. testcode::
 
-  carry = cell.initialize_carry(jax.random.PRNGKey(0), (batch_size, in_features))
+  carry = cell.initialize_carry(jax.random.key(0), (batch_size, in_features))
 
 
 Upgrade Patterns
@@ -99,7 +99,7 @@ it working, albeit not in the most idiomatic way:
     @staticmethod
     def initialize_carry(batch_dims, hidden_size):
       return nn.OptimizedLSTMCell.initialize_carry(
-        jax.random.PRNGKey(0), batch_dims, hidden_size)
+        jax.random.key(0), batch_dims, hidden_size)
 
   ---
 
@@ -118,7 +118,7 @@ it working, albeit not in the most idiomatic way:
     @staticmethod
     def initialize_carry(batch_dims, hidden_size):
       return nn.OptimizedLSTMCell(hidden_size, parent=None).initialize_carry(
-        jax.random.PRNGKey(0), (*batch_dims, hidden_size))
+        jax.random.key(0), (*batch_dims, hidden_size))
 
 Notice how in the new version, we have to extract the number of features from the carry
 during ``__call__``, and use ``parent=None`` during ``initialize_carry`` to avoid some potential
@@ -147,11 +147,11 @@ a ``nn.scan``-ed version of the cell in the ``setup`` method:
     @staticmethod
     def initialize_carry(batch_dims, hidden_size):
       return nn.OptimizedLSTMCell.initialize_carry(
-        jax.random.PRNGKey(0), batch_dims, hidden_size)
+        jax.random.key(0), batch_dims, hidden_size)
 
   model = SimpleLSTM()
   carry = SimpleLSTM.initialize_carry((batch_size,), out_features)
-  variables = model.init(jax.random.PRNGKey(0), carry, x)
+  variables = model.init(jax.random.key(0), carry, x)
 
   ---
 
@@ -168,12 +168,12 @@ a ``nn.scan``-ed version of the cell in the ``setup`` method:
 
     @nn.compact
     def __call__(self, x):
-      carry = self.scan_cell.initialize_carry(jax.random.PRNGKey(0), x[:, 0].shape)
+      carry = self.scan_cell.initialize_carry(jax.random.key(0), x[:, 0].shape)
       return self.scan_cell(carry, x)[1]  # only return the output
 
 
   model = SimpleLSTM(features=out_features)
-  variables = model.init(jax.random.PRNGKey(0), x)
+  variables = model.init(jax.random.key(0), x)
 
 Because the ``carry`` can be easily initialized from the sample input, we can move the
 call to ``initialize_carry`` into the ``__call__`` method, somewhat simplifying the code.

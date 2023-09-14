@@ -143,7 +143,7 @@ class OgbgMolpcbaTrainTest(parameterized.TestCase):
     print('Running on platform:', platform.upper())
 
     # Create PRNG keys.
-    self.rng = jax.random.PRNGKey(0)
+    self.rng = jax.random.key(0)
 
     # Create dummy datasets.
     self.datasets = get_dummy_datasets(dataset_length=20, batch_size=10)

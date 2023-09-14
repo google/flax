@@ -78,7 +78,7 @@ class SequentialTest(absltest.TestCase):
 
   def test_construction(self):
     sequential = nn.Sequential([nn.Dense(4), nn.Dense(2)])
-    key1, key2 = random.split(random.PRNGKey(0), 2)
+    key1, key2 = random.split(random.key(0), 2)
     x = random.uniform(key1, (3, 1, 5))
     params = sequential.init(key2, x)
     output = sequential.apply(params, x)
@@ -87,7 +87,7 @@ class SequentialTest(absltest.TestCase):
   def test_fails_if_layers_empty(self):
     sequential = nn.Sequential([])
     with self.assertRaisesRegex(ValueError, 'Empty Sequential module'):
-      sequential.init(random.PRNGKey(42), jnp.ones((3, 5)))
+      sequential.init(random.key(42), jnp.ones((3, 5)))
 
   def test_same_output_as_mlp(self):
     sequential = nn.Sequential([
@@ -97,7 +97,7 @@ class SequentialTest(absltest.TestCase):
     ])
     mlp = MLP(layer_sizes=[4, 8, 2])
 
-    key1, key2 = random.split(random.PRNGKey(0), 2)
+    key1, key2 = random.split(random.key(0), 2)
     x = random.uniform(key1, (3, 5))
     params_1 = sequential.init(key2, x)
     params_2 = mlp.init(key2, x)
@@ -122,7 +122,7 @@ class SequentialTest(absltest.TestCase):
         activation_final=nn.log_softmax,
     )
 
-    key1, key2 = random.split(random.PRNGKey(0), 2)
+    key1, key2 = random.split(random.key(0), 2)
     x = random.uniform(key1, (3, 5))
     params_1 = sequential.init(key2, x)
     params_2 = mlp.init(key2, x)
@@ -137,7 +137,7 @@ class SequentialTest(absltest.TestCase):
         AttentionTuple(),
     ])
 
-    key1, key2 = random.split(random.PRNGKey(0), 2)
+    key1, key2 = random.split(random.key(0), 2)
     query = random.uniform(key1, (3, 5))
     key_value = random.uniform(key1, (9, 5))
     params_1 = sequential.init(key2, query, key_value)
@@ -153,7 +153,7 @@ class SequentialTest(absltest.TestCase):
         AttentionDict(),
     ])
 
-    key1, key2 = random.split(random.PRNGKey(0), 2)
+    key1, key2 = random.split(random.key(0), 2)
     query = random.uniform(key1, (3, 5))
     key_value = random.uniform(key1, (9, 5))
     params_1 = sequential.init(key2, query, key_value)

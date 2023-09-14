@@ -209,10 +209,10 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
     # this way we can determinte the PartitionSpecs for the init variables
     # before we call the init fn.
     var_spec = nn.get_partition_spec(
-        jax.eval_shape(mlp.init, random.PRNGKey(0), x))
+        jax.eval_shape(mlp.init, random.key(0), x))
     init_fn = mesh(pjit(mlp.init,
                         (None, PartitionSpec("data", "model")), var_spec))
-    variables = init_fn(random.PRNGKey(0), x)
+    variables = init_fn(random.key(0), x)
     apply_fn = mesh(pjit(
         mlp.apply,
         (var_spec, PartitionSpec("data", "model")),
