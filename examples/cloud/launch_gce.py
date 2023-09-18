@@ -178,7 +178,6 @@ def launch_gce(*, vm_name: str, startup_script: str):
       '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd',
       '--metadata=install-nvidia-driver=True',
-      f'--metadata-from-file=startup-script={startup_script}',
   ]
   if FLAGS.accelerator_type and FLAGS.accelerator_count:
     args.extend([

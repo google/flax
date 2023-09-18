@@ -84,9 +84,6 @@ tensorflow-datasets==4.4.0
 tensorflow-estimator==2.11.0
 tensorflow-io-gcs-filesystem==0.34.0
 tensorflow-metadata==1.13.0
-tensorrt==8.6.1.post1
-tensorrt-bindings==8.6.1
-tensorrt-libs==8.6.1
 tensorstore==0.1.42
 termcolor==2.3.0
 tiny-imagenet-tfds @ git+https://github.com/ksachdeva/tiny-imagenet-tfds.git@8dbaaf62f3806e5ad8a95c980061575851c442e6

@@ -32,6 +32,7 @@ set -x
 
     cd examples/__EXAMPLE__ &&
     pip install -r requirements.txt &&
+    pip install tensorrt &&
     cd /train
   ) &&
 
