@@ -29,7 +29,6 @@ set -x
     conda activate flax &&
 
     pip install -U pip &&
-    pip install -e . &&
 
     cd examples/__EXAMPLE__ &&
     pip install -r requirements.txt &&
