@@ -52,6 +52,10 @@ Normalization
   :module: flax.linen
   :class: GroupNorm
 
+.. flax_module::
+  :module: flax.linen
+  :class: SpectralNorm
+
 
 Combinators
 ------------------------
@@ -127,6 +131,7 @@ Recurrent
   LayerNorm
   GroupNorm
   RMSNorm
+  SpectralNorm
   Sequential
   Dropout
   SelfAttention

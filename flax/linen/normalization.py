@@ -125,7 +125,7 @@ def _compute_stats(
   return mu, var
 
 
-def _z_normalize_and_scale(
+def _normalize(
     mdl: Module,
     x: Array,
     mean: Array,
@@ -219,8 +219,8 @@ class BatchNorm(Module):
     BN = nn.BatchNorm(use_running_average=False, momentum=0.9, epsilon=1e-5,
                       dtype=jnp.float32)
 
-  The initialized variables dict will contain in addition to a 'params'
-  collection a separate 'batch_stats' collection that will contain all the
+  The initialized variables dict will contain, in addition to a 'params'
+  collection, a separate 'batch_stats' collection that will contain all the
   running statistics for all the BatchNorm layers in a model::
 
     vars_initialized = BN.init(key, x)  # {'params': ..., 'batch_stats': ...}
@@ -335,7 +335,7 @@ class BatchNorm(Module):
         )
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
-    return _z_normalize_and_scale(
+    return _normalize(
         self,
         x,
         mean,
@@ -417,7 +417,7 @@ class LayerNorm(Module):
         use_fast_variance=self.use_fast_variance,
     )
 
-    return _z_normalize_and_scale(
+    return _normalize(
         self,
         x,
         mean,
@@ -503,7 +503,7 @@ class RMSNorm(Module):
         use_mean=False,
     )
 
-    return _z_normalize_and_scale(
+    return _normalize(
         self,
         x,
         mean,
@@ -626,7 +626,7 @@ class GroupNorm(Module):
     mean = jnp.repeat(mean, group_size, axis=-1)
     var = jnp.repeat(var, group_size, axis=-1)
 
-    return _z_normalize_and_scale(
+    return _normalize(
         self,
         x,
         mean,
@@ -644,85 +644,149 @@ class GroupNorm(Module):
 
 
 class SpectralNorm(Module):
-  """Spectral normalization (https://arxiv.org/abs/2006.10108).
+  """Spectral normalization. See:
+
+  - https://arxiv.org/abs/1802.05957
+  - https://arxiv.org/abs/1805.08318
+  - https://arxiv.org/abs/1809.11096
 
   Spectral normalization normalizes the weight params so that the spectral
-  norm of the matrix is equal to 1.
+  norm of the matrix is equal to 1. This is implemented as a layer wrapper
+  where each wrapped layer will have its params spectral normalized before
+  computing its ``__call__`` output.
 
-  Example::
+  Usage Note:
+  The initialized variables dict will contain, in addition to a 'params'
+  collection, a separate 'batch_stats' collection that will contain a
+  ``u`` vector and ``sigma`` value, which are intermediate values used
+  when performing spectral normalization. During training, we pass in
+  ``update_stats=True`` and ``mutable=['batch_stats']`` so that ``u``
+  and ``sigma`` are updated with the most recently computed values using
+  power iteration. This will help the power iteration method approximate
+  the true singular value more accurately over time. During eval, we pass
+  in ``update_stats=False`` to ensure we get deterministic behavior from
+  the model. For example::
+
     class Foo(nn.Module):
       @nn.compact
-      def __call__(self, x):
-        x = nn.SpectralNorm(nn.Dense(2))(x)
-        x = nn.Dense(2)(x)
+      def __call__(self, x, train):
+        x = nn.Dense(3)(x)
+        # only spectral normalize the params of the second Dense layer
+        x = nn.SpectralNorm(nn.Dense(4))(x, update_stats=train)
+        x = nn.Dense(5)(x)
         return x
-    x = jax.random.uniform(jax.random.PRNGKey(0), (2, 3))
-    variables = Foo.init(jax.random.PRNGKey(1), x)
-    y = Foo.apply(variables, x)
+
+    # init
+    x = jnp.ones((1, 2))
+    y = jnp.ones((1, 5))
+    model = Foo()
+    variables = model.init(jax.random.PRNGKey(0), x, train=False)
+
+    # train
+    def train_step(variables, x, y):
+      def loss_fn(params):
+        logits, updates = model.apply(
+            {'params': params, 'batch_stats': variables['batch_stats']},
+            x,
+            train=True,
+            mutable=['batch_stats'],
+        )
+        loss = jnp.mean(optax.l2_loss(predictions=logits, targets=y))
+        return loss, updates
+
+      (loss, updates), grads = jax.value_and_grad(loss_fn, has_aux=True)(
+          variables['params']
+      )
+      return {
+          'params': jax.tree_map(
+              lambda p, g: p - 0.1 * g, variables['params'], grads
+          ),
+          'batch_stats': updates['batch_stats'],
+      }, loss
+    for _ in range(10):
+      variables, loss = train_step(variables, x, y)
+
+    # inference / eval
+    out = model.apply(variables, x, train=False)
 
   Attributes:
-    layer: Module instance that you want to wrap in SpectralNorm
+    layer_instance: Module instance that is wrapped with SpectralNorm
     n_steps: How many steps of power iteration to perform to approximate the
-      singular value of the input.
+      singular value of the weight params.
     epsilon: A small float added to l2-normalization to avoid dividing by zero.
     dtype: the dtype of the result (default: infer from input and params).
     param_dtype: the dtype passed to parameter initializers (default: float32).
     error_on_non_matrix: Spectral normalization is only defined on matrices.
       By default, this module will return scalars unchanged and flatten
       higher-order tensors in their leading dimensions. Setting this flag to
-      True will instead throw errors in those cases.
+      True will instead throw an error if a weight tensor with dimension
+      greater than 2 is used by the layer.
+    collection_name: Name of the collection to store intermediate values used
+      when performing spectral normalization.
   """
 
-  # TODO: fix docstring
-
-  layer: Module
+  layer_instance: Module
   n_steps: int = 1
   epsilon: float = 1e-12
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   error_on_non_matrix: bool = False
+  collection_name: str = 'batch_stats'
 
   @compact
-  def __call__(self, x, update_stats: bool):
-    # update_stats = merge_param('update_stats', self.update_stats, update_stats)
-    # TODO: fix docstring
-    # x: the input to be normalized.
-    # use_running_average: if true, the statistics stored in batch_stats will be
-    #   used instead of computing the batch statistics on the input.
-    #
+  def __call__(self, *args, update_stats: bool, **kwargs):
+    """Compute the largest singular value of the weights in ``self.layer_instance``
+    using power iteration and normalize the weights using this value before
+    computing the ``__call__`` output.
 
-    # TODO: figure out if there's a more elegant and robust way of unpacking a module instance and re-initializing it after it's been parametrized by map_variables
-    # TODO: or figure out how to elegantly pass in a module class with it's args into the SpectralNorm constructor
-    layer_class = type(self.layer)
-    layer_kwargs = {
-        f.name: (
-            getattr(self.layer, f.name)
-            if f.name != 'name'
-            else f'{self.name}({getattr(self.layer, f.name)})'
-        )
-        for f in dataclasses.fields(self.layer)
-    }
+    Args:
+      *args: positional arguments to be passed into the call method of the
+        underlying layer instance in ``self.layer_instance``.
+      update_stats: if True, update the internal ``u`` vector and ``sigma`` value
+        after computing their updated values using power iteration. This will help
+        the power iteration method approximate the true singular value more
+        accurately over time.
+      **kwargs: keyword arguments to be passed into the call method of the
+        underlying layer instance in ``self.layer_instance``.
+
+    Returns:
+      Output of the layer using spectral normalized weights.
+    """
+
+    def layer_forward(layer_instance):
+      return layer_instance(*args, **kwargs)
+
     return map_variables(
-        layer_class,
-        'params',
-        trans_in_fn=lambda vs: jax.tree_map(
+        layer_forward,
+        trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
             functools.partial(
-                self.spectral_normalize, update_stats=update_stats
+                self._spectral_normalize,
+                layer_instance_name=self.layer_instance.name,
+                update_stats=update_stats,
             ),
             vs,
         ),
-        init=True,
+        init=self.is_initializing(),
         mutable=True,
-    )(**layer_kwargs)(x)
+    )(self.layer_instance)
 
-  def spectral_normalize(self, x, update_stats):
-    # TODO: add docstring
-    """update_stats: A boolean defaulting to True. Regardless of this arg, this
-    function will return the normalized input. When
-    `update_stats` is True, the internal state of this object will also be
-    updated to reflect the input value. When `update_stats` is False the
-    internal stats will remain unchanged."""
-    value = jnp.asarray(x)
+  def _spectral_normalize(self, path, vs, layer_instance_name, update_stats):
+    """Compute the largest singular value using power iteration and normalize
+    the variables ``vs`` using this value. This is intended to be a helper
+    function used in this Module's ``__call__`` method in conjunction with
+    ``nn.transforms.map_variables`` and ``jax.tree_util.tree_map_with_path``.
+
+    Args:
+      path: dict key path, used for naming the ``u`` and ``sigma`` variables
+      vs: variables to be spectral normalized
+      layer_instance_name: name of the underlying ``self.layer_instance``,
+        used for naming the ``u`` and ``sigma`` variables
+      update_stats: if True, update the ``u`` vector and ``sigma`` variables
+        after computing their updated values using power iteration. This will
+        help the power iteration method approximate the true singular value
+        more accurately over time.
+    """
+    value = jnp.asarray(vs)
     value_shape = value.shape
 
     # Skip and return value if input is scalar, vector or if number of power iterations is less than 1
@@ -737,25 +801,31 @@ class SpectralNorm(Module):
       else:
         value = jnp.reshape(value, (-1, value.shape[-1]))
 
-    # TODO: check if you need to make a separate u and sigma collection for each param in the same layer
-    # (e.g. transformer layer would need a separate u and sigma for query, key and value param)
-    # u0 = jax.random.normal(
-    #     jax.random.PRNGKey(0), (1, value.shape[-1]), self.param_dtype
-    # )
-    # TODO: maybe just change u_var and sigma_var to self.param instead of self.variable
+    u_var_name = (
+        layer_instance_name
+        + '/'
+        + '/'.join((dict_key.key for dict_key in path[1:]))
+        + '/u'
+    )
     u_var = self.variable(
-        'batch_stats',
-        'u',
+        self.collection_name,
+        u_var_name,
         jax.random.normal,
-        self.make_rng(
-            'spectral_norm'
-        ),  # TODO: figure out how to not require an RNG during apply (only needed in init), or how to derive an rng key from the one that's passed down to init
+        self.make_rng('params')
+        if not self.has_variable(self.collection_name, u_var_name)
+        else None,
         (1, value.shape[-1]),
         self.param_dtype,
     )
     u0 = u_var.value
+    sigma_var_name = (
+        layer_instance_name
+        + '/'
+        + '/'.join((dict_key.key for dict_key in path[1:]))
+        + '/sigma'
+    )
     sigma_var = self.variable(
-        'batch_stats', 'sigma', jnp.ones, (), self.param_dtype
+        self.collection_name, sigma_var_name, jnp.ones, (), self.param_dtype
     )
 
     # Power iteration for the weight's singular value.
@@ -770,12 +840,12 @@ class SpectralNorm(Module):
 
     sigma = jnp.matmul(jnp.matmul(v0, value), jnp.transpose(u0))[0, 0]
 
-    value /= sigma
+    value /= jnp.where(sigma != 0, sigma, 1)
     value_bar = value.reshape(value_shape)
 
     if update_stats:
       u_var.value = u0
       sigma_var.value = sigma
 
-    dtype = canonicalize_dtype(x, u0, v0, sigma, dtype=self.dtype)
+    dtype = canonicalize_dtype(vs, u0, v0, sigma, dtype=self.dtype)
     return jnp.asarray(value_bar, dtype)
