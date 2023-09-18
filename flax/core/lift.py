@@ -61,9 +61,9 @@ T = TypeVar('T')
 
 
 def tree_map_rngs(fn, tree):
-  """Needed for mapping JAX random.* functions over KeyArray leaves."""
+  """Needed for mapping JAX random.* functions over PRNGKey leaves."""
   return jax.tree_util.tree_map(
-      fn, tree, is_leaf=lambda x: isinstance(x, random.KeyArray)
+      fn, tree, is_leaf=lambda x: jax.dtypes.issubdtype(x, jax.dtypes.prng_key)
   )
 
 
