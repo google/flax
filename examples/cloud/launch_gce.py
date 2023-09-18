@@ -170,7 +170,7 @@ def launch_gce(*, vm_name: str, startup_script: str):
       vm_name,
       f'--project={FLAGS.project}',
       f'--zone={FLAGS.zone}',
-      '--image=tf-ent-latest-gpu-v20230615-ubuntu-2004',
+      '--image=tf-2-13-gpu-v20230822-ubuntu-2004-py310',
       '--image-project=deeplearning-platform-release',
       f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full',
