@@ -42,6 +42,7 @@ import tensorflow_datasets as tfds
 
 import input_pipeline
 import models
+import resource
 
 
 NUM_CLASSES = 1000
@@ -307,6 +308,11 @@ def train_and_evaluate(
     input_dtype = tf.float32
 
   dataset_builder = tfds.builder(config.dataset)
+  low, high = resource.getrlimit(resource.RLIMIT_NOFILE)
+  resource.setrlimit(resource.RLIMIT_NOFILE, (high, high))
+
+  dataset_builder.download_and_prepare()
+
   train_iter = create_input_iter(
       dataset_builder,
       local_batch_size,

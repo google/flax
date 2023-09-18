@@ -170,10 +170,11 @@ def launch_gce(*, vm_name: str, startup_script: str):
       vm_name,
       f'--project={FLAGS.project}',
       f'--zone={FLAGS.zone}',
-      '--image=c1-deeplearning-tf-2-10-cu113-v20221107-debian-10',
-      '--image-project=ml-images',
+      '--image=tf-ent-latest-gpu-v20230615-ubuntu-2004',
+      '--image-project=deeplearning-platform-release',
       f'--machine-type={FLAGS.machine_type}',
       '--scopes=cloud-platform,storage-full',
+      '--network-interface=nic-type=GVNIC',
       '--boot-disk-size=256GB',
       '--boot-disk-type=pd-ssd',
       '--metadata=install-nvidia-driver=True',
@@ -303,3 +304,4 @@ def main(_):
 
 if __name__ == '__main__':
   app.run(main)
+

@@ -5,6 +5,7 @@
 WORKDIR="/train/workdir_base/__EXAMPLE__/__NAME__/__TIMESTAMP__"
 
 mkdir -p /train
+mkdir -p $WORKDIR
 cd /train
 
 # Login directly with:
@@ -42,13 +43,6 @@ set -x
   TFDS_DATA_DIR='__TFDS_DATA_DIR__' python main.py --workdir=$WORKDIR __ARGS__
 
 ) 2>&1 | tee -a $WORKDIR/setup_train_log_${TIMESTAMP}.txt
-
-if [ __SHUTDOWN_SECS__ -gt 0 ]; then
-  echo
-  echo WILL SHUT DOWN IN $((__SHUTDOWN_SECS__/60)) MIN ...
-  sleep __SHUTDOWN_SECS__ && shutdown now
-fi
-
 EOF
 
 

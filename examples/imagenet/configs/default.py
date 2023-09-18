@@ -37,7 +37,7 @@ def get_config():
   # As defined in the `models` module.
   config.model = 'ResNet50'
   # `name` argument of tensorflow_datasets.builder()
-  config.dataset = 'imagenet2012:5.*.*'
+  config.dataset = 'imagenette'
 
   config.learning_rate = 0.1
   config.warmup_epochs = 5.0

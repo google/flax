@@ -1,9 +1,11 @@
 absl-py==1.0.0
 clu==0.0.6
-flax==0.6.5
+flax==0.6.11
 -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-jax[cuda11_cudnn805]>=0.3.16  # change to jax[tpu] if running on tpus
+jax==0.4.12
+jaxlib==0.4.12
+chex==0.1.82
 ml-collections==0.1.0
 numpy==1.22.0
 optax==0.1.3
