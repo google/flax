@@ -307,65 +307,56 @@ def _get_call_flops(c: module_lib._CallInfo, mutable) -> tuple[int, int]:
   args = jax.tree_map(_from_value_representation, c.args)
   kwargs = jax.tree_map(_from_value_representation, c.kwargs)
 
-  static_kwargs = {}
-  dynamic_kwargs = {}
-  for k, v in kwargs.items():
-    if isinstance(v, jax.ShapeDtypeStruct):
-      dynamic_kwargs[k] = v
-    else:
-      static_kwargs[k] = v
+  leaves, treedef = jax.tree_util.tree_flatten((args, kwargs))
+  dynamic_leaves = []
+  dynamic_idxs = []
+  for i, arg in enumerate(leaves):
+    if isinstance(arg, jax.ShapeDtypeStruct):
+      dynamic_leaves.append(arg)
+      dynamic_idxs.append(i)
 
-  def init(rngs, *args, **dynamic_kwargs):
+  def _get_inputs(dynamic_leaves):
+    new_leaves: list[Any] = leaves.copy()
+    for i, arg in zip(dynamic_idxs, dynamic_leaves):
+      new_leaves[i] = arg
+    return treedef.unflatten(new_leaves)
+
+  def init(rngs, dynamic_leaves):
     """`c.module.init` closed over static keyword arguments."""
+    args, kwargs = _get_inputs(dynamic_leaves)
     return c.module.init(
         {'params': rngs, 'dropout': rngs},
         *args,
         method=c.method,
         mutable=mutable,
-        **dynamic_kwargs,
-        **static_kwargs,
+        **kwargs,
     )
 
   rngs = jax.ShapeDtypeStruct((2,), jnp.uint)
-  variables = jax.eval_shape(init, rngs, *args, **dynamic_kwargs)
+  variables = jax.eval_shape(init, rngs, dynamic_leaves)
 
-  def apply(variables, rngs, *args, **dynamic_kwargs):
+  def apply(variables, rngs, dynamic_leaves):
     """`c.module.apply` closed over static keyword arguments."""
+    args, kwargs = _get_inputs(dynamic_leaves)
     return c.module.apply(
         variables,
         *args,
         rngs={'dropout': rngs},
         method=c.method,
         mutable=mutable,
-        **dynamic_kwargs,
-        **static_kwargs,
+        **kwargs,
     )
 
   # Forward pass FLOPs
-  flops = _get_flops(apply, variables, rngs, *args, **dynamic_kwargs)
+  flops = _get_flops(apply, variables, rngs, dynamic_leaves)
 
   # Backward pass FLOPs
-  dynamic_keys = tuple(dynamic_kwargs.keys())
-
-  def apply_positional(variables, rngs, *all_args):
-    """Same as `apply` above but with positional arguments only."""
-    split = len(all_args) - len(dynamic_keys)
-    args, dynamic_values = all_args[:split], all_args[split:]
-    dynamic_kwargs = {k: v for k, v in zip(dynamic_keys, dynamic_values)}
-    return apply(variables, rngs, *args, **dynamic_kwargs)
-
-  def apply_vjp(variables, rngs, *args, **dynamic_kwargs):
+  def apply_vjp(variables, rngs, dynamic_leaves):
     """VJP of `c.module.apply` closed over static keyword arguments."""
-    out, vjp_fn = jax.vjp(
-        apply_positional,
-        variables,
-        rngs,
-        *args,
-        *dynamic_kwargs.values(),
-    )
+    out, vjp_fn = jax.vjp(apply, variables, rngs, dynamic_leaves)
     return vjp_fn(out)
 
-  vjp_flops = _get_flops(apply_vjp, variables, rngs, *args, **dynamic_kwargs)
+  vjp_flops = _get_flops(apply_vjp, variables, rngs, dynamic_leaves)
   return flops, vjp_flops
 
 
