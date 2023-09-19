@@ -87,6 +87,7 @@ COMMIT_SUCCESS_FILE = 'commit_success.txt'
 
 # Orbax main checkpoint file name.
 ORBAX_CKPT_FILENAME = 'checkpoint'
+ORBAX_MANIFEST_OCDBT = 'manifest.ocdbt'
 
 PyTree = Any
 
@@ -129,6 +130,12 @@ def _safe_remove(path: str):
     io.rmtree(path)
   else:
     io.remove(path)
+
+
+def _is_orbax_checkpoint(path: str) -> bool:
+  return io.exists(os.path.join(path, ORBAX_CKPT_FILENAME)) or io.exists(
+      os.path.join(path, ORBAX_MANIFEST_OCDBT)
+  )
 
 
 class AsyncManager:
@@ -1046,7 +1053,7 @@ def restore_checkpoint(
       return target
     if io.isdir(ckpt_dir):
       # This means the given dir is an orbax checkpoint.
-      if io.exists(os.path.join(ckpt_dir, ORBAX_CKPT_FILENAME)):
+      if _is_orbax_checkpoint(ckpt_dir):
         ckpt_path = ckpt_dir
       else:
         ckpt_path = latest_checkpoint(ckpt_dir, prefix)  # type: ignore
@@ -1059,7 +1066,7 @@ def restore_checkpoint(
       ckpt_path = ckpt_dir
 
   # Restore the checkpoint with Orbax if needed.
-  is_orbax = io.exists(os.path.join(ckpt_path, ORBAX_CKPT_FILENAME))
+  is_orbax = _is_orbax_checkpoint(ckpt_path)
   ckpt_type = 'orbax' if is_orbax else 'legacy Flax'
   logging.info(f'Restoring {ckpt_type} checkpoint from {ckpt_path}')
   if is_orbax:
