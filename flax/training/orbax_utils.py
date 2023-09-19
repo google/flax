@@ -70,7 +70,7 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
   """
 
   def find_sharding(x):
-    if isinstance(x, jax.Array):
+    if hasattr(x, 'sharding'):
       return x.sharding
     return None
 
