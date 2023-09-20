@@ -18,7 +18,7 @@ import functools
 
 import jax
 from jax import core
-from jax import linear_util as lu
+from jax.extend import linear_util as lu
 from jax.interpreters import partial_eval as pe
 
 from flax import errors
