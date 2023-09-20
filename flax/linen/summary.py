@@ -33,7 +33,7 @@ import numpy as np
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
-Array = Any  # pylint: disable=invalid-name
+Array = jax.Array  # pylint: disable=invalid-name
 
 
 class _ValueRepresentation(ABC):
@@ -48,10 +48,15 @@ class _ValueRepresentation(ABC):
 class _ArrayRepresentation(_ValueRepresentation):
   shape: Tuple[int, ...]
   dtype: Any
+  sharding: Optional[jax.sharding.Sharding]
 
   @classmethod
   def from_array(cls, x: Array) -> '_ArrayRepresentation':
-    return cls(jnp.shape(x), jnp.result_type(x))
+    return cls(
+        jnp.shape(x),
+        jnp.result_type(x),
+        x.sharding if hasattr(x, 'sharding') else None,
+    )
 
   @classmethod
   def render_array(cls, x) -> str:
@@ -59,7 +64,15 @@ class _ArrayRepresentation(_ValueRepresentation):
 
   def render(self):
     shape_repr = ','.join(str(x) for x in self.shape)
-    return f'[dim]{self.dtype}[/dim][{shape_repr}]'
+    sharding_info = _array_sharding_info(self.shape, self.sharding)
+    if sharding_info:
+      counts_repr = ', '.join(
+          str(count) if count is not None else 'None' for count in sharding_info
+      )
+      sharding_repr = f' [dim]P[/dim]({counts_repr})'
+    else:
+      sharding_repr = ''
+    return f'[dim]{self.dtype}[/dim][{shape_repr}]{sharding_repr}'
 
 
 @dataclasses.dataclass
@@ -589,3 +602,31 @@ def _represent_tree(x):
 
 def _maybe_render(x):
   return x.render() if hasattr(x, 'render') else repr(x)
+
+
+def _slice_to_tuple(
+    s: slice,
+) -> tuple[Optional[int], Optional[int], Optional[int]]:
+  return s.start, s.stop, s.step
+
+
+def _array_sharding_info(
+    shape: tuple[int, ...], sharding: Optional[jax.sharding.Sharding]
+) -> Optional[tuple[Optional[int], ...]]:
+  if sharding is None:
+    return None
+
+  axis_slices = list(sharding.devices_indices_map(shape).values())
+  axis_slices = [list(map(_slice_to_tuple, slices)) for slices in axis_slices]
+  axis_device_count = tuple(
+      len(set(axis_slices[i][j] for i in range(len(axis_slices))))
+      for j in range(len(axis_slices[0]))
+  )
+  sharding_repr = tuple(
+      None if device_count == 1 else device_count
+      for device_count in axis_device_count
+  )
+  if any(sharding_repr):
+    return sharding_repr
+  else:
+    return None
