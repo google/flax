@@ -212,7 +212,7 @@ the training step function. Refer to the
   from flax.training import train_state
 
   class TrainState(train_state.TrainState): #!
-    key: jax.random.KeyArray #!
+    key: jax.Array #!
 
   state = TrainState.create( #!
     apply_fn=my_model.apply,

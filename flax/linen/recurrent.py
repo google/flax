@@ -42,7 +42,7 @@ import numpy as np
 from typing_extensions import Protocol
 
 A = TypeVar('A')
-PRNGKey = jax.random.KeyArray
+PRNGKey = jax.Array
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Array = jax.Array
@@ -750,7 +750,7 @@ class RNN(Module):
       inputs: jax.Array,
       *,
       initial_carry: Optional[Carry] = None,
-      init_key: Optional[random.KeyArray] = None,
+      init_key: Optional[PRNGKey] = None,
       seq_lengths: Optional[Array] = None,
       return_carry: Optional[bool] = None,
       time_major: Optional[bool] = None,
@@ -976,7 +976,7 @@ class RNNBase(Protocol):
       inputs: jax.Array,
       *,
       initial_carry: Optional[Carry] = None,
-      init_key: Optional[random.KeyArray] = None,
+      init_key: Optional[PRNGKey] = None,
       seq_lengths: Optional[Array] = None,
       return_carry: Optional[bool] = None,
       time_major: Optional[bool] = None,
@@ -1000,7 +1000,7 @@ class Bidirectional(Module):
       inputs: jax.Array,
       *,
       initial_carry: Optional[Carry] = None,
-      init_key: Optional[random.KeyArray] = None,
+      init_key: Optional[PRNGKey] = None,
       seq_lengths: Optional[Array] = None,
       return_carry: Optional[bool] = None,
       time_major: Optional[bool] = None,
