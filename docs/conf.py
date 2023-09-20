@@ -144,3 +144,9 @@ nb_execution_raise_on_error = True
 # Tell sphinx-autodoc-typehints to generate stub parameter annotations including
 # types, even if the parameters aren't explicitly documented.
 always_document_param_types = True
+
+# -- doctest configuration -------------------------------------------------
+doctest_global_setup = """
+import jax
+import jax.numpy as jnp
+"""
