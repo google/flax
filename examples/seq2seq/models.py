@@ -26,7 +26,7 @@ import jax.numpy as jnp
 import numpy as np
 
 Array = jax.Array
-PRNGKey = jax.random.KeyArray
+PRNGKey = jax.Array
 LSTMCarry = Tuple[Array, Array]
 
 

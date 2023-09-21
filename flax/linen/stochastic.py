@@ -25,7 +25,7 @@ from jax import lax
 from jax import random
 import jax.numpy as jnp
 
-KeyArray = Union[jax.Array, jax.random.KeyArray]
+KeyArray = jax.Array
 
 
 class Dropout(Module):

@@ -74,7 +74,7 @@ from typing_extensions import Protocol, dataclass_transform  # pytype: disable=n
 
 traceback_util.register_exclusion(__file__)
 
-KeyArray = Union[jax.Array, jax.random.KeyArray]  # pylint: disable=invalid-name
+KeyArray = jax.Array
 RNGSequences = Dict[str, KeyArray]
 Array = Any  # pylint: disable=invalid-name
 
