@@ -36,9 +36,9 @@ Throughout the guide, you will be able to compare code examples with and without
   # Set up the directory.
   import os
   import shutil
-  if os.path.exists('./tmp/'):
-    shutil.rmtree('./tmp/')
-  os.makedirs('./tmp/')
+  if os.path.exists('/tmp/orbax_upgrade'):
+    shutil.rmtree('/tmp/orbax_upgrade')
+  os.makedirs('/tmp/orbax_upgrade')
 
 
 Setup
@@ -78,7 +78,7 @@ For example:
   :title_right: orbax.checkpoint
   :sync:
 
-  CKPT_DIR = './tmp/'
+  CKPT_DIR = '/tmp/orbax_upgrade/'
   flax.config.update('flax_use_orbax_checkpointing', False)
 
   # Inside your training loop
@@ -92,7 +92,7 @@ For example:
 
   ---
 
-  CKPT_DIR = './tmp/orbax'
+  CKPT_DIR = '/tmp/orbax_upgrade/orbax'
 
   # At the top level
   mgr_options = orbax.checkpoint.CheckpointManagerOptions(
@@ -126,7 +126,7 @@ For example:
   :title_right: orbax.checkpoint
   :sync:
 
-  PURE_CKPT_DIR = './tmp/pure'
+  PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
   flax.config.update('flax_use_orbax_checkpointing', False)
 
   checkpoints.save_checkpoint(PURE_CKPT_DIR, CKPT_PYTREE, step=0, overwrite=True)
@@ -134,7 +134,7 @@ For example:
 
   ---
 
-  PURE_CKPT_DIR = './tmp/pure'
+  PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
 
   ckptr = orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler())  # A stateless object, can be created on the fly.
   ckptr.save(PURE_CKPT_DIR, CKPT_PYTREE,
@@ -156,7 +156,7 @@ For example:
   :title_right: orbax.checkpoint
   :sync:
 
-  NOTARGET_CKPT_DIR = './tmp/no_target'
+  NOTARGET_CKPT_DIR = '/tmp/orbax_upgrade/no_target'
   flax.config.update('flax_use_orbax_checkpointing', False)
 
   checkpoints.save_checkpoint(NOTARGET_CKPT_DIR, CKPT_PYTREE, step=0)
@@ -164,7 +164,7 @@ For example:
 
   ---
 
-  NOTARGET_CKPT_DIR = './tmp/no_target'
+  NOTARGET_CKPT_DIR = '/tmp/orbax_upgrade/no_target'
 
   # A stateless object, can be created on the fly.
   ckptr = orbax.checkpoint.Checkpointer(orbax.checkpoint.PyTreeCheckpointHandler())
@@ -195,7 +195,7 @@ For example:
   :title_right: orbax.checkpoint
   :sync:
 
-  ARR_CKPT_DIR = './tmp/singleton'
+  ARR_CKPT_DIR = '/tmp/orbax_upgrade/singleton'
   flax.config.update('flax_use_orbax_checkpointing', False)
 
   checkpoints.save_checkpoint(ARR_CKPT_DIR, jnp.arange(10), step=0)
@@ -203,7 +203,7 @@ For example:
 
   ---
 
-  ARR_CKPT_DIR = './tmp/singleton'
+  ARR_CKPT_DIR = '/tmp/orbax_upgrade/singleton'
 
   ckptr = orbax.checkpoint.Checkpointer(orbax.checkpoint.ArrayCheckpointHandler())
   ckptr.save(ARR_CKPT_DIR, jnp.arange(10))

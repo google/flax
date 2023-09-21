@@ -61,8 +61,8 @@ TARGET_PYTREE = [0, {'foo': '', 'bar': np.array((0))}, [0, 0, 0]]
 
 # For removing any existing checkpoints from the last notebook run:
 import shutil
-if os.path.exists('./tmp'):
-    shutil.rmtree('./tmp')
+if os.path.exists('/tmp/orbax_upgrade'):
+    shutil.rmtree('/tmp/orbax_upgrade')
 ```
 
 ## Most common use case: Saving/loading and managing checkpoints
@@ -84,7 +84,7 @@ To upgrade your code:
 Below are code examples for before and after the migration to Orbax:
 
 ```python
-CKPT_DIR = './tmp/'
+CKPT_DIR = '/tmp/orbax_upgrade/'
 flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
@@ -100,7 +100,7 @@ checkpoints.restore_checkpoint(CKPT_DIR, target=TARGET_PYTREE, step=4, prefix='t
 ```
 
 ```python
-CKPT_DIR = './tmp/orbax'
+CKPT_DIR = '/tmp/orbax_upgrade/orbax'
 
 # After: Using the Orbax API
 
@@ -131,7 +131,7 @@ To migrate to Orbax code, instead of using the `overwrite` argument in `flax.sav
 For example:
 
 ```python
-PURE_CKPT_DIR = './tmp/pure'
+PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure'
 flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
@@ -140,7 +140,7 @@ checkpoints.restore_checkpoint(PURE_CKPT_DIR, target=TARGET_PYTREE)
 ```
 
 ```python
-PURE_CKPT_DIR = './tmp/pure/orbax'
+PURE_CKPT_DIR = '/tmp/orbax_upgrade/pure/orbax'
 
 # After: Using the Orbax API
 ckptr = orbax_checkpoint.Checkpointer(orbax_checkpoint.PyTreeCheckpointHandler())  # A stateless object, can be created on the fly.
@@ -157,7 +157,7 @@ If you need to restore your checkpoints without a target pytree, pass `item=None
 For example:
 
 ```python
-NOTARGET_CKPT_DIR = './tmp/no_target'
+NOTARGET_CKPT_DIR = '/tmp/orbax_upgrade/no_target'
 flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
@@ -166,7 +166,7 @@ checkpoints.restore_checkpoint(NOTARGET_CKPT_DIR, target=None)
 ```
 
 ```python
-NOTARGET_CKPT_DIR = './tmp/no_target/orbax'
+NOTARGET_CKPT_DIR = '/tmp/orbax_upgrade/no_target/orbax'
 
 # After: Using the Orbax API
 ckptr = orbax_checkpoint.Checkpointer(orbax_checkpoint.PyTreeCheckpointHandler())
@@ -190,7 +190,7 @@ The `orbax.checkpoint.PyTreeCheckpointHandler` class, as the name suggests, can 
 For example:
 
 ```python
-ARR_CKPT_DIR = './tmp/singleton'
+ARR_CKPT_DIR = '/tmp/orbax_upgrade/singleton'
 flax.config.update('flax_use_orbax_checkpointing', False)
 
 # Before: Using the Flax API
@@ -199,7 +199,7 @@ checkpoints.restore_checkpoint(ARR_CKPT_DIR, target=None)
 ```
 
 ```python
-ARR_CKPT_DIR = './tmp/singleton/orbax'
+ARR_CKPT_DIR = '/tmp/orbax_upgrade/singleton/orbax'
 
 # After: Using the Orbax API
 ckptr = orbax.checkpoint.Checkpointer(orbax.checkpoint.ArrayCheckpointHandler())  # stateless object, can be created on-fly

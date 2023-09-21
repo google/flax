@@ -80,7 +80,7 @@ import optax
 ```
 
 ```python
-ckpt_dir = 'tmp'
+ckpt_dir = '/tmp/flax_ckpt'
 
 if os.path.exists(ckpt_dir):
     shutil.rmtree(ckpt_dir)  # Remove any existing checkpoints from the last notebook run.
@@ -132,7 +132,7 @@ from flax.training import orbax_utils
 
 orbax_checkpointer = orbax.checkpoint.PyTreeCheckpointer()
 save_args = orbax_utils.save_args_from_target(ckpt)
-orbax_checkpointer.save('tmp/orbax/single_save', ckpt, save_args=save_args)
+orbax_checkpointer.save('/tmp/flax_ckpt/orbax/single_save', ckpt, save_args=save_args)
 ```
 
 Next, to use versioning and automatic bookkeeping features, you need to wrap `orbax.checkpoint.CheckpointManager` over `orbax.checkpoint.PyTreeCheckpointer`. 
@@ -144,14 +144,14 @@ In addition, provide `orbax.checkpoint.CheckpointManagerOptions` that customizes
 ```python id="T6T8V4UBXB1R" outputId="b7132933-566d-440d-c34e-c5468d87cbdc"
 options = orbax.checkpoint.CheckpointManagerOptions(max_to_keep=2, create=True)
 checkpoint_manager = orbax.checkpoint.CheckpointManager(
-    'tmp/orbax/managed', orbax_checkpointer, options)
+    '/tmp/flax_ckpt/orbax/managed', orbax_checkpointer, options)
 
 # Inside a training loop
 for step in range(5):
     # ... do your training
     checkpoint_manager.save(step, ckpt, save_kwargs={'save_args': save_args})
 
-os.listdir('tmp/orbax/managed')  # Because max_to_keep=2, only step 3 and 4 are retained
+os.listdir('/tmp/flax_ckpt/orbax/managed')  # Because max_to_keep=2, only step 3 and 4 are retained
 ```
 
 <!-- #region id="OQkUOkHVW_4e" -->
@@ -164,7 +164,7 @@ And here's how to save with the legacy Flax checkpointing utilities (note that t
 # Import Flax Checkpoints.
 from flax.training import checkpoints
 
-checkpoints.save_checkpoint(ckpt_dir='tmp/flax-checkpointing',
+checkpoints.save_checkpoint(ckpt_dir='/tmp/flax_ckpt/flax-checkpointing',
                             target=ckpt,
                             step=0,
                             overwrite=True,
@@ -180,7 +180,7 @@ In Orbax, call `.restore()` for either `orbax.checkpoint.PyTreeCheckpointer` or 
 <!-- #endregion -->
 
 ```python id="WgRJj3wjXIaN" outputId="b4af1ef4-f22f-459b-bdca-2e6bfa16c08b"
-raw_restored = orbax_checkpointer.restore('tmp/orbax/single_save')
+raw_restored = orbax_checkpointer.restore('/tmp/flax_ckpt/orbax/single_save')
 raw_restored
 ```
 
@@ -200,7 +200,7 @@ Here's how to restore checkpoints using the legacy API:
 <!-- #endregion -->
 
 ```python id="150b20a0" outputId="85ffceca-f38d-46b8-e567-d9d38b7885f9"
-raw_restored = checkpoints.restore_checkpoint(ckpt_dir='tmp/flax-checkpointing', target=None)
+raw_restored = checkpoints.restore_checkpoint(ckpt_dir='/tmp/flax_ckpt/flax-checkpointing', target=None)
 raw_restored
 ```
 
@@ -226,7 +226,7 @@ empty_state = train_state.TrainState.create(
 )
 empty_config = {'dimensions': np.array([0, 0])}
 target = {'model': empty_state, 'config': empty_config, 'data': [jnp.zeros_like(x1)]}
-state_restored = orbax_checkpointer.restore('tmp/orbax/single_save', item=target)
+state_restored = orbax_checkpointer.restore('/tmp/flax_ckpt/orbax/single_save', item=target)
 state_restored
 ```
 
@@ -239,7 +239,7 @@ checkpoint_manager.restore(4, items=target)
 ```
 
 ```python
-checkpoints.restore_checkpoint(ckpt_dir='tmp/flax-checkpointing', target=target)
+checkpoints.restore_checkpoint(ckpt_dir='/tmp/flax_ckpt/flax-checkpointing', target=target)
 ```
 
 It's often recommended to refactor out the process of initializing a checkpoint's structure (for example, a [`TrainState`](https://flax.readthedocs.io/en/latest/flip/1009-optimizer-api.html?#train-state)), so that saving/loading is easier and less error-prone. This is because functions and complex objects like `apply_fn` and `tx` (optimizer) cannot be serialized into the checkpoint file and must be initialized by code.
@@ -329,13 +329,13 @@ If you have already saved your checkpoints with the Orbax backend, you can use `
 ```python id="29fd1e33" outputId="cdbb9247-d1eb-4458-aa83-8db0332af7cb"
 # Save in the "Flax-with-Orbax" backend.
 flax.config.update('flax_use_orbax_checkpointing', True)
-checkpoints.save_checkpoint(ckpt_dir='tmp/flax-checkpointing',
+checkpoints.save_checkpoint(ckpt_dir='/tmp/flax_ckpt/flax-checkpointing',
                             target=ckpt,
                             step=4,
                             overwrite=True,
                             keep=2)
 
-checkpoints.restore_checkpoint('tmp/flax-checkpointing', target=custom_target, step=4,
+checkpoints.restore_checkpoint('/tmp/flax_ckpt/flax-checkpointing', target=custom_target, step=4,
                                orbax_transforms={})
 ```
 
@@ -348,14 +348,14 @@ You need to restore the checkpoint to a raw dict with `target=None`, modify the 
 ```python
 # Save using the legacy Flax `checkpoints` API.
 flax.config.update('flax_use_orbax_checkpointing', False)
-checkpoints.save_checkpoint(ckpt_dir='tmp/flax-checkpointing',
+checkpoints.save_checkpoint(ckpt_dir='/tmp/flax_ckpt/flax-checkpointing',
                             target=ckpt,
                             step=5,
                             overwrite=True,
                             keep=2)
 
 # Pass no target to get a raw state dictionary first.
-raw_state_dict = checkpoints.restore_checkpoint('tmp/flax-checkpointing', target=None, step=5)
+raw_state_dict = checkpoints.restore_checkpoint('/tmp/flax_ckpt/flax-checkpointing', target=None, step=5)
 # Add/remove fields as needed.
 raw_state_dict['model']['batch_stats'] = np.flip(np.arange(10))
 # Restore the classes with correct target now
@@ -386,12 +386,12 @@ async_checkpointer = orbax.checkpoint.AsyncCheckpointer(
     orbax.checkpoint.PyTreeCheckpointHandler(), timeout_secs=50)
 
 # Save your job:
-async_checkpointer.save('tmp/orbax/single_save_async', ckpt, save_args=save_args)
+async_checkpointer.save('/tmp/flax_ckpt/orbax/single_save_async', ckpt, save_args=save_args)
 # ... Continue with your work...
 
 # ... Until a time when you want to wait until the save completes:
 async_checkpointer.wait_until_finished()  # Blocks until the checkpoint saving is completed.
-async_checkpointer.restore('tmp/orbax/single_save_async', item=target)
+async_checkpointer.restore('/tmp/flax_ckpt/orbax/single_save_async', item=target)
 ```
 
 <!-- #region id="QpuTCeMVXOBn" -->
@@ -400,7 +400,7 @@ If you are using Orbax `CheckpointManager`, just pass in the async_checkpointer 
 
 ```python
 async_checkpoint_manager = orbax.checkpoint.CheckpointManager(
-    'tmp/orbax/managed_async', async_checkpointer, options)
+    '/tmp/flax_ckpt/orbax/managed_async', async_checkpointer, options)
 async_checkpoint_manager.wait_until_finished()
 ```
 
