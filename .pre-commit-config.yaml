@@ -13,10 +13,11 @@ repos:
   hooks:
   - id: jupytext
     args: [--sync]
-- repo: https://github.com/google/pyink
-  rev: 23.5.0
-  hooks:
-    - id: pyink
+# diable pyink for now
+# - repo: https://github.com/google/pyink
+#   rev: 23.5.0
+#   hooks:
+#     - id: pyink
 - repo: https://github.com/pre-commit/pre-commit-hooks
   rev: v4.3.0
   hooks:
