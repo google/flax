@@ -3,14 +3,11 @@ from functools import partial
 
 from flax.linen import initializers
 from flax.linen.module import Module
-from flax.linen import partitioning as nn_partitioning
 from jax import custom_vjp
 from jax import lax
 from jax import numpy as jnp
 from jax import random
 
-
-variable_with_axes = nn_partitioning.variable_with_axes
 
 # Type annotations
 Array = jnp.ndarray
@@ -140,37 +137,31 @@ class Fp8DenseGeneralOp(Module):
         jnp.float32,
     )
 
-    self.input_amax_history = variable_with_axes(
+    self.input_amax_history = self.variable(
         FP8Helper.FP8_COLLECTION_NAME,
         'input_amax_history',
-        *amax_history_args,
-        axes=('fp8_meta',))
-    self.kernel_amax_history = variable_with_axes(
+        *amax_history_args)
+    self.kernel_amax_history = self.variable(
         FP8Helper.FP8_COLLECTION_NAME,
         'kernel_amax_history',
-        *amax_history_args,
-        axes=('fp8_meta',))
-    self.output_grad_amax_history = variable_with_axes(
+        *amax_history_args)
+    self.output_grad_amax_history = self.variable(
         FP8Helper.FP8_COLLECTION_NAME,
         'output_grad_amax_history',
-        *amax_history_args,
-        axes=('fp8_meta',))
+        *amax_history_args)
 
-    self.input_scale = variable_with_axes(
+    self.input_scale = self.variable(
         FP8Helper.FP8_COLLECTION_NAME,
         'input_scale',
-        *scale_args,
-        axes=('fp8_meta',))
-    self.kernel_scale = variable_with_axes(
+        *scale_args)
+    self.kernel_scale = self.variable(
         FP8Helper.FP8_COLLECTION_NAME,
         'kernel_scale',
-        *scale_args,
-        axes=('fp8_meta',))
-    self.output_grad_scale = variable_with_axes(
+        *scale_args)
+    self.output_grad_scale = self.variable(
         FP8Helper.FP8_COLLECTION_NAME,
         'output_grad_scale',
-        *scale_args,
-        axes=('fp8_meta',))
+        *scale_args)
 
 
   def __call__(self, *args, **kwargs) -> Array:

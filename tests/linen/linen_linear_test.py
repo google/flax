@@ -1040,8 +1040,6 @@ class LinearTest(parameterized.TestCase):
         p.dot_general_cls=nn.Fp8DenseGeneralOp
       y, initial_vars = p.init_with_output(init_key, x)
       var_shapes = jax.tree_util.tree_map(jnp.shape, initial_vars)
-      if 'fp8_params_axes' in var_shapes:
-          var_shapes.pop('fp8_params_axes')
       self.assertEqual(var_shapes, expected_shapes)
 
       def _train(variables, x):
