@@ -59,7 +59,7 @@ testing = [
     "torch",
     "nbstripout",
     "black[jupyter]==23.7.0",
-    "pyink==23.5.0",
+    # "pyink==23.5.0", # disabling pyink fow now
 ]
 
 [project.urls]
