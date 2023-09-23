@@ -1081,8 +1081,8 @@ class LinearTest(parameterized.TestCase):
     variables = dense.init(key, x)
 
     opt = optax.adam(learning_rate=.1)
-    state = train_state.TrainState.create(params=variables, tx=opt,
-                                          apply_fn=dense.apply)
+    state = train_state.Fp8TrainState.create(params=variables, tx=opt,
+                                             apply_fn=dense.apply)
     
     def roll_and_update(amax_h, update):
       return jnp.roll(amax_h, shift=-1, axis=0).at[0].set(update)
