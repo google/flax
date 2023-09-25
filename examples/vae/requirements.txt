@@ -1,5 +1,6 @@
 absl-py==1.4.0
-flax==0.6.9
+clu==0.0.6
+flax==0.7.4
 numpy==1.23.5
 optax==0.1.5
 Pillow==9.5.0

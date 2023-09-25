@@ -18,7 +18,7 @@ follows:
 
 ```shell
 python main.py \
---workdir=/tmp/mnist --config=configs/default.py \
+--config=configs/default.py \
 --config.learning_rate=0.01 --config.num_epochs=10
 ```
 
