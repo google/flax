@@ -2357,7 +2357,7 @@ class Module(ModuleBase):
       *args,
       depth: Optional[int] = None,
       show_repeated: bool = False,
-      mutable: CollectionFilter = True,
+      mutable: CollectionFilter = DenyList('intermediates'),
       console_kwargs: Optional[Mapping[str, Any]] = None,
       table_kwargs: Mapping[str, Any] = MappingProxyType({}),
       column_kwargs: Mapping[str, Any] = MappingProxyType({}),

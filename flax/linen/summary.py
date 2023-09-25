@@ -22,7 +22,7 @@ from flax.core import unfreeze
 
 import flax.linen.module as module_lib
 from flax.core import meta
-from flax.core.scope import CollectionFilter, FrozenVariableDict, MutableVariableDict
+from flax.core.scope import CollectionFilter, DenyList, FrozenVariableDict, MutableVariableDict
 import jax
 import jax.numpy as jnp
 import rich.console
@@ -156,7 +156,7 @@ def tabulate(
     rngs: Union[PRNGKey, RNGSequences],
     depth: Optional[int] = None,
     show_repeated: bool = False,
-    mutable: CollectionFilter = True,
+    mutable: CollectionFilter = DenyList('intermediates'),
     console_kwargs: Optional[Mapping[str, Any]] = None,
     table_kwargs: Mapping[str, Any] = MappingProxyType({}),
     column_kwargs: Mapping[str, Any] = MappingProxyType({}),
@@ -251,12 +251,16 @@ def tabulate(
     (`method`) and returns a string with a tabular representation of the
     Modules.
   """
+  # add non-default arguments to kwargs, this prevents some issue we overloading init
+  # see: https://github.com/google/flax/issues/3299
+  if mutable != DenyList('intermediates'):
+    kwargs['mutable'] = mutable
 
   def _tabulate_fn(*fn_args, **fn_kwargs):
     table_fn = _get_module_table(
         module, depth=depth, show_repeated=show_repeated
     )
-    table = table_fn(rngs, *fn_args, mutable=mutable, **fn_kwargs, **kwargs)
+    table = table_fn(rngs, *fn_args, **fn_kwargs, **kwargs)
     return _render_table(table, console_kwargs, table_kwargs, column_kwargs)
 
   return _tabulate_fn
