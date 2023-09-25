@@ -613,6 +613,27 @@ class SummaryTest(absltest.TestCase):
     lines = rep.splitlines()
     self.assertIn("Total Parameters: 50", lines[-2])
 
+  def test_monkey_patching_init(self):
+    class MyModule(nn.Module):
+
+      @nn.compact
+      def __call__(self, inputs):
+        return nn.Dense(3)(inputs)
+
+    key = jax.random.PRNGKey(0)
+
+    # tabulate without pmap
+    model = MyModule()
+    model.tabulate(key, jnp.ones((3, 3)))
+
+    # apply pmap
+    model.init = jax.pmap(model.init, axis_name="i")
+    rngs = jax.random.split(key, 4)
+    x = jnp.ones((4, 3, 3))
+
+    # test tabulate still works
+    model.tabulate(rngs, x)
+
 
 if __name__ == "__main__":
   absltest.main()

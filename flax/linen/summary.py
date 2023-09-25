@@ -251,12 +251,16 @@ def tabulate(
     (`method`) and returns a string with a tabular representation of the
     Modules.
   """
+  # add non-default arguments to kwargs, this prevents some issue we overloading init
+  # see: https://github.com/google/flax/issues/3299
+  if mutable != True:
+    kwargs['mutable'] = mutable
 
   def _tabulate_fn(*fn_args, **fn_kwargs):
     table_fn = _get_module_table(
         module, depth=depth, show_repeated=show_repeated
     )
-    table = table_fn(rngs, *fn_args, mutable=mutable, **fn_kwargs, **kwargs)
+    table = table_fn(rngs, *fn_args, **fn_kwargs, **kwargs)
     return _render_table(table, console_kwargs, table_kwargs, column_kwargs)
 
   return _tabulate_fn
