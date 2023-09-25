@@ -1006,7 +1006,7 @@ def _unfreeze_variables(variables, mutable):
     if in_filter(mutable, key):
       new_variables[key] = unfreeze(value)
     else:
-      new_variables[key] = freeze(value)
+      new_variables[key] = value
   return new_variables
 
 

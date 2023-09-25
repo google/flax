@@ -1622,12 +1622,27 @@ class ModuleTest(absltest.TestCase):
     self.assertIsInstance(decoder, nn.Dense)
     self.assertEqual(decoder.features, 2)
 
-    np.testing.assert_equal(
-        variables['params']['encoder'], encoder_vars['params']
-    )
-    np.testing.assert_equal(
-        variables['params']['decoder'], decoder_vars['params']
-    )
+    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda v1, v2: (v1 == v2).all(), variables['params']['encoder'], encoder_vars['params'])))
+    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda v1, v2: (v1 == v2).all(), variables['params']['decoder'], decoder_vars['params'])))
+
+  def test_bind_unbind_equality(self):
+    class Foo(nn.Module):
+        sub_module: Any
+        @nn.compact
+        def __call__(self, x):
+            x = nn.Dense(2)(x)
+            return self.sub_module(x)
+
+    sub_module = Foo(nn.Dense(3))
+    module = Foo(sub_module)
+    x = jnp.ones((1, 2))
+    variables = module.init(jax.random.PRNGKey(0), x)
+
+    bound_module = module.bind(variables)
+    self.assertTrue((module.apply(variables, x) == bound_module(x)).all())
+    new_module, new_variables = bound_module.unbind()
+    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda v1, v2: (v1 == v2).all(), variables, new_variables)))
+    self.assertEqual(module, new_module)
 
   def test_passing_mutable_variables(self):
     class Foo(nn.Module):

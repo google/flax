@@ -1432,6 +1432,7 @@ class Module(ModuleBase):
       *,
       parent: Optional[Union[Scope, 'Module']] = None,
       _deep_clone: Union[bool, weakref.WeakValueDictionary] = False,
+      _reset_names: bool = False,
       **updates,
   ) -> M:
     """Creates a clone of this Module, with optionally updated arguments.
@@ -1443,6 +1444,8 @@ class Module(ModuleBase):
         of submodules. If True, submodules will be cloned recursively. If a weak
         value dictionary is passed, it will be used to cache cloned submodules.
         This flag is used by init/apply/bind to avoid scope leakage.
+      _reset_names: If True, `name=None` is also passed to submodules when
+        cloning. Resetting names in submodules is necessary when calling `.unbind`.
       **updates: Attribute updates.
 
     Returns:
@@ -1474,7 +1477,10 @@ class Module(ModuleBase):
           if key in cache:
             return cache[key]
           else:
-            clone = m.clone(_deep_clone=cache)
+            if _reset_names:
+              clone = m.clone(_deep_clone=cache, _reset_names=_reset_names, name=None)
+            else:
+              clone = m.clone(_deep_clone=cache)
             cache[key] = clone
             return clone
         else:
@@ -1825,7 +1831,7 @@ class Module(ModuleBase):
       raise errors.CallUnbindOnUnboundModuleError()
 
     variables = self.variables
-    module = self.clone()
+    module = self.clone(_deep_clone=True, _reset_names=True, name=None)
     return module, variables
 
   @traceback_util.api_boundary
