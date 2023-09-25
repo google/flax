@@ -142,8 +142,6 @@ filterwarnings = [
     "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
     # DeprecationWarning: module 'sre_constants' is deprecated
     "ignore:.*module 'sre_constants' is deprecated.*:DeprecationWarning",
-    # DeprecationWarning: jax.random.KeyArray is deprecated. Use jax.Array for annotations, and jax.dtypes.issubdtype(arr, jax.dtypes.prng_key) for runtime detection of typed prng keys.
-    "ignore:.*jax.random.KeyArray is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
