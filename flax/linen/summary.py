@@ -22,7 +22,7 @@ from flax.core import unfreeze
 
 import flax.linen.module as module_lib
 from flax.core import meta
-from flax.core.scope import CollectionFilter, FrozenVariableDict, MutableVariableDict
+from flax.core.scope import CollectionFilter, DenyList, FrozenVariableDict, MutableVariableDict
 import jax
 import jax.numpy as jnp
 import rich.console
@@ -156,7 +156,7 @@ def tabulate(
     rngs: Union[PRNGKey, RNGSequences],
     depth: Optional[int] = None,
     show_repeated: bool = False,
-    mutable: CollectionFilter = True,
+    mutable: CollectionFilter = DenyList('intermediates'),
     console_kwargs: Optional[Mapping[str, Any]] = None,
     table_kwargs: Mapping[str, Any] = MappingProxyType({}),
     column_kwargs: Mapping[str, Any] = MappingProxyType({}),
@@ -253,7 +253,7 @@ def tabulate(
   """
   # add non-default arguments to kwargs, this prevents some issue we overloading init
   # see: https://github.com/google/flax/issues/3299
-  if mutable != True:
+  if mutable != DenyList('intermediates'):
     kwargs['mutable'] = mutable
 
   def _tabulate_fn(*fn_args, **fn_kwargs):

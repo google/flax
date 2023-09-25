@@ -329,6 +329,7 @@ class SummaryTest(absltest.TestCase):
         {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
+        mutable=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
     )
 
