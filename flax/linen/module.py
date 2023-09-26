@@ -2470,7 +2470,7 @@ class Module(ModuleBase):
     return tabulate_fn(*args, **kwargs)
 
 
-_ParentType = Union[Type[Module], Type[Scope], Type[_Sentinel], None]
+_ParentType = Union[Type[Module], Scope, Type[_Sentinel], None]
 
 
 def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
