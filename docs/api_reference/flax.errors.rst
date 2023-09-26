@@ -1,5 +1,5 @@
 
-flax.error package
+flax.errors package
 ===================
 
 Flax has the following classes of errors.
