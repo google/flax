@@ -120,9 +120,11 @@ Alternatively, the environment variable ``flax_return_frozendict``
 (found `here <https://github.com/google/flax/blob/main/flax/configurations.py>`__) can be directly modified in the Flax source code.
 
 
-Migration plan
+Migration status
 --------------
 
-Currently ``flax_return_frozendict`` is set to True, meaning Flax will default to returning ``FrozenDicts``.
-In the future this flag will be flipped to False, and Flax will instead default to returning regular dicts.
-Eventually this feature flag will be removed once the migration is complete.
+As of July 19th, 2023, ``flax_return_frozendict`` is set to ``False`` (see
+`#3193 <https://github.com/google/flax/pull/3193>`__), meaning Flax will default to
+returning regular dicts from version `0.7.1 <https://github.com/google/flax/releases/tag/v0.7.1>`__
+onward. This flag can be flipped to ``True`` temporarily to have Flax return
+``Frozendicts``. However this feature flag will eventually be removed in the future.

@@ -32,10 +32,19 @@ class Dropout(Module):
   """Create a dropout layer.
 
   Note: When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
-  to include an RNG seed named `'dropout'`. For example::
+  to include an RNG seed named `'dropout'`. Dropout isn't necessary for
+  variable initialization. Example::
 
-    model.apply({'params': params}, inputs=inputs, train=True, rngs={'dropout':
-    dropout_rng})`
+    class MLP(nn.Module):
+      @nn.compact
+      def __call__(self, x, train):
+        x = nn.Dense(4)(x)
+        x = nn.Dropout(0.5, deterministic=not train)(x)
+        return x
+    model = MLP()
+    x = jnp.ones((1, 3))
+    variables = model.init(jax.random.key(0), x, train=False) # don't use dropout
+    model.apply(variables, x, train=True, rngs={'dropout': jax.random.key(1)}) # use dropout
 
   Attributes:
     rate: the dropout probability.  (_not_ the keep rate!)
