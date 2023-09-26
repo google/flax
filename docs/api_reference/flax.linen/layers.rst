@@ -108,6 +108,10 @@ Recurrent
 
 .. flax_module::
   :module: flax.linen
+  :class: CudnnLSTM
+
+.. flax_module::
+  :module: flax.linen
   :class: RNN
 
 .. flax_module::

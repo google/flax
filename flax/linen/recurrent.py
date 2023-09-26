@@ -36,6 +36,7 @@ from flax.linen.linear import PrecisionLike
 from flax.linen.module import compact, nowrap
 from flax.linen.module import Module
 import jax
+import jax.experimental.rnn
 from jax import numpy as jnp
 from jax import random
 import numpy as np
@@ -618,6 +619,259 @@ class ConvLSTMCell(RNNCellBase):
   @property
   def num_feature_axes(self) -> int:
     return len(self.kernel_size) + 1
+
+
+class CudnnLSTM(Module):
+  """
+  An optimized LSTM implementation backed by cuDNN.
+
+  Example::
+
+    >>> x = jnp.ones((2, 10, 5))
+    >>> lstm = nn.CudnnLSTM(features=15)
+    ...
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> y = lstm.apply(variables, x)
+    >>> y.shape
+    (2, 10, 15)
+
+  For sequences with variable lengths, the ``seq_lengths`` argument can be used
+  to indicate the length of each sequence in the batch. Elements with an index
+  greater than or equal to the length of their respective sequence are considered
+  padding and ignored. The output elements corresponding to padding elements are
+  set to zero::
+
+    >>> x = jnp.ones((2, 10, 5))
+    >>> seq_lengths = jnp.array([7, 4])
+    >>> lstm = nn.CudnnLSTM(features=15)
+    ...
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> y = lstm.apply(variables, x, seq_lengths=seq_lengths)
+    >>> # zero padding
+    >>> float(y[0, 7:].sum())
+    0.0
+    >>> float(y[1, 4:].sum())
+    0.0
+
+  By default, ``CudnnLSTM`` accepts inputs of shape ``(*batch_dims, time, features)``.
+  To indicate that the time dimension is the first dimension of the input, set
+  ``time_major=True``::
+
+    >>> x = jnp.ones((10, 2, 5))
+    >>> lstm = nn.CudnnLSTM(features=15, time_major=True)
+    ...
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> y = lstm.apply(variables, x)
+    >>> y.shape
+    (10, 2, 15)
+
+  ``CudnnLSTM`` supports stacking multiple LSTM layers in the same operation for performance
+  reasons by specifying ``num_layers``. Only the output of the final layer is returned.
+
+  ``CudnnLSTM`` also supports bidirectional LSTMs by specifying ``bidirectional``. In this case,
+  the output is the concatenation of the forward and backward LSTM outputs::
+
+    >>> x = jnp.ones((2, 10, 5))
+    >>> lstm = nn.CudnnLSTM(features=15, bidirectional=True)
+    ...
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> y = lstm.apply(variables, x)
+    >>> y.shape
+    (2, 10, 30)
+
+  To return the carry state of the LSTM, set ``return_carry=True``. This returns
+  a tuple of the LSTM output and the carry state::
+
+    >>> x = jnp.ones((2, 10, 5))
+    >>> lstm = nn.CudnnLSTM(features=15, return_carry=True)
+    ...
+    >>> variables = lstm.init(jax.random.PRNGKey(0), x)
+    >>> (h, c), y = lstm.apply(variables, x)
+
+  For debugging purposes, set the ``use_cudnn`` argument to ``False`` to fall back
+  to a pure JAX implementation of the LSTM. When running on non-GPU hardware,
+  the JAX implementation is always used.
+
+  Attributes:
+    features: int, the number of output features.
+    num_layers: int, the number of LSTM layers to use, defaults to 1. Behaves as if
+      multiple LSTM layers were stacked.
+    dropout: float, dropout probability, defaults to 0.0. Currently dropout is not
+      supported by `jax.experimental.rnn`, this is a placeholder.
+    bidirectional: bool, whether to use a bidirectional LSTM, defaults to False. When
+      enabled, the output is the concatenation of the forward and backward LSTM
+      outputs.
+    deterministic: bool, if True, disables dropout. Defaults to False.
+    time_major: bool, whether the time dimension is the first dimension of the input,
+      else it is the second to last dimension. Defaults to False.
+    return_carry: bool, whether to return the carry state of the LSTM. Defaults to
+      False.
+    use_cudnn: bool, whether to use the cuDNN implementation of the LSTM, else a pure JAX
+      fallback implementation is used. Defaults to True.
+  """
+
+  features: int
+  num_layers: int = 1
+  dropout: float = 0.0
+  bidirectional: bool = False
+  deterministic: bool = True
+  time_major: bool = False
+  return_carry: bool = False
+  use_cudnn: bool = True
+
+  @compact
+  def __call__(
+      self,
+      inputs: Array,
+      seq_lengths: Optional[Array] = None,
+      initial_state: Optional[Carry] = None,
+      # overloads
+      use_cudnn: Optional[bool] = None,
+      return_carry: Optional[bool] = None,
+      dropout: Optional[float] = None,
+      deterministic: Optional[bool] = None,
+      bidirectional: Optional[bool] = None,
+      time_major: Optional[bool] = None,
+  ) -> Union[Array, Tuple[Carry, Array]]:
+    """Applies the LSTM forward pass.
+
+    Args:
+      inputs: input data with dimensions ``(*batch_dims, time, features)`` or
+        ``(time, *batch_dims, features)`` if ``time_major=True``.
+      seq_lengths: optional array with the length of each sequence in the batch.
+      initial_state: optional carry state that will be used as the initial state
+        of the LSTM.
+      use_cudnn: optional override of the `use_cudnn` attribute.
+      return_carry: optional override of the `return_carry` attribute.
+      dropout: optional override of the `dropout` attribute.
+      deterministic: optional override of the `deterministic` attribute.
+      bidirectional: optional override of the `bidirectional` attribute.
+      time_major: optional override of the `time_major` attribute.
+
+    Returns:
+      Union[Array, Tuple[Carry, Array]]: Either the LSTM output or a tuple of the
+        LSTM output and the carry state, depending on the `return_carry` attribute.
+    """
+
+    if time_major is None:
+      time_major = self.time_major
+
+    if bidirectional is None:
+      bidirectional = self.bidirectional
+
+    if deterministic is None:
+      deterministic = self.deterministic
+
+    if return_carry is None:
+      return_carry = self.return_carry
+
+    if use_cudnn is None:
+      use_cudnn = self.use_cudnn
+
+    if deterministic:
+      dropout = 0.0
+    elif dropout is None:
+      dropout = self.dropout
+
+    input_shape = inputs.shape
+
+    if len(input_shape) <= 1:
+      raise ValueError('Input must have at least 2 dimensions.')
+    elif len(input_shape) == 2:
+      inputs = jnp.expand_dims(inputs, axis=0)
+    else:
+      if time_major:
+        inputs = jnp.swapaxes(inputs, 0, -2)
+      if len(input_shape) > 3:
+        inputs = inputs.reshape(-1, *input_shape[-2:])
+
+    if jax.devices()[0].platform != 'gpu':
+      use_cudnn = False
+
+    batch_size = inputs.shape[0]
+    input_size = inputs.shape[2]
+    num_directions = 2 if self.bidirectional else 1
+
+    weights = self.param(
+        'weights',
+        jax.experimental.rnn.init_lstm_weight,
+        input_size,
+        self.features,
+        self.num_layers,
+        self.bidirectional,
+    )
+
+    if initial_state is None:
+      h_0 = jnp.zeros(
+          (num_directions * self.num_layers, batch_size, self.features),
+          jnp.float32,
+      )
+      c_0 = jnp.zeros(
+          (num_directions * self.num_layers, batch_size, self.features),
+          jnp.float32,
+      )
+    else:
+      h_0, c_0 = initial_state
+
+    if seq_lengths is None:
+      seq_lengths = jnp.full((batch_size,), inputs.shape[1], dtype=jnp.int32)
+
+    y: jax.Array
+    if use_cudnn:
+      y, h, c = jax.experimental.rnn.lstm(  # type: ignore[misc]
+          x=inputs,
+          h_0=h_0,
+          c_0=c_0,
+          weights=weights,
+          seq_lengths=seq_lengths,
+          input_size=input_size,
+          hidden_size=self.features,
+          num_layers=self.num_layers,
+          dropout=dropout,
+          bidirectional=self.bidirectional,
+      )
+    else:
+      W_ih, W_hh, b_ih, b_hh = self.unpack_weights(weights, input_size)
+      y, h, c = jax.experimental.rnn.lstm_ref(
+          x=inputs,
+          h_0=h_0,
+          c_0=c_0,
+          W_ih=W_ih,
+          W_hh=W_hh,
+          b_ih=b_ih,
+          b_hh=b_hh,
+          seq_lengths=seq_lengths,
+          input_size=input_size,
+          hidden_size=self.features,
+          num_layers=self.num_layers,
+          dropout=dropout,
+          bidirectional=self.bidirectional,
+      )
+
+    if time_major and len(input_shape) >= 3:
+      y = jnp.swapaxes(y, 0, -2)
+
+    if len(input_shape) != 3:
+      y = y.reshape(*input_shape[:-1], y.shape[-1])
+
+    if return_carry:
+      return (h, c), y
+
+    return y
+
+  @nowrap
+  def unpack_weights(
+      self, weights: Array, input_size: int
+  ) -> Tuple[
+      Dict[int, Array], Dict[int, Array], Dict[int, Array], Dict[int, Array]
+  ]:
+    return jax.experimental.rnn.unpack_lstm_weights(
+        weights,
+        input_size,
+        self.features,
+        self.num_layers,
+        self.bidirectional,
+    )
 
 
 class RNN(Module):
