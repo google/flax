@@ -16,11 +16,15 @@
 
 import functools
 from multiprocessing.sharedctypes import Value
+from typing import Callable, Optional
 
 from absl.testing import absltest
 from absl.testing import parameterized
 
+import optax
+
 from flax import linen as nn
+from flax.training import train_state
 
 import jax
 from jax import random
@@ -1015,6 +1019,142 @@ class LinearTest(parameterized.TestCase):
         {'dense': {'kernel': (4, 6), 'bias': (6,)}},
     )
     self.assertEqual(y.shape, (2, 8, 6))
+
+  def test_fp8_dot_general_cls_injection(self):
+    # Used to cast the inputs to be representable in FP8, so that the difference
+    # of the results from the original gemm and fp8 gemm is small.
+    cast_to_representable = functools.partial(nn.fp8_quantize_dequantize,
+                                              scale=jnp.ones((1,)),
+                                              compute_dtype=jnp.float32)
+
+    init_key, random_key = jax.random.split(
+        jax.random.PRNGKey(seed=123), 2)
+
+    x = jax.random.uniform(random_key, (16, 32))
+    x = cast_to_representable(x, jnp.float8_e4m3fn)
+    dy = jax.random.uniform(random_key, (16, 64))
+    dy = cast_to_representable(dy, jnp.float8_e5m2)
+    def run(fp8_injection, expected_shapes):
+      p = nn.DenseGeneral(features=64, name='dense')
+      if fp8_injection:
+        p.dot_general_cls=nn.Fp8DenseGeneralOp
+      y, initial_vars = p.init_with_output(init_key, x)
+      var_shapes = jax.tree_util.tree_map(jnp.shape, initial_vars)
+      self.assertEqual(var_shapes, expected_shapes)
+
+      def _train(variables, x):
+        y = p.apply(variables, x)
+        loss = y * dy
+        return jnp.mean(loss)
+      train_fn = jax.jit(jax.value_and_grad(_train, argnums=[0, 1]))
+      outputs, grads = train_fn(initial_vars, x)
+      return outputs, grads
+
+    expected_shapes_original = {
+        'params': {'kernel': (32, 64), 'bias': (64,)},
+    }
+    expected_shapes_new = {
+        'params': {'kernel': (32, 64), 'bias': (64,)},
+        'fp8_params': {
+            'Fp8DenseGeneralOp_0': {'input_amax_history': (1024,),
+                                    'kernel_amax_history': (1024,),
+                                    'output_grad_amax_history': (1024,),
+                                    'input_scale': (1,),
+                                    'kernel_scale': (1,),
+                                    'output_grad_scale': (1,), }},
+    }
+
+    output1a, output1b = run(False, expected_shapes_original)
+    output2a, output2b = run(True, expected_shapes_new)
+    dw1, dw2 = output1b[0]['params']['kernel'], output2b[0]['params']['kernel']
+    dx1, dx2 = output1b[1], output2b[1]
+
+    np.testing.assert_allclose(output1a, output2a, atol=1e-02)
+    np.testing.assert_allclose(dw1, dw2, atol=1e-04)
+    np.testing.assert_allclose(dx1, dx2, atol=1e-04)
+
+  def test_fp8_with_train_state(self):
+    x = random.uniform(random.PRNGKey(1), (16, 16), dtype=jnp.float32)
+    dense = nn.DenseGeneral(features=32, use_bias=True,
+                            dot_general_cls=nn.Fp8DenseGeneralOp)
+    key = random.PRNGKey(0)
+    variables = dense.init(key, x)
+
+    opt = optax.adam(learning_rate=.1)
+    state = train_state.Fp8TrainState.create(params=variables, tx=opt,
+                                             apply_fn=dense.apply)
+    
+    def roll_and_update(amax_h, update):
+      return jnp.roll(amax_h, shift=-1, axis=0).at[0].set(update)
+
+    def _train_loss(state, x, dy):
+      def loss_fn(vars):
+        y = state.apply_fn(vars, x)
+        loss = y * dy.astype(y.dtype)
+        return jnp.sum(loss)
+
+      grad_fn = jax.grad(loss_fn)
+      grads = grad_fn(state.params)
+
+      state = state.apply_gradients(grads=grads)
+      return state
+
+    train_fn = jax.jit(_train_loss)
+
+    amax_history_x = jnp.zeros((1024, ))
+    amax_history_k = jnp.zeros((1024, ))
+    amax_history_dy = jnp.zeros((1024, ))
+    scale_x = jnp.ones(())
+    scale_k = jnp.ones(())
+    scale_dy = jnp.ones(())
+    fp8_e4m3_max = jnp.finfo(jnp.float8_e4m3fn).max.astype(jnp.float32)
+    fp8_e5m2_max = jnp.finfo(jnp.float8_e5m2).max.astype(jnp.float32)
+    for _ in range(5):
+      x = random.normal(random.PRNGKey(1), (16, 16), dtype=jnp.float32)
+      dy = random.normal(random.PRNGKey(1), (16, 32), dtype=jnp.float32)
+
+      amax_history_x = roll_and_update(amax_history_x, jnp.max(jnp.abs(x)))
+      amax_history_k = roll_and_update(
+          amax_history_k,
+          jnp.max(jnp.abs(state.params['params']['kernel'])))
+      amax_history_dy = roll_and_update(amax_history_dy, jnp.max(jnp.abs(dy)))
+
+      amax_from_history_x = jnp.max(amax_history_x, axis=0)
+      amax_from_history_k = jnp.max(amax_history_k, axis=0)
+      amax_from_history_dy = jnp.max(amax_history_dy, axis=0)
+      scale_x = nn.fp8_compute_scale(amax_from_history_x, scale_x,
+                                     fp8_e4m3_max)
+      scale_k = nn.fp8_compute_scale(amax_from_history_k, scale_k, fp8_e4m3_max)
+      scale_dy = nn.fp8_compute_scale(amax_from_history_dy, scale_dy,
+                                      fp8_e5m2_max)
+      
+      state = train_fn(state, x, dy)
+
+      rtol, atol = 0.001, 0.001
+      fp8_vars = state.params['fp8_params']
+      np.testing.assert_allclose(
+          fp8_vars['Fp8DenseGeneralOp_0']['input_amax_history'],
+          amax_history_x, rtol=rtol, atol=atol)
+      np.testing.assert_allclose(
+          fp8_vars['Fp8DenseGeneralOp_0']['kernel_amax_history'],
+          amax_history_k, rtol=rtol, atol=atol)
+      np.testing.assert_allclose(
+          fp8_vars['Fp8DenseGeneralOp_0']
+          ['output_grad_amax_history'],
+          amax_history_dy, rtol=rtol, atol=atol)
+
+      np.testing.assert_allclose(
+          fp8_vars['Fp8DenseGeneralOp_0']
+          ['input_scale'][0],
+          scale_x)
+      np.testing.assert_allclose(
+          fp8_vars['Fp8DenseGeneralOp_0']
+          ['kernel_scale'][0],
+          scale_k)
+      np.testing.assert_allclose(
+          fp8_vars['Fp8DenseGeneralOp_0']
+          ['output_grad_scale'][0],
+          scale_dy)
 
   def test_non_final_axes(self):
     class Foo(nn.Module):

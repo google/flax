@@ -69,6 +69,11 @@ from .attention import (
     make_causal_mask as make_causal_mask,
 )
 from .combinators import Sequential as Sequential
+from .fp8_ops import (
+  compute_scale as fp8_compute_scale,
+  quantize_dequantize as fp8_quantize_dequantize,
+  Fp8DenseGeneralOp as Fp8DenseGeneralOp,
+)
 from .initializers import (
     ones_init as ones_init,
     ones as ones,

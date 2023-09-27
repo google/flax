@@ -92,3 +92,41 @@ class TrainState(struct.PyTreeNode):
         opt_state=opt_state,
         **kwargs,
     )
+
+class Fp8TrainState(TrainState):
+  """Customized train state for Fp8."""
+
+  def apply_gradients(self, *, grads, **kwargs):    
+    assert 'fp8_params' in grads
+    updates, new_opt_state = self.tx.update(grads['params'], self.opt_state,
+                                            self.params['params'])
+    new_non_fp8_params = optax.apply_updates(self.params['params'], updates)
+
+    # self.param is structured as
+    # {'param': {'kernel:...,'}, 'fp8_params': {...}}. For the fp8 variables
+    # in the fp8-params collection, we will simply replace them with their
+    # grads, because their grads are actually new values defined in the
+    # custom_vjp functions.
+    new_params = {'params': new_non_fp8_params,
+                  'fp8_params': grads['fp8_params']}
+
+    return self.replace(
+        step=self.step + 1,
+        params=new_params,
+        opt_state=new_opt_state,
+        **kwargs,
+    )
+
+  @classmethod
+  def create(cls, *, apply_fn, params, tx, **kwargs):
+    assert 'fp8_params' in params
+    opt_state = tx.init(params['params'])
+
+    return cls(
+        step=0,
+        apply_fn=apply_fn,
+        params=params,
+        tx=tx,
+        opt_state=opt_state,
+        **kwargs,
+    )
