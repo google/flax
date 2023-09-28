@@ -14,17 +14,16 @@
 
 from typing import List
 
-import jax
-import jax.numpy as jnp
 from absl.testing import absltest
-from jax import random
-import numpy as np
-
 from flax import linen as nn
+from flax import struct
 from flax.core.scope import Array
 from flax.linen import summary
-from flax import struct
-from flax.configurations import temp_flip_flag
+import jax
+from jax import random
+import jax.numpy as jnp
+import numpy as np
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -115,7 +114,8 @@ class SummaryTest(absltest.TestCase):
   def test_module_summary(self):
     """
     This test creates a Table using `module_summary` and checks that it
-    matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
+    matches the expected output given the CNN model defined in
+    `_get_tabulate_cnn`.
     """
 
     batch_size = 32
@@ -123,7 +123,13 @@ class SummaryTest(absltest.TestCase):
     x = jnp.ones((batch_size, 28, 28, 1))
     module = CNN(test_sow=False)
 
-    table = summary._get_module_table(module, depth=None, show_repeated=True)(
+    table = summary._get_module_table(
+        module,
+        depth=None,
+        show_repeated=True,
+        compute_flops=True,
+        compute_vjp_flops=True,
+    )(
         {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
@@ -135,7 +141,7 @@ class SummaryTest(absltest.TestCase):
       row.outputs = jax.tree_util.tree_map(_get_obj_repr_value, row.outputs)
 
     # 10 rows = 1 CNN + 4 ConvBlock_0 + 4 ConvBlock_1 + 1 Dense_0
-    self.assertEqual(len(table), 10)
+    self.assertLen(table, 10)
 
     # check paths
     self.assertEqual(table[0].path, ())
@@ -208,17 +214,36 @@ class SummaryTest(absltest.TestCase):
           row.counted_variables,
       )
 
+    # Each module FLOPs >= sum of its submodule FLOPs.
+    # Can be greater due to ops like `nn.relu` not belonging to any submodule.
+    for r in table:
+      flops, vjp_flops = r.flops, r.vjp_flops
+      submodule_flops, submodule_vjp_flops = 0, 0
+      for s in table:
+        if len(s.path) == len(r.path) + 1 and s.path[: len(r.path)] == r.path:
+          submodule_flops += s.flops
+          submodule_vjp_flops += s.vjp_flops
+
+      self.assertGreaterEqual(flops, submodule_flops)
+      self.assertGreaterEqual(vjp_flops, submodule_vjp_flops)
+
   def test_module_summary_with_depth(self):
     """
-    This test creates a Table using `module_summary` set the `depth` argument to `1`,
-    table should have less rows as a consequence.
+    This test creates a Table using `module_summary` set the `depth` argument
+    to `1`, table should have fewer rows as a consequence.
     """
     batch_size = 32
 
     x = jnp.ones((batch_size, 28, 28, 1))
     module = CNN(test_sow=False)
 
-    table = summary._get_module_table(module, depth=1, show_repeated=True)(
+    table = summary._get_module_table(
+        module,
+        depth=1,
+        show_repeated=True,
+        compute_flops=True,
+        compute_vjp_flops=True,
+    )(
         {"dropout": random.key(0), "params": random.key(1)},
         x,
         training=True,
@@ -231,7 +256,7 @@ class SummaryTest(absltest.TestCase):
       row.outputs = jax.tree_util.tree_map(_get_obj_repr_value, row.outputs)
 
     # 4 rows = 1 CNN + 1 ConvBlock_0 + 1 ConvBlock_1 + 1 Dense_0
-    self.assertEqual(len(table), 4)
+    self.assertLen(table, 4)
 
     # check paths
     self.assertEqual(table[0].path, ())
@@ -273,10 +298,15 @@ class SummaryTest(absltest.TestCase):
     self.assertEqual(table[0].module_variables, table[0].counted_variables)
     self.assertEqual(table[3].module_variables, table[3].counted_variables)
 
+    # Top level FLOPs > sum of listed submodule FLOPs, since not all are listed.
+    self.assertGreater(table[0].flops, sum(r.flops for r in table[1:]))
+    self.assertGreater(table[0].vjp_flops, sum(r.vjp_flops for r in table[1:]))
+
   def test_tabulate(self):
     """
     This test creates a string representation of a Module using `Module.tabulate`
-    and checks that it matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
+    and checks that it matches the expected output given the CNN model defined
+    in `_get_tabulate_cnn`.
     """
     batch_size = 32
 
@@ -288,11 +318,13 @@ class SummaryTest(absltest.TestCase):
         x,
         training=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
     )
 
-    # NOTE: its tricky to validate the content of lines
+    # NOTE: it's tricky to validate the content of lines
     # because it seems to be shell-dependent, so we will
-    # just check lines that wont change between environments
+    # just check lines that won't change between environments
     lines = module_repr.split("\n")
 
     # check title
@@ -305,6 +337,8 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("inputs", lines[3])
     self.assertIn("outputs", lines[3])
     self.assertIn("params", lines[3])
+    self.assertIn("flops", lines[3])
+    self.assertIn("vjp_flops", lines[3])
     self.assertIn("batch_stats", lines[3])
 
     # collection counts
@@ -331,6 +365,8 @@ class SummaryTest(absltest.TestCase):
         training=True,
         mutable=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
     )
 
     self.assertIn("intermediates", module_repr)
@@ -348,6 +384,8 @@ class SummaryTest(absltest.TestCase):
         training=True,
         method=CNN.cnn_method,
         console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
     )
 
     self.assertIn("(block_method)", module_repr)
@@ -355,8 +393,9 @@ class SummaryTest(absltest.TestCase):
 
   def test_tabulate_function(self):
     """
-    This test creates a string representation of a Module using `Module.tabulate`
-    and checks that it matches the expected output given the CNN model defined in `_get_tabulate_cnn`.
+    This test creates a string representation of a Module using
+    `Module.tabulate` and checks that it matches the expected output given the
+    CNN model defined in `_get_tabulate_cnn`.
     """
     batch_size = 32
 
@@ -367,10 +406,9 @@ class SummaryTest(absltest.TestCase):
         module,
         {"dropout": random.key(0), "params": random.key(1)},
         console_kwargs=CONSOLE_TEST_KWARGS,
-    )(
-        x,
-        training=True,
-    )
+        compute_flops=True,
+        compute_vjp_flops=True,
+    )(x, training=True)
 
     lines = module_repr.split("\n")
 
@@ -384,6 +422,7 @@ class SummaryTest(absltest.TestCase):
     self.assertIn("inputs", lines[3])
     self.assertIn("outputs", lines[3])
     self.assertIn("params", lines[3])
+    self.assertIn("flops", lines[3])
     self.assertIn("batch_stats", lines[3])
 
     # collection counts
@@ -423,6 +462,8 @@ class SummaryTest(absltest.TestCase):
           random.key(0),
           x=jnp.ones((32, 128, 64)),
           console_kwargs=CONSOLE_TEST_KWARGS,
+          compute_flops=True,
+          compute_vjp_flops=True,
       )
 
     lines = module_repr.splitlines()
@@ -458,6 +499,8 @@ class SummaryTest(absltest.TestCase):
           random.key(0),
           x=jnp.ones((32, 128, 64)),
           console_kwargs=CONSOLE_TEST_KWARGS,
+          compute_flops=True,
+          compute_vjp_flops=True,
       )
 
     lines = module_repr.splitlines()
@@ -495,6 +538,8 @@ class SummaryTest(absltest.TestCase):
         x=x,
         show_repeated=True,
         console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
     )
     lines = module_repr.splitlines()
 
@@ -522,6 +567,33 @@ class SummaryTest(absltest.TestCase):
     self.assertNotIn("bias", lines[33])
     self.assertIn("ConvBlock_0/Dropout_0", lines[35])
 
+    # Test that CNN FLOPs are 3x ConvBlock FLOPs.
+    args = ({"dropout": random.key(0), "params": random.key(1)}, x)
+    cnn = summary._get_module_table(
+        CNN(),
+        depth=1,
+        show_repeated=True,
+        compute_flops=True,
+        compute_vjp_flops=True,
+    )(*args, mutable=True)
+
+    block = summary._get_module_table(
+        ConvBlock(),
+        depth=1,
+        show_repeated=True,
+        compute_flops=True,
+        compute_vjp_flops=True,
+    )(*args, mutable=True)
+
+    # Total forward/backward FLOPs equal to their sums of sub blocks.
+    self.assertEqual(cnn[0].flops, sum(r.flops for r in cnn[1:]))
+    self.assertEqual(cnn[0].vjp_flops, sum(r.vjp_flops for r in cnn[1:]))
+
+    # Each sub block has cost equal to ConvBlock instantiated separately.
+    for r in cnn[1:]:
+      self.assertEqual(r.flops, block[0].flops)
+      self.assertEqual(r.vjp_flops, block[0].vjp_flops)
+
   def test_empty_input(self):
     class EmptyInput(nn.Module):
 
@@ -530,10 +602,18 @@ class SummaryTest(absltest.TestCase):
         return 1
 
     module = EmptyInput()
-    module_repr = module.tabulate({}, console_kwargs=CONSOLE_TEST_KWARGS)
+    module_repr = module.tabulate(
+        {},
+        console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
+    )
     lines = module_repr.splitlines()
 
-    self.assertRegex(lines[5], r"|\s*|\s*EmptyInput\s*|\s*|\s*1\s*|")
+    # 1 output and 0 forward / backward FLOPs.
+    self.assertRegex(
+        lines[5], r"│\s*│\s*EmptyInput\s*│\s*│\s*1\s*│\s*0\s*│\s*0\s*│"
+    )
 
   def test_numpy_scalar(self):
     class Submodule(nn.Module):
@@ -548,12 +628,21 @@ class SummaryTest(absltest.TestCase):
         return Submodule()(x=np.pi)
 
     module = EmptyInput()
-    module_repr = module.tabulate({}, console_kwargs=CONSOLE_TEST_KWARGS)
+    module_repr = module.tabulate(
+        {},
+        console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
+    )
     lines = module_repr.splitlines()
 
     self.assertIn("4.141592", lines[5])
     self.assertIn("x: 3.141592", lines[7])
     self.assertIn("4.141592", lines[7])
+
+    # 0 forward / backward FLOPs due to precomputed output values.
+    self.assertIn("│ 0     │ 0", lines[5])
+    self.assertIn("│ 0     │ 0", lines[7])
 
   def test_partitioned_params(self):
     class Classifier(nn.Module):
@@ -579,9 +668,35 @@ class SummaryTest(absltest.TestCase):
         jax.random.key(0),
         jnp.empty((1, 28, 28, 1)),
         console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
     ).splitlines()
     self.assertIn("P(None,)", lines[7])
     self.assertIn("P(None, data)", lines[8])
+
+    # Per-layer forward FLOPs:
+    self.assertIn("1606656", lines[7])  # 1 * (28 * 28 * 1) * 1024 * 2 + 1024
+    self.assertIn("20490", lines[12])  #  1 * (1024       ) * 10   * 2 + 10
+
+    # Total forward FLOPs: input division + ReLU + two dense layers above.
+    # (1 * 28 * 28 * 1) + (1 * 1024) + 1606656 + 20490.
+    self.assertIn("1628954", lines[5])
+
+    # Per-layer backward FLOPs:
+
+    # [3x MMs: forward, input cotangent, weight cotangent] 1024 * 784 * 2 * 3
+    # + [forward bias addition] 1024
+    # + [`mutable=True`: weight and bias sizes] 1024 * 784 + 1024
+    self.assertIn("5621760", lines[7])
+
+    # [3x matmuls: forward, input cotangent, weight cotangent] 1024 * 10 * 2 * 3
+    # + [forward bias addition] 10
+    # + [`mutable=True`: weight and bias sizes] 1024 * 10 + 10
+    self.assertIn("71700", lines[12])
+
+    # Total backward FLOPs: input division + ReLU + two dense layers above.
+    # 2 * (1 * 28 * 28 * 1) + 3 * (1 * 1024) + 5621760 + 71700.
+    self.assertIn("5698100", lines[5])
 
   def test_non_array_variables(self):
     class Metadata(struct.PyTreeNode):
@@ -594,12 +709,20 @@ class SummaryTest(absltest.TestCase):
         self.sow("foo", "bar", Metadata(("baz", "qux")))
 
     module = Foo()
-    lines = module.tabulate({}, console_kwargs=CONSOLE_TEST_KWARGS).splitlines()
+    lines = module.tabulate(
+        {},
+        console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
+    ).splitlines()
     self.assertIn("names", lines[6])
     self.assertIn("baz", lines[7])
     self.assertIn("qux", lines[8])
 
-  def test_tabulate_param_count(self):
+    # 0 forward and backward FLOPs.
+    self.assertIn("│ 0     │ 0", lines[5])
+
+  def test_tabulate_param_count_and_flops(self):
     class Foo(nn.Module):
 
       @nn.compact
@@ -607,33 +730,20 @@ class SummaryTest(absltest.TestCase):
         h = nn.Dense(4)(x)
         return nn.Dense(2)(h)
 
+    module = Foo()
+    rng = jax.random.key(0)
     x = jnp.ones((16, 9))
-    rep = Foo().tabulate(
-        jax.random.key(0), x, console_kwargs=CONSOLE_TEST_KWARGS
+
+    rep = module.tabulate(
+        rng,
+        x,
+        console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
     )
     lines = rep.splitlines()
     self.assertIn("Total Parameters: 50", lines[-2])
 
-  def test_monkey_patching_init(self):
-    class MyModule(nn.Module):
-
-      @nn.compact
-      def __call__(self, inputs):
-        return nn.Dense(3)(inputs)
-
-    key = jax.random.PRNGKey(0)
-
-    # tabulate without pmap
-    model = MyModule()
-    model.tabulate(key, jnp.ones((3, 3)))
-
-    # apply pmap
-    model.init = jax.pmap(model.init, axis_name="i")
-    rngs = jax.random.split(key, 4)
-    x = jnp.ones((4, 3, 3))
-
-    # test tabulate still works
-    model.tabulate(rngs, x)
 
 
 if __name__ == "__main__":

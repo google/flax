@@ -4,7 +4,7 @@ Changelog
 vNext
 ------
 (Add your change to a random empty line to avoid merge conflicts)
--
+- Report forward and backward pass FLOPs of modules and submodules in `linen.Module.tabulate` and `summary.tabulate` (in new `flops` and `vjp_flops` table columns). Pass `compute_flops=True` and/or `compute_vjp_flops=True` to include these columns.
 -
 -
 -
