@@ -131,7 +131,8 @@ import jax
 import jax.numpy as jnp  # JAX NumPy
 
 cnn = CNN()
-print(cnn.tabulate(jax.random.key(0), jnp.ones((1, 28, 28, 1))))
+print(cnn.tabulate(jax.random.key(0), jnp.ones((1, 28, 28, 1)),
+                   compute_flops=True, compute_vjp_flops=True))
 ```
 
 +++ {"id": "4b5ac16e"}
