@@ -1083,7 +1083,7 @@ class LinearTest(parameterized.TestCase):
     opt = optax.adam(learning_rate=.1)
     state = train_state.Fp8TrainState.create(params=variables, tx=opt,
                                              apply_fn=dense.apply)
-    
+
     def roll_and_update(amax_h, update):
       return jnp.roll(amax_h, shift=-1, axis=0).at[0].set(update)
 
@@ -1127,7 +1127,7 @@ class LinearTest(parameterized.TestCase):
       scale_k = nn.fp8_compute_scale(amax_from_history_k, scale_k, fp8_e4m3_max)
       scale_dy = nn.fp8_compute_scale(amax_from_history_dy, scale_dy,
                                       fp8_e5m2_max)
-      
+
       state = train_fn(state, x, dy)
 
       rtol, atol = 0.001, 0.001
