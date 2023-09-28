@@ -41,14 +41,14 @@ def quantize(x, q_dtype, scale, compute_dtype):
   # would violate the fp8-matmul pattern matching.
   dtype_max = get_fp8_max(q_dtype, compute_dtype)
 
-  scaled_x = x / scale.astype(compute_dtype)
+  scaled_x = x / jnp.broadcast_to(scale.astype(compute_dtype), x.shape)
 
   clipped_x = jnp.clip(scaled_x, -dtype_max, dtype_max)
 
   return clipped_x.astype(q_dtype)
 
 def dequantize(x, dq_dtype, scale):
-  return x.astype(dq_dtype) * scale.astype(dq_dtype)
+  return x.astype(dq_dtype) * jnp.broadcast_to(scale.astype(dq_dtype), x.shape)
 
 def quantize_dequantize(x, q_dtype, scale, compute_dtype):
   qx = quantize(x, q_dtype, scale, compute_dtype)
