@@ -96,7 +96,7 @@ class TrainState(struct.PyTreeNode):
 class Fp8TrainState(TrainState):
   """Customized train state for Fp8."""
 
-  def apply_gradients(self, *, grads, **kwargs):    
+  def apply_gradients(self, *, grads, **kwargs):
     assert 'fp8_params' in grads
     updates, new_opt_state = self.tx.update(grads['params'], self.opt_state,
                                             self.params['params'])

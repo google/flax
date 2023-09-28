@@ -115,14 +115,14 @@ def out_qdq_bwd(compute_dtype, res, g):
   q_g, new_scale, new_amax_history = qdq_and_return(
       g, jnp.float8_e5m2, scale, amax_history, compute_dtype)
   return q_g, new_scale, new_amax_history
-  
+
 out_qdq.defvjp(out_qdq_fwd, out_qdq_bwd)
 
 def fp8_dot_general(lhs, rhs, dimension_numbers, precision, compute_dtype,
                     lhs_scale, lhs_amax_history, rhs_scale, rhs_amax_history,
                     dout_scale, dout_amax_history):
   """Perform dot_general.  """
-  
+
   lhs_qdq = in_qdq(compute_dtype, lhs, lhs_scale, lhs_amax_history)
 
   rhs_qdq = in_qdq(compute_dtype, rhs, rhs_scale, rhs_amax_history)
@@ -187,7 +187,7 @@ class Fp8DenseGeneralOp(Module):
     precision = kwargs['precision']
     comp_dtype = kernel.dtype
     inputs = jnp.asarray(inputs, comp_dtype)
-    
+
     out = fp8_dot_general(inputs, kernel, dimension_numbers, precision,
                           comp_dtype, self.input_scale.value,
                           self.input_amax_history.value,
