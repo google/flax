@@ -299,7 +299,7 @@ class EncoderDecoder1DBlock(nn.Module):
         broadcast_dropout=False,
         dropout_rate=config.attention_dropout_rate,
         deterministic=config.deterministic,
-    )(y, encoded, encoder_decoder_mask)
+    )(y, encoded, mask=encoder_decoder_mask)
 
     y = nn.Dropout(rate=config.dropout_rate)(
         y, deterministic=config.deterministic

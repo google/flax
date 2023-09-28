@@ -147,6 +147,12 @@ filterwarnings = [
     "ignore:.*module 'sre_constants' is deprecated.*:DeprecationWarning",
     # DeprecationWarning: jax.random.KeyArray is deprecated.
     "ignore:.*jax.random.KeyArray is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: SelfAttention will be deprecated soon.
+    "ignore:.*SelfAttention will be deprecated soon.*:DeprecationWarning",
+    # DeprecationWarning: The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.
+    "ignore:.*The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.*:DeprecationWarning",
+    # DeprecationWarning: the function signature of MultiHeadDotProductAttention's `__call__` method has changed
+    "ignore:.*the function signature of MultiHeadDotProductAttention's `__call__` method has changed.*:DeprecationWarning"
 ]
 
 [tool.coverage.report]
