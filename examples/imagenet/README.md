@@ -23,6 +23,7 @@ Table of contents:
 - [Example runs](#example-runs)
 - [Running locally](#running-locally)
   - [Overriding parameters on the command line](#overriding-parameters-on-the-command-line)
+- [Running fake data benchmarks](#running-fake-data-benchmarks)
 - [Running on Cloud](#running-on-cloud)
   - [Preparing the dataset](#preparing-the-dataset)
   - [Google Cloud TPU](#google-cloud-tpu)
@@ -65,6 +66,22 @@ follows:
 python main.py --workdir=./imagenet_default --config=configs/default.py \
 --config.num_epochs=100
 ```
+
+### Running fake data benchmarks
+
+Execute the following code with `flax/examples/imagenet` as your current directory:
+```shell
+bash ../../tests/download_dataset_metadata.sh
+python imagenet_fake_data_benchmark.py
+```
+
+If you get an error like this:
+```shell
+Cloning into 'datasets'...
+fatal: cannot change to 'https://github.com/tensorflow/datasets/': No such file or directory
+error: failed to initialize sparse-checkout
+```
+This mean your git version is outdated. Just update it and re-run.
 
 ### Running on Cloud
 
