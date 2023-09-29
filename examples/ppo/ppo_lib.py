@@ -15,24 +15,22 @@
 """Library file which executes the PPO training."""
 
 import functools
-from typing import Any, Callable, Tuple, List
+from typing import Any, Callable
 
 from absl import logging
 import flax
 from flax import linen as nn
+import agent
+import models
+import test_episodes
 from flax.metrics import tensorboard
 from flax.training import checkpoints
 from flax.training import train_state
 import jax
-import jax.random
 import jax.numpy as jnp
 import ml_collections
 import numpy as np
 import optax
-
-import agent
-import models
-import test_episodes
 
 
 @jax.jit
@@ -82,7 +80,7 @@ def gae_advantages(
 def loss_fn(
     params: flax.core.FrozenDict,
     apply_fn: Callable[..., Any],
-    minibatch: Tuple,
+    minibatch: tuple,
     clip_param: float,
     vf_coeff: float,
     entropy_coeff: float,
@@ -96,7 +94,7 @@ def loss_fn(
   Args:
     params: the parameters of the actor-critic model
     apply_fn: the actor-critic model's apply function
-    minibatch: Tuple of five elements forming one experience batch:
+    minibatch: tuple of five elements forming one experience batch:
                states: shape (batch_size, 84, 84, 4)
                actions: shape (batch_size, 84, 84, 4)
                old_log_probs: shape (batch_size,)
@@ -134,7 +132,7 @@ def loss_fn(
 @functools.partial(jax.jit, static_argnums=(2,))
 def train_step(
     state: train_state.TrainState,
-    trajectories: Tuple,
+    trajectories: tuple,
     batch_size: int,
     *,
     clip_param: float,
@@ -148,7 +146,7 @@ def train_step(
 
   Args:
     state: the train state
-    trajectories: Tuple of the following five elements forming the experience:
+    trajectories: tuple of the following five elements forming the experience:
                   states: shape (steps_per_agent*num_agents, 84, 84, 4)
                   actions: shape (steps_per_agent*num_agents, 84, 84, 4)
                   old_log_probs: shape (steps_per_agent*num_agents, )
@@ -180,7 +178,7 @@ def train_step(
 
 def get_experience(
     state: train_state.TrainState,
-    simulators: List[agent.RemoteSimulator],
+    simulators: list[agent.RemoteSimulator],
     steps_per_actor: int,
 ):
   """Collect experience from agents.
@@ -216,7 +214,7 @@ def get_experience(
 
 
 def process_experience(
-    experience: List[List[agent.ExpTuple]],
+    experience: list[list[agent.ExpTuple]],
     actor_steps: int,
     num_agents: int,
     gamma: float,
@@ -269,7 +267,7 @@ def process_experience(
 
 
 @functools.partial(jax.jit, static_argnums=1)
-def get_initial_params(key: np.ndarray, model: nn.Module):
+def get_initial_params(key: jax.Array, model: nn.Module):
   input_dims = (1, 84, 84, 4)  # (minibatch, height, width, stacked frames)
   init_shape = jnp.ones(input_dims, jnp.float32)
   initial_params = model.init(key, init_shape)['params']
