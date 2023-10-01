@@ -47,7 +47,6 @@ def dot_product_attention_weights(
     broadcast_dropout: bool = True,
     dropout_rng: Optional[PRNGKey] = None,
     dropout_rate: float = 0.0,
-    deterministic: bool = False,
     dtype: Optional[Dtype] = None,
     precision: PrecisionLike = None,
 ):
@@ -108,7 +107,7 @@ def dot_product_attention_weights(
   attn_weights = jax.nn.softmax(attn_weights).astype(dtype)
 
   # apply attention dropout
-  if not deterministic and dropout_rate > 0.0:
+  if dropout_rate > 0.0:
     keep_prob = 1.0 - dropout_rate
     if broadcast_dropout:
       # dropout is broadcast across the batch + head dimensions
@@ -131,7 +130,6 @@ def dot_product_attention(
     broadcast_dropout: bool = True,
     dropout_rng: Optional[PRNGKey] = None,
     dropout_rate: float = 0.0,
-    deterministic: bool = False,
     dtype: Optional[Dtype] = None,
     precision: PrecisionLike = None,
 ):
@@ -188,7 +186,6 @@ def dot_product_attention(
       broadcast_dropout,
       dropout_rng,
       dropout_rate,
-      deterministic,
       dtype,
       precision,
   )
@@ -361,17 +358,11 @@ class MultiHeadDotProductAttention(Module):
             ),
         )
 
-    dropout_rng = None
-    if (
-        self.dropout_rate > 0.0
-    ):  # Require `deterministic` only if using dropout.
-      m_deterministic = merge_param(
-          'deterministic', self.deterministic, deterministic
-      )
-      if not m_deterministic:
-        dropout_rng = self.make_rng('dropout')
-    else:
-      m_deterministic = True
+    dropout_rate = self.dropout_rate
+    if dropout_rate > 0.0:
+      # Require `deterministic` to have a value only if using dropout.
+      if merge_param('deterministic', self.deterministic, deterministic):
+        dropout_rate = 0.0
 
     # apply attention
     x = self.attention_fn(
@@ -379,10 +370,9 @@ class MultiHeadDotProductAttention(Module):
         key,
         value,
         mask=mask,
-        dropout_rng=dropout_rng,
-        dropout_rate=self.dropout_rate,
+        dropout_rng=self.make_rng('dropout') if (dropout_rate > 0.0) else None,
+        dropout_rate=dropout_rate,
         broadcast_dropout=self.broadcast_dropout,
-        deterministic=m_deterministic,
         dtype=self.dtype,
         precision=self.precision,
     )  # pytype: disable=wrong-keyword-args
