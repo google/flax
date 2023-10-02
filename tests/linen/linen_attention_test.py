@@ -94,6 +94,37 @@ class AttentionTest(parameterized.TestCase):
     y, _ = sa_module.init_with_output(rngs, x)
     self.assertEqual(y.shape, x.shape)
 
+  def test_multihead_self_attention_explicit_dropout(self):
+    class Foo(nn.Module):
+      attention_kwargs: dict
+      @nn.compact
+      def __call__(self, x, dropout_rng=None):
+        a = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, x, dropout_rng=dropout_rng)
+        b = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, x, dropout_rng=dropout_rng)
+        return a, b
+
+    module = Foo(
+      dict(
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        dropout_rate=0.5,
+        deterministic=False,
+        )
+      )
+    rng1, rng2, rng3 = random.split(random.key(0), 3)
+    x = jnp.ones((4, 2, 3, 5))
+    rngs = {'params': rng1, 'dropout': rng2}
+    v = module.init(rngs, x)
+    a, b = module.apply(v, x, rngs=rngs)
+    self.assertTrue(not (a == b).all())
+    a, b = module.apply(v, x, rngs=rngs, dropout_rng=rng3)
+    self.assertTrue((a == b).all())
+    a, b = module.apply(v, x, dropout_rng=rng3)
+    self.assertTrue((a == b).all())
+    self.assertTrue(a.shape == b.shape == x.shape)
+
   def test_multihead_self_attention_w_dropout_disabled(self):
     rng = random.key(0)
     x = jnp.ones((4, 2, 3, 5))
