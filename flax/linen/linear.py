@@ -916,6 +916,21 @@ class ConvTranspose(Module):
   bias_init: Initializer = initializers.zeros_init()
   transpose_kernel: bool = False
 
+  def param_with_axes(
+    self,
+    name: str,
+    init_fn,
+    *init_args,
+    axes: Optional[Tuple[str, ...]] = None,
+    module: Optional[Module] = None):
+    return param_with_axes(
+      name,
+      init_fn,
+      *init_args,
+      axes=axes,
+      module=module,
+    )
+
   @compact
   def __call__(self, inputs: Array) -> Array:
     """Applies a transposed convolution to the inputs.
@@ -979,8 +994,9 @@ class ConvTranspose(Module):
         f'Shapes are: {self.mask.shape}, {kernel_shape}'
       )
 
-    kernel = self.param(
-      'kernel', self.kernel_init, kernel_shape, self.param_dtype
+    kernel = self.param_with_axes(
+      'kernel', self.kernel_init, kernel_shape, self.param_dtype,
+      axes=('height', 'width', 'input', 'embed')
     )
 
     if self.mask is not None:
@@ -991,8 +1007,8 @@ class ConvTranspose(Module):
       padding_lax = 'VALID'
 
     if self.use_bias:
-      bias = self.param(
-        'bias', self.bias_init, (self.features,), self.param_dtype
+      bias = self.param_with_axes(
+        'bias', self.bias_init, (self.features,), self.param_dtype, axes=('embed', )
       )
     else:
       bias = None
