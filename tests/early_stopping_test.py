@@ -32,8 +32,8 @@ class EarlyStoppingTests(absltest.TestCase):
       improve_steps = 0
       for step in range(10):
         metric = 1.0
-        did_improve, es = es.update(metric)
-        if not did_improve:
+        es = es.update(metric)
+        if not es.has_improved:
           improve_steps += 1
         if es.should_stop:
           break
@@ -48,7 +48,7 @@ class EarlyStoppingTests(absltest.TestCase):
     patient_es = early_stopping.EarlyStopping(min_delta=0, patience=6)
     for step in range(10):
       metric = 1.0
-      did_improve, es = es.update(metric)
+      es = es.update(metric)
       if es.should_stop:
         break
 
@@ -56,7 +56,7 @@ class EarlyStoppingTests(absltest.TestCase):
 
     for patient_step in range(10):
       metric = 1.0
-      did_improve, patient_es = patient_es.update(metric)
+      patient_es = patient_es.update(metric)
       if patient_es.should_stop:
         break
 
@@ -69,7 +69,7 @@ class EarlyStoppingTests(absltest.TestCase):
     metric = 1.0
     for step in range(100):
       metric -= 1e-4
-      did_improve, es = es.update(metric)
+      es = es.update(metric)
       if es.should_stop:
         break
 
@@ -78,7 +78,7 @@ class EarlyStoppingTests(absltest.TestCase):
     metric = 1.0
     for step in range(100):
       metric -= 1e-4
-      did_improve, delta_es = delta_es.update(metric)
+      delta_es = delta_es.update(metric)
       if delta_es.should_stop:
         break
 
@@ -99,8 +99,8 @@ class EarlyStoppingTests(absltest.TestCase):
     improvement_steps = 0
     for step in range(10):
       metric = metrics[step]
-      did_improve, delta_patient_es = delta_patient_es.update(metric)
-      if did_improve:
+      delta_patient_es = delta_patient_es.update(metric)
+      if delta_patient_es.has_improved:
         improvement_steps += 1
       if delta_patient_es.should_stop:
         break

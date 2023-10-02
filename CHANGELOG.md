@@ -9,12 +9,14 @@ vNext
 -
 -
 -
-- Re-factored `MultiHeadDotProductAttention`'s call method signatur, by adding
+- Re-factored `MultiHeadDotProductAttention`'s call method signature, by adding
 `inputs_k` and `inputs_v` args and switching `inputs_kv`, `mask` and `determistic`
 to keyword arguments. See more details in [#3389](https://github.com/google/flax/discussions/3389).
 -
 -
--
+- Added `has_improved` field to EarlyStopping and changed the return signature of
+`EarlyStopping.update` from returning a tuple to returning just the updated class.
+See more details in [#3385](https://github.com/google/flax/pull/3385)
 -
 -
 - Use new typed PRNG keys throughout flax: this essentially involved changing
@@ -27,7 +29,7 @@ to keyword arguments. See more details in [#3389](https://github.com/google/flax
 -
 -
 -
--
+- NOTE: Remember to bump version number to 0.8.0
 
 0.7.3
 -----
