@@ -112,13 +112,12 @@ jobs:
       run: |
         if [ -d "venv" ]; then rm -rf venv; fi
         python3 -m venv venv
-        venv/bin/python3 -m pip install .[all]
-        venv/bin/python3 -m pip install .[testing]
+        venv/bin/python3 -m pip install .[all,testing]
         venv/bin/python3 -m pip install tensorflow_datasets[dev]
         venv/bin/python3 -m pip install -r docs/requirements.txt
     - name: Install Flax
       run: |
-        venv/bin/python3 -m pip install -e .[all]
+        venv/bin/python3 -m pip install -e .[all,testing]
     - name: Cached mypy cache
       id: mypy_cache
       uses: actions/cache@v3
