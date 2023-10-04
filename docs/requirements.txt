@@ -3,6 +3,10 @@ sphinx-book-theme
 Pygments>=2.6.1
 jax>=0.4
 jaxlib
+numpy>1.22
+numpy>=1.23.2; python_version>='3.11'
+numpy>=1.26.0; python_version>='3.12'
+
 ipykernel
 myst_nb
 recommonmark
