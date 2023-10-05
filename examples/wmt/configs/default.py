@@ -110,6 +110,9 @@ def get_config():
   # Use float16/bfloat16 (GPU/TPU) mixed precision training instead of float32.
   config.use_mixed_precision = True
 
+  # Use float8.
+  config.use_fp8 = False
+
   # Integer for PRNG random seed.
   config.seed = 0
 

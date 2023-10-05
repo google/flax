@@ -49,6 +49,8 @@ import models
 class TrainState(train_state.TrainState):
   dynamic_scale: dynamic_scale_lib.DynamicScale
 
+class Fp8TrainState(train_state.Fp8TrainState):
+  dynamic_scale: dynamic_scale_lib.DynamicScale
 
 def rsqrt_schedule(
     init_value: float,
@@ -212,7 +214,7 @@ def train_step(
   def loss_fn(params):
     """loss function used for training."""
     logits = models.Transformer(config).apply(
-        {"params": params},
+        params if config.use_fp8 else {"params": params},
         inputs,
         targets,
         inputs_positions=inputs_positions,
@@ -267,7 +269,8 @@ def eval_step(params, batch, config, label_smoothing=0.0):
   """Calculate evaluation metrics on a batch."""
   inputs, targets = batch["inputs"], batch["targets"]
   weights = jnp.where(targets > 0, 1.0, 0.0)
-  logits = models.Transformer(config).apply({"params": params}, inputs, targets)
+  logits = models.Transformer(config).apply(
+      params if config.use_fp8 else {"params": params}, inputs, targets)
 
   return compute_metrics(logits, targets, weights, label_smoothing)
 
@@ -295,7 +298,8 @@ def predict_step(
   # [el0, el1, el2] --> beamsize=2 --> [el0,el0,el1,el1,el2,el2]
   encoded_inputs = decode.flat_batch_beam_expand(
       models.Transformer(config).apply(
-          {"params": params}, inputs, method=models.Transformer.encode
+          params if config.use_fp8 else {"params": params},
+          inputs, method=models.Transformer.encode
       ),
       beam_size,
   )
@@ -304,8 +308,10 @@ def predict_step(
   def tokens_ids_to_logits(flat_ids, flat_cache):
     """Token slice to logits from decoder model."""
     # --> [batch * beam, 1, vocab]
+    params_predict = params if config.use_fp8 else {"params": params}
+    params_predict["cache"] = flat_cache
     flat_logits, new_vars = models.Transformer(config).apply(
-        {"params": params, "cache": flat_cache},
+        params_predict,
         encoded_inputs,
         raw_inputs,  # only needed for input padding mask
         flat_ids,
@@ -453,7 +459,7 @@ def preferred_dtype(config):
     if platform == "tpu":
       return jnp.bfloat16
     elif platform == "gpu":
-      return jnp.float16
+      return jnp.bfloat16 if config.use_fp8 else jnp.float16
   return jnp.float32
 
 
@@ -518,6 +524,7 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
       decode=False,
       kernel_init=nn.initializers.xavier_uniform(),
       bias_init=nn.initializers.normal(stddev=1e-6),
+      use_fp8=config.use_fp8
   )
   eval_config = train_config.replace(deterministic=True)
   predict_config = train_config.replace(deterministic=True, decode=True)
@@ -542,9 +549,10 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
   dynamic_scale = None
   if dtype == jnp.float16:
     dynamic_scale = dynamic_scale_lib.DynamicScale()
-  state = TrainState.create(
+  TrainStateProxy = Fp8TrainState if config.use_fp8 else TrainState
+  state = TrainStateProxy.create(
       apply_fn=m.apply,
-      params=initial_variables["params"],
+      params=initial_variables if config.use_fp8 else initial_variables["params"],
       tx=optax.adamw(
           learning_rate=learning_rate_fn,
           b1=0.9,
@@ -665,18 +673,18 @@ def train_and_evaluate(config: ml_collections.ConfigDict, workdir: str):
           writer.write_scalars(
               step, {"eval_" + k: v for k, v in eval_results.items()}
           )
-
-        with report_progress.timed("translate_and_bleu"):
-          exemplars, bleu_score = translate_and_calculate_bleu(
-              p_pred_step=p_pred_step,
-              p_init_cache=p_init_cache,
-              params=state.params,
-              predict_ds=predict_ds,
-              decode_tokens=decode_tokens,
-              max_predict_length=config.max_predict_length,
-          )
-          writer.write_scalars(step, {"bleu": bleu_score})
-          writer.write_texts(step, {"samples": exemplars})
+        if not config.use_fp8:
+          with report_progress.timed("translate_and_bleu"):
+            exemplars, bleu_score = translate_and_calculate_bleu(
+                p_pred_step=p_pred_step,
+                p_init_cache=p_init_cache,
+                params=state.params,
+                predict_ds=predict_ds,
+                decode_tokens=decode_tokens,
+                max_predict_length=config.max_predict_length,
+            )
+            writer.write_scalars(step, {"bleu": bleu_score})
+            writer.write_texts(step, {"samples": exemplars})
 
       # Save a checkpoint on one host after every checkpoint_freq steps.
       save_checkpoint = (
