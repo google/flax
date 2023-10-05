@@ -302,9 +302,7 @@ class _Conv(Module):
 
   Attributes:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer. For all other cases, it must
-      be a sequence of integers.
+    kernel_size: shape of the convolutional kernel.
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string `'SAME'`, the string `'VALID'`, the string
@@ -560,9 +558,7 @@ class Conv(_Conv):
 
   Attributes:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer. For all other cases, it must
-      be a sequence of integers.
+    kernel_size: shape of the convolutional kernel.
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string `'SAME'`, the string `'VALID'`, the string
@@ -603,9 +599,7 @@ class ConvLocal(_Conv):
 
   Attributes:
     features: number of convolution filters.
-    kernel_size: shape of the convolutional kernel. For 1D convolution,
-      the kernel size can be passed as an integer. For all other cases, it must
-      be a sequence of integers.
+    kernel_size: shape of the convolutional kernel.
     strides: an integer or a sequence of `n` integers, representing the
       inter-window strides (default: 1).
     padding: either the string `'SAME'`, the string `'VALID'`, the string
