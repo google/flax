@@ -147,6 +147,8 @@ filterwarnings = [
     "ignore:.*module 'sre_constants' is deprecated.*:DeprecationWarning",
     # DeprecationWarning: jax.random.KeyArray is deprecated.
     "ignore:.*jax.random.KeyArray is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: ml_dtypes.float8_e4m3b11 is deprecated.
+    "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
