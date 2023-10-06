@@ -15,6 +15,7 @@ Initializers
 .. autofunction:: lecun_normal
 .. autofunction:: lecun_uniform
 .. autofunction:: normal
+.. autofunction:: truncated_normal
 .. autofunction:: ones
 .. autofunction:: ones_init
 .. autofunction:: orthogonal
@@ -42,6 +43,7 @@ Initializers
   lecun_normal
   lecun_uniform
   normal
+  truncated_normal
   ones
   ones_init
   orthogonal
