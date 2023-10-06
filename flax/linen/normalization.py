@@ -14,8 +14,8 @@
 
 """Normalization modules for Flax."""
 
-import dataclasses
 import functools
+from dataclasses import field
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
 
 from flax.linen.dtypes import canonicalize_dtype
@@ -848,4 +848,168 @@ class SpectralNorm(Module):
       sigma_var.value = sigma
 
     dtype = canonicalize_dtype(vs, u0, v0, sigma, dtype=self.dtype)
+    return jnp.asarray(value_bar, dtype)
+
+class WeightNorm(Module):
+  """L2 weight normalization (https://arxiv.org/pdf/1602.07868.pdf).
+
+  Weight normalization normalizes the weight params so that the l2-norm of
+  the matrix is equal to 1. This is implemented as a layer wrapper where
+  each wrapped layer will have its params l2-normalized before computing
+  its ``__call__`` output.
+
+  Example::
+
+    class Baz(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(2)(x)
+
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = Baz()(x)
+        x = nn.Dense(3)(x)
+        x = Baz()(x)
+        x = nn.Dense(3)(x)
+        return x
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(3)(x)
+        # l2-normalize all params of the second Dense layer
+        x = nn.WeightNorm(nn.Dense(4), variable_filter=None)(x)
+        x = nn.Dense(5)(x)
+        # l2-normalize all kernels in the Bar submodule and all params in the Baz submodule
+        x = nn.WeightNorm(Bar(), variable_filter={'kernel', 'Baz'})(x)
+        return x
+
+    # init
+    x = jnp.ones((1, 2))
+    model = Foo()
+    variables = model.init(jax.random.key(0), x)
+
+    variables
+    # {
+    #   params: {
+    #     ...
+    #     WeightNorm_0: {
+    #         Dense_1/bias/scale: Array([1., 1., 1., 1.], dtype=float32),
+    #         Dense_1/kernel/scale: Array([1., 1., 1., 1.], dtype=float32),
+    #     },
+    #     ...
+    #     WeightNorm_1: {
+    #         Bar_0/Baz_0/Dense_0/bias/scale: Array([1., 1.], dtype=float32),
+    #         Bar_0/Baz_0/Dense_0/kernel/scale: Array([1., 1.], dtype=float32),
+    #         Bar_0/Baz_1/Dense_0/bias/scale: Array([1., 1.], dtype=float32),
+    #         Bar_0/Baz_1/Dense_0/kernel/scale: Array([1., 1.], dtype=float32),
+    #         Bar_0/Dense_0/kernel/scale: Array([1., 1., 1.], dtype=float32),
+    #         Bar_0/Dense_1/kernel/scale: Array([1., 1., 1.], dtype=float32),
+    #     },
+    #     ...
+    #   }
+    # }
+
+  Attributes:
+    layer_instance: Module instance that is wrapped with WeightNorm
+    epsilon: A small float added to l2-normalization to avoid dividing by zero.
+    dtype: the dtype of the result (default: infer from input and params).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+    use_scale: If True, creates a learnable variable ``scale`` that is
+      multiplied to the ``layer_instance`` variables after l2-normalization.
+    scale_init: Initialization function for the scaling function.
+    feature_axes: The feature axes dimension(s). The l2-norm is calculated by
+      reducing the ``layer_instance`` variables over the remaining (non-feature)
+      axes. Therefore a separate l2-norm value is calculated and a separate
+      scale (if ``use_scale=True``) is learned for each specified feature. By
+      default, the trailing dimension is treated as the feature axis.
+    variable_filter: An optional iterable that contains string items. The
+      WeightNorm layer will selectively apply l2-normalization to the
+      ``layer_instance`` variables whose key path (delimited by '/') has a
+      match with ``variable_filter``. For example, ``variable_filter={'kernel'}``
+      will only apply l2-normalization to variables whose key path contains
+      'kernel'. By default, ``variable_filter={'kernel'}``.
+  """
+
+  layer_instance: Module
+  epsilon: float = 1e-12
+  dtype: Optional[Dtype] = None
+  param_dtype: Dtype = jnp.float32
+  use_scale: bool = True
+  scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
+  feature_axes: Optional[Axes] = -1
+  variable_filter: Optional[Iterable] = field(default_factory=lambda: {'kernel'})
+
+  @compact
+  def __call__(self, *args, **kwargs):
+    """Compute the l2-norm of the weights in ``self.layer_instance``
+    and normalize the weights using this value before computing the
+    ``__call__`` output.
+
+    Args:
+      *args: positional arguments to be passed into the call method of the
+        underlying layer instance in ``self.layer_instance``.
+      **kwargs: keyword arguments to be passed into the call method of the
+        underlying layer instance in ``self.layer_instance``.
+
+    Returns:
+      Output of the layer using l2-normalized weights.
+    """
+
+    def layer_forward(layer_instance):
+      return layer_instance(*args, **kwargs)
+
+    return map_variables(
+        layer_forward,
+        trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
+          self._l2_normalize,
+          vs,
+        ),
+        init=self.is_initializing(),
+    )(self.layer_instance)
+
+  def _l2_normalize(self, path, vs):
+    """Compute the l2-norm and normalize the variables ``vs`` using this
+    value. This is intended to be a helper function used in this Module's
+    ``__call__`` method in conjunction with ``nn.transforms.map_variables``
+    and ``jax.tree_util.tree_map_with_path``.
+
+    Args:
+      path: dict key path, used for naming the ``scale`` variable
+      vs: variables to be l2-normalized
+    """
+    value = jnp.asarray(vs)
+    str_path = self.layer_instance.name + '/' + '/'.join((dict_key.key for dict_key in path[1:]))
+    if self.variable_filter:
+      for variable_name in self.variable_filter:
+        if variable_name in str_path:
+          break
+      else:
+        return value
+
+    if self.feature_axes is None:
+      feature_axes = ()
+      reduction_axes = tuple(i for i in range(value.ndim))
+    else:
+      feature_axes = _canonicalize_axes(value.ndim, self.feature_axes)
+      reduction_axes = tuple(i for i in range(value.ndim) if i not in feature_axes)
+
+    feature_shape = [1] * value.ndim
+    reduced_feature_shape = []
+    for ax in feature_axes:
+      feature_shape[ax] = value.shape[ax]
+      reduced_feature_shape.append(value.shape[ax])
+
+    value_bar = _l2_normalize(value, axis=reduction_axes, eps=self.epsilon)
+
+    args = [vs]
+    if self.use_scale:
+      scale = self.param(
+        str_path + '/scale', self.scale_init, reduced_feature_shape, self.param_dtype
+      ).reshape(feature_shape)
+      value_bar *= scale
+      args.append(scale)
+
+    dtype = canonicalize_dtype(*args, dtype=self.dtype)
     return jnp.asarray(value_bar, dtype)
