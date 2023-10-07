@@ -48,7 +48,7 @@ _READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'
 _WRITE_CHECKPOINT_EVENT: str = '/jax/checkpoint/write/durations_sec'
 _IMPORT_GDAM_SUCCESSFUL = False
 try:
-  from jax.experimental.array_serialization.serialization import get_tensorstore_spec
+  from jax.experimental.array_serialization.google.spec import get_tensorstore_spec
   from jax.experimental.array_serialization.serialization import GlobalAsyncCheckpointManager
 
   _IMPORT_GDAM_SUCCESSFUL = True
