@@ -3,8 +3,8 @@ Frequently Asked Questions (FAQ)
 
 This is a collection of answers to frequently asked questions (FAQ). You can contribute to the Flax FAQ by starting a new topic in `GitHub Discussions <https://github.com/google/flax/discussions>`__.
 
-Where to search for an answer to a Flax-related question
-********************************************************
+Where to search for an answer to a Flax-related question?
+*********************************************************
 
 There are a number of official Flax resources to search for information:
 
@@ -12,8 +12,8 @@ There are a number of official Flax resources to search for information:
 - `google/flax GitHub Discussions <https://github.com/google/flax/discussions>`__: Search for an existing topic or start a new one. If you can't find what you're looking for, feel free to ask the Flax team or community a question.
 - `google/flax GitHub Issues <https://github.com/google/flax/issues>`__: Use the search bar to look for an existing issue or a feature request, or start a new one.
 
-How to take the derivative with respect to an intermediate value (using :code:`Module.perturb`)
-***********************************************************************************************
+How to take the derivative with respect to an intermediate value (using :code:`Module.perturb`)?
+************************************************************************************************
 
 To take the derivative(s) or gradient(s) of the output with respect to a hidden/intermediate activation inside a model layer, you can use :meth:`flax.linen.Module.perturb`. You define a zero-value :class:`flax.linen.Module` "perturbation" parameter – :code:`perturb(...)` – in the forward pass with the same shape as the intermediate activation, define the loss function with :code:`'perturbations'` as an added standalone argument, perform a JAX derivative operation with :code:`jax.grad` on the perturbation argument.
 
@@ -35,4 +35,4 @@ Consider using CLU (Common Loop Utils) `google/CommonLoopUtils <https://github.c
 
 Check out the official `google/flax Examples <https://github.com/google/flax/tree/main/examples>`__ for examples of using the training loop with  (CLU) metrics. For example, this is `Flax ImageNet's train.py <https://github.com/google/flax/blob/main/examples/imagenet/train.py>`__.
 
-For computer vision research, consider `google-research/scenic <https://github.com/google-research/scenic>`__. Scenic is a set of shared light-weight libraries solving commonly encountered tasks when training large-scale vision models (with examples of several projects). Scenic is developed in JAX with Flax. To get started, go the `README page on GitHub <https://github.com/google-research/scenic#getting-started>`__.
+For computer vision research, consider `google-research/scenic <https://github.com/google-research/scenic>`__. Scenic is a set of shared light-weight libraries solving commonly encountered tasks when training large-scale vision models (with examples of several projects). Scenic is developed in JAX with Flax. To get started, go to the `README page on GitHub <https://github.com/google-research/scenic#getting-started>`__.

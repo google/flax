@@ -323,4 +323,3 @@ Notable examples in Flax include:
    philosophy
    contributing
    api_reference/index
-   
