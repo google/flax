@@ -318,7 +318,9 @@ Notable examples in Flax include:
    guides/index
    examples
    glossary
+   faq
    developer_notes/index
    philosophy
    contributing
    api_reference/index
+   
