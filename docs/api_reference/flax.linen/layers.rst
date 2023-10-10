@@ -54,6 +54,10 @@ Normalization
 
 .. flax_module::
   :module: flax.linen
+  :class: RMSNorm
+
+.. flax_module::
+  :module: flax.linen
   :class: SpectralNorm
 
 
