@@ -41,7 +41,6 @@ from jax import monitoring
 from jax import process_index
 from jax import tree_util as jtu
 from jax.experimental.multihost_utils import sync_global_devices
-import numpy as np
 import orbax.checkpoint as ocp
 
 _READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'

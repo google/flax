@@ -23,7 +23,7 @@ to keep track of how variables should be partitioned with ``jax.pjit``.
 
 import abc
 import functools
-from typing import Any, Callable, Dict, Generic, Mapping, Optional, Tuple, TypeVar, Union
+from typing import Any, Callable, Dict, Generic, Optional, Tuple, TypeVar, Union
 
 from flax import errors
 from flax import struct

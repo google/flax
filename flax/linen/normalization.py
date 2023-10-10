@@ -14,7 +14,6 @@
 
 """Normalization modules for Flax."""
 
-import dataclasses
 import functools
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
 

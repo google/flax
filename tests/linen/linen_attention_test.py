@@ -20,7 +20,6 @@ from absl.testing import parameterized
 from flax import linen as nn
 from flax import jax_utils
 from flax.core import pop
-from flax.configurations import temp_flip_flag
 
 import jax
 from jax import lax

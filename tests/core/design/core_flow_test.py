@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence, NamedTuple, Any
+from typing import Any, Sequence, Any
 
 from absl.testing import absltest
 

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import enum
-from typing import Any, Callable, Dict, Generator, Generic, Mapping, Optional, Protocol, Tuple, TypeVar, Union, runtime_checkable
+from typing import Any, Callable, Dict, Generator, Generic, Mapping, Optional, Protocol, TypeVar, runtime_checkable
 from flax.core import FrozenDict
 from flax.errors import CursorFindError, TraverseTreeError
 import dataclasses

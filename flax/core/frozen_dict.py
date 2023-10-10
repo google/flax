@@ -15,7 +15,7 @@
 """Frozen Dictionary."""
 
 import collections
-from typing import Any, Dict, Hashable, Optional, Mapping, Tuple, TypeVar, Union
+from typing import Any, Dict, Hashable, Mapping, Tuple, TypeVar, Union
 from types import MappingProxyType
 
 from flax import serialization

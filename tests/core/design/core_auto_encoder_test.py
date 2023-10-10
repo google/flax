@@ -20,12 +20,8 @@ from flax.core import Scope, Array, init, nn, unfreeze
 import jax
 from jax import numpy as jnp, random
 
-from flax import struct
-
-from jax.scipy.linalg import expm
-
-from dataclasses import dataclass, InitVar
-from typing import Any, Callable, Sequence, NamedTuple, Any
+from dataclasses import dataclass
+from typing import Callable
 
 
 def mlp(scope: Scope, x: Array, hidden: int, out: int):
