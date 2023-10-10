@@ -111,14 +111,10 @@ params = variables['params']
 ```
 
 ## Transfering the parameters
-Since `params` are currently random, the pretrained parameters from `vision_model_vars` have to be transfered to the `params` structure at the appropriate location. This can be done by unfreezing `params`, updating the `backbone` parameters, and freezing the `params` again:
+Since `params` are currently random, the pretrained parameters from `vision_model_vars` have to be transfered to the `params` structure at the appropriate location (i.e. the `backbone`):
 
 ```{code-cell} ipython3
-import flax
-
-params = flax.core.unfreeze(params)
 params['backbone'] = vision_model_vars['params']
-params = flax.core.freeze(params)
 ```
 
 **Note:** if the model contains other variable collections such as `batch_stats`, these have to be transfered as well.
@@ -153,13 +149,13 @@ from flax import traverse_util
 import optax
 
 partition_optimizers = {'trainable': optax.adam(5e-3), 'frozen': optax.set_to_zero()}
-param_partitions = flax.core.freeze(traverse_util.path_aware_map(
-  lambda path, v: 'frozen' if 'backbone' in path else 'trainable', params))
+param_partitions = traverse_util.path_aware_map(
+  lambda path, v: 'frozen' if 'backbone' in path else 'trainable', params)
 tx = optax.multi_transform(partition_optimizers, param_partitions)
 
 # visualize a subset of the param_partitions structure
 flat = list(traverse_util.flatten_dict(param_partitions).items())
-flax.core.freeze(traverse_util.unflatten_dict(dict(flat[:2] + flat[-2:])))
+traverse_util.unflatten_dict(dict(flat[:2] + flat[-2:]))
 ```
 
 To implement [differential learning rates](https://blog.slavv.com/differential-learning-rates-59eff5209a4f), the `optax.set_to_zero` can be replaced with any other optimizer, different optimizers and partitioning schemes can be selected depending on the task. For more information on advanced optimizers, refer to Optax's [Combining Optimizers](https://optax.readthedocs.io/en/latest/api.html#combining-optimizers) documentation.

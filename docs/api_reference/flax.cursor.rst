@@ -12,7 +12,7 @@ To illustrate, consider the example below::
   import dataclasses
   from typing import Any
 
-  @dataclasses.dataclass
+  @dataclasses.dataclass(frozen=True)
   class A:
     x: Any
 

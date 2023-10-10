@@ -206,7 +206,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
     mlp = MLP(4096)
     x = jnp.ones((8 * 1024, 1024))
     # use eval_shape to get the Partitioned instances for the variables.
-    # this way we can determinte the PartitionSpecs for the init variables
+    # this way we can determine the PartitionSpecs for the init variables
     # before we call the init fn.
     var_spec = nn.get_partition_spec(
         jax.eval_shape(mlp.init, random.key(0), x))
