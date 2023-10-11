@@ -455,6 +455,163 @@ class NormalizationTest(parameterized.TestCase):
       else:
         variables = model_cls.init(random.PRNGKey(0), x, train=False)
 
+  @parameterized.parameters(
+      {'feature_axes': -1, 'reduction_axes': 0, 'variable_filter': {'kernel'}},
+      {'feature_axes': 0, 'reduction_axes': 1, 'variable_filter': {'kernel'}},
+      {'feature_axes': (0, 1), 'reduction_axes': (), 'variable_filter': {'kernel'}},
+      {'feature_axes': (), 'reduction_axes': (0, 1), 'variable_filter': {'kernel'}},
+      {'feature_axes': None, 'reduction_axes': (0, 1), 'variable_filter': {'kernel'}},
+      {'feature_axes': 0, 'reduction_axes': (), 'variable_filter': {'bias'}},
+      {'feature_axes': (), 'reduction_axes': -1, 'variable_filter': {'bias'}}
+  )
+  def test_manual_weight_norm(self, feature_axes, reduction_axes, variable_filter):
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.WeightNorm(nn.Dense(2, bias_init=nn.initializers.normal()),
+                             feature_axes=feature_axes,
+                             variable_filter=variable_filter)(x)
+    key1, key2 = jax.random.split(jax.random.key(1))
+    x = jax.random.normal(key1, (1, 3))
+    module = Foo()
+    v = module.init(key2, x)
+    v = jax.tree_map(lambda x: x + 0.5, v)
+    out = module.apply(v, x)
+
+    kernel = v['params']['Dense_0']['kernel']
+    if 'kernel' in variable_filter:
+      kernel /= jnp.sqrt(jnp.sum(kernel**2, axis=reduction_axes, keepdims=True))
+      kernel_scale = jnp.expand_dims(v['params']['WeightNorm_0']['Dense_0/kernel/scale'], axis=reduction_axes)
+    else:
+      kernel_scale = 1
+    bias = v['params']['Dense_0']['bias']
+    if 'bias' in variable_filter:
+      bias /= jnp.sqrt(jnp.sum(bias**2, axis=reduction_axes, keepdims=True))
+      bias_scale = jnp.expand_dims(v['params']['WeightNorm_0']['Dense_0/bias/scale'], axis=reduction_axes)
+    else:
+      bias_scale = 1
+    manual_out = jnp.dot(x, kernel_scale * kernel) + (bias_scale * bias).reshape(1, -1)
+
+    self.assertTrue(jnp.allclose(out, manual_out))
+
+  @parameterized.parameters(
+      {'variable_filters': ({}, None, {'kernel', 'bias'}, {'Bar'}),
+       'key_paths': {'Bar_0/Baz_0/Dense_0/kernel/scale',
+                     'Bar_0/Baz_0/Dense_0/bias/scale',
+                     'Bar_0/Dense_0/kernel/scale',
+                     'Bar_0/Dense_0/bias/scale',
+                     'Bar_0/Baz_1/Dense_0/kernel/scale',
+                     'Bar_0/Baz_1/Dense_0/bias/scale',
+                     'Bar_0/Dense_1/kernel/scale',
+                     'Bar_0/Dense_1/bias/scale'}},
+      {'variable_filters': ({'kernel'},),
+       'key_paths': {'Bar_0/Baz_0/Dense_0/kernel/scale',
+                     'Bar_0/Dense_0/kernel/scale',
+                     'Bar_0/Baz_1/Dense_0/kernel/scale',
+                     'Bar_0/Dense_1/kernel/scale'}},
+      {'variable_filters': ({'Baz', 'kernel'},),
+       'key_paths': {'Bar_0/Baz_0/Dense_0/kernel/scale',
+                     'Bar_0/Baz_0/Dense_0/bias/scale',
+                     'Bar_0/Dense_0/kernel/scale',
+                     'Bar_0/Baz_1/Dense_0/kernel/scale',
+                     'Bar_0/Baz_1/Dense_0/bias/scale',
+                     'Bar_0/Dense_1/kernel/scale'}}
+  )
+  def test_weight_norm_variable_filter(self, variable_filters, key_paths):
+    class Baz(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        return nn.Dense(2)(x)
+    class Bar(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        x = Baz()(x)
+        x = nn.Dense(3)(x)
+        x = Baz()(x)
+        x = nn.Dense(3)(x)
+        return x
+
+    for variable_filter in variable_filters:
+      class Foo(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+          return nn.WeightNorm(Bar(), variable_filter=variable_filter)(x)
+      v = Foo().init(jax.random.key(0), jnp.ones((1, 4)))
+      self.assertEqual(key_paths, v['params']['WeightNorm_0'].keys())
+
+  @parameterized.parameters(
+      {'model_index': 0, 'key_paths': {'Dense_1/kernel/scale'}},
+      {'model_index': 1, 'key_paths': {'Conv_0/kernel/scale'}},
+      {'model_index': 2, 'key_paths': {'MultiHeadDotProductAttention_0/key/kernel/scale',
+                                       'MultiHeadDotProductAttention_0/out/kernel/scale',
+                                       'MultiHeadDotProductAttention_0/query/kernel/scale',
+                                       'MultiHeadDotProductAttention_0/value/kernel/scale'}}
+  )
+  def test_weight_norm_train(
+      self, model_index, key_paths
+  ):
+    class FooDense(nn.Module):
+      @nn.compact
+      def __call__(self, x,):
+        x = nn.Dense(8)(x)
+        x = nn.WeightNorm(nn.Dense(6))(x)
+        x = nn.Dense(4)(x)
+        return x
+    class FooConv(nn.Module):
+      @nn.compact
+      def __call__(self, x,):
+        x = nn.Dense(9)(x)
+        x = x.reshape((1, 3, 3))
+        x = nn.WeightNorm(nn.Conv(2, kernel_size=(2, 2)))(x)
+        x = x.reshape(1, -1)
+        x = nn.Dense(4)(x)
+        return x
+    class FooAttention(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        a = nn.Dense(4)(x)
+        b = nn.Dense(4)(x)
+        x = nn.WeightNorm(nn.attention.MultiHeadDotProductAttention(4))(a, b)
+        x = nn.Dense(4)(x)
+        return x
+
+    key1, key2, key3 = random.split(random.PRNGKey(0), 3)
+    x = random.normal(key1, (1, 4))
+    y = random.normal(key2, (1, 4))
+
+    model_cls = (FooDense, FooConv, FooAttention)[model_index]
+    params = model_cls().init(key3, x)['params']
+    self.assertEqual(key_paths, params['WeightNorm_0'].keys())
+
+    state = train_state.TrainState.create(
+        apply_fn=model_cls().apply,
+        params=params,
+        tx=optax.adam(1e-3),
+    )
+
+    @jax.jit
+    def train_step(state, batch):
+      def loss_fn(params):
+        logits = state.apply_fn(
+            {'params': params},
+            x=batch['image'],
+        )
+        loss = jnp.mean(
+            optax.l2_loss(predictions=logits, targets=batch['label'])
+        )
+        return loss
+
+      grad_fn = jax.value_and_grad(loss_fn)
+      loss, grads = grad_fn(state.params)
+      state = state.apply_gradients(grads=grads)
+      return state, loss
+
+    prev_loss = float('inf')
+    for _ in range(10):
+      state, loss = train_step(state, {'image': x, 'label': y})
+      self.assertTrue(loss < prev_loss)
+      prev_loss = loss
+
 
 class StochasticTest(absltest.TestCase):
 
