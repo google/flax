@@ -9,7 +9,9 @@ vNext
 -
 -
 -
--
+- Re-factored `MultiHeadDotProductAttention`'s call method signatur, by adding
+`inputs_k` and `inputs_v` args and switching `inputs_kv`, `mask` and `determistic`
+to keyword arguments. See more details in [#3389](https://github.com/google/flax/discussions/3389).
 -
 -
 -
