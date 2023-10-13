@@ -40,24 +40,13 @@ import jax
 from jax import monitoring
 from jax import process_index
 from jax import tree_util as jtu
+from jax.experimental.array_serialization.serialization import get_tensorstore_spec
+from jax.experimental.array_serialization.serialization import GlobalAsyncCheckpointManager
 from jax.experimental.multihost_utils import sync_global_devices
-import numpy as np
 import orbax.checkpoint as ocp
 
 _READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'
 _WRITE_CHECKPOINT_EVENT: str = '/jax/checkpoint/write/durations_sec'
-_IMPORT_GDAM_SUCCESSFUL = False
-try:
-  from jax.experimental.array_serialization.serialization import get_tensorstore_spec
-  from jax.experimental.array_serialization.serialization import GlobalAsyncCheckpointManager
-
-  _IMPORT_GDAM_SUCCESSFUL = True
-except ImportError:
-  logging.warning(
-      'GlobalAsyncCheckpointManager is not imported correctly. '
-      'Checkpointing of GlobalDeviceArrays will not be available.'
-      'To use the feature, install tensorstore.'
-  )
 
 
 # Single-group reg-exps for int or float numerical substrings.
@@ -262,7 +251,7 @@ def _restore_mpas(
     target: Optional[Any],
     ckpt_path: str,
     step: Optional[Union[int, float]],
-    gda_manager: Optional[Any],
+    gda_manager: Optional[GlobalAsyncCheckpointManager],
     allow_partial: bool = False,
 ):
   """Restore the multiprocess arrays given the target structure and type."""
@@ -740,7 +729,7 @@ def save_checkpoint_multiprocess(
     overwrite: bool = False,
     keep_every_n_steps: Optional[int] = None,
     async_manager: Optional[AsyncManager] = None,
-    gda_manager: Optional[Any] = None,
+    gda_manager: Optional[GlobalAsyncCheckpointManager] = None,
     orbax_checkpointer: Optional[ocp.Checkpointer] = None,
 ) -> str:
   """Save a checkpoint of the model in multi-process environment.
@@ -768,15 +757,15 @@ def save_checkpoint_multiprocess(
     async_manager: if defined, the save will run without blocking the main
       thread. Only works for single host. Note that an ongoing save will still
       block subsequent saves, to make sure overwrite/keep logic works correctly.
-    gda_manager: required if target contains a JAX GlobalDeviceArray. Type
-      should be GlobalAsyncCheckpointManager (needs Tensorstore to be imported
-      correctly). Will save the GDAs to a separate subdirectory with postfix
-      "_gda" asynchronously. Same as async_manager, this will block subsequent
-      saves.
+    gda_manager: required if target contains a JAX GlobalDeviceArray. Will save
+      the GDAs to a separate subdirectory with postfix "_gda" asynchronously.
+      Same as async_manager, this will block subsequent saves.
     orbax_checkpointer: if defined, the save will be done by Orbax In the
-      future, all Flax checkpointing features will be migrated to Orbax,
-      and starting to use an `orbax_checkpointer` is recommended. Please
-      check out the checkpointing guide (https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#save-checkpoints) for how to use Orbax checkpointers.
+      future, all Flax checkpointing features will be migrated to Orbax, and
+      starting to use an `orbax_checkpointer` is recommended. Please check out
+      the checkpointing guide
+      (https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#save-checkpoints)
+      for how to use Orbax checkpointers.
 
   Returns:
     Filename of saved checkpoint.
@@ -850,7 +839,7 @@ def save_checkpoint_multiprocess(
   target = serialization.to_state_dict(target)
   target, mpa_targets = _split_mp_arrays(target)
   target = serialization.msgpack_serialize(target)
-  has_mpa = mpa_targets and _IMPORT_GDAM_SUCCESSFUL
+  has_mpa = bool(mpa_targets)
 
   if not overwrite:
     _check_overwrite_error(ckpt_tmp_path, ckpt_path, base_path, step)  # type: ignore
@@ -989,7 +978,7 @@ def restore_checkpoint(
     step: Optional[Union[int, float]] = None,
     prefix: str = 'checkpoint_',
     parallel: bool = True,
-    gda_manager: Optional[Any] = None,
+    gda_manager: Optional[GlobalAsyncCheckpointManager] = None,
     allow_partial_mpa_restoration: bool = False,
     orbax_checkpointer: Optional[ocp.Checkpointer] = None,
     orbax_transforms: Optional[Dict] = None,
@@ -1014,9 +1003,8 @@ def restore_checkpoint(
     prefix: str: name prefix of checkpoint files.
     parallel: bool: whether to load seekable checkpoints in parallel, for speed.
     gda_manager: required if checkpoint contains a multiprocess array
-      (GlobalDeviceArray or jax Array from pjit). Type should be
-      GlobalAsyncCheckpointManager (needs Tensorstore to be imported correctly).
-      Will read the arrays from the separate subdirectory with postfix "_gda".
+      (GlobalDeviceArray or jax Array from pjit). Will read the arrays from the
+      separate subdirectory with postfix "_gda".
     allow_partial_mpa_restoration: If true, the given `target` doesn't have to
       contain all valid multiprocess arrays. As a result, the restored Pytree
       may have some MPAs not restored correctly. Use this if you cannot provide
@@ -1126,15 +1114,14 @@ def restore_checkpoint(
       checkpoint_contents = fp.read()
 
   state_dict = serialization.msgpack_restore(checkpoint_contents)
-  if _IMPORT_GDAM_SUCCESSFUL:
-    state_dict = _restore_mpas(
-        state_dict,
-        target,
-        ckpt_path,
-        step,
-        gda_manager,
-        allow_partial_mpa_restoration,
-    )
+  state_dict = _restore_mpas(
+      state_dict,
+      target,
+      ckpt_path,
+      step,
+      gda_manager,
+      allow_partial_mpa_restoration,
+  )
 
   if target is None:
     restored_checkpoint = state_dict
