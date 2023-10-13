@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
+from typing import Iterable, Tuple
 
 import jax
-from jax import numpy as jnp, random, lax
-import numpy as np
+from jax import numpy as jnp, random
 
 from flax import linen as nn
 from flax.linen import Module, Dense, compact

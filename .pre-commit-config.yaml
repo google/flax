@@ -34,3 +34,7 @@ repos:
         --extra-keys,
         "metadata.kernelspec metadata.vscode metadata.colab cell.metadata.executionInfo.user cell.metadata.executionInfo.user_tz cell.metadata.colab",
       ]
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.0.292
+  hooks:
+    - id: ruff

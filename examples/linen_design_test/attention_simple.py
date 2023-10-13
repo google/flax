@@ -14,15 +14,13 @@
 
 import functools
 from pprint import pprint
-from typing import Any, Callable, Iterable, List, Optional, Sequence, Tuple, Type, Union
-from flax.core import Scope
-from flax.core.frozen_dict import freeze, unfreeze
+from typing import Any, Callable, Optional, Sequence
+from flax.core.frozen_dict import unfreeze
 from flax.linen import initializers
 from flax.linen import Module, compact, vmap
 from flax.linen.linear import PrecisionLike
 import jax
 from jax import lax, numpy as jnp, random
-import numpy as np
 
 
 class Dense(Module):

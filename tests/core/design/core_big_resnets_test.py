@@ -18,10 +18,10 @@ from absl.testing import absltest
 
 import numpy as np
 
-from flax.core import Scope, Array, init, apply, unfreeze, lift, nn
+from flax.core import Scope, Array, init, unfreeze, lift, nn
 
 import jax
-from jax import lax, random, numpy as jnp
+from jax import random, numpy as jnp
 
 
 default_norm = partial(nn.batch_norm)

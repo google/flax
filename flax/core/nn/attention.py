@@ -17,10 +17,7 @@
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 import functools
 from typing import Any, Callable, Union
-import warnings
-from . import stochastic
 
-from flax import jax_utils
 from flax import struct
 from flax.core import Scope
 from flax.linen import initializers

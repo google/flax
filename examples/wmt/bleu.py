@@ -44,7 +44,6 @@ import sys
 import unicodedata
 
 import numpy as np
-import six
 
 
 class UnicodeRegex:

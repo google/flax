@@ -38,8 +38,6 @@ from jax.experimental import maps
 from flax import struct
 
 from flax.core import meta
-from flax.core.lift import In as ScanIn  # pylint: disable=unused-import
-from flax.core.lift import Out as ScanOut  # pylint: disable=unused-import
 
 # Real types and dummy aliases for documentation
 LogicalRules = Sequence[Tuple[str, Union[str, Tuple[str], None]]]

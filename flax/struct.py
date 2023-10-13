@@ -15,7 +15,7 @@
 """Utilities for defining custom classes that can be used with jax transformations."""
 
 import dataclasses
-from typing import TypeVar, Callable, Tuple, Union, Any
+from typing import TypeVar
 
 from . import serialization
 

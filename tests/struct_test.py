@@ -15,7 +15,6 @@
 """Tests for flax.struct."""
 
 from typing import Any
-import unittest
 
 from absl.testing import absltest
 

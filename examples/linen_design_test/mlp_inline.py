@@ -13,12 +13,10 @@
 # limitations under the License.
 
 import jax
-from jax import numpy as jnp, random, lax
+from jax import numpy as jnp
 from flax import linen as nn
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Type, Union
+from typing import Iterable
 from flax.linen import Module, compact
-import numpy as np
-from pprint import pprint
 from dense import Dense
 
 

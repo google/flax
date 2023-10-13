@@ -30,7 +30,6 @@
 from typing import Any, Optional, List
 
 from jax import numpy as jnp
-import jax
 
 
 Dtype = Any

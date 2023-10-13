@@ -19,10 +19,7 @@ from absl.testing import absltest, parameterized
 import jax
 import jax.numpy as jnp
 import numpy as np
-from flax import errors
 from flax import linen as nn
-import pytest
-import einops
 from flax.linen.recurrent import flip_sequences
 
 # Parse absl flags test_srcdir and test_tmpdir.

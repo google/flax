@@ -37,7 +37,6 @@ sys.path.insert(0, os.path.abspath('..'))
 sys.path.append(os.path.abspath('./_ext'))
 
 # patch sphinx
-import docs.conf_sphinx_patch
 # -- Project information -----------------------------------------------------
 
 project = 'Flax'

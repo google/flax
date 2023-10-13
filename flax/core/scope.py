@@ -45,7 +45,6 @@ from flax import struct
 from flax import traceback_util
 from flax.ids import uuid
 import jax
-from jax import config as jax_config
 from jax import numpy as jnp
 from jax import random
 from jax import tree_util

@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
 from flax import errors
 from flax.core import Scope, scope, freeze, lazy_init, init, apply, nn
 from flax.core.scope import LazyRng
 from flax.configurations import temp_flip_flag
 
 import jax
-from jax import config as jax_config
 from jax import random
 from jax import numpy as jnp
 

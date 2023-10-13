@@ -15,8 +15,6 @@
 """Tests for flax.linen.linear."""
 
 import functools
-from multiprocessing.sharedctypes import Value
-from typing import Callable, Optional
 
 from absl.testing import absltest
 from absl.testing import parameterized

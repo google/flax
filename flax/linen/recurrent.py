@@ -20,7 +20,7 @@ see: https://flax.readthedocs.io/en/latest/developer_notes/lift.html.
 
 from abc import ABCMeta
 from functools import partial  # pylint: disable=g-importing-member
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, TypeVar, Union, cast
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, TypeVar, Union
 from absl import logging
 from flax.core import lift
 from flax.core.frozen_dict import FrozenDict

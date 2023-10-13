@@ -20,7 +20,6 @@ import jax
 from jax import numpy as jnp
 from jax import random
 from jax.experimental import mesh_utils
-from jax.experimental.pjit import pjit
 from jax.sharding import Mesh
 from jax.sharding import PartitionSpec
 

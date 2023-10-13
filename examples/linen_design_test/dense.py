@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import jax
-from jax import numpy as jnp, random, lax
+from jax import lax
 from flax.linen import initializers
 from typing import Callable
 from flax.linen import Module, compact

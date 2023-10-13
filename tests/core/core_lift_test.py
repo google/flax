@@ -14,8 +14,7 @@
 
 import operator
 from flax import errors
-from flax.core import Scope, init, apply, lift, nn, FrozenDict, unfreeze, copy
-from flax.configurations import temp_flip_flag
+from flax.core import init, apply, lift, nn, FrozenDict, copy
 
 import jax
 from jax import random
