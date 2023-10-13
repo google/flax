@@ -98,7 +98,7 @@ class DenseGeneral(Module):
   )
   precision: PrecisionLike = None
   # Deprecated. Will be removed.
-  dot_general: DotGeneralT = lax.dot_general
+  dot_general: Optional[DotGeneralT] = None
   dot_general_cls: Any = None
 
   @compact
@@ -178,8 +178,10 @@ class DenseGeneral(Module):
 
     if self.dot_general_cls is not None:
       dot_general = self.dot_general_cls()
-    else:
+    elif self.dot_general is not None:
       dot_general = self.dot_general
+    else:
+      dot_general = lax.dot_general
     out = dot_general(
         inputs,
         kernel,
@@ -218,7 +220,7 @@ class Dense(Module):
       initializers.zeros_init()
   )
   # Deprecated. Will be removed.
-  dot_general: DotGeneralT = lax.dot_general
+  dot_general: Optional[DotGeneralT] = None
   dot_general_cls: Any = None
 
   @compact
@@ -247,8 +249,10 @@ class Dense(Module):
 
     if self.dot_general_cls is not None:
       dot_general = self.dot_general_cls()
-    else:
+    elif self.dot_general is not None:
       dot_general = self.dot_general
+    else:
+      dot_general = lax.dot_general
     y = dot_general(
         inputs,
         kernel,
@@ -350,7 +354,7 @@ class _Conv(Module):
       initializers.zeros_init()
   )
   # Deprecated. Will be removed.
-  conv_general_dilated: ConvGeneralDilatedT = lax.conv_general_dilated
+  conv_general_dilated: Optional[ConvGeneralDilatedT] = None
   conv_general_dilated_cls: Any = None
 
   @property
@@ -466,8 +470,10 @@ class _Conv(Module):
       # create the unshared convolution kernel.
       if self.conv_general_dilated_cls is not None:
         conv_general_dilated = self.conv_general_dilated_cls()
-      else:
+      elif self.conv_general_dilated is not None:
         conv_general_dilated = self.conv_general_dilated
+      else:
+        conv_general_dilated = lax.conv_general_dilated
       conv_output_shape = eval_shape(
           lambda lhs, rhs: conv_general_dilated(  # pylint: disable=g-long-lambda
               lhs=lhs,
@@ -517,8 +523,10 @@ class _Conv(Module):
     if self.shared_weights:
       if self.conv_general_dilated_cls is not None:
         conv_general_dilated = self.conv_general_dilated_cls()
-      else:
+      elif self.conv_general_dilated is not None:
         conv_general_dilated = self.conv_general_dilated
+      else:
+        conv_general_dilated = lax.conv_general_dilated
       y = conv_general_dilated(
           inputs,
           kernel,

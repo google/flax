@@ -73,7 +73,7 @@ class Dense(nn.Module):
   )
   kernel_axes: Tuple[str, ...] = ()
   # Deprecated. Will be removed.
-  dot_general: DotGeneralT = lax.dot_general
+  dot_general: Optional[DotGeneralT] = None
   dot_general_cls: Any = None
 
   @nn.compact
@@ -98,8 +98,10 @@ class Dense(nn.Module):
 
     if self.dot_general_cls is not None:
       dot_general = self.dot_general_cls()
-    else:
+    elif self.dot_general is not None:
       dot_general = self.dot_general
+    else:
+      dot_general = lax.dot_general
     y = dot_general(
         inputs,
         kernel,

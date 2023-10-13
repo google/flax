@@ -821,7 +821,7 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
-        dot_general = dot_general
+        dot_general = None
         dot_general_cls = None
     )
     Dense_1 = Dense(
@@ -833,7 +833,7 @@ class ModuleTest(absltest.TestCase):
         precision = None
         kernel_init = init
         bias_init = zeros
-        dot_general = dot_general
+        dot_general = None
         dot_general_cls = None
     )
 )"""
