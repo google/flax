@@ -244,8 +244,8 @@ class MultiHeadDotProductAttention(Module):
   decode: bool = False
   normalize_qk: bool = False
   # Deprecated, will be removed.
-  qkv_dot_general: DotGeneralT = lax.dot_general
-  out_dot_general: DotGeneralT = lax.dot_general
+  qkv_dot_general: Optional[DotGeneralT] = None
+  out_dot_general: Optional[DotGeneralT] = None
   qkv_dot_general_cls: Any = None
   out_dot_general_cls: Any = None
 
