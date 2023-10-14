@@ -296,20 +296,35 @@ class NormalizationTest(parameterized.TestCase):
     (y1, y2), variables = model.init_with_output(key, x)
     np.testing.assert_allclose(y1, y2, rtol=1e-4)
 
+  @parameterized.parameters(
+      {'model_index': 0, 'key_paths': {'Dense_1/kernel/u', 'Dense_1/kernel/sigma'}},
+      {'model_index': 1, 'key_paths': {'Conv_0/kernel/u', 'Conv_0/kernel/sigma'}},
+      {'model_index': 2, 'key_paths': {'MultiHeadDotProductAttention_0/key/bias/u',
+                                       'MultiHeadDotProductAttention_0/key/kernel/u',
+                                       'MultiHeadDotProductAttention_0/out/kernel/u',
+                                       'MultiHeadDotProductAttention_0/query/bias/u',
+                                       'MultiHeadDotProductAttention_0/query/kernel/u',
+                                       'MultiHeadDotProductAttention_0/value/bias/u',
+                                       'MultiHeadDotProductAttention_0/value/kernel/u',
+                                       'MultiHeadDotProductAttention_0/key/bias/sigma',
+                                       'MultiHeadDotProductAttention_0/key/kernel/sigma',
+                                       'MultiHeadDotProductAttention_0/out/kernel/sigma',
+                                       'MultiHeadDotProductAttention_0/query/bias/sigma',
+                                       'MultiHeadDotProductAttention_0/query/kernel/sigma',
+                                       'MultiHeadDotProductAttention_0/value/bias/sigma',
+                                       'MultiHeadDotProductAttention_0/value/kernel/sigma'}}
+  )
   def test_spectral_norm_train(
-      self,
+      self, model_index, key_paths
   ):
     class FooDense(nn.Module):
-
       @nn.compact
       def __call__(self, x, train):
         x = nn.Dense(8)(x)
         x = nn.SpectralNorm(nn.Dense(6))(x, update_stats=train)
         x = nn.Dense(4)(x)
         return x
-
     class FooConv(nn.Module):
-
       @nn.compact
       def __call__(self, x, train):
         x = nn.Dense(9)(x)
@@ -320,9 +335,7 @@ class NormalizationTest(parameterized.TestCase):
         x = x.reshape(1, -1)
         x = nn.Dense(4)(x)
         return x
-
     class FooAttention(nn.Module):
-
       @nn.compact
       def __call__(self, x, train):
         a = nn.Dense(4)(x)
@@ -337,123 +350,105 @@ class NormalizationTest(parameterized.TestCase):
     x = random.normal(key1, (1, 4))
     y = random.normal(key2, (1, 4))
 
-    for model_cls, var_paths in (
-        (FooDense, ('Dense_1/kernel/',)),
-        (FooConv, ('Conv_0/kernel/',)),
-        (
-            FooAttention,
-            (
-                'MultiHeadDotProductAttention_0/key/bias/',
-                'MultiHeadDotProductAttention_0/key/kernel/',
-                'MultiHeadDotProductAttention_0/out/kernel/',
-                'MultiHeadDotProductAttention_0/query/bias/',
-                'MultiHeadDotProductAttention_0/query/kernel/',
-                'MultiHeadDotProductAttention_0/value/bias/',
-                'MultiHeadDotProductAttention_0/value/kernel/',
-            ),
-        ),
-    ):
-      variables = model_cls().init(key3, x, train=False)
-      params, batch_stats = variables['params'], variables['batch_stats']
-      for var_path in var_paths:
-        self.assertTrue(var_path + 'u' in batch_stats['SpectralNorm_0'].keys())
-        self.assertTrue(
-            var_path + 'sigma' in batch_stats['SpectralNorm_0'].keys()
+    model_cls = (FooDense, FooConv, FooAttention)[model_index]
+    variables = model_cls().init(key3, x, train=False)
+    params, batch_stats = variables['params'], variables['batch_stats']
+    self.assertEqual(key_paths, batch_stats['SpectralNorm_0'].keys())
+
+    class TrainState(train_state.TrainState):
+      batch_stats: Any
+
+    state = TrainState.create(
+        apply_fn=model_cls().apply,
+        params=params,
+        batch_stats=batch_stats,
+        tx=optax.adam(1e-3),
+    )
+
+    @jax.jit
+    def train_step(state, batch):
+      def loss_fn(params):
+        logits, updates = state.apply_fn(
+            {'params': params, 'batch_stats': state.batch_stats},
+            x=batch['image'],
+            train=True,
+            mutable=['batch_stats'],
         )
+        loss = jnp.mean(
+            optax.l2_loss(predictions=logits, targets=batch['label'])
+        )
+        return loss, updates
 
-      class TrainState(train_state.TrainState):
-        batch_stats: Any
+      grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
+      (loss, updates), grads = grad_fn(state.params)
+      state = state.apply_gradients(grads=grads)
+      state = state.replace(batch_stats=updates['batch_stats'])
+      return state, loss
 
-      state = TrainState.create(
-          apply_fn=model_cls().apply,
-          params=params,
-          batch_stats=batch_stats,
-          tx=optax.adam(1e-3),
-      )
+    prev_loss = float('inf')
+    for _ in range(10):
+      state, loss = train_step(state, {'image': x, 'label': y})
+      self.assertTrue(loss < prev_loss)
+      prev_loss = loss
 
-      @jax.jit
-      def train_step(state, batch):
-        def loss_fn(params):
-          logits, updates = state.apply_fn(
-              {'params': params, 'batch_stats': state.batch_stats},
-              x=batch['image'],
-              train=True,
-              mutable=['batch_stats'],
-          )
-          loss = jnp.mean(
-              optax.l2_loss(predictions=logits, targets=batch['label'])
-          )
-          return loss, updates
+  @parameterized.parameters(
+      {'n_steps': 1, 'update_stats': True, 'result': 4.0},
+      {'n_steps': 3, 'update_stats': True, 'result': 4.0},
+      {'n_steps': 10, 'update_stats': True, 'result': 4.0},
+      {'n_steps': 1, 'update_stats': False, 'result': 1.0}
+  )
+  def test_spectral_norm_sigma(self, n_steps, update_stats, result):
+    class Foo(nn.Module):
 
-        grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-        (loss, updates), grads = grad_fn(state.params)
-        state = state.apply_gradients(grads=grads)
-        state = state.replace(batch_stats=updates['batch_stats'])
-        return state, loss
+      @nn.compact
+      def __call__(self, x, train):
+        x = nn.SpectralNorm(nn.Dense(8, use_bias=False), n_steps=n_steps)(
+            x, update_stats=train
+        )
+        return x
 
-      prev_loss = float('inf')
-      for _ in range(10):
-        state, loss = train_step(state, {'image': x, 'label': y})
-        self.assertTrue(loss < prev_loss)
-        prev_loss = loss
+    x = jnp.ones((1, 8))
+    model_cls = Foo()
+    variables = model_cls.init(random.PRNGKey(0), x, train=False)
+    params, batch_stats = variables['params'], variables['batch_stats']
+    params = jax.tree_map(lambda x: 4 * jnp.eye(*x.shape), params)
+    logits, updates = model_cls.apply(
+        {'params': params, 'batch_stats': batch_stats},
+        x=x,
+        train=update_stats,
+        mutable=True,
+    )
+    np.testing.assert_allclose(
+        updates['batch_stats']['SpectralNorm_0']['Dense_0/kernel/sigma'],
+        result,
+        atol=1e-3,
+    )
 
-  def test_spectral_norm_sigma(self):
-    for n_steps, update_stats, result in (
-        (1, True, 4.0),
-        (3, True, 4.0),
-        (10, True, 4.0),
-        (1, False, 1.0),
-    ):
+  @parameterized.parameters(
+      {'error_on_non_matrix': True},
+      {'error_on_non_matrix': False}
+  )
+  def test_spectral_norm_3d_tensor(self, error_on_non_matrix):
+    class Foo(nn.Module):
 
-      class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, train):
+        x = nn.SpectralNorm(
+            nn.DenseGeneral((3, 4), use_bias=False),
+            error_on_non_matrix=error_on_non_matrix,
+        )(x, update_stats=train)
+        return x
 
-        @nn.compact
-        def __call__(self, x, train):
-          x = nn.SpectralNorm(nn.Dense(8, use_bias=False), n_steps=n_steps)(
-              x, update_stats=train
-          )
-          return x
+    x = jnp.ones((1, 2))
+    model_cls = Foo()
 
-      x = jnp.ones((1, 8))
-      model_cls = Foo()
-      variables = model_cls.init(random.PRNGKey(0), x, train=False)
-      params, batch_stats = variables['params'], variables['batch_stats']
-      params = jax.tree_map(lambda x: 4 * jnp.eye(*x.shape), params)
-      logits, updates = model_cls.apply(
-          {'params': params, 'batch_stats': batch_stats},
-          x=x,
-          train=update_stats,
-          mutable=True,
-      )
-      np.testing.assert_allclose(
-          updates['batch_stats']['SpectralNorm_0']['Dense_0/kernel/sigma'],
-          result,
-          atol=1e-3,
-      )
-
-  def test_spectral_norm_3d_tensor(self):
-    for error_on_non_matrix in (True, False):
-
-      class Foo(nn.Module):
-
-        @nn.compact
-        def __call__(self, x, train):
-          x = nn.SpectralNorm(
-              nn.DenseGeneral((3, 4), use_bias=False),
-              error_on_non_matrix=error_on_non_matrix,
-          )(x, update_stats=train)
-          return x
-
-      x = jnp.ones((1, 2))
-      model_cls = Foo()
-
-      if error_on_non_matrix:
-        with self.assertRaisesRegex(
-            ValueError, 'Input is 3D but error_on_non_matrix is True'
-        ):
-          variables = model_cls.init(random.PRNGKey(0), x, train=False)
-      else:
+    if error_on_non_matrix:
+      with self.assertRaisesRegex(
+          ValueError, 'Input is 3D but error_on_non_matrix is True'
+      ):
         variables = model_cls.init(random.PRNGKey(0), x, train=False)
+    else:
+      variables = model_cls.init(random.PRNGKey(0), x, train=False)
 
   @parameterized.parameters(
       {'feature_axes': -1, 'reduction_axes': 0, 'variable_filter': {'kernel'}},

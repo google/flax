@@ -761,7 +761,6 @@ class SpectralNorm(Module):
         trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
             functools.partial(
                 self._spectral_normalize,
-                layer_instance_name=self.layer_instance.name,
                 update_stats=update_stats,
             ),
             vs,
@@ -770,7 +769,7 @@ class SpectralNorm(Module):
         mutable=True,
     )(self.layer_instance)
 
-  def _spectral_normalize(self, path, vs, layer_instance_name, update_stats):
+  def _spectral_normalize(self, path, vs, update_stats):
     """Compute the largest singular value using power iteration and normalize
     the variables ``vs`` using this value. This is intended to be a helper
     function used in this Module's ``__call__`` method in conjunction with
@@ -779,8 +778,6 @@ class SpectralNorm(Module):
     Args:
       path: dict key path, used for naming the ``u`` and ``sigma`` variables
       vs: variables to be spectral normalized
-      layer_instance_name: name of the underlying ``self.layer_instance``,
-        used for naming the ``u`` and ``sigma`` variables
       update_stats: if True, update the ``u`` vector and ``sigma`` variables
         after computing their updated values using power iteration. This will
         help the power iteration method approximate the true singular value
@@ -802,7 +799,7 @@ class SpectralNorm(Module):
         value = jnp.reshape(value, (-1, value.shape[-1]))
 
     u_var_name = (
-        layer_instance_name
+        self.layer_instance.name
         + '/'
         + '/'.join((dict_key.key for dict_key in path[1:]))
         + '/u'
@@ -819,7 +816,7 @@ class SpectralNorm(Module):
     )
     u0 = u_var.value
     sigma_var_name = (
-        layer_instance_name
+        self.layer_instance.name
         + '/'
         + '/'.join((dict_key.key for dict_key in path[1:]))
         + '/sigma'
