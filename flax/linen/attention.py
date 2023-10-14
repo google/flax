@@ -34,7 +34,7 @@ from jax import random
 import jax.numpy as jnp
 
 
-PRNGKey = Any
+PRNGKey = jax.Array
 Shape = Tuple[int, ...]
 Dtype = Any
 Array = Any
@@ -258,6 +258,7 @@ class MultiHeadDotProductAttention(Module):
       *,
       mask: Optional[Array] = None,
       deterministic: Optional[bool] = None,
+      dropout_rng: Optional[PRNGKey] = None,
   ):
     ...
 
@@ -269,6 +270,7 @@ class MultiHeadDotProductAttention(Module):
       inputs_kv: Array = None,
       mask: Optional[Array] = None,
       deterministic: Optional[bool] = None,
+      dropout_rng: Optional[PRNGKey] = None,
   ):
     ...
 
@@ -282,6 +284,7 @@ class MultiHeadDotProductAttention(Module):
       inputs_kv: Optional[Array] = None,
       mask: Optional[Array] = None,
       deterministic: Optional[bool] = None,
+      dropout_rng: Optional[PRNGKey] = None
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -306,6 +309,8 @@ class MultiHeadDotProductAttention(Module):
         corresponding mask value is `False`.
       deterministic: if false, the attention weight is masked randomly using
         dropout, whereas if true, the attention weights are deterministic.
+      dropout_rng: optional rng key to pass to the attention layer's dropout
+        mask. Otherwise, self.make_rng('dropout') is used instead.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
@@ -434,14 +439,13 @@ class MultiHeadDotProductAttention(Module):
             ),
         )
 
-    dropout_rng = None
     if (
         self.dropout_rate > 0.0
     ):  # Require `deterministic` only if using dropout.
       m_deterministic = merge_param(
           'deterministic', self.deterministic, deterministic
       )
-      if not m_deterministic:
+      if not m_deterministic and dropout_rng is None:
         dropout_rng = self.make_rng('dropout')
     else:
       m_deterministic = True
@@ -485,6 +489,7 @@ class SelfAttention(MultiHeadDotProductAttention):
       inputs_q: Array,
       mask: Optional[Array] = None,
       deterministic: Optional[bool] = None,
+      dropout_rng: Optional[PRNGKey] = None
   ):
     """Applies multi-head dot product self-attention on the input data.
 
@@ -508,7 +513,7 @@ class SelfAttention(MultiHeadDotProductAttention):
                   'for more information.',
                   DeprecationWarning)
     return super().__call__(
-        inputs_q, mask=mask, deterministic=deterministic
+        inputs_q, mask=mask, deterministic=deterministic, dropout_rng=dropout_rng
     )
 
 
