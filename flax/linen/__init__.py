@@ -117,6 +117,7 @@ from .recurrent import (
     GRUCell as GRUCell,
     LSTMCell as LSTMCell,
     OptimizedLSTMCell as OptimizedLSTMCell,
+    CudnnLSTM as CudnnLSTM,
     RNNCellBase as RNNCellBase,
     RNN as RNN,
 )

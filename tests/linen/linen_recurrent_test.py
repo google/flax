@@ -19,11 +19,10 @@ from absl.testing import absltest, parameterized
 import jax
 import jax.numpy as jnp
 import numpy as np
-from flax import errors
 from flax import linen as nn
 import pytest
-import einops
 from flax.linen.recurrent import flip_sequences
+from jax._src.test_util import sample_product
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -535,6 +534,151 @@ class TestRecurrentDeprecation(parameterized.TestCase):
     cell = nn.LSTMCell(3)
     with self.assertRaisesRegex(TypeError, 'The RNNCellBase API has changed'):
       nn.RNN(cell, cell_size=8)
+
+
+class CudnnLSTMTest(parameterized.TestCase):
+
+  def test_cuddn_lstm(self):
+    batch_size = 3
+    seq_len = 4
+    channels_in = 5
+    channels_out = 6
+
+    module = nn.CudnnLSTM(features=channels_out)
+
+    xs = jnp.ones((batch_size, seq_len, channels_in))
+    ys: jnp.ndarray
+    ys, variables = module.init_with_output(jax.random.PRNGKey(0), xs)
+
+    self.assertEqual(ys.shape, (batch_size, seq_len, channels_out))
+
+  def test_cuddn_lstm_return_carry(self):
+    batch_size = 3
+    seq_len = 4
+    channels_in = 5
+    channels_out = 6
+
+    module = nn.CudnnLSTM(features=channels_out, return_carry=True)
+
+    xs = jnp.ones((batch_size, seq_len, channels_in))
+    ys: jnp.ndarray
+    (carry, ys), variables = module.init_with_output(jax.random.PRNGKey(0), xs)
+    c, h = carry
+
+    self.assertEqual(ys.shape, (batch_size, seq_len, channels_out))
+    self.assertEqual(c.shape, (1, batch_size, channels_out))
+    self.assertEqual(h.shape, (1, batch_size, channels_out))
+
+  def test_seq_lengths(self):
+    batch_size = 3
+    seq_len = 4
+    channels_in = 5
+    channels_out = 6
+
+    module = nn.CudnnLSTM(features=channels_out)
+
+    xs = jnp.ones((batch_size, seq_len, channels_in))
+    seq_lengths = jnp.array([3, 2, 1], dtype=jnp.int32)
+    ys: jnp.ndarray
+    ys, variables = module.init_with_output(
+        jax.random.PRNGKey(0), xs, seq_lengths=seq_lengths
+    )
+
+    self.assertEqual(ys.shape, (batch_size, seq_len, channels_out))
+
+    np.testing.assert_allclose(ys[0, 3], 0)
+    np.testing.assert_allclose(ys[1, 2:], 0)
+    np.testing.assert_allclose(ys[2, 1:], 0)
+
+  @sample_product(time_major=[True, False])
+  def test_cuddn_multibatch(self, time_major: bool):
+    batch_size = (2, 3)
+    seq_len = 4
+    channels_in = 5
+    channels_out = 6
+
+    module = nn.CudnnLSTM(features=channels_out, time_major=time_major)
+
+    if time_major:
+      xs = jnp.ones((seq_len, *batch_size, channels_in))
+    else:
+      xs = jnp.ones((*batch_size, seq_len, channels_in))
+    ys: jnp.ndarray
+    ys, variables = module.init_with_output(jax.random.PRNGKey(0), xs)
+
+    if time_major:
+      self.assertEqual(ys.shape, (seq_len, *batch_size, channels_out))
+    else:
+      self.assertEqual(ys.shape, (*batch_size, seq_len, channels_out))
+
+  @sample_product(time_major=[True, False])
+  def test_cuddn_no_batch(self, time_major: bool):
+    seq_len = 4
+    channels_in = 5
+    channels_out = 6
+
+    module = nn.CudnnLSTM(features=channels_out, time_major=time_major)
+
+    xs = jnp.ones((seq_len, channels_in))
+
+    ys: jnp.ndarray
+    ys, variables = module.init_with_output(jax.random.PRNGKey(0), xs)
+
+    self.assertEqual(ys.shape, (seq_len, channels_out))
+
+  # skip tests
+  @pytest.mark.skip(
+      reason=(
+          "LSTMCell doesn't use bias term for the Dense layers applied to the"
+          ' inputs'
+      )
+  )
+  def test_compare_cudnn_with_rnn(self):
+    batch_size = 3
+    seq_len = 4
+    channels_in = 5
+    channels_out = 6
+
+    cudnn_module = nn.CudnnLSTM(features=channels_out)
+    rnn_module = nn.RNN(nn.OptimizedLSTMCell(), cell_size=channels_out)
+
+    xs = jnp.ones((batch_size, seq_len, channels_in))
+    ys_cudnn: jnp.ndarray
+    ys_cudnn, variables_cudnn = cudnn_module.init_with_output(
+        jax.random.PRNGKey(0), xs
+    )
+
+    variables_rnn = rnn_module.init(jax.random.PRNGKey(0), xs)
+
+    W_ih, W_hh, b_ih, b_hh = cudnn_module.unpack_weights(
+        variables_cudnn['params']['weights'], channels_in
+    )
+    W_ii, W_if, W_ig, W_io = jnp.split(W_ih[0], 4, axis=0)
+    W_hi, W_hf, W_hg, W_ho = jnp.split(W_hh[0], 4, axis=0)
+    b_ii, b_if, b_ig, b_io = jnp.split(b_ih[0], 4, axis=0)
+    b_hi, b_hf, b_hg, b_ho = jnp.split(b_hh[0], 4, axis=0)
+
+    variables_rnn_dict = variables_rnn.unfreeze()
+    variables_rnn_dict['params']['cell']['hf']['kernel'] = W_hf.T
+    variables_rnn_dict['params']['cell']['hf']['bias'] = b_hf
+    variables_rnn_dict['params']['cell']['hg']['kernel'] = W_hg.T
+    variables_rnn_dict['params']['cell']['hg']['bias'] = b_hg
+    variables_rnn_dict['params']['cell']['hi']['kernel'] = W_hi.T
+    variables_rnn_dict['params']['cell']['hi']['bias'] = b_hi
+    variables_rnn_dict['params']['cell']['ho']['kernel'] = W_ho.T
+    variables_rnn_dict['params']['cell']['ho']['bias'] = b_ho
+    variables_rnn_dict['params']['cell']['if']['kernel'] = W_if.T
+    variables_rnn_dict['params']['cell']['ig']['kernel'] = W_ig.T
+    variables_rnn_dict['params']['cell']['ii']['kernel'] = W_ii.T
+    variables_rnn_dict['params']['cell']['io']['kernel'] = W_io.T
+
+    # b_ii, b_if, b_ig, and b_io are not used in the LSTMCell
+    # hard to compare the results. Try zeroing them out in the `weights` array
+    # in the future.
+    ys_rnn: jnp.ndarray
+    ys_rnn = rnn_module.apply(variables_rnn_dict, xs)
+
+    np.testing.assert_allclose(ys_cudnn, ys_rnn, atol=1e-5)
 
 
 if __name__ == '__main__':
