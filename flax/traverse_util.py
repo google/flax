@@ -43,7 +43,7 @@ returns a copy of the data including the provided updates.
 import abc
 import copy
 import dataclasses
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Tuple
 import warnings
 
 import jax

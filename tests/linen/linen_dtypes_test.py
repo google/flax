@@ -14,12 +14,9 @@
 
 """Tests for flax.linen.dtypes."""
 
-import functools
-from multiprocessing.sharedctypes import Value
 
 from absl.testing import absltest
 
-from flax import linen as nn
 from flax.linen import dtypes
 
 import jax

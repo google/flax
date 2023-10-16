@@ -24,7 +24,6 @@ from flax.training import train_state
 
 import jax
 from jax import random
-from jax.nn import initializers
 import jax.numpy as jnp
 import optax
 import numpy as np

@@ -17,13 +17,11 @@
 # See issue #620.
 # pytype: disable=wrong-keyword-args
 
-import functools
-from typing import Any, Tuple
+from typing import Tuple
 
 from flax import linen as nn
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 Array = jax.Array
 PRNGKey = jax.Array

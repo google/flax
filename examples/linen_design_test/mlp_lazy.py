@@ -13,10 +13,9 @@
 # limitations under the License.
 
 import jax
-from jax import numpy as jnp, random, lax
+from jax import numpy as jnp
 from flax import linen as nn
 from flax.linen import Module
-import numpy as np
 from pprint import pprint
 from dense import Dense
 

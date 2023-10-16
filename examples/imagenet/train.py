@@ -25,7 +25,6 @@ from typing import Any
 from absl import logging
 from clu import metric_writers
 from clu import periodic_actions
-import flax
 from flax import jax_utils
 from flax.training import checkpoints
 from flax.training import common_utils

@@ -15,7 +15,7 @@
 """Transforms tests."""
 
 from functools import partial
-from typing import Any, Tuple, Iterable, Callable, Sequence
+from typing import Any, Callable, Sequence
 import operator
 import unittest
 
@@ -24,11 +24,9 @@ import jax
 from jax import random
 import jax.numpy as jnp
 import numpy as np
-from flax import config
 from flax import errors
 from flax import linen as nn
 from flax.core import freeze, copy
-from flax.configurations import temp_flip_flag
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

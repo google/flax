@@ -17,7 +17,6 @@ from absl.testing import absltest
 from absl.testing import parameterized
 import models
 import jax
-from jax import numpy as jnp
 import jax.test_util
 import numpy as np
 

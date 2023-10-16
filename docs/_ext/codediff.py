@@ -26,7 +26,6 @@ Use directive as follows:
 
 In order to highlight a line of code, append "#!" to it.
 """
-import itertools
 from typing import List, Tuple
 
 from docutils import nodes

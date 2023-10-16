@@ -34,7 +34,6 @@ from flax.linen.module import Module
 import jax
 from jax import eval_shape
 from jax import lax
-from jax import random
 from jax.core import ShapedArray
 import jax.numpy as jnp
 import numpy as np

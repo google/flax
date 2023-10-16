@@ -42,8 +42,7 @@ from flax import config
 from flax import errors
 from flax import linen as nn
 from flax import struct
-from flax.configurations import temp_flip_flag
-from flax.core import FrozenDict, Scope, freeze, tracers
+from flax.core import FrozenDict, Scope, freeze
 from flax.linen import compact
 import jax
 from jax import random
