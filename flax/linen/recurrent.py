@@ -130,7 +130,7 @@ class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
 
   Attributes:
     features: number of output features.
-    gate_fn: activation function used for gates (default: sigmoid)
+    gate_fn: activation function used for gates (default: sigmoid).
     activation_fn: activation function used for output and memory update
       (default: tanh).
     kernel_init: initializer function for the kernels that transform
@@ -406,8 +406,8 @@ class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
   .. math::
 
       \begin{array}{ll}
-      r = \sigma(W_{ir} x + W_{hr} h + b_{hr}) \\
-      z = \sigma(W_{iz} x + W_{hz} h + b_{hz}) \\
+      r = \sigma(W_{ir} x + b_{ir} + W_{hr} h) \\
+      z = \sigma(W_{iz} x + b_{iz} + W_{hz} h) \\
       n = \tanh(W_{in} x + b_{in} + r * (W_{hn} h + b_{hn})) \\
       h' = (1 - z) * n + z * h \\
       \end{array}
@@ -415,7 +415,8 @@ class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
   where x is the input and h, is the output of the previous time step.
 
   Attributes:
-    gate_fn: activation function used for gates (default: sigmoid)
+    features: number of output features.
+    gate_fn: activation function used for gates (default: sigmoid).
     activation_fn: activation function used for output and memory update
       (default: tanh).
     kernel_init: initializer function for the kernels that transform
