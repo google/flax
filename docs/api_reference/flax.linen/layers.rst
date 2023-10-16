@@ -116,6 +116,10 @@ Recurrent
 
 .. flax_module::
   :module: flax.linen
+  :class: MGUCell
+
+.. flax_module::
+  :module: flax.linen
   :class: RNN
 
 .. flax_module::

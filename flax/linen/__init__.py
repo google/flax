@@ -111,6 +111,7 @@ from .recurrent import (
     Bidirectional as Bidirectional,
     ConvLSTMCell as ConvLSTMCell,
     GRUCell as GRUCell,
+    MGUCell as MGUCell,
     LSTMCell as LSTMCell,
     OptimizedLSTMCell as OptimizedLSTMCell,
     RNNCellBase as RNNCellBase,
