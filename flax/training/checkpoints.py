@@ -620,6 +620,7 @@ def save_checkpoint(
   Returns:
     Filename of saved checkpoint.
   """
+  jax.monitoring.record_event('/jax/flax/checkpoint/save')
   start_time = time.time()
   # Make sure all saves are finished before the logic of checking and removing
   # outdated checkpoints happens.
@@ -770,6 +771,7 @@ def save_checkpoint_multiprocess(
   Returns:
     Filename of saved checkpoint.
   """
+  jax.monitoring.record_event('/jax/flax/checkpoint/save')
   start_time = time.time()
   # Make sure all saves are finished before the logic of checking and removing
   # outdated checkpoints happens.
@@ -1022,6 +1024,7 @@ def restore_checkpoint(
     returned. This is to match the behavior of the case where a directory path
     is specified but the directory has not yet been created.
   """
+  jax.monitoring.record_event('/jax/flax/checkpoint/restore')
   start_time = time.time()
   # Make sure any previous work is done before checking files.
   if orbax_checkpointer and isinstance(
