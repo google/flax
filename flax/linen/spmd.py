@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Utilities for working with pjit and partitioned models.
+"""Utilities for working with jit and partitioned models.
 
 This module introduces `axis_rules`, `logical_to_mesh_axes`,
-`logical_to_mesh`, `with_logical_constraint` for appyling pjit
-sharding constraints in terms of "logical named axes" rather than
-pjit's default mesh axes.
+`logical_to_mesh`, `with_logical_constraint` for appyling jit sharding
+constraints in terms of "logical named axes" rather than jit's default mesh
+axes.
 
 Additionally the `LogicallyPartitioned` metadata wrapper is defined as
 well as the initializer function wrapper `with_logical_partitioning` for
@@ -206,7 +206,7 @@ def logical_to_mesh_sharding(
 
 
 def _global_mesh_defined() -> bool:
-  """Checks if global xmap/pjit mesh resource environment is defined."""
+  """Checks if global xmap/jit mesh resource environment is defined."""
   maps_env = maps.thread_resources.env
   return maps_env.physical_mesh.devices.shape != ()  # pylint: disable=g-explicit-bool-comparison
 
@@ -224,7 +224,7 @@ def _with_sharding_constraint(
     axis_resources: Optional[jax.sharding.PartitionSpec],
     mesh: Optional[jax.sharding.Mesh] = None,
 ):
-  """Wrapper for lax.with_sharding_constraint, no-op on cpu or outside pjit."""
+  """Wrapper for lax.with_sharding_constraint, no-op on cpu or outside jit."""
   if jax.devices()[0].platform == 'cpu' or (
       not _global_mesh_defined() and mesh is None
   ):
@@ -274,7 +274,7 @@ def with_logical_constraint(
     mesh: Optional[jax.sharding.Mesh] = None,
     fallback: RulesFallback = RulesFallback.AXIS_IS_UNSHARDED,
 ):
-  """Version of pjit's with_sharding_constraint that uses logical axis names."""
+  """Version of jit's with_sharding_constraint that uses logical axis names."""
   # If no axis binding is set, this is a no-op.
   if rules is None:
     rules = _axis_rules.rules
