@@ -16,9 +16,13 @@
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 from absl.testing import absltest
 =======
 >>>>>>> 67eaa395 (added import sorting rule to pre-commit hook)
+=======
+from absl.testing import absltest
+>>>>>>> 96b5c1f5 (fully deprecated old RNN api)
 import jax
 import jax.numpy as jnp
 import numpy as np
