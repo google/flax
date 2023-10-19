@@ -15,7 +15,7 @@
 """Recurrent tests."""
 
 
-from absl.testing import absltest, parameterized
+from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -509,29 +509,6 @@ class BidirectionalTest(absltest.TestCase):
         jax.tree_map(jnp.shape, carry_backward),
         ((batch_size, channels_out), (batch_size, channels_out)),
     )
-
-
-class TestRecurrentDeprecation(parameterized.TestCase):
-
-  @parameterized.product(
-      cell_type=[nn.LSTMCell, nn.GRUCell, nn.OptimizedLSTMCell]
-  )
-  def test_constructor(self, cell_type):
-    with self.assertRaisesRegex(TypeError, 'The RNNCellBase API has changed'):
-      cell_type()
-
-  @parameterized.product(
-      cell_type=[nn.LSTMCell, nn.GRUCell, nn.OptimizedLSTMCell]
-  )
-  def test_initialize_carry(self, cell_type):
-    key = jax.random.key(0)
-    with self.assertRaisesRegex(TypeError, 'The RNNCellBase API has changed'):
-      cell_type.initialize_carry(key, (2,), 3)
-
-  def test_rnn(self):
-    cell = nn.LSTMCell(3)
-    with self.assertRaisesRegex(TypeError, 'The RNNCellBase API has changed'):
-      nn.RNN(cell, cell_size=8)
 
 
 if __name__ == '__main__':
