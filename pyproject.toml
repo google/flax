@@ -155,6 +155,8 @@ filterwarnings = [
     "ignore:.*the function signature of MultiHeadDotProductAttention's `__call__` method has changed.*:DeprecationWarning",
     # DeprecationWarning: ml_dtypes.float8_e4m3b11 is deprecated.
     "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: jax.core.Shape is deprecated. Use Shape = Sequence[int | Any].  (chex, recheck by Nov 2023)
+    "ignore:.*jax.core.Shape is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
