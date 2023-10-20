@@ -954,9 +954,7 @@ class Scope:
     """
     self.reserve(name, 'params')
     if self.has_variable('params', name):
-      abs_rng = jax.ShapeDtypeStruct(
-          random.default_prng_impl().key_shape, jnp.uint32
-      )
+      abs_rng = jax.eval_shape(lambda s: random.key_data(random.key(s)), 0)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
@@ -1201,10 +1199,10 @@ def _is_valid_rng(rng: Array):
       return rng.shape == ()
 
   # Handle old-style raw PRNG keys
-  if (
-      rng.shape != random.default_prng_impl().key_shape
-      or rng.dtype != jnp.uint32
-  ):
+  expected_rng = jax.eval_shape(
+      lambda s: jax.random.key_data(jax.random.key(s)), 0
+  )
+  if (rng.shape, rng.dtype) != (expected_rng.shape, expected_rng.dtype):
     return False
   return True
 
