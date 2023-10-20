@@ -954,9 +954,8 @@ class Scope:
     """
     self.reserve(name, 'params')
     if self.has_variable('params', name):
-      abs_rng = jax.ShapeDtypeStruct(
-          random.default_prng_impl().key_shape, jnp.uint32
-      )
+      # The seed is irrelevant since we only want to evaluate the shape.
+      abs_rng = random.key(0)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
