@@ -81,4 +81,4 @@ Reasons to prefer using ``setup``:
 
 
 
-.. _`Linen`: https://jax.readthedocs.io/en/latest/notebooks/thinking_in_jax.html#JIT-mechanics:-tracing-and-static-variables
+.. _`Linen`: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/index.html
