@@ -133,6 +133,7 @@ myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
     'getting_started.ipynb',  # <-- times out
     'optax_update_guide.ipynb',  # <-- requires flax<=0.5.3
+    'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False
