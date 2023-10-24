@@ -32,8 +32,13 @@ Array = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Axes = Union[int, Sequence[int]]
+
+field = dataclasses.field
+canonicalize_dtype = dtypes.canonicalize_dtype
 compact = module.compact
 Module = module.Module
+merge_param = module.merge_param
+map_variables = transforms.map_variables
 
 
 def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
