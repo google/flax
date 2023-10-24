@@ -266,6 +266,8 @@ while ``torch.nn.ConvTranspose2d`` computes a gradient based transposed convolut
 implementation of a gradient based transposed convolution is ``Jax``. However, there is a pending `pull request`_
 that contains an implementation.
 
+To load ``torch.nn.ConvTranspose2d`` parameters into Flax, we need
+
 .. _`pull request`: https://github.com/google/jax/pull/5772
 
 .. |nn.ConvTranspose| replace:: ``nn.ConvTranspose``
