@@ -1,6 +1,3 @@
-.. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/orbax_upgrade_guide.ipynb
-
 Migrate checkpointing to Orbax
 ==============================
 
@@ -180,7 +177,7 @@ To make your checkpoint-saving asynchronous, substitute ``orbax.checkpoint.Check
 
 Then, you can call ``orbax.checkpoint.AsyncCheckpointer.wait_until_finished()`` or Orbax's ``CheckpointerManager.wait_until_finished()`` to wait for the save the complete.
 
-For more details, read the `checkpoint guide <https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#asynchronized-checkpointing>`_.
+For more details, read the `checkpoint guide <https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#asynchronized-checkpointing>`_.
 
 
 Saving/loading a single JAX or NumPy Array

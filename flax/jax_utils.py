@@ -268,7 +268,7 @@ def pad_shard_unpad(
     this size per device. This can be useful to avoid recompiles for the last
     batch and reduce memory fragmentation.
 
-    For more information refer to https://flax.readthedocs.io/en/latest/guides/full_eval.html
+    For more information refer to https://flax.readthedocs.io/en/latest/guides/data_preprocessing/full_eval.html
   """
 
   def pad_shard_unpad_wrapper(*args, min_device_batch=None, **kw):

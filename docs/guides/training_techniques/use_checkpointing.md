@@ -32,13 +32,13 @@ After July 30 2023, Flax's legacy `flax.training.checkpoints` API will be deprec
 
 *  **If you have legacy `flax.training.checkpoints` code in your project**: Consider the following options:
 
-   * **Migrating your code to Orbax (Recommended)**: Migrate your API calls to `orbax.checkpoint` API by following this [migration guide](https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html).
+   * **Migrating your code to Orbax (Recommended)**: Migrate your API calls to `orbax.checkpoint` API by following this [migration guide](https://flax.readthedocs.io/en/latest/guides/converting_and_upgrading/orbax_upgrade_guide.html).
 
    * **Automatically use the Orbax backend**: Add `flax.config.update('flax_use_orbax_checkpointing', True)` to your project, which will let your `flax.training.checkpoints` calls automatically use the Orbax backend to save your checkpoints.
      
      * **Scheduled flip**: This will become the default mode after **May 2023** (tentative date).
 
-     * Visit [Orbax-as-backend troubleshooting section](https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#orbax-as-backend-troubleshooting) if you meet any issue in the automatic migration.
+     * Visit [Orbax-as-backend troubleshooting section](https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#orbax-as-backend-troubleshooting) if you meet any issue in the automatic migration.
 ---
 
 For backward-compatibility, this guide shows the Orbax-equivalent calls in the Flax legacy `flax.training.checkpoints` API.
@@ -251,7 +251,7 @@ During your development, your checkpoint structure will change when changing the
 
 This section explains how to load old data to your new code.
 
-Below is  a simple example — a `CustomTrainState` extended from `flax.training.train_state.TrainState` that contains an extra field called `batch_stats`. When working on a real-world model, you may need this when applying [batch normalization](https://flax.readthedocs.io/en/latest/guides/batch_norm.html).
+Below is  a simple example — a `CustomTrainState` extended from `flax.training.train_state.TrainState` that contains an extra field called `batch_stats`. When working on a real-world model, you may need this when applying [batch normalization](https://flax.readthedocs.io/en/latest/guides/training_techniques/batch_norm.html).
 
 Here, you store the new `CustomTrainState` as step 5, while step 4 contains the old/previous `TrainState`.
 <!-- #endregion -->
@@ -513,6 +513,6 @@ Orbax uses `orbax.checkpoint.PyTreeCheckpointHandler` to save checkpoints, which
 
 If you want to save singular arrays or numbers, you have two options:
 
-1. Use `orbax.ArrayCheckpointHandler` to save them following [this migration section](https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html#saving-loading-a-single-jax-or-numpy-array).
+1. Use `orbax.ArrayCheckpointHandler` to save them following [this migration section](https://flax.readthedocs.io/en/latest/guides/converting_and_upgrading/orbax_upgrade_guide.html#saving-loading-a-single-jax-or-numpy-array).
 
 1. Wrap it inside a pytree and save as usual.

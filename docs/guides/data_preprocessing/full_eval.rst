@@ -1,6 +1,3 @@
-.. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/full_eval.ipynb
-
 Processing the entire Dataset
 =============================
 
@@ -189,9 +186,3 @@ on each of the hosts independently, and continuing processing examples until
     preds = get_preds(vs, batch['image']).argmax(axis=-1)
     total += n
     correct += count_correct_p(batch['label'], preds, batch['mask'])[0]
-
-As for the other examples in this HOWTO, the complete executable code can be
-found in the Colab:
-
-.. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/full_eval.ipynb
