@@ -14,13 +14,13 @@
 
 """Normalization modules for Flax."""
 
+import dataclasses
 import functools
-from dataclasses import field
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
 
-from flax.linen.dtypes import canonicalize_dtype
-from flax.linen.module import Module, compact, merge_param  # pylint: disable=g-multiple-import
-from flax.linen.transforms import map_variables
+from flax.linen import dtypes
+from flax.linen import module
+from flax.linen import transforms
 import jax
 from jax import lax
 from jax.nn import initializers
@@ -32,6 +32,8 @@ Array = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Axes = Union[int, Sequence[int]]
+compact = module.compact
+Module = module.Module
 
 
 def _canonicalize_axes(rank: int, axes: Axes) -> Tuple[int, ...]:
@@ -57,6 +59,7 @@ def _compute_stats(
     axis_index_groups: Any = None,
     use_mean: bool = True,
     use_fast_variance: bool = True,
+    mask: Optional[Array] = None,
 ):
   """Computes mean and variance statistics.
 
@@ -82,6 +85,8 @@ def _compute_stats(
       variance without subtracting the mean.
     use_fast_variance: If true, use a faster, but less numerically stable,
       calculation for the variance.
+    mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+      the positions for which the mean and variance should be computed.
 
   Returns:
     A pair ``(mean, var)``.
@@ -94,8 +99,8 @@ def _compute_stats(
   x = jnp.asarray(x, dtype)
   axes = _canonicalize_axes(x.ndim, axes)
 
-  def maybe_distributed_mean(*xs):
-    mus = tuple(x.mean(axes) for x in xs)
+  def maybe_distributed_mean(*xs, mask=None):
+    mus = tuple(x.mean(axes, where=mask) for x in xs)
     if axis_name is None:
       return mus if len(xs) > 1 else mus[0]
     else:
@@ -112,15 +117,17 @@ def _compute_stats(
 
   if use_mean:
     if use_fast_variance:
-      mu, mu2 = maybe_distributed_mean(x, _abs_sq(x))
+      mu, mu2 = maybe_distributed_mean(x, _abs_sq(x), mask=mask)
       # mean2 - _abs_sq(mean) is not guaranteed to be non-negative due
       # to floating point round-off errors.
       var = jnp.maximum(0.0, mu2 - _abs_sq(mu))
     else:
-      mu = maybe_distributed_mean(x)
-      var = maybe_distributed_mean(_abs_sq(x - jnp.expand_dims(mu, axes)))
+      mu = maybe_distributed_mean(x, mask=mask)
+      var = maybe_distributed_mean(
+          _abs_sq(x - jnp.expand_dims(mu, axes)), mask=mask
+      )
   else:
-    var = maybe_distributed_mean(_abs_sq(x))
+    var = maybe_distributed_mean(_abs_sq(x), mask=mask)
     mu = jnp.zeros_like(var)
   return mu, var
 
@@ -188,7 +195,7 @@ def _normalize(
     ).reshape(feature_shape)
     y += bias
     args.append(bias)
-  dtype = canonicalize_dtype(*args, dtype=dtype)
+  dtype = dtypes.canonicalize_dtype(*args, dtype=dtype)
   return jnp.asarray(y, dtype)
 
 
@@ -281,7 +288,7 @@ class BatchNorm(Module):
   use_fast_variance: bool = True
 
   @compact
-  def __call__(self, x, use_running_average: Optional[bool] = None):
+  def __call__(self, x, use_running_average: Optional[bool] = None, mask=None):
     """Normalizes the input using batch statistics.
 
     NOTE:
@@ -295,12 +302,14 @@ class BatchNorm(Module):
       x: the input to be normalized.
       use_running_average: if true, the statistics stored in batch_stats will be
         used instead of computing the batch statistics on the input.
+      mask: Binary array of shape broadcastable to `inputs` tensor, indicating
+        the positions for which the mean and variance should be computed.
 
     Returns:
       Normalized inputs (the same shape as inputs).
     """
 
-    use_running_average = merge_param(
+    use_running_average = module.merge_param(
         'use_running_average', self.use_running_average, use_running_average
     )
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
@@ -327,6 +336,7 @@ class BatchNorm(Module):
           axis_name=self.axis_name if not self.is_initializing() else None,
           axis_index_groups=self.axis_index_groups,
           use_fast_variance=self.use_fast_variance,
+          mask=mask,
       )
 
       if not self.is_initializing():
@@ -644,8 +654,9 @@ class GroupNorm(Module):
 
 
 class SpectralNorm(Module):
-  """Spectral normalization. See:
+  """Spectral normalization.
 
+  See:
   - https://arxiv.org/abs/1802.05957
   - https://arxiv.org/abs/1805.08318
   - https://arxiv.org/abs/1809.11096
@@ -742,10 +753,10 @@ class SpectralNorm(Module):
     Args:
       *args: positional arguments to be passed into the call method of the
         underlying layer instance in ``self.layer_instance``.
-      update_stats: if True, update the internal ``u`` vector and ``sigma`` value
-        after computing their updated values using power iteration. This will help
-        the power iteration method approximate the true singular value more
-        accurately over time.
+      update_stats: if True, update the internal ``u`` vector and ``sigma``
+        value after computing their updated values using power iteration. This
+        will help the power iteration method approximate the true singular value
+        more accurately over time.
       **kwargs: keyword arguments to be passed into the call method of the
         underlying layer instance in ``self.layer_instance``.
 
@@ -756,7 +767,7 @@ class SpectralNorm(Module):
     def layer_forward(layer_instance):
       return layer_instance(*args, **kwargs)
 
-    return map_variables(
+    return transforms.map_variables(
         layer_forward,
         trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
             functools.partial(
@@ -786,7 +797,8 @@ class SpectralNorm(Module):
     value = jnp.asarray(vs)
     value_shape = value.shape
 
-    # Skip and return value if input is scalar, vector or if number of power iterations is less than 1
+    # Skip and return value if input is scalar, vector or if number of power
+    # iterations is less than 1
     if value.ndim <= 1 or self.n_steps < 1:
       return value
     # Handle higher-order tensors.
@@ -844,8 +856,9 @@ class SpectralNorm(Module):
       u_var.value = u0
       sigma_var.value = sigma
 
-    dtype = canonicalize_dtype(vs, u0, v0, sigma, dtype=self.dtype)
+    dtype = dtypes.canonicalize_dtype(vs, u0, v0, sigma, dtype=self.dtype)
     return jnp.asarray(value_bar, dtype)
+
 
 class WeightNorm(Module):
   """L2 weight normalization (https://arxiv.org/pdf/1602.07868.pdf).
@@ -878,7 +891,8 @@ class WeightNorm(Module):
         # l2-normalize all params of the second Dense layer
         x = nn.WeightNorm(nn.Dense(4), variable_filter=None)(x)
         x = nn.Dense(5)(x)
-        # l2-normalize all kernels in the Bar submodule and all params in the Baz submodule
+        # l2-normalize all kernels in the Bar submodule and all params in the
+        # Baz submodule
         x = nn.WeightNorm(Bar(), variable_filter={'kernel', 'Baz'})(x)
         return x
 
@@ -923,10 +937,10 @@ class WeightNorm(Module):
       default, the trailing dimension is treated as the feature axis.
     variable_filter: An optional iterable that contains string items. The
       WeightNorm layer will selectively apply l2-normalization to the
-      ``layer_instance`` variables whose key path (delimited by '/') has a
-      match with ``variable_filter``. For example, ``variable_filter={'kernel'}``
-      will only apply l2-normalization to variables whose key path contains
-      'kernel'. By default, ``variable_filter={'kernel'}``.
+      ``layer_instance`` variables whose key path (delimited by '/') has a match
+      with ``variable_filter``. For example, ``variable_filter={'kernel'}`` will
+      only apply l2-normalization to variables whose key path contains 'kernel'.
+      By default, ``variable_filter={'kernel'}``.
   """
 
   layer_instance: Module
@@ -936,7 +950,9 @@ class WeightNorm(Module):
   use_scale: bool = True
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
   feature_axes: Optional[Axes] = -1
-  variable_filter: Optional[Iterable] = field(default_factory=lambda: {'kernel'})
+  variable_filter: Optional[Iterable] = dataclasses.field(
+      default_factory=lambda: {'kernel'}
+  )
 
   @compact
   def __call__(self, *args, **kwargs):
@@ -957,11 +973,11 @@ class WeightNorm(Module):
     def layer_forward(layer_instance):
       return layer_instance(*args, **kwargs)
 
-    return map_variables(
+    return transforms.map_variables(
         layer_forward,
         trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
-          self._l2_normalize,
-          vs,
+            self._l2_normalize,
+            vs,
         ),
         init=self.is_initializing(),
     )(self.layer_instance)
@@ -977,7 +993,11 @@ class WeightNorm(Module):
       vs: variables to be l2-normalized
     """
     value = jnp.asarray(vs)
-    str_path = self.layer_instance.name + '/' + '/'.join((dict_key.key for dict_key in path[1:]))
+    str_path = (
+        self.layer_instance.name
+        + '/'
+        + '/'.join((dict_key.key for dict_key in path[1:]))
+    )
     if self.variable_filter:
       for variable_name in self.variable_filter:
         if variable_name in str_path:
@@ -990,7 +1010,9 @@ class WeightNorm(Module):
       reduction_axes = tuple(i for i in range(value.ndim))
     else:
       feature_axes = _canonicalize_axes(value.ndim, self.feature_axes)
-      reduction_axes = tuple(i for i in range(value.ndim) if i not in feature_axes)
+      reduction_axes = tuple(
+          i for i in range(value.ndim) if i not in feature_axes
+      )
 
     feature_shape = [1] * value.ndim
     reduced_feature_shape = []
@@ -1003,10 +1025,13 @@ class WeightNorm(Module):
     args = [vs]
     if self.use_scale:
       scale = self.param(
-        str_path + '/scale', self.scale_init, reduced_feature_shape, self.param_dtype
+          str_path + '/scale',
+          self.scale_init,
+          reduced_feature_shape,
+          self.param_dtype,
       ).reshape(feature_shape)
       value_bar *= scale
       args.append(scale)
 
-    dtype = canonicalize_dtype(*args, dtype=self.dtype)
+    dtype = dtypes.canonicalize_dtype(*args, dtype=self.dtype)
     return jnp.asarray(value_bar, dtype)
