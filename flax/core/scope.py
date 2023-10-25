@@ -954,14 +954,13 @@ class Scope:
     """
     self.reserve(name, 'params')
     if self.has_variable('params', name):
-      abs_rng = jax.eval_shape(lambda s: random.key_data(random.key(s)), 0)
       value = self.get_variable('params', name)
       # Validate that the shape of the init_fn output is the same as the shape
       # of the existing parameter. This is to make sure that the hparams set up
       # in a Flax Module match the shapes coming in during apply, and if not,
       # catch it with an error message.
       # NOTE: We could consider moving this to `self.`
-      abs_value = jax.eval_shape(lambda rng: init_fn(rng, *init_args), abs_rng)
+      abs_value = jax.eval_shape(lambda: init_fn(random.key(0), *init_args))
       abs_value_flat = jax.tree_util.tree_leaves(abs_value)
       value_flat = jax.tree_util.tree_leaves(value)
       for val, abs_val in zip(value_flat, abs_value_flat):

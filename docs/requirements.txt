@@ -32,4 +32,3 @@ tensorflow_text>=2.11.0 # WMT example
 
 # notebooks
 einops
-transformers[flax]

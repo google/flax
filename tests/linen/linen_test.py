@@ -15,18 +15,19 @@
 """Tests for flax.linen."""
 
 import copy
-from absl.testing import absltest, parameterized
 from typing import Any
 
+from absl.testing import absltest
+from absl.testing import parameterized
 from flax import ids
 from flax import linen as nn
 from flax.training import train_state
-
 import jax
 from jax import random
 import jax.numpy as jnp
-import optax
 import numpy as np
+import optax
+
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -77,25 +78,6 @@ class PoolTest(parameterized.TestCase):
         [0.25, 0.5, 0.25],
     ]).reshape((3, 3, 1))
     np.testing.assert_allclose(y_grad, expected_grad)
-
-  @parameterized.parameters(
-      {'count_include_pad': True}, {'count_include_pad': False}
-  )
-  def test_avg_pool_padding_same(self, count_include_pad):
-    x = jnp.array([1.0, 2.0, 3.0, 4.0]).reshape((1, 2, 2, 1))
-    pool = lambda x: nn.avg_pool(
-        x, (2, 2), padding='SAME', count_include_pad=count_include_pad
-    )
-    y = pool(x)
-    if count_include_pad:
-      expected_y = jnp.array([10.0 / 4, 6.0 / 4, 7.0 / 4, 4.0 / 4]).reshape(
-          (1, 2, 2, 1)
-      )
-    else:
-      expected_y = jnp.array([10.0 / 4, 6.0 / 2, 7.0 / 2, 4.0 / 1]).reshape(
-          (1, 2, 2, 1)
-      )
-    np.testing.assert_allclose(y, expected_y)
 
   def test_max_pool(self):
     x = jnp.arange(9).reshape((1, 3, 3, 1)).astype(jnp.float32)
@@ -148,51 +130,74 @@ class PoolTest(parameterized.TestCase):
 
 class NormalizationTest(parameterized.TestCase):
 
-  def test_batch_norm(self):
+  @parameterized.parameters({'test_mask': True}, {'test_mask': False})
+  def test_batch_norm(self, test_mask):
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    key1, key2, key3 = random.split(rng, 3)
     x = random.normal(key1, (4, 3, 2))
+    if test_mask:
+      m = random.randint(
+          key2, (4, 3, 1), minval=0, maxval=2, dtype=jnp.int32
+      ).astype(jnp.bool_)
+      x = jnp.where(m, x, jnp.ones_like(x) * jnp.nan)
+    else:
+      m = None
     model_cls = nn.BatchNorm(momentum=0.9, use_running_average=False)
-    y, initial_params = model_cls.init_with_output(key2, x)
+    y, initial_params = model_cls.init_with_output(key3, x, mask=m)
 
-    mean = y.mean((0, 1))
-    var = y.var((0, 1))
+    mean = y.mean((0, 1), where=m)
+    var = y.var((0, 1), where=m)
     np.testing.assert_allclose(mean, np.array([0.0, 0.0]), atol=1e-4)
     np.testing.assert_allclose(var, np.array([1.0, 1.0]), rtol=1e-4)
-
-    y, vars_out = model_cls.apply(initial_params, x, mutable=['batch_stats'])
+    _, vars_out = model_cls.apply(
+        initial_params, x, mutable=['batch_stats'], mask=m
+    )
 
     ema = vars_out['batch_stats']
     np.testing.assert_allclose(
-        ema['mean'], 0.1 * x.mean((0, 1), keepdims=False), atol=1e-4
+        ema['mean'], 0.1 * x.mean((0, 1), keepdims=False, where=m), atol=1e-4
     )
     np.testing.assert_allclose(
-        ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=False), rtol=1e-4
+        ema['var'],
+        0.9 + 0.1 * x.var((0, 1), keepdims=False, where=m),
+        rtol=1e-4,
     )
 
-  def test_batch_norm_complex(self):
+  @parameterized.parameters({'test_mask': True}, {'test_mask': False})
+  def test_batch_norm_complex(self, test_mask):
     rng = random.key(0)
-    key1, key2 = random.split(rng)
+    key1, key2, key3 = random.split(rng, 3)
     x = random.normal(key1, (4, 3, 2), dtype=jnp.complex64)
+    if test_mask:
+      m = random.randint(
+          key2, (4, 3, 1), minval=0, maxval=2, dtype=jnp.int32
+      ).astype(jnp.bool_)
+      x = jnp.where(m, x, jnp.ones_like(x) * jnp.nan)
+    else:
+      m = None
     model_cls = nn.BatchNorm(
         momentum=0.9, use_running_average=False, dtype=jnp.complex64
     )
-    y, initial_params = model_cls.init_with_output(key2, x)
+    y, initial_params = model_cls.init_with_output(key3, x, mask=m)
 
-    mean = y.mean((0, 1))
-    var = y.var((0, 1))
+    mean = y.mean((0, 1), where=m)
+    var = y.var((0, 1), where=m)
     np.testing.assert_allclose(mean, np.array([0.0, 0.0]), atol=1e-4)
     np.testing.assert_allclose(var, np.array([1.0, 1.0]), rtol=1e-4)
     self.assertEqual(mean.dtype, jnp.complex64)
 
-    y, vars_out = model_cls.apply(initial_params, x, mutable=['batch_stats'])
+    _, vars_out = model_cls.apply(
+        initial_params, x, mutable=['batch_stats'], mask=m
+    )
 
     ema = vars_out['batch_stats']
     np.testing.assert_allclose(
-        ema['mean'], 0.1 * x.mean((0, 1), keepdims=False), atol=1e-4
+        ema['mean'], 0.1 * x.mean((0, 1), keepdims=False, where=m), atol=1e-4
     )
     np.testing.assert_allclose(
-        ema['var'], 0.9 + 0.1 * x.var((0, 1), keepdims=False), rtol=1e-4
+        ema['var'],
+        0.9 + 0.1 * x.var((0, 1), keepdims=False, where=m),
+        rtol=1e-4,
     )
 
   @parameterized.parameters(
@@ -292,26 +297,37 @@ class NormalizationTest(parameterized.TestCase):
     key = random.key(0)
     model = Foo()
     x = random.normal(random.key(1), (2, 4))
-    (y1, y2), variables = model.init_with_output(key, x)
+    (y1, y2), _ = model.init_with_output(key, x)
     np.testing.assert_allclose(y1, y2, rtol=1e-4)
 
   @parameterized.parameters(
-      {'model_index': 0, 'key_paths': {'Dense_1/kernel/u', 'Dense_1/kernel/sigma'}},
-      {'model_index': 1, 'key_paths': {'Conv_0/kernel/u', 'Conv_0/kernel/sigma'}},
-      {'model_index': 2, 'key_paths': {'MultiHeadDotProductAttention_0/key/bias/u',
-                                       'MultiHeadDotProductAttention_0/key/kernel/u',
-                                       'MultiHeadDotProductAttention_0/out/kernel/u',
-                                       'MultiHeadDotProductAttention_0/query/bias/u',
-                                       'MultiHeadDotProductAttention_0/query/kernel/u',
-                                       'MultiHeadDotProductAttention_0/value/bias/u',
-                                       'MultiHeadDotProductAttention_0/value/kernel/u',
-                                       'MultiHeadDotProductAttention_0/key/bias/sigma',
-                                       'MultiHeadDotProductAttention_0/key/kernel/sigma',
-                                       'MultiHeadDotProductAttention_0/out/kernel/sigma',
-                                       'MultiHeadDotProductAttention_0/query/bias/sigma',
-                                       'MultiHeadDotProductAttention_0/query/kernel/sigma',
-                                       'MultiHeadDotProductAttention_0/value/bias/sigma',
-                                       'MultiHeadDotProductAttention_0/value/kernel/sigma'}}
+      {
+          'model_index': 0,
+          'key_paths': {'Dense_1/kernel/u', 'Dense_1/kernel/sigma'},
+      },
+      {
+          'model_index': 1,
+          'key_paths': {'Conv_0/kernel/u', 'Conv_0/kernel/sigma'},
+      },
+      {
+          'model_index': 2,
+          'key_paths': {
+              'MultiHeadDotProductAttention_0/key/bias/u',
+              'MultiHeadDotProductAttention_0/key/kernel/u',
+              'MultiHeadDotProductAttention_0/out/kernel/u',
+              'MultiHeadDotProductAttention_0/query/bias/u',
+              'MultiHeadDotProductAttention_0/query/kernel/u',
+              'MultiHeadDotProductAttention_0/value/bias/u',
+              'MultiHeadDotProductAttention_0/value/kernel/u',
+              'MultiHeadDotProductAttention_0/key/bias/sigma',
+              'MultiHeadDotProductAttention_0/key/kernel/sigma',
+              'MultiHeadDotProductAttention_0/out/kernel/sigma',
+              'MultiHeadDotProductAttention_0/query/bias/sigma',
+              'MultiHeadDotProductAttention_0/query/kernel/sigma',
+              'MultiHeadDotProductAttention_0/value/bias/sigma',
+              'MultiHeadDotProductAttention_0/value/kernel/sigma',
+          },
+      },
   )
   def test_spectral_norm_train(
       self, model_index, key_paths
@@ -323,6 +339,7 @@ class NormalizationTest(parameterized.TestCase):
         x = nn.SpectralNorm(nn.Dense(6))(x, update_stats=train)
         x = nn.Dense(4)(x)
         return x
+
     class FooConv(nn.Module):
       @nn.compact
       def __call__(self, x, train):
@@ -334,6 +351,7 @@ class NormalizationTest(parameterized.TestCase):
         x = x.reshape(1, -1)
         x = nn.Dense(4)(x)
         return x
+
     class FooAttention(nn.Module):
       @nn.compact
       def __call__(self, x, train):
@@ -387,7 +405,7 @@ class NormalizationTest(parameterized.TestCase):
     prev_loss = float('inf')
     for _ in range(10):
       state, loss = train_step(state, {'image': x, 'label': y})
-      self.assertTrue(loss < prev_loss)
+      self.assertLess(loss, prev_loss)
       prev_loss = loss
 
   @parameterized.parameters(
@@ -411,7 +429,7 @@ class NormalizationTest(parameterized.TestCase):
     variables = model_cls.init(random.PRNGKey(0), x, train=False)
     params, batch_stats = variables['params'], variables['batch_stats']
     params = jax.tree_map(lambda x: 4 * jnp.eye(*x.shape), params)
-    logits, updates = model_cls.apply(
+    _, updates = model_cls.apply(
         {'params': params, 'batch_stats': batch_stats},
         x=x,
         train=update_stats,
@@ -445,26 +463,42 @@ class NormalizationTest(parameterized.TestCase):
       with self.assertRaisesRegex(
           ValueError, 'Input is 3D but error_on_non_matrix is True'
       ):
-        variables = model_cls.init(random.PRNGKey(0), x, train=False)
+        _ = model_cls.init(random.PRNGKey(0), x, train=False)
     else:
-      variables = model_cls.init(random.PRNGKey(0), x, train=False)
+      _ = model_cls.init(random.PRNGKey(0), x, train=False)
 
   @parameterized.parameters(
       {'feature_axes': -1, 'reduction_axes': 0, 'variable_filter': {'kernel'}},
       {'feature_axes': 0, 'reduction_axes': 1, 'variable_filter': {'kernel'}},
-      {'feature_axes': (0, 1), 'reduction_axes': (), 'variable_filter': {'kernel'}},
-      {'feature_axes': (), 'reduction_axes': (0, 1), 'variable_filter': {'kernel'}},
-      {'feature_axes': None, 'reduction_axes': (0, 1), 'variable_filter': {'kernel'}},
+      {
+          'feature_axes': (0, 1),
+          'reduction_axes': (),
+          'variable_filter': {'kernel'},
+      },
+      {
+          'feature_axes': (),
+          'reduction_axes': (0, 1),
+          'variable_filter': {'kernel'},
+      },
+      {
+          'feature_axes': None,
+          'reduction_axes': (0, 1),
+          'variable_filter': {'kernel'},
+      },
       {'feature_axes': 0, 'reduction_axes': (), 'variable_filter': {'bias'}},
-      {'feature_axes': (), 'reduction_axes': -1, 'variable_filter': {'bias'}}
+      {'feature_axes': (), 'reduction_axes': -1, 'variable_filter': {'bias'}},
   )
-  def test_manual_weight_norm(self, feature_axes, reduction_axes, variable_filter):
+  def test_manual_weight_norm(
+      self, feature_axes, reduction_axes, variable_filter
+  ):
     class Foo(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         return nn.WeightNorm(nn.Dense(2, bias_init=nn.initializers.normal()),
                              feature_axes=feature_axes,
                              variable_filter=variable_filter)(x)
+
     key1, key2 = jax.random.split(jax.random.key(1))
     x = jax.random.normal(key1, (1, 3))
     module = Foo()
@@ -474,17 +508,26 @@ class NormalizationTest(parameterized.TestCase):
 
     kernel = v['params']['Dense_0']['kernel']
     if 'kernel' in variable_filter:
-      kernel /= jnp.sqrt(jnp.sum(kernel**2, axis=reduction_axes, keepdims=True))
-      kernel_scale = jnp.expand_dims(v['params']['WeightNorm_0']['Dense_0/kernel/scale'], axis=reduction_axes)
+      kernel /= jnp.sqrt(
+          jnp.sum(kernel**2, axis=reduction_axes, keepdims=True)
+      )
+      kernel_scale = jnp.expand_dims(
+          v['params']['WeightNorm_0']['Dense_0/kernel/scale'],
+          axis=reduction_axes,
+      )
     else:
       kernel_scale = 1
     bias = v['params']['Dense_0']['bias']
     if 'bias' in variable_filter:
       bias /= jnp.sqrt(jnp.sum(bias**2, axis=reduction_axes, keepdims=True))
-      bias_scale = jnp.expand_dims(v['params']['WeightNorm_0']['Dense_0/bias/scale'], axis=reduction_axes)
+      bias_scale = jnp.expand_dims(
+          v['params']['WeightNorm_0']['Dense_0/bias/scale'], axis=reduction_axes
+      )
     else:
       bias_scale = 1
-    manual_out = jnp.dot(x, kernel_scale * kernel) + (bias_scale * bias).reshape(1, -1)
+    manual_out = jnp.dot(x, kernel_scale * kernel) + (
+        bias_scale * bias
+    ).reshape(1, -1)
 
     self.assertTrue(jnp.allclose(out, manual_out))
 
@@ -513,10 +556,13 @@ class NormalizationTest(parameterized.TestCase):
   )
   def test_weight_norm_variable_filter(self, variable_filters, key_paths):
     class Baz(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         return nn.Dense(2)(x)
+
     class Bar(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         x = Baz()(x)
@@ -526,41 +572,58 @@ class NormalizationTest(parameterized.TestCase):
         return x
 
     for variable_filter in variable_filters:
+
       class Foo(nn.Module):
+
         @nn.compact
         def __call__(self, x):
           return nn.WeightNorm(Bar(), variable_filter=variable_filter)(x)
+
       v = Foo().init(jax.random.key(0), jnp.ones((1, 4)))
       self.assertEqual(key_paths, v['params']['WeightNorm_0'].keys())
 
   @parameterized.parameters(
       {'model_index': 0, 'key_paths': {'Dense_1/kernel/scale'}},
       {'model_index': 1, 'key_paths': {'Conv_0/kernel/scale'}},
-      {'model_index': 2, 'key_paths': {'MultiHeadDotProductAttention_0/key/kernel/scale',
-                                       'MultiHeadDotProductAttention_0/out/kernel/scale',
-                                       'MultiHeadDotProductAttention_0/query/kernel/scale',
-                                       'MultiHeadDotProductAttention_0/value/kernel/scale'}}
+      {
+          'model_index': 2,
+          'key_paths': {
+              'MultiHeadDotProductAttention_0/key/kernel/scale',
+              'MultiHeadDotProductAttention_0/out/kernel/scale',
+              'MultiHeadDotProductAttention_0/query/kernel/scale',
+              'MultiHeadDotProductAttention_0/value/kernel/scale',
+          },
+      },
   )
-  def test_weight_norm_train(
-      self, model_index, key_paths
-  ):
+  def test_weight_norm_train(self, model_index, key_paths):
     class FooDense(nn.Module):
+
       @nn.compact
-      def __call__(self, x,):
+      def __call__(
+          self,
+          x,
+      ):
         x = nn.Dense(8)(x)
         x = nn.WeightNorm(nn.Dense(6))(x)
         x = nn.Dense(4)(x)
         return x
+
     class FooConv(nn.Module):
+
       @nn.compact
-      def __call__(self, x,):
+      def __call__(
+          self,
+          x,
+      ):
         x = nn.Dense(9)(x)
         x = x.reshape((1, 3, 3))
         x = nn.WeightNorm(nn.Conv(2, kernel_size=(2, 2)))(x)
         x = x.reshape(1, -1)
         x = nn.Dense(4)(x)
         return x
+
     class FooAttention(nn.Module):
+
       @nn.compact
       def __call__(self, x):
         a = nn.Dense(4)(x)
@@ -603,7 +666,7 @@ class NormalizationTest(parameterized.TestCase):
     prev_loss = float('inf')
     for _ in range(10):
       state, loss = train_step(state, {'image': x, 'label': y})
-      self.assertTrue(loss < prev_loss)
+      self.assertLess(loss, prev_loss)
       prev_loss = loss
 
 

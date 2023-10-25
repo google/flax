@@ -85,7 +85,7 @@ Convolutions and FC Layers
 We have to be careful, when we have a model that uses convolutions followed by fc layers (ResNet, VGG, etc).
 In PyTorch, the activations will have shape [N, C, H, W] after the convolutions and are then
 reshaped to [N, C * H * W] before being fed to the fc layers.
-When we port our weights from PyToch to Flax, the activations after the convolutions will be of shape [N, H, W, C] in Flax.
+When we port our weights from PyTorch to Flax, the activations after the convolutions will be of shape [N, H, W, C] in Flax.
 Before we reshape the activations for the fc layers, we have to transpose them to [N, C, H, W].
 
 Consider this PyTorch model:
@@ -265,6 +265,40 @@ Transposed Convolutions
 while ``torch.nn.ConvTranspose2d`` computes a gradient based transposed convolution. Currently, there is no
 implementation of a gradient based transposed convolution is ``Jax``. However, there is a pending `pull request`_
 that contains an implementation.
+
+To load ``torch.nn.ConvTranspose2d`` parameters into Flax, we need to use the ``transpose_kernel`` arg in Flax's
+``nn.ConvTranspose`` layer.
+
+.. testcode::
+
+  # padding is inverted
+  torch_padding = 0
+  flax_padding = 1 - torch_padding
+
+  t_conv = torch.nn.ConvTranspose2d(in_channels=3, out_channels=4, kernel_size=2, padding=torch_padding)
+
+  kernel = t_conv.weight.detach().cpu().numpy()
+  bias = t_conv.bias.detach().cpu().numpy()
+
+  # [inC, outC, kH, kW] -> [kH, kW, outC, inC]
+  kernel = jnp.transpose(kernel, (2, 3, 1, 0))
+
+  key = random.key(0)
+  x = random.normal(key, (1, 6, 6, 3))
+
+  variables = {'params': {'kernel': kernel, 'bias': bias}}
+  # ConvTranspose expects the kernel to be [kH, kW, inC, outC],
+  # but with `transpose_kernel=True`, it expects [kH, kW, outC, inC] instead
+  j_conv = nn.ConvTranspose(features=4, kernel_size=(2, 2), padding=flax_padding, transpose_kernel=True)
+  j_out = j_conv.apply(variables, x)
+
+  # [N, H, W, C] -> [N, C, H, W]
+  t_x = torch.from_numpy(np.transpose(np.array(x), (0, 3, 1, 2)))
+  t_out = t_conv(t_x)
+  # [N, C, H, W] -> [N, H, W, C]
+  t_out = np.transpose(t_out.detach().cpu().numpy(), (0, 2, 3, 1))
+  np.testing.assert_almost_equal(j_out, t_out, decimal=6)
+
 
 .. _`pull request`: https://github.com/google/jax/pull/5772
 
