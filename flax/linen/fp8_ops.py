@@ -174,7 +174,7 @@ class Fp8DotGeneralOp(module.Module):
     k_qdq = in_qdq(
         comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
-    y_qdq = lax.dot_general(x_qdq, k_qdq, dimension_numbers, precision)
+    y_qdq = lax.dot_general(x_qdq, k_qdq, dimension_numbers, precision) # type: ignore
     y = out_qdq(
         comp_dtype,
         y_qdq,
@@ -182,5 +182,5 @@ class Fp8DotGeneralOp(module.Module):
         self.output_grad_amax_history.value
     )
 
-    return y
+    return y # type: ignore
 
