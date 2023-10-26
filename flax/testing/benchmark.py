@@ -24,24 +24,24 @@ benchmark.
 """
 
 import functools
-import itertools
 import inspect
+import itertools
 import json
-from typing import Dict
 import os
 import tempfile
-from absl import flags
-from absl import logging
+from typing import Dict
+
+from absl import flags, logging
 from absl.testing import absltest
-
-from flax import io
-
-from tensorboard.backend.event_processing import directory_watcher
-from tensorboard.backend.event_processing import event_file_loader
-from tensorboard.backend.event_processing import io_wrapper
+from tensorboard.backend.event_processing import (
+    directory_watcher,
+    event_file_loader,
+    io_wrapper,
+)
 from tensorboard.summary import v1 as summary_lib
 from tensorboard.util import tensor_util
 
+from flax import io
 
 flags.DEFINE_string(
     'benchmark_output_dir', default=None, help='Benchmark output directory.'

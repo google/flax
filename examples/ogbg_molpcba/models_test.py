@@ -14,13 +14,11 @@
 
 """Tests for flax.examples.ogbg_molpcba.models."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
 import jax
 import jax.numpy as jnp
 import jraph
-
 import models
+from absl.testing import absltest, parameterized
 
 
 class ModelsTest(parameterized.TestCase):

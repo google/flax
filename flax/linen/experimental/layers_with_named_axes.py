@@ -16,15 +16,13 @@
 import dataclasses
 from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
+import jax.numpy as jnp
+from jax import lax
+
 from flax import linen as nn
 from flax.linen import initializers
-from flax.linen.linear import DotGeneralT
-from flax.linen.linear import PrecisionLike
-from flax.linen.partitioning import param_with_axes
-from flax.linen.partitioning import with_sharding_constraint
-from jax import lax
-import jax.numpy as jnp
-
+from flax.linen.linear import DotGeneralT, PrecisionLike
+from flax.linen.partitioning import param_with_axes, with_sharding_constraint
 
 # Type annotations
 IntSequence = Any

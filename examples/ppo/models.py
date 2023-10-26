@@ -14,8 +14,9 @@
 
 """Class and functions to define and initialize the actor-critic model."""
 
-from flax import linen as nn
 import jax.numpy as jnp
+
+from flax import linen as nn
 
 
 class ActorCritic(nn.Module):

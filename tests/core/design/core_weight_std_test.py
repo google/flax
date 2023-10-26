@@ -15,12 +15,12 @@
 from functools import partial
 from typing import Sequence
 
-from flax.core import Scope, Array, init, apply, unfreeze, lift, nn
-
-from absl.testing import absltest
-
 import jax
-from jax import random, numpy as jnp
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax.core import Array, Scope, apply, init, lift, nn, unfreeze
 
 
 def weight_std(fn, kernel_name='kernel', eps=1e-8):

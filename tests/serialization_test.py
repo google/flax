@@ -14,26 +14,24 @@
 
 """Tests for flax.struct and flax.serialization."""
 
-import platform
 import collections
-from typing import NamedTuple, Any
-import pytest
+import platform
+from typing import Any, NamedTuple
 
-from absl.testing import absltest
-from absl.testing import parameterized
-from flax import linen as nn
-from flax import serialization
-from flax import struct
-from flax.core import freeze
-from flax.training import train_state
 import jax
-from jax import random
-from jax.tree_util import Partial
 import jax.numpy as jnp
 import msgpack
 import numpy as np
 import optax
+import pytest
+from absl.testing import absltest, parameterized
+from jax import random
+from jax.tree_util import Partial
 
+from flax import linen as nn
+from flax import serialization, struct
+from flax.core import freeze
+from flax.training import train_state
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

@@ -22,26 +22,21 @@ import functools
 import time
 from typing import Any
 
-from absl import logging
-from clu import metric_writers
-from clu import periodic_actions
-from flax import jax_utils
-from flax.training import checkpoints
-from flax.training import common_utils
-from flax.training import dynamic_scale as dynamic_scale_lib
-from flax.training import train_state
+import input_pipeline
 import jax
-from jax import lax
 import jax.numpy as jnp
-from jax import random
 import ml_collections
+import models
 import optax
 import tensorflow as tf
 import tensorflow_datasets as tfds
+from absl import logging
+from clu import metric_writers, periodic_actions
+from jax import lax, random
 
-import input_pipeline
-import models
-
+from flax import jax_utils
+from flax.training import checkpoints, common_utils, train_state
+from flax.training import dynamic_scale as dynamic_scale_lib
 
 NUM_CLASSES = 1000
 

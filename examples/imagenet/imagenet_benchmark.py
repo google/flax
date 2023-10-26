@@ -16,17 +16,17 @@
 
 import time
 
-from absl import flags
-from absl.testing import absltest
-from absl.testing.flagsaver import flagsaver
-from flax.testing import Benchmark
 import jax
-import numpy as np
 
 # Local imports.
 import main
+import numpy as np
+from absl import flags
+from absl.testing import absltest
+from absl.testing.flagsaver import flagsaver
 from configs import v100_x8_mixed_precision as config_lib
 
+from flax.testing import Benchmark
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

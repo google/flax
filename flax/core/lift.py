@@ -17,6 +17,7 @@
 import collections
 import dataclasses
 import functools
+import warnings
 from typing import (
     Any,
     Callable,
@@ -31,16 +32,14 @@ from typing import (
     TypeVar,
     Union,
 )
-import warnings
 
-from flax import traceback_util
 import jax
 from jax import random
 
-from . import axes_scan
-from . import meta
-from .frozen_dict import freeze
-from .frozen_dict import unfreeze
+from flax import traceback_util
+
+from . import axes_scan, meta
+from .frozen_dict import freeze, unfreeze
 from .scope import (
     CollectionFilter,
     DenyList,  # pylint: disable=g-multiple-import

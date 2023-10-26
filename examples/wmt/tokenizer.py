@@ -20,11 +20,10 @@ import tempfile
 import time
 from typing import Any, Dict, Iterable, Tuple
 
-from absl import logging
 import jax
 import tensorflow as tf
 import tensorflow_text as tftxt
-
+from absl import logging
 from sentencepiece import SentencePieceTrainer
 
 Features = Dict[str, tf.Tensor]

@@ -12,15 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import jax
 from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random, sharding
+from jax.experimental import mesh_utils
 
 from flax import errors
 from flax.core import init, lift, meta, nn
-import jax
-from jax import numpy as jnp
-from jax import random
-from jax import sharding
-from jax.experimental import mesh_utils
 
 
 class MetaTest(absltest.TestCase):

@@ -15,16 +15,15 @@
 """Benchmark for the MNIST example."""
 import time
 
+import jax
+import main
+import numpy as np
 from absl import flags
 from absl.testing import absltest
 from absl.testing.flagsaver import flagsaver
-from flax.testing import Benchmark
-import jax
-import numpy as np
-
-import main
 from configs import default
 
+from flax.testing import Benchmark
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

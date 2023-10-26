@@ -35,8 +35,8 @@ from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
 import jax
 from jax import lax
 from jax.experimental import maps
-from flax import struct
 
+from flax import struct
 from flax.core import meta
 
 # Real types and dummy aliases for documentation

@@ -173,11 +173,11 @@ preview = true
 
 [tool.ruff]
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
-select = ["F401"]
+select = ["F401", "I001"]
 ignore = []
 # Allow fix for all enabled rules (when `--fix`) is provided.
 # Full list of rules: https://docs.astral.sh/ruff/rules/
-fixable = ["F401"]
+fixable = ["ALL"]
 unfixable = []
 # Exclude a variety of commonly ignored directories.
 exclude = [

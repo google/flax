@@ -17,11 +17,11 @@
 import itertools
 from typing import Any, Callable
 
-import flax
-import numpy as np
-
 import agent
 import env_utils
+import numpy as np
+
+import flax
 
 
 def policy_test(

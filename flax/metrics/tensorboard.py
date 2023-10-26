@@ -18,12 +18,12 @@ import contextlib
 import functools
 import os
 
-# pylint: disable=g-import-not-at-top
-from flax import io
 import numpy as np
-
 import tensorflow as tf  # pytype: disable=import-error
 from tensorboard.plugins.hparams import api as hparams_api
+
+# pylint: disable=g-import-not-at-top
+from flax import io
 
 
 def _flatten_dict(input_dict, parent_key='', sep='.'):

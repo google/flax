@@ -18,18 +18,17 @@ import copy
 import functools
 from typing import Any
 
-from absl.testing import absltest
-from absl.testing import parameterized
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from absl.testing import absltest, parameterized
+from jax import random
+
 from flax import ids
 from flax import linen as nn
 from flax.linen import fp8_ops
 from flax.training import train_state
-import jax
-from jax import random
-import jax.numpy as jnp
-import numpy as np
-import optax
-
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -331,10 +330,9 @@ class NormalizationTest(parameterized.TestCase):
           },
       },
   )
-  def test_spectral_norm_train(
-      self, model_index, key_paths
-  ):
+  def test_spectral_norm_train(self, model_index, key_paths):
     class FooDense(nn.Module):
+
       @nn.compact
       def __call__(self, x, train):
         x = nn.Dense(8)(x)
@@ -343,6 +341,7 @@ class NormalizationTest(parameterized.TestCase):
         return x
 
     class FooConv(nn.Module):
+
       @nn.compact
       def __call__(self, x, train):
         x = nn.Dense(9)(x)
@@ -355,6 +354,7 @@ class NormalizationTest(parameterized.TestCase):
         return x
 
     class FooAttention(nn.Module):
+
       @nn.compact
       def __call__(self, x, train):
         a = nn.Dense(4)(x)
@@ -414,7 +414,7 @@ class NormalizationTest(parameterized.TestCase):
       {'n_steps': 1, 'update_stats': True, 'result': 4.0},
       {'n_steps': 3, 'update_stats': True, 'result': 4.0},
       {'n_steps': 10, 'update_stats': True, 'result': 4.0},
-      {'n_steps': 1, 'update_stats': False, 'result': 1.0}
+      {'n_steps': 1, 'update_stats': False, 'result': 1.0},
   )
   def test_spectral_norm_sigma(self, n_steps, update_stats, result):
     class Foo(nn.Module):
@@ -444,8 +444,7 @@ class NormalizationTest(parameterized.TestCase):
     )
 
   @parameterized.parameters(
-      {'error_on_non_matrix': True},
-      {'error_on_non_matrix': False}
+      {'error_on_non_matrix': True}, {'error_on_non_matrix': False}
   )
   def test_spectral_norm_3d_tensor(self, error_on_non_matrix):
     class Foo(nn.Module):
@@ -497,9 +496,11 @@ class NormalizationTest(parameterized.TestCase):
 
       @nn.compact
       def __call__(self, x):
-        return nn.WeightNorm(nn.Dense(2, bias_init=nn.initializers.normal()),
-                             feature_axes=feature_axes,
-                             variable_filter=variable_filter)(x)
+        return nn.WeightNorm(
+            nn.Dense(2, bias_init=nn.initializers.normal()),
+            feature_axes=feature_axes,
+            variable_filter=variable_filter,
+        )(x)
 
     key1, key2 = jax.random.split(jax.random.key(1))
     x = jax.random.normal(key1, (1, 3))
@@ -534,27 +535,39 @@ class NormalizationTest(parameterized.TestCase):
     self.assertTrue(jnp.allclose(out, manual_out))
 
   @parameterized.parameters(
-      {'variable_filters': ({}, None, {'kernel', 'bias'}, {'Bar'}),
-       'key_paths': {'Bar_0/Baz_0/Dense_0/kernel/scale',
-                     'Bar_0/Baz_0/Dense_0/bias/scale',
-                     'Bar_0/Dense_0/kernel/scale',
-                     'Bar_0/Dense_0/bias/scale',
-                     'Bar_0/Baz_1/Dense_0/kernel/scale',
-                     'Bar_0/Baz_1/Dense_0/bias/scale',
-                     'Bar_0/Dense_1/kernel/scale',
-                     'Bar_0/Dense_1/bias/scale'}},
-      {'variable_filters': ({'kernel'},),
-       'key_paths': {'Bar_0/Baz_0/Dense_0/kernel/scale',
-                     'Bar_0/Dense_0/kernel/scale',
-                     'Bar_0/Baz_1/Dense_0/kernel/scale',
-                     'Bar_0/Dense_1/kernel/scale'}},
-      {'variable_filters': ({'Baz', 'kernel'},),
-       'key_paths': {'Bar_0/Baz_0/Dense_0/kernel/scale',
-                     'Bar_0/Baz_0/Dense_0/bias/scale',
-                     'Bar_0/Dense_0/kernel/scale',
-                     'Bar_0/Baz_1/Dense_0/kernel/scale',
-                     'Bar_0/Baz_1/Dense_0/bias/scale',
-                     'Bar_0/Dense_1/kernel/scale'}}
+      {
+          'variable_filters': ({}, None, {'kernel', 'bias'}, {'Bar'}),
+          'key_paths': {
+              'Bar_0/Baz_0/Dense_0/kernel/scale',
+              'Bar_0/Baz_0/Dense_0/bias/scale',
+              'Bar_0/Dense_0/kernel/scale',
+              'Bar_0/Dense_0/bias/scale',
+              'Bar_0/Baz_1/Dense_0/kernel/scale',
+              'Bar_0/Baz_1/Dense_0/bias/scale',
+              'Bar_0/Dense_1/kernel/scale',
+              'Bar_0/Dense_1/bias/scale',
+          },
+      },
+      {
+          'variable_filters': ({'kernel'},),
+          'key_paths': {
+              'Bar_0/Baz_0/Dense_0/kernel/scale',
+              'Bar_0/Dense_0/kernel/scale',
+              'Bar_0/Baz_1/Dense_0/kernel/scale',
+              'Bar_0/Dense_1/kernel/scale',
+          },
+      },
+      {
+          'variable_filters': ({'Baz', 'kernel'},),
+          'key_paths': {
+              'Bar_0/Baz_0/Dense_0/kernel/scale',
+              'Bar_0/Baz_0/Dense_0/bias/scale',
+              'Bar_0/Dense_0/kernel/scale',
+              'Bar_0/Baz_1/Dense_0/kernel/scale',
+              'Bar_0/Baz_1/Dense_0/bias/scale',
+              'Bar_0/Dense_1/kernel/scale',
+          },
+      },
   )
   def test_weight_norm_variable_filter(self, variable_filters, key_paths):
     class Baz(nn.Module):
@@ -875,20 +888,24 @@ class Fp8Test(absltest.TestCase):
   def test_fp8_dot_general_injection(self):
     # Used to cast the inputs to be representable in FP8, so that the difference
     # of the results from the original gemm and fp8 gemm is small.
-    cast_to_representable = functools.partial(fp8_ops.quantize_dequantize,
-                                              scale=jnp.ones((1,)),
-                                              compute_dtype=jnp.float32)
+    cast_to_representable = functools.partial(
+        fp8_ops.quantize_dequantize,
+        scale=jnp.ones((1,)),
+        compute_dtype=jnp.float32,
+    )
 
     init_key, random_key = random.split(random.PRNGKey(seed=123), 2)
     x = cast_to_representable(
-        random.uniform(random_key, (16, 32)), jnp.float8_e4m3fn)
+        random.uniform(random_key, (16, 32)), jnp.float8_e4m3fn
+    )
     dy = cast_to_representable(
-        random.uniform(random_key, (16, 64)), jnp.float8_e5m2)
+        random.uniform(random_key, (16, 64)), jnp.float8_e5m2
+    )
 
     def run(fp8_injection, expected_shapes):
       p = nn.DenseGeneral(features=64, name='dense')
       if fp8_injection:
-        p.dot_general_cls=nn.Fp8DotGeneralOp
+        p.dot_general_cls = nn.Fp8DotGeneralOp
       y, initial_vars = p.init_with_output(init_key, x)
       var_shapes = jax.tree_util.tree_map(jnp.shape, initial_vars)
       self.assertEqual(var_shapes, expected_shapes)
@@ -908,12 +925,15 @@ class Fp8Test(absltest.TestCase):
     expected_shapes_new = {
         'params': {'kernel': (32, 64), 'bias': (64,)},
         fp8_ops.OVERWRITE_WITH_GRADIENT: {
-            'Fp8DotGeneralOp_0': {'input_amax_history': (1024,),
-                                  'kernel_amax_history': (1024,),
-                                  'output_grad_amax_history': (1024,),
-                                  'input_scale': (1,),
-                                  'kernel_scale': (1,),
-                                  'output_grad_scale': (1,), }},
+            'Fp8DotGeneralOp_0': {
+                'input_amax_history': (1024,),
+                'kernel_amax_history': (1024,),
+                'output_grad_amax_history': (1024,),
+                'input_scale': (1,),
+                'kernel_scale': (1,),
+                'output_grad_scale': (1,),
+            }
+        },
     }
 
     output1a, output1b = run(False, expected_shapes_original)
@@ -928,10 +948,11 @@ class Fp8Test(absltest.TestCase):
   def test_fp8_train_state(self):
     key, init_key, random_key = random.split(random.PRNGKey(seed=123), 3)
     x = random.uniform(random_key, (16, 16), dtype=jnp.float32)
-    dense = nn.DenseGeneral(features=32, use_bias=True,
-                            dot_general_cls=nn.Fp8DotGeneralOp)
+    dense = nn.DenseGeneral(
+        features=32, use_bias=True, dot_general_cls=nn.Fp8DotGeneralOp
+    )
     variables = dense.init(init_key, x)
-    opt = optax.adam(learning_rate=.1)
+    opt = optax.adam(learning_rate=0.1)
     state = train_state.TrainState.create(
         params=variables, tx=opt, apply_fn=dense.apply
     )
@@ -944,6 +965,7 @@ class Fp8Test(absltest.TestCase):
         y = state.apply_fn(vars, x)
         loss = y * dy.astype(y.dtype)
         return jnp.sum(loss)
+
       grad_fn = jax.grad(loss_fn)
       grads = grad_fn(state.params)
       state = state.apply_gradients(grads=grads)
@@ -977,14 +999,20 @@ class Fp8Test(absltest.TestCase):
       state = train_fn(state, x, g)
 
       rtol, atol = 0.001, 0.001
-      fp8_vars = (
-           state.params[fp8_ops.OVERWRITE_WITH_GRADIENT]['Fp8DotGeneralOp_0']
+      fp8_vars = state.params[fp8_ops.OVERWRITE_WITH_GRADIENT][
+          'Fp8DotGeneralOp_0'
+      ]
+      np.testing.assert_allclose(
+          fp8_vars['input_amax_history'],
+          amax_history_x,
+          rtol=rtol,
+          atol=atol,
       )
       np.testing.assert_allclose(
-          fp8_vars['input_amax_history'], amax_history_x, rtol=rtol, atol=atol,
-      )
-      np.testing.assert_allclose(
-          fp8_vars['kernel_amax_history'], amax_history_k, rtol=rtol, atol=atol,
+          fp8_vars['kernel_amax_history'],
+          amax_history_k,
+          rtol=rtol,
+          atol=atol,
       )
       np.testing.assert_allclose(
           fp8_vars['output_grad_amax_history'],

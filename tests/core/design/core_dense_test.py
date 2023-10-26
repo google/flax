@@ -12,17 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Optional
 from dataclasses import dataclass
-
-from absl.testing import absltest
+from typing import Any, Optional
 
 import jax
-from jax import numpy as jnp, random
-
-from flax.core import Array, init, unfreeze, nn
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
 
 from flax import struct
+from flax.core import Array, init, nn, unfreeze
 
 
 @dataclass

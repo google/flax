@@ -15,16 +15,17 @@
 """Tests for flax.traceback_util."""
 
 import contextlib
-import traceback
 import sys
-from absl.testing import absltest
+import traceback
+
 import jax
+from absl.testing import absltest
 from jax import numpy as jnp
 from jax import random
 from jax._src import traceback_util as jax_traceback_util
+
 from flax import linen as nn
 from flax import traceback_util
-
 
 # pylint: disable=arguments-differ,protected-access, g-wrong-blank-lines
 

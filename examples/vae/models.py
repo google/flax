@@ -14,9 +14,10 @@
 
 """VAE model definitions."""
 
-from flax import linen as nn
-from jax import random
 import jax.numpy as jnp
+from jax import random
+
+from flax import linen as nn
 
 
 class Encoder(nn.Module):

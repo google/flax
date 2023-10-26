@@ -15,7 +15,6 @@
 """Tests for codediff Sphinx extension."""
 
 from absl.testing import absltest
-
 from codediff import CodeDiffParser
 
 

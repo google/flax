@@ -15,15 +15,13 @@
 import pathlib
 import tempfile
 
-from absl import logging
-from absl.testing import absltest
 import jax
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
-from configs import default
 import train
-
+from absl import logging
+from absl.testing import absltest
+from configs import default
 
 jax.config.update('jax_disable_most_optimizations', True)
 

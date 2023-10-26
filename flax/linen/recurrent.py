@@ -20,26 +20,32 @@ see: https://flax.readthedocs.io/en/latest/developer_notes/lift.html.
 
 from abc import ABCMeta
 from functools import partial  # pylint: disable=g-importing-member
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, TypeVar, Union
-from absl import logging
-from flax.core import lift
-from flax.core.frozen_dict import FrozenDict
-from flax.linen import initializers
-from flax.linen import transforms
-from flax.linen.activation import sigmoid
-from flax.linen.activation import tanh
-from flax.linen.dtypes import promote_dtype
-from flax.linen.linear import Conv
-from flax.linen.linear import default_kernel_init
-from flax.linen.linear import Dense
-from flax.linen.linear import PrecisionLike
-from flax.linen.module import compact, nowrap
-from flax.linen.module import Module
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
+
 import jax
+import numpy as np
+from absl import logging
 from jax import numpy as jnp
 from jax import random
-import numpy as np
 from typing_extensions import Protocol
+
+from flax.core import lift
+from flax.core.frozen_dict import FrozenDict
+from flax.linen import initializers, transforms
+from flax.linen.activation import sigmoid, tanh
+from flax.linen.dtypes import promote_dtype
+from flax.linen.linear import Conv, Dense, PrecisionLike, default_kernel_init
+from flax.linen.module import Module, compact, nowrap
 
 A = TypeVar('A')
 PRNGKey = jax.Array

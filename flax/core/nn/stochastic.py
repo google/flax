@@ -14,9 +14,8 @@
 
 """Stochastic modules."""
 
-from jax import lax
-from jax import random
 import jax.numpy as jnp
+from jax import lax, random
 
 
 def dropout(scope, inputs, rate, deterministic=False, rng=None):

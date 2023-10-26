@@ -19,31 +19,28 @@ other numerical metric in filename.  Cleans up older / worse-performing
 checkpoint files.
 """
 
-from concurrent.futures import thread
 import functools
 import os
 import pathlib
 import re
 import time
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 import warnings
+from concurrent.futures import thread
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Type, Union
 
-from absl import logging
-from flax import config
-from flax import core
-from flax import errors
-from flax import io
-from flax import serialization
-from flax import traverse_util
-from flax.training import orbax_utils
 import jax
-from jax import monitoring
-from jax import process_index
-from jax import tree_util as jtu
-from jax.experimental.array_serialization.serialization import get_tensorstore_spec
-from jax.experimental.array_serialization.serialization import GlobalAsyncCheckpointManager
-from jax.experimental.multihost_utils import sync_global_devices
 import orbax.checkpoint as ocp
+from absl import logging
+from jax import monitoring, process_index
+from jax import tree_util as jtu
+from jax.experimental.array_serialization.serialization import (
+    GlobalAsyncCheckpointManager,
+    get_tensorstore_spec,
+)
+from jax.experimental.multihost_utils import sync_global_devices
+
+from flax import config, core, errors, io, serialization, traverse_util
+from flax.training import orbax_utils
 
 _READ_CHECKPOINT_EVENT: str = '/jax/checkpoint/read/durations_sec'
 _WRITE_CHECKPOINT_EVENT: str = '/jax/checkpoint/write/durations_sec'

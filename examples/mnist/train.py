@@ -21,16 +21,17 @@ The data is loaded using tensorflow_datasets.
 # See issue #620.
 # pytype: disable=wrong-keyword-args
 
-from absl import logging
-from flax import linen as nn
-from flax.metrics import tensorboard
-from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import ml_collections
 import numpy as np
 import optax
 import tensorflow_datasets as tfds
+from absl import logging
+
+from flax import linen as nn
+from flax.metrics import tensorboard
+from flax.training import train_state
 
 
 class CNN(nn.Module):

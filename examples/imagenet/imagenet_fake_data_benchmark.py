@@ -21,14 +21,15 @@ That can be fetched with the script `flax/tests/download_dataset_metadata.sh`.
 import pathlib
 import time
 
-from absl.testing import absltest
-from flax.testing import Benchmark
 import jax
 import tensorflow_datasets as tfds
+import train
+from absl.testing import absltest
 
 # Local imports.
 from configs import fake_data_benchmark as config_lib
-import train
+
+from flax.testing import Benchmark
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

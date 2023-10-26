@@ -14,13 +14,10 @@
 
 from functools import partial
 
-from flax.linen import initializers
-from flax.linen import module
-from jax import custom_vjp
-from jax import lax
+from jax import custom_vjp, lax, random
 from jax import numpy as jnp
-from jax import random
 
+from flax.linen import initializers, module
 
 OVERWRITE_WITH_GRADIENT = '_overwrite_with_gradient'
 
@@ -55,7 +52,7 @@ def compute_scale(amax, scale, fp8_max, margin=0):
   # the reciprocal operation at the entry and exit of the function.
   scale = 1.0 / scale
   exp = jnp.floor(jnp.log2(fp8_max / amax)) - margin
-  sf = jnp.round(lax.pow(2., jnp.abs(exp)))
+  sf = jnp.round(lax.pow(2.0, jnp.abs(exp)))
   sf = jnp.where(amax > 0.0, sf, scale)
   sf = jnp.where(lax.is_finite(amax), sf, scale)
   sf = jnp.where(exp < 0, 1.0 / sf, sf)
@@ -141,22 +138,26 @@ class Fp8DotGeneralOp(module.Module):
     )
 
     self.input_amax_history = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'input_amax_history', *amax_history_args)
+        OVERWRITE_WITH_GRADIENT, 'input_amax_history', *amax_history_args
+    )
     self.kernel_amax_history = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'kernel_amax_history', *amax_history_args)
+        OVERWRITE_WITH_GRADIENT, 'kernel_amax_history', *amax_history_args
+    )
     self.output_grad_amax_history = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'output_grad_amax_history', *amax_history_args)
+        OVERWRITE_WITH_GRADIENT, 'output_grad_amax_history', *amax_history_args
+    )
 
     self.input_scale = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'input_scale', *scale_args)
+        OVERWRITE_WITH_GRADIENT, 'input_scale', *scale_args
+    )
     self.kernel_scale = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'kernel_scale', *scale_args)
+        OVERWRITE_WITH_GRADIENT, 'kernel_scale', *scale_args
+    )
     self.output_grad_scale = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'output_grad_scale', *scale_args)
-
+        OVERWRITE_WITH_GRADIENT, 'output_grad_scale', *scale_args
+    )
 
   def __call__(self, *args, **kwargs) -> jnp.ndarray:
-
     assert len(args) == 3
     x = args[0]
     k = args[1]
@@ -179,8 +180,7 @@ class Fp8DotGeneralOp(module.Module):
         comp_dtype,
         y_qdq,
         self.output_grad_scale.value,
-        self.output_grad_amax_history.value
+        self.output_grad_amax_history.value,
     )
 
     return y
-

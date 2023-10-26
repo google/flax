@@ -14,12 +14,13 @@
 
 """Transformer-based language models."""
 
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
+
+import jax.numpy as jnp
+import numpy as np
 
 from flax import linen as nn
 from flax import struct
-import jax.numpy as jnp
-import numpy as np
 
 
 @struct.dataclass

@@ -38,24 +38,18 @@ from typing import (
     overload,
 )
 
+import jax
+import numpy as np
+from jax import numpy as jnp
+from jax import random, tree_util
+
 from flax import config as config
 from flax import configurations as legacy_config  # only for flax_lazy_rng
-from flax import errors
-from flax import struct
-from flax import traceback_util
+from flax import errors, struct, traceback_util
 from flax.ids import uuid
-import jax
-from jax import numpy as jnp
-from jax import random
-from jax import tree_util
-import numpy as np
 
-from . import meta
-from . import partial_eval
-from . import tracers
-from .frozen_dict import freeze
-from .frozen_dict import FrozenDict
-from .frozen_dict import unfreeze
+from . import meta, partial_eval, tracers
+from .frozen_dict import FrozenDict, freeze, unfreeze
 
 traceback_util.register_exclusion(__file__)
 

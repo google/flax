@@ -16,12 +16,12 @@
 
 import typing
 
-import flax
 import jax
-from jax import lax
 import jax.numpy as jnp
 import numpy as np
+from jax import lax
 
+import flax
 
 # Constants
 # We assume the default End-of-Sentence token id is 2 (SentencePiece).

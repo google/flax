@@ -20,7 +20,6 @@ import enum
 
 import tensorflow as tf  # pytype: disable=import-error
 
-
 # Values for padding, unknown words and a root.
 PAD = '<p>'
 PAD_ID = 0

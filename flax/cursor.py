@@ -12,12 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import enum
-from typing import Any, Callable, Dict, Generator, Generic, Mapping, Optional, Protocol, TypeVar, runtime_checkable
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Generator,
+    Generic,
+    Mapping,
+    Optional,
+    Protocol,
+    TypeVar,
+    runtime_checkable,
+)
+
 from flax.core import FrozenDict
 from flax.errors import CursorFindError, TraverseTreeError
-import dataclasses
-
 
 A = TypeVar('A')
 Key = Any

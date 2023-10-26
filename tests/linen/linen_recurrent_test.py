@@ -15,10 +15,11 @@
 """Recurrent tests."""
 
 
-from absl.testing import absltest, parameterized
 import jax
 import jax.numpy as jnp
 import numpy as np
+from absl.testing import absltest, parameterized
+
 from flax import linen as nn
 from flax.linen.recurrent import flip_sequences
 

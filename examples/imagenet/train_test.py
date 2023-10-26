@@ -17,19 +17,16 @@
 import pathlib
 import tempfile
 
-from absl.testing import absltest
-from absl.testing import parameterized
-
 import jax
-from jax import random
-import tensorflow as tf
-import tensorflow_datasets as tfds
 
 # Local imports.
 import models
+import tensorflow as tf
+import tensorflow_datasets as tfds
 import train
+from absl.testing import absltest, parameterized
 from configs import default as default_lib
-
+from jax import random
 
 jax.config.update('jax_disable_most_optimizations', True)
 

@@ -14,11 +14,10 @@
 
 """Tests for flax.examples.ogbg_molpcba.input_pipeline."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
 import input_pipeline
 import jraph
 import tensorflow as tf
+from absl.testing import absltest, parameterized
 
 
 def get_dummy_datasets(dataset_length: int):

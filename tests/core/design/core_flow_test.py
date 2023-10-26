@@ -13,16 +13,15 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Sequence, Any
+from typing import Any, Sequence
 
-from absl.testing import absltest
-
-from flax.core import Scope, Array, init, apply, unfreeze, nn
 import jax
-from jax import numpy as jnp, random
-
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
 from jax.scipy.linalg import expm
 
+from flax.core import Array, Scope, apply, init, nn, unfreeze
 
 Initializer = Any
 Flow = Any

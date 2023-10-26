@@ -15,9 +15,10 @@
 """Tests for flax.training.early_stopping."""
 
 
-from absl.testing import absltest
-from flax.training import early_stopping
 import jax
+from absl.testing import absltest
+
+from flax.training import early_stopping
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

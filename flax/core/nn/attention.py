@@ -14,20 +14,20 @@
 
 """Attention core modules for Flax."""
 
-from collections.abc import Iterable  # pylint: disable=g-importing-member
 import functools
+from collections.abc import Iterable  # pylint: disable=g-importing-member
 from typing import Any, Callable, Union
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax import lax, random
 
 from flax import struct
 from flax.core import Scope
 from flax.linen import initializers
-import jax
-from jax import lax
-from jax import random
-import jax.numpy as jnp
-from .linear import default_kernel_init
-from .linear import dense_general
-import numpy as np
+
+from .linear import default_kernel_init, dense_general
 
 
 def dot_product_attention(

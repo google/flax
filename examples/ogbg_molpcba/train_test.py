@@ -17,24 +17,22 @@
 import functools
 import pathlib
 import tempfile
-from typing import Dict, Optional
 import warnings
+from typing import Dict, Optional
 
-from absl.testing import absltest
-from absl.testing import parameterized
-import flax
-from flax.training import train_state
+import input_pipeline
 import jax
-from jax import numpy as jnp
 import jraph
+import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-import numpy as np
-
-from configs import default
-from configs import test
-import input_pipeline
 import train
+from absl.testing import absltest, parameterized
+from configs import default, test
+from jax import numpy as jnp
+
+import flax
+from flax.training import train_state
 
 
 def average_with_mask(arr: jnp.ndarray, mask: jnp.ndarray):

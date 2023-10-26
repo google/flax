@@ -14,21 +14,16 @@
 
 """Tests for flax.linen.attention."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
-
-from flax import errors
-from flax import linen as nn
-from flax import jax_utils
-from flax.core import pop
-
 import jax
-from jax import lax
-from jax import random
-from jax.nn import initializers
 import jax.numpy as jnp
-
 import numpy as np
+from absl.testing import absltest, parameterized
+from jax import lax, random
+from jax.nn import initializers
+
+from flax import errors, jax_utils
+from flax import linen as nn
+from flax.core import pop
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -96,22 +91,27 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_self_attention_explicit_dropout(self):
     class Foo(nn.Module):
       attention_kwargs: dict
+
       @nn.compact
       def __call__(self, x, dropout_rng=None):
-        a = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, x, dropout_rng=dropout_rng)
-        b = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(x, x, dropout_rng=dropout_rng)
+        a = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+            x, x, dropout_rng=dropout_rng
+        )
+        b = nn.MultiHeadDotProductAttention(**self.attention_kwargs)(
+            x, x, dropout_rng=dropout_rng
+        )
         return a, b
 
     module = Foo(
-      dict(
-        num_heads=8,
-        qkv_features=16,
-        kernel_init=initializers.ones,
-        bias_init=initializers.zeros,
-        dropout_rate=0.5,
-        deterministic=False,
+        dict(
+            num_heads=8,
+            qkv_features=16,
+            kernel_init=initializers.ones,
+            bias_init=initializers.zeros,
+            dropout_rate=0.5,
+            deterministic=False,
         )
-      )
+    )
     rng1, rng2, rng3 = random.split(random.key(0), 3)
     x = jnp.ones((4, 2, 3, 5))
     rngs = {'params': rng1, 'dropout': rng2}
@@ -267,46 +267,75 @@ class AttentionTest(parameterized.TestCase):
   def test_multihead_self_attention_equality(self):
     rng = random.key(0)
     q = jnp.ones((4, 2, 3, 5))
-    module_kwargs = {'num_heads': 8,
-                     'qkv_features': 16,
-                     'kernel_init': initializers.ones,
-                     'bias_init': initializers.zeros,
-                     'deterministic': False}
+    module_kwargs = {
+        'num_heads': 8,
+        'qkv_features': 16,
+        'kernel_init': initializers.ones,
+        'bias_init': initializers.zeros,
+        'deterministic': False,
+    }
     sa_module0 = nn.MultiHeadDotProductAttention(**module_kwargs)
     sa_module1 = nn.SelfAttention(**module_kwargs)
     y0, v0 = sa_module0.init_with_output(rng, q)
-    with self.assertWarnsRegex(DeprecationWarning, 'SelfAttention will be deprecated soon.'):
+    with self.assertWarnsRegex(
+        DeprecationWarning, 'SelfAttention will be deprecated soon.'
+    ):
       y1, v1 = sa_module1.init_with_output(rng, q)
     self.assertTrue((y0 == y1).all())
-    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda x, y: (x == y).all(), v0, v1)))
+    self.assertTrue(
+        jax.tree_util.tree_all(
+            jax.tree_map(lambda x, y: (x == y).all(), v0, v1)
+        )
+    )
 
   def test_multihead_kv_args(self):
     key1, key2 = random.split(random.key(0), 2)
     query = random.uniform(key1, (3, 5))
     key_value = random.uniform(key1, (9, 5))
     module = nn.MultiHeadDotProductAttention(
-      num_heads=8,
-      qkv_features=16,
-      kernel_init=initializers.ones,
-      bias_init=initializers.zeros,
-      deterministic=False,
+        num_heads=8,
+        qkv_features=16,
+        kernel_init=initializers.ones,
+        bias_init=initializers.zeros,
+        deterministic=False,
     )
-    y0, v0 = module.init_with_output(key2, query, inputs_k=key_value, inputs_v=key_value)
+    y0, v0 = module.init_with_output(
+        key2, query, inputs_k=key_value, inputs_v=key_value
+    )
     y1, v1 = module.init_with_output(key2, query, inputs_k=key_value)
-    with self.assertWarnsRegex(DeprecationWarning, 'The inputs_kv arg will be deprecated soon.'):
+    with self.assertWarnsRegex(
+        DeprecationWarning, 'The inputs_kv arg will be deprecated soon.'
+    ):
       y2, v2 = module.init_with_output(key2, query, inputs_kv=key_value)
     self.assertTrue((y0 == y1).all() and (y1 == y2).all())
     self.assertTrue(
-      jax.tree_util.tree_all(
-        jax.tree_map(lambda x, y, z: (x == y).all() and (y == z).all(),
-                     v0, v1, v2)))
+        jax.tree_util.tree_all(
+            jax.tree_map(
+                lambda x, y, z: (x == y).all() and (y == z).all(), v0, v1, v2
+            )
+        )
+    )
 
-    with self.assertRaisesRegex(ValueError, '`inputs_k` cannot be None if `inputs_v` is not None.'):
+    with self.assertRaisesRegex(
+        ValueError, '`inputs_k` cannot be None if `inputs_v` is not None.'
+    ):
       y3, v3 = module.init_with_output(key2, query, inputs_v=key_value)
-    with self.assertRaisesRegex(ValueError, 'If either `inputs_k` or `inputs_v` is not None, `inputs_kv` must be None.'):
-      y3, v3 = module.init_with_output(key2, query, inputs_kv=key_value, inputs_v=key_value)
-    with self.assertRaisesRegex(ValueError, 'If either `inputs_k` or `inputs_v` is not None, `inputs_kv` must be None.'):
-      y3, v3 = module.init_with_output(key2, query, key_value, key_value, inputs_kv=key_value)
+    with self.assertRaisesRegex(
+        ValueError,
+        'If either `inputs_k` or `inputs_v` is not None, `inputs_kv` must be'
+        ' None.',
+    ):
+      y3, v3 = module.init_with_output(
+          key2, query, inputs_kv=key_value, inputs_v=key_value
+      )
+    with self.assertRaisesRegex(
+        ValueError,
+        'If either `inputs_k` or `inputs_v` is not None, `inputs_kv` must be'
+        ' None.',
+    ):
+      y3, v3 = module.init_with_output(
+          key2, query, key_value, key_value, inputs_kv=key_value
+      )
 
   def test_multihead_mask_warning(self):
     rng = random.key(0)
@@ -328,8 +357,11 @@ class AttentionTest(parameterized.TestCase):
     causal_mask = nn.attention.make_causal_mask(jnp.ones(input_shape[:-1]))
 
     module.apply(initial_vars, query, key, mask=causal_mask)
-    with self.assertWarnsRegex(DeprecationWarning,
-                               "the function signature of MultiHeadDotProductAttention's `__call__` method has changed"):
+    with self.assertWarnsRegex(
+        DeprecationWarning,
+        "the function signature of MultiHeadDotProductAttention's `__call__`"
+        ' method has changed',
+    ):
       with self.assertRaises(errors.ScopeParamShapeError):
         module.apply(initial_vars, query, key, causal_mask)
 

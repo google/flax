@@ -15,24 +15,23 @@
 """Attention core modules for Flax."""
 
 import functools
-from typing import Any, Callable, Optional, Tuple, Union, overload
 import warnings
+from typing import Any, Callable, Optional, Tuple, Union, overload
+
+import jax
+import jax.numpy as jnp
+from jax import lax, random
 
 from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
-from flax.linen.linear import default_kernel_init
-from flax.linen.linear import DenseGeneral
-from flax.linen.linear import DotGeneralT
-from flax.linen.linear import PrecisionLike
-from flax.linen.module import compact
-from flax.linen.module import merge_param
-from flax.linen.module import Module
+from flax.linen.linear import (
+    DenseGeneral,
+    DotGeneralT,
+    PrecisionLike,
+    default_kernel_init,
+)
+from flax.linen.module import Module, compact, merge_param
 from flax.linen.normalization import LayerNorm
-import jax
-from jax import lax
-from jax import random
-import jax.numpy as jnp
-
 
 PRNGKey = jax.Array
 Shape = Tuple[int, ...]
@@ -284,7 +283,7 @@ class MultiHeadDotProductAttention(Module):
       inputs_kv: Optional[Array] = None,
       mask: Optional[Array] = None,
       deterministic: Optional[bool] = None,
-      dropout_rng: Optional[PRNGKey] = None
+      dropout_rng: Optional[PRNGKey] = None,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -317,39 +316,47 @@ class MultiHeadDotProductAttention(Module):
     """
     if inputs_kv is not None:
       if inputs_k is not None or inputs_v is not None:
-        raise ValueError('If either `inputs_k` or `inputs_v` is not None, '
-        '`inputs_kv` must be None. If `inputs_kv` is not None, both `inputs_k` '
-        'and `inputs_v` must be None. We recommend using `inputs_k` and '
-        '`inputs_v` args, since `inputs_kv` will be deprecated soon. See '
-        'https://github.com/google/flax/discussions/3389 for more '
-        'information.')
+        raise ValueError(
+            'If either `inputs_k` or `inputs_v` is not None, `inputs_kv` must'
+            ' be None. If `inputs_kv` is not None, both `inputs_k` and'
+            ' `inputs_v` must be None. We recommend using `inputs_k` and'
+            ' `inputs_v` args, since `inputs_kv` will be deprecated soon. See'
+            ' https://github.com/google/flax/discussions/3389 for more'
+            ' information.'
+        )
       inputs_k = inputs_v = inputs_kv
-      warnings.warn('The inputs_kv arg will be deprecated soon. '
-                    'Use inputs_k and inputs_v instead. See '
-                    'https://github.com/google/flax/discussions/3389 '
-                    'for more information.',
-                    DeprecationWarning)
+      warnings.warn(
+          'The inputs_kv arg will be deprecated soon. '
+          'Use inputs_k and inputs_v instead. See '
+          'https://github.com/google/flax/discussions/3389 '
+          'for more information.',
+          DeprecationWarning,
+      )
     else:
       if inputs_k is None:
         if inputs_v is not None:
-          raise ValueError('`inputs_k` cannot be None if `inputs_v` is not None. '
-          'To have both `inputs_k` and `inputs_v` be the same value, pass in the '
-          'value to `inputs_k` and leave `inputs_v` as None.')
+          raise ValueError(
+              '`inputs_k` cannot be None if `inputs_v` is not None. To have'
+              ' both `inputs_k` and `inputs_v` be the same value, pass in the'
+              ' value to `inputs_k` and leave `inputs_v` as None.'
+          )
         inputs_k = inputs_q
       if inputs_v is None:
         inputs_v = inputs_k
       elif inputs_v.shape[-1] == inputs_v.shape[-2]:
-        warnings.warn(f"You are passing an array of shape {inputs_v.shape} "
-                      "to the `inputs_v` arg, when you may have intended "
-                      "to pass it to the `mask` arg. As of Flax version "
-                      "0.7.4, the function signature of "
-                      "MultiHeadDotProductAttention's `__call__` method "
-                      "has changed to `__call__(inputs_q, inputs_k=None, "
-                      "inputs_v=None, *, inputs_kv=None, mask=None, "
-                      "deterministic=None)`. Use the kwarg `mask` instead. "
-                      "See https://github.com/google/flax/discussions/3389 "
-                      "and read the docstring for more information.",
-                      DeprecationWarning)
+        warnings.warn(
+            f'You are passing an array of shape {inputs_v.shape} '
+            'to the `inputs_v` arg, when you may have intended '
+            'to pass it to the `mask` arg. As of Flax version '
+            '0.7.4, the function signature of '
+            "MultiHeadDotProductAttention's `__call__` method "
+            'has changed to `__call__(inputs_q, inputs_k=None, '
+            'inputs_v=None, *, inputs_kv=None, mask=None, '
+            'deterministic=None)`. Use the kwarg `mask` instead. '
+            'See https://github.com/google/flax/discussions/3389 '
+            'and read the docstring for more information.',
+            DeprecationWarning,
+        )
 
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
@@ -489,7 +496,7 @@ class SelfAttention(MultiHeadDotProductAttention):
       inputs_q: Array,
       mask: Optional[Array] = None,
       deterministic: Optional[bool] = None,
-      dropout_rng: Optional[PRNGKey] = None
+      dropout_rng: Optional[PRNGKey] = None,
   ):
     """Applies multi-head dot product self-attention on the input data.
 
@@ -507,13 +514,18 @@ class SelfAttention(MultiHeadDotProductAttention):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    warnings.warn('SelfAttention will be deprecated soon. Use '
-                  '`MultiHeadDotProductAttention.__call__(inputs_q)` instead. '
-                  'See https://github.com/google/flax/discussions/3389 '
-                  'for more information.',
-                  DeprecationWarning)
+    warnings.warn(
+        'SelfAttention will be deprecated soon. Use '
+        '`MultiHeadDotProductAttention.__call__(inputs_q)` instead. '
+        'See https://github.com/google/flax/discussions/3389 '
+        'for more information.',
+        DeprecationWarning,
+    )
     return super().__call__(
-        inputs_q, mask=mask, deterministic=deterministic, dropout_rng=dropout_rng
+        inputs_q,
+        mask=mask,
+        deterministic=deterministic,
+        dropout_rng=dropout_rng,
     )
 
 

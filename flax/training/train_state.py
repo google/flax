@@ -14,10 +14,10 @@
 
 from typing import Any, Callable
 
-from flax import core
-from flax import struct
-from flax.linen.fp8_ops import OVERWRITE_WITH_GRADIENT
 import optax
+
+from flax import core, struct
+from flax.linen.fp8_ops import OVERWRITE_WITH_GRADIENT
 
 
 class TrainState(struct.PyTreeNode):
@@ -89,7 +89,7 @@ class TrainState(struct.PyTreeNode):
     if OVERWRITE_WITH_GRADIENT in grads:
       new_params = {
           'params': new_params_with_opt,
-          OVERWRITE_WITH_GRADIENT: grads[OVERWRITE_WITH_GRADIENT]
+          OVERWRITE_WITH_GRADIENT: grads[OVERWRITE_WITH_GRADIENT],
       }
     else:
       new_params = new_params_with_opt

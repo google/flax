@@ -21,9 +21,9 @@ To modify a config value on run time, call:
 """
 
 import os
-from jax import config as jax_config
-
 from contextlib import contextmanager
+
+from jax import config as jax_config
 
 # Keep a wrapper at the flax namespace, in case we make our implementation
 # in the future.

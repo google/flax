@@ -17,16 +17,12 @@ This file is intentionally kept short. The majority for logic is in libraries
 that can be easily tested and imported in Colab.
 """
 
-from absl import app
-from absl import flags
-from absl import logging
-from clu import platform
 import jax
-from ml_collections import config_flags
 import tensorflow as tf
-
 import train
-
+from absl import app, flags, logging
+from clu import platform
+from ml_collections import config_flags
 
 FLAGS = flags.FLAGS
 

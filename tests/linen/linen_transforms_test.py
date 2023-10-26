@@ -14,19 +14,20 @@
 
 """Transforms tests."""
 
-from functools import partial
-from typing import Any, Callable, Sequence
 import operator
 import unittest
+from functools import partial
+from typing import Any, Callable, Sequence
 
-from absl.testing import absltest
 import jax
-from jax import random
 import jax.numpy as jnp
 import numpy as np
+from absl.testing import absltest
+from jax import random
+
 from flax import errors
 from flax import linen as nn
-from flax.core import freeze, copy
+from flax.core import copy, freeze
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

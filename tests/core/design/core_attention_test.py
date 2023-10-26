@@ -13,17 +13,14 @@
 # limitations under the License.
 
 from functools import partial
-
 from typing import Callable, Optional, Sequence
 
-from absl.testing import absltest
-
-
 import jax
+from absl.testing import absltest
 from jax import lax, random
 from jax import numpy as jnp
 
-from flax.core import Scope, init, lift, Array, nn, unfreeze
+from flax.core import Array, Scope, init, lift, nn, unfreeze
 
 
 def softmax_attn(scope: Scope, weights: Array):

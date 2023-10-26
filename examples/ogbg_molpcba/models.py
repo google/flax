@@ -16,9 +16,10 @@
 
 from typing import Callable, Sequence
 
-from flax import linen as nn
 import jax.numpy as jnp
 import jraph
+
+from flax import linen as nn
 
 
 def add_graphs_tuples(

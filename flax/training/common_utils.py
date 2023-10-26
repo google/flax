@@ -19,9 +19,9 @@ with helping write pmap-based data-parallel training loops.
 """
 
 import jax
-from jax import lax
 import jax.numpy as jnp
 import numpy as np
+from jax import lax
 
 
 def shard(xs):

@@ -18,14 +18,13 @@ All Flax classes that carry state (e.g., Optimizer) can be turned into a
 state dict of numpy arrays for easy serialization.
 """
 import enum
-from typing import Any, Dict, List
 import threading
 from contextlib import contextmanager
+from typing import Any, Dict, List
 
 import jax
 import msgpack
 import numpy as np
-
 
 _STATE_DICT_REGISTRY: Dict[Any, Any] = {}
 

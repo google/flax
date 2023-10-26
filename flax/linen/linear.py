@@ -26,18 +26,16 @@ from typing import (
     Union,
 )
 
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax import eval_shape, lax
+from jax.core import ShapedArray
+
 from flax.core import meta
 from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
-from flax.linen.module import compact
-from flax.linen.module import Module
-import jax
-from jax import eval_shape
-from jax import lax
-from jax.core import ShapedArray
-import jax.numpy as jnp
-import numpy as np
-
+from flax.linen.module import Module, compact
 
 PRNGKey = Any
 Shape = Tuple[int, ...]

@@ -14,14 +14,10 @@
 
 """Tests for flax.examples.imagenet.models."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
-
 import jax
-from jax import numpy as jnp
-
 import models
-
+from absl.testing import absltest, parameterized
+from jax import numpy as jnp
 
 jax.config.update('jax_disable_most_optimizations', True)
 

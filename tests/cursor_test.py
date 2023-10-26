@@ -15,17 +15,18 @@
 """Tests for flax.struct."""
 
 
-from absl.testing import absltest
 import dataclasses
-import flax
+from typing import Any, NamedTuple
+
 import jax
 import jax.numpy as jnp
 import optax
-from typing import Any, NamedTuple
+from absl.testing import absltest
 
+import flax
 import flax.linen as nn
 from flax.core import freeze
-from flax.cursor import cursor, _traverse_tree, AccessType
+from flax.cursor import AccessType, _traverse_tree, cursor
 from flax.errors import CursorFindError, TraverseTreeError
 from flax.training import train_state
 

@@ -37,18 +37,17 @@ from typing import (
 )
 from unittest.mock import patch
 
-from absl.testing import absltest
-from flax import config
-from flax import errors
-from flax import linen as nn
-from flax import struct
-from flax.core import FrozenDict, Scope, freeze
-from flax.linen import compact
 import jax
-from jax import random
-from jax.nn import initializers
 import jax.numpy as jnp
 import numpy as np
+from absl.testing import absltest
+from jax import random
+from jax.nn import initializers
+
+from flax import config, errors, struct
+from flax import linen as nn
+from flax.core import FrozenDict, Scope, freeze
+from flax.linen import compact
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -1621,16 +1620,33 @@ class ModuleTest(absltest.TestCase):
     self.assertIsInstance(decoder, nn.Dense)
     self.assertEqual(decoder.features, 2)
 
-    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda v1, v2: (v1 == v2).all(), variables['params']['encoder'], encoder_vars['params'])))
-    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda v1, v2: (v1 == v2).all(), variables['params']['decoder'], decoder_vars['params'])))
+    self.assertTrue(
+        jax.tree_util.tree_all(
+            jax.tree_map(
+                lambda v1, v2: (v1 == v2).all(),
+                variables['params']['encoder'],
+                encoder_vars['params'],
+            )
+        )
+    )
+    self.assertTrue(
+        jax.tree_util.tree_all(
+            jax.tree_map(
+                lambda v1, v2: (v1 == v2).all(),
+                variables['params']['decoder'],
+                decoder_vars['params'],
+            )
+        )
+    )
 
   def test_bind_unbind_equality(self):
     class Foo(nn.Module):
-        sub_module: Any
-        @nn.compact
-        def __call__(self, x):
-            x = nn.Dense(2)(x)
-            return self.sub_module(x)
+      sub_module: Any
+
+      @nn.compact
+      def __call__(self, x):
+        x = nn.Dense(2)(x)
+        return self.sub_module(x)
 
     sub_module = Foo(nn.Dense(3))
     module = Foo(sub_module)
@@ -1640,7 +1656,13 @@ class ModuleTest(absltest.TestCase):
     bound_module = module.bind(variables)
     self.assertTrue((module.apply(variables, x) == bound_module(x)).all())
     new_module, new_variables = bound_module.unbind()
-    self.assertTrue(jax.tree_util.tree_all(jax.tree_map(lambda v1, v2: (v1 == v2).all(), variables, new_variables)))
+    self.assertTrue(
+        jax.tree_util.tree_all(
+            jax.tree_map(
+                lambda v1, v2: (v1 == v2).all(), variables, new_variables
+            )
+        )
+    )
     self.assertEqual(module, new_module)
 
   def test_passing_mutable_variables(self):

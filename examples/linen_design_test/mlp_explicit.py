@@ -14,11 +14,13 @@
 
 from pprint import pprint
 from typing import Optional
-from flax.deprecated import nn
-from dense import Dense
-from flax.linen import Module
+
 import jax
+from dense import Dense
 from jax import numpy as jnp
+
+from flax.deprecated import nn
+from flax.linen import Module
 
 
 # Add `in_features` to the built-in Dense layer that normally works

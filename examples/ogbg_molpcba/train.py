@@ -15,29 +15,31 @@
 """Library file for executing training and evaluation on ogbg-molpcba."""
 
 import os
-from typing import Any, Dict, Iterable, Tuple, Optional
+from typing import Any, Dict, Iterable, Optional, Tuple
 
-from absl import logging
-from clu import checkpoint
-from clu import metric_writers
-from clu import metrics
-from clu import parameter_overview
-from clu import periodic_actions
-import flax
-import flax.core
-import flax.linen as nn
-from flax.training import train_state
+import input_pipeline
 import jax
 import jax.numpy as jnp
 import jraph
 import ml_collections
+import models
 import numpy as np
 import optax
 import sklearn.metrics
 import tensorflow as tf
+from absl import logging
+from clu import (
+    checkpoint,
+    metric_writers,
+    metrics,
+    parameter_overview,
+    periodic_actions,
+)
 
-import input_pipeline
-import models
+import flax
+import flax.core
+import flax.linen as nn
+from flax.training import train_state
 
 
 def create_model(

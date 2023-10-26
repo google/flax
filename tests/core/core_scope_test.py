@@ -12,19 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax import errors
-from flax.core import Scope, scope, freeze, lazy_init, init, apply, nn
-from flax.core.scope import LazyRng
-from flax.configurations import temp_flip_flag
-
 import jax
-from jax import random
-from jax import numpy as jnp
-
 import numpy as np
-
-
 from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax import errors
+from flax.configurations import temp_flip_flag
+from flax.core import Scope, apply, freeze, init, lazy_init, nn, scope
+from flax.core.scope import LazyRng
 
 
 class ScopeTest(absltest.TestCase):

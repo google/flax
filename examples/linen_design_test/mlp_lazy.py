@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from pprint import pprint
+
 import jax
+from dense import Dense
 from jax import numpy as jnp
+
 from flax import linen as nn
 from flax.linen import Module
-from pprint import pprint
-from dense import Dense
 
 
 # Here submodules are explicitly defined during init, but still materialized

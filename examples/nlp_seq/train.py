@@ -21,24 +21,20 @@ import functools
 import os
 import time
 
-from absl import app
-from absl import flags
-from absl import logging
-from flax import jax_utils
-from flax import linen as nn
-from flax.metrics import tensorboard
-from flax.training import common_utils
-from flax.training import train_state
+import input_pipeline
 import jax
 import jax.numpy as jnp
-from jax import random
+import models
 import numpy as np
 import optax
 import tensorflow as tf
+from absl import app, flags, logging
+from jax import random
 
-import input_pipeline
-import models
-
+from flax import jax_utils
+from flax import linen as nn
+from flax.metrics import tensorboard
+from flax.training import common_utils, train_state
 
 FLAGS = flags.FLAGS
 
