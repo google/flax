@@ -15,20 +15,19 @@
 """Trains an SST2 text classifier."""
 from typing import Any, Callable, Dict, Iterable, Optional, Sequence, Tuple, Union
 
-from absl import logging
-from flax import struct
-from flax.metrics import tensorboard
-from flax.training import train_state
+import input_pipeline
 import jax
 import jax.numpy as jnp
 import ml_collections
+import models
 import numpy as np
 import optax
 import tensorflow as tf
+from absl import logging
 
-import input_pipeline
-import models
-
+from flax import struct
+from flax.metrics import tensorboard
+from flax.training import train_state
 
 Array = jnp.ndarray
 Example = Dict[str, Array]

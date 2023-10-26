@@ -28,11 +28,10 @@ In order to highlight a line of code, append "#!" to it.
 """
 from typing import List, Tuple
 
+import sphinx
 from docutils import nodes
 from docutils.parsers.rst import directives
 from docutils.statemachine import ViewList
-
-import sphinx
 from sphinx.util.docutils import SphinxDirective
 
 MISSING = object()

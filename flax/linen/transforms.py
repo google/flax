@@ -26,33 +26,32 @@ import dataclasses
 import functools
 import inspect
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
+  Any,
+  Callable,
+  Dict,
+  Iterable,
+  Mapping,
+  Optional,
+  Sequence,
+  Tuple,
+  Type,
+  TypeVar,
+  Union,
 )
 
-from flax import errors
-from flax import struct
-from flax import traceback_util
-from flax.core import lift
-from flax.core import meta
-from flax.core import Scope
+import jax
+
+from flax import errors, struct, traceback_util
+from flax.core import Scope, lift, meta
 from flax.core.frozen_dict import FrozenDict
 from flax.linen import module as linen_module
-from flax.linen.module import _derive_profiling_name
-from flax.linen.module import _get_unbound_fn
-from flax.linen.module import Module
-from flax.linen.module import Variable
-from flax.linen.module import wrap_method_once
-import jax
+from flax.linen.module import (
+  Module,
+  Variable,
+  _derive_profiling_name,
+  _get_unbound_fn,
+  wrap_method_once,
+)
 
 traceback_util.register_exclusion(__file__)
 

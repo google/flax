@@ -18,18 +18,17 @@ import copy
 import functools
 from typing import Any
 
-from absl.testing import absltest
-from absl.testing import parameterized
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+from absl.testing import absltest, parameterized
+from jax import random
+
 from flax import ids
 from flax import linen as nn
 from flax.linen import fp8_ops
 from flax.training import train_state
-import jax
-from jax import random
-import jax.numpy as jnp
-import numpy as np
-import optax
-
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

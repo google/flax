@@ -27,18 +27,19 @@
 # limitations under the License.
 """Training and evaluation logic."""
 
-from absl import logging
-from flax import linen as nn
 import input_pipeline
-import models
-import utils as vae_utils
-from flax.training import train_state
 import jax
-from jax import random
 import jax.numpy as jnp
 import ml_collections
+import models
 import optax
 import tensorflow_datasets as tfds
+import utils as vae_utils
+from absl import logging
+from jax import random
+
+from flax import linen as nn
+from flax.training import train_state
 
 
 @jax.vmap

@@ -14,15 +14,13 @@
 
 from functools import partial
 
-from absl.testing import absltest
-
-import numpy as np
-
-from flax.core import Scope, Array, init, unfreeze, lift, nn
-
 import jax
-from jax import random, numpy as jnp
+import numpy as np
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
 
+from flax.core import Array, Scope, init, lift, nn, unfreeze
 
 default_norm = partial(nn.batch_norm)
 

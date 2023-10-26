@@ -12,18 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl.testing import absltest
-
-
-from flax.core import Scope, Array, init, nn, unfreeze
-
-import jax
-from jax import numpy as jnp, random
-
-
-
 from dataclasses import dataclass
 from typing import Callable
+
+import jax
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax.core import Array, Scope, init, nn, unfreeze
 
 
 def mlp(scope: Scope, x: Array, hidden: int, out: int):

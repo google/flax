@@ -17,16 +17,14 @@
 import pathlib
 import tempfile
 
-from absl.testing import absltest
 import jax
-from jax import numpy as jnp
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
-from configs import default
 import train
-
+from absl.testing import absltest
+from configs import default
+from jax import numpy as jnp
 
 CNN_PARAMS = 825_034
 

@@ -17,12 +17,11 @@
 import functools
 from typing import Any, Callable, NamedTuple, Optional, Sequence, Union
 
-from flax import struct
-
 import jax
-from jax import lax
 import jax.numpy as jnp
+from jax import lax
 
+from flax import struct
 
 Array = Any
 

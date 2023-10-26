@@ -24,8 +24,9 @@
 # We should consider sending a PR to sphinx so we can get rid of this.
 # Original source: https://github.com/sphinx-doc/sphinx/blob/0aedcc9a916daa92d477226da67d33ce1831822e/sphinx/ext/autosummary/generate.py#L211-L351
 from typing import Any, Dict, List, Set, Tuple
-import sphinx.ext.autosummary.generate as ag
+
 import sphinx.ext.autodoc
+import sphinx.ext.autosummary.generate as ag
 
 
 def generate_autosummary_content(

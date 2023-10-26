@@ -14,16 +14,14 @@
 
 """Tests for flax.struct."""
 
+import dataclasses
 from typing import Any
 
+import jax
 from absl.testing import absltest
-
-import dataclasses
+from jax._src.tree_util import prefix_errors
 
 from flax import struct
-
-import jax
-from jax._src.tree_util import prefix_errors
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

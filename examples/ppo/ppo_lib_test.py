@@ -14,17 +14,17 @@
 
 """Unit tests for the PPO example."""
 
-from absl.testing import absltest
-from flax.training import train_state
-import jax
-import ml_collections
-import numpy as np
-import numpy.testing as np_testing
-
 import agent
 import env_utils
+import jax
+import ml_collections
 import models
+import numpy as np
+import numpy.testing as np_testing
 import ppo_lib
+from absl.testing import absltest
+
+from flax.training import train_state
 
 
 # test GAE

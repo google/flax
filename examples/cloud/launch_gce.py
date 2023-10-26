@@ -22,8 +22,7 @@ import subprocess
 import time
 from typing import Sequence
 
-from absl import app
-from absl import flags
+from absl import app, flags
 
 # General options.
 flags.DEFINE_bool(

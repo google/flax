@@ -14,10 +14,10 @@
 
 from typing import Any, Callable
 
-from flax import core
-from flax import struct
-from flax.linen.fp8_ops import OVERWRITE_WITH_GRADIENT
 import optax
+
+from flax import core, struct
+from flax.linen.fp8_ops import OVERWRITE_WITH_GRADIENT
 
 
 class TrainState(struct.PyTreeNode):

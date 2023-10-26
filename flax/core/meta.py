@@ -25,11 +25,10 @@ import abc
 import functools
 from typing import Any, Callable, Dict, Generic, Optional, Tuple, TypeVar, Union
 
-from flax import errors
-from flax import struct
 import jax
 from jax.experimental import maps
 
+from flax import errors, struct
 
 A = TypeVar('A')
 B = TypeVar('B')

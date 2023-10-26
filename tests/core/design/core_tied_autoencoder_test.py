@@ -14,13 +14,12 @@
 
 from dataclasses import dataclass
 
-from absl.testing import absltest
-
-from jax import numpy as jnp, random
 import jax
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
 
-
-from flax.core import init, unfreeze, lift, nn
+from flax.core import init, lift, nn, unfreeze
 
 
 def transpose(fn):

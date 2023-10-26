@@ -46,9 +46,7 @@ This will use the currently installed versions of all packages.
 import pathlib
 import re
 
-from absl import app
-from absl import flags
-
+from absl import app, flags
 
 FLAGS = flags.FLAGS
 

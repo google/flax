@@ -15,12 +15,11 @@
 """Tests for flax.linen.dtypes."""
 
 
+import jax
 from absl.testing import absltest
+from jax import numpy as jnp
 
 from flax.linen import dtypes
-
-import jax
-from jax import numpy as jnp
 
 default_float_dtype = jnp.result_type(1.0)
 

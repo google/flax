@@ -17,13 +17,10 @@
 from typing import Optional, Sequence
 
 import jax
-
-from flax.linen.module import compact
-from flax.linen.module import merge_param
-from flax.linen.module import Module
-from jax import lax
-from jax import random
 import jax.numpy as jnp
+from jax import lax, random
+
+from flax.linen.module import Module, compact, merge_param
 
 KeyArray = jax.Array
 

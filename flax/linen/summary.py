@@ -14,21 +14,25 @@
 
 """Flax Module summary library."""
 
-from abc import ABC
-from abc import abstractmethod
 import dataclasses
 import io
+from abc import ABC, abstractmethod
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Type, Union
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  Iterable,
+  List,
+  Mapping,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+  Type,
+  Union,
+)
 
-from flax.core import meta
-from flax.core import unfreeze
-from flax.core.scope import CollectionFilter
-from flax.core.scope import DenyList
-from flax.core.scope import FrozenVariableDict
-from flax.core.scope import LazyRng
-from flax.core.scope import MutableVariableDict
-import flax.linen.module as module_lib
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -37,6 +41,15 @@ import rich.table
 import rich.text
 import yaml
 
+import flax.linen.module as module_lib
+from flax.core import meta, unfreeze
+from flax.core.scope import (
+  CollectionFilter,
+  DenyList,
+  FrozenVariableDict,
+  LazyRng,
+  MutableVariableDict,
+)
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]

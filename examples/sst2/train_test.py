@@ -13,15 +13,12 @@
 # limitations under the License.
 
 """Tests for sst2.train."""
-from absl.testing import absltest
-from absl.testing import parameterized
 import jax
 import jax.test_util
 import numpy as np
-
-from configs import default as default_config
 import train
-
+from absl.testing import absltest, parameterized
+from configs import default as default_config
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

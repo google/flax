@@ -16,14 +16,16 @@
 
 
 import collections
-from absl.testing import absltest
-import numpy as np
-import optax
-import flax
-from flax.core import freeze
-from flax import traverse_util
+
 import jax
 import jax.numpy as jnp
+import numpy as np
+import optax
+from absl.testing import absltest
+
+import flax
+from flax import traverse_util
+from flax.core import freeze
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

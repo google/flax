@@ -24,31 +24,30 @@ import operator
 import sys
 from tempfile import TemporaryDirectory
 from typing import (
-    Any,
-    Callable,
-    Generic,
-    Mapping,
-    NamedTuple,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    get_type_hints,
+  Any,
+  Callable,
+  Generic,
+  Mapping,
+  NamedTuple,
+  Optional,
+  Sequence,
+  Tuple,
+  TypeVar,
+  get_type_hints,
 )
 from unittest.mock import patch
 
-from absl.testing import absltest
-from flax import config
-from flax import errors
-from flax import linen as nn
-from flax import struct
-from flax.core import FrozenDict, Scope, freeze
-from flax.linen import compact
 import jax
-from jax import random
-from jax.nn import initializers
 import jax.numpy as jnp
 import numpy as np
+from absl.testing import absltest
+from jax import random
+from jax.nn import initializers
+
+from flax import config, errors, struct
+from flax import linen as nn
+from flax.core import FrozenDict, Scope, freeze
+from flax.linen import compact
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

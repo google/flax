@@ -16,6 +16,7 @@
 
 # pylint: disable=unused-import
 # re-export initializer functions from jax.nn
+from jax.nn.initializers import Initializer as Initializer
 from jax.nn.initializers import constant as constant
 from jax.nn.initializers import delta_orthogonal as delta_orthogonal
 from jax.nn.initializers import glorot_normal as glorot_normal
@@ -27,15 +28,15 @@ from jax.nn.initializers import kaiming_uniform as kaiming_uniform
 from jax.nn.initializers import lecun_normal as lecun_normal
 from jax.nn.initializers import lecun_uniform as lecun_uniform
 from jax.nn.initializers import normal as normal
-from jax.nn.initializers import truncated_normal as truncated_normal
 from jax.nn.initializers import ones as ones
 from jax.nn.initializers import orthogonal as orthogonal
+from jax.nn.initializers import truncated_normal as truncated_normal
 from jax.nn.initializers import uniform as uniform
 from jax.nn.initializers import variance_scaling as variance_scaling
 from jax.nn.initializers import xavier_normal as xavier_normal
 from jax.nn.initializers import xavier_uniform as xavier_uniform
 from jax.nn.initializers import zeros as zeros
-from jax.nn.initializers import Initializer as Initializer
+
 # pylint: enable=unused-import
 
 

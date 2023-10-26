@@ -17,13 +17,11 @@ import itertools
 import pathlib
 import tempfile
 
-from absl.testing import absltest
 import numpy as np
-
-from tensorboard.backend.event_processing import directory_watcher
-from tensorboard.backend.event_processing import event_file_loader
-from tensorboard.util import tensor_util
 import tensorflow as tf
+from absl.testing import absltest
+from tensorboard.backend.event_processing import directory_watcher, event_file_loader
+from tensorboard.util import tensor_util
 
 from flax.metrics.tensorboard import SummaryWriter, _flatten_dict
 

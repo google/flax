@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from jax import lax
-from flax.linen import initializers
 from typing import Callable
-from flax.linen import Module, compact
+
+from jax import lax
+
+from flax.linen import Module, compact, initializers
 
 
 class Dense(Module):

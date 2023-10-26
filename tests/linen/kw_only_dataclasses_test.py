@@ -16,6 +16,7 @@
 
 import dataclasses
 import inspect
+
 from absl.testing import absltest
 
 from flax.linen import kw_only_dataclasses

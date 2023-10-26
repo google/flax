@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl.testing import absltest, parameterized
-from flax.core import FrozenDict, copy, freeze, pop, unfreeze, pretty_repr
 import jax
+from absl.testing import absltest, parameterized
+
+from flax.core import FrozenDict, copy, freeze, pop, pretty_repr, unfreeze
 
 
 class FrozenDictTest(parameterized.TestCase):

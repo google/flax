@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import jax
-from jax import numpy as jnp, jit
 from dense import Dense
-
+from jax import jit
+from jax import numpy as jnp
 
 X = jnp.ones((1, 10))
 Y = jnp.ones((5,))

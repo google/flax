@@ -15,6 +15,7 @@
 """Early stopping."""
 
 import math
+
 from flax import struct
 
 

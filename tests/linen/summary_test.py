@@ -14,16 +14,16 @@
 
 from typing import List
 
+import jax
+import jax.numpy as jnp
+import numpy as np
 from absl.testing import absltest
+from jax import random
+
 from flax import linen as nn
 from flax import struct
 from flax.core.scope import Array
 from flax.linen import summary
-import jax
-from jax import random
-import jax.numpy as jnp
-import numpy as np
-
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

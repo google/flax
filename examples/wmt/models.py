@@ -20,13 +20,14 @@
 # pytype: disable=wrong-keyword-args
 # pytype: disable=attribute-error
 
-from typing import Callable, Any, Optional
+from typing import Any, Callable, Optional
+
+import jax.numpy as jnp
+import numpy as np
+from jax import lax
 
 from flax import linen as nn
 from flax import struct
-from jax import lax
-import jax.numpy as jnp
-import numpy as np
 
 
 @struct.dataclass

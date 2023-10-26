@@ -21,36 +21,45 @@ import functools
 import inspect
 import sys
 import threading
-from types import MappingProxyType
 import typing
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Literal, Mapping, Optional, Tuple, Type, TypeVar, Union, overload
-from typing_extensions import Protocol, dataclass_transform
 import weakref
+from types import MappingProxyType
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  Iterable,
+  Iterator,
+  List,
+  Literal,
+  Mapping,
+  Optional,
+  Tuple,
+  Type,
+  TypeVar,
+  Union,
+  overload,
+)
 
-import flax
-from flax import config
-from flax import core
-from flax import errors
-from flax import serialization
-from flax import traceback_util
-from flax import traverse_util
-from flax.core import meta
-from flax.core import partial_eval
-from flax.core import Scope
-from flax.core.frozen_dict import FrozenDict
-from flax.core.scope import CollectionFilter
-from flax.core.scope import DenyList
-from flax.core.scope import FrozenVariableDict
-from flax.core.scope import union_filters
-from flax.core.scope import Variable
-from flax.core.scope import VariableDict
-from flax.ids import FlaxId
-from flax.ids import uuid
-import flax.linen as nn
-from flax.linen import kw_only_dataclasses
 import jax
 import jax.numpy as jnp
+from typing_extensions import Protocol, dataclass_transform
 
+import flax
+import flax.linen as nn
+from flax import config, core, errors, serialization, traceback_util, traverse_util
+from flax.core import Scope, meta, partial_eval
+from flax.core.frozen_dict import FrozenDict
+from flax.core.scope import (
+  CollectionFilter,
+  DenyList,
+  FrozenVariableDict,
+  Variable,
+  VariableDict,
+  union_filters,
+)
+from flax.ids import FlaxId, uuid
+from flax.linen import kw_only_dataclasses
 
 traceback_util.register_exclusion(__file__)
 

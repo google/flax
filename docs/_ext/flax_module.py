@@ -21,15 +21,16 @@ Use directive as follows:
   :class: Dense
 """
 
+import importlib
+
+import sphinx
+import sphinx.ext.autosummary.generate as ag
 from docutils import nodes
 from docutils.parsers.rst import directives
 from docutils.statemachine import ViewList
-
-import sphinx
 from sphinx.util.docutils import SphinxDirective
+
 from docs.conf_sphinx_patch import generate_autosummary_content
-import sphinx.ext.autosummary.generate as ag
-import importlib
 
 
 def render_module(modname: str, qualname: str, app):

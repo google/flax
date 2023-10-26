@@ -14,17 +14,15 @@
 
 """Tests for flax.linen.partitioning."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
+import jax
+import jax.numpy as jnp
+from absl.testing import absltest, parameterized
+from jax import random, sharding
+from jax.experimental import mesh_utils
+
 from flax import linen as nn
 from flax.core import freeze, unfreeze
 from flax.linen import partitioning
-from jax.experimental import mesh_utils
-from jax import sharding
-import jax
-from jax import random
-import jax.numpy as jnp
-
 
 mock = absltest.mock
 

@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import jax
-from jax import numpy as jnp
-from flax import linen as nn
 from typing import Iterable
-from flax.linen import Module, compact
+
+import jax
 from dense import Dense
+from jax import numpy as jnp
+
+from flax import linen as nn
+from flax.linen import Module, compact
 
 
 # Many NN layers and blocks are best described by a single function with inline variables.

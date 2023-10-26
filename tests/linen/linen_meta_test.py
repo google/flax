@@ -14,14 +14,14 @@
 
 """Tests for linen_meta."""
 
-from absl.testing import absltest
-from flax import linen as nn
 import jax
+from absl.testing import absltest
 from jax import numpy as jnp
 from jax import random
 from jax.experimental import mesh_utils
-from jax.sharding import Mesh
-from jax.sharding import PartitionSpec
+from jax.sharding import Mesh, PartitionSpec
+
+from flax import linen as nn
 
 
 class LinenMetaTest(absltest.TestCase):

@@ -43,10 +43,11 @@ returns a copy of the data including the provided updates.
 import abc
 import copy
 import dataclasses
-from typing import Any, Callable, Tuple
 import warnings
+from typing import Any, Callable, Tuple
 
 import jax
+
 import flax
 from flax.core.scope import VariableDict
 

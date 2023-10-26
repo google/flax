@@ -19,20 +19,15 @@ import os
 import pathlib
 from typing import Any
 
-from absl.testing import absltest
-from absl.testing import parameterized
-from flax import config
-from flax import core
-from flax import errors
-from flax import io
-from flax import linen as nn
-from flax import struct
-from flax.training import checkpoints
 import jax
-from jax import numpy as jnp
 import numpy as np
-
 import orbax.checkpoint as orbax
+from absl.testing import absltest, parameterized
+from jax import numpy as jnp
+
+from flax import config, core, errors, io, struct
+from flax import linen as nn
+from flax.training import checkpoints
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

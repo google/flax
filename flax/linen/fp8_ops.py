@@ -14,13 +14,10 @@
 
 from functools import partial
 
-from flax.linen import initializers
-from flax.linen import module
-from jax import custom_vjp
-from jax import lax
+from jax import custom_vjp, lax, random
 from jax import numpy as jnp
-from jax import random
 
+from flax.linen import initializers, module
 
 OVERWRITE_WITH_GRADIENT = '_overwrite_with_gradient'
 

@@ -17,42 +17,41 @@
 import collections
 import dataclasses
 import functools
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
 import warnings
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  Generic,
+  Iterable,
+  List,
+  Mapping,
+  Optional,
+  Sequence,
+  Tuple,
+  TypeVar,
+  Union,
+)
 
-from flax import traceback_util
 import jax
 from jax import random
 
-from . import axes_scan
-from . import meta
-from .frozen_dict import freeze
-from .frozen_dict import unfreeze
+from flax import traceback_util
+
+from . import axes_scan, meta
+from .frozen_dict import freeze, unfreeze
 from .scope import (
-    CollectionFilter,
-    DenyList,  # pylint: disable=g-multiple-import
-    Filter,
-    PRNGSequenceFilter,
-    Scope,
-    group_collections,
-    in_filter,
-    intersect_filters,
-    is_filter_empty,
-    subtract_filters,
-    union_filters,
+  CollectionFilter,
+  DenyList,  # pylint: disable=g-multiple-import
+  Filter,
+  PRNGSequenceFilter,
+  Scope,
+  group_collections,
+  in_filter,
+  intersect_filters,
+  is_filter_empty,
+  subtract_filters,
+  union_filters,
 )
 
 traceback_util.register_exclusion(__file__)

@@ -14,10 +14,8 @@
 
 """Fast decoding routines for inference from a trained language model."""
 
-from jax import lax
-from jax import random
 import jax.numpy as jnp
-
+from jax import lax, random
 
 # Constants
 # The default End-of-Sentence token id is 2 (SentencePiece).

@@ -20,21 +20,17 @@
 import functools
 from typing import Any, Dict, Tuple
 
-from absl import app
-from absl import flags
-from absl import logging
-from clu import metric_writers
-from flax import linen as nn
-from flax.training import train_state
 import jax
 import jax.numpy as jnp
-import optax
-
 import models
+import optax
+from absl import app, flags, logging
+from clu import metric_writers
 from input_pipeline import CharacterTable as CTable
-from input_pipeline import get_sequence_lengths
-from input_pipeline import mask_sequences
+from input_pipeline import get_sequence_lengths, mask_sequences
 
+from flax import linen as nn
+from flax.training import train_state
 
 Array = Any
 FLAGS = flags.FLAGS

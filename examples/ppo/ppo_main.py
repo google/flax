@@ -15,15 +15,12 @@
 # See issue #620.
 # pytype: disable=wrong-keyword-args
 
-from absl import app
-from absl import flags
-from ml_collections import config_flags
-import tensorflow as tf
-
 import env_utils
 import models
 import ppo_lib
-
+import tensorflow as tf
+from absl import app, flags
+from ml_collections import config_flags
 
 FLAGS = flags.FLAGS
 

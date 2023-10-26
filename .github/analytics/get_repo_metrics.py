@@ -16,13 +16,12 @@ import json
 import os
 from datetime import datetime
 from typing import Callable, List
-from absl import app, flags
 
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import pandas as pd
 import requests
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-
+from absl import app, flags
 
 token = os.environ['GITHUB_TOKEN']
 endpoint = r'https://api.github.com/graphql'

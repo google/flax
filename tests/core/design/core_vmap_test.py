@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Sequence, Callable
-
-from flax.core import Scope, Array, init, unfreeze, lift, nn
-
-from absl.testing import absltest
+from typing import Callable, Sequence
 
 import jax
-from jax import random, numpy as jnp
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax.core import Array, Scope, init, lift, nn, unfreeze
 
 
 def mlp_vmap(

@@ -51,11 +51,13 @@ end of the parameter list (after all non-keyword-only parameters).
 """
 
 import dataclasses
-import inspect
 import functools
+import inspect
 from types import MappingProxyType
 from typing import Any, TypeVar
+
 from typing_extensions import dataclass_transform
+
 import flax
 
 M = TypeVar('M', bound='flax.linen.Module')

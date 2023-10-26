@@ -17,20 +17,20 @@
 import functools
 from typing import Any, Callable
 
-from absl import logging
-import flax
-from flax import linen as nn
 import agent
-import models
-import test_episodes
-from flax.metrics import tensorboard
-from flax.training import checkpoints
-from flax.training import train_state
 import jax
 import jax.numpy as jnp
 import ml_collections
+import models
 import numpy as np
 import optax
+import test_episodes
+from absl import logging
+
+import flax
+from flax import linen as nn
+from flax.metrics import tensorboard
+from flax.training import checkpoints, train_state
 
 
 @jax.jit

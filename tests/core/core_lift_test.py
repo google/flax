@@ -13,17 +13,15 @@
 # limitations under the License.
 
 import operator
-from flax import errors
-from flax.core import init, apply, lift, nn, FrozenDict, copy
 
 import jax
-from jax import random
-from jax import numpy as jnp
-
 import numpy as np
-
-
 from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax import errors
+from flax.core import FrozenDict, apply, copy, init, lift, nn
 
 
 class LiftTest(absltest.TestCase):

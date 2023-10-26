@@ -15,11 +15,12 @@
 """Frozen Dictionary."""
 
 import collections
-from typing import Any, Dict, Hashable, Mapping, Tuple, TypeVar, Union
 from types import MappingProxyType
+from typing import Any, Dict, Hashable, Mapping, Tuple, TypeVar, Union
+
+import jax
 
 from flax import serialization
-import jax
 
 
 class FrozenKeysView(collections.abc.KeysView):

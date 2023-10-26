@@ -27,10 +27,9 @@
 # limitations under the License.
 """APIs for handling dtypes in Linen Modules."""
 
-from typing import Any, Optional, List
+from typing import Any, List, Optional
 
 from jax import numpy as jnp
-
 
 Dtype = Any
 Array = Any

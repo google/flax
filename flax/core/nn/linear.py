@@ -15,14 +15,14 @@
 """Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-from flax import struct
-from flax.core import Scope
-from flax.linen import initializers
-from jax import lax
 
 import jax.numpy as jnp
 import numpy as np
+from jax import lax
 
+from flax import struct
+from flax.core import Scope
+from flax.linen import initializers
 
 default_kernel_init = initializers.lecun_normal()
 

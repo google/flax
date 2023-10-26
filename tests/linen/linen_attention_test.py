@@ -14,21 +14,16 @@
 
 """Tests for flax.linen.attention."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
-
-from flax import errors
-from flax import linen as nn
-from flax import jax_utils
-from flax.core import pop
-
 import jax
-from jax import lax
-from jax import random
-from jax.nn import initializers
 import jax.numpy as jnp
-
 import numpy as np
+from absl.testing import absltest, parameterized
+from jax import lax, random
+from jax.nn import initializers
+
+from flax import errors, jax_utils
+from flax import linen as nn
+from flax.core import pop
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

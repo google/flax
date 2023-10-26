@@ -15,10 +15,15 @@
 """Recurrent tests."""
 
 
+<<<<<<< HEAD
 from absl.testing import absltest
+=======
+>>>>>>> 67eaa395 (added import sorting rule to pre-commit hook)
 import jax
 import jax.numpy as jnp
 import numpy as np
+from absl.testing import absltest, parameterized
+
 from flax import linen as nn
 from flax.linen.recurrent import flip_sequences
 

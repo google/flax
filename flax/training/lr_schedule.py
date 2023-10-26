@@ -23,9 +23,9 @@ Note that with `FLIP #1009`_ learning rate schedules in ``flax.training`` are
 .. _Optimizer Schedules: https://optax.readthedocs.io/en/latest/api.html#optimizer-schedules
 """
 
-from absl import logging
 import jax.numpy as jnp
 import numpy as np
+from absl import logging
 
 
 def _piecewise_constant(boundaries, values, t):

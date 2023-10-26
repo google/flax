@@ -16,17 +16,14 @@
 
 import functools
 
-from absl.testing import absltest
-from absl.testing import parameterized
-
-from flax import linen as nn
-
 import jax
+import jax.numpy as jnp
+import numpy as np
+from absl.testing import absltest, parameterized
 from jax import random
 from jax.nn import initializers
-import jax.numpy as jnp
 
-import numpy as np
+from flax import linen as nn
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

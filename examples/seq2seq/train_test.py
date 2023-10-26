@@ -16,16 +16,16 @@
 
 import functools
 
-from absl.testing import absltest
-from flax.training import train_state
+import input_pipeline
 import jax
-from jax import random
+import models
 import numpy as np
 import optax
-
-import input_pipeline
 import train
-import models
+from absl.testing import absltest
+from jax import random
+
+from flax.training import train_state
 
 jax.config.parse_flags_with_absl()
 

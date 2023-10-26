@@ -18,14 +18,12 @@ import dataclasses
 import functools
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
 
-from flax.linen import dtypes
-from flax.linen import module
-from flax.linen import transforms
 import jax
+import jax.numpy as jnp
 from jax import lax
 from jax.nn import initializers
-import jax.numpy as jnp
 
+from flax.linen import dtypes, module, transforms
 
 PRNGKey = Any
 Array = Any

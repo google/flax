@@ -23,25 +23,23 @@ This script trains a Transformer on a LM1B dataset.
 import collections
 import os
 
-from absl import logging
-from clu import metric_writers
-from clu import periodic_actions
-from flax import linen as nn
-from flax.training import checkpoints
-from flax.training import common_utils
+import input_pipeline
 import jax
-from jax import random
 import jax.numpy as jnp
 from jax.sharding import PartitionSpec as P, Mesh, NamedSharding
 import ml_collections
+import models
 import numpy as np
 import optax
-import tensorflow as tf
-
-import input_pipeline
-import models
 import temperature_sampler
-import utils
+import tensorflow as tf
+from absl import logging
+from clu import metric_writers, periodic_actions
+from jax import random
+
+from flax import jax_utils
+from flax import linen as nn
+from flax.training import checkpoints, common_utils, train_state
 
 
 def rsqrt_schedule(

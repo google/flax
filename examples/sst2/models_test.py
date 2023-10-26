@@ -13,13 +13,11 @@
 # limitations under the License.
 
 """Tests for sst2.models."""
-from absl.testing import absltest
-from absl.testing import parameterized
-import models
 import jax
 import jax.test_util
+import models
 import numpy as np
-
+from absl.testing import absltest, parameterized
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()

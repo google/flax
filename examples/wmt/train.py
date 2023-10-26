@@ -24,26 +24,23 @@ import collections
 import functools
 import os
 
-from absl import logging
-from clu import metric_writers
-from clu import periodic_actions
-from flax import jax_utils
-from flax import linen as nn
-from flax.training import checkpoints
-from flax.training import common_utils
-from flax.training import dynamic_scale as dynamic_scale_lib
-from flax.training import train_state
-import jax
-import jax.numpy as jnp
-import ml_collections
-import numpy as np
-import optax
-import tensorflow as tf
-
 import bleu
 import decode
 import input_pipeline
+import jax
+import jax.numpy as jnp
+import ml_collections
 import models
+import numpy as np
+import optax
+import tensorflow as tf
+from absl import logging
+from clu import metric_writers, periodic_actions
+
+from flax import jax_utils
+from flax import linen as nn
+from flax.training import checkpoints, common_utils, train_state
+from flax.training import dynamic_scale as dynamic_scale_lib
 
 
 class TrainState(train_state.TrainState):

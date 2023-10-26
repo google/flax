@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl.testing import absltest
 import jax
 import jax.numpy as jnp
 import numpy as np
-
+from absl.testing import absltest
 from temperature_sampler import temperature_sample
-
 
 jax.config.update('jax_disable_most_optimizations', True)
 

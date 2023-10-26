@@ -15,10 +15,11 @@
 from typing import Iterable, Tuple
 
 import jax
-from jax import numpy as jnp, random
+from jax import numpy as jnp
+from jax import random
 
 from flax import linen as nn
-from flax.linen import Module, Dense, compact
+from flax.linen import Dense, Module, compact
 
 
 # A concise MLP defined via lazy submodule initialization

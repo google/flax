@@ -14,10 +14,9 @@
 
 """Pooling modules."""
 
-from jax import lax
 import jax.numpy as jnp
-
 import numpy as np
+from jax import lax
 
 
 def pool(inputs, init, reduce_fn, window_shape, strides, padding):
