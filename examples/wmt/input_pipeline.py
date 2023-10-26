@@ -15,15 +15,13 @@
 """Input pipeline for a WMT dataset."""
 
 import os
-from typing import Dict, Optional, List, Union
+from typing import Dict, List, Optional, Union
 
-from clu import deterministic_data
 import ml_collections
 import tensorflow as tf
 import tensorflow_datasets as tfds
-
 import tokenizer
-
+from clu import deterministic_data
 
 AUTOTUNE = tf.data.AUTOTUNE
 Features = Dict[str, tf.Tensor]
