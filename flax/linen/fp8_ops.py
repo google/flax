@@ -155,7 +155,7 @@ class Fp8DotGeneralOp(module.Module):
         OVERWRITE_WITH_GRADIENT, 'output_grad_scale', *scale_args)
 
 
-  def __call__(self, *args, **kwargs) -> jnp.ndarray:
+  def __call__(self, *args, **kwargs):
 
     assert len(args) == 3
     x = args[0]
