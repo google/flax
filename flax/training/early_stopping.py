@@ -30,7 +30,7 @@ class EarlyStopping(struct.PyTreeNode):
       rng, input_rng = jax.random.split(rng)
       optimizer, train_metrics = train_epoch(
           optimizer, train_ds, config.batch_size, epoch, input_rng)
-      _, early_stop = early_stop.update(train_metrics['loss'])
+      early_stop = early_stop.update(train_metrics['loss'])
       if early_stop.should_stop:
         print('Met early stopping criteria, breaking...')
         break
@@ -43,6 +43,8 @@ class EarlyStopping(struct.PyTreeNode):
     patience_count: Number of steps since last improving update.
     should_stop: Whether the training loop should stop to avoid
         overfitting.
+    has_improved: Whether the metric has improved greater or
+      equal to the min_delta in the last `.update` call.
   """
 
   min_delta: float = 0
@@ -50,28 +52,29 @@ class EarlyStopping(struct.PyTreeNode):
   best_metric: float = float('inf')
   patience_count: int = 0
   should_stop: bool = False
+  has_improved: bool = False
 
   def reset(self):
     return self.replace(
-        best_metric=float('inf'), patience_count=0, should_stop=False
+        best_metric=float('inf'), patience_count=0, should_stop=False, has_improved=False
     )
 
   def update(self, metric):
     """Update the state based on metric.
 
     Returns:
-      A pair (has_improved, early_stop), where `has_improved` is True when there
-      was an improvement greater than `min_delta` from the previous
-      `best_metric` and `early_stop` is the updated `EarlyStop` object.
+      The updated EarlyStopping class. The `.has_improved` attribute is True
+      when there was an improvement greater than `min_delta` from the previous
+      `best_metric`.
     """
 
     if (
         math.isinf(self.best_metric)
         or self.best_metric - metric > self.min_delta
     ):
-      return True, self.replace(best_metric=metric, patience_count=0)
+      return self.replace(best_metric=metric, patience_count=0, has_improved=True)
     else:
       should_stop = self.patience_count >= self.patience or self.should_stop
-      return False, self.replace(
-          patience_count=self.patience_count + 1, should_stop=should_stop
+      return self.replace(
+          patience_count=self.patience_count + 1, should_stop=should_stop, has_improved=False
       )
