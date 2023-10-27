@@ -747,7 +747,7 @@ class StochasticTest(absltest.TestCase):
 
 
 # TODO(flax-dev): add integration tests for RNN cells
-class RecurrentTest(absltest.TestCase):
+class RecurrentTest(parameterized.TestCase):
 
   def test_lstm(self):
     lstm = nn.LSTMCell(features=4)
@@ -776,37 +776,56 @@ class RecurrentTest(absltest.TestCase):
         },
     )
 
-  def test_gru(self):
-    gru = nn.GRUCell(features=4)
+  @parameterized.parameters(
+      {'module_cls': nn.GRUCell,
+       'expected_param_shapes': {
+         'ir': {'kernel': (3, 4), 'bias': (4,)},
+         'iz': {'kernel': (3, 4), 'bias': (4,)},
+         'in': {'kernel': (3, 4), 'bias': (4,)},
+         'hr': {'kernel': (4, 4)},
+         'hz': {'kernel': (4, 4)},
+         'hn': {'kernel': (4, 4), 'bias': (4,)},
+        }},
+      {'module_cls': nn.MGUCell,
+       'expected_param_shapes': {
+         'if': {'kernel': (3, 4), 'bias': (4,)},
+         'in': {'kernel': (3, 4), 'bias': (4,)},
+         'hf': {'kernel': (4, 4)},
+         'hn': {'kernel': (4, 4), 'bias': (4,)},
+        }}
+  )
+  def test_gated_units(self, module_cls, expected_param_shapes):
+    module = module_cls(features=4)
     rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
-    carry0 = gru.initialize_carry(rng, x.shape)
+    carry0 = module.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
-    (carry, y), initial_params = gru.init_with_output(key2, carry0, x)
+    (carry, y), initial_params = module.init_with_output(key2, carry0, x)
     self.assertEqual(carry.shape, (2, 4))
     np.testing.assert_allclose(y, carry)
     param_shapes = jax.tree_util.tree_map(np.shape, initial_params['params'])
     self.assertEqual(
         param_shapes,
-        {
-            'ir': {'kernel': (3, 4), 'bias': (4,)},
-            'iz': {'kernel': (3, 4), 'bias': (4,)},
-            'in': {'kernel': (3, 4), 'bias': (4,)},
-            'hr': {'kernel': (4, 4)},
-            'hz': {'kernel': (4, 4)},
-            'hn': {'kernel': (4, 4), 'bias': (4,)},
-        },
+        expected_param_shapes,
     )
+    if module_cls == nn.MGUCell:
+      self.assertTrue((initial_params['params']['if']['bias'] == jnp.ones((4,))).all())
+      self.assertTrue((initial_params['params']['in']['bias'] == jnp.zeros((4,))).all())
+      self.assertTrue((initial_params['params']['hn']['bias'] == jnp.zeros((4,))).all())
 
-  def test_complex_input_gru(self):
-    gru = nn.GRUCell(features=4)
+  @parameterized.parameters(
+      {'module_cls': nn.GRUCell},
+      {'module_cls': nn.MGUCell}
+  )
+  def test_complex_input_gated_units(self, module_cls):
+    module_instance = module_cls(features=4)
     rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3), dtype=jnp.complex64)
-    carry0 = gru.initialize_carry(rng, x.shape)
+    carry0 = module_instance.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
-    (carry, y), _ = gru.init_with_output(key2, carry0, x)
+    (carry, y), _ = module_instance.init_with_output(key2, carry0, x)
     self.assertEqual(carry.dtype, jnp.complex64)
     self.assertEqual(y.dtype, jnp.complex64)
 
