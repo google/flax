@@ -14,7 +14,7 @@
 
 from functools import partial
 
-from jax import custom_vjp, lax, random
+from jax import custom_vjp, custom_jvp, lax, random
 from jax import numpy as jnp
 
 from flax.linen import initializers, module
@@ -120,6 +120,24 @@ def out_qdq_bwd(compute_dtype, res, g):
 out_qdq.defvjp(out_qdq_fwd, out_qdq_bwd)
 
 
+@partial(custom_jvp, nondiff_argnums=(2,))
+def dot_general_with_precision(lhs, rhs, dimension_numbers):
+  return lax.dot_general(lhs, rhs, dimension_numbers,
+                         precision=lax.Precision.DEFAULT)
+
+@dot_general_with_precision.defjvp
+def dot_general_with_precision_jvp(dimension_numbers, primals, tangents):
+ lhs, rhs = primals
+ lhs_dot, rhs_dot = tangents
+
+ out = lax.dot_general(lhs, rhs, dimension_numbers,
+                       precision=lax.Precision.DEFAULT)
+ grad_out = (lax.dot_general(lhs_dot, rhs, dimension_numbers,
+                             precision=lax.Precision.HIGHEST) +
+             lax.dot_general(lhs, rhs_dot, dimension_numbers,
+                             precision=lax.Precision.HIGHEST))
+ return out, grad_out
+
 class Fp8DotGeneralOp(module.Module):
   amax_history_length: int = 1024
 
@@ -162,7 +180,6 @@ class Fp8DotGeneralOp(module.Module):
     x = args[0]
     k = args[1]
     dimension_numbers = args[2]
-    precision = kwargs['precision']
 
     # Use the `k.dtype` since it aligns with the `dtype` of its layers,
     # namely, the computation data type.
@@ -175,7 +192,7 @@ class Fp8DotGeneralOp(module.Module):
     k_qdq = in_qdq(
       comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
-    y_qdq = lax.dot_general(x_qdq, k_qdq, dimension_numbers, precision)  # type: ignore
+    y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers) # type: ignore
     y = out_qdq(
       comp_dtype,
       y_qdq,
