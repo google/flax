@@ -18,7 +18,6 @@ THe RNNCell modules can be scanned using lifted transforms. For more information
 see: https://flax.readthedocs.io/en/latest/developer_notes/lift.html.
 """
 
-from abc import ABCMeta
 from functools import partial  # pylint: disable=g-importing-member
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, TypeVar, Union
 from absl import logging
@@ -51,41 +50,6 @@ CarryHistory = Any
 Output = Any
 
 
-class _Never:
-  pass
-
-
-NEVER = _Never()
-
-LEGACY_UPDATE_MESSAGE = (
-    'The RNNCellBase API has changed, '
-    'the error you are experiencing might be caused by this change. Please '
-    'update your code to the new API, for more information on how to do this '
-    'please check out the RNNCellBase migration guide: '
-    'https://flax.readthedocs.io/en/latest/guides/rnncell_upgrade_guide.html'
-)
-
-
-class RNNCellCompatibilityMeta(ABCMeta):
-  """Metaclass for RNNCell compatibility."""
-
-  def __call__(self, *args: Any, **kwds: Any) -> Any:
-    try:
-      return super().__call__(*args, **kwds)
-    except TypeError as e:
-      msg = e.args[0]
-      raise TypeError(f'{msg} \n\n {LEGACY_UPDATE_MESSAGE}') from e
-
-
-def deprecation_method_decorator(f):
-  def wrapper(*args, **kwargs):
-    if len(args) < 1 or not isinstance(args[0], RNNCellBase):
-      raise TypeError(LEGACY_UPDATE_MESSAGE)
-    return f(*args, **kwargs)
-
-  return wrapper
-
-
 class RNNCellBase(Module):
   """RNN cell base class."""
 
@@ -110,7 +74,7 @@ class RNNCellBase(Module):
     raise NotImplementedError
 
 
-class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
+class LSTMCell(RNNCellBase):
   r"""LSTM cell.
 
   The mathematical definition of the cell is as follows
@@ -193,7 +157,6 @@ class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return (new_c, new_h), new_h
 
   @nowrap
-  @deprecation_method_decorator
   def initialize_carry(
       self, rng: PRNGKey, input_shape: Tuple[int, ...]
   ) -> Tuple[Array, Array]:
@@ -244,7 +207,7 @@ class DenseParams(Module):
     return k, b
 
 
-class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
+class OptimizedLSTMCell(RNNCellBase):
   r"""More efficient LSTM Cell that concatenates state components before matmul.
 
   The parameters are compatible with `LSTMCell`. Note that this cell is often
@@ -373,7 +336,6 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return (new_c, new_h), new_h
 
   @nowrap
-  @deprecation_method_decorator
   def initialize_carry(
       self, rng: PRNGKey, input_shape: Tuple[int, ...]
   ) -> Tuple[Array, Array]:
@@ -398,7 +360,7 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return 1
 
 
-class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
+class GRUCell(RNNCellBase):
   r"""GRU cell.
 
   The mathematical definition of the cell is as follows
@@ -481,7 +443,6 @@ class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return new_h, new_h
 
   @nowrap
-  @deprecation_method_decorator
   def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
     """Initialize the RNN cell carry.
 
@@ -596,7 +557,6 @@ class ConvLSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @nowrap
-  @deprecation_method_decorator
   def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
     """Initialize the RNN cell carry.
 
@@ -723,7 +683,6 @@ class RNN(Module):
   """
 
   cell: RNNCellBase
-  cell_size: Any = NEVER
   time_major: bool = False
   return_carry: bool = False
   reverse: bool = False
@@ -737,14 +696,6 @@ class RNN(Module):
   split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(
       {'params': False}
   )
-
-  def __post_init__(self) -> None:
-    if self.cell_size is not NEVER:
-      raise TypeError(
-          f'The `cell_size` argument is no longer available`. '
-          + LEGACY_UPDATE_MESSAGE
-      )
-    return super().__post_init__()
 
   def __call__(
       self,
