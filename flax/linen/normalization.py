@@ -83,7 +83,10 @@ def _compute_stats(
     axes: The axes in ``x`` to compute mean and variance statistics for.
     dtype: Optional dtype specifying the minimal precision. Statistics are
       always at least float32 for stability (default: dtype of x).
-    axis_name: Optional name for the pmapped axis to compute mean over.
+    axis_name: Optional name for the pmapped axis to compute mean over. Note,
+      this is only used for pmap and shard map. For SPMD jit, you do not need to
+      manually synchronize. Just make sure that the axes are correctly annotated
+      and XLA:SPMD will insert the necessary collectives.
     axis_index_groups: Optional axis indices.
     use_mean: If true, calculate the mean from the input and use it when
       computing the variance. If false, set the mean to zero and compute the
@@ -269,6 +272,9 @@ class BatchNorm(Module):
     scale_init: initializer for scale, by default, one.
     axis_name: the axis name used to combine batch statistics from multiple
       devices. See `jax.pmap` for a description of axis names (default: None).
+      Note, this is only used for pmap and shard map. For SPMD jit, you do not
+      need to manually synchronize. Just make sure that the axes are correctly
+      annotated and XLA:SPMD will insert the necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
@@ -390,7 +396,10 @@ class LayerNorm(Module):
     axis_name: the axis name used to combine batch statistics from multiple
       devices. See `jax.pmap` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
-      array being normalized is sharded across devices within a pmap.
+      array being normalized is sharded across devices within a pmap or shard
+      map. For SPMD jit, you do not need to manually synchronize. Just make sure
+      that the axes are correctly annotated and XLA:SPMD will insert the
+      necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
@@ -481,7 +490,10 @@ class RMSNorm(Module):
     axis_name: the axis name used to combine batch statistics from multiple
       devices. See `jax.pmap` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
-      array being normalized is sharded across devices within a pmap.
+      array being normalized is sharded across devices within a pmap or shard
+      map. For SPMD jit, you do not need to manually synchronize. Just make sure
+      that the axes are correctly annotated and XLA:SPMD will insert the
+      necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over the
@@ -561,7 +573,10 @@ class GroupNorm(Module):
     axis_name: the axis name used to combine batch statistics from multiple
       devices. See `jax.pmap` for a description of axis names (default: None).
       This is only needed if the model is subdivided across devices, i.e. the
-      array being normalized is sharded across devices within a pmap.
+      array being normalized is sharded across devices within a pmap or shard
+      map. For SPMD jit, you do not need to manually synchronize. Just make sure
+      that the axes are correctly annotated and XLA:SPMD will insert the
+      necessary collectives.
     axis_index_groups: groups of axis indices within that named axis
       representing subsets of devices to reduce over (default: None). For
       example, `[[0, 1], [2, 3]]` would independently batch-normalize over the

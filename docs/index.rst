@@ -315,6 +315,7 @@ Notable examples in Flax include:
    :maxdepth: 2
 
    Quick start <getting_started>
+   guides/flax_basics
    guides/index
    examples
    glossary

@@ -101,16 +101,20 @@ class DynamicScale(struct.PyTreeNode):
     Args:
       fun: Function to be differentiated. Its arguments at positions specified
         by ``argnums`` should be arrays, scalars, or standard Python containers.
-        It should return a scalar (which includes arrays with shape ``()``
-        but not arrays with shape ``(1,)`` etc.)
+        It should return a scalar (which includes arrays with shape ``()`` but
+        not arrays with shape ``(1,)`` etc.)
       argnums: Optional, integer or sequence of integers. Specifies which
         positional argument(s) to differentiate with respect to (default 0).
       has_aux: Optional, bool. Indicates whether ``fun`` returns a pair where
         the first element is considered the output of the mathematical function
-        to be differentiated and the second element is auxiliary data.
-        Default False.
+        to be differentiated and the second element is auxiliary data. Default
+        False.
       axis_name: If an axis is given the gradients will be averaged across
-        replicas (default: None).
+        replicas (default: None). Note, this is only used for pmap and shard
+        map. For SPMD jit, you do not need to manually synchronize. Just make
+        sure that the axes are correctly annotated and XLA:SPMD will insert the
+        necessary collectives.
+
     Returns:
       A function that takes the same arguments as `fun` and
       returns a DynamicScaleResult

@@ -186,8 +186,10 @@ class MlpBlock(nn.Module):
     x = nn.Dense(
         config.mlp_dim,
         dtype=config.dtype,
-        kernel_init=config.kernel_init,
-        bias_init=config.bias_init,
+        kernel_init=nn.with_logical_partitioning(
+            config.kernel_init, ('embed', 'mlp')
+        ),
+        bias_init=nn.with_logical_partitioning(config.bias_init, ('mlp',)),
     )(inputs)
     x = nn.relu(x)
     x = nn.Dropout(rate=config.dropout_rate)(
@@ -196,8 +198,10 @@ class MlpBlock(nn.Module):
     output = nn.Dense(
         actual_out_dim,
         dtype=config.dtype,
-        kernel_init=config.kernel_init,
-        bias_init=config.bias_init,
+        kernel_init=nn.with_logical_partitioning(
+            config.kernel_init, ('mlp', 'embed')
+        ),
+        bias_init=nn.with_logical_partitioning(config.bias_init, ('embed',)),
     )(x)
     output = nn.Dropout(rate=config.dropout_rate)(
         output, deterministic=config.deterministic
@@ -230,13 +234,23 @@ class EncoderDecoder1DBlock(nn.Module):
 
     # Decoder block.
     assert inputs.ndim == 3
-    x = nn.LayerNorm(dtype=config.dtype)(inputs)
+    x = nn.LayerNorm(
+        dtype=config.dtype,
+        bias_init=nn.with_logical_partitioning(
+            nn.initializers.zeros, ('embed',)
+        ),
+        scale_init=nn.with_logical_partitioning(
+            nn.initializers.ones, ('embed',)
+        ),
+    )(inputs)
     x = nn.SelfAttention(
         num_heads=config.num_heads,
         dtype=config.dtype,
         qkv_features=config.qkv_dim,
-        kernel_init=config.kernel_init,
-        bias_init=config.bias_init,
+        kernel_init=nn.with_logical_partitioning(
+            config.kernel_init, ('embed', 'kv')
+        ),
+        bias_init=nn.with_logical_partitioning(config.bias_init, ('embed',)),
         use_bias=False,
         broadcast_dropout=False,
         dropout_rate=config.attention_dropout_rate,
@@ -249,7 +263,15 @@ class EncoderDecoder1DBlock(nn.Module):
     x = x + inputs
 
     # MLP block.
-    z = nn.LayerNorm(dtype=config.dtype)(x)
+    z = nn.LayerNorm(
+        dtype=config.dtype,
+        bias_init=nn.with_logical_partitioning(
+            nn.initializers.zeros, ('embed',)
+        ),
+        scale_init=nn.with_logical_partitioning(
+            nn.initializers.ones, ('embed',)
+        ),
+    )(x)
     z = MlpBlock(config=config)(z)
 
     return x + z
@@ -296,7 +318,9 @@ class Decoder(nn.Module):
       output_embed = nn.Embed(
           num_embeddings=config.output_vocab_size,
           features=config.emb_dim,
-          embedding_init=nn.initializers.normal(stddev=1.0),
+          embedding_init=nn.with_logical_partitioning(
+              nn.initializers.normal(stddev=1.0), ('vocab', 'embed')
+          ),
       )
     else:
       output_embed = self.shared_embedding
@@ -319,7 +343,16 @@ class Decoder(nn.Module):
       y = EncoderDecoder1DBlock(
           config=config, name=f'encoderdecoderblock_{lyr}'
       )(y, decoder_mask=decoder_mask, encoder_decoder_mask=encoder_decoder_mask)
-    y = nn.LayerNorm(dtype=config.dtype, name='encoderdecoder_norm')(y)
+    y = nn.LayerNorm(
+        dtype=config.dtype,
+        name='encoderdecoder_norm',
+        bias_init=nn.with_logical_partitioning(
+            nn.initializers.zeros, ('embed',)
+        ),
+        scale_init=nn.with_logical_partitioning(
+            nn.initializers.ones, ('embed',)
+        ),
+    )(y)
 
     # Decoded Logits
     if config.logits_via_embedding:
@@ -331,8 +364,10 @@ class Decoder(nn.Module):
       logits = nn.Dense(
           config.output_vocab_size,
           dtype=config.dtype,
-          kernel_init=config.kernel_init,
-          bias_init=config.bias_init,
+          kernel_init=nn.with_logical_partitioning(
+              config.kernel_init, ('embed', 'vocab')
+          ),
+          bias_init=nn.with_logical_partitioning(config.bias_init, ('vocab',)),
           name='logitdense',
       )(y)
     return logits

@@ -193,11 +193,6 @@ class CheckpointsTest(parameterized.TestCase):
     new_object = checkpoints.restore_checkpoint(tmp_dir, test_object0)
     check_eq(new_object, test_object)
 
-    os.chdir(os.path.dirname(tmp_dir))
-    rel_tmp_dir = './' + os.path.basename(tmp_dir)
-    checkpoints.save_checkpoint(rel_tmp_dir, test_object, 3, keep=1)
-    new_object = checkpoints.restore_checkpoint(rel_tmp_dir, test_object0)
-    check_eq(new_object, test_object)
     non_norm_dir_path = tmp_dir + '//'
     checkpoints.save_checkpoint(non_norm_dir_path, test_object, 4, keep=1)
     new_object = checkpoints.restore_checkpoint(non_norm_dir_path, test_object0)

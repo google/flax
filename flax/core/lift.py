@@ -641,18 +641,20 @@ def vmap(
 
   Args:
     fn: the function to be transformed.
-    variable_axes: the variable collections that are lifted into the
-      batching transformation. Use `None` to indicate a broadcasted
-      collection or an integer to map over an axis.
-    split_rngs: Split PRNG sequences will be different for each index
-      of the batch dimension. Unsplit PRNGs will be broadcasted.
+    variable_axes: the variable collections that are lifted into the batching
+      transformation. Use `None` to indicate a broadcasted collection or an
+      integer to map over an axis.
+    split_rngs: Split PRNG sequences will be different for each index of the
+      batch dimension. Unsplit PRNGs will be broadcasted.
     in_axes: Specifies the mapping of the input arguments (see `jax.vmap).
     out_axes: Specifies the mapping of the return value (see `jax.vmap).
-    axis_size: Specifies the size of the batch axis. This only needs
-      to be specified if it cannot be derived from the input arguments.
-    axis_name: Specifies a name for the batch axis. Can be used together
-      with parallel reduction primitives (e.g. `jax.lax.pmean`,
-      `jax.lax.ppermute`, etc.)
+    axis_size: Specifies the size of the batch axis. This only needs to be
+      specified if it cannot be derived from the input arguments.
+    axis_name: Specifies a name for the batch axis. Can be used together with
+      parallel reduction primitives (e.g. `jax.lax.pmean`, `jax.lax.ppermute`,
+      etc.). Note, this is only used for pmap and shmap. For SPMD jit, you do
+      not need to manually synchronize. Just make sure that the axes are
+      correctly annotated and XLA:SPMD will insert the necessary collectives.
     spmd_axis_name: Axis name added to any pjit sharding constraints appearing
       in `fn`. See also
       https://github.com/google/flax/blob/main/flax/linen/partitioning.py.

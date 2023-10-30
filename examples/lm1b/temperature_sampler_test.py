@@ -28,7 +28,7 @@ class TestTemperatureSampler(absltest.TestCase):
   def test_temperature_sampler(self):
     tokens = jnp.array([[5, 0, 0, 0]], dtype=jnp.int32)
     cache = None
-    key = jax.random.key(0)
+    key = jax.random.PRNGKey(0)
 
     def tokens_to_logits(tokens, cache):
       jax.debug.print('tokens: {}', tokens)

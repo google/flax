@@ -4,32 +4,43 @@ Changelog
 vNext
 ------
 (Add your change to a random empty line to avoid merge conflicts)
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+-
+- NOTE: Remember to bump version number to 0.8.0
+
+0.7.5
+-----
 - Report forward and backward pass FLOPs of modules and submodules in `linen.Module.tabulate` and `summary.tabulate` (in new `flops` and `vjp_flops` table columns). Pass `compute_flops=True` and/or `compute_vjp_flops=True` to include these columns.
--
--
--
--
-- Re-factored `MultiHeadDotProductAttention`'s call method signatur, by adding
+- Re-factored `MultiHeadDotProductAttention`'s call method signature, by adding
 `inputs_k` and `inputs_v` args and switching `inputs_kv`, `mask` and `determistic`
 to keyword arguments. See more details in [#3389](https://github.com/google/flax/discussions/3389).
--
--
--
--
--
 - Use new typed PRNG keys throughout flax: this essentially involved changing
   uses of `jax.random.PRNGKey` to `jax.random.key`.
   (See [JEP 9263](https://github.com/google/jax/pull/17297) for details).
   If you notice dispatch performance regressions after this change, be sure
   you update `jax` to version 0.4.16 or newer.
--
--
--
--
--
--
+- Added `has_improved` field to EarlyStopping and changed the return signature of
+`EarlyStopping.update` from returning a tuple to returning just the updated class.
+See more details in [#3385](https://github.com/google/flax/pull/3385)
 
-0.7.3
+0.7.4
 -----
 New features:
 - Add QK-normalization to MultiHeadDotProductAttention

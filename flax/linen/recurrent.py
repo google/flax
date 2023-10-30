@@ -18,7 +18,6 @@ THe RNNCell modules can be scanned using lifted transforms. For more information
 see: https://flax.readthedocs.io/en/latest/developer_notes/lift.html.
 """
 
-from abc import ABCMeta
 from functools import partial  # pylint: disable=g-importing-member
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, TypeVar, Union
 from absl import logging
@@ -51,41 +50,6 @@ CarryHistory = Any
 Output = Any
 
 
-class _Never:
-  pass
-
-
-NEVER = _Never()
-
-LEGACY_UPDATE_MESSAGE = (
-    'The RNNCellBase API has changed, '
-    'the error you are experiencing might be caused by this change. Please '
-    'update your code to the new API, for more information on how to do this '
-    'please check out the RNNCellBase migration guide: '
-    'https://flax.readthedocs.io/en/latest/guides/rnncell_upgrade_guide.html'
-)
-
-
-class RNNCellCompatibilityMeta(ABCMeta):
-  """Metaclass for RNNCell compatibility."""
-
-  def __call__(self, *args: Any, **kwds: Any) -> Any:
-    try:
-      return super().__call__(*args, **kwds)
-    except TypeError as e:
-      msg = e.args[0]
-      raise TypeError(f'{msg} \n\n {LEGACY_UPDATE_MESSAGE}') from e
-
-
-def deprecation_method_decorator(f):
-  def wrapper(*args, **kwargs):
-    if len(args) < 1 or not isinstance(args[0], RNNCellBase):
-      raise TypeError(LEGACY_UPDATE_MESSAGE)
-    return f(*args, **kwargs)
-
-  return wrapper
-
-
 class RNNCellBase(Module):
   """RNN cell base class."""
 
@@ -110,7 +74,7 @@ class RNNCellBase(Module):
     raise NotImplementedError
 
 
-class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
+class LSTMCell(RNNCellBase):
   r"""LSTM cell.
 
   The mathematical definition of the cell is as follows
@@ -193,7 +157,6 @@ class LSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return (new_c, new_h), new_h
 
   @nowrap
-  @deprecation_method_decorator
   def initialize_carry(
       self, rng: PRNGKey, input_shape: Tuple[int, ...]
   ) -> Tuple[Array, Array]:
@@ -244,7 +207,7 @@ class DenseParams(Module):
     return k, b
 
 
-class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
+class OptimizedLSTMCell(RNNCellBase):
   r"""More efficient LSTM Cell that concatenates state components before matmul.
 
   The parameters are compatible with `LSTMCell`. Note that this cell is often
@@ -373,7 +336,6 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return (new_c, new_h), new_h
 
   @nowrap
-  @deprecation_method_decorator
   def initialize_carry(
       self, rng: PRNGKey, input_shape: Tuple[int, ...]
   ) -> Tuple[Array, Array]:
@@ -398,7 +360,7 @@ class OptimizedLSTMCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return 1
 
 
-class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
+class GRUCell(RNNCellBase):
   r"""GRU cell.
 
   The mathematical definition of the cell is as follows
@@ -481,7 +443,111 @@ class GRUCell(RNNCellBase, metaclass=RNNCellCompatibilityMeta):
     return new_h, new_h
 
   @nowrap
-  @deprecation_method_decorator
+  def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
+    """Initialize the RNN cell carry.
+
+    Args:
+      rng: random number generator passed to the init_fn.
+      input_shape: a tuple providing the shape of the input to the cell.
+
+    Returns:
+      An initialized carry for the given RNN cell.
+    """
+    batch_dims = input_shape[:-1]
+    mem_shape = batch_dims + (self.features,)
+    return self.carry_init(rng, mem_shape, self.param_dtype)
+
+  @property
+  def num_feature_axes(self) -> int:
+    return 1
+
+
+class MGUCell(RNNCellBase):
+  r"""MGU cell (https://arxiv.org/pdf/1603.09420.pdf).
+
+  The mathematical definition of the cell is as follows
+
+  .. math::
+
+      \begin{array}{ll}
+      f = \sigma(W_{if} x + b_{if} + W_{hf} h) \\
+      n = \tanh(W_{in} x + b_{in} + f * (W_{hn} h + b_{hn})) \\
+      h' = (1 - f) * n + f * h \\
+      \end{array}
+
+  where x is the input and h, is the output of the previous time step.
+
+  Attributes:
+    features: number of output features.
+    gate_fn: activation function used for gates (default: sigmoid).
+    activation_fn: activation function used for output and memory update
+      (default: tanh).
+    kernel_init: initializer function for the kernels that transform
+      the input (default: lecun_normal).
+    recurrent_kernel_init: initializer function for the kernels that transform
+      the hidden state (default: initializers.orthogonal()).
+    forget_bias_init: initializer for the bias parameters of the forget gate.
+      The default is set to initializers.ones_init() because this prevents
+      vanishing gradients. See https://proceedings.mlr.press/v37/jozefowicz15.pdf,
+      section 2.2 for more details.
+    activation_bias_init: initializer for the bias parameters of the activation
+      output (default: initializers.zeros_init()).
+    dtype: the dtype of the computation (default: None).
+    param_dtype: the dtype passed to parameter initializers (default: float32).
+  """
+  features: int
+  gate_fn: Callable[..., Any] = sigmoid
+  activation_fn: Callable[..., Any] = tanh
+  kernel_init: initializers.Initializer = default_kernel_init
+  recurrent_kernel_init: initializers.Initializer = initializers.orthogonal()
+  forget_bias_init: initializers.Initializer = initializers.ones_init()
+  activation_bias_init: initializers.Initializer = initializers.zeros_init()
+  dtype: Optional[Dtype] = None
+  param_dtype: Dtype = jnp.float32
+  carry_init: initializers.Initializer = initializers.zeros_init()
+
+  @compact
+  def __call__(self, carry, inputs):
+    """Minimal gated unit (MGU) cell.
+
+    Args:
+      carry: the hidden state of the MGU cell,
+        initialized using `MGUCell.initialize_carry`.
+      inputs: an ndarray with the input for the current time step.
+        All dimensions except the final are considered batch dimensions.
+
+    Returns:
+      A tuple with the new carry and the output.
+    """
+    h = carry
+    hidden_features = h.shape[-1]
+    # input and recurrent layers are summed so only one needs a bias.
+    dense_h = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=False,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        kernel_init=self.recurrent_kernel_init,
+        bias_init=self.activation_bias_init,
+    )
+    dense_i = partial(
+        Dense,
+        features=hidden_features,
+        use_bias=True,
+        dtype=self.dtype,
+        param_dtype=self.param_dtype,
+        kernel_init=self.kernel_init,
+    )
+    f = self.gate_fn(dense_i(name='if', bias_init=self.forget_bias_init)(inputs) + dense_h(name='hf')(h))
+    # add bias because the linear transformations aren't directly summed.
+    n = self.activation_fn(
+        dense_i(name='in', bias_init=self.activation_bias_init)(inputs) + f * dense_h(name='hn', use_bias=True)(h)
+    )
+    new_h = (1.0 - f) * n + f * h
+    return new_h, new_h
+
+  @nowrap
   def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
     """Initialize the RNN cell carry.
 
@@ -596,7 +662,6 @@ class ConvLSTMCell(RNNCellBase):
     return (new_c, new_h), new_h
 
   @nowrap
-  @deprecation_method_decorator
   def initialize_carry(self, rng: PRNGKey, input_shape: Tuple[int, ...]):
     """Initialize the RNN cell carry.
 
@@ -723,7 +788,6 @@ class RNN(Module):
   """
 
   cell: RNNCellBase
-  cell_size: Any = NEVER
   time_major: bool = False
   return_carry: bool = False
   reverse: bool = False
@@ -737,14 +801,6 @@ class RNN(Module):
   split_rngs: Mapping[lift.PRNGSequenceFilter, bool] = FrozenDict(
       {'params': False}
   )
-
-  def __post_init__(self) -> None:
-    if self.cell_size is not NEVER:
-      raise TypeError(
-          f'The `cell_size` argument is no longer available`. '
-          + LEGACY_UPDATE_MESSAGE
-      )
-    return super().__post_init__()
 
   def __call__(
       self,

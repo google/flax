@@ -16,6 +16,7 @@ from typing import Any, Callable
 
 from flax import core
 from flax import struct
+from flax.linen.fp8_ops import OVERWRITE_WITH_GRADIENT
 import optax
 
 
@@ -71,8 +72,27 @@ class TrainState(struct.PyTreeNode):
       and `opt_state` updated by applying `grads`, and additional attributes
       replaced as specified by `kwargs`.
     """
-    updates, new_opt_state = self.tx.update(grads, self.opt_state, self.params)
-    new_params = optax.apply_updates(self.params, updates)
+    if OVERWRITE_WITH_GRADIENT in grads:
+      grads_with_opt = grads['params']
+      params_with_opt = self.params['params']
+    else:
+      grads_with_opt = grads
+      params_with_opt = self.params
+
+    updates, new_opt_state = self.tx.update(
+        grads_with_opt, self.opt_state, params_with_opt
+    )
+    new_params_with_opt = optax.apply_updates(params_with_opt, updates)
+
+    # As implied by the OWG name, the gradients are used directly to update the
+    # parameters.
+    if OVERWRITE_WITH_GRADIENT in grads:
+      new_params = {
+          'params': new_params_with_opt,
+          OVERWRITE_WITH_GRADIENT: grads[OVERWRITE_WITH_GRADIENT]
+      }
+    else:
+      new_params = new_params_with_opt
     return self.replace(
         step=self.step + 1,
         params=new_params,
@@ -83,45 +103,11 @@ class TrainState(struct.PyTreeNode):
   @classmethod
   def create(cls, *, apply_fn, params, tx, **kwargs):
     """Creates a new instance with `step=0` and initialized `opt_state`."""
-    opt_state = tx.init(params)
-    return cls(
-        step=0,
-        apply_fn=apply_fn,
-        params=params,
-        tx=tx,
-        opt_state=opt_state,
-        **kwargs,
+    # We exclude OWG params when present because they do not need opt states.
+    params_with_opt = (
+        params['params'] if OVERWRITE_WITH_GRADIENT in params else params
     )
-
-class Fp8TrainState(TrainState):
-  """Customized train state for Fp8."""
-
-  def apply_gradients(self, *, grads, **kwargs):
-    assert 'fp8_params' in grads
-    updates, new_opt_state = self.tx.update(grads['params'], self.opt_state,
-                                            self.params['params'])
-    new_non_fp8_params = optax.apply_updates(self.params['params'], updates)
-
-    # self.param is structured as
-    # {'param': {'kernel:...,'}, 'fp8_params': {...}}. For the fp8 variables
-    # in the fp8-params collection, we will simply replace them with their
-    # grads, because their grads are actually new values defined in the
-    # custom_vjp functions.
-    new_params = {'params': new_non_fp8_params,
-                  'fp8_params': grads['fp8_params']}
-
-    return self.replace(
-        step=self.step + 1,
-        params=new_params,
-        opt_state=new_opt_state,
-        **kwargs,
-    )
-
-  @classmethod
-  def create(cls, *, apply_fn, params, tx, **kwargs):
-    assert 'fp8_params' in params
-    opt_state = tx.init(params['params'])
-
+    opt_state = tx.init(params_with_opt)
     return cls(
         step=0,
         apply_fn=apply_fn,

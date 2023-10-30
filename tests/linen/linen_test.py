@@ -15,12 +15,14 @@
 """Tests for flax.linen."""
 
 import copy
+import functools
 from typing import Any
 
 from absl.testing import absltest
 from absl.testing import parameterized
 from flax import ids
 from flax import linen as nn
+from flax.linen import fp8_ops
 from flax.training import train_state
 import jax
 from jax import random
@@ -745,7 +747,7 @@ class StochasticTest(absltest.TestCase):
 
 
 # TODO(flax-dev): add integration tests for RNN cells
-class RecurrentTest(absltest.TestCase):
+class RecurrentTest(parameterized.TestCase):
 
   def test_lstm(self):
     lstm = nn.LSTMCell(features=4)
@@ -774,37 +776,56 @@ class RecurrentTest(absltest.TestCase):
         },
     )
 
-  def test_gru(self):
-    gru = nn.GRUCell(features=4)
+  @parameterized.parameters(
+      {'module_cls': nn.GRUCell,
+       'expected_param_shapes': {
+         'ir': {'kernel': (3, 4), 'bias': (4,)},
+         'iz': {'kernel': (3, 4), 'bias': (4,)},
+         'in': {'kernel': (3, 4), 'bias': (4,)},
+         'hr': {'kernel': (4, 4)},
+         'hz': {'kernel': (4, 4)},
+         'hn': {'kernel': (4, 4), 'bias': (4,)},
+        }},
+      {'module_cls': nn.MGUCell,
+       'expected_param_shapes': {
+         'if': {'kernel': (3, 4), 'bias': (4,)},
+         'in': {'kernel': (3, 4), 'bias': (4,)},
+         'hf': {'kernel': (4, 4)},
+         'hn': {'kernel': (4, 4), 'bias': (4,)},
+        }}
+  )
+  def test_gated_units(self, module_cls, expected_param_shapes):
+    module = module_cls(features=4)
     rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3))
-    carry0 = gru.initialize_carry(rng, x.shape)
+    carry0 = module.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
-    (carry, y), initial_params = gru.init_with_output(key2, carry0, x)
+    (carry, y), initial_params = module.init_with_output(key2, carry0, x)
     self.assertEqual(carry.shape, (2, 4))
     np.testing.assert_allclose(y, carry)
     param_shapes = jax.tree_util.tree_map(np.shape, initial_params['params'])
     self.assertEqual(
         param_shapes,
-        {
-            'ir': {'kernel': (3, 4), 'bias': (4,)},
-            'iz': {'kernel': (3, 4), 'bias': (4,)},
-            'in': {'kernel': (3, 4), 'bias': (4,)},
-            'hr': {'kernel': (4, 4)},
-            'hz': {'kernel': (4, 4)},
-            'hn': {'kernel': (4, 4), 'bias': (4,)},
-        },
+        expected_param_shapes,
     )
+    if module_cls == nn.MGUCell:
+      self.assertTrue((initial_params['params']['if']['bias'] == jnp.ones((4,))).all())
+      self.assertTrue((initial_params['params']['in']['bias'] == jnp.zeros((4,))).all())
+      self.assertTrue((initial_params['params']['hn']['bias'] == jnp.zeros((4,))).all())
 
-  def test_complex_input_gru(self):
-    gru = nn.GRUCell(features=4)
+  @parameterized.parameters(
+      {'module_cls': nn.GRUCell},
+      {'module_cls': nn.MGUCell}
+  )
+  def test_complex_input_gated_units(self, module_cls):
+    module_instance = module_cls(features=4)
     rng = random.key(0)
     key1, key2 = random.split(rng)
     x = random.normal(key1, (2, 3), dtype=jnp.complex64)
-    carry0 = gru.initialize_carry(rng, x.shape)
+    carry0 = module_instance.initialize_carry(rng, x.shape)
     self.assertEqual(carry0.shape, (2, 4))
-    (carry, y), _ = gru.init_with_output(key2, carry0, x)
+    (carry, y), _ = module_instance.init_with_output(key2, carry0, x)
     self.assertEqual(carry.dtype, jnp.complex64)
     self.assertEqual(y.dtype, jnp.complex64)
 
@@ -866,6 +887,134 @@ class IdsTest(absltest.TestCase):
     id1dc = copy.deepcopy(id1)
     self.assertNotEqual(hash(id1), hash(id1c))
     self.assertNotEqual(hash(id1), hash(id1dc))
+
+
+class Fp8Test(absltest.TestCase):
+
+  def test_fp8_dot_general_injection(self):
+    # Used to cast the inputs to be representable in FP8, so that the difference
+    # of the results from the original gemm and fp8 gemm is small.
+    cast_to_representable = functools.partial(fp8_ops.quantize_dequantize,
+                                              scale=jnp.ones((1,)),
+                                              compute_dtype=jnp.float32)
+
+    init_key, random_key = random.split(random.PRNGKey(seed=123), 2)
+    x = cast_to_representable(
+        random.uniform(random_key, (16, 32)), jnp.float8_e4m3fn)
+    dy = cast_to_representable(
+        random.uniform(random_key, (16, 64)), jnp.float8_e5m2)
+
+    def run(fp8_injection, expected_shapes):
+      p = nn.DenseGeneral(features=64, name='dense')
+      if fp8_injection:
+        p.dot_general_cls=nn.Fp8DotGeneralOp
+      y, initial_vars = p.init_with_output(init_key, x)
+      var_shapes = jax.tree_util.tree_map(jnp.shape, initial_vars)
+      self.assertEqual(var_shapes, expected_shapes)
+
+      def _train(variables, x):
+        y = p.apply(variables, x)
+        loss = y * dy
+        return jnp.mean(loss)
+
+      train_fn = jax.jit(jax.value_and_grad(_train, argnums=[0, 1]))
+      outputs, grads = train_fn(initial_vars, x)
+      return outputs, grads
+
+    expected_shapes_original = {
+        'params': {'kernel': (32, 64), 'bias': (64,)},
+    }
+    expected_shapes_new = {
+        'params': {'kernel': (32, 64), 'bias': (64,)},
+        fp8_ops.OVERWRITE_WITH_GRADIENT: {
+            'Fp8DotGeneralOp_0': {'input_amax_history': (1024,),
+                                  'kernel_amax_history': (1024,),
+                                  'output_grad_amax_history': (1024,),
+                                  'input_scale': (1,),
+                                  'kernel_scale': (1,),
+                                  'output_grad_scale': (1,), }},
+    }
+
+    output1a, output1b = run(False, expected_shapes_original)
+    output2a, output2b = run(True, expected_shapes_new)
+    dw1, dw2 = output1b[0]['params']['kernel'], output2b[0]['params']['kernel']
+    dx1, dx2 = output1b[1], output2b[1]
+
+    np.testing.assert_allclose(output1a, output2a, atol=1e-02)
+    np.testing.assert_allclose(dw1, dw2, atol=1e-04)
+    np.testing.assert_allclose(dx1, dx2, atol=1e-04)
+
+  def test_fp8_train_state(self):
+    key, init_key, random_key = random.split(random.PRNGKey(seed=123), 3)
+    x = random.uniform(random_key, (16, 16), dtype=jnp.float32)
+    dense = nn.DenseGeneral(features=32, use_bias=True,
+                            dot_general_cls=nn.Fp8DotGeneralOp)
+    variables = dense.init(init_key, x)
+    opt = optax.adam(learning_rate=.1)
+    state = train_state.TrainState.create(
+        params=variables, tx=opt, apply_fn=dense.apply
+    )
+
+    def _roll_and_update(amax_h, update):
+      return jnp.roll(amax_h, shift=-1, axis=0).at[0].set(update)
+
+    def _train_loss(state, x, dy):
+      def loss_fn(vars):
+        y = state.apply_fn(vars, x)
+        loss = y * dy.astype(y.dtype)
+        return jnp.sum(loss)
+      grad_fn = jax.grad(loss_fn)
+      grads = grad_fn(state.params)
+      state = state.apply_gradients(grads=grads)
+      return state
+
+    train_fn = jax.jit(_train_loss)
+
+    scale_x, amax_history_x = jnp.ones(()), jnp.zeros((1024,))
+    scale_k, amax_history_k = jnp.ones(()), jnp.zeros((1024,))
+    scale_g, amax_history_g = jnp.ones(()), jnp.zeros((1024,))
+    e4m3_max = jnp.finfo(jnp.float8_e4m3fn).max.astype(jnp.float32)
+    e5m2_max = jnp.finfo(jnp.float8_e5m2).max.astype(jnp.float32)
+
+    for _ in range(5):
+      key, random_key = random.split(key, 2)
+      x = random.normal(random_key, (16, 16), dtype=jnp.float32)
+      g = random.normal(random_key, (16, 32), dtype=jnp.float32)
+      k = state.params['params']['kernel']
+
+      # Manually compute the expected amax history and scaling factors.
+      amax_history_x = _roll_and_update(amax_history_x, jnp.max(jnp.abs(x)))
+      amax_history_k = _roll_and_update(amax_history_k, jnp.max(jnp.abs(k)))
+      amax_history_g = _roll_and_update(amax_history_g, jnp.max(jnp.abs(g)))
+      amax_from_history_x = jnp.max(amax_history_x, axis=0)
+      amax_from_history_k = jnp.max(amax_history_k, axis=0)
+      amax_from_history_g = jnp.max(amax_history_g, axis=0)
+      scale_x = fp8_ops.compute_scale(amax_from_history_x, scale_x, e4m3_max)
+      scale_k = fp8_ops.compute_scale(amax_from_history_k, scale_k, e4m3_max)
+      scale_g = fp8_ops.compute_scale(amax_from_history_g, scale_g, e5m2_max)
+
+      state = train_fn(state, x, g)
+
+      rtol, atol = 0.001, 0.001
+      fp8_vars = (
+           state.params[fp8_ops.OVERWRITE_WITH_GRADIENT]['Fp8DotGeneralOp_0']
+      )
+      np.testing.assert_allclose(
+          fp8_vars['input_amax_history'], amax_history_x, rtol=rtol, atol=atol,
+      )
+      np.testing.assert_allclose(
+          fp8_vars['kernel_amax_history'], amax_history_k, rtol=rtol, atol=atol,
+      )
+      np.testing.assert_allclose(
+          fp8_vars['output_grad_amax_history'],
+          amax_history_g,
+          rtol=rtol,
+          atol=atol,
+      )
+
+      np.testing.assert_allclose(fp8_vars['input_scale'][0], scale_x)
+      np.testing.assert_allclose(fp8_vars['kernel_scale'][0], scale_k)
+      np.testing.assert_allclose(fp8_vars['output_grad_scale'][0], scale_g)
 
 
 if __name__ == '__main__':
