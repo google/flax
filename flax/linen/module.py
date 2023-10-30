@@ -477,10 +477,14 @@ def compact(fun: _CallableT) -> _CallableT:
 
   For instance::
 
-    @compact
-    __call__(self, x, features):
-      x = nn.Dense(features)(x)
-      ...
+    >>> import flax.linen as nn
+
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x, features):
+    ...     x = nn.Dense(features)(x)
+    ...     ...
+    ...     return x
 
   At most one method in each Module may be wrapped with @compact.
 
@@ -508,15 +512,21 @@ def nowrap(fun: _CallableT) -> _CallableT:
 
   For instance::
 
-    @nowrap
-    def _make_dense(self, num_features):
-      return nn.Dense(num_features)
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
 
-    @compact
-    def __call__(self, x):
-      # now safe to use constructor helper even if using named_call
-      dense = self._make_dense(self.num_features)
-      return dense(x)
+    >>> class Foo(nn.Module):
+    ...   num_features: int
+
+    ...   @nn.nowrap
+    ...   def _make_dense(self, num_features):
+    ...     return nn.Dense(num_features)
+
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     # now safe to use constructor helper even if using named_call
+    ...     dense = self._make_dense(self.num_features)
+    ...     return dense(x)
 
   Args:
     fun: The Module method to mark as nowrap.
@@ -900,17 +910,18 @@ class Module(ModuleBase):
   While no methods are special-cased, ``__call__`` is a popular choice because
   it allows you to use module instances as if they are functions::
 
-    from flax import linen as nn
+    >>> from flax import linen as nn
+    >>> from typing import Tuple
 
-    class Module(nn.Module):
-      features: Tuple[int, ...] = (16, 4)
+    >>> class Module(nn.Module):
+    ...   features: Tuple[int, ...] = (16, 4)
 
-      def setup(self):
-        self.dense1 = Dense(self.features[0])
-        self.dense2 = Dense(self.features[1])
+    ...   def setup(self):
+    ...     self.dense1 = nn.Dense(self.features[0])
+    ...     self.dense2 = nn.Dense(self.features[1])
 
-      def __call__(self, x):
-        return self.dense2(nn.relu(self.dense1(x)))
+    ...   def __call__(self, x):
+    ...     return self.dense2(nn.relu(self.dense1(x)))
 
   Optionally, for more concise module implementations where submodules
   definitions are co-located with their usage, you can use the
@@ -1304,18 +1315,18 @@ class Module(ModuleBase):
          another module inside the other module's ``setup`` method
          (see :meth:`__setattr__`)::
 
-           class MyModule(nn.Module):
-             def setup(self):
-               submodule = Conv(...)
+            >>> class MyModule(nn.Module):
+            ...   def setup(self):
+            ...     submodule = nn.Conv(...)
 
-               # Accessing `submodule` attributes does not yet work here.
+            ...     # Accessing `submodule` attributes does not yet work here.
 
-               # The following line invokes `self.__setattr__`, which gives
-               # `submodule` the name "conv1".
-               self.conv1 = submodule
+            ...     # The following line invokes `self.__setattr__`, which gives
+            ...     # `submodule` the name "conv1".
+            ...     self.conv1 = submodule
 
-               # Accessing `submodule` attributes or methods is now safe and
-               # either causes setup() to be called once.
+            ...     # Accessing `submodule` attributes or methods is now safe and
+            ...     # either causes setup() to be called once.
 
       3. Once a module is constructed inside a method wrapped with
          :meth:`compact`, immediately before another method is called or
@@ -1590,8 +1601,17 @@ class Module(ModuleBase):
     Contrary to :meth:`param`, all arguments passing using `init_fn` should be
     passed on explicitly::
 
-      key = self.make_rng('stats')
-      mean = self.variable('stats', 'mean', lecun_normal(), key, (2, 2))
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     x = nn.Dense(4)(x)
+      ...     key = self.make_rng('stats')
+      ...     mean = self.variable('stats', 'mean', nn.initializers.lecun_normal(), key, x.shape)
+      ...     ...
+      ...     return x * mean.value
+      >>> variables = Foo().init({'params': jax.random.key(0), 'stats': jax.random.key(1)}, jnp.ones((2, 3)))
+      >>> jax.tree_map(jnp.shape, variables)
+      {'params': {'Dense_0': {'bias': (4,), 'kernel': (3, 4)}}, 'stats': {'mean': (2, 4)}}
 
     In the example above, the function `lecun_normal` expects two arguments:
     `key` and `shape`, and both have to be passed on. The PRNG for `stats` has
@@ -1665,7 +1685,16 @@ class Module(ModuleBase):
     The first argument of `init_fn` is assumed to be a PRNG key, which is
     provided automatically and does not have to be passed using `init_args`::
 
-      mean = self.param('mean', lecun_normal(), (2, 2))
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     x = nn.Dense(4)(x)
+      ...     mean = self.param('mean', nn.initializers.lecun_normal(), x.shape)
+      ...     ...
+      ...     return x * mean
+      >>> variables = Foo().init({'params': jax.random.key(0), 'stats': jax.random.key(1)}, jnp.ones((2, 3)))
+      >>> jax.tree_map(jnp.shape, variables)
+      {'params': {'Dense_0': {'bias': (4,), 'kernel': (3, 4)}, 'mean': (2, 4)}}
 
     In the example above, the function `lecun_normal` expects two arguments:
     `key` and `shape`, but only `shape` has to be provided explicitly; `key`
@@ -1792,24 +1821,24 @@ class Module(ModuleBase):
 
     Example::
 
-      import jax
-      import jax.numpy as jnp
-      import flax.linen as nn
+      >>> import jax
+      >>> import jax.numpy as jnp
+      >>> import flax.linen as nn
 
-      class AutoEncoder(nn.Module):
-        def setup(self):
-          self.encoder = nn.Dense(3)
-          self.decoder = nn.Dense(5)
+      >>> class AutoEncoder(nn.Module):
+      ...   def setup(self):
+      ...     self.encoder = nn.Dense(3)
+      ...     self.decoder = nn.Dense(5)
+      ...
+      ...   def __call__(self, x):
+      ...     return self.decoder(self.encoder(x))
 
-        def __call__(self, x):
-          return self.decoder(self.encoder(x))
-
-      x = jnp.ones((16, 9))
-      ae = AutoEncoder()
-      variables = ae.init(jax.random.key(0), x)
-      model = ae.bind(variables)
-      z = model.encoder(x)
-      x_reconstructed = model.decoder(z)
+      >>> x = jnp.ones((16, 9))
+      >>> ae = AutoEncoder()
+      >>> variables = ae.init(jax.random.key(0), x)
+      >>> model = ae.bind(variables)
+      >>> z = model.encoder(x)
+      >>> x_reconstructed = model.decoder(z)
 
     Args:
       variables: A dictionary containing variables keyed by variable
@@ -1841,19 +1870,31 @@ class Module(ModuleBase):
     parent Module; and then 2) ``unbind`` the desired sub-Module. (Recall that
     ``setup()`` is only called when the Module is bound.)::
 
-      class AutoEncoder(nn.Module):
-        def setup(self):
-          self.encoder = Encoder()
-          self.decoder = Decoder()
+      >>> class Encoder(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     ...
+      ...     return nn.Dense(256)(x)
 
-        def __call__(self, x):
-          return self.decoder(self.encoder(x))
+      >>> class Decoder(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     ...
+      ...     return nn.Dense(784)(x)
 
-      module = AutoEncoder()
-      variables = module.init(jax.random.key(0), jnp.ones((1, 784)))
+      >>> class AutoEncoder(nn.Module):
+      ...   def setup(self):
+      ...     self.encoder = Encoder()
+      ...     self.decoder = Decoder()
       ...
-      # Extract the Encoder sub-Module and its variables
-      encoder, encoder_vars = module.bind(variables).encoder.unbind()
+      ...   def __call__(self, x):
+      ...     return self.decoder(self.encoder(x))
+
+      >>> module = AutoEncoder()
+      >>> variables = module.init(jax.random.key(0), jnp.ones((1, 784)))
+
+      >>> # Extract the Encoder sub-Module and its variables
+      >>> encoder, encoder_vars = module.bind(variables).encoder.unbind()
 
     Returns:
       A tuple with an unbound copy of this Module and its variables.
@@ -1885,28 +1926,36 @@ class Module(ModuleBase):
     Transformer modules has a method called `encode`, then the following calls
     `apply` on that method::
 
-      model = Transformer()
-      encoded = model.apply({'params': params}, x, method=Transformer.encode)
+      >>> class Transformer(nn.Module):
+      ...   def encode(self, x):
+      ...     ...
+
+      >>> x = jnp.ones((16, 9))
+      >>> model = Transformer()
+      >>> variables = model.init(jax.random.key(0), x, method=Transformer.encode)
+
+      >>> encoded = model.apply(variables, x, method=Transformer.encode)
 
     If a function instance is provided, the unbound function is used. For
     instance, the example below is equivalent to the one above::
 
-      encoded = model.apply({'params': params}, x, method=model.encode)
+      >>> encoded = model.apply(variables, x, method=model.encode)
 
     You can also pass a string to a callable attribute of the module. For
     example, the previous can be written as::
 
-      encoded = model.apply({'params': params}, x, method='encode')
+      >>> encoded = model.apply(variables, x, method='encode')
 
     Note ``method`` can also be a function that is not defined in
     ``Transformer``. In that case, the function should have at least one
     argument representing an instance of the Module class::
 
-      def other_fn(instance, ...):
-        instance.some_module_attr(...)
-        ...
+      >>> def other_fn(instance, x):
+      ...   # instance.some_module_attr(...)
+      ...   instance.encode
+      ...   ...
 
-      model.apply({'params': params}, x, method=other_fn)
+      >>> model.apply(variables, x, method=other_fn)
 
     Args:
       variables: A dictionary containing variables keyed by variable
@@ -2050,7 +2099,7 @@ class Module(ModuleBase):
       >>> import flax.linen as nn
       >>> import jax.numpy as jnp
       >>> import jax
-      ...
+
       >>> class Foo(nn.Module):
       ...   @nn.compact
       ...   def __call__(self, x, train):
@@ -2058,7 +2107,7 @@ class Module(ModuleBase):
       ...     x = nn.BatchNorm(use_running_average=not train)(x)
       ...     x = nn.relu(x)
       ...     return nn.Dense(1)(x)
-      ...
+
       >>> module = Foo()
       >>> key = jax.random.key(0)
       >>> variables = module.init(key, jnp.empty((1, 7)), train=False)
@@ -2082,7 +2131,7 @@ class Module(ModuleBase):
       ...     x = x + jax.random.normal(noise_key, x.shape)
       ...
       ...     return nn.Dense(1)(x)
-      ...
+
       >>> module = Foo()
       >>> rngs = {'params': jax.random.key(0),
       ...         'noise': jax.random.key(1)}
@@ -2151,9 +2200,9 @@ class Module(ModuleBase):
 
     Example::
 
-      model = nn.Dense(features=256)
-      variables = model.lazy_init(
-          rng, jax.ShapeDtypeStruct((1, 128), jnp.float32))
+      >>> model = nn.Dense(features=256)
+      >>> variables = model.lazy_init(
+      ...     jax.random.key(0), jax.ShapeDtypeStruct((1, 128), jnp.float32))
 
     The args and kwargs args passed to ``lazy_init`` can be a mix of
     concrete (jax arrays, scalars, bools) and abstract (ShapeDtypeStruct)
@@ -2254,44 +2303,62 @@ class Module(ModuleBase):
 
     Example::
 
-      import jax
-      import jax.numpy as jnp
-      import flax.linen as nn
+      >>> import jax
+      >>> import jax.numpy as jnp
+      >>> import flax.linen as nn
 
-      class Foo(nn.Module):
-        @nn.compact
-        def __call__(self, x):
-          h = nn.Dense(4)(x)
-          self.sow('intermediates', 'h', h)
-          return nn.Dense(2)(h)
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     h = nn.Dense(4)(x)
+      ...     self.sow('intermediates', 'h', h)
+      ...     return nn.Dense(2)(h)
 
-      x = jnp.ones((16, 9))
-      model = Foo()
-      variables = model.init(jax.random.key(0), x)
-      y, state = model.apply(variables, x, mutable=['intermediates'])
-      print(state['intermediates'])  # {'h': (...,)}
+      >>> x = jnp.ones((16, 9))
+      >>> model = Foo()
+      >>> variables = model.init(jax.random.key(0), x)
+      >>> y, state = model.apply(variables, x, mutable=['intermediates'])
+      >>> print(state['intermediates'])
+      {'h': (Array([[-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ],
+             [-1.503171  ,  0.7377704 , -0.59388214, -1.0079019 ]],      dtype=float32),)}
 
     By default the values are stored in a tuple and each stored value
     is appended at the end. This way all intermediates can be tracked when
     the same module is called multiple times. Alternatively, a custom
     init/reduce function can be passed::
 
-      class Foo2(nn.Module):
-        @nn.compact
-        def __call__(self, x):
-          init_fn = lambda: 0
-          reduce_fn = lambda a, b: a + b
-          self.sow('intermediates', 'h', x,
-                   init_fn=init_fn, reduce_fn=reduce_fn)
-          self.sow('intermediates', 'h', x * 2,
-                   init_fn=init_fn, reduce_fn=reduce_fn)
-          return x
+      >>> class Foo2(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     init_fn = lambda: 0
+      ...     reduce_fn = lambda a, b: a + b
+      ...     self.sow('intermediates', 'h', x,
+      ...               init_fn=init_fn, reduce_fn=reduce_fn)
+      ...     self.sow('intermediates', 'h', x * 2,
+      ...               init_fn=init_fn, reduce_fn=reduce_fn)
+      ...     return x
 
-      model = Foo2()
-      variables = model.init(jax.random.key(0), x)
-      y, state = model.apply(
-          variables, jnp.ones((1, 1)), mutable=['intermediates'])
-      print(state['intermediates'])  # ==> {'h': [[3.]]}
+      >>> x = jnp.ones((1, 1))
+      >>> model = Foo2()
+      >>> variables = model.init(jax.random.key(0), x)
+      >>> y, state = model.apply(
+      ...     variables, x, mutable=['intermediates'])
+      >>> print(state['intermediates'])
+      {'h': Array([[3.]], dtype=float32)}
 
     Args:
       col: The name of the variable collection.
@@ -2338,38 +2405,38 @@ class Module(ModuleBase):
 
     Example::
 
-      import jax
-      import jax.numpy as jnp
-      import flax.linen as nn
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     x = nn.Dense(3)(x)
+      ...     x = self.perturb('dense3', x)
+      ...     return nn.Dense(2)(x)
 
-      class Foo(nn.Module):
-          @nn.compact
-          def __call__(self, x):
-              x = nn.Dense(3)(x)
-              x = self.perturb('dense3', x)
-              return nn.Dense(2)(x)
+      >>> def loss(variables, inputs, targets):
+      ...   preds = model.apply(variables, inputs)
+      ...   return jnp.square(preds - targets).mean()
 
-      def loss(params, perturbations, inputs, targets):
-        variables = {'params': params, 'perturbations': perturbations}
-        preds = model.apply(variables, inputs)
-        return jnp.square(preds - targets).mean()
-
-      x = jnp.ones((2, 9))
-      y = jnp.ones((2, 2))
-      model = Foo()
-      variables = model.init(jax.random.key(0), x)
-      intm_grads = jax.grad(loss, argnums=1)(
-          variables['params'], variables['perturbations'], x, y)
-      print(intm_grads['dense3']) # ==> [[-1.456924   -0.44332537  0.02422847]
-                                  #      [-1.456924   -0.44332537  0.02422847]]
+      >>> x = jnp.ones((2, 9))
+      >>> y = jnp.ones((2, 2))
+      >>> model = Foo()
+      >>> variables = model.init(jax.random.key(0), x)
+      >>> intm_grads = jax.grad(loss, argnums=0)(variables, x, y)
+      >>> print(intm_grads['perturbations']['dense3'])
+      [[-1.456924   -0.44332537  0.02422847]
+       [-1.456924   -0.44332537  0.02422847]]
 
     If perturbations are not passed to `apply`, `perturb` behaves like a no-op
     so you can easily disable the behavior when not needed::
 
-      model.apply(
-          {'params': params, 'perturbations': perturbations},
-          x) # works as expected
-      model.apply({'params': params}, x) # behaves like a no-op
+      >>> model.apply(variables, x) # works as expected
+      Array([[-1.0980128 , -0.67961735],
+             [-1.0980128 , -0.67961735]], dtype=float32)
+      >>> model.apply({'params': variables['params']}, x) # behaves like a no-op
+      Array([[-1.0980128 , -0.67961735],
+             [-1.0980128 , -0.67961735]], dtype=float32)
+      >>> intm_grads = jax.grad(loss, argnums=0)({'params': variables['params']}, x, y)
+      >>> 'perturbations' not in intm_grads
+      True
     """
 
     def _root_has_collection():
@@ -2416,21 +2483,19 @@ class Module(ModuleBase):
 
     Example::
 
-      import jax
-      import jax.numpy as jnp
-      import flax.linen as nn
+      >>> import flax.linen as nn
+      >>> import jax, jax.numpy as jnp
 
-      class Foo(nn.Module):
-          @nn.compact
-          def __call__(self, x):
-              h = nn.Dense(4)(x)
-              return nn.Dense(2)(h)
+      >>> class Foo(nn.Module):
+      ...   @nn.compact
+      ...   def __call__(self, x):
+      ...     h = nn.Dense(4)(x)
+      ...     return nn.Dense(2)(h)
 
-      x = jnp.ones((16, 9))
+      >>> x = jnp.ones((16, 9))
 
-      print(Foo().tabulate(
-          jax.random.key(0), x, compute_flops=True, compute_vjp_flops=True))
-
+      >>> # print(Foo().tabulate(
+      >>> #     jax.random.key(0), x, compute_flops=True, compute_vjp_flops=True))
 
     This gives the following output::
 
@@ -2533,11 +2598,14 @@ def merge_param(name: str, a: Optional[T], b: Optional[T]) -> T:
 
   Example::
 
-    class Foo(nn.Module):
-      train: Optional[bool] = None
+    >>> import flax.linen as nn
+    >>> from typing import Optional
 
-      def __call__(self, train: Optional[bool] = None):
-        train = nn.merge_param('train', self.train, train)
+    >>> class Foo(nn.Module):
+    ...   train: Optional[bool] = None
+
+    ...   def __call__(self, train: Optional[bool] = None):
+    ...     train = nn.merge_param('train', self.train, train)
 
   An error is thrown when both arguments are `None` or both values are not
   `None`.
@@ -2582,15 +2650,22 @@ def apply(
   The apply function that is returned can be directly composed with
   JAX transformations like ``jax.jit``::
 
-    def f(foo, x):
-      z = foo.encode(x)
-      y = foo.decode(z)
-      # ...
-      return y
+    >>> class Foo(nn.Module):
+    ...   def encode(self, x):
+    ...     ...
+    ...   def decode(self, x):
+    ...     ...
 
-    foo = Foo()
-    f_jitted = jax.jit(nn.apply(f, foo))
-    f_jitted(variables, x)
+    >>> def f(foo, x):
+    ...   z = foo.encode(x)
+    ...   y = foo.decode(z)
+    ...   # ...
+    ...   return y
+
+    >>> variables = {}
+    >>> foo = Foo()
+    >>> f_jitted = jax.jit(nn.apply(f, foo))
+    >>> f_jitted(variables, jnp.ones((1, 3)))
 
   Args:
     fn: The function that should be applied. The first argument passed will be
@@ -2646,15 +2721,21 @@ def init_with_output(
   The init function that is returned can be directly composed with
   JAX transformations like ``jax.jit``::
 
-    def f(foo, x):
-      z = foo.encode(x)
-      y = foo.decode(z)
-      # ...
-      return y
+    >>> class Foo(nn.Module):
+    ...   def encode(self, x):
+    ...     ...
+    ...   def decode(self, x):
+    ...     ...
 
-    foo = Foo()
-    f_jitted = jax.jit(nn.init_with_output(f, foo))
-    y, variables = f_jitted(rng, x)
+    >>> def f(foo, x):
+    ...   z = foo.encode(x)
+    ...   y = foo.decode(z)
+    ...   # ...
+    ...   return y
+
+    >>> foo = Foo()
+    >>> f_jitted = jax.jit(nn.init_with_output(f, foo))
+    >>> y, variables = f_jitted(jax.random.key(0), jnp.ones((1, 3)))
 
   Args:
     fn: The function that should be applied. The first argument passed will be
@@ -2710,15 +2791,21 @@ def init(
   The init function that is returned can be directly composed with
   JAX transformations like ``jax.jit``::
 
-    def f(foo, x):
-      z = foo.encode(x)
-      y = foo.decode(z)
-      # ...
-      return y
+    >>> class Foo(nn.Module):
+    ...   def encode(self, x):
+    ...     ...
+    ...   def decode(self, x):
+    ...     ...
 
-    foo = Foo()
-    f_jitted = jax.jit(nn.init(f, foo))
-    variables = f_jitted(rng, x)
+    >>> def f(foo, x):
+    ...   z = foo.encode(x)
+    ...   y = foo.decode(z)
+    ...   # ...
+    ...   return y
+
+    >>> foo = Foo()
+    >>> f_jitted = jax.jit(nn.init(f, foo))
+    >>> variables = f_jitted(jax.random.key(0), jnp.ones((1, 3)))
 
   Args:
     fn: The function that should be applied. The first argument passed will be

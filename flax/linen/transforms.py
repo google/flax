@@ -508,11 +508,12 @@ def vmap(
   For example we could create a version of ``Dense`` with
   a batch axis that does not share parameters::
 
-    BatchDense = nn.vmap(
-        nn.Dense,
-        in_axes=0, out_axes=0,
-        variable_axes={'params': 0},
-        split_rngs={'params': True})
+    >>> import flax.linen as nn
+    >>> BatchDense = nn.vmap(
+    ...     nn.Dense,
+    ...     in_axes=0, out_axes=0,
+    ...     variable_axes={'params': 0},
+    ...     split_rngs={'params': True})
 
   By using ``variable_axes={'params': 0}``, we indicate that the
   parameters themselves are mapped over and therefore not shared along
@@ -520,14 +521,15 @@ def vmap(
   otherwise the parameters would be initialized identically along
   the mapped axis.
 
-  Similarly, ``vmap`` could be use to add a batch axis with parameter
+  Similarly, ``vmap`` could be used to add a batch axis with parameter
   sharing::
 
-    BatchFoo = nn.vmap(
-        Foo,
-        in_axes=0, out_axes=0,
-        variable_axes={'params': None},
-        split_rngs={'params': False})
+    >>> import flax.linen as nn
+    >>> BatchDense = nn.vmap(
+    ...     nn.Dense,
+    ...     in_axes=0, out_axes=0,
+    ...     variable_axes={'params': None},
+    ...     split_rngs={'params': False})
 
   Here we use ``variable_axes={'params': None}`` to indicate the parameter
   variables are shared along the mapped axis. Consequently, the 'params'
@@ -748,12 +750,14 @@ def remat_scan(
 
   Example::
 
-    class BigModel(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        DenseStack = nn.remat_scan(nn.Dense, lengths=(10, 10))
-        # 100x dense with O(sqrt(N)) memory for gradient computation
-        return DenseStack(8, name="dense_stack")(x)
+    >>> import flax.linen as nn
+
+    >>> class BigModel(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     DenseStack = nn.remat_scan(nn.Dense, lengths=(10, 10))
+    ...     # 100x dense with O(sqrt(N)) memory for gradient computation
+    ...     return DenseStack(8, name="dense_stack")(x)
 
   Args:
     target: a ``Module`` or a function taking a ``Module`` as its first
@@ -989,6 +993,7 @@ def map_variables(
   module itself.
 
   Example::
+
     >>> import jax
     >>> import jax.numpy as jnp
     >>> import flax.linen as nn
@@ -1068,18 +1073,21 @@ def vjp(
 
   Example::
 
-    class LearnScale(nn.Module):
-      @nn.compact
-      def __call__(self, x, y):
-        p = self.param('scale', nn.initializers.zeros_init(), ())
-        return p * x * y
+    >>> import flax.linen as nn
+    >>> import jax.numpy as jnp
 
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x, y):
-        z, bwd = nn.vjp(lambda mdl, x, y: mdl(x, y), LearnScale(), x, y)
-        params_grad, x_grad, y_grad = bwd(jnp.ones(z.shape))
-        return z, params_grad, x_grad, y_grad
+    >>> class LearnScale(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x, y):
+    ...     p = self.param('scale', nn.initializers.zeros_init(), ())
+    ...     return p * x * y
+
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x, y):
+    ...     z, bwd = nn.vjp(lambda mdl, x, y: mdl(x, y), LearnScale(), x, y)
+    ...     params_grad, x_grad, y_grad = bwd(jnp.ones(z.shape))
+    ...     return z, params_grad, x_grad, y_grad
 
   Args:
     fn: Function to be differentiated. Its arguments should be arrays, scalars,
@@ -1327,35 +1335,38 @@ def jvp(
   are required their value should be returned explicitly by `fn`
   using `Module.variables`::
 
-    class LearnScale(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        p = self.param('test', nn.initializers._init(), ())
-        return p * x
+    >>> import flax.linen as nn
+    >>> import jax.numpy as jnp
 
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        scale = LearnScale()
-        vars_t = jax.tree_util.tree_map(jnp.ones_like,
-                                        scale.variables.get('params', {}))
-        _, out_t = nn.jvp(
-            lambda mdl, x: mdl(x), scale, (x,), (jnp.zeros_like(x),),
-            variable_tangents={'params': vars_t})
-        return out_t
+    >>> class LearnScale(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     p = self.param('test', nn.initializers._init(), ())
+    ...     return p * x
+
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     scale = LearnScale()
+    ...     vars_t = jax.tree_util.tree_map(jnp.ones_like,
+    ...                                     scale.variables.get('params', {}))
+    ...     _, out_t = nn.jvp(
+    ...         lambda mdl, x: mdl(x), scale, (x,), (jnp.zeros_like(x),),
+    ...         variable_tangents={'params': vars_t})
+    ...     return out_t
 
   Example::
 
-    def learn_scale(scope, x):
-      p = scope.param('scale', nn.initializers.zeros_init(), ())
-      return p * x
+    >>> def learn_scale(scope, x):
+    ...   p = scope.param('scale', nn.initializers.zeros_init(), ())
+    ...   return p * x
 
-    def f(scope, x):
-      vars_t = jax.tree_util.tree_map(jnp.ones_like, scope.variables().get('params', {}))
-      x, out_t = lift.jvp(
-          learn_scale, scope, (x,), (jnp.zeros_like(x),),
-          variable_tangents={'params': vars_t})
-      return out_t
+    >>> def f(scope, x):
+    ...   vars_t = jax.tree_util.tree_map(jnp.ones_like, scope.variables().get('params', {}))
+    ...   x, out_t = lift.jvp(
+    ...       learn_scale, scope, (x,), (jnp.zeros_like(x),),
+    ...       variable_tangents={'params': vars_t})
+    ...   return out_t
 
   Args:
     fn: Function to be differentiated. Its arguments should be arrays, scalars,
@@ -1422,27 +1433,30 @@ def while_loop(
 
   Example::
 
-    class WhileLoopExample(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        def cond_fn(mdl, c):
-          return mdl.variables['state']['acc'] < 10
-        def body_fn(mdl, c):
-          acc = mdl.variable('state', 'acc', lambda: jnp.array(0))
-          acc.value += 1
-          y = nn.Dense(c.shape[-1])(c)
-          return y
-        c = x
-        if self.is_mutable_collection('params'):
-          return body_fn(self, c)
-        else:
-          return nn.while_loop(cond_fn, body_fn, self, c,
-                               carry_variables='state')
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
 
-    k = random.key(0)
-    x = jnp.ones((2, 2))
-    intial_vars = WhileLoopExample().init(k, x)
-    result, state = WhileLoopExample().apply(intial_vars, x, mutable=['state'])
+    >>> class WhileLoopExample(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     def cond_fn(mdl, c):
+    ...       return mdl.variables['state']['acc'] < 10
+    ...     def body_fn(mdl, c):
+    ...       acc = mdl.variable('state', 'acc', lambda: jnp.array(0))
+    ...       acc.value += 1
+    ...       y = nn.Dense(c.shape[-1])(c)
+    ...       return y
+    ...     c = x
+    ...     if self.is_mutable_collection('params'):
+    ...       return body_fn(self, c)
+    ...     else:
+    ...       return nn.while_loop(cond_fn, body_fn, self, c,
+    ...                             carry_variables='state')
+
+    >>> k = jax.random.key(0)
+    >>> x = jnp.ones((2, 2))
+    >>> intial_vars = WhileLoopExample().init(k, x)
+    >>> result, state = WhileLoopExample().apply(intial_vars, x, mutable=['state'])
 
   Args:
     cond_fn: Should return True as long as the loop should continue.
@@ -1497,19 +1511,20 @@ def cond(
 
   Example::
 
-    class CondExample(nn.Module):
-      @nn.compact
-      def __call__(self, x, pred):
-        self.variable('state', 'true_count', lambda: 0)
-        self.variable('state', 'false_count', lambda: 0)
-        def true_fn(mdl, x):
-          mdl.variable('state', 'true_count').value += 1
-          return nn.Dense(2, name='dense')(x)
-        def false_fn(mdl, x):
-          mdl.variable('state', 'false_count').value += 1
-          return -nn.Dense(2, name='dense')(x)
-        return nn.cond(pred, true_fn, false_fn, self, x)
+    >>> import flax.linen as nn
 
+    >>> class CondExample(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x, pred):
+    ...     self.variable('state', 'true_count', lambda: 0)
+    ...     self.variable('state', 'false_count', lambda: 0)
+    ...     def true_fn(mdl, x):
+    ...       mdl.variable('state', 'true_count').value += 1
+    ...       return nn.Dense(2, name='dense')(x)
+    ...     def false_fn(mdl, x):
+    ...       mdl.variable('state', 'false_count').value += 1
+    ...       return -nn.Dense(2, name='dense')(x)
+    ...     return nn.cond(pred, true_fn, false_fn, self, x)
 
   Args:
     pred: determines if true_fun or false_fun is evaluated.
@@ -1567,46 +1582,48 @@ def switch(
 
   Example::
 
-    class SwitchExample(nn.Module):
-      @nn.compact
-      def __call__(self, x, index):
-        self.variable('state', 'a_count', lambda: 0)
-        self.variable('state', 'b_count', lambda: 0)
-        self.variable('state', 'c_count', lambda: 0)
-        def a_fn(mdl, x):
-          mdl.variable('state', 'a_count').value += 1
-          return nn.Dense(2, name='dense')(x)
-        def b_fn(mdl, x):
-          mdl.variable('state', 'b_count').value += 1
-          return -nn.Dense(2, name='dense')(x)
-        def c_fn(mdl, x):
-          mdl.variable('state', 'c_count').value += 1
-          return nn.Dense(2, name='dense')(x)
-        return nn.switch(index, [a_fn, b_fn, c_fn], self, x)
+    >>> import flax.linen as nn
+
+    >>> class SwitchExample(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x, index):
+    ...     self.variable('state', 'a_count', lambda: 0)
+    ...     self.variable('state', 'b_count', lambda: 0)
+    ...     self.variable('state', 'c_count', lambda: 0)
+    ...     def a_fn(mdl, x):
+    ...       mdl.variable('state', 'a_count').value += 1
+    ...       return nn.Dense(2, name='dense')(x)
+    ...     def b_fn(mdl, x):
+    ...       mdl.variable('state', 'b_count').value += 1
+    ...       return -nn.Dense(2, name='dense')(x)
+    ...     def c_fn(mdl, x):
+    ...       mdl.variable('state', 'c_count').value += 1
+    ...       return nn.Dense(2, name='dense')(x)
+    ...     return nn.switch(index, [a_fn, b_fn, c_fn], self, x)
 
   If you want to have a different parameter structure for each branch
   you should run all branches on initialization before calling switch::
 
-    class MultiHeadSwitchExample(nn.Module):
-      def setup(self) -> None:
-        self.heads = [
-          nn.Sequential([nn.Dense(10), nn.Dense(7), nn.Dense(5)]),
-          nn.Sequential([nn.Dense(11), nn.Dense(5)]),
-          nn.Dense(5),
-        ]
-
-      @nn.compact
-      def __call__(self, x, index):
-        def head_fn(i):
-          return lambda mdl, x: mdl.heads[i](x)
-        branches = [head_fn(i) for i in range(len(self.heads))]
-
-        # run all branches on init
-        if self.is_mutable_collection('params'):
-          for branch in branches:
-            _ = branch(self, x)
-
-        return nn.switch(index, branches, self, x)
+    >>> class MultiHeadSwitchExample(nn.Module):
+    ...   def setup(self) -> None:
+    ...     self.heads = [
+    ...       nn.Sequential([nn.Dense(10), nn.Dense(7), nn.Dense(5)]),
+    ...       nn.Sequential([nn.Dense(11), nn.Dense(5)]),
+    ...       nn.Dense(5),
+    ...     ]
+    ...
+    ...   @nn.compact
+    ...   def __call__(self, x, index):
+    ...     def head_fn(i):
+    ...       return lambda mdl, x: mdl.heads[i](x)
+    ...     branches = [head_fn(i) for i in range(len(self.heads))]
+    ...
+    ...     # run all branches on init
+    ...     if self.is_mutable_collection('params'):
+    ...       for branch in branches:
+    ...         _ = branch(self, x)
+    ...
+    ...     return nn.switch(index, branches, self, x)
 
   Args:
     index: Integer scalar type, indicating which branch function to apply.
@@ -1674,27 +1691,30 @@ def custom_vjp(
 
   Example::
 
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        def f(mdl, x):
-          return mdl(x)
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
 
-        def fwd(mdl, x):
-          return nn.vjp(f, mdl, x)
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     def f(mdl, x):
+    ...       return mdl(x)
+    ...
+    ...     def fwd(mdl, x):
+    ...       return nn.vjp(f, mdl, x)
+    ...
+    ...     def bwd(vjp_fn, y_t):
+    ...       params_t, *inputs_t = vjp_fn(y_t)
+    ...       params_t = jax.tree_util.tree_map(jnp.sign, params_t)
+    ...       return (params_t, *inputs_t)
+    ...
+    ...     sign_grad = nn.custom_vjp(
+    ...         f, forward_fn=fwd, backward_fn=bwd)
+    ...     return sign_grad(nn.Dense(1), x).reshape(())
 
-        def bwd(vjp_fn, y_t):
-          params_t, *inputs_t = vjp_fn(y_t)
-          params_t = jax.tree_util.tree_map(jnp.sign, params_t)
-          return (params_t, *inputs_t)
-
-        sign_grad = nn.custom_vjp(
-            f, forward_fn=fwd, backward_fn=bwd)
-        return sign_grad(nn.Dense(1), x).reshape(())
-
-    x = jnp.ones((2,))
-    variables = Foo().init(random.key(0), x)
-    grad = jax.grad(Foo().apply)(variables, x)
+    >>> x = jnp.ones((2,))
+    >>> variables = Foo().init(jax.random.key(0), x)
+    >>> grad = jax.grad(Foo().apply)(variables, x)
 
   Args:
     fn: The function to define a custom_vjp for.

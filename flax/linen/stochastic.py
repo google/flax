@@ -30,18 +30,25 @@ class Dropout(Module):
 
   Note: When using :meth:`Module.apply() <flax.linen.Module.apply>`, make sure
   to include an RNG seed named `'dropout'`. Dropout isn't necessary for
-  variable initialization. Example::
+  variable initialization. Example usage::
 
-    class MLP(nn.Module):
-      @nn.compact
-      def __call__(self, x, train):
-        x = nn.Dense(4)(x)
-        x = nn.Dropout(0.5, deterministic=not train)(x)
-        return x
-    model = MLP()
-    x = jnp.ones((1, 3))
-    variables = model.init(jax.random.key(0), x, train=False) # don't use dropout
-    model.apply(variables, x, train=True, rngs={'dropout': jax.random.key(1)}) # use dropout
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> class MLP(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x, train):
+    ...     x = nn.Dense(4)(x)
+    ...     x = nn.Dropout(0.5, deterministic=not train)(x)
+    ...     return x
+
+    >>> model = MLP()
+    >>> x = jnp.ones((1, 3))
+    >>> variables = model.init(jax.random.key(0), x, train=False) # don't use dropout
+    >>> model.apply(variables, x, train=False) # don't use dropout
+    Array([[-0.88686204, -0.5928178 , -0.5184689 , -0.4345976 ]], dtype=float32)
+    >>> model.apply(variables, x, train=True, rngs={'dropout': jax.random.key(1)}) # use dropout
+    Array([[ 0.       , -1.1856356, -1.0369378,  0.       ]], dtype=float32)
 
   Attributes:
     rate: the dropout probability.  (_not_ the keep rate!)

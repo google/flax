@@ -604,6 +604,26 @@ def save_checkpoint(
   commit will happen inside an async callback, which can be explicitly waited
   by calling `async_manager.wait_previous_save()`.
 
+  Example usage::
+
+    >>> from flax.training import checkpoints
+    >>> import jax.numpy as jnp
+    >>> import tempfile
+
+    >>> with tempfile.TemporaryDirectory() as dir_path:
+    ...   test_object = {
+    ...     'a': jnp.array([1, 2, 3], jnp.int32),
+    ...     'b': jnp.array([1, 1, 1], jnp.int32),
+    ...   }
+    ...   file_path = checkpoints.save_checkpoint(
+    ...     dir_path, target=test_object, step=0, prefix='test_', keep=1
+    ...   )
+    ...   restored_object = checkpoints.restore_checkpoint(
+    ...     file_path, target=None
+    ...   )
+    >>> restored_object
+    {'a': array([1, 2, 3], dtype=int32), 'b': array([1, 1, 1], dtype=int32)}
+
   Args:
     ckpt_dir: str or pathlib-like path to store checkpoint files in.
     target: serializable flax object, usually a flax optimizer.
@@ -1004,6 +1024,26 @@ def restore_checkpoint(
   *  ``ckpt_0.01, ckpt_0.1, ckpt_0.001 --> ckpt_0.1``
 
   *  ``ckpt_-1.0, ckpt_1.0, ckpt_1e5 --> ckpt_1e5``
+
+  Example usage::
+
+    >>> from flax.training import checkpoints
+    >>> import jax.numpy as jnp
+    >>> import tempfile
+
+    >>> with tempfile.TemporaryDirectory() as dir_path:
+    ...   test_object = {
+    ...     'a': jnp.array([1, 2, 3], jnp.int32),
+    ...     'b': jnp.array([1, 1, 1], jnp.int32),
+    ...   }
+    ...   file_path = checkpoints.save_checkpoint(
+    ...     dir_path, target=test_object, step=0, prefix='test_', keep=1
+    ...   )
+    ...   restored_object = checkpoints.restore_checkpoint(
+    ...     file_path, target=None
+    ...   )
+    >>> restored_object
+    {'a': array([1, 2, 3], dtype=int32), 'b': array([1, 1, 1], dtype=int32)}
 
   Args:
     ckpt_dir: str: checkpoint file or directory of checkpoints to restore from.

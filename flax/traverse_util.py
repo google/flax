@@ -18,23 +18,36 @@ A Traversal can be used to iterate and update complex data structures.
 Traversals take in an object and return a subset of its contents.
 For example, a Traversal could select an attribute of an object::
 
-  x = Foo(foo=1)
-  traverse_util.TraverseAttr('foo').iterate(x) # [1]
+  >>> from flax import traverse_util
+  >>> import dataclasses
 
+  >>> @dataclasses.dataclass
+  ... class Foo:
+  ...   foo: int = 0
+  ...   bar: int = 0
+  ...
+  >>> x = Foo(foo=1)
+  >>> iterator = traverse_util.TraverseAttr('foo').iterate(x)
+  >>> list(iterator)
+  [1]
 
 More complex traversals can be constructed using composition.
 It is often useful to start from the identity traversal and use a method chain
 to construct the intended Traversal::
 
-  data = [{'foo': 1, 'bar': 2}, {'foo': 3, 'bar': 4}]
-  traversal = traverse_util.t_identity.each()['foo']
-  traversal.iterate(data) # [1, 3]
+  >>> data = [{'foo': 1, 'bar': 2}, {'foo': 3, 'bar': 4}]
+  >>> traversal = traverse_util.t_identity.each()['foo']
+  >>> iterator = traversal.iterate(data)
+  >>> list(iterator)
+  [1, 3]
 
 Traversals can also be used to make changes using the `update` method::
 
-  data = {'foo': Foo(bar=2)}
-  traversal = traverse_util.t_identity['foo'].bar
-  traversal.update(lambda x: x + x, data) # {'foo': Foo(bar=4)}
+  >>> data = {'foo': Foo(bar=2)}
+  >>> traversal = traverse_util.t_identity['foo'].bar
+  >>> data = traversal.update(lambda x: x + x, data)
+  >>> data
+  {'foo': Foo(foo=0, bar=4)}
 
 Traversals never mutate the original data. Therefore, an update essentially
 returns a copy of the data including the provided updates.
@@ -74,13 +87,12 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
 
   Example::
 
-    xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
-    flat_xs = flatten_dict(xs)
-    print(flat_xs)
-    # {
-    #   ('foo',): 1,
-    #   ('bar', 'a'): 2,
-    # }
+    >>> from flax.traverse_util import flatten_dict
+
+    >>> xs = {'foo': 1, 'bar': {'a': 2, 'b': {}}}
+    >>> flat_xs = flatten_dict(xs)
+    >>> flat_xs
+    {('foo',): 1, ('bar', 'a'): 2}
 
   Note that empty dictionaries are ignored and
   will not be restored by `unflatten_dict`.
@@ -135,16 +147,13 @@ def unflatten_dict(xs, sep=None):
 
   Example::
 
-    flat_xs = {
-      ('foo',): 1,
-      ('bar', 'a'): 2,
-    }
-    xs = unflatten_dict(flat_xs)
-    print(xs)
-    # {
-    #   'foo': 1
-    #   'bar': {'a': 2}
-    # }
+    >>> flat_xs = {
+    ...   ('foo',): 1,
+    ...   ('bar', 'a'): 2,
+    ... }
+    >>> xs = unflatten_dict(flat_xs)
+    >>> xs
+    {'foo': 1, 'bar': {'a': 2}}
 
   Args:
     xs: a flattened dictionary
@@ -178,7 +187,7 @@ def path_aware_map(
 
     >>> import jax.numpy as jnp
     >>> from flax import traverse_util
-    ...
+
     >>> params = {'a': {'x': 10, 'y': 3}, 'b': {'x': 20}}
     >>> f = lambda path, x: x + 5 if 'x' in path else -x
     >>> traverse_util.path_aware_map(f, params)

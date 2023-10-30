@@ -26,15 +26,23 @@ class EarlyStopping(struct.PyTreeNode):
   recorded in the current epoch and previous epoch is less than 1e-3
   consecutively for 2 times::
 
-    early_stop = EarlyStopping(min_delta=1e-3, patience=2)
-    for epoch in range(1, num_epochs+1):
-      rng, input_rng = jax.random.split(rng)
-      optimizer, train_metrics = train_epoch(
-          optimizer, train_ds, config.batch_size, epoch, input_rng)
-      early_stop = early_stop.update(train_metrics['loss'])
-      if early_stop.should_stop:
-        print('Met early stopping criteria, breaking...')
-        break
+    >>> from flax.training.early_stopping import EarlyStopping
+
+    >>> def train_epoch(optimizer, train_ds, batch_size, epoch, input_rng):
+    ...   ...
+    ...   loss = [4, 3, 3, 3, 2, 2, 2, 2, 1, 1][epoch]
+    ...   return None, {'loss': loss}
+
+    >>> early_stop = EarlyStopping(min_delta=1e-3, patience=2)
+    >>> optimizer = None
+    >>> for epoch in range(10):
+    ...   optimizer, train_metrics = train_epoch(
+    ...       optimizer=optimizer, train_ds=None, batch_size=None, epoch=epoch, input_rng=None)
+    ...   early_stop = early_stop.update(train_metrics['loss'])
+    ...   if early_stop.should_stop:
+    ...     print(f'Met early stopping criteria, breaking at epoch {epoch}')
+    ...     break
+    Met early stopping criteria, breaking at epoch 7
 
   Attributes:
     min_delta: Minimum delta between updates to be considered an

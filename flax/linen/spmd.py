@@ -324,9 +324,10 @@ def with_logical_partitioning(
 
   Example::
 
-    kernel_init = with_logical_partitioning(
-        nn.initializers.lecun_normal, (None, "data"))
-    partitioned_dense = nn.Dense(features, kernel_init=kernel_init)
+    >>> import flax.linen as nn
+    >>> kernel_init = nn.with_logical_partitioning(
+    ...     nn.initializers.lecun_normal, (None, "data"))
+    >>> partitioned_dense = nn.Dense(features=3, kernel_init=kernel_init)
 
   Args:
     fn: The function to be wrapped. Typically this is an initializer.

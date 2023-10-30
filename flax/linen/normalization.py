@@ -229,29 +229,30 @@ class BatchNorm(Module):
   Usage Note:
   If we define a model with BatchNorm, for example::
 
-    BN = nn.BatchNorm(use_running_average=False, momentum=0.9, epsilon=1e-5,
-                      dtype=jnp.float32)
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+    >>> BN = nn.BatchNorm(momentum=0.9, epsilon=1e-5, dtype=jnp.float32)
 
   The initialized variables dict will contain, in addition to a 'params'
   collection, a separate 'batch_stats' collection that will contain all the
   running statistics for all the BatchNorm layers in a model::
 
-    vars_initialized = BN.init(key, x)  # {'params': ..., 'batch_stats': ...}
+    >>> x = jax.random.normal(jax.random.key(0), (5, 6))
+    >>> variables = BN.init(jax.random.key(1), x, use_running_average=False)
+    >>> jax.tree_map(jnp.shape, variables)
+    {'batch_stats': {'mean': (6,), 'var': (6,)}, 'params': {'bias': (6,), 'scale': (6,)}}
 
   We then update the batch_stats during training by specifying that the
   `batch_stats` collection is mutable in the `apply` method for our module.::
 
-    vars_in = {'params': params, 'batch_stats': old_batch_stats}
-    y, mutated_vars = BN.apply(vars_in, x, mutable=['batch_stats'])
-    new_batch_stats = mutated_vars['batch_stats']
+    >>> y, new_batch_stats = BN.apply(variables, x, mutable=['batch_stats'], use_running_average=False)
 
   During eval we would define BN with `use_running_average=True` and use the
   batch_stats collection from training to set the statistics.  In this case
   we are not mutating the batch statistics collection, and needn't mark it
   mutable::
 
-    vars_in = {'params': params, 'batch_stats': training_batch_stats}
-    y = BN.apply(vars_in, x)
+    >>> y = BN.apply(variables, x, mutable=['batch_stats'], use_running_average=True)
 
   Attributes:
     use_running_average: if True, the statistics stored in batch_stats will be
@@ -379,6 +380,18 @@ class LayerNorm(Module):
   i.e. applies a transformation that maintains the mean activation within
   each example close to 0 and the activation standard deviation close to 1.
 
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (5, 6))
+    >>> layer = nn.LayerNorm()
+    >>> variables = layer.init(jax.random.key(1), x)
+    >>> variables
+    {'params': {'scale': Array([1., 1., 1., 1., 1., 1.], dtype=float32), 'bias': Array([0., 0., 0., 0., 0., 0.], dtype=float32)}}
+    >>> y = layer.apply(variables, x)
+
   Attributes:
     epsilon: A small float added to variance to avoid dividing by zero.
     dtype: the dtype of the result (default: infer from input and params).
@@ -465,14 +478,16 @@ class RMSNorm(Module):
   standard deviation of the activations, RMSNorm does not re-center at all
   and instead normalizes by the root mean square of the activations.
 
-  Example::
-    >>> import jax.numpy as jnp
-    >>> import jax
+  Example usage::
+
     >>> import flax.linen as nn
-    ...
-    >>> x = jax.random.uniform(jax.random.key(0), (2, 3))
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (5, 6))
     >>> layer = nn.RMSNorm()
     >>> variables = layer.init(jax.random.key(1), x)
+    >>> variables
+    {'params': {'scale': Array([1., 1., 1., 1., 1., 1.], dtype=float32)}}
     >>> y = layer.apply(variables, x)
 
   Attributes:
@@ -554,6 +569,18 @@ class GroupNorm(Module):
   not require maintaining internal state for storing statistics.
   The user should either specify the total number of channel groups or the
   number of channels per group.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (5, 6))
+    >>> layer = nn.GroupNorm(num_groups=3)
+    >>> variables = layer.init(jax.random.key(1), x)
+    >>> variables
+    {'params': {'scale': Array([1., 1., 1., 1., 1., 1.], dtype=float32), 'bias': Array([0., 0., 0., 0., 0., 0.], dtype=float32)}}
+    >>> y = layer.apply(variables, x)
 
   Attributes:
     num_groups: the total number of channel groups. The default value of 32 is
@@ -672,9 +699,8 @@ class GroupNorm(Module):
 
 
 class SpectralNorm(Module):
-  """Spectral normalization.
+  """Spectral normalization. See:
 
-  See:
   - https://arxiv.org/abs/1802.05957
   - https://arxiv.org/abs/1805.08318
   - https://arxiv.org/abs/1809.11096
@@ -696,47 +722,76 @@ class SpectralNorm(Module):
   in ``update_stats=False`` to ensure we get deterministic behavior from
   the model. For example::
 
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x, train):
-        x = nn.Dense(3)(x)
-        # only spectral normalize the params of the second Dense layer
-        x = nn.SpectralNorm(nn.Dense(4))(x, update_stats=train)
-        x = nn.Dense(5)(x)
-        return x
+  Example usage::
 
-    # init
-    x = jnp.ones((1, 2))
-    y = jnp.ones((1, 5))
-    model = Foo()
-    variables = model.init(jax.random.PRNGKey(0), x, train=False)
+    >>> import flax, flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+    >>> import optax
 
-    # train
-    def train_step(variables, x, y):
-      def loss_fn(params):
-        logits, updates = model.apply(
-            {'params': params, 'batch_stats': variables['batch_stats']},
-            x,
-            train=True,
-            mutable=['batch_stats'],
-        )
-        loss = jnp.mean(optax.l2_loss(predictions=logits, targets=y))
-        return loss, updates
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x, train):
+    ...     x = nn.Dense(3)(x)
+    ...     # only spectral normalize the params of the second Dense layer
+    ...     x = nn.SpectralNorm(nn.Dense(4))(x, update_stats=train)
+    ...     x = nn.Dense(5)(x)
+    ...     return x
 
-      (loss, updates), grads = jax.value_and_grad(loss_fn, has_aux=True)(
-          variables['params']
-      )
-      return {
-          'params': jax.tree_map(
-              lambda p, g: p - 0.1 * g, variables['params'], grads
-          ),
-          'batch_stats': updates['batch_stats'],
-      }, loss
-    for _ in range(10):
-      variables, loss = train_step(variables, x, y)
+    >>> # init
+    >>> x = jnp.ones((1, 2))
+    >>> y = jnp.ones((1, 5))
+    >>> model = Foo()
+    >>> variables = model.init(jax.random.PRNGKey(0), x, train=False)
+    >>> flax.core.freeze(jax.tree_map(jnp.shape, variables))
+    FrozenDict({
+        batch_stats: {
+            SpectralNorm_0: {
+                Dense_1/kernel/sigma: (),
+                Dense_1/kernel/u: (1, 4),
+            },
+        },
+        params: {
+            Dense_0: {
+                bias: (3,),
+                kernel: (2, 3),
+            },
+            Dense_1: {
+                bias: (4,),
+                kernel: (3, 4),
+            },
+            Dense_2: {
+                bias: (5,),
+                kernel: (4, 5),
+            },
+        },
+    })
 
-    # inference / eval
-    out = model.apply(variables, x, train=False)
+    >>> # train
+    >>> def train_step(variables, x, y):
+    ...   def loss_fn(params):
+    ...     logits, updates = model.apply(
+    ...         {'params': params, 'batch_stats': variables['batch_stats']},
+    ...         x,
+    ...         train=True,
+    ...         mutable=['batch_stats'],
+    ...     )
+    ...     loss = jnp.mean(optax.l2_loss(predictions=logits, targets=y))
+    ...     return loss, updates
+    ...
+    ...   (loss, updates), grads = jax.value_and_grad(loss_fn, has_aux=True)(
+    ...       variables['params']
+    ...   )
+    ...   return {
+    ...       'params': jax.tree_map(
+    ...           lambda p, g: p - 0.1 * g, variables['params'], grads
+    ...       ),
+    ...       'batch_stats': updates['batch_stats'],
+    ...   }, loss
+    >>> for _ in range(10):
+    ...   variables, loss = train_step(variables, x, y)
+
+    >>> # inference / eval
+    >>> out = model.apply(variables, x, train=False)
 
   Attributes:
     layer_instance: Module instance that is wrapped with SpectralNorm
@@ -886,59 +941,92 @@ class WeightNorm(Module):
   each wrapped layer will have its params l2-normalized before computing
   its ``__call__`` output.
 
-  Example::
+  Example usage::
 
-    class Baz(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        return nn.Dense(2)(x)
+    >>> import flax, flax.linen as nn
+    >>> import jax, jax.numpy as jnp
 
-    class Bar(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        x = Baz()(x)
-        x = nn.Dense(3)(x)
-        x = Baz()(x)
-        x = nn.Dense(3)(x)
-        return x
+    >>> class Baz(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     return nn.Dense(2)(x)
 
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        x = nn.Dense(3)(x)
-        # l2-normalize all params of the second Dense layer
-        x = nn.WeightNorm(nn.Dense(4), variable_filter=None)(x)
-        x = nn.Dense(5)(x)
-        # l2-normalize all kernels in the Bar submodule and all params in the
-        # Baz submodule
-        x = nn.WeightNorm(Bar(), variable_filter={'kernel', 'Baz'})(x)
-        return x
+    >>> class Bar(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     x = Baz()(x)
+    ...     x = nn.Dense(3)(x)
+    ...     x = Baz()(x)
+    ...     x = nn.Dense(3)(x)
+    ...     return x
 
-    # init
-    x = jnp.ones((1, 2))
-    model = Foo()
-    variables = model.init(jax.random.key(0), x)
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     x = nn.Dense(3)(x)
+    ...     # l2-normalize all params of the second Dense layer
+    ...     x = nn.WeightNorm(nn.Dense(4), variable_filter=None)(x)
+    ...     x = nn.Dense(5)(x)
+    ...     # l2-normalize all kernels in the Bar submodule and all params in the
+    ...     # Baz submodule
+    ...     x = nn.WeightNorm(Bar(), variable_filter={'kernel', 'Baz'})(x)
+    ...     return x
 
-    variables
-    # {
-    #   params: {
-    #     ...
-    #     WeightNorm_0: {
-    #         Dense_1/bias/scale: Array([1., 1., 1., 1.], dtype=float32),
-    #         Dense_1/kernel/scale: Array([1., 1., 1., 1.], dtype=float32),
-    #     },
-    #     ...
-    #     WeightNorm_1: {
-    #         Bar_0/Baz_0/Dense_0/bias/scale: Array([1., 1.], dtype=float32),
-    #         Bar_0/Baz_0/Dense_0/kernel/scale: Array([1., 1.], dtype=float32),
-    #         Bar_0/Baz_1/Dense_0/bias/scale: Array([1., 1.], dtype=float32),
-    #         Bar_0/Baz_1/Dense_0/kernel/scale: Array([1., 1.], dtype=float32),
-    #         Bar_0/Dense_0/kernel/scale: Array([1., 1., 1.], dtype=float32),
-    #         Bar_0/Dense_1/kernel/scale: Array([1., 1., 1.], dtype=float32),
-    #     },
-    #     ...
-    #   }
-    # }
+    >>> # init
+    >>> x = jnp.ones((1, 2))
+    >>> model = Foo()
+    >>> variables = model.init(jax.random.key(0), x)
+    >>> flax.core.freeze(jax.tree_map(jnp.shape, variables))
+    FrozenDict({
+        params: {
+            Bar_0: {
+                Baz_0: {
+                    Dense_0: {
+                        bias: (2,),
+                        kernel: (5, 2),
+                    },
+                },
+                Baz_1: {
+                    Dense_0: {
+                        bias: (2,),
+                        kernel: (3, 2),
+                    },
+                },
+                Dense_0: {
+                    bias: (3,),
+                    kernel: (2, 3),
+                },
+                Dense_1: {
+                    bias: (3,),
+                    kernel: (2, 3),
+                },
+            },
+            Dense_0: {
+                bias: (3,),
+                kernel: (2, 3),
+            },
+            Dense_1: {
+                bias: (4,),
+                kernel: (3, 4),
+            },
+            Dense_2: {
+                bias: (5,),
+                kernel: (4, 5),
+            },
+            WeightNorm_0: {
+                Dense_1/bias/scale: (4,),
+                Dense_1/kernel/scale: (4,),
+            },
+            WeightNorm_1: {
+                Bar_0/Baz_0/Dense_0/bias/scale: (2,),
+                Bar_0/Baz_0/Dense_0/kernel/scale: (2,),
+                Bar_0/Baz_1/Dense_0/bias/scale: (2,),
+                Bar_0/Baz_1/Dense_0/kernel/scale: (2,),
+                Bar_0/Dense_0/kernel/scale: (3,),
+                Bar_0/Dense_1/kernel/scale: (3,),
+            },
+        },
+    })
 
   Attributes:
     layer_instance: Module instance that is wrapped with WeightNorm
