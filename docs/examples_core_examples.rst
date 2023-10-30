@@ -51,7 +51,7 @@ Natural language processing
    WMT <https://github.com/google/flax/tree/main/examples/wmt/>`__:
    Translating English/German (featuring multihost SPMD, dynamic bucketing,
    attention cache, packed sequences, recipe for TPU training on GCP).
--  :octicon:`mark-github;0.9em` `Transformer encoder trained on one billion word
+-  :octicon:`mark-github;0.9em` `Transformer decoder trained on one billion word
    benchmark <https://github.com/google/flax/tree/main/examples/lm1b/>`__:
    for autoregressive language modeling, based on the WMT example above.
 
