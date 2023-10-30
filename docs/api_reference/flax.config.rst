@@ -4,4 +4,5 @@ flax.config package
 
 .. automodule:: flax.configurations
     :members:
-    :exclude-members: temp_flip_flag
+    :undoc-members:
+    :exclude-members: FlagHolder, bool_flag, temp_flip_flag, static_bool_env
