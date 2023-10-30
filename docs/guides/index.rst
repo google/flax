@@ -10,4 +10,5 @@ Guides
    index_parallel_training
    index_model_inspection
    index_converting_and_upgrading
+   Loading datasets <../notebooks/loading_datasets>
    The Sharp Bits <../notebooks/flax_sharp_bits>
