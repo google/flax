@@ -51,11 +51,13 @@ end of the parameter list (after all non-keyword-only parameters).
 """
 
 import dataclasses
-import inspect
 import functools
+import inspect
 from types import MappingProxyType
 from typing import Any, TypeVar
+
 from typing_extensions import dataclass_transform
+
 import flax
 
 M = TypeVar('M', bound='flax.linen.Module')
@@ -88,9 +90,9 @@ def field(*, metadata=None, kw_only=dataclasses.MISSING, **kwargs):
   """
   if kw_only is not dataclasses.MISSING and kw_only:
     if (
-        kwargs.get('default', dataclasses.MISSING) is dataclasses.MISSING
-        and kwargs.get('default_factory', dataclasses.MISSING)
-        is dataclasses.MISSING
+      kwargs.get('default', dataclasses.MISSING) is dataclasses.MISSING
+      and kwargs.get('default_factory', dataclasses.MISSING)
+      is dataclasses.MISSING
     ):
       raise ValueError('Keyword-only fields with no default are not supported.')
     if metadata is None:
@@ -146,7 +148,7 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
     elif kw_only_name is not None:
       if not hasattr(cls, name):
         raise ValueError(
-            'Keyword-only fields with no default are not supported.'
+          'Keyword-only fields with no default are not supported.'
         )
       default = getattr(cls, name)
       if isinstance(default, dataclasses.Field):
@@ -162,8 +164,8 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
     for name, annotation, default in extra_fields:
       if not (isinstance(name, str) and isinstance(default, dataclasses.Field)):
         raise ValueError(
-            'Expected extra_fields to a be a list of '
-            '(name, type, Field) tuples.'
+          'Expected extra_fields to a be a list of '
+          '(name, type, Field) tuples.'
         )
       setattr(cls, name, default)
       cls.__annotations__[name] = annotation
@@ -174,14 +176,14 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
       continue
     base_annotations = base.__dict__.get('__annotations__', {})
     base_dataclass_fields[base] = dict(
-        getattr(base, '__dataclass_fields__', {})
+      getattr(base, '__dataclass_fields__', {})
     )
     for base_field in list(dataclasses.fields(base)):
       field_name = base_field.name
       if base_field.metadata.get(KW_ONLY) or field_name in kw_only_fields:
         kw_only_fields[field_name] = (
-            base_annotations.get(field_name),
-            base_field,
+          base_annotations.get(field_name),
+          base_field,
         )
         del base.__dataclass_fields__[field_name]
 
@@ -190,7 +192,7 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
   for name, annotation in list(cls_annotations.items()):
     value = getattr(cls, name, None)
     if (
-        isinstance(value, dataclasses.Field) and value.metadata.get(KW_ONLY)
+      isinstance(value, dataclasses.Field) and value.metadata.get(KW_ONLY)
     ) or name in kw_only_fields:
       del cls_annotations[name]
       kw_only_fields[name] = (annotation, value)
@@ -215,8 +217,8 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
     dataclass_init = transformed_cls.__init__
     # use sum to count the number of init fields that are not keyword-only
     expected_num_args = sum(
-        f.init and not f.metadata.get(KW_ONLY, False)
-        for f in dataclasses.fields(transformed_cls)
+      f.init and not f.metadata.get(KW_ONLY, False)
+      for f in dataclasses.fields(transformed_cls)
     )
 
     @functools.wraps(dataclass_init)
@@ -226,8 +228,8 @@ def _process_class(cls: type[M], extra_fields=None, **kwargs):
         # we add + 1 to each to account for `self`, matching python's
         # default error message
         raise TypeError(
-            f'__init__() takes {expected_num_args + 1} positional '
-            f'arguments but {num_args + 1} were given'
+          f'__init__() takes {expected_num_args + 1} positional '
+          f'arguments but {num_args + 1} were given'
         )
 
       dataclass_init(self, *args, **kwargs)

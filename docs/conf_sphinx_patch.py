@@ -24,45 +24,46 @@
 # We should consider sending a PR to sphinx so we can get rid of this.
 # Original source: https://github.com/sphinx-doc/sphinx/blob/0aedcc9a916daa92d477226da67d33ce1831822e/sphinx/ext/autosummary/generate.py#L211-L351
 from typing import Any, Dict, List, Set, Tuple
-import sphinx.ext.autosummary.generate as ag
+
 import sphinx.ext.autodoc
+import sphinx.ext.autosummary.generate as ag
 
 
 def generate_autosummary_content(
-    name: str,
-    obj: Any,
-    parent: Any,
-    template: ag.AutosummaryRenderer,
-    template_name: str,
-    imported_members: bool,
-    app: Any,
-    recursive: bool,
-    context: Dict,
-    modname: str = None,
-    qualname: str = None,
+  name: str,
+  obj: Any,
+  parent: Any,
+  template: ag.AutosummaryRenderer,
+  template_name: str,
+  imported_members: bool,
+  app: Any,
+  recursive: bool,
+  context: Dict,
+  modname: str = None,
+  qualname: str = None,
 ) -> str:
   doc = ag.get_documenter(app, obj, parent)
 
   def skip_member(obj: Any, name: str, objtype: str) -> bool:
     try:
       return app.emit_firstresult(
-          'autodoc-skip-member', objtype, name, obj, False, {}
+        'autodoc-skip-member', objtype, name, obj, False, {}
       )
     except Exception as exc:
       ag.logger.warning(
-          __(
-              'autosummary: failed to determine %r to be documented, '
-              'the following exception was raised:\n%s'
-          ),
-          name,
-          exc,
-          type='autosummary',
+        __(
+          'autosummary: failed to determine %r to be documented, '
+          'the following exception was raised:\n%s'
+        ),
+        name,
+        exc,
+        type='autosummary',
       )
       return False
 
   def get_class_members(obj: Any) -> Dict[str, Any]:
     members = sphinx.ext.autodoc.get_class_members(
-        obj, [qualname], ag.safe_getattr
+      obj, [qualname], ag.safe_getattr
     )
     return {name: member.object for name, member in members.items()}
 
@@ -83,10 +84,10 @@ def generate_autosummary_content(
     return {}
 
   def get_members(
-      obj: Any,
-      types: Set[str],
-      include_public: List[str] = [],
-      imported: bool = True,
+    obj: Any,
+    types: Set[str],
+    include_public: List[str] = [],
+    imported: bool = True,
   ) -> Tuple[List[str], List[str]]:
     items: List[str] = []
     public: List[str] = []
@@ -148,13 +149,13 @@ def generate_autosummary_content(
     scanner = ag.ModuleScanner(app, obj)
     ns['members'] = scanner.scan(imported_members)
     ns['functions'], ns['all_functions'] = get_members(
-        obj, {'function'}, imported=imported_members
+      obj, {'function'}, imported=imported_members
     )
     ns['classes'], ns['all_classes'] = get_members(
-        obj, {'class'}, imported=imported_members
+      obj, {'class'}, imported=imported_members
     )
     ns['exceptions'], ns['all_exceptions'] = get_members(
-        obj, {'exception'}, imported=imported_members
+      obj, {'exception'}, imported=imported_members
     )
     ns['attributes'], ns['all_attributes'] = get_module_attrs(ns['members'])
     ispackage = hasattr(obj, '__path__')
@@ -164,10 +165,10 @@ def generate_autosummary_content(
     ns['members'] = dir(obj)
     ns['inherited_members'] = set(dir(obj)) - set(obj.__dict__.keys())
     ns['methods'], ns['all_methods'] = get_members(
-        obj, {'method'}, ['__init__']
+      obj, {'method'}, ['__init__']
     )
     ns['attributes'], ns['all_attributes'] = get_members(
-        obj, {'attribute', 'property'}
+      obj, {'attribute', 'property'}
     )
     ns['annotations'] = list(getattr(obj, '__annotations__', {}).keys())
 

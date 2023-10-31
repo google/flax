@@ -19,9 +19,9 @@ with helping write pmap-based data-parallel training loops.
 """
 
 import jax
-from jax import lax
 import jax.numpy as jnp
 import numpy as np
+from jax import lax
 
 
 def shard(xs):
@@ -35,7 +35,7 @@ def shard(xs):
   """
   local_device_count = jax.local_device_count()
   return jax.tree_util.tree_map(
-      lambda x: x.reshape((local_device_count, -1) + x.shape[1:]), xs
+    lambda x: x.reshape((local_device_count, -1) + x.shape[1:]), xs
   )
 
 
@@ -101,7 +101,7 @@ def onehot(labels, num_classes, on_value=1.0, off_value=0.0):
     num_classes.
   """
   x = labels[..., None] == jnp.arange(num_classes).reshape(
-      (1,) * labels.ndim + (-1,)
+    (1,) * labels.ndim + (-1,)
   )
   x = lax.select(x, jnp.full(x.shape, on_value), jnp.full(x.shape, off_value))
   return x.astype(jnp.float32)

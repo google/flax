@@ -15,16 +15,16 @@
 """Tests for flax.training.early_stopping."""
 
 
-from absl.testing import absltest
-from flax.training import early_stopping
 import jax
+from absl.testing import absltest
+
+from flax.training import early_stopping
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
 
 class EarlyStoppingTests(absltest.TestCase):
-
   def test_update(self):
     es = early_stopping.EarlyStopping(min_delta=0, patience=0)
 
@@ -85,16 +85,16 @@ class EarlyStoppingTests(absltest.TestCase):
     self.assertEqual(step, 1)
 
     metrics = [
-        0.01,
-        0.005,
-        0.0033,
-        0.0025,
-        0.002,
-        0.0017,
-        0.0014,
-        0.0012,
-        0.0011,
-        0.001,
+      0.01,
+      0.005,
+      0.0033,
+      0.0025,
+      0.002,
+      0.0017,
+      0.0014,
+      0.0012,
+      0.0011,
+      0.001,
     ]
     improvement_steps = 0
     for step in range(10):

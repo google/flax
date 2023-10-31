@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax.core import Scope, Array, init, unfreeze, lift, nn
-
-from absl.testing import absltest
-
 import jax
-from jax import random, numpy as jnp
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax.core import Array, Scope, init, lift, nn, unfreeze
 
 
 def mlp_scan(scope: Scope, xs: Array, share_params: bool = False):
@@ -31,17 +31,17 @@ def mlp_scan(scope: Scope, xs: Array, share_params: bool = False):
 
   if share_params:
     _, ys = lift.scan(
-        body_fn,
-        variable_carry='counter',
-        variable_broadcast='params',
-        split_rngs={'params': False},
+      body_fn,
+      variable_carry='counter',
+      variable_broadcast='params',
+      split_rngs={'params': False},
     )(scope, (), xs)
   else:
     _, ys = lift.scan(
-        body_fn,
-        variable_carry='counter',
-        variable_axes={'params': 0},
-        split_rngs={'params': True},
+      body_fn,
+      variable_carry='counter',
+      variable_axes={'params': 0},
+      split_rngs={'params': True},
     )(scope, (), xs)
 
   # output layer
@@ -49,21 +49,20 @@ def mlp_scan(scope: Scope, xs: Array, share_params: bool = False):
 
 
 class ScanTest(absltest.TestCase):
-
   def test_scan_unshared_params(self):
     x = random.normal(random.key(0), (1, 4))
     x = jnp.concatenate([x, x], 0)
     y, variables = init(mlp_scan)(random.key(1), x, share_params=False)
 
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params'])
+      jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
     self.assertEqual(variables['counter']['i'], 2)
     self.assertEqual(
-        param_shapes,
-        {
-            'dense_0': {'kernel': (2, 4, 1), 'bias': (2, 1)},
-        },
+      param_shapes,
+      {
+        'dense_0': {'kernel': (2, 4, 1), 'bias': (2, 1)},
+      },
     )
 
     self.assertNotEqual(y[0], y[1])
@@ -76,14 +75,14 @@ class ScanTest(absltest.TestCase):
     y, variables = init(mlp_scan)(random.key(1), x, share_params=True)
 
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params'])
+      jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
     self.assertEqual(variables['counter']['i'], 2)
     self.assertEqual(
-        param_shapes,
-        {
-            'dense_0': {'kernel': (4, 1), 'bias': (1,)},
-        },
+      param_shapes,
+      {
+        'dense_0': {'kernel': (4, 1), 'bias': (1,)},
+      },
     )
 
     self.assertEqual(y[0], y[1])

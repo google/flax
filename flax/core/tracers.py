@@ -14,8 +14,9 @@
 
 """Functionality for inspecting jax tracers."""
 
-from .. import errors
 import jax
+
+from .. import errors
 
 
 def current_trace():

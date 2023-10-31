@@ -17,15 +17,15 @@ The sole purpose of this abstraction layer is to avoid requiring tensorflow
 as an open-source dependency solely for its tensorflow.io.gfile functions.
 """
 import contextlib
-from enum import Enum
 import glob as glob_module
 import importlib
 import os
 import shutil
+from enum import Enum
 
 from absl import logging
-from . import errors
 
+from . import errors
 
 # Global Modes and selective import of tensorflow.io gfile.
 
@@ -38,15 +38,15 @@ class BackendMode(Enum):
 io_mode = None
 gfile = None
 
-if importlib.util.find_spec("tensorflow"):
+if importlib.util.find_spec('tensorflow'):
   from tensorflow.io import gfile  # type: ignore
 
   io_mode = BackendMode.TF
 else:
   logging.warning(
-      "Tensorflow library not found, tensorflow.io.gfile "
-      "operations will use native shim calls. "
-      "GCS paths (i.e. 'gs://...') cannot be accessed."
+    'Tensorflow library not found, tensorflow.io.gfile '
+    'operations will use native shim calls. '
+    "GCS paths (i.e. 'gs://...') cannot be accessed."
   )
   io_mode = BackendMode.DEFAULT
 
@@ -96,14 +96,14 @@ def set_mode(override: BackendMode):
 
 def GFile(name, mode):  # pylint: disable=invalid-name
   if io_mode == BackendMode.DEFAULT:
-    if "b" in mode:
+    if 'b' in mode:
       return open(name, mode)  # pylint: disable=unspecified-encoding
     else:
-      return open(name, mode, encoding="utf-8")
+      return open(name, mode, encoding='utf-8')
   elif io_mode == BackendMode.TF:
     return gfile.GFile(name, mode)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def listdir(path):
@@ -112,7 +112,7 @@ def listdir(path):
   elif io_mode == BackendMode.TF:
     return gfile.listdir(path=path)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def isdir(path):
@@ -121,7 +121,7 @@ def isdir(path):
   elif io_mode == BackendMode.TF:
     return gfile.isdir(path)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def copy(src, dst, overwrite=False):
@@ -133,7 +133,7 @@ def copy(src, dst, overwrite=False):
   elif io_mode == BackendMode.TF:
     return gfile.copy(src, dst, overwrite=overwrite)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def rename(src, dst, overwrite=False):
@@ -144,7 +144,7 @@ def rename(src, dst, overwrite=False):
   elif io_mode == BackendMode.TF:
     return gfile.rename(src, dst, overwrite=overwrite)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def exists(path):
@@ -153,7 +153,7 @@ def exists(path):
   elif io_mode == BackendMode.TF:
     return gfile.exists(path)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def makedirs(path):
@@ -162,18 +162,18 @@ def makedirs(path):
   elif io_mode == BackendMode.TF:
     return gfile.makedirs(path)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def glob(pattern):
   if io_mode == BackendMode.DEFAULT:
     return [
-        path.rstrip("/") for path in glob_module.glob(pattern, recursive=False)
+      path.rstrip('/') for path in glob_module.glob(pattern, recursive=False)
     ]
   elif io_mode == BackendMode.TF:
     return gfile.glob(pattern)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def remove(path):
@@ -183,7 +183,7 @@ def remove(path):
   elif io_mode == BackendMode.TF:
     return gfile.remove(path)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def rmtree(path):
@@ -193,7 +193,7 @@ def rmtree(path):
   elif io_mode == BackendMode.TF:
     return gfile.rmtree(path)
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')
 
 
 def getsize(path):
@@ -203,4 +203,4 @@ def getsize(path):
   elif io_mode == BackendMode.TF:
     return gfile.stat(path).length
   else:
-    raise ValueError("Unknown IO Backend Mode.")
+    raise ValueError('Unknown IO Backend Mode.')

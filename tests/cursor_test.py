@@ -15,17 +15,18 @@
 """Tests for flax.struct."""
 
 
-from absl.testing import absltest
 import dataclasses
-import flax
+from typing import Any, NamedTuple
+
 import jax
 import jax.numpy as jnp
 import optax
-from typing import Any, NamedTuple
+from absl.testing import absltest
 
+import flax
 import flax.linen as nn
 from flax.core import freeze
-from flax.cursor import cursor, _traverse_tree, AccessType
+from flax.cursor import AccessType, _traverse_tree, cursor
 from flax.errors import CursorFindError, TraverseTreeError
 from flax.training import train_state
 
@@ -47,15 +48,14 @@ class GenericDataClass:
 
 
 class CursorTest(absltest.TestCase):
-
   def test_repr(self):
     g = GenericTuple(1, 'a', (2, 'b'))
     c = cursor(
-        {'a': {1: {(2, 3): 'z', 4: g, '6': (7, 8)}, 'b': [1, 2, 3]}, 'z': -1}
+      {'a': {1: {(2, 3): 'z', 4: g, '6': (7, 8)}, 'b': [1, 2, 3]}, 'z': -1}
     )
     self.assertEqual(
-        repr(c),
-        """Cursor(
+      repr(c),
+      """Cursor(
   _obj={'a': {1: {(2, 3): 'z', 4: GenericTuple(x=1, y='a', z=(2, 'b')), '6': (7, 8)}, 'b': [1, 2, 3]}, 'z': -1},
   _changes={}
 )""",
@@ -72,8 +72,8 @@ class CursorTest(absltest.TestCase):
     c['a'][1][4].z[0] = flax.core.freeze({'a': 1, 'b': {'c': 2, 'd': 3}})
 
     self.assertEqual(
-        repr(c),
-        """Cursor(
+      repr(c),
+      """Cursor(
   _obj={'a': {1: {(2, 3): 'z', 4: GenericTuple(x=1, y='a', z=(2, 'b')), '6': (7, 8)}, 'b': [1, 2, 3]}, 'z': -1},
   _changes={
     'z': Cursor(
@@ -126,10 +126,10 @@ class CursorTest(absltest.TestCase):
     def same_value(v1, v2):
       if isinstance(v1, tuple):
         return all(
-            [
-                jnp.all(jax.tree_map(lambda x, y: x == y, e1, e2))
-                for e1, e2 in zip(v1, v2)
-            ]
+          [
+            jnp.all(jax.tree_map(lambda x, y: x == y, e1, e2))
+            for e1, e2 in zip(v1, v2)
+          ]
         )
       return jnp.all(jax.tree_map(lambda x, y: x == y, v1, v2))
 
@@ -148,18 +148,18 @@ class CursorTest(absltest.TestCase):
       self.assertEqual(c.build(), tuple_wrap([(1, 5), (3, 7)]))
     # test __iter__ error
     with self.assertRaisesRegex(
-        NotImplementedError,
-        '__iter__ method only implemented for tuples and lists, not type <class'
-        " 'dict'>",
+      NotImplementedError,
+      '__iter__ method only implemented for tuples and lists, not type <class'
+      " 'dict'>",
     ):
       c = cursor({'a': 1, 'b': 2})
       for key in c:
         c[key] *= -1
     # test __iter__ error
     with self.assertRaisesRegex(
-        NotImplementedError,
-        '__reversed__ method only implemented for tuples and lists, not type'
-        " <class 'dict'>",
+      NotImplementedError,
+      '__reversed__ method only implemented for tuples and lists, not type'
+      " <class 'dict'>",
     ):
       c = cursor({'a': 1, 'b': 2})
       for key in reversed(c):
@@ -167,13 +167,13 @@ class CursorTest(absltest.TestCase):
 
     for obj_value in (2, jnp.array([[1, -2], [3, 4]])):
       for c in (
-          cursor(obj_value),
-          cursor([obj_value])[0],
-          cursor((obj_value,))[0],
-          cursor({0: obj_value})[0],
-          cursor(flax.core.freeze({0: obj_value}))[0],
-          cursor(GenericTuple(x=obj_value)).x,
-          cursor(GenericDataClass(x=obj_value)).x,
+        cursor(obj_value),
+        cursor([obj_value])[0],
+        cursor((obj_value,))[0],
+        cursor({0: obj_value})[0],
+        cursor(flax.core.freeze({0: obj_value}))[0],
+        cursor(GenericTuple(x=obj_value)).x,
+        cursor(GenericDataClass(x=obj_value)).x,
       ):
         # test __neg__
         self.assertTrue(same_value(-c, -obj_value))
@@ -186,7 +186,7 @@ class CursorTest(absltest.TestCase):
         # test __round__
         self.assertTrue(same_value(round(c + 0.123), round(obj_value + 0.123)))
         self.assertTrue(
-            same_value(round(c + 0.123, 2), round(obj_value + 0.123, 2))
+          same_value(round(c + 0.123, 2), round(obj_value + 0.123, 2))
         )
 
         for other_value in (3, jnp.array([[5, 6], [7, 8]])):
@@ -208,11 +208,11 @@ class CursorTest(absltest.TestCase):
           self.assertTrue(same_value(other_value / c, other_value / obj_value))
           # test __floordiv__
           self.assertTrue(
-              same_value(c // other_value, obj_value // other_value)
+            same_value(c // other_value, obj_value // other_value)
           )
           # test __rfloordiv__
           self.assertTrue(
-              same_value(other_value // c, other_value // obj_value)
+            same_value(other_value // c, other_value // obj_value)
           )
           # test __mod__
           self.assertTrue(same_value(c % other_value, obj_value % other_value))
@@ -220,35 +220,35 @@ class CursorTest(absltest.TestCase):
           self.assertTrue(same_value(other_value % c, other_value % obj_value))
           # test __divmod__
           self.assertTrue(
-              same_value(divmod(c, other_value), divmod(obj_value, other_value))
+            same_value(divmod(c, other_value), divmod(obj_value, other_value))
           )
           # test __rdivmod__
           self.assertTrue(
-              same_value(divmod(other_value, c), divmod(other_value, obj_value))
+            same_value(divmod(other_value, c), divmod(other_value, obj_value))
           )
           # test __pow__
           self.assertTrue(
-              same_value(pow(c, other_value), pow(obj_value, other_value))
+            same_value(pow(c, other_value), pow(obj_value, other_value))
           )
           # test __rpow__
           self.assertTrue(
-              same_value(pow(other_value, c), pow(other_value, obj_value))
+            same_value(pow(other_value, c), pow(other_value, obj_value))
           )
           # test __lshift__
           self.assertTrue(
-              same_value(c << other_value, obj_value << other_value)
+            same_value(c << other_value, obj_value << other_value)
           )
           # test __rlshift__
           self.assertTrue(
-              same_value(other_value << c, other_value << obj_value)
+            same_value(other_value << c, other_value << obj_value)
           )
           # test __rshift__
           self.assertTrue(
-              same_value(c >> other_value, obj_value >> other_value)
+            same_value(c >> other_value, obj_value >> other_value)
           )
           # test __rrshift__
           self.assertTrue(
-              same_value(other_value >> c, other_value >> obj_value)
+            same_value(other_value >> c, other_value >> obj_value)
           )
           # test __and__
           self.assertTrue(same_value(c & other_value, obj_value & other_value))
@@ -264,15 +264,15 @@ class CursorTest(absltest.TestCase):
           self.assertTrue(same_value(other_value | c, other_value | obj_value))
 
           if isinstance(obj_value, jax.Array) and isinstance(
-              other_value, jax.Array
+            other_value, jax.Array
           ):
             # test __matmul__
             self.assertTrue(
-                same_value(c @ other_value, obj_value @ other_value)
+              same_value(c @ other_value, obj_value @ other_value)
             )
             # test __rmatmul__
             self.assertTrue(
-                same_value(other_value @ c, other_value @ obj_value)
+              same_value(other_value @ c, other_value @ obj_value)
             )
 
           # test __lt__
@@ -280,51 +280,51 @@ class CursorTest(absltest.TestCase):
           self.assertTrue(same_value(other_value < c, other_value < obj_value))
           # test __le__
           self.assertTrue(
-              same_value(c <= other_value, obj_value <= other_value)
+            same_value(c <= other_value, obj_value <= other_value)
           )
           self.assertTrue(
-              same_value(other_value <= c, other_value <= obj_value)
+            same_value(other_value <= c, other_value <= obj_value)
           )
           # test __eq__
           self.assertTrue(
-              same_value(c == other_value, obj_value == other_value)
+            same_value(c == other_value, obj_value == other_value)
           )
           self.assertTrue(
-              same_value(other_value == c, other_value == obj_value)
+            same_value(other_value == c, other_value == obj_value)
           )
           # test __ne__
           self.assertTrue(
-              same_value(c != other_value, obj_value != other_value)
+            same_value(c != other_value, obj_value != other_value)
           )
           self.assertTrue(
-              same_value(other_value != c, other_value != obj_value)
+            same_value(other_value != c, other_value != obj_value)
           )
           # test __gt__
           self.assertTrue(same_value(c > other_value, obj_value > other_value))
           self.assertTrue(same_value(other_value > c, other_value > obj_value))
           # test __ge__
           self.assertTrue(
-              same_value(c >= other_value, obj_value >= other_value)
+            same_value(c >= other_value, obj_value >= other_value)
           )
           self.assertTrue(
-              same_value(other_value >= c, other_value >= obj_value)
+            same_value(other_value >= c, other_value >= obj_value)
           )
 
   def test_path(self):
     c = cursor(
-        GenericTuple(
-            x=[
-                0,
-                {'a': 1, 'b': (2, 3), ('c', 'd'): [4, 5]},
-                (100, 200),
-                [3, 4, 5],
-            ],
-            y=train_state.TrainState.create(
-                apply_fn=lambda x: x,
-                params=freeze({'a': 1, 'b': (2, 3), 'c': [4, 5]}),
-                tx=optax.adam(1e-3),
-            ),
-        )
+      GenericTuple(
+        x=[
+          0,
+          {'a': 1, 'b': (2, 3), ('c', 'd'): [4, 5]},
+          (100, 200),
+          [3, 4, 5],
+        ],
+        y=train_state.TrainState.create(
+          apply_fn=lambda x: x,
+          params=freeze({'a': 1, 'b': (2, 3), 'c': [4, 5]}),
+          tx=optax.adam(1e-3),
+        ),
+      )
     )
     self.assertEqual(c.x[1][('c', 'd')][0]._path, ".x[1][('c', 'd')][0]")
     self.assertEqual(c.x[2][1]._path, '.x[2][1]')
@@ -337,15 +337,15 @@ class CursorTest(absltest.TestCase):
 
   def test_traverse_tree(self):
     c = cursor(
-        GenericTuple(
-            x=[
-                0,
-                {'a': 1, 'b': (2, 3), ('c', 'd'): [4, 5]},
-                (100, 200),
-                [3, 4, 5],
-            ],
-            y=3,
-        )
+      GenericTuple(
+        x=[
+          0,
+          {'a': 1, 'b': (2, 3), ('c', 'd'): [4, 5]},
+          (100, 200),
+          [3, 4, 5],
+        ],
+        y=3,
+      )
     )
 
     def update_fn(path, value):
@@ -357,46 +357,46 @@ class CursorTest(absltest.TestCase):
       return value == 3
 
     with self.assertRaisesRegex(
-        TraverseTreeError,
-        'Both update_fn and cond_fn are None. Exactly one of them must be'
-        ' None.',
+      TraverseTreeError,
+      'Both update_fn and cond_fn are None. Exactly one of them must be'
+      ' None.',
     ):
       next(_traverse_tree((), c._obj))
     with self.assertRaisesRegex(
-        TraverseTreeError,
-        'Both update_fn and cond_fn are not None. Exactly one of them must be'
-        ' not None.',
+      TraverseTreeError,
+      'Both update_fn and cond_fn are not None. Exactly one of them must be'
+      ' not None.',
     ):
       next(_traverse_tree((), c._obj, update_fn=update_fn, cond_fn=cond_fn))
 
     (p, v), (p2, v2) = _traverse_tree((), c._obj, update_fn=update_fn)
     self.assertEqual(
-        p,
-        (
-            ('x', AccessType.ATTR),
-            (1, AccessType.ITEM),
-            (('c', 'd'), AccessType.ITEM),
-            (0, AccessType.ITEM),
-        ),
+      p,
+      (
+        ('x', AccessType.ATTR),
+        (1, AccessType.ITEM),
+        (('c', 'd'), AccessType.ITEM),
+        (0, AccessType.ITEM),
+      ),
     )
     self.assertEqual(v, -4)
     self.assertEqual(
-        p2, (('x', AccessType.ATTR), (3, AccessType.ITEM), (1, AccessType.ITEM))
+      p2, (('x', AccessType.ATTR), (3, AccessType.ITEM), (1, AccessType.ITEM))
     )
     self.assertEqual(v2, -4)
 
     p, p2, p3 = _traverse_tree((), c._obj, cond_fn=cond_fn)
     self.assertEqual(
-        p,
-        (
-            ('x', AccessType.ATTR),
-            (1, AccessType.ITEM),
-            ('b', AccessType.ITEM),
-            (1, AccessType.ITEM),
-        ),
+      p,
+      (
+        ('x', AccessType.ATTR),
+        (1, AccessType.ITEM),
+        ('b', AccessType.ITEM),
+        (1, AccessType.ITEM),
+      ),
     )
     self.assertEqual(
-        p2, (('x', AccessType.ATTR), (3, AccessType.ITEM), (0, AccessType.ITEM))
+      p2, (('x', AccessType.ATTR), (3, AccessType.ITEM), (0, AccessType.ITEM))
     )
     self.assertEqual(p3, (('y', AccessType.ATTR),))
 
@@ -406,8 +406,8 @@ class CursorTest(absltest.TestCase):
     for d, freeze_wrap in ((dict_obj, lambda x: x), (freeze(dict_obj), freeze)):
       # set API
       self.assertEqual(
-          cursor(d)['b'][0].set(10),
-          freeze_wrap({'a': 1, 'b': (10, 3), 'c': [4, 5]}),
+        cursor(d)['b'][0].set(10),
+        freeze_wrap({'a': 1, 'b': (10, 3), 'c': [4, 5]}),
       )
       # build API
       c = cursor(d)
@@ -415,10 +415,10 @@ class CursorTest(absltest.TestCase):
       c['a'] = (100, 200)
       d2 = c.build()
       self.assertEqual(
-          d2, freeze_wrap({'a': (100, 200), 'b': (20, 3), 'c': [4, 5]})
+        d2, freeze_wrap({'a': (100, 200), 'b': (20, 3), 'c': [4, 5]})
       )
     self.assertEqual(
-        dict_obj, {'a': 1, 'b': (2, 3), 'c': [4, 5]}
+      dict_obj, {'a': 1, 'b': (2, 3), 'c': [4, 5]}
     )  # make sure original object is unchanged
 
     # test list and tuple
@@ -426,10 +426,8 @@ class CursorTest(absltest.TestCase):
     for l, tuple_wrap in ((list_obj, lambda x: x), (tuple(list_obj), tuple)):
       # set API
       self.assertEqual(
-          cursor(l)[1]['b'][0].set(10),
-          tuple_wrap(
-              [0, {'a': 1, 'b': (10, 3), 'c': [4, 5]}, (1, 2), [3, 4, 5]]
-          ),
+        cursor(l)[1]['b'][0].set(10),
+        tuple_wrap([0, {'a': 1, 'b': (10, 3), 'c': [4, 5]}, (1, 2), [3, 4, 5]]),
       )
       # build API
       c = cursor(l)
@@ -437,25 +435,25 @@ class CursorTest(absltest.TestCase):
       c[2] = (100, 200)
       l2 = c.build()
       self.assertEqual(
-          l2,
-          tuple_wrap(
-              [0, {'a': 1, 'b': (20, 3), 'c': [4, 5]}, (100, 200), [3, 4, 5]]
-          ),
+        l2,
+        tuple_wrap(
+          [0, {'a': 1, 'b': (20, 3), 'c': [4, 5]}, (100, 200), [3, 4, 5]]
+        ),
       )
     self.assertEqual(
-        list_obj, [0, {'a': 1, 'b': (2, 3), 'c': [4, 5]}, (1, 2), [3, 4, 5]]
+      list_obj, [0, {'a': 1, 'b': (2, 3), 'c': [4, 5]}, (1, 2), [3, 4, 5]]
     )  # make sure original object is unchanged
 
     # test TrainState
     state = train_state.TrainState.create(
-        apply_fn=lambda x: x,
-        params=dict_obj,
-        tx=optax.adam(1e-3),
+      apply_fn=lambda x: x,
+      params=dict_obj,
+      tx=optax.adam(1e-3),
     )
     # set API
     self.assertEqual(
-        cursor(state).params['b'][0].set(10).params,
-        {'a': 1, 'b': (10, 3), 'c': [4, 5]},
+      cursor(state).params['b'][0].set(10).params,
+      {'a': 1, 'b': (10, 3), 'c': [4, 5]},
     )
     # build API
     new_fn = lambda x: x + 1
@@ -466,11 +464,11 @@ class CursorTest(absltest.TestCase):
     state2 = c.build()
     self.assertEqual(state2.apply_fn, new_fn)
     self.assertEqual(
-        state2.params, {'a': (100, 200), 'b': (20, 3), 'c': [4, 5]}
+      state2.params, {'a': (100, 200), 'b': (20, 3), 'c': [4, 5]}
     )
 
     self.assertEqual(
-        dict_obj, {'a': 1, 'b': (2, 3), 'c': [4, 5]}
+      dict_obj, {'a': 1, 'b': (2, 3), 'c': [4, 5]}
     )  # make sure original object is unchanged
 
     # test NamedTuple
@@ -487,7 +485,7 @@ class CursorTest(absltest.TestCase):
     self.assertEqual(t2, GenericTuple(GenericTuple(2, 3), 4))
 
     self.assertEqual(
-        t, GenericTuple(GenericTuple(0))
+      t, GenericTuple(GenericTuple(0))
     )  # make sure original object is unchanged
 
   def test_apply_update(self):
@@ -503,10 +501,10 @@ class CursorTest(absltest.TestCase):
       c = cursor(l)
       l2 = c.apply_update(update_fn).build()
       self.assertEqual(
-          l2, tuple_wrap([tuple_wrap([-1, 2]), tuple_wrap([-3, 4])])
+        l2, tuple_wrap([tuple_wrap([-1, 2]), tuple_wrap([-3, 4])])
       )
       self.assertEqual(
-          l, tuple_wrap([tuple_wrap([1, 2]), tuple_wrap([3, 4])])
+        l, tuple_wrap([tuple_wrap([1, 2]), tuple_wrap([3, 4])])
       )  # make sure the original object is unchanged
 
     # test regular dict and FrozenDict
@@ -520,7 +518,6 @@ class CursorTest(absltest.TestCase):
       return value
 
     class Model(nn.Module):
-
       @nn.compact
       def __call__(self, x):
         x = nn.Dense(3)(x)
@@ -533,35 +530,33 @@ class CursorTest(absltest.TestCase):
 
     for freeze_wrap in (lambda x: x, freeze):
       params = freeze_wrap(
-          Model().init(jax.random.key(0), jnp.empty((1, 2)))['params']
+        Model().init(jax.random.key(0), jnp.empty((1, 2)))['params']
       )
 
       c = cursor(params)
       params2 = c.apply_update(update_fn).build()
       for layer in ('Dense_0', 'Dense_1', 'Dense_2'):
         self.assertTrue(
-            (params2[layer]['kernel'] == 2 * params[layer]['kernel'] + 1).all()
+          (params2[layer]['kernel'] == 2 * params[layer]['kernel'] + 1).all()
         )
         if layer == 'Dense_1':
           self.assertTrue(
-              (params2[layer]['bias'] == jnp.array([-1, -1, -1])).all()
+            (params2[layer]['bias'] == jnp.array([-1, -1, -1])).all()
           )
         else:
           self.assertTrue(
-              (params2[layer]['bias'] == params[layer]['bias']).all()
+            (params2[layer]['bias'] == params[layer]['bias']).all()
           )
       self.assertTrue(
-          jax.tree_util.tree_all(
-              jax.tree_util.tree_map(
-                  lambda x, y: (x == y).all(),
-                  params,
-                  freeze_wrap(
-                      Model().init(jax.random.key(0), jnp.empty((1, 2)))[
-                          'params'
-                      ]
-                  ),
-              )
+        jax.tree_util.tree_all(
+          jax.tree_util.tree_map(
+            lambda x, y: (x == y).all(),
+            params,
+            freeze_wrap(
+              Model().init(jax.random.key(0), jnp.empty((1, 2)))['params']
+            ),
           )
+        )
       )  # make sure original params are unchanged
 
     # test TrainState
@@ -572,15 +567,15 @@ class CursorTest(absltest.TestCase):
       return value
 
     state = train_state.TrainState.create(
-        apply_fn=lambda x: x,
-        params={'a': 1, 'b': 2},
-        tx=optax.adam(1e-3),
+      apply_fn=lambda x: x,
+      params={'a': 1, 'b': 2},
+      tx=optax.adam(1e-3),
     )
     c = cursor(state)
     state2 = c.apply_update(update_fn).build()
     self.assertEqual(state2.params, {})
     self.assertEqual(
-        state.params, {'a': 1, 'b': 2}
+      state.params, {'a': 1, 'b': 2}
     )  # make sure original params are unchanged
 
     # test NamedTuple
@@ -595,7 +590,7 @@ class CursorTest(absltest.TestCase):
     t2 = c.apply_update(update_fn).build()
     self.assertEqual(t2, GenericTuple(GenericTuple(5, 1), GenericTuple(7, 3)))
     self.assertEqual(
-        t, GenericTuple(GenericTuple(0, 1), GenericTuple(2, 3))
+      t, GenericTuple(GenericTuple(0, 1), GenericTuple(2, 3))
     )  # make sure original object is unchanged
 
   def test_apply_update_root_node_unmodified(self):
@@ -631,7 +626,7 @@ class CursorTest(absltest.TestCase):
     l[1] = -1
     l2 = c.build()
     self.assertEqual(
-        l2, [100, -1]
+      l2, [100, -1]
     )  # change in l affects l2 (this is expected behavior)
     self.assertEqual(l, [1, -1])
 
@@ -642,23 +637,23 @@ class CursorTest(absltest.TestCase):
     d['b'] = -1
     d2 = c.build()
     self.assertEqual(
-        d2, {'a': 100, 'b': -1}
+      d2, {'a': 100, 'b': -1}
     )  # change in d affects d2 (this is expected behavior)
     self.assertEqual(d, {'a': 1, 'b': -1})
 
     # test TrainState
     params = {'a': 1, 'b': 2}
     state = train_state.TrainState.create(
-        apply_fn=lambda x: x,
-        params=params,
-        tx=optax.adam(1e-3),
+      apply_fn=lambda x: x,
+      params=params,
+      tx=optax.adam(1e-3),
     )
     c = cursor(state)
     c.params['a'] = 100
     params['b'] = -1
     state2 = c.build()
     self.assertEqual(
-        state2.params, {'a': 100, 'b': -1}
+      state2.params, {'a': 100, 'b': -1}
     )  # change in state affects state2 (this is expected behavior)
     self.assertEqual(state.params, {'a': 1, 'b': -1})
 
@@ -670,61 +665,59 @@ class CursorTest(absltest.TestCase):
     c.y.x = 6
     c.y[1] = 7
     self.assertEqual(
-        c.build(), GenericTuple(GenericTuple(4, 5), GenericTuple(6, 7))
+      c.build(), GenericTuple(GenericTuple(4, 5), GenericTuple(6, 7))
     )
 
     c[0][1] = -5
     self.assertEqual(
-        c.build(), GenericTuple(GenericTuple(4, -5), GenericTuple(6, 7))
+      c.build(), GenericTuple(GenericTuple(4, -5), GenericTuple(6, 7))
     )
     c.x[1] = -6
     self.assertEqual(
-        c.build(), GenericTuple(GenericTuple(4, -6), GenericTuple(6, 7))
+      c.build(), GenericTuple(GenericTuple(4, -6), GenericTuple(6, 7))
     )
     c.x.y = -7
     self.assertEqual(
-        c.build(), GenericTuple(GenericTuple(4, -7), GenericTuple(6, 7))
+      c.build(), GenericTuple(GenericTuple(4, -7), GenericTuple(6, 7))
     )
     c[0].y = -8
     self.assertEqual(
-        c.build(), GenericTuple(GenericTuple(4, -8), GenericTuple(6, 7))
+      c.build(), GenericTuple(GenericTuple(4, -8), GenericTuple(6, 7))
     )
 
   def test_find(self):
     c = cursor(
-        GenericTuple(
-            x=[
-                0,
-                {'a': 1, 'b': (2, 3), ('c', 'd'): [4, 5]},
-                (100, 200),
-                [3, 4, 5],
-            ],
-            y=train_state.TrainState.create(
-                apply_fn=lambda x: x,
-                params=freeze({'a': 1, 'b': (2, 3), 'c': [4, 5]}),
-                tx=optax.adam(1e-3),
-            ),
-        )
+      GenericTuple(
+        x=[
+          0,
+          {'a': 1, 'b': (2, 3), ('c', 'd'): [4, 5]},
+          (100, 200),
+          [3, 4, 5],
+        ],
+        y=train_state.TrainState.create(
+          apply_fn=lambda x: x,
+          params=freeze({'a': 1, 'b': (2, 3), 'c': [4, 5]}),
+          tx=optax.adam(1e-3),
+        ),
+      )
     )
 
     with self.assertRaisesRegex(
-        CursorFindError,
-        'More than one object found given the conditions of the cond_fn\\. '
-        'The first two objects found have the following paths: '
-        "\\.x\\[1]\\['b'] and \\.y\\.params\\['b'] ",
+      CursorFindError,
+      'More than one object found given the conditions of the cond_fn\\. '
+      'The first two objects found have the following paths: '
+      "\\.x\\[1]\\['b'] and \\.y\\.params\\['b'] ",
     ):
       c.find(lambda path, value: 'b' in path and isinstance(value, tuple))
     with self.assertRaisesRegex(
-        CursorFindError,
-        'No object found given the conditions of the cond_fn\\.',
+      CursorFindError,
+      'No object found given the conditions of the cond_fn\\.',
     ):
       c.find(lambda path, value: 'b' in path and isinstance(value, str))
 
     self.assertEqual(
-        c.find(lambda path, value: path.endswith('params/b'))[1]
-        .set(30)
-        .y.params,
-        freeze({'a': 1, 'b': (2, 30), 'c': [4, 5]}),
+      c.find(lambda path, value: path.endswith('params/b'))[1].set(30).y.params,
+      freeze({'a': 1, 'b': (2, 30), 'c': [4, 5]}),
     )
 
   def test_find_all(self):
@@ -735,23 +728,23 @@ class CursorTest(absltest.TestCase):
 
     for tuple_wrap in (lambda x: x, tuple):
       l = tuple_wrap(
-          [tuple_wrap([1, 2]), tuple_wrap([3, 4]), tuple_wrap([5, 6])]
+        [tuple_wrap([1, 2]), tuple_wrap([3, 4]), tuple_wrap([5, 6])]
       )
       c = cursor(l)
       c2, c3 = c.find_all(cond_fn)
       c2[0] *= -1
       c3[1] *= -2
       self.assertEqual(
-          c.build(),
-          tuple_wrap(
-              [tuple_wrap([1, 2]), tuple_wrap([-3, 4]), tuple_wrap([5, -12])]
-          ),
+        c.build(),
+        tuple_wrap(
+          [tuple_wrap([1, 2]), tuple_wrap([-3, 4]), tuple_wrap([5, -12])]
+        ),
       )
       self.assertEqual(
-          l,
-          tuple_wrap(
-              [tuple_wrap([1, 2]), tuple_wrap([3, 4]), tuple_wrap([5, 6])]
-          ),
+        l,
+        tuple_wrap(
+          [tuple_wrap([1, 2]), tuple_wrap([3, 4]), tuple_wrap([5, 6])]
+        ),
       )  # make sure the original object is unchanged
 
     # test regular dict and FrozenDict
@@ -760,7 +753,6 @@ class CursorTest(absltest.TestCase):
       return 'Dense_1' in path or 'Dense_2' in path
 
     class Model(nn.Module):
-
       @nn.compact
       def __call__(self, x):
         x = nn.Dense(3)(x)
@@ -773,28 +765,24 @@ class CursorTest(absltest.TestCase):
 
     for freeze_wrap in (lambda x: x, freeze):
       params = freeze_wrap(
-          Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))['params']
+        Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))['params']
       )
       c = cursor(params)
       for i, c2 in enumerate(c.find_all(cond_fn)):
         self.assertEqual(
-            c2['kernel'].set(123)[f'Dense_{i+1}'],
-            freeze_wrap(
-                {'kernel': 123, 'bias': params[f'Dense_{i+1}']['bias']}
-            ),
+          c2['kernel'].set(123)[f'Dense_{i+1}'],
+          freeze_wrap({'kernel': 123, 'bias': params[f'Dense_{i+1}']['bias']}),
         )
       self.assertTrue(
-          jax.tree_util.tree_all(
-              jax.tree_util.tree_map(
-                  lambda x, y: (x == y).all(),
-                  params,
-                  freeze_wrap(
-                      Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))[
-                          'params'
-                      ]
-                  ),
-              )
+        jax.tree_util.tree_all(
+          jax.tree_util.tree_map(
+            lambda x, y: (x == y).all(),
+            params,
+            freeze_wrap(
+              Model().init(jax.random.PRNGKey(0), jnp.empty((1, 2)))['params']
+            ),
           )
+        )
       )  # make sure original params are unchanged
 
     # test TrainState
@@ -803,9 +791,9 @@ class CursorTest(absltest.TestCase):
       return 'params' in path
 
     state = train_state.TrainState.create(
-        apply_fn=lambda x: x,
-        params={'a': 1, 'b': 2},
-        tx=optax.adam(1e-3),
+      apply_fn=lambda x: x,
+      params={'a': 1, 'b': 2},
+      tx=optax.adam(1e-3),
     )
     c = cursor(state)
     c2 = list(c.find_all(cond_fn))
@@ -813,7 +801,7 @@ class CursorTest(absltest.TestCase):
     c2 = c2[0]
     self.assertEqual(c2['b'].set(-1).params, {'a': 1, 'b': -1})
     self.assertEqual(
-        state.params, {'a': 1, 'b': 2}
+      state.params, {'a': 1, 'b': 2}
     )  # make sure original params are unchanged
 
     # test NamedTuple
@@ -822,23 +810,23 @@ class CursorTest(absltest.TestCase):
       return isinstance(value, GenericTuple) and isinstance(value.x, int)
 
     t = GenericTuple(
-        GenericTuple(0, 'a'), GenericTuple(1, 'b'), GenericTuple('c', 2)
+      GenericTuple(0, 'a'), GenericTuple(1, 'b'), GenericTuple('c', 2)
     )
     c = cursor(t)
     c2, c3 = c.find_all(cond_fn)
     c2.x += 5
     c3.x += 6
     self.assertEqual(
-        c.build(),
-        GenericTuple(
-            GenericTuple(5, 'a'), GenericTuple(7, 'b'), GenericTuple('c', 2)
-        ),
+      c.build(),
+      GenericTuple(
+        GenericTuple(5, 'a'), GenericTuple(7, 'b'), GenericTuple('c', 2)
+      ),
     )
     self.assertEqual(
-        t,
-        GenericTuple(
-            GenericTuple(0, 'a'), GenericTuple(1, 'b'), GenericTuple('c', 2)
-        ),
+      t,
+      GenericTuple(
+        GenericTuple(0, 'a'), GenericTuple(1, 'b'), GenericTuple('c', 2)
+      ),
     )  # make sure original object is unchanged
 
 

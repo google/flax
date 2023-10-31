@@ -14,21 +14,25 @@
 
 """Flax Module summary library."""
 
-from abc import ABC
-from abc import abstractmethod
 import dataclasses
 import io
+from abc import ABC, abstractmethod
 from types import MappingProxyType
-from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple, Type, Union
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  Iterable,
+  List,
+  Mapping,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+  Type,
+  Union,
+)
 
-from flax.core import meta
-from flax.core import unfreeze
-from flax.core.scope import CollectionFilter
-from flax.core.scope import DenyList
-from flax.core.scope import FrozenVariableDict
-from flax.core.scope import LazyRng
-from flax.core.scope import MutableVariableDict
-import flax.linen.module as module_lib
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -37,6 +41,15 @@ import rich.table
 import rich.text
 import yaml
 
+import flax.linen.module as module_lib
+from flax.core import meta, unfreeze
+from flax.core.scope import (
+  CollectionFilter,
+  DenyList,
+  FrozenVariableDict,
+  LazyRng,
+  MutableVariableDict,
+)
 
 PRNGKey = Any  # pylint: disable=invalid-name
 RNGSequences = Dict[str, PRNGKey]
@@ -76,10 +89,10 @@ class _PartitionedArrayRepresentation(_ValueRepresentation):
 
   @classmethod
   def from_partitioned(
-      cls, partitioned: meta.Partitioned
+    cls, partitioned: meta.Partitioned
   ) -> '_PartitionedArrayRepresentation':
     return cls(
-        _ArrayRepresentation.from_array(partitioned.value), partitioned.names
+      _ArrayRepresentation.from_array(partitioned.value), partitioned.names
     )
 
   def render(self):
@@ -132,15 +145,15 @@ class Row:
     self.counted_variables = self.counted_variables
 
   def size_and_bytes(
-      self, collections: Iterable[str]
+    self, collections: Iterable[str]
   ) -> Dict[str, Tuple[int, int]]:
     return {
-        col: (
-            _size_and_bytes(self.counted_variables[col])
-            if col in self.counted_variables
-            else (0, 0)
-        )
-        for col in collections
+      col: (
+        _size_and_bytes(self.counted_variables[col])
+        if col in self.counted_variables
+        else (0, 0)
+      )
+      for col in collections
     }
 
 
@@ -155,10 +168,10 @@ class Table(List[Row]):
   """
 
   def __init__(
-      self,
-      module: module_lib.Module,
-      collections: Sequence[str],
-      rows: Iterable[Row],
+    self,
+    module: module_lib.Module,
+    collections: Sequence[str],
+    rows: Iterable[Row],
   ):
     super().__init__(rows)
     self.module = module
@@ -166,17 +179,17 @@ class Table(List[Row]):
 
 
 def tabulate(
-    module: module_lib.Module,
-    rngs: Union[PRNGKey, RNGSequences],
-    depth: Optional[int] = None,
-    show_repeated: bool = False,
-    mutable: CollectionFilter = DenyList('intermediates'),
-    console_kwargs: Optional[Mapping[str, Any]] = None,
-    table_kwargs: Mapping[str, Any] = MappingProxyType({}),
-    column_kwargs: Mapping[str, Any] = MappingProxyType({}),
-    compute_flops: bool = False,
-    compute_vjp_flops: bool = False,
-    **kwargs,
+  module: module_lib.Module,
+  rngs: Union[PRNGKey, RNGSequences],
+  depth: Optional[int] = None,
+  show_repeated: bool = False,
+  mutable: CollectionFilter = DenyList('intermediates'),
+  console_kwargs: Optional[Mapping[str, Any]] = None,
+  table_kwargs: Mapping[str, Any] = MappingProxyType({}),
+  column_kwargs: Mapping[str, Any] = MappingProxyType({}),
+  compute_flops: bool = False,
+  compute_vjp_flops: bool = False,
+  **kwargs,
 ) -> Callable[..., str]:
   """Returns a function that creates a summary of the Module represented as a table.
 
@@ -292,20 +305,20 @@ def tabulate(
 
   def _tabulate_fn(*fn_args, **fn_kwargs):
     table_fn = _get_module_table(
-        module,
-        depth=depth,
-        show_repeated=show_repeated,
-        compute_flops=compute_flops,
-        compute_vjp_flops=compute_vjp_flops,
+      module,
+      depth=depth,
+      show_repeated=show_repeated,
+      compute_flops=compute_flops,
+      compute_vjp_flops=compute_vjp_flops,
     )
 
     table = table_fn(rngs, *fn_args, **fn_kwargs, **kwargs)
 
     non_param_cols = [
-        'path',
-        'module',
-        'inputs',
-        'outputs',
+      'path',
+      'module',
+      'inputs',
+      'outputs',
     ]
 
     if compute_flops:
@@ -314,7 +327,7 @@ def tabulate(
       non_param_cols.append('vjp_flops')
 
     return _render_table(
-        table, console_kwargs, table_kwargs, column_kwargs, non_param_cols
+      table, console_kwargs, table_kwargs, column_kwargs, non_param_cols
     )
 
   return _tabulate_fn
@@ -328,9 +341,9 @@ def _get_flops(fn, *args, **kwargs):
 
 
 def _get_call_flops(
-    c: module_lib._CallInfo,
-    compute_flops: bool,
-    compute_vjp_flops: bool,
+  c: module_lib._CallInfo,
+  compute_flops: bool,
+  compute_vjp_flops: bool,
 ) -> tuple[int, int]:
   """Return the FLOPs of executing the call `c` in the call stack.
 
@@ -351,7 +364,7 @@ def _get_call_flops(
     return -1, -1
 
   rngs = jax.tree_map(
-      lambda x: x.rng, c.rngs, is_leaf=lambda x: isinstance(x, LazyRng)
+    lambda x: x.rng, c.rngs, is_leaf=lambda x: isinstance(x, LazyRng)
   )
 
   args = jax.tree_map(_from_value_representation, c.args)
@@ -375,11 +388,11 @@ def _get_call_flops(
     """`c.module.init` closed over static keyword arguments."""
     args, kwargs = _get_inputs(dynamic_leaves)
     return c.module.init(
-        rngs,
-        *args,
-        method=c.method,
-        mutable=c.mutable,
-        **kwargs,
+      rngs,
+      *args,
+      method=c.method,
+      mutable=c.mutable,
+      **kwargs,
     )
 
   variables = jax.eval_shape(init, rngs, dynamic_leaves)
@@ -388,12 +401,12 @@ def _get_call_flops(
     """`c.module.apply` closed over static keyword arguments."""
     args, kwargs = _get_inputs(dynamic_leaves)
     return c.module.apply(
-        variables,
-        *args,
-        rngs=rngs,
-        method=c.method,
-        mutable=c.mutable,
-        **kwargs,
+      variables,
+      *args,
+      rngs=rngs,
+      method=c.method,
+      mutable=c.mutable,
+      **kwargs,
     )
 
   # Forward pass FLOPs
@@ -417,11 +430,11 @@ def _get_call_flops(
 
 
 def _get_module_table(
-    module: module_lib.Module,
-    depth: Optional[int],
-    show_repeated: bool,
-    compute_flops: bool,
-    compute_vjp_flops: bool,
+  module: module_lib.Module,
+  depth: Optional[int],
+  show_repeated: bool,
+  compute_flops: bool,
+  compute_vjp_flops: bool,
 ) -> Callable[..., Table]:
   """A function that takes a Module and returns function with the same signature
   as `init` but returns the Table representation of the Module."""
@@ -464,16 +477,16 @@ def _get_module_table(
 
       visited_paths.add(c.path)
       rows.append(
-          Row(
-              c.path,
-              type(c.module),
-              c.method,
-              inputs,
-              c.outputs,
-              module_vars,
-              counted_vars,
-              *_get_call_flops(c, compute_flops, compute_vjp_flops),
-          )
+        Row(
+          c.path,
+          type(c.module),
+          c.method,
+          inputs,
+          c.outputs,
+          module_vars,
+          counted_vars,
+          *_get_call_flops(c, compute_flops, compute_vjp_flops),
+        )
       )
 
     return Table(module, tuple(collections), rows)
@@ -482,9 +495,9 @@ def _get_module_table(
 
 
 def _get_module_variables(
-    path: Tuple[str, ...],
-    variables: FrozenVariableDict,
-    all_paths: Set[Tuple[str, ...]],
+  path: Tuple[str, ...],
+  variables: FrozenVariableDict,
+  all_paths: Set[Tuple[str, ...]],
 ) -> Tuple[MutableVariableDict, Any]:
   """A function that takes a path and variables structure and returns a
 
@@ -496,7 +509,7 @@ def _get_module_variables(
   module_variables = _get_path_variables(path, variables)
   submodule_variables: Any = {collection: {} for collection in module_variables}
   all_keys = set(
-      key for collection in module_variables.values() for key in collection
+    key for collection in module_variables.values() for key in collection
   )
 
   for key in all_keys:
@@ -505,14 +518,14 @@ def _get_module_variables(
       for collection in module_variables:
         if key in module_variables[collection]:
           submodule_variables[collection][key] = module_variables[
-              collection
+            collection
           ].pop(key)
 
   return module_variables, submodule_variables
 
 
 def _get_path_variables(
-    path: Tuple[str, ...], variables: FrozenVariableDict
+  path: Tuple[str, ...], variables: FrozenVariableDict
 ) -> MutableVariableDict:
   """A function that takes a path and a variables structure and returns the
   variable structure at that path.
@@ -550,11 +563,11 @@ def _process_inputs(args, kwargs) -> Any:
 
 
 def _render_table(
-    table: Table,
-    console_extras: Optional[Mapping[str, Any]],
-    table_kwargs: Mapping[str, Any],
-    column_kwargs: Mapping[str, Any],
-    non_params_cols: List[str],
+  table: Table,
+  console_extras: Optional[Mapping[str, Any]],
+  table_kwargs: Mapping[str, Any],
+  column_kwargs: Mapping[str, Any],
+  non_params_cols: List[str],
 ) -> str:
   """A function that renders a Table to a string representation using rich."""
   console_kwargs = {'force_terminal': True, 'force_jupyter': False}
@@ -562,11 +575,11 @@ def _render_table(
     console_kwargs.update(console_extras)
 
   rich_table = rich.table.Table(
-      show_header=True,
-      show_lines=True,
-      show_footer=True,
-      title=f'{table.module.__class__.__name__} Summary',
-      **table_kwargs,
+    show_header=True,
+    show_lines=True,
+    show_footer=True,
+    title=f'{table.module.__class__.__name__} Summary',
+    **table_kwargs,
   )
 
   for c in non_params_cols:
@@ -585,7 +598,7 @@ def _render_table(
         module_variables = _represent_tree(row.module_variables[collection])
         module_variables = _normalize_structure(module_variables)
         col_repr += _as_yaml_str(
-            _summary_tree_map(_maybe_render, module_variables)
+          _summary_tree_map(_maybe_render, module_variables)
         )
         if col_repr:
           col_repr += '\n\n'
@@ -596,28 +609,26 @@ def _render_table(
     no_show_methods = {'__call__', '<lambda>'}
     path_repr = '/'.join(row.path)
     method_repr = (
-        f' [dim]({row.method})[/dim]'
-        if row.method not in no_show_methods
-        else ''
+      f' [dim]({row.method})[/dim]' if row.method not in no_show_methods else ''
     )
     rich_table.add_row(
-        path_repr,
-        row.module_type.__name__ + method_repr,
-        *(
-            _as_yaml_str(
-                _summary_tree_map(
-                    _maybe_render, _normalize_structure(getattr(row, c))
-                )
-            )
-            for c in non_params_cols[2:]
-        ),
-        *collections_size_repr,
+      path_repr,
+      row.module_type.__name__ + method_repr,
+      *(
+        _as_yaml_str(
+          _summary_tree_map(
+            _maybe_render, _normalize_structure(getattr(row, c))
+          )
+        )
+        for c in non_params_cols[2:]
+      ),
+      *collections_size_repr,
     )
 
   # add footer with totals
   n_non_params_cols = len(non_params_cols)
   rich_table.columns[n_non_params_cols - 1].footer = rich.text.Text.from_markup(
-      'Total', justify='right'
+    'Total', justify='right'
   )
 
   # get collection totals
@@ -625,27 +636,27 @@ def _render_table(
   for row in table:
     for col, size_bytes in row.size_and_bytes(table.collections).items():
       collection_total[col] = (
-          collection_total[col][0] + size_bytes[0],
-          collection_total[col][1] + size_bytes[1],
+        collection_total[col][0] + size_bytes[0],
+        collection_total[col][1] + size_bytes[1],
       )
 
   # add totals to footer
   for i, col in enumerate(table.collections):
     rich_table.columns[n_non_params_cols + i].footer = _size_and_bytes_repr(
-        *collection_total[col]
+      *collection_total[col]
     )
 
   # add final totals to caption
   caption_totals = (0, 0)
   for size, num_bytes in collection_total.values():
     caption_totals = (
-        caption_totals[0] + size,
-        caption_totals[1] + num_bytes,
+      caption_totals[0] + size,
+      caption_totals[1] + num_bytes,
     )
 
   rich_table.caption_style = 'bold'
   rich_table.caption = (
-      f'\nTotal Parameters: {_size_and_bytes_repr(*caption_totals)}'
+    f'\nTotal Parameters: {_size_and_bytes_repr(*caption_totals)}'
   )
 
   return '\n' + _get_rich_repr(rich_table, console_kwargs) + '\n'
@@ -666,7 +677,7 @@ def _size_and_bytes(pytree: Any) -> Tuple[int, int]:
   leaves = jax.tree_util.tree_leaves(pytree)
   size = sum(x.size for x in leaves if hasattr(x, 'size'))
   num_bytes = sum(
-      x.size * x.dtype.itemsize for x in leaves if hasattr(x, 'size')
+    x.size * x.dtype.itemsize for x in leaves if hasattr(x, 'size')
   )
   return size, num_bytes
 
@@ -684,12 +695,12 @@ def _as_yaml_str(value) -> str:
 
   file = io.StringIO()
   yaml.safe_dump(
-      value,
-      file,
-      default_flow_style=False,
-      indent=2,
-      sort_keys=False,
-      explicit_end=False,
+    value,
+    file,
+    default_flow_style=False,
+    indent=2,
+    sort_keys=False,
+    explicit_end=False,
   )
   return file.getvalue().replace('\n...', '').replace("'", '').strip()
 
@@ -703,8 +714,8 @@ def _normalize_structure(obj):
     return {k: _normalize_structure(v) for k, v in obj.items()}
   elif dataclasses.is_dataclass(obj):
     return {
-        f.name: _normalize_structure(getattr(obj, f.name))
-        for f in dataclasses.fields(obj)
+      f.name: _normalize_structure(getattr(obj, f.name))
+      for f in dataclasses.fields(obj)
     }
   else:
     return obj
@@ -712,13 +723,13 @@ def _normalize_structure(obj):
 
 def _bytes_repr(num_bytes):
   count, units = (
-      (f'{num_bytes / 1e9 :,.1f}', 'GB')
-      if num_bytes > 1e9
-      else (f'{num_bytes / 1e6 :,.1f}', 'MB')
-      if num_bytes > 1e6
-      else (f'{num_bytes / 1e3 :,.1f}', 'KB')
-      if num_bytes > 1e3
-      else (f'{num_bytes:,}', 'B')
+    (f'{num_bytes / 1e9 :,.1f}', 'GB')
+    if num_bytes > 1e9
+    else (f'{num_bytes / 1e6 :,.1f}', 'MB')
+    if num_bytes > 1e6
+    else (f'{num_bytes / 1e3 :,.1f}', 'KB')
+    if num_bytes > 1e3
+    else (f'{num_bytes:,}', 'B')
   )
 
   return f'{count} {units}'
@@ -726,7 +737,7 @@ def _bytes_repr(num_bytes):
 
 def _get_value_representation(x: Any) -> _ValueRepresentation:
   if isinstance(x, (int, float, bool, type(None))) or (
-      isinstance(x, np.ndarray) and np.isscalar(x)
+    isinstance(x, np.ndarray) and np.isscalar(x)
   ):
     return _ObjectRepresentation(x)
   elif isinstance(x, meta.Partitioned):
@@ -743,7 +754,7 @@ def _from_value_representation(x: _ValueRepresentation) -> Any:
 
   elif isinstance(x, _PartitionedArrayRepresentation):
     return jax.ShapeDtypeStruct(
-        x.array_representation.shape, x.array_representation.dtype
+      x.array_representation.shape, x.array_representation.dtype
     )
 
   elif isinstance(x, _ObjectRepresentation):
@@ -756,9 +767,9 @@ def _represent_tree(x):
   """Returns a tree with the same structure as `x` but with each leaf replaced
   by a `_ValueRepresentation` object."""
   return jax.tree_util.tree_map(
-      _get_value_representation,
-      x,
-      is_leaf=lambda x: x is None or isinstance(x, meta.Partitioned),
+    _get_value_representation,
+    x,
+    is_leaf=lambda x: x is None or isinstance(x, meta.Partitioned),
   )
 
 

@@ -17,11 +17,12 @@
 import dataclasses
 from typing import TypeVar
 
-from . import serialization
-
 import jax
-from typing_extensions import dataclass_transform  # pytype: disable=not-supported-yet
+from typing_extensions import (
+  dataclass_transform,  # pytype: disable=not-supported-yet
+)
 
+from . import serialization
 
 _T = TypeVar('_T')
 
@@ -121,8 +122,7 @@ def dataclass(clz: _T) -> _T:
   def iterate_clz_with_keys(x):
     meta = tuple(getattr(x, name) for name in meta_fields)
     data = tuple(
-        (jax.tree_util.GetAttrKey(name), getattr(x, name))
-        for name in data_fields
+      (jax.tree_util.GetAttrKey(name), getattr(x, name)) for name in data_fields
     )
     return data, meta
 
@@ -133,13 +133,13 @@ def dataclass(clz: _T) -> _T:
     return data_clz(**kwargs)
 
   jax.tree_util.register_pytree_with_keys(
-      data_clz, iterate_clz_with_keys, clz_from_iterable
+    data_clz, iterate_clz_with_keys, clz_from_iterable
   )
 
   def to_state_dict(x):
     state_dict = {
-        name: serialization.to_state_dict(getattr(x, name))
-        for name in data_fields
+      name: serialization.to_state_dict(getattr(x, name))
+      for name in data_fields
     }
     return state_dict
 
@@ -150,26 +150,26 @@ def dataclass(clz: _T) -> _T:
     for name in data_fields:
       if name not in state:
         raise ValueError(
-            f'Missing field {name} in state dict while restoring'
-            f' an instance of {clz.__name__},'
-            f' at path {serialization.current_path()}'
+          f'Missing field {name} in state dict while restoring'
+          f' an instance of {clz.__name__},'
+          f' at path {serialization.current_path()}'
         )
       value = getattr(x, name)
       value_state = state.pop(name)
       updates[name] = serialization.from_state_dict(
-          value, value_state, name=name
+        value, value_state, name=name
       )
     if state:
       names = ','.join(state.keys())
       raise ValueError(
-          f'Unknown field(s) "{names}" in state dict while'
-          f' restoring an instance of {clz.__name__}'
-          f' at path {serialization.current_path()}'
+        f'Unknown field(s) "{names}" in state dict while'
+        f' restoring an instance of {clz.__name__}'
+        f' at path {serialization.current_path()}'
       )
     return x.replace(**updates)
 
   serialization.register_serialization_state(
-      data_clz, to_state_dict, from_state_dict
+    data_clz, to_state_dict, from_state_dict
   )
 
   # add a _flax_dataclass flag to distinguish from regular dataclasses

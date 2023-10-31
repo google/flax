@@ -14,10 +14,11 @@
 
 """Normalization modules for Flax."""
 
+import jax.numpy as jnp
+from jax import lax
+
 from flax.core import Scope
 from flax.linen import initializers
-from jax import lax
-import jax.numpy as jnp
 
 
 def _absolute_dims(ndim, dims):
@@ -25,20 +26,20 @@ def _absolute_dims(ndim, dims):
 
 
 def batch_norm(
-    scope: Scope,
-    x,
-    use_running_average=False,
-    axis=-1,
-    momentum=0.99,
-    epsilon=1e-5,
-    dtype=jnp.float32,
-    bias=True,
-    scale=True,
-    bias_init=initializers.zeros_init(),
-    scale_init=initializers.ones_init(),
-    axis_name=None,
-    axis_index_groups=None,
-    kind='batch_stats',
+  scope: Scope,
+  x,
+  use_running_average=False,
+  axis=-1,
+  momentum=0.99,
+  epsilon=1e-5,
+  dtype=jnp.float32,
+  bias=True,
+  scale=True,
+  bias_init=initializers.zeros_init(),
+  scale_init=initializers.ones_init(),
+  axis_name=None,
+  axis_index_groups=None,
+  kind='batch_stats',
 ):
   x = jnp.asarray(x, jnp.float32)
   axis = axis if isinstance(axis, tuple) else (axis,)
@@ -74,7 +75,7 @@ def batch_norm(
   mul = lax.rsqrt(var + epsilon)
   if scale:
     mul = mul * scope.param('scale', scale_init, squeeze_shape).reshape(
-        mean.shape
+      mean.shape
     )
   y = y * mul
   if bias:
@@ -83,14 +84,14 @@ def batch_norm(
 
 
 def layer_norm(
-    scope: Scope,
-    x,
-    epsilon=1e-6,
-    dtype=jnp.float32,
-    bias=True,
-    scale=True,
-    bias_init=initializers.zeros_init(),
-    scale_init=initializers.ones_init(),
+  scope: Scope,
+  x,
+  epsilon=1e-6,
+  dtype=jnp.float32,
+  bias=True,
+  scale=True,
+  bias_init=initializers.zeros_init(),
+  scale_init=initializers.ones_init(),
 ):
   """Applies layer normalization on the input.
   It normalizes the activations of the layer for each given example in a
@@ -117,7 +118,7 @@ def layer_norm(
   mul = lax.rsqrt(var + epsilon)
   if scale:
     mul = mul * jnp.asarray(
-        scope.param('scale', scale_init, (features,)), dtype
+      scope.param('scale', scale_init, (features,)), dtype
     )
   y = (x - mean) * mul
   if bias:
@@ -126,16 +127,16 @@ def layer_norm(
 
 
 def group_norm(
-    scope,
-    x,
-    num_groups=32,
-    group_size=None,
-    epsilon=1e-6,
-    dtype=jnp.float32,
-    bias=True,
-    scale=True,
-    bias_init=initializers.zeros_init(),
-    scale_init=initializers.ones_init(),
+  scope,
+  x,
+  num_groups=32,
+  group_size=None,
+  epsilon=1e-6,
+  dtype=jnp.float32,
+  bias=True,
+  scale=True,
+  bias_init=initializers.zeros_init(),
+  scale_init=initializers.ones_init(),
 ):
   """Applies group normalization to the input (arxiv.org/abs/1803.08494).
   This op is similar to batch normalization, but statistics are shared across
@@ -164,19 +165,19 @@ def group_norm(
   """
   x = jnp.asarray(x, jnp.float32)
   if (num_groups is None and group_size is None) or (
-      num_groups is not None and group_size is not None
+    num_groups is not None and group_size is not None
   ):
     raise ValueError(
-        'Either `num_groups` or `group_size` should be '
-        'specified, but not both of them.'
+      'Either `num_groups` or `group_size` should be '
+      'specified, but not both of them.'
     )
 
   if group_size is not None:
     channels = x.shape[-1]
     if channels % group_size != 0:
       raise ValueError(
-          'Number of channels ({}) is not multiple of the '
-          'group size ({}).'.format(channels, group_size)
+        'Number of channels ({}) is not multiple of the '
+        'group size ({}).'.format(channels, group_size)
       )
     num_groups = channels // group_size
 

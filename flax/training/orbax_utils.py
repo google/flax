@@ -16,14 +16,13 @@
 
 import dataclasses
 import inspect
-from typing import Any, Optional
 import warnings
+from typing import Any, Optional
 
 import jax
-from jax.sharding import Mesh
 import numpy as np
 import orbax.checkpoint as ocp
-
+from jax.sharding import Mesh
 
 PyTree = Any
 
@@ -37,13 +36,13 @@ def is_multi_device_array(value: Any) -> bool:
 
 def save_args_from_target(target: Any) -> Any:
   return jax.tree_util.tree_map(
-      lambda x: ocp.SaveArgs(aggregate=not is_multi_device_array(x)),
-      target,
+    lambda x: ocp.SaveArgs(aggregate=not is_multi_device_array(x)),
+    target,
   )
 
 
 def maybe_construct_transformations(
-    target: Any, transforms: Optional[Any]
+  target: Any, transforms: Optional[Any]
 ) -> Any:
   if transforms is not None:
     return transforms
@@ -76,10 +75,10 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
 
   # Simpler case: no JAX arrays
   if not any(
-      jax.tree_util.tree_flatten(jax.tree_map(find_sharding, target))[0]
+    jax.tree_util.tree_flatten(jax.tree_map(find_sharding, target))[0]
   ):
     return jax.tree_util.tree_map(
-        lambda x: ocp.RestoreArgs(restore_type=np.ndarray), target
+      lambda x: ocp.RestoreArgs(restore_type=np.ndarray), target
     )
 
   # JAX arrays: find sharding from the given target and create RestoreArgs
@@ -87,21 +86,19 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
   # TODO(ivyzheng): remove after Orbax new release.
   ocp_kwargs = {}
   if (
-      'set_global_shape'
-      in inspect.signature(
-          ocp.checkpoint_utils.construct_restore_args
-      ).parameters
+    'set_global_shape'
+    in inspect.signature(ocp.checkpoint_utils.construct_restore_args).parameters
   ):
     ocp_kwargs['set_global_shape'] = False
 
   sharding_tree = jax.tree_util.tree_map(find_sharding, target)
   if mesh is not None:
     warnings.warn(
-        (
-            'restore_args_from_target(): `mesh` arg is deprecated. Simply'
-            ' calling the function with target pytree should suffice.'
-        ),
-        DeprecationWarning,
+      (
+        'restore_args_from_target(): `mesh` arg is deprecated. Simply'
+        ' calling the function with target pytree should suffice.'
+      ),
+      DeprecationWarning,
     )
 
     def substitute_embedding(s):
@@ -109,14 +106,14 @@ def restore_args_from_target(target: Any, mesh: Optional[Mesh] = None) -> Any:
 
     sharding_tree = jax.tree_util.tree_map(substitute_embedding, sharding_tree)
   restore_args = ocp.checkpoint_utils.construct_restore_args(
-      target, sharding_tree, **ocp_kwargs
+    target, sharding_tree, **ocp_kwargs
   )
   # TODO(ivyzheng): remove after Orbax new release.
   if not ocp_kwargs:
     restore_args = jax.tree_util.tree_map(
-        lambda ra: dataclasses.replace(ra, global_shape=None)
-        if isinstance(ra, ocp.ArrayRestoreArgs)
-        else ra,
-        restore_args,
+      lambda ra: dataclasses.replace(ra, global_shape=None)
+      if isinstance(ra, ocp.ArrayRestoreArgs)
+      else ra,
+      restore_args,
     )
   return restore_args

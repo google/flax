@@ -15,12 +15,14 @@
 """Tests for flax.jax_utils."""
 
 from functools import partial
-from absl.testing import parameterized
+
 import chex
-from flax import jax_utils
 import jax
 import numpy as np
 import tensorflow as tf
+from absl.testing import parameterized
+
+from flax import jax_utils
 
 NDEV = 4
 

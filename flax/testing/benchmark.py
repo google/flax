@@ -24,41 +24,41 @@ benchmark.
 """
 
 import functools
-import itertools
 import inspect
+import itertools
 import json
-from typing import Dict
 import os
 import tempfile
-from absl import flags
-from absl import logging
+from typing import Dict
+
+from absl import flags, logging
 from absl.testing import absltest
-
-from flax import io
-
-from tensorboard.backend.event_processing import directory_watcher
-from tensorboard.backend.event_processing import event_file_loader
-from tensorboard.backend.event_processing import io_wrapper
+from tensorboard.backend.event_processing import (
+  directory_watcher,
+  event_file_loader,
+  io_wrapper,
+)
 from tensorboard.summary import v1 as summary_lib
 from tensorboard.util import tensor_util
 
+from flax import io
 
 flags.DEFINE_string(
-    'benchmark_output_dir', default=None, help='Benchmark output directory.'
+  'benchmark_output_dir', default=None, help='Benchmark output directory.'
 )
 
 
 FLAGS = flags.FLAGS
 
 _SCALAR_PLUGIN_NAME = (
-    summary_lib.scalar_pb('', 0).value[0].metadata.plugin_data.plugin_name
+  summary_lib.scalar_pb('', 0).value[0].metadata.plugin_data.plugin_name
 )
 
 
 def _make_events_generator(path):
   """Makes a generator yielding TensorBoard events from files in `path`."""
   return directory_watcher.DirectoryWatcher(
-      path, event_file_loader.EventFileLoader, io_wrapper.IsSummaryEventsFile
+    path, event_file_loader.EventFileLoader, io_wrapper.IsSummaryEventsFile
   ).Load()
 
 
@@ -78,10 +78,10 @@ def _process_event(event):
 
     if value.HasField('tensor'):
       yield (
-          value.tag,
-          event.wall_time,
-          event.step,
-          tensor_util.make_ndarray(value.tensor).item(),
+        value.tag,
+        event.wall_time,
+        event.step,
+        tensor_util.make_ndarray(value.tensor).item(),
       )
 
 
@@ -166,7 +166,7 @@ class Benchmark(absltest.TestCase):
     else:
       model_dir = tempfile.mkdtemp()
     model_dir_path = os.path.join(
-        model_dir, self._reported_name or self._get_test_name()
+      model_dir, self._reported_name or self._get_test_name()
     )
     # Create directories if they don't exist.
     if not io.exists(model_dir_path):
@@ -260,17 +260,17 @@ class Benchmark(absltest.TestCase):
     name = self._reported_name
     if not name:
       raise ValueError(
-          'Unable to determine test name for reporting '
-          'benchmark results. Make sure you are using '
-          '`self.report_*` methods.'
+        'Unable to determine test name for reporting '
+        'benchmark results. Make sure you are using '
+        '`self.report_*` methods.'
       )
 
     succeeded = not self.has_outstanding_fails()
     results = {
-        'name': name,
-        'succeeded': succeeded,
-        'metrics': self._reported_metrics,
-        'extras': self._reported_extras,
+      'name': name,
+      'succeeded': succeeded,
+      'metrics': self._reported_metrics,
+      'extras': self._reported_extras,
     }
     if self._reported_wall_time is not None:
       results['wall_time'] = self._reported_wall_time

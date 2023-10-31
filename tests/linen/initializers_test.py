@@ -14,49 +14,45 @@
 
 """Tests for flax.linen.initializers."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
+import jax
+import jax.numpy as jnp
+import numpy as np
+from absl.testing import absltest, parameterized
+from jax import random
 
 from flax import linen as nn
 from flax.linen import initializers
-
-import jax
-from jax import random
-import jax.numpy as jnp
-
-import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
 
 class InitializersTest(parameterized.TestCase):
-
   @parameterized.parameters(
-      {
-          'builder_fn': initializers.zeros_init,
-          'params_shape': (2, 3),
-          'expected_params': jnp.zeros((2, 3)),
-      },
-      {
-          'builder_fn': initializers.ones_init,
-          'params_shape': (3, 2),
-          'expected_params': jnp.ones((3, 2)),
-      },
+    {
+      'builder_fn': initializers.zeros_init,
+      'params_shape': (2, 3),
+      'expected_params': jnp.zeros((2, 3)),
+    },
+    {
+      'builder_fn': initializers.ones_init,
+      'params_shape': (3, 2),
+      'expected_params': jnp.ones((3, 2)),
+    },
   )
   def test_call_builder(self, builder_fn, params_shape, expected_params):
     params = builder_fn()(random.key(42), params_shape, jnp.float32)
     np.testing.assert_allclose(params, expected_params)
 
   @parameterized.parameters(
-      {
-          'builder_fn': initializers.zeros_init,
-          'expected_params': jnp.zeros((2, 5)),
-      },
-      {
-          'builder_fn': initializers.ones_init,
-          'expected_params': jnp.ones((2, 5)),
-      },
+    {
+      'builder_fn': initializers.zeros_init,
+      'expected_params': jnp.zeros((2, 5)),
+    },
+    {
+      'builder_fn': initializers.ones_init,
+      'expected_params': jnp.ones((2, 5)),
+    },
   )
   def test_kernel_builder(self, builder_fn, expected_params):
     layer = nn.Dense(5, kernel_init=builder_fn())

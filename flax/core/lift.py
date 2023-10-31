@@ -17,42 +17,41 @@
 import collections
 import dataclasses
 import functools
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-)
 import warnings
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  Generic,
+  Iterable,
+  List,
+  Mapping,
+  Optional,
+  Sequence,
+  Tuple,
+  TypeVar,
+  Union,
+)
 
-from flax import traceback_util
 import jax
 from jax import random
 
-from . import axes_scan
-from . import meta
-from .frozen_dict import freeze
-from .frozen_dict import unfreeze
+from flax import traceback_util
+
+from . import axes_scan, meta
+from .frozen_dict import freeze, unfreeze
 from .scope import (
-    CollectionFilter,
-    DenyList,  # pylint: disable=g-multiple-import
-    Filter,
-    PRNGSequenceFilter,
-    Scope,
-    group_collections,
-    in_filter,
-    intersect_filters,
-    is_filter_empty,
-    subtract_filters,
-    union_filters,
+  CollectionFilter,
+  DenyList,  # pylint: disable=g-multiple-import
+  Filter,
+  PRNGSequenceFilter,
+  Scope,
+  group_collections,
+  in_filter,
+  intersect_filters,
+  is_filter_empty,
+  subtract_filters,
+  union_filters,
 )
 
 traceback_util.register_exclusion(__file__)
@@ -63,10 +62,10 @@ T = TypeVar('T')
 def tree_map_rngs(fn, tree):
   """Needed for mapping JAX random.* functions over PRNGKey leaves."""
   return jax.tree_util.tree_map(
-      fn,
-      tree,
-      is_leaf=lambda x: hasattr(x, 'dtype')
-      and jax.dtypes.issubdtype(x.dtype, jax.dtypes.prng_key),
+    fn,
+    tree,
+    is_leaf=lambda x: hasattr(x, 'dtype')
+    and jax.dtypes.issubdtype(x.dtype, jax.dtypes.prng_key),
   )
 
 
@@ -109,12 +108,12 @@ def _transpose(xs):
 
 
 def pack(
-    fn: Callable[..., Any],
-    in_variable_filters: Sequence[CollectionFilter],
-    out_variable_filters: Sequence[CollectionFilter],
-    rng_filters: Sequence[PRNGSequenceFilter],
-    name=None,
-    enable_kwargs=False,
+  fn: Callable[..., Any],
+  in_variable_filters: Sequence[CollectionFilter],
+  out_variable_filters: Sequence[CollectionFilter],
+  rng_filters: Sequence[PRNGSequenceFilter],
+  name=None,
+  enable_kwargs=False,
 ) -> Callable[..., Any]:
   """Pack variables and rngs for functional transformations.
 
@@ -148,7 +147,7 @@ def pack(
       scope._validate_trace_level()
       scope._populate_collections()
       variable_groups_xs.append(
-          group_collections(scope._variables, in_variable_filters)
+        group_collections(scope._variables, in_variable_filters)
       )
     variable_groups_xs_t = _transpose(variable_groups_xs)
 
@@ -157,8 +156,8 @@ def pack(
       for variable_group in variable_group_xs:
         for col_name, collection in variable_group.items():
           col_in_out = any(
-              in_filter(col_filter, col_name)
-              for col_filter in out_variable_filters
+            in_filter(col_filter, col_name)
+            for col_filter in out_variable_filters
           )
           if not col_in_out:
             variable_group[col_name] = freeze(collection)
@@ -174,9 +173,9 @@ def pack(
     inner_scopes: List[Scope] = []
 
     def scope_fn(
-        variable_groups_xs_t,
-        rng_groups_xs_t,
-        mutable_filter: CollectionFilter = True,
+      variable_groups_xs_t,
+      rng_groups_xs_t,
+      mutable_filter: CollectionFilter = True,
     ):
       nonlocal inner_scopes
       for inner_scope in inner_scopes:
@@ -189,13 +188,13 @@ def pack(
       # in this case fallback to ((),) * len(scopes) to make sure the zip has
       # something to iterate over for each scope.
       variable_groups_xs = _transpose(variable_groups_xs_t) or ((),) * len(
-          scopes
+        scopes
       )
       rng_groups_xs = _transpose(rng_groups_xs_t) or ((),) * len(scopes)
       assert len(variable_groups_xs) == len(scopes)
       assert len(rng_groups_xs) == len(scopes)
       for variable_groups, rng_groups, scope, rng_counters in zip(
-          variable_groups_xs, rng_groups_xs, scopes, inner_rng_counters
+        variable_groups_xs, rng_groups_xs, scopes, inner_rng_counters
       ):
         variables = {}
         rngs = {}
@@ -207,25 +206,25 @@ def pack(
         # sharing.
         variables = jax.tree_util.tree_map(lambda x: x, variables)
         scope_mutable = intersect_filters(
-            intersect_filters(scope.mutable, mutable), mutable_filter
+          intersect_filters(scope.mutable, mutable), mutable_filter
         )
         new_debug_path = scope.debug_path
         if name:
           if new_debug_path:
             new_debug_path = new_debug_path[:-1] + (
-                f'{name}({new_debug_path[-1]})',
+              f'{name}({new_debug_path[-1]})',
             )
           else:
             new_debug_path = (f'{name}()',)
         inner_scope = Scope(
-            variables,
-            name=scope.name,
-            rngs=rngs,
-            mutable=scope_mutable,
-            parent=None,
-            path=scope.path,
-            debug_path=new_debug_path,
-            flags=scope.flags,
+          variables,
+          name=scope.name,
+          rngs=rngs,
+          mutable=scope_mutable,
+          parent=None,
+          path=scope.path,
+          debug_path=new_debug_path,
+          flags=scope.flags,
         )
         inner_scope.rng_counters = rng_counters
         inner_scopes.append(inner_scope)
@@ -242,12 +241,12 @@ def pack(
         inner_scope.invalidate()
         inner_scope._validate_trace_level()
         mutable_variables = {
-            key: val
-            for key, val in inner_scope._variables.items()
-            if in_filter(inner_scope.mutable, key)
+          key: val
+          for key, val in inner_scope._variables.items()
+          if in_filter(inner_scope.mutable, key)
         }
         out_variable_groups = group_collections(
-            mutable_variables, tuple(out_variable_filters) + (True,)
+          mutable_variables, tuple(out_variable_filters) + (True,)
         )
         remainder = tuple(out_variable_groups[-1].keys())
         if remainder:
@@ -259,23 +258,23 @@ def pack(
     try:
       if enable_kwargs:
         y, out_variable_groups_xs_t = fn(
-            scope_fn,
-            repack,
-            variable_groups_xs_t,
-            rng_groups_xs_t,
-            *args,
-            **kwargs,
+          scope_fn,
+          repack,
+          variable_groups_xs_t,
+          rng_groups_xs_t,
+          *args,
+          **kwargs,
         )
       else:
         y, out_variable_groups_xs_t = fn(
-            scope_fn, repack, variable_groups_xs_t, rng_groups_xs_t, *args
+          scope_fn, repack, variable_groups_xs_t, rng_groups_xs_t, *args
         )
     finally:
       for inner_scope in inner_scopes:
         inner_scope.invalidate()
     out_variable_groups_xs = _transpose(out_variable_groups_xs_t)
     for scope, out_variable_groups, rng_counters in zip(
-        scopes, out_variable_groups_xs, inner_rng_counters
+      scopes, out_variable_groups_xs, inner_rng_counters
     ):
       for out_variable_group in out_variable_groups:
         for col_name, collection in out_variable_group.items():
@@ -293,14 +292,14 @@ id_fn = lambda x: x
 
 
 def map_variables(
-    fn: Callable[..., Any],
-    mapped_collections: CollectionFilter,
-    map_in_fn: Callable[..., Any] = id_fn,
-    map_out_fn: Callable[..., Any] = id_fn,
-    init: bool = False,
-    mutable: bool = False,
-    rngs: PRNGSequenceFilter = True,
-    variables: CollectionFilter = True,
+  fn: Callable[..., Any],
+  mapped_collections: CollectionFilter,
+  map_in_fn: Callable[..., Any] = id_fn,
+  map_out_fn: Callable[..., Any] = id_fn,
+  init: bool = False,
+  mutable: bool = False,
+  rngs: PRNGSequenceFilter = True,
+  variables: CollectionFilter = True,
 ) -> Callable[..., Any]:
   """Map Variables inside a scope.
 
@@ -325,8 +324,8 @@ def map_variables(
     if init:
       scopes = scope_fn((target, variables), rng_groups)
       has_mutable_cols = any(
-          not is_filter_empty(scope.mutable)
-          for scope in jax.tree_util.tree_leaves(scopes)
+        not is_filter_empty(scope.mutable)
+        for scope in jax.tree_util.tree_leaves(scopes)
       )
       if has_mutable_cols:
         fn(scopes, *args, **kwargs)
@@ -347,17 +346,17 @@ def map_variables(
 
   in_vars = (mapped_collections, variables)
   out_vars = (
-      in_vars
-      if is_target_out
-      else (False, subtract_filters(variables, mapped_collections))
+    in_vars
+    if is_target_out
+    else (False, subtract_filters(variables, mapped_collections))
   )
   return pack(
-      wrapper,
-      in_vars,
-      out_vars,
-      (rngs,),
-      enable_kwargs=True,
-      name='map_variables',
+    wrapper,
+    in_vars,
+    out_vars,
+    (rngs,),
+    enable_kwargs=True,
+    name='map_variables',
   )
 
 
@@ -405,14 +404,14 @@ def _bwd_wrapper(treedef, bwd_fn, tangent):
 
 
 def vjp(
-    fn: Callable[..., Any],
-    scope: Scope,
-    *primals,
-    has_aux: bool = False,
-    reduce_axes=(),
-    vjp_variables: CollectionFilter = 'params',
-    variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True,
+  fn: Callable[..., Any],
+  scope: Scope,
+  *primals,
+  has_aux: bool = False,
+  reduce_axes=(),
+  vjp_variables: CollectionFilter = 'params',
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
   """A lifted version of ``jax.vjp``.
 
@@ -485,7 +484,7 @@ def vjp(
       return y, (aux, repack_fn(scope))
 
     y, bwd, (aux, out_vars) = jax.vjp(
-        wrapper, vjp_vars, *args, reduce_axes=reduce_axes, has_aux=True
+      wrapper, vjp_vars, *args, reduce_axes=reduce_axes, has_aux=True
     )
     treedef = jax.tree_util.tree_structure(scope)
     bwd = jax.tree_util.Partial(functools.partial(_bwd_wrapper, treedef), bwd)
@@ -495,23 +494,23 @@ def vjp(
       return (y, bwd), out_vars
 
   return pack(
-      inner,
-      (vjp_variables, variables),
-      (variables,),
-      (rngs,),
-      name='vjp',
-      enable_kwargs=False,
+    inner,
+    (vjp_variables, variables),
+    (variables,),
+    (rngs,),
+    name='vjp',
+    enable_kwargs=False,
   )(scope, *primals)
 
 
 def jvp(
-    fn: Callable[..., Any],
-    scope: Scope,
-    primals,
-    tangents,
-    variable_tangents,
-    variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True,
+  fn: Callable[..., Any],
+  scope: Scope,
+  primals,
+  tangents,
+  variable_tangents,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ) -> Tuple[Any, Any]:
   """A lifted version of ``jax.jvp``.
 
@@ -572,7 +571,7 @@ def jvp(
       return y, repack_fn(scope)
 
     (y, out_vars), out_tangents = jax.jvp(
-        wrapper, (jvp_vars, args), (variable_tangents, tangents)
+      wrapper, (jvp_vars, args), (variable_tangents, tangents)
     )
     return (y, out_tangents[0]), out_vars
 
@@ -581,30 +580,30 @@ def jvp(
   treedef = jax.tree_util.tree_structure(scope)
 
   variable_tangents = tuple(
-      {k: v for k, v in vt.items() if v}  # pylint: disable=g-complex-comprehension
-      for vt in treedef.flatten_up_to(variable_tangents)
+    {k: v for k, v in vt.items() if v}  # pylint: disable=g-complex-comprehension
+    for vt in treedef.flatten_up_to(variable_tangents)
   )
   target = tuple(variable_tangents[0].keys())
   return pack(
-      inner,
-      (target, variables),
-      (variables,),
-      (rngs,),
-      name='jvp',
-      enable_kwargs=False,
+    inner,
+    (target, variables),
+    (variables,),
+    (rngs,),
+    name='jvp',
+    enable_kwargs=False,
   )(scope, *primals)
 
 
 def vmap(
-    fn: Callable[..., Any],
-    variable_axes: Mapping[CollectionFilter, InOutAxis],
-    split_rngs: Mapping[PRNGSequenceFilter, bool],
-    in_axes=0,
-    out_axes=0,
-    axis_size: Optional[int] = None,
-    axis_name: Optional[str] = None,
-    spmd_axis_name: Optional[str] = None,
-    metadata_params: Dict[Any, Any] = {},
+  fn: Callable[..., Any],
+  variable_axes: Mapping[CollectionFilter, InOutAxis],
+  split_rngs: Mapping[PRNGSequenceFilter, bool],
+  in_axes=0,
+  out_axes=0,
+  axis_size: Optional[int] = None,
+  axis_name: Optional[str] = None,
+  spmd_axis_name: Optional[str] = None,
+  metadata_params: Dict[Any, Any] = {},
 ) -> Callable[..., Any]:
   """A lifted version of ``jax.vmap``.
 
@@ -680,7 +679,7 @@ def vmap(
 
     # split rngs
     axis_sizes = jax.tree_util.tree_map(
-        find_axis_size, (variable_in_axes, in_axes), (variable_groups, args)
+      find_axis_size, (variable_in_axes, in_axes), (variable_groups, args)
     )
     axis_sizes = set(jax.tree_util.tree_leaves(axis_sizes))
     if axis_size is None and len(axis_sizes) == 1:
@@ -694,27 +693,27 @@ def vmap(
     split_fn = lambda rng: random.split(rng, d_axis_size)
 
     rng_groups = tuple(
-        tree_map_rngs(split_fn, rng_group) if split else rng_group
-        for rng_group, split in zip(rng_groups, rng_splits)
+      tree_map_rngs(split_fn, rng_group) if split else rng_group
+      for rng_group, split in zip(rng_groups, rng_splits)
     )
 
     new_variable_groups = []
     for var_group, axis in zip(variable_groups, variable_in_axes):
       if axis is not None:
         new_variable_groups.append(
-            meta.remove_axis(var_group, axis, metadata_params)
+          meta.remove_axis(var_group, axis, metadata_params)
         )
       else:
         new_variable_groups.append(var_group)
     variable_groups = tuple(new_variable_groups)
 
     @functools.partial(
-        jax.vmap,
-        in_axes=(variable_in_axes, rng_axes, in_axes),
-        out_axes=(out_axes, variable_out_axes),
-        axis_name=axis_name,
-        axis_size=axis_size,
-        spmd_axis_name=spmd_axis_name,
+      jax.vmap,
+      in_axes=(variable_in_axes, rng_axes, in_axes),
+      out_axes=(out_axes, variable_out_axes),
+      axis_name=axis_name,
+      axis_size=axis_size,
+      spmd_axis_name=spmd_axis_name,
     )
     @functools.wraps(fn)
     def mapped(variable_groups, rng_groups, args):
@@ -733,7 +732,7 @@ def vmap(
     return y, vars_out
 
   return pack(
-      inner, variable_in_groups, variable_out_groups, rng_groups, name='vmap'
+    inner, variable_in_groups, variable_out_groups, rng_groups, name='vmap'
   )
 
 
@@ -742,18 +741,18 @@ InOutScanAxis = Union[ScanAxis, In[ScanAxis], Out[ScanAxis]]
 
 
 def scan(
-    fn: Callable[..., Any],
-    variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {},
-    variable_broadcast: CollectionFilter = False,
-    variable_carry: CollectionFilter = False,
-    split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
-    in_axes=0,
-    out_axes=0,
-    length: Optional[int] = None,
-    reverse: bool = False,
-    unroll: int = 1,
-    data_transform: Optional[Callable[..., Any]] = None,
-    metadata_params: Dict[Any, Any] = {},
+  fn: Callable[..., Any],
+  variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {},
+  variable_broadcast: CollectionFilter = False,
+  variable_carry: CollectionFilter = False,
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
+  in_axes=0,
+  out_axes=0,
+  length: Optional[int] = None,
+  reverse: bool = False,
+  unroll: int = 1,
+  data_transform: Optional[Callable[..., Any]] = None,
+  metadata_params: Dict[Any, Any] = {},
 ) -> Callable[..., Any]:
   """A lifted version of ``jax.lax.scan``.
 
@@ -832,7 +831,7 @@ def scan(
   assert all(isinstance(ax, int) for ax in variable_out_axes)
   rng_groups, rng_splits = _unzip2(split_rngs.items())
   rng_axes = tuple(
-      0 if rng_split else axes_scan.broadcast for rng_split in rng_splits
+    0 if rng_split else axes_scan.broadcast for rng_split in rng_splits
   )
 
   def inner(scope_fn, repack_fn, variable_groups, rng_groups, init, *args):
@@ -857,24 +856,24 @@ def scan(
     split_fn = lambda rng: random.split(rng, d_length)
 
     rng_groups = tuple(
-        tree_map_rngs(split_fn, rng_group) if split else rng_group
-        for rng_group, split in zip(rng_groups, rng_splits)
+      tree_map_rngs(split_fn, rng_group) if split else rng_group
+      for rng_group, split in zip(rng_groups, rng_splits)
     )
 
     @functools.partial(
-        axes_scan.scan,
-        in_axes=(variable_in_axes, rng_axes, in_axes),
-        out_axes=(out_axes, variable_out_axes),
-        length=length,
-        reverse=reverse,
-        unroll=unroll,
+      axes_scan.scan,
+      in_axes=(variable_in_axes, rng_axes, in_axes),
+      out_axes=(out_axes, variable_out_axes),
+      length=length,
+      reverse=reverse,
+      unroll=unroll,
     )
     def scanned(broadcast_vars, carry, scan_variable_groups, rng_groups, args):
       carry_vars, c = carry
       variable_groups = (broadcast_vars, carry_vars) + scan_variable_groups
       if data_transform is not None:
         variable_groups, rng_groups = data_transform(
-            variable_groups, rng_groups
+          variable_groups, rng_groups
         )
       scope = scope_fn(variable_groups, rng_groups)
       c, y = fn(scope, c, *args)
@@ -897,28 +896,28 @@ def scan(
     for scan_group, axis in zip(scan_vars, variable_in_axes):
       new_scan_vars.append(meta.remove_axis(scan_group, axis, metadata_params))
     broadcast_vars, (carry_vars, c), (ys, scan_vars) = scanned(
-        broadcast_vars,
-        (carry_vars, init),
-        tuple(new_scan_vars),
-        rng_groups,
-        args,
+      broadcast_vars,
+      (carry_vars, init),
+      tuple(new_scan_vars),
+      rng_groups,
+      args,
     )
     new_scan_vars = []
     for scan_group, axis in zip(scan_vars, variable_out_axes):
       new_scan_vars.append(meta.add_axis(scan_group, axis, metadata_params))
     scan_vars = tuple(new_scan_vars)
     out_vars = (
-        broadcast_vars,
-        carry_vars,
+      broadcast_vars,
+      carry_vars,
     ) + scan_vars
     return (c, ys), out_vars
 
   return pack(
-      inner,
-      (variable_broadcast, variable_carry) + variable_in_groups,
-      (variable_broadcast, variable_carry) + variable_out_groups,
-      rng_groups,
-      name='scan',
+    inner,
+    (variable_broadcast, variable_carry) + variable_in_groups,
+    (variable_broadcast, variable_carry) + variable_out_groups,
+    rng_groups,
+    name='scan',
   )
 
 
@@ -926,13 +925,13 @@ C = TypeVar('C')
 
 
 def while_loop(
-    cond_fn: Callable[[Scope, C], bool],
-    body_fn: Callable[[Scope, C], C],
-    scope: Scope,
-    init: C,
-    carry_variables: CollectionFilter = False,
-    broadcast_variables: CollectionFilter = True,
-    split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
+  cond_fn: Callable[[Scope, C], bool],
+  body_fn: Callable[[Scope, C], C],
+  scope: Scope,
+  init: C,
+  carry_variables: CollectionFilter = False,
+  broadcast_variables: CollectionFilter = True,
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = {},
 ) -> C:
   """Lifted version of jax.lax.while_loop.
 
@@ -983,7 +982,7 @@ def while_loop(
       for rng_group, rng_split in zip(rng_groups, rng_splits):
         if rng_split:
           rng_group = tree_map_rngs(
-              lambda rng: random.fold_in(rng, i), rng_group
+            lambda rng: random.fold_in(rng, i), rng_group
           )
         local_rng_groups.append(rng_group)
       return local_rng_groups
@@ -991,16 +990,16 @@ def while_loop(
     def cond_wrapper(c):
       i, carry_variables, carry = c
       scope = scope_fn(
-          (carry_variables, broadcast_variables),
-          make_loop_rngs(-i),
-          mutable_filter=False,
+        (carry_variables, broadcast_variables),
+        make_loop_rngs(-i),
+        mutable_filter=False,
       )
       return cond_fn(scope, carry)
 
     def body_wrapper(c):
       i, carry_variables, carry = c
       scope = scope_fn(
-          (carry_variables, broadcast_variables), make_loop_rngs(i)
+        (carry_variables, broadcast_variables), make_loop_rngs(i)
       )
       carry = body_fn(scope, carry)
       (carry_variables,) = repack_fn(scope)
@@ -1008,27 +1007,27 @@ def while_loop(
 
     c = (0, carry_variables, init)
     _, carry_variables, carry = jax.lax.while_loop(
-        cond_wrapper, body_wrapper, c
+      cond_wrapper, body_wrapper, c
     )
     return carry, (carry_variables,)
 
   return pack(
-      inner,
-      (carry_variables, broadcast_variables),
-      (carry_variables,),
-      rng_groups,
-      name='while_loop',
+    inner,
+    (carry_variables, broadcast_variables),
+    (carry_variables,),
+    rng_groups,
+    name='while_loop',
   )(scope)
 
 
 def cond(
-    pred: Any,
-    true_fun: Callable[..., C],
-    false_fun: Callable[..., C],
-    scope: Scope,
-    *operands,
-    variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True,
+  pred: Any,
+  true_fun: Callable[..., C],
+  false_fun: Callable[..., C],
+  scope: Scope,
+  *operands,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ) -> C:
   """Lifted version of ``jax.lax.cond``.
 
@@ -1078,7 +1077,7 @@ def cond(
       return y, repack_fn(scope)
 
     pure_branches = [
-        functools.partial(branch_wrapper, branch_fn) for branch_fn in branches
+      functools.partial(branch_wrapper, branch_fn) for branch_fn in branches
     ]
     return jax.lax.cond(pred, pure_branches[0], pure_branches[1], *operands)
 
@@ -1086,12 +1085,12 @@ def cond(
 
 
 def switch(
-    index: Any,
-    branches: Sequence[Callable[..., C]],
-    scope: Scope,
-    *operands,
-    variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True,
+  index: Any,
+  branches: Sequence[Callable[..., C]],
+  scope: Scope,
+  *operands,
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
 ) -> C:
   """Lifted version of ``jax.lax.switch``.
 
@@ -1164,7 +1163,7 @@ def switch(
       return y, repack_fn(scope)
 
     pure_branches = [
-        functools.partial(branch_wrapper, branch_fn) for branch_fn in branches
+      functools.partial(branch_wrapper, branch_fn) for branch_fn in branches
     ]
     return jax.lax.switch(index, pure_branches, *operands)
 
@@ -1172,11 +1171,11 @@ def switch(
 
 
 def custom_vjp(
-    fn: Callable[..., Any],
-    forward_fn: Callable[..., Any],
-    backward_fn: Callable[..., Any],
-    grad_vars: CollectionFilter = 'params',
-    nondiff_argnums=(),
+  fn: Callable[..., Any],
+  forward_fn: Callable[..., Any],
+  backward_fn: Callable[..., Any],
+  grad_vars: CollectionFilter = 'params',
+  nondiff_argnums=(),
 ):
   """Lifted version of `jax.custom_vjp`.
 
@@ -1270,22 +1269,22 @@ def custom_vjp(
   variable_out_groups = (grad_vars, True)
   rng_groups = (True,)
   return pack(
-      inner,
-      variable_in_groups,
-      variable_out_groups,
-      rng_groups,
-      name='custom_vjp',
+    inner,
+    variable_in_groups,
+    variable_out_groups,
+    rng_groups,
+    name='custom_vjp',
   )
 
 
 def checkpoint(
-    fn: Callable[..., Any],
-    variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True,
-    concrete: bool = False,
-    prevent_cse: bool = True,
-    static_argnums: Union[int, Tuple[int, ...]] = (),
-    policy: Optional[Callable[..., bool]] = None,
+  fn: Callable[..., Any],
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
+  concrete: bool = False,
+  prevent_cse: bool = True,
+  static_argnums: Union[int, Tuple[int, ...]] = (),
+  policy: Optional[Callable[..., bool]] = None,
 ) -> Callable[..., Any]:
   """Lifted version of ``jax.checkpoint``.
 
@@ -1326,11 +1325,11 @@ def checkpoint(
     static_argnums_ = jax.tree_util.tree_map(lambda x: x + 2, static_argnums)
 
     @functools.partial(
-        jax.remat,
-        concrete=concrete,
-        static_argnums=static_argnums_,
-        prevent_cse=prevent_cse,
-        policy=policy,
+      jax.remat,
+      concrete=concrete,
+      static_argnums=static_argnums_,
+      prevent_cse=prevent_cse,
+      policy=policy,
     )
     @functools.wraps(fn)
     def rematted(variable_groups, rng_groups, *args, **kwargs):
@@ -1341,12 +1340,12 @@ def checkpoint(
     return rematted(variable_groups, rng_groups, *args, **kwargs)
 
   return pack(
-      inner,
-      (variables,),
-      (variables,),
-      (rngs,),
-      name='remat',
-      enable_kwargs=True,
+    inner,
+    (variables,),
+    (variables,),
+    (rngs,),
+    name='remat',
+    enable_kwargs=True,
   )
 
 
@@ -1359,19 +1358,19 @@ def _hashable_filter(x):
     return tuple(x)  # convert un-hashable list & sets to tuple
   if isinstance(x, DenyList):
     return DenyList(
-        _hashable_filter(x.deny)
+      _hashable_filter(x.deny)
     )  # convert inner filter recursively
   return x
 
 
 def jit(
-    fn: Callable[..., Any],
-    variables: CollectionFilter = True,
-    rngs: PRNGSequenceFilter = True,
-    static_argnums: Union[int, Iterable[int]] = (),
-    donate_argnums: Union[int, Iterable[int]] = (),
-    device=None,
-    backend: Union[str, None] = None,
+  fn: Callable[..., Any],
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
+  static_argnums: Union[int, Iterable[int]] = (),
+  donate_argnums: Union[int, Iterable[int]] = (),
+  device=None,
+  backend: Union[str, None] = None,
 ) -> Callable[..., Any]:
   """Lifted version of ``jax.jit``.
 
@@ -1426,11 +1425,11 @@ def jit(
   repack_fn = None  # type: Optional[Callable]
 
   @functools.partial(
-      jax.jit,
-      static_argnums=static_argnums,
-      donate_argnums=donate_argnums,
-      device=device,
-      backend=backend,
+    jax.jit,
+    static_argnums=static_argnums,
+    donate_argnums=donate_argnums,
+    device=device,
+    backend=backend,
   )
   @functools.wraps(fn)
   def jitted(fingerprint, variable_groups, rng_groups, *args):
@@ -1457,13 +1456,13 @@ def jit(
 
 
 def remat_scan(
-    body_fn: Callable[..., Any],
-    lengths: Sequence[int],
-    policy: Optional[Callable[..., bool]] = None,
-    variable_broadcast: CollectionFilter = False,
-    variable_carry: CollectionFilter = False,
-    variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {True: 0},
-    split_rngs: Mapping[PRNGSequenceFilter, bool] = {True: True},
+  body_fn: Callable[..., Any],
+  lengths: Sequence[int],
+  policy: Optional[Callable[..., bool]] = None,
+  variable_broadcast: CollectionFilter = False,
+  variable_carry: CollectionFilter = False,
+  variable_axes: Mapping[CollectionFilter, InOutScanAxis] = {True: 0},
+  split_rngs: Mapping[PRNGSequenceFilter, bool] = {True: True},
 ) -> Callable[..., Any]:
   """Combines `lift.remat` and `lift.scan` for memory efficiency and constant time compilation.
 
@@ -1502,11 +1501,11 @@ def remat_scan(
   """
   # TODO(jheek) should remat scan have scan inputs/outputs?
   scan_fn = functools.partial(
-      scan,
-      variable_broadcast=variable_broadcast,
-      variable_carry=variable_carry,
-      variable_axes=variable_axes,
-      split_rngs=split_rngs,
+    scan,
+    variable_broadcast=variable_broadcast,
+    variable_carry=variable_carry,
+    variable_axes=variable_axes,
+    split_rngs=split_rngs,
   )
   if len(lengths) == 1:
 
@@ -1519,13 +1518,13 @@ def remat_scan(
     @functools.partial(remat, policy=policy, prevent_cse=False)
     def inner_loop(scope, carry):
       carry = remat_scan(
-          body_fn,
-          lengths[1:],
-          policy,
-          variable_broadcast,
-          variable_carry,
-          variable_axes,
-          split_rngs,
+        body_fn,
+        lengths[1:],
+        policy,
+        variable_broadcast,
+        variable_carry,
+        variable_axes,
+        split_rngs,
       )(scope, carry)
       return carry, ()
 

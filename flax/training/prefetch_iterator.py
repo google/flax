@@ -43,9 +43,9 @@ class PrefetchIterator:
       buffer_size: how many items to prefetch (default: 1).
     """
     warnings.warn(
-        'PrefetchIterator is deprecated. Use the standard `tf.data`'
-        ' prefetch method instead',
-        DeprecationWarning,
+      'PrefetchIterator is deprecated. Use the standard `tf.data`'
+      ' prefetch method instead',
+      DeprecationWarning,
     )
 
     self._data_iter = data_iter

@@ -15,24 +15,23 @@
 """Attention core modules for Flax."""
 
 import functools
-from typing import Any, Callable, Optional, Tuple, Union, overload
 import warnings
+from typing import Any, Callable, Optional, Tuple, Union, overload
+
+import jax
+import jax.numpy as jnp
+from jax import lax, random
 
 from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
-from flax.linen.linear import default_kernel_init
-from flax.linen.linear import DenseGeneral
-from flax.linen.linear import DotGeneralT
-from flax.linen.linear import PrecisionLike
-from flax.linen.module import compact
-from flax.linen.module import merge_param
-from flax.linen.module import Module
+from flax.linen.linear import (
+  DenseGeneral,
+  DotGeneralT,
+  PrecisionLike,
+  default_kernel_init,
+)
+from flax.linen.module import Module, compact, merge_param
 from flax.linen.normalization import LayerNorm
-import jax
-from jax import lax
-from jax import random
-import jax.numpy as jnp
-
 
 PRNGKey = jax.Array
 Shape = Tuple[int, ...]
@@ -41,16 +40,16 @@ Array = Any
 
 
 def dot_product_attention_weights(
-    query: Array,
-    key: Array,
-    bias: Optional[Array] = None,
-    mask: Optional[Array] = None,
-    broadcast_dropout: bool = True,
-    dropout_rng: Optional[PRNGKey] = None,
-    dropout_rate: float = 0.0,
-    deterministic: bool = False,
-    dtype: Optional[Dtype] = None,
-    precision: PrecisionLike = None,
+  query: Array,
+  key: Array,
+  bias: Optional[Array] = None,
+  mask: Optional[Array] = None,
+  broadcast_dropout: bool = True,
+  dropout_rng: Optional[PRNGKey] = None,
+  dropout_rate: float = 0.0,
+  deterministic: bool = False,
+  dtype: Optional[Dtype] = None,
+  precision: PrecisionLike = None,
 ):
   """Computes dot-product attention weights given query and key.
 
@@ -94,7 +93,7 @@ def dot_product_attention_weights(
   query = query / jnp.sqrt(depth).astype(dtype)
   # attn weight shape is (batch..., num_heads, q_length, kv_length)
   attn_weights = jnp.einsum(
-      '...qhd,...khd->...hqk', query, key, precision=precision
+    '...qhd,...khd->...hqk', query, key, precision=precision
   )
 
   # apply attention bias: masking, dropout, proximity bias, etc.
@@ -124,17 +123,17 @@ def dot_product_attention_weights(
 
 
 def dot_product_attention(
-    query: Array,
-    key: Array,
-    value: Array,
-    bias: Optional[Array] = None,
-    mask: Optional[Array] = None,
-    broadcast_dropout: bool = True,
-    dropout_rng: Optional[PRNGKey] = None,
-    dropout_rate: float = 0.0,
-    deterministic: bool = False,
-    dtype: Optional[Dtype] = None,
-    precision: PrecisionLike = None,
+  query: Array,
+  key: Array,
+  value: Array,
+  bias: Optional[Array] = None,
+  mask: Optional[Array] = None,
+  broadcast_dropout: bool = True,
+  dropout_rng: Optional[PRNGKey] = None,
+  dropout_rate: float = 0.0,
+  deterministic: bool = False,
+  dtype: Optional[Dtype] = None,
+  precision: PrecisionLike = None,
 ):
   """Computes dot-product attention given query, key, and value.
 
@@ -173,30 +172,30 @@ def dot_product_attention(
   dtype = query.dtype
   assert key.ndim == query.ndim == value.ndim, 'q, k, v must have same rank.'
   assert (
-      query.shape[:-3] == key.shape[:-3] == value.shape[:-3]
+    query.shape[:-3] == key.shape[:-3] == value.shape[:-3]
   ), 'q, k, v batch dims must match.'
   assert (
-      query.shape[-2] == key.shape[-2] == value.shape[-2]
+    query.shape[-2] == key.shape[-2] == value.shape[-2]
   ), 'q, k, v num_heads must match.'
   assert key.shape[-3] == value.shape[-3], 'k, v lengths must match.'
 
   # compute attention weights
   attn_weights = dot_product_attention_weights(
-      query,
-      key,
-      bias,
-      mask,
-      broadcast_dropout,
-      dropout_rng,
-      dropout_rate,
-      deterministic,
-      dtype,
-      precision,
+    query,
+    key,
+    bias,
+    mask,
+    broadcast_dropout,
+    dropout_rng,
+    dropout_rate,
+    deterministic,
+    dtype,
+    precision,
   )
 
   # return weighted sum over values for each query position
   return jnp.einsum(
-      '...hqk,...khd->...qhd', attn_weights, value, precision=precision
+    '...hqk,...khd->...qhd', attn_weights, value, precision=precision
   )
 
 
@@ -236,9 +235,9 @@ class MultiHeadDotProductAttention(Module):
   deterministic: Optional[bool] = None
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      initializers.zeros_init()
-  )
+  bias_init: Callable[
+    [PRNGKey, Shape, Dtype], Array
+  ] = initializers.zeros_init()
   use_bias: bool = True
   attention_fn: Callable[..., Array] = dot_product_attention
   decode: bool = False
@@ -251,40 +250,40 @@ class MultiHeadDotProductAttention(Module):
 
   @overload
   def __call__(
-      self,
-      inputs_q: Array,
-      inputs_k: Optional[Array] = None,
-      inputs_v: Optional[Array] = None,
-      *,
-      mask: Optional[Array] = None,
-      deterministic: Optional[bool] = None,
-      dropout_rng: Optional[PRNGKey] = None,
+    self,
+    inputs_q: Array,
+    inputs_k: Optional[Array] = None,
+    inputs_v: Optional[Array] = None,
+    *,
+    mask: Optional[Array] = None,
+    deterministic: Optional[bool] = None,
+    dropout_rng: Optional[PRNGKey] = None,
   ):
     ...
 
   @overload
   def __call__(
-      self,
-      inputs_q: Array,
-      *,
-      inputs_kv: Array = None,
-      mask: Optional[Array] = None,
-      deterministic: Optional[bool] = None,
-      dropout_rng: Optional[PRNGKey] = None,
+    self,
+    inputs_q: Array,
+    *,
+    inputs_kv: Array = None,
+    mask: Optional[Array] = None,
+    deterministic: Optional[bool] = None,
+    dropout_rng: Optional[PRNGKey] = None,
   ):
     ...
 
   @compact
   def __call__(
-      self,
-      inputs_q: Array,
-      inputs_k: Optional[Array] = None,
-      inputs_v: Optional[Array] = None,
-      *,
-      inputs_kv: Optional[Array] = None,
-      mask: Optional[Array] = None,
-      deterministic: Optional[bool] = None,
-      dropout_rng: Optional[PRNGKey] = None
+    self,
+    inputs_q: Array,
+    inputs_k: Optional[Array] = None,
+    inputs_v: Optional[Array] = None,
+    *,
+    inputs_kv: Optional[Array] = None,
+    mask: Optional[Array] = None,
+    deterministic: Optional[bool] = None,
+    dropout_rng: Optional[PRNGKey] = None,
   ):
     """Applies multi-head dot product attention on the input data.
 
@@ -317,67 +316,75 @@ class MultiHeadDotProductAttention(Module):
     """
     if inputs_kv is not None:
       if inputs_k is not None or inputs_v is not None:
-        raise ValueError('If either `inputs_k` or `inputs_v` is not None, '
-        '`inputs_kv` must be None. If `inputs_kv` is not None, both `inputs_k` '
-        'and `inputs_v` must be None. We recommend using `inputs_k` and '
-        '`inputs_v` args, since `inputs_kv` will be deprecated soon. See '
-        'https://github.com/google/flax/discussions/3389 for more '
-        'information.')
+        raise ValueError(
+          'If either `inputs_k` or `inputs_v` is not None, '
+          '`inputs_kv` must be None. If `inputs_kv` is not None, both `inputs_k` '
+          'and `inputs_v` must be None. We recommend using `inputs_k` and '
+          '`inputs_v` args, since `inputs_kv` will be deprecated soon. See '
+          'https://github.com/google/flax/discussions/3389 for more '
+          'information.'
+        )
       inputs_k = inputs_v = inputs_kv
-      warnings.warn('The inputs_kv arg will be deprecated soon. '
-                    'Use inputs_k and inputs_v instead. See '
-                    'https://github.com/google/flax/discussions/3389 '
-                    'for more information.',
-                    DeprecationWarning)
+      warnings.warn(
+        'The inputs_kv arg will be deprecated soon. '
+        'Use inputs_k and inputs_v instead. See '
+        'https://github.com/google/flax/discussions/3389 '
+        'for more information.',
+        DeprecationWarning,
+      )
     else:
       if inputs_k is None:
         if inputs_v is not None:
-          raise ValueError('`inputs_k` cannot be None if `inputs_v` is not None. '
-          'To have both `inputs_k` and `inputs_v` be the same value, pass in the '
-          'value to `inputs_k` and leave `inputs_v` as None.')
+          raise ValueError(
+            '`inputs_k` cannot be None if `inputs_v` is not None. '
+            'To have both `inputs_k` and `inputs_v` be the same value, pass in the '
+            'value to `inputs_k` and leave `inputs_v` as None.'
+          )
         inputs_k = inputs_q
       if inputs_v is None:
         inputs_v = inputs_k
       elif inputs_v.shape[-1] == inputs_v.shape[-2]:
-        warnings.warn(f"You are passing an array of shape {inputs_v.shape} "
-                      "to the `inputs_v` arg, when you may have intended "
-                      "to pass it to the `mask` arg. As of Flax version "
-                      "0.7.4, the function signature of "
-                      "MultiHeadDotProductAttention's `__call__` method "
-                      "has changed to `__call__(inputs_q, inputs_k=None, "
-                      "inputs_v=None, *, inputs_kv=None, mask=None, "
-                      "deterministic=None)`. Use the kwarg `mask` instead. "
-                      "See https://github.com/google/flax/discussions/3389 "
-                      "and read the docstring for more information.",
-                      DeprecationWarning)
+        warnings.warn(
+          f'You are passing an array of shape {inputs_v.shape} '
+          'to the `inputs_v` arg, when you may have intended '
+          'to pass it to the `mask` arg. As of Flax version '
+          '0.7.4, the function signature of '
+          "MultiHeadDotProductAttention's `__call__` method "
+          'has changed to `__call__(inputs_q, inputs_k=None, '
+          'inputs_v=None, *, inputs_kv=None, mask=None, '
+          'deterministic=None)`. Use the kwarg `mask` instead. '
+          'See https://github.com/google/flax/discussions/3389 '
+          'and read the docstring for more information.',
+          DeprecationWarning,
+        )
 
     features = self.out_features or inputs_q.shape[-1]
     qkv_features = self.qkv_features or inputs_q.shape[-1]
     assert qkv_features % self.num_heads == 0, (
-        f'Memory dimension ({qkv_features}) must be divisible by number of'
-        f' heads ({self.num_heads}).'
+      f'Memory dimension ({qkv_features}) must be divisible by number of'
+      f' heads ({self.num_heads}).'
     )
     head_dim = qkv_features // self.num_heads
 
     dense = functools.partial(
-        DenseGeneral,
-        axis=-1,
-        dtype=self.dtype,
-        param_dtype=self.param_dtype,
-        features=(self.num_heads, head_dim),
-        kernel_init=self.kernel_init,
-        bias_init=self.bias_init,
-        use_bias=self.use_bias,
-        precision=self.precision,
-        dot_general=self.qkv_dot_general,
-        dot_general_cls=self.qkv_dot_general_cls,
+      DenseGeneral,
+      axis=-1,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      features=(self.num_heads, head_dim),
+      kernel_init=self.kernel_init,
+      bias_init=self.bias_init,
+      use_bias=self.use_bias,
+      precision=self.precision,
+      dot_general=self.qkv_dot_general,
+      dot_general_cls=self.qkv_dot_general_cls,
     )
     # project inputs_q to multi-headed q/k/v
     # dimensions are then [batch..., length, n_heads, n_features_per_head]
     query, key, value = (
-        dense(name='query')(inputs_q),
-        dense(name='key')(inputs_k),
-        dense(name='value')(inputs_v),
+      dense(name='query')(inputs_q),
+      dense(name='key')(inputs_k),
+      dense(name='value')(inputs_v),
     )
 
     if self.normalize_qk:
@@ -392,35 +399,35 @@ class MultiHeadDotProductAttention(Module):
       # detect if we're initializing by absence of existing cache data.
       is_initialized = self.has_variable('cache', 'cached_key')
       cached_key = self.variable(
-          'cache', 'cached_key', jnp.zeros, key.shape, key.dtype
+        'cache', 'cached_key', jnp.zeros, key.shape, key.dtype
       )
       cached_value = self.variable(
-          'cache', 'cached_value', jnp.zeros, value.shape, value.dtype
+        'cache', 'cached_value', jnp.zeros, value.shape, value.dtype
       )
       cache_index = self.variable(
-          'cache', 'cache_index', lambda: jnp.array(0, dtype=jnp.int32)
+        'cache', 'cache_index', lambda: jnp.array(0, dtype=jnp.int32)
       )
       if is_initialized:
         (
-            *batch_dims,
-            max_length,
-            num_heads,
-            depth_per_head,
+          *batch_dims,
+          max_length,
+          num_heads,
+          depth_per_head,
         ) = cached_key.value.shape
         # shape check of cached keys against query input
         expected_shape = tuple(batch_dims) + (1, num_heads, depth_per_head)
         if expected_shape != query.shape:
           raise ValueError(
-              'Autoregressive cache shape error, '
-              'expected query shape %s instead got %s.'
-              % (expected_shape, query.shape)
+            'Autoregressive cache shape error, '
+            'expected query shape %s instead got %s.'
+            % (expected_shape, query.shape)
           )
         # update key, value caches with our new 1d spatial slices
         cur_index = cache_index.value
         indices: tuple[Union[int, jax.Array], ...] = (0,) * len(batch_dims) + (
-            cur_index,
-            0,
-            0,
+          cur_index,
+          0,
+          0,
         )
         key = lax.dynamic_update_slice(cached_key.value, key, indices)
         value = lax.dynamic_update_slice(cached_value.value, value, indices)
@@ -432,18 +439,18 @@ class MultiHeadDotProductAttention(Module):
         # positions that have already been generated and cached,
         # not the remaining zero elements.
         mask = combine_masks(
-            mask,
-            jnp.broadcast_to(
-                jnp.arange(max_length) <= cur_index,
-                tuple(batch_dims) + (1, 1, max_length),
-            ),
+          mask,
+          jnp.broadcast_to(
+            jnp.arange(max_length) <= cur_index,
+            tuple(batch_dims) + (1, 1, max_length),
+          ),
         )
 
     if (
-        self.dropout_rate > 0.0
+      self.dropout_rate > 0.0
     ):  # Require `deterministic` only if using dropout.
       m_deterministic = merge_param(
-          'deterministic', self.deterministic, deterministic
+        'deterministic', self.deterministic, deterministic
       )
       if not m_deterministic and dropout_rng is None:
         dropout_rng = self.make_rng('dropout')
@@ -452,30 +459,30 @@ class MultiHeadDotProductAttention(Module):
 
     # apply attention
     x = self.attention_fn(
-        query,
-        key,
-        value,
-        mask=mask,
-        dropout_rng=dropout_rng,
-        dropout_rate=self.dropout_rate,
-        broadcast_dropout=self.broadcast_dropout,
-        deterministic=m_deterministic,
-        dtype=self.dtype,
-        precision=self.precision,
+      query,
+      key,
+      value,
+      mask=mask,
+      dropout_rng=dropout_rng,
+      dropout_rate=self.dropout_rate,
+      broadcast_dropout=self.broadcast_dropout,
+      deterministic=m_deterministic,
+      dtype=self.dtype,
+      precision=self.precision,
     )  # pytype: disable=wrong-keyword-args
     # back to the original inputs dimensions
     out = DenseGeneral(
-        features=features,
-        axis=(-2, -1),
-        kernel_init=self.kernel_init,
-        bias_init=self.bias_init,
-        use_bias=self.use_bias,
-        dtype=self.dtype,
-        param_dtype=self.param_dtype,
-        precision=self.precision,
-        dot_general=self.out_dot_general,
-        dot_general_cls=self.out_dot_general_cls,
-        name='out',  # type: ignore[call-arg]
+      features=features,
+      axis=(-2, -1),
+      kernel_init=self.kernel_init,
+      bias_init=self.bias_init,
+      use_bias=self.use_bias,
+      dtype=self.dtype,
+      param_dtype=self.param_dtype,
+      precision=self.precision,
+      dot_general=self.out_dot_general,
+      dot_general_cls=self.out_dot_general_cls,
+      name='out',  # type: ignore[call-arg]
     )(x)
     return out
 
@@ -485,11 +492,11 @@ class SelfAttention(MultiHeadDotProductAttention):
 
   @compact
   def __call__(  # type: ignore
-      self,
-      inputs_q: Array,
-      mask: Optional[Array] = None,
-      deterministic: Optional[bool] = None,
-      dropout_rng: Optional[PRNGKey] = None
+    self,
+    inputs_q: Array,
+    mask: Optional[Array] = None,
+    deterministic: Optional[bool] = None,
+    dropout_rng: Optional[PRNGKey] = None,
   ):
     """Applies multi-head dot product self-attention on the input data.
 
@@ -507,13 +514,15 @@ class SelfAttention(MultiHeadDotProductAttention):
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    warnings.warn('SelfAttention will be deprecated soon. Use '
-                  '`MultiHeadDotProductAttention.__call__(inputs_q)` instead. '
-                  'See https://github.com/google/flax/discussions/3389 '
-                  'for more information.',
-                  DeprecationWarning)
+    warnings.warn(
+      'SelfAttention will be deprecated soon. Use '
+      '`MultiHeadDotProductAttention.__call__(inputs_q)` instead. '
+      'See https://github.com/google/flax/discussions/3389 '
+      'for more information.',
+      DeprecationWarning,
+    )
     return super().__call__(
-        inputs_q, mask=mask, deterministic=deterministic, dropout_rng=dropout_rng
+      inputs_q, mask=mask, deterministic=deterministic, dropout_rng=dropout_rng
     )
 
 
@@ -521,11 +530,11 @@ class SelfAttention(MultiHeadDotProductAttention):
 
 
 def make_attention_mask(
-    query_input: Array,
-    key_input: Array,
-    pairwise_fn: Callable[..., Any] = jnp.multiply,
-    extra_batch_dims: int = 0,
-    dtype: Dtype = jnp.float32,
+  query_input: Array,
+  key_input: Array,
+  pairwise_fn: Callable[..., Any] = jnp.multiply,
+  extra_batch_dims: int = 0,
+  dtype: Dtype = jnp.float32,
 ):
   """Mask-making helper for attention weights.
 
@@ -545,7 +554,7 @@ def make_attention_mask(
     A `[batch..., 1, len_q, len_kv]` shaped mask for 1d attention.
   """
   mask = pairwise_fn(
-      jnp.expand_dims(query_input, axis=-1), jnp.expand_dims(key_input, axis=-2)
+    jnp.expand_dims(query_input, axis=-1), jnp.expand_dims(key_input, axis=-2)
   )
   mask = jnp.expand_dims(mask, axis=-3)
   mask = jnp.expand_dims(mask, axis=tuple(range(extra_batch_dims)))
@@ -553,7 +562,7 @@ def make_attention_mask(
 
 
 def make_causal_mask(
-    x: Array, extra_batch_dims: int = 0, dtype: Dtype = jnp.float32
+  x: Array, extra_batch_dims: int = 0, dtype: Dtype = jnp.float32
 ) -> Array:
   """Make a causal mask for self-attention.
 
@@ -572,11 +581,11 @@ def make_causal_mask(
   """
   idxs = jnp.broadcast_to(jnp.arange(x.shape[-1], dtype=jnp.int32), x.shape)
   return make_attention_mask(
-      idxs,
-      idxs,
-      jnp.greater_equal,
-      extra_batch_dims=extra_batch_dims,
-      dtype=dtype,
+    idxs,
+    idxs,
+    jnp.greater_equal,
+    extra_batch_dims=extra_batch_dims,
+    dtype=dtype,
   )
 
 
@@ -594,7 +603,7 @@ def combine_masks(*masks: Optional[Array], dtype: Dtype = jnp.float32) -> Array:
   if not masks_list:
     return None
   assert all(
-      map(lambda x: x.ndim == masks_list[0].ndim, masks_list)
+    map(lambda x: x.ndim == masks_list[0].ndim, masks_list)
   ), f'masks must have same rank: {tuple(map(lambda x: x.ndim, masks_list))}'
   mask, *other_masks = masks_list
   for other_mask in other_masks:

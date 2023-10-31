@@ -21,41 +21,35 @@ import functools
 import hashlib
 import typing
 from typing import (
-    Any,
-    Callable,
-    Dict,
-    Generic,
-    Iterable,
-    Literal,
-    Mapping,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-    overload,
+  Any,
+  Callable,
+  Dict,
+  Generic,
+  Iterable,
+  Literal,
+  Mapping,
+  Optional,
+  Sequence,
+  Set,
+  Tuple,
+  TypeVar,
+  Union,
+  cast,
+  overload,
 )
+
+import jax
+import numpy as np
+from jax import numpy as jnp
+from jax import random, tree_util
 
 from flax import config as config
 from flax import configurations as legacy_config  # only for flax_lazy_rng
-from flax import errors
-from flax import struct
-from flax import traceback_util
+from flax import errors, struct, traceback_util
 from flax.ids import uuid
-import jax
-from jax import numpy as jnp
-from jax import random
-from jax import tree_util
-import numpy as np
 
-from . import meta
-from . import partial_eval
-from . import tracers
-from .frozen_dict import freeze
-from .frozen_dict import FrozenDict
-from .frozen_dict import unfreeze
+from . import meta, partial_eval, tracers
+from .frozen_dict import FrozenDict, freeze, unfreeze
 
 traceback_util.register_exclusion(__file__)
 
@@ -115,7 +109,7 @@ class LazyRng(struct.PyTreeNode):
 
   @staticmethod
   def create(
-      rng: Union['LazyRng', PRNGKey], *suffix: PRNGFoldable
+    rng: Union['LazyRng', PRNGKey], *suffix: PRNGFoldable
   ) -> 'LazyRng':
     if not legacy_config.flax_lazy_rng:
       if isinstance(rng, LazyRng):
@@ -145,7 +139,7 @@ def _legacy_rng_fold_in(rng: PRNGKey, data: Iterable[PRNGFoldable]) -> PRNGKey:
 
 
 def _fold_in_static(
-    rng: PRNGKey, data: typing.Collection[PRNGFoldable]
+  rng: PRNGKey, data: typing.Collection[PRNGFoldable]
 ) -> PRNGKey:
   """Folds static data (strings & ints) into a jax.random.PRNGKey using its SHA-1 hash.
 
@@ -323,7 +317,7 @@ def intersect_filters(a: Filter, b: Filter) -> Filter:
 
 
 def group_collections(
-    xs: VariableDict, col_filters: Sequence[CollectionFilter]
+  xs: VariableDict, col_filters: Sequence[CollectionFilter]
 ) -> Sequence[MutableVariableDict]:
   """Groups variables by collection filters.
 
@@ -391,7 +385,7 @@ class Variable(Generic[T]):
       cur = self.scope.get_variable(self.collection, self.name)
       cur_struct = tree_util.tree_structure(cur, is_leaf=meta.is_axis_metadata)
       value_struct = tree_util.tree_structure(
-          value, is_leaf=meta.is_axis_metadata
+        value, is_leaf=meta.is_axis_metadata
       )
       has_meta = any(map(meta.is_axis_metadata, cur_struct.flatten_up_to(cur)))
       if cur_struct == value_struct and has_meta:
@@ -435,15 +429,15 @@ class Scope:
   reservations: Dict[str, Set[Optional[str]]]
 
   def __init__(
-      self,
-      variables: MutableVariableDict,
-      rngs: Optional[Dict[str, Union[PRNGKey, LazyRng]]] = None,
-      name: Optional[str] = None,
-      mutable: CollectionFilter = False,
-      parent: Optional['Scope'] = None,
-      path: Iterable[str] = (),
-      debug_path: Iterable[str] = (),
-      flags: Optional[Mapping] = None,
+    self,
+    variables: MutableVariableDict,
+    rngs: Optional[Dict[str, Union[PRNGKey, LazyRng]]] = None,
+    name: Optional[str] = None,
+    mutable: CollectionFilter = False,
+    parent: Optional['Scope'] = None,
+    path: Iterable[str] = (),
+    debug_path: Iterable[str] = (),
+    flags: Optional[Mapping] = None,
   ):
     """Initializes a Scope.
 
@@ -485,9 +479,9 @@ class Scope:
     if self is other:
       return True
     return (
-        self.root._variables is other.root._variables
-        and self.path == other.path
-        and self.rng_counters is other.rng_counters
+      self.root._variables is other.root._variables
+      and self.path == other.path
+      and self.rng_counters is other.rng_counters
     )
 
   def __hash__(self) -> int:
@@ -528,7 +522,7 @@ class Scope:
     """Returns an immutable copy of the mutable variables belonging to this Scope."""
     self._populate_collections()
     xs = {
-        k: v for k, v in self._variables.items() if in_filter(self.mutable, k)
+      k: v for k, v in self._variables.items() if in_filter(self.mutable, k)
     }
     if config.flax_return_frozendict:
       return freeze(xs)
@@ -556,14 +550,14 @@ class Scope:
     """
     self._check_valid()
     scope = Scope(
-        self._variables,
-        self.rngs,
-        self.name,
-        self.mutable,
-        self.parent,
-        path=self.path,
-        debug_path=self.debug_path,
-        flags=self.flags,
+      self._variables,
+      self.rngs,
+      self.name,
+      self.mutable,
+      self.parent,
+      path=self.path,
+      debug_path=self.debug_path,
+      flags=self.flags,
     )
     if not rewind_rngs:
       scope.rng_counters = self.rng_counters
@@ -580,9 +574,9 @@ class Scope:
       # allow the same name for two variables in
       # different collections, otherwise raise error.
       if (
-          None in self.reservations[name]
-          or col is None
-          or col in self.reservations[name]
+        None in self.reservations[name]
+        or col is None
+        or col in self.reservations[name]
       ):
         return True
     return False
@@ -598,8 +592,7 @@ class Scope:
     """
     if not isinstance(name, str):
       raise TypeError(
-          'The type of scope "{name}" should be string but '
-          f'it is {type(name)}'
+        'The type of scope "{name}" should be string but ' f'it is {type(name)}'
       )
     if self.name_reserved(name, col):
       raise ValueError(f'Duplicate use of scope name: "{name}"')
@@ -622,7 +615,7 @@ class Scope:
       i += 1
 
   def push(
-      self, name: Optional[str] = None, prefix: str = '', reuse=False
+    self, name: Optional[str] = None, prefix: str = '', reuse=False
   ) -> 'Scope':
     """Creates a child Scope.
 
@@ -649,25 +642,25 @@ class Scope:
       rng_counters = {key: 0 for key in rngs}
       self.rng_counters[rng_key] = rng_counters  # type: ignore
     scope = Scope(
-        {},
-        name=name,
-        rngs=rngs,
-        parent=self,
-        mutable=self.mutable,
-        path=self.path + (name,),
-        debug_path=self.debug_path + (name,),
-        flags=self.flags,
+      {},
+      name=name,
+      rngs=rngs,
+      parent=self,
+      mutable=self.mutable,
+      path=self.path + (name,),
+      debug_path=self.debug_path + (name,),
+      flags=self.flags,
     )
     scope.rng_counters = rng_counters
     return scope
 
   def child(
-      self,
-      fn: Callable[..., Any],
-      name: Optional[str] = None,
-      prefix: Optional[str] = None,
-      named_call: bool = True,
-      **partial_kwargs,
+    self,
+    fn: Callable[..., Any],
+    name: Optional[str] = None,
+    prefix: Optional[str] = None,
+    named_call: bool = True,
+    **partial_kwargs,
   ) -> Callable[..., Any]:
     """Partially applies a child scope to fn.
 
@@ -813,9 +806,9 @@ class Scope:
     # See https://github.com/google/flax/issues/2022 for more details.
     def put(target, key, val):
       if (
-          key in target
-          and isinstance(target[key], dict)
-          and isinstance(val, Mapping)
+        key in target
+        and isinstance(target[key], dict)
+        and isinstance(val, Mapping)
       ):
         for k, v in val.items():
           put(target[key], k, v)
@@ -826,54 +819,54 @@ class Scope:
 
   @overload
   def variable(
-      self,
-      col: str,
-      name: str,
-      init_fn: Optional[Callable[..., T]] = None,
-      *init_args,
+    self,
+    col: str,
+    name: str,
+    init_fn: Optional[Callable[..., T]] = None,
+    *init_args,
   ) -> Variable[T]:
     ...
 
   @overload
   def variable(
-      self,
-      col: str,
-      name: str,
-      init_fn: Optional[Callable[..., T]] = None,
-      *init_args,
-      unbox: Literal[True],
+    self,
+    col: str,
+    name: str,
+    init_fn: Optional[Callable[..., T]] = None,
+    *init_args,
+    unbox: Literal[True],
   ) -> Variable[T]:
     ...
 
   @overload
   def variable(
-      self,
-      col: str,
-      name: str,
-      init_fn: Optional[Callable[..., T]] = None,
-      *init_args,
-      unbox: Literal[False],
+    self,
+    col: str,
+    name: str,
+    init_fn: Optional[Callable[..., T]] = None,
+    *init_args,
+    unbox: Literal[False],
   ) -> Variable[meta.AxisMetadata[T]]:
     ...
 
   @overload
   def variable(
-      self,
-      col: str,
-      name: str,
-      init_fn: Optional[Callable[..., T]] = None,
-      *init_args,
-      unbox: bool = True,
+    self,
+    col: str,
+    name: str,
+    init_fn: Optional[Callable[..., T]] = None,
+    *init_args,
+    unbox: bool = True,
   ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     ...
 
   def variable(
-      self,
-      col: str,
-      name: str,  # pylint: disable=keyword-arg-before-vararg
-      init_fn: Optional[Callable[..., T]] = None,
-      *init_args,
-      unbox: bool = True,
+    self,
+    col: str,
+    name: str,  # pylint: disable=keyword-arg-before-vararg
+    init_fn: Optional[Callable[..., T]] = None,
+    *init_args,
+    unbox: bool = True,
   ) -> Union[Variable[T], Variable[meta.AxisMetadata[T]]]:
     """Creates a variable if it doesn't exist yet in this scope and returns it.
 
@@ -900,8 +893,8 @@ class Scope:
       self.put_variable(col, name, init_value)
     # cast to make static analyzers happy
     return cast(
-        Union[Variable[T], Variable[meta.AxisMetadata[T]]],
-        Variable(self, col, name, unbox=unbox),
+      Union[Variable[T], Variable[meta.AxisMetadata[T]]],
+      Variable(self, col, name, unbox=unbox),
     )
 
   @overload
@@ -910,32 +903,32 @@ class Scope:
 
   @overload
   def param(
-      self,
-      name: str,
-      init_fn: Callable[..., T],
-      *init_args,
-      unbox: Literal[True],
+    self,
+    name: str,
+    init_fn: Callable[..., T],
+    *init_args,
+    unbox: Literal[True],
   ) -> T:
     ...
 
   @overload
   def param(
-      self,
-      name: str,
-      init_fn: Callable[..., T],
-      *init_args,
-      unbox: Literal[False],
+    self,
+    name: str,
+    init_fn: Callable[..., T],
+    *init_args,
+    unbox: Literal[False],
   ) -> meta.AxisMetadata[T]:
     ...
 
   @overload
   def param(
-      self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
+    self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool
   ) -> Union[T, meta.AxisMetadata[T]]:
     ...
 
   def param(
-      self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
+    self, name: str, init_fn: Callable[..., T], *init_args, unbox: bool = True
   ) -> Union[T, meta.AxisMetadata[T]]:
     """Creates a parameter if it doesn't exist yet in this scope and returns it.
 
@@ -969,7 +962,7 @@ class Scope:
         # for inference to a half float type for example.
         if jnp.shape(val) != jnp.shape(abs_val):
           raise errors.ScopeParamShapeError(
-              name, self.path_text, jnp.shape(abs_val), jnp.shape(val)
+            name, self.path_text, jnp.shape(abs_val), jnp.shape(val)
           )
     else:
       if not self.is_mutable_collection('params'):
@@ -1007,10 +1000,10 @@ def _unfreeze_variables(variables, mutable):
 
 
 def bind(
-    variables: VariableDict,
-    rngs: Optional[RNGSequences] = None,
-    mutable: CollectionFilter = False,
-    flags: Optional[Mapping] = None,
+  variables: VariableDict,
+  rngs: Optional[RNGSequences] = None,
+  mutable: CollectionFilter = False,
+  flags: Optional[Mapping] = None,
 ):
   """Binds variables and rngs to a new ``Scope``.
 
@@ -1037,16 +1030,16 @@ def bind(
     raise errors.ApplyScopeInvalidVariablesTypeError()
   if rngs is not None and not _is_valid_rngs(rngs):
     raise errors.InvalidRngError(
-        'rngs should be a dictionary mapping strings to `jax.PRNGKey`.'
+      'rngs should be a dictionary mapping strings to `jax.PRNGKey`.'
     )
   new_variables = _unfreeze_variables(variables, mutable)
   return Scope(new_variables, rngs=rngs, mutable=mutable, flags=flags)
 
 
 def apply(
-    fn: Callable[..., Any],
-    mutable: CollectionFilter = False,
-    flags: Optional[Mapping] = None,
+  fn: Callable[..., Any],
+  mutable: CollectionFilter = False,
+  flags: Optional[Mapping] = None,
 ) -> Callable[..., Any]:
   """Functionalize a `Scope` function.
 
@@ -1061,21 +1054,21 @@ def apply(
 
   @functools.wraps(fn)
   def wrapper(
-      variables: VariableDict,
-      *args,
-      rngs: Optional[RNGSequences] = None,
-      **kwargs,
+    variables: VariableDict,
+    *args,
+    rngs: Optional[RNGSequences] = None,
+    **kwargs,
   ) -> Union[Any, Tuple[Any, Union[VariableDict, Dict[str, Any]]]]:
     # Try to detect if user accidentally passed {'params': {'params': ...}.
     if (
-        'params' in variables
-        and isinstance(variables['params'], (dict, FrozenDict))
-        and 'params' in variables['params']
+      'params' in variables
+      and isinstance(variables['params'], (dict, FrozenDict))
+      and 'params' in variables['params']
     ):
       raise errors.ApplyScopeInvalidVariablesStructureError(variables)
 
     with bind(
-        variables, rngs=rngs, mutable=mutable, flags=flags
+      variables, rngs=rngs, mutable=mutable, flags=flags
     ).temporary() as root:
       y = fn(root, *args, **kwargs)
     if mutable is not False:
@@ -1087,9 +1080,9 @@ def apply(
 
 
 def init(
-    fn: Callable[..., Any],
-    mutable: CollectionFilter = True,
-    flags: Optional[Mapping] = None,
+  fn: Callable[..., Any],
+  mutable: CollectionFilter = True,
+  flags: Optional[Mapping] = None,
 ) -> Callable[..., Any]:
   """Functionalize a `Scope` function for initialization.
 
@@ -1106,24 +1099,24 @@ def init(
   def wrapper(rngs, *args, **kwargs) -> Tuple[Any, VariableDict]:
     if not _is_valid_rng(rngs) and not _is_valid_rngs(rngs):
       raise ValueError(
-          'First argument passed to an init function should be a '
-          '`jax.PRNGKey` or a dictionary mapping strings to '
-          '`jax.PRNGKey`.'
+        'First argument passed to an init function should be a '
+        '`jax.PRNGKey` or a dictionary mapping strings to '
+        '`jax.PRNGKey`.'
       )
     if not isinstance(rngs, dict):
       rngs = {'params': rngs}
     init_flags = {**(flags if flags is not None else {}), 'initializing': True}
     return apply(fn, mutable=mutable, flags=init_flags)(
-        {}, *args, rngs=rngs, **kwargs
+      {}, *args, rngs=rngs, **kwargs
     )
 
   return wrapper
 
 
 def lazy_init(
-    fn: Callable[..., Any],
-    mutable: CollectionFilter = True,
-    flags: Optional[Mapping] = None,
+  fn: Callable[..., Any],
+  mutable: CollectionFilter = True,
+  flags: Optional[Mapping] = None,
 ) -> Callable[..., Any]:
   """Functionalizes a `Scope` function for lazy initialization.
 
@@ -1152,7 +1145,7 @@ def lazy_init(
     output and variables, the lazy init function only returns the variables.
   """
   return partial_eval.lazy_init(
-      lambda *args, **kwargs: init(fn, mutable, flags)(*args, **kwargs)[1]
+    lambda *args, **kwargs: init(fn, mutable, flags)(*args, **kwargs)[1]
   )
 
 
@@ -1199,7 +1192,7 @@ def _is_valid_rng(rng: Array):
 
   # Handle old-style raw PRNG keys
   expected_rng = jax.eval_shape(
-      lambda s: jax.random.key_data(jax.random.key(s)), 0
+    lambda s: jax.random.key_data(jax.random.key(s)), 0
   )
   if (rng.shape, rng.dtype) != (expected_rng.shape, expected_rng.dtype):
     return False

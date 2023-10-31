@@ -15,11 +15,12 @@
 """Frozen Dictionary."""
 
 import collections
-from typing import Any, Dict, Hashable, Mapping, Tuple, TypeVar, Union
 from types import MappingProxyType
+from typing import Any, Dict, Hashable, Mapping, Tuple, TypeVar, Union
+
+import jax
 
 from flax import serialization
-import jax
 
 
 class FrozenKeysView(collections.abc.KeysView):
@@ -113,7 +114,7 @@ class FrozenDict(Mapping[K, V]):
     return self._hash
 
   def copy(
-      self, add_or_replace: Mapping[K, V] = MappingProxyType({})
+    self, add_or_replace: Mapping[K, V] = MappingProxyType({})
   ) -> 'FrozenDict[K, V]':
     """Create a new FrozenDict with additional or replaced entries."""
     return type(self)({**self, **unfreeze(add_or_replace)})  # type: ignore[arg-type]
@@ -162,7 +163,7 @@ class FrozenDict(Mapping[K, V]):
     """
     sorted_keys = sorted(self._dict)
     return tuple(
-        [(jax.tree_util.DictKey(k), self._dict[k]) for k in sorted_keys]
+      [(jax.tree_util.DictKey(k), self._dict[k]) for k in sorted_keys]
     ), tuple(sorted_keys)
 
   @classmethod
@@ -225,10 +226,8 @@ def unfreeze(x: Union[FrozenDict, Dict[str, Any]]) -> Dict[Any, Any]:
 
 
 def copy(
-    x: Union[FrozenDict, Dict[str, Any]],
-    add_or_replace: Union[FrozenDict[str, Any], Dict[str, Any]] = FrozenDict(
-        {}
-    ),
+  x: Union[FrozenDict, Dict[str, Any]],
+  add_or_replace: Union[FrozenDict[str, Any], Dict[str, Any]] = FrozenDict({}),
 ) -> Union[FrozenDict, Dict[str, Any]]:
   """Create a new dict with additional and/or replaced entries. This is a utility
   function that can act on either a FrozenDict or regular dict and mimics the
@@ -255,7 +254,7 @@ def copy(
 
 
 def pop(
-    x: Union[FrozenDict, Dict[str, Any]], key: str
+  x: Union[FrozenDict, Dict[str, Any]], key: str
 ) -> Tuple[Union[FrozenDict, Dict[str, Any]], Any]:
   """Create a new dict where one entry is removed. This is a utility
   function that can act on either a FrozenDict or regular dict and
@@ -320,19 +319,19 @@ def _restore_frozen_dict(xs, states):
   diff = set(map(str, xs.keys())).difference(states.keys())
   if diff:
     raise ValueError(
-        'The target dict keys and state dict keys do not match, target dict'
-        f' contains keys {diff} which are not present in state dict at path'
-        f' {serialization.current_path()}'
+      'The target dict keys and state dict keys do not match, target dict'
+      f' contains keys {diff} which are not present in state dict at path'
+      f' {serialization.current_path()}'
     )
 
   return FrozenDict(
-      {
-          key: serialization.from_state_dict(value, states[key], name=key)
-          for key, value in xs.items()
-      }
+    {
+      key: serialization.from_state_dict(value, states[key], name=key)
+      for key, value in xs.items()
+    }
   )
 
 
 serialization.register_serialization_state(
-    FrozenDict, _frozen_dict_state_dict, _restore_frozen_dict
+  FrozenDict, _frozen_dict_state_dict, _restore_frozen_dict
 )

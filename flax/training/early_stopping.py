@@ -15,6 +15,7 @@
 """Early stopping."""
 
 import math
+
 from flax import struct
 
 
@@ -56,7 +57,10 @@ class EarlyStopping(struct.PyTreeNode):
 
   def reset(self):
     return self.replace(
-        best_metric=float('inf'), patience_count=0, should_stop=False, has_improved=False
+      best_metric=float('inf'),
+      patience_count=0,
+      should_stop=False,
+      has_improved=False,
     )
 
   def update(self, metric):
@@ -69,12 +73,15 @@ class EarlyStopping(struct.PyTreeNode):
     """
 
     if (
-        math.isinf(self.best_metric)
-        or self.best_metric - metric > self.min_delta
+      math.isinf(self.best_metric) or self.best_metric - metric > self.min_delta
     ):
-      return self.replace(best_metric=metric, patience_count=0, has_improved=True)
+      return self.replace(
+        best_metric=metric, patience_count=0, has_improved=True
+      )
     else:
       should_stop = self.patience_count >= self.patience or self.should_stop
       return self.replace(
-          patience_count=self.patience_count + 1, should_stop=should_stop, has_improved=False
+        patience_count=self.patience_count + 1,
+        should_stop=should_stop,
+        has_improved=False,
       )

@@ -16,13 +16,12 @@ import json
 import os
 from datetime import datetime
 from typing import Callable, List
-from absl import app, flags
 
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import pandas as pd
 import requests
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-
+from absl import app, flags
 
 token = os.environ['GITHUB_TOKEN']
 endpoint = r'https://api.github.com/graphql'
@@ -76,7 +75,7 @@ def send_query(query, query_type, cursor=None):
   # directly or manually adding more query_types to the set
   if query_type not in {'issues', 'pullRequests'}:
     raise ValueError(
-        "Only 'issues' and 'pullRequests' queries are currently supported"
+      "Only 'issues' and 'pullRequests' queries are currently supported"
     )
   # TODO: Generalize this
   # WARNING: The cursor injection depends on the specific structure of the
@@ -162,7 +161,7 @@ class GithubGrabber:
 
   def load_query(self):
     self.query = load_query_from_file(
-        self.query_fname, self.repo_owner, self.repo_name
+      self.query_fname, self.repo_owner, self.repo_name
     )
 
   def get(self):
@@ -196,10 +195,10 @@ def _get_issues_features(issues):
         time_issue_closed = _to_datetime(event['createdAt'])
 
     yield {
-        'created_at': created_at,
-        'time_labeled_or_converted': time_labeled_or_converted,
-        'time_issue_closed': time_issue_closed,
-        'issue_closed': issue['state'] == 'CLOSED',
+      'created_at': created_at,
+      'time_labeled_or_converted': time_labeled_or_converted,
+      'time_issue_closed': time_issue_closed,
+      'issue_closed': issue['state'] == 'CLOSED',
     }
 
 
@@ -221,15 +220,15 @@ def _get_pr_features(prs):
       event = event['node']
 
       if (
-          time_labeled_or_assigned is None
-          and event['__typename'] == 'LabeledEvent'
-          and 'cla:' not in event['label']['name']
+        time_labeled_or_assigned is None
+        and event['__typename'] == 'LabeledEvent'
+        and 'cla:' not in event['label']['name']
       ):
         time_labeled_or_assigned = _to_datetime(event['createdAt'])
 
       if (
-          time_labeled_or_assigned is None
-          and event['__typename'] == 'AssignedEvent'
+        time_labeled_or_assigned is None
+        and event['__typename'] == 'AssignedEvent'
       ):
         time_labeled_or_assigned = _to_datetime(event['createdAt'])
 
@@ -240,12 +239,12 @@ def _get_pr_features(prs):
         ready_for_review_at = _to_datetime(event['createdAt'])
 
     yield {
-        'created_at': created_at,
-        'ready_for_review_at': ready_for_review_at,
-        'time_labeled_or_assigned': time_labeled_or_assigned,
-        'time_merged_or_closed': time_merged_or_closed,
-        'time_review': time_review,
-        'pr_closed': pr['state'] != 'OPEN',
+      'created_at': created_at,
+      'ready_for_review_at': ready_for_review_at,
+      'time_labeled_or_assigned': time_labeled_or_assigned,
+      'time_merged_or_closed': time_merged_or_closed,
+      'time_review': time_review,
+      'pr_closed': pr['state'] != 'OPEN',
     }
 
 
@@ -266,14 +265,14 @@ def _shift_n_months(date: datetime, n: int) -> datetime:
 
 
 def _rolling_window(
-    df: pd.DataFrame,
-    f: Callable[[pd.DataFrame], pd.Series],
-    window_size: int = 6,
-    step: int = 1,
+  df: pd.DataFrame,
+  f: Callable[[pd.DataFrame], pd.Series],
+  window_size: int = 6,
+  step: int = 1,
 ) -> pd.DataFrame:
   # start of month of the first issue
   start: datetime = df.iloc[0]['created_at'].replace(
-      day=1, hour=0, minute=0, second=0, microsecond=0
+    day=1, hour=0, minute=0, second=0, microsecond=0
   )
   end = _shift_n_months(start, window_size)
 
@@ -296,17 +295,21 @@ def _rolling_window(
 
 
 def _process_prs(df: pd.DataFrame) -> pd.Series:
-  return pd.Series({
+  return pd.Series(
+    {
       'pr_response_time': df['pr_response_time'].dt.days.mean(),
       'pr_resolution_time': df['pr_resolution_time'].dt.days.mean(),
-  })
+    }
+  )
 
 
 def _process_issues(df: pd.DataFrame) -> pd.Series:
-  return pd.Series({
+  return pd.Series(
+    {
       'issue_response_time': df['issue_response_time'].dt.days.mean(),
       'issue_resolution_time': df['issue_resolution_time'].dt.days.mean(),
-  })
+    }
+  )
 
 
 # -----------------------------------------------------------------------------
@@ -323,40 +326,40 @@ def main(_):
 
   # Download issue data
   issues = GithubGrabber(
-      '.github/analytics/issue_activity_since_date.gql',
-      'issues',
-      repo_owner=repo_owner,
-      repo_name=repo_name,
+    '.github/analytics/issue_activity_since_date.gql',
+    'issues',
+    repo_owner=repo_owner,
+    repo_name=repo_name,
   )
   issues.get()
 
   df_issues = df_issues0 = pd.DataFrame(
-      list(_get_issues_features(issues.raw_data))
+    list(_get_issues_features(issues.raw_data))
   )
   df_issues['issue_response_time'] = (
-      df_issues['time_labeled_or_converted'] - df_issues['created_at']
+    df_issues['time_labeled_or_converted'] - df_issues['created_at']
   )
   df_issues['issue_resolution_time'] = (
-      df_issues['time_issue_closed'] - df_issues['created_at']
+    df_issues['time_issue_closed'] - df_issues['created_at']
   )
 
   df_issues = _rolling_window(df_issues, _process_issues)
 
   prs = GithubGrabber(
-      '.github/analytics/pr_data_query.gql',
-      'pullRequests',
-      repo_owner=repo_owner,
-      repo_name=repo_name,
+    '.github/analytics/pr_data_query.gql',
+    'pullRequests',
+    repo_owner=repo_owner,
+    repo_name=repo_name,
   )
   prs.get()
 
   df_prs = df_prs0 = pd.DataFrame(list(_get_pr_features(prs.raw_data)))
   time_response = df_prs[['time_labeled_or_assigned', 'time_review']].min(
-      axis=1
+    axis=1
   )
   df_prs['pr_response_time'] = time_response - df_prs['ready_for_review_at']
   df_prs['pr_resolution_time'] = (
-      df_prs['time_merged_or_closed'] - df_prs['ready_for_review_at']
+    df_prs['time_merged_or_closed'] - df_prs['ready_for_review_at']
   )
 
   df_prs = _rolling_window(df_prs, _process_prs)

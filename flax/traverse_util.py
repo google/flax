@@ -43,10 +43,11 @@ returns a copy of the data including the provided updates.
 import abc
 import copy
 import dataclasses
-from typing import Any, Callable, Tuple
 import warnings
+from typing import Any, Callable, Tuple
 
 import jax
+
 import flax
 from flax.core.scope import VariableDict
 
@@ -99,7 +100,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
     The flattened dictionary.
   """
   assert isinstance(
-      xs, (flax.core.FrozenDict, dict)
+    xs, (flax.core.FrozenDict, dict)
   ), f'expected (frozen)dict; got {type(xs)}'
 
   def _key(path):
@@ -109,7 +110,7 @@ def flatten_dict(xs, keep_empty_nodes=False, is_leaf=None, sep=None):
 
   def _flatten(xs, prefix):
     if not isinstance(xs, (flax.core.FrozenDict, dict)) or (
-        is_leaf and is_leaf(prefix, xs)
+      is_leaf and is_leaf(prefix, xs)
     ):
       return {_key(prefix): xs}
     result = {}
@@ -168,7 +169,7 @@ def unflatten_dict(xs, sep=None):
 
 
 def path_aware_map(
-    f: Callable[[Path, Any], Any], nested_dict: VariableDict
+  f: Callable[[Path, Any], Any], nested_dict: VariableDict
 ) -> VariableDict:
   """A map function that operates over nested dictionary structures while taking
   the path to each leaf into account.
@@ -193,7 +194,7 @@ def path_aware_map(
   """
   flat = flatten_dict(nested_dict, keep_empty_nodes=True)
   return unflatten_dict(
-      {k: f(k, v) if v is not empty_node else v for k, v in flat.items()}
+    {k: f(k, v) if v is not empty_node else v for k, v in flat.items()}
   )
 
 
@@ -203,11 +204,11 @@ class Traversal(abc.ABC):
   def __new__(cls, *args, **kwargs):
     # Must override __new__ instead of __init__ since this is an ABC
     warnings.warn(
-        '`flax.traverse_util.Traversal` will be deprecated. If you are using '
-        'it for `flax.optim`, use `optax` instead. Refer to the update guide '
-        'https://flax.readthedocs.io/en/latest/guides/optax_update_guide.html '
-        'for detailed instructions.',
-        DeprecationWarning,
+      '`flax.traverse_util.Traversal` will be deprecated. If you are using '
+      'it for `flax.optim`, use `optax` instead. Refer to the update guide '
+      'https://flax.readthedocs.io/en/latest/guides/optax_update_guide.html '
+      'for detailed instructions.',
+      DeprecationWarning,
     )
     return super().__new__(cls)
 
@@ -389,8 +390,7 @@ class TraverseItem(Traversal):
       indices = set(range(*sl.indices(len(inputs))))
 
       args = [
-          fn(inputs[i]) if i in indices else inputs[i]
-          for i in range(len(inputs))
+        fn(inputs[i]) if i in indices else inputs[i] for i in range(len(inputs))
       ]
       if _is_namedtuple(ty):
         return ty(*args)
@@ -441,8 +441,8 @@ def _get_params_dict(inputs):
     return flax.core.unfreeze(inputs)
   else:
     raise ValueError(
-        'Can only traverse a flax Model instance or a nested dict, not '
-        f'{type(inputs)}'
+      'Can only traverse a flax Model instance or a nested dict, not '
+      f'{type(inputs)}'
     )
 
 

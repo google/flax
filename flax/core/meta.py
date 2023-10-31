@@ -25,11 +25,10 @@ import abc
 import functools
 from typing import Any, Callable, Dict, Generic, Optional, Tuple, TypeVar, Union
 
-from flax import errors
-from flax import struct
 import jax
 from jax.experimental import maps
 
+from flax import errors, struct
 
 A = TypeVar('A')
 B = TypeVar('B')
@@ -85,7 +84,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def add_axis(
-      self: TAxisMetadata, index: int, params: Dict[Any, Any]
+    self: TAxisMetadata, index: int, params: Dict[Any, Any]
   ) -> TAxisMetadata:
     """Adds a new axis to the axis metadata.
 
@@ -106,7 +105,7 @@ class AxisMetadata(Generic[A], metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def remove_axis(
-      self: TAxisMetadata, index: int, params: Dict[Any, Any]
+    self: TAxisMetadata, index: int, params: Dict[Any, Any]
   ) -> TAxisMetadata:
     """Removes an axis from the axis metadata.
 
@@ -240,7 +239,7 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
   value: Any
   names: LogicalNames = struct.field(pytree_node=False)
   mesh: Optional[jax.sharding.Mesh] = struct.field(
-      default=None, pytree_node=False
+    default=None, pytree_node=False
   )
 
   def unbox(self, apply_constraint=True) -> A:
@@ -286,9 +285,9 @@ class Partitioned(struct.PyTreeNode, AxisMetadata[A]):
 
 
 def with_partitioning(
-    fn: Callable[..., Any],
-    names: LogicalNames,
-    mesh: Optional[jax.sharding.Mesh] = None,
+  fn: Callable[..., Any],
+  names: LogicalNames,
+  mesh: Optional[jax.sharding.Mesh] = None,
 ) -> Callable[..., Partitioned[Any]]:
   """Wraps a function's return value with Partitioned.
 

@@ -15,6 +15,7 @@
 """Flax specific traceback_util functions."""
 
 from jax._src import traceback_util as jax_traceback_util
+
 from flax import config
 
 # pylint: disable=protected-access

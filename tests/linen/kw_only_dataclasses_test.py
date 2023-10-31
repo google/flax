@@ -16,13 +16,13 @@
 
 import dataclasses
 import inspect
+
 from absl.testing import absltest
 
 from flax.linen import kw_only_dataclasses
 
 
 class KwOnlyDataclassesTest(absltest.TestCase):
-
   def test_kwonly_args_moved_to_end(self):
     @kw_only_dataclasses.dataclass
     class TestClass:
@@ -102,7 +102,7 @@ class KwOnlyDataclassesTest(absltest.TestCase):
 
     value = C(4, 'foo')  # pylint: disable=too-many-function-args
     self.assertDictEqual(
-        dataclasses.asdict(value), dict(name='foo', size=4, x=2, y=3)
+      dataclasses.asdict(value), dict(name='foo', size=4, x=2, y=3)
     )
 
   def test_kwonly_marker(self):

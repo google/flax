@@ -17,13 +17,10 @@
 from typing import Optional, Sequence
 
 import jax
-
-from flax.linen.module import compact
-from flax.linen.module import merge_param
-from flax.linen.module import Module
-from jax import lax
-from jax import random
 import jax.numpy as jnp
+from jax import lax, random
+
+from flax.linen.module import Module, compact, merge_param
 
 KeyArray = jax.Array
 
@@ -62,10 +59,10 @@ class Dropout(Module):
 
   @compact
   def __call__(
-      self,
-      inputs,
-      deterministic: Optional[bool] = None,
-      rng: Optional[KeyArray] = None,
+    self,
+    inputs,
+    deterministic: Optional[bool] = None,
+    rng: Optional[KeyArray] = None,
   ):
     """Applies a random dropout mask to the input.
 
@@ -81,7 +78,7 @@ class Dropout(Module):
       The masked inputs reweighted to preserve mean.
     """
     deterministic = merge_param(
-        'deterministic', self.deterministic, deterministic
+      'deterministic', self.deterministic, deterministic
     )
 
     if (self.rate == 0.0) or deterministic:

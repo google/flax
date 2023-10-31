@@ -14,22 +14,18 @@
 
 """Tests for flax.linen.activation."""
 
-from absl.testing import absltest
-from absl.testing import parameterized
+import jax
+import jax.numpy as jnp
+from absl.testing import absltest, parameterized
+from jax import random
 
 from flax import linen as nn
-
-import jax
-from jax import random
-import jax.numpy as jnp
-
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
 
 class ActivationTest(parameterized.TestCase):
-
   def test_prelu(self):
     rng = random.key(0)
     x = jnp.ones((4, 6, 5))
