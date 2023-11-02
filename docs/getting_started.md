@@ -30,7 +30,7 @@ the network for image classification on the MNIST dataset.
 :id: bb81587e
 :tags: [skip-execution]
 
-!pip install -q flax
+!pip install -q flax>=0.7.5
 ```
 
 +++ {"id": "b529fbef"}
