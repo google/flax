@@ -481,10 +481,10 @@ For more information, please see the design note on `Lifted transformations`_.
 TODO: Given an example of ``jax.scan_in_dim`` (pre-Linen) vs. ``nn.scan``
 (Linen).
 
-.. _`Should I use setup or nn.compact?`: https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html
+.. _`Should I use setup or nn.compact?`: https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/setup_or_nncompact.html
 .. _`Variables documentation`: https://flax.readthedocs.io/en/latest/api_reference/flax.linen/variable.html
 .. _`TrainState`: https://flax.readthedocs.io/en/latest/flax.training.html#train-state
-.. _`Upgrading my codebase to Optax`: https://flax.readthedocs.io/en/latest/guides/optax_update_guide.html
+.. _`Upgrading my codebase to Optax`: https://flax.readthedocs.io/en/latest/guides/converting_and_upgrading/optax_update_guide.html
 .. _`Lifted transformations`: https://flax.readthedocs.io/en/latest/developer_notes/lift.html
 
 

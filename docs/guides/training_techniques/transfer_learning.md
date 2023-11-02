@@ -44,7 +44,7 @@ Depending on your task, some of the content in this guide may be suboptimal. For
 
 ## Create a function for model loading
 
-To load a pre-trained classifier, for convenience first create a function that returns a [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics) and its pretrained variables.
+To load a pre-trained classifier, for convenience first create a function that returns a [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/flax_basics.html#module-basics) and its pretrained variables.
 
 In the code below, the `load_model` function uses HuggingFace's `FlaxCLIPVisionModel` model from the [Transformers](https://huggingface.co/docs/transformers/index) library and extracts a `FlaxCLIPModule` module.
 
@@ -79,7 +79,7 @@ vision_model, vision_model_vars = clip.bind(clip_variables).vision_model.unbind(
 
 ### Creating a classifier
 
-To create a classifier define a new Flax [`Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics) consisting of a `backbone` (the pretrained vision model) and a `head` (the classifier) submodules.
+To create a classifier define a new Flax [`Module`](https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/flax_basics.html#module-basics) consisting of a `backbone` (the pretrained vision model) and a `head` (the classifier) submodules.
 
 ```{code-cell} ipython3
 from typing import Callable

@@ -621,7 +621,7 @@ def save_checkpoint(
       all Flax checkpointing features will be migrated to Orbax, and starting to
       use an `orbax_checkpointer` is recommended. Please check out the
       checkpointing guide
-      (https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#save-checkpoints)
+      (https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#save-checkpoints)
       for how to use Orbax checkpointers.
 
   Returns:
@@ -642,14 +642,14 @@ def save_checkpoint(
     logging.info(
       'Using Orbax as backend to save Flax checkpoints. For potential'
       ' troubleshooting see:'
-      ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#orbax-as-backend-troubleshooting'
+      ' https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#orbax-as-backend-troubleshooting'
     )
     if jax.process_count() > 1:
       logging.warning(
         'Multiple JAX processes detected when calling single-process'
         ' `save_checkpoint`. Your devices will HANG if this function is only'
         ' called on process 0! Troubleshoot at:'
-        ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#if-your-devices-hang-when-writing-checkpoints'
+        ' https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#if-your-devices-hang-when-writing-checkpoints'
       )
 
     # Make sure any previous work is done before making file changes.
@@ -670,7 +670,7 @@ def save_checkpoint(
       raise ValueError(
         'Orbax backend only accept pytree as save target. To save singular'
         ' objects like numbers or Numpy arrays, checkout'
-        ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#if-you-don-t-save-pytrees'
+        ' https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#if-you-don-t-save-pytrees'
       )
 
     save_args = orbax_utils.save_args_from_target(target)
@@ -693,7 +693,7 @@ def save_checkpoint(
       'Flax Checkpointing will soon be deprecated in favor of Orbax'
       ' (https://github.com/google/orbax). Please refer to the Checkpoint'
       ' Upgrade Guide'
-      ' (https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html)'
+      ' (https://flax.readthedocs.io/en/latest/guides/converting_and_upgrading/orbax_upgrade_guide.html)'
       ' to self-migrate your code to ocp.'
     ),
     DeprecationWarning,
@@ -773,7 +773,7 @@ def save_checkpoint_multiprocess(
       future, all Flax checkpointing features will be migrated to Orbax, and
       starting to use an `orbax_checkpointer` is recommended. Please check out
       the checkpointing guide
-      (https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#save-checkpoints)
+      (https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#save-checkpoints)
       for how to use Orbax checkpointers.
 
   Returns:
@@ -798,7 +798,7 @@ def save_checkpoint_multiprocess(
     logging.info(
       'Using Orbax as backend to save Flax checkpoints. For potential'
       ' troubleshooting see:'
-      ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#orbax-as-backend-troubleshooting'
+      ' https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#orbax-as-backend-troubleshooting'
     )
     # Make sure any previous work is done before making file changes.
     if orbax_checkpointer and isinstance(
@@ -819,7 +819,7 @@ def save_checkpoint_multiprocess(
       raise ValueError(
         'Orbax backend only accept pytree as save target. To save singular'
         ' objects like numbers or Numpy arrays, checkout'
-        ' https://flax.readthedocs.io/en/latest/guides/use_checkpointing.html#if-you-don-t-save-pytrees'
+        ' https://flax.readthedocs.io/en/latest/guides/training_techniques/use_checkpointing.html#if-you-don-t-save-pytrees'
       )
 
     if process_index() == 0:
@@ -841,7 +841,7 @@ def save_checkpoint_multiprocess(
       'Flax Checkpointing will soon be deprecated in favor of Orbax'
       ' (https://github.com/google/orbax). Please refer to the Checkpoint'
       ' Upgrade Guide'
-      ' (https://flax.readthedocs.io/en/latest/guides/orbax_upgrade_guide.html)'
+      ' (https://flax.readthedocs.io/en/latest/guides/converting_and_upgrading/orbax_upgrade_guide.html)'
       ' to self-migrate your code to ocp.'
     ),
     DeprecationWarning,

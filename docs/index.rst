@@ -143,9 +143,9 @@ Learn more
    .. grid-item::
       :columns: 6 6 6 4
 
-      .. card:: :material-regular:`rocket_launch;2em` Getting started
+      .. card:: :material-regular:`rocket_launch;2em` Quickstart
          :class-card: sd-text-black sd-bg-light
-         :link: getting_started.html
+         :link: quick_start.html
 
    .. grid-item::
       :columns: 6 6 6 4
@@ -315,9 +315,9 @@ Notable examples in Flax include:
    :maxdepth: 2
 
    Quick start <getting_started>
-   guides/flax_basics
+   guides/flax_fundamentals/flax_basics
    guides/index
-   examples
+   examples/index
    glossary
    faq
    developer_notes/index

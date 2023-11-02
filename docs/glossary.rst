@@ -24,7 +24,7 @@ For additional terms, refer to the `Jax glossary <https://jax.readthedocs.io/en/
       whereas modules defining a :meth:`setup() <flax.linen.Module.setup>` method
       (usually but not always with multiple callable methods)
       are referred to as “setup-style modules”. To learn more, refer to the
-      `setup vs compact guide <https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html>`__.
+      `setup vs compact guide <https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/setup_or_nncompact.html>`__.
 
     `Folding in <https://jax.readthedocs.io/en/latest/_autosummary/jax.random.fold_in.html>`__
       Generating a new PRNG key given an input PRNG key and integer. Typically used when you want to

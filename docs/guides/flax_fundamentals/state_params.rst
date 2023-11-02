@@ -1,6 +1,3 @@
-.. image:: https://colab.research.google.com/assets/colab-badge.svg
-   :target: https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/state_params.ipynb
-
 Managing Parameters and State
 =============================
 

@@ -20,7 +20,7 @@ To take the derivative(s) or gradient(s) of the output with respect to a hidden/
 For full examples and detailed documentation, go to:
 
 - The :meth:`flax.linen.Module.perturb` API docs
-- The `Extracting gradients of intermediate values <https://flax.readthedocs.io/en/latest/guides/extracting_intermediates.html#extracting-gradients-of-intermediate-values>`_ guide
+- The `Extracting gradients of intermediate values <https://flax.readthedocs.io/en/latest/guides/model_inspection/extracting_intermediates.html#extracting-gradients-of-intermediate-values>`_ guide
 - `Flax GitHub Discussions #1152 <https://github.com/google/flax/discussions/1152>`__
 
 Is Flax Linen :code:`remat_scan()` the same as :code:`scan(remat(...))`?

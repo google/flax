@@ -10,7 +10,7 @@ The Flax Module lifecycle
   import jax
 
 
-This design note is intended for users who are already familiar with Flax Linen Modules but want to understand more about the design principles behind the abstraction. This note should give you a good understanding of the assumptions and guarantees the Module API is built upon. If you have no practical experience with Modules yet, check out the `Getting started notebook <https://flax.readthedocs.io/en/latest/getting_started.html>`_.
+This design note is intended for users who are already familiar with Flax Linen Modules but want to understand more about the design principles behind the abstraction. This note should give you a good understanding of the assumptions and guarantees the Module API is built upon. If you have no practical experience with Modules yet, check out the `Quickstart guide <https://flax.readthedocs.io/en/latest/quick_start.html>`_.
 
 Flax Linen Modules offer a Pythonic abstraction on top of Flax core. The `Module <https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html>`_ abstraction allows you to create classes that have state, parameters and randomness on top of JAX. This is a practical guide to the design and behavior of the ``Module`` class. By the end, you should feel comfortable to go off the beaten track and use Modules in new ways.
 
@@ -130,7 +130,7 @@ Linen provides an alternative API for defining modules more compactly. This is e
       return nn.Dense(self.out_size)(h)
 
 
-A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module does. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a concise overview. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html>`_ for a practical guide on deciding between setup and compact.
+A compact ``Module`` is similar in spirit to a function. It offers a concise notation and restricts external interaction to the inputs and return values of the function. In this case the concise notation might make it easier for others to understand what the Module does. There is no need to jump back and forth between the ``setup`` and ``__call__`` method to understand what the submodules are doing. Instead, simply reading the ``__call__`` method from top to bottom once should provide a concise overview. This can make a significant difference if you are implementing complex Modules with many hyperparameters. See `setup or compact <https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/setup_or_nncompact.html>`_ for a practical guide on deciding between setup and compact.
 
 Another benefit of defining submodules and/or variables inline is that you can add arguments to your method when constructing variables. The most common example of this is using shape information to determine the shape of a parameter like this:
 

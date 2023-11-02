@@ -1,4 +1,4 @@
-Data preprocesing
+Data preprocessing
 =================
 
 .. toctree::

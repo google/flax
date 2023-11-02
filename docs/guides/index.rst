@@ -4,10 +4,10 @@ Guides
 .. toctree::
    :maxdepth: 2
 
-   index_flax_fundamentals
-   index_data_preprocessing
-   index_training_techniques
-   index_parallel_training
-   index_model_inspection
-   index_converting_and_upgrading
-   The Sharp Bits <../notebooks/flax_sharp_bits>
+   flax_fundamentals/index
+   data_preprocessing/index
+   training_techniques/index
+   parallel_training/index
+   model_inspection/index
+   converting_and_upgrading/index
+   The Sharp Bits <flax_sharp_bits>

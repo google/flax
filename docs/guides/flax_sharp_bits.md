@@ -10,8 +10,6 @@ jupytext:
 
 # 🔪 Flax - The Sharp Bits 🔪
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/docs/notebooks/flax_sharp_bits.ipynb)
-
 Flax exposes the full power of JAX. And just like when using JAX, there are certain _["sharp bits"](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html)_ you may experience when working with Flax. This evolving document is designed to assist you with them.
 
 First, install and/or update Flax:
@@ -26,10 +24,10 @@ First, install and/or update Flax:
 
 ### TL;DR
 
-When working on a model with dropout (subclassed from [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics)), add the `'dropout'` PRNGkey only during the forward pass.
+When working on a model with dropout (subclassed from [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/flax_basics.html#module-basics)), add the `'dropout'` PRNGkey only during the forward pass.
 
 1. Start with [`jax.random.split()`](https://jax.readthedocs.io/en/latest/_autosummary/jax.random.split.html#jax-random-split) to explicitly create PRNG keys for `'params'` and `'dropout'`.
-2. Add the [`flax.linen.Dropout`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.Dropout.html#flax.linen.Dropout) layer(s) to your model (subclassed from Flax [`Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics)).
+2. Add the [`flax.linen.Dropout`](https://flax.readthedocs.io/en/latest/api_reference/_autosummary/flax.linen.Dropout.html#flax.linen.Dropout) layer(s) to your model (subclassed from Flax [`Module`](https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/flax_basics.html#module-basics)).
 3. When initializing the model ([`flax.linen.init()`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/init_apply.html)), there's no need to pass in an extra `'dropout'` PRNG key—just the `'params'` key like in a "simpler" model.
 4. During the forward pass with [`flax.linen.apply()`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/init_apply.html), pass in `rngs={'dropout': dropout_key}`.
 
@@ -47,7 +45,7 @@ The [dropout](https://jmlr.org/papers/volume15/srivastava14a/srivastava14a.pdf) 
 
 > Note: Recall that JAX has an explicit way of giving you PRNG keys: you can fork the main PRNG state (such as `key = jax.random.key(seed=0)`) into multiple new PRNG keys with `key, subkey = jax.random.split(key)`. Refresh your memory in [🔪 JAX - The Sharp Bits 🔪 Randomness and PRNG keys](https://jax.readthedocs.io/en/latest/notebooks/Common_Gotchas_in_JAX.html#random-numbers).
 
-Flax provides an _implicit_ way of handling PRNG key streams via [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_basics.html#module-basics)'s [`flax.linen.Module.make_rng`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.make_rng) helper function. It allows the code in Flax `Module`s (or its sub-`Module`s) to "pull PRNG keys". `make_rng` guarantees to provide a unique key each time you call it.
+Flax provides an _implicit_ way of handling PRNG key streams via [Flax `Module`](https://flax.readthedocs.io/en/latest/guides/flax_fundamentals/flax_basics.html#module-basics)'s [`flax.linen.Module.make_rng`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.make_rng) helper function. It allows the code in Flax `Module`s (or its sub-`Module`s) to "pull PRNG keys". `make_rng` guarantees to provide a unique key each time you call it.
 
 > Note: Recall that [`flax.linen.Module`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) is the base class for all neural network modules. All layers and models are subclassed from it.
 
