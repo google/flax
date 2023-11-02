@@ -277,7 +277,7 @@ LaxPadding = Union[str, Sequence[Tuple[int, int]]]
 
 
 def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
-  """ "Canonicalizes conv padding to a jax.lax supported format."""
+  """Canonicalizes conv padding to a jax.lax supported format."""
   if isinstance(padding, str):
     return padding
   if isinstance(padding, int):
@@ -311,10 +311,10 @@ class _Conv(Module):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpreted as applying the same padding
-      in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
-      left-pad the convolution axis, resulting in same-sized output.
+      spatial dimension. A single int is interpreted as applying the same
+      padding in all dims and assign a single int in a sequence causes the same
+      padding to be used on both sides. `'CAUSAL'` padding for a 1D convolution
+      will left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of `inputs`
       (default: 1). Convolution with input dilation `d` is equivalent to
@@ -571,10 +571,10 @@ class Conv(_Conv):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpreted as applying the same padding
-      in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
-      left-pad the convolution axis, resulting in same-sized output.
+      spatial dimension. A single int is interpreted as applying the same
+      padding in all dims and assign a single int in a sequence causes the same
+      padding to be used on both sides. `'CAUSAL'` padding for a 1D convolution
+      will left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of `inputs`
       (default: 1). Convolution with input dilation `d` is equivalent to
@@ -612,10 +612,10 @@ class ConvLocal(_Conv):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpreted as applying the same padding
-      in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides. `'CAUSAL'` padding for a 1D convolution will
-      left-pad the convolution axis, resulting in same-sized output.
+      spatial dimension. A single int is interpreted as applying the same
+      padding in all dims and assign a single int in a sequence causes the same
+      padding to be used on both sides. `'CAUSAL'` padding for a 1D convolution
+      will left-pad the convolution axis, resulting in same-sized output.
     input_dilation: an integer or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of `inputs`
       (default: 1). Convolution with input dilation `d` is equivalent to
@@ -654,9 +654,9 @@ class ConvTranspose(Module):
     padding: either the string `'SAME'`, the string `'VALID'`, the string
       `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
       high)` integer pairs that give the padding to apply before and after each
-      spatial dimension. A single int is interpreted as applying the same padding
-      in all dims and assign a single int in a sequence causes the same padding
-      to be used on both sides.
+      spatial dimension. A single int is interpreted as applying the same
+      padding in all dims and assign a single int in a sequence causes the same
+      padding to be used on both sides.
     kernel_dilation: `None`, or a sequence of `n` integers, giving the
       dilation factor to apply in each spatial dimension of the convolution
       kernel. Convolution with kernel dilation is also known as 'atrous
@@ -800,7 +800,8 @@ class ConvTranspose(Module):
       if self.transpose_kernel:
         # If the kernel is transposed, the "+1" is put on the right to
         # mirror the regular convolution. If the same kernel parameters are used
-        # as for Conv, this layer then computes the proper transpose convolution.
+        # as for Conv, this layer then computes the proper transpose
+        # convolution.
         total_pad = [
             (size_diff // 2, (size_diff + 1) // 2) for size_diff in size_diffs
         ]
@@ -876,12 +877,11 @@ class Embed(Module):
     """
     if not jnp.issubdtype(inputs.dtype, jnp.integer):
       raise ValueError('Input type must be an integer or unsigned integer.')
-    # Use take because fancy indexing numpy arrays with JAX indices does not
-    # work correctly.
+
     (embedding,) = promote_dtype(
         self.embedding, dtype=self.dtype, inexact=False
     )
-    return jnp.take(embedding, inputs, axis=0)
+    return embedding[inputs]
 
   def attend(self, query: Array) -> Array:
     """Attend over the embedding using a query array.
