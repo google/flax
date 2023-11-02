@@ -14,16 +14,16 @@
 
 from typing import List
 
+import jax
+import jax.numpy as jnp
+import numpy as np
 from absl.testing import absltest
+from jax import random
+
 from flax import linen as nn
 from flax import struct
 from flax.core.scope import Array
 from flax.linen import summary
-import jax
-from jax import random
-import jax.numpy as jnp
-import numpy as np
-
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
@@ -33,7 +33,7 @@ CONSOLE_TEST_KWARGS = dict(force_terminal=False, no_color=True, width=10_000)
 
 def _get_shapes(pytree):
   return jax.tree_util.tree_map(
-      lambda x: x.shape if hasattr(x, "shape") else x, pytree
+    lambda x: x.shape if hasattr(x, 'shape') else x, pytree
   )
 
 
@@ -57,7 +57,7 @@ class ConvBlock(nn.Module):
     x = self.conv(x)
 
     if self.test_sow:
-      self.sow("intermediates", "INTERM", x)
+      self.sow('intermediates', 'INTERM', x)
 
     x = self.bn(x, use_running_average=not training)
     x = self.dropout(x, deterministic=not training)
@@ -68,7 +68,7 @@ class ConvBlock(nn.Module):
     x = self.conv(x)
 
     if self.test_sow:
-      self.sow("intermediates", "INTERM", x)
+      self.sow('intermediates', 'INTERM', x)
 
     x = self.bn(x, use_running_average=not training)
     x = self.dropout(x, deterministic=not training)
@@ -90,7 +90,7 @@ class CNN(nn.Module):
     x = x.mean(axis=(1, 2))
 
     if self.test_sow:
-      self.sow("intermediates", "INTERM", x)
+      self.sow('intermediates', 'INTERM', x)
 
     x = self.dense(x)
 
@@ -102,7 +102,7 @@ class CNN(nn.Module):
     x = x.mean(axis=(1, 2))
 
     if self.test_sow:
-      self.sow("intermediates", "INTERM", x)
+      self.sow('intermediates', 'INTERM', x)
 
     x = self.dense(x)
 
@@ -110,7 +110,6 @@ class CNN(nn.Module):
 
 
 class SummaryTest(absltest.TestCase):
-
   def test_module_summary(self):
     """
     This test creates a Table using `module_summary` and checks that it
@@ -124,16 +123,16 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     table = summary._get_module_table(
-        module,
-        depth=None,
-        show_repeated=True,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      module,
+      depth=None,
+      show_repeated=True,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )(
-        {"dropout": random.key(0), "params": random.key(1)},
-        x,
-        training=True,
-        mutable=True,
+      {'dropout': random.key(0), 'params': random.key(1)},
+      x,
+      training=True,
+      mutable=True,
     )
     # get values for inputs and outputs from their _ValueRepresentation
     for row in table:
@@ -146,61 +145,61 @@ class SummaryTest(absltest.TestCase):
     # check paths
     self.assertEqual(table[0].path, ())
 
-    self.assertEqual(table[1].path, ("block1",))
-    self.assertEqual(table[2].path, ("block1", "conv"))
-    self.assertEqual(table[3].path, ("block1", "bn"))
-    self.assertEqual(table[4].path, ("block1", "dropout"))
+    self.assertEqual(table[1].path, ('block1',))
+    self.assertEqual(table[2].path, ('block1', 'conv'))
+    self.assertEqual(table[3].path, ('block1', 'bn'))
+    self.assertEqual(table[4].path, ('block1', 'dropout'))
 
-    self.assertEqual(table[5].path, ("block2",))
-    self.assertEqual(table[6].path, ("block2", "conv"))
-    self.assertEqual(table[7].path, ("block2", "bn"))
-    self.assertEqual(table[8].path, ("block2", "dropout"))
+    self.assertEqual(table[5].path, ('block2',))
+    self.assertEqual(table[6].path, ('block2', 'conv'))
+    self.assertEqual(table[7].path, ('block2', 'bn'))
+    self.assertEqual(table[8].path, ('block2', 'dropout'))
 
-    self.assertEqual(table[9].path, ("dense",))
+    self.assertEqual(table[9].path, ('dense',))
 
     # check outputs shapes
     self.assertEqual(
-        (table[0].inputs[0].shape, table[0].inputs[1]),
-        (x.shape, dict(training=True)),
+      (table[0].inputs[0].shape, table[0].inputs[1]),
+      (x.shape, dict(training=True)),
     )
     self.assertEqual(
-        _get_shapes(table[0].outputs),
-        ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
+      _get_shapes(table[0].outputs),
+      ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
     )
 
     self.assertEqual(
-        _get_shapes(table[1].inputs),
-        ((batch_size, 28, 28, 1), {"training": True}),
+      _get_shapes(table[1].inputs),
+      ((batch_size, 28, 28, 1), {'training': True}),
     )
     self.assertEqual(table[1].outputs.shape, (batch_size, 28, 28, 32))
     self.assertEqual(table[2].inputs.shape, (batch_size, 28, 28, 1))
     self.assertEqual(table[2].outputs.shape, (batch_size, 28, 28, 32))
     self.assertEqual(
-        _get_shapes(table[3].inputs),
-        ((batch_size, 28, 28, 32), {"use_running_average": False}),
+      _get_shapes(table[3].inputs),
+      ((batch_size, 28, 28, 32), {'use_running_average': False}),
     )
     self.assertEqual(table[3].outputs.shape, (batch_size, 28, 28, 32))
     self.assertEqual(
-        _get_shapes(table[4].inputs),
-        ((batch_size, 28, 28, 32), {"deterministic": False}),
+      _get_shapes(table[4].inputs),
+      ((batch_size, 28, 28, 32), {'deterministic': False}),
     )
     self.assertEqual(table[4].outputs.shape, (batch_size, 28, 28, 32))
 
     self.assertEqual(
-        _get_shapes(table[5].inputs),
-        ((batch_size, 28, 28, 32), {"training": True}),
+      _get_shapes(table[5].inputs),
+      ((batch_size, 28, 28, 32), {'training': True}),
     )
     self.assertEqual(table[5].outputs.shape, (batch_size, 28, 28, 64))
     self.assertEqual(table[6].inputs.shape, (batch_size, 28, 28, 32))
     self.assertEqual(table[6].outputs.shape, (batch_size, 28, 28, 64))
     self.assertEqual(
-        _get_shapes(table[7].inputs),
-        ((batch_size, 28, 28, 64), {"use_running_average": False}),
+      _get_shapes(table[7].inputs),
+      ((batch_size, 28, 28, 64), {'use_running_average': False}),
     )
     self.assertEqual(table[7].outputs.shape, (batch_size, 28, 28, 64))
     self.assertEqual(
-        _get_shapes(table[8].inputs),
-        ((batch_size, 28, 28, 64), {"deterministic": False}),
+      _get_shapes(table[8].inputs),
+      ((batch_size, 28, 28, 64), {'deterministic': False}),
     )
     self.assertEqual(table[8].outputs.shape, (batch_size, 28, 28, 64))
 
@@ -210,8 +209,8 @@ class SummaryTest(absltest.TestCase):
     # check no summary is performed
     for row in table:
       self.assertEqual(
-          row.module_variables,
-          row.counted_variables,
+        row.module_variables,
+        row.counted_variables,
       )
 
     # Each module FLOPs >= sum of its submodule FLOPs.
@@ -238,16 +237,16 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     table = summary._get_module_table(
-        module,
-        depth=1,
-        show_repeated=True,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      module,
+      depth=1,
+      show_repeated=True,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )(
-        {"dropout": random.key(0), "params": random.key(1)},
-        x,
-        training=True,
-        mutable=True,
+      {'dropout': random.key(0), 'params': random.key(1)},
+      x,
+      training=True,
+      mutable=True,
     )
     # get values for inputs and outputs from their _ValueRepresentation
 
@@ -261,29 +260,29 @@ class SummaryTest(absltest.TestCase):
     # check paths
     self.assertEqual(table[0].path, ())
 
-    self.assertEqual(table[1].path, ("block1",))
-    self.assertEqual(table[2].path, ("block2",))
-    self.assertEqual(table[3].path, ("dense",))
+    self.assertEqual(table[1].path, ('block1',))
+    self.assertEqual(table[2].path, ('block2',))
+    self.assertEqual(table[3].path, ('dense',))
 
     # check outputs shapes
     self.assertEqual(
-        (table[0].inputs[0].shape, table[0].inputs[1]),
-        (x.shape, dict(training=True)),
+      (table[0].inputs[0].shape, table[0].inputs[1]),
+      (x.shape, dict(training=True)),
     )
     self.assertEqual(
-        _get_shapes(table[0].outputs),
-        ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
+      _get_shapes(table[0].outputs),
+      ((batch_size, 10), dict(a=(batch_size, 10), b=(batch_size, 10))),
     )
 
     self.assertEqual(
-        _get_shapes(table[1].inputs),
-        ((batch_size, 28, 28, 1), {"training": True}),
+      _get_shapes(table[1].inputs),
+      ((batch_size, 28, 28, 1), {'training': True}),
     )
     self.assertEqual(table[1].outputs.shape, (batch_size, 28, 28, 32))
 
     self.assertEqual(
-        _get_shapes(table[2].inputs),
-        ((batch_size, 28, 28, 32), {"training": True}),
+      _get_shapes(table[2].inputs),
+      ((batch_size, 28, 28, 32), {'training': True}),
     )
     self.assertEqual(table[2].outputs.shape, (batch_size, 28, 28, 64))
 
@@ -314,44 +313,44 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-        {"dropout": random.key(0), "params": random.key(1)},
-        x,
-        training=True,
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      {'dropout': random.key(0), 'params': random.key(1)},
+      x,
+      training=True,
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )
 
     # NOTE: it's tricky to validate the content of lines
     # because it seems to be shell-dependent, so we will
     # just check lines that won't change between environments
-    lines = module_repr.split("\n")
+    lines = module_repr.split('\n')
 
     # check title
     module_name = module.__class__.__name__
-    self.assertIn(f"{module_name} Summary", lines[1])
+    self.assertIn(f'{module_name} Summary', lines[1])
 
     # check headers are correct
-    self.assertIn("path", lines[3])
-    self.assertIn("module", lines[3])
-    self.assertIn("inputs", lines[3])
-    self.assertIn("outputs", lines[3])
-    self.assertIn("params", lines[3])
-    self.assertIn("flops", lines[3])
-    self.assertIn("vjp_flops", lines[3])
-    self.assertIn("batch_stats", lines[3])
+    self.assertIn('path', lines[3])
+    self.assertIn('module', lines[3])
+    self.assertIn('inputs', lines[3])
+    self.assertIn('outputs', lines[3])
+    self.assertIn('params', lines[3])
+    self.assertIn('flops', lines[3])
+    self.assertIn('vjp_flops', lines[3])
+    self.assertIn('batch_stats', lines[3])
 
     # collection counts
-    self.assertIn("Total", lines[-6])
-    self.assertIn("192", lines[-6])
-    self.assertIn("768 B", lines[-6])
-    self.assertIn("19,658", lines[-6])
-    self.assertIn("78.6 KB", lines[-6])
+    self.assertIn('Total', lines[-6])
+    self.assertIn('192', lines[-6])
+    self.assertIn('768 B', lines[-6])
+    self.assertIn('19,658', lines[-6])
+    self.assertIn('78.6 KB', lines[-6])
 
     # total counts
-    self.assertIn("Total Parameters", lines[-3])
-    self.assertIn("19,850", lines[-3])
-    self.assertIn("79.4 KB", lines[-3])
+    self.assertIn('Total Parameters', lines[-3])
+    self.assertIn('19,850', lines[-3])
+    self.assertIn('79.4 KB', lines[-3])
 
   def test_tabulate_with_sow(self):
     batch_size = 32
@@ -360,17 +359,17 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=True)
 
     module_repr = module.tabulate(
-        {"dropout": random.key(0), "params": random.key(1)},
-        x,
-        training=True,
-        mutable=True,
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      {'dropout': random.key(0), 'params': random.key(1)},
+      x,
+      training=True,
+      mutable=True,
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )
 
-    self.assertIn("intermediates", module_repr)
-    self.assertIn("INTERM", module_repr)
+    self.assertIn('intermediates', module_repr)
+    self.assertIn('INTERM', module_repr)
 
   def test_tabulate_with_method(self):
     batch_size = 32
@@ -379,17 +378,17 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = module.tabulate(
-        {"dropout": random.key(0), "params": random.key(1)},
-        x,
-        training=True,
-        method=CNN.cnn_method,
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      {'dropout': random.key(0), 'params': random.key(1)},
+      x,
+      training=True,
+      method=CNN.cnn_method,
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )
 
-    self.assertIn("(block_method)", module_repr)
-    self.assertIn("(cnn_method)", module_repr)
+    self.assertIn('(block_method)', module_repr)
+    self.assertIn('(cnn_method)', module_repr)
 
   def test_tabulate_function(self):
     """
@@ -403,39 +402,39 @@ class SummaryTest(absltest.TestCase):
     module = CNN(test_sow=False)
 
     module_repr = nn.tabulate(
-        module,
-        {"dropout": random.key(0), "params": random.key(1)},
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      module,
+      {'dropout': random.key(0), 'params': random.key(1)},
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )(x, training=True)
 
-    lines = module_repr.split("\n")
+    lines = module_repr.split('\n')
 
     # check title
     module_name = module.__class__.__name__
-    self.assertIn(f"{module_name} Summary", lines[1])
+    self.assertIn(f'{module_name} Summary', lines[1])
 
     # check headers are correct
-    self.assertIn("path", lines[3])
-    self.assertIn("module", lines[3])
-    self.assertIn("inputs", lines[3])
-    self.assertIn("outputs", lines[3])
-    self.assertIn("params", lines[3])
-    self.assertIn("flops", lines[3])
-    self.assertIn("batch_stats", lines[3])
+    self.assertIn('path', lines[3])
+    self.assertIn('module', lines[3])
+    self.assertIn('inputs', lines[3])
+    self.assertIn('outputs', lines[3])
+    self.assertIn('params', lines[3])
+    self.assertIn('flops', lines[3])
+    self.assertIn('batch_stats', lines[3])
 
     # collection counts
-    self.assertIn("Total", lines[-6])
-    self.assertIn("192", lines[-6])
-    self.assertIn("768 B", lines[-6])
-    self.assertIn("19,658", lines[-6])
-    self.assertIn("78.6 KB", lines[-6])
+    self.assertIn('Total', lines[-6])
+    self.assertIn('192', lines[-6])
+    self.assertIn('768 B', lines[-6])
+    self.assertIn('19,658', lines[-6])
+    self.assertIn('78.6 KB', lines[-6])
 
     # total counts
-    self.assertIn("Total Parameters", lines[-3])
-    self.assertIn("19,850", lines[-3])
-    self.assertIn("79.4 KB", lines[-3])
+    self.assertIn('Total Parameters', lines[-3])
+    self.assertIn('19,850', lines[-3])
+    self.assertIn('79.4 KB', lines[-3])
 
   def test_lifted_transform(self):
     class LSTM(nn.Module):
@@ -444,35 +443,35 @@ class SummaryTest(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         carry = nn.LSTMCell(self.features).initialize_carry(
-            random.key(0), x[:, 0].shape
+          random.key(0), x[:, 0].shape
         )
         ScanLSTM = nn.scan(
-            nn.LSTMCell,
-            variable_broadcast="params",
-            split_rngs={"params": False},
-            in_axes=1,
-            out_axes=1,
+          nn.LSTMCell,
+          variable_broadcast='params',
+          split_rngs={'params': False},
+          in_axes=1,
+          out_axes=1,
         )
-        return ScanLSTM(self.features, name="ScanLSTM")(carry, x)
+        return ScanLSTM(self.features, name='ScanLSTM')(carry, x)
 
     lstm = LSTM(features=128)
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
-          random.key(0),
-          x=jnp.ones((32, 128, 64)),
-          console_kwargs=CONSOLE_TEST_KWARGS,
-          compute_flops=True,
-          compute_vjp_flops=True,
+        random.key(0),
+        x=jnp.ones((32, 128, 64)),
+        console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
       )
 
     lines = module_repr.splitlines()
 
-    self.assertIn("LSTM", lines[5])
-    self.assertIn("ScanLSTM", lines[9])
-    self.assertIn("LSTMCell", lines[9])
-    self.assertIn("ScanLSTM/ii", lines[13])
-    self.assertIn("Dense", lines[13])
+    self.assertIn('LSTM', lines[5])
+    self.assertIn('ScanLSTM', lines[9])
+    self.assertIn('LSTMCell', lines[9])
+    self.assertIn('ScanLSTM/ii', lines[13])
+    self.assertIn('Dense', lines[13])
 
   def test_lifted_transform_no_rename(self):
     class LSTM(nn.Module):
@@ -481,14 +480,14 @@ class SummaryTest(absltest.TestCase):
       @nn.compact
       def __call__(self, x):
         carry = nn.LSTMCell(self.features).initialize_carry(
-            random.key(0), x[:, 0].shape
+          random.key(0), x[:, 0].shape
         )
         ScanLSTM = nn.scan(
-            nn.LSTMCell,
-            variable_broadcast="params",
-            split_rngs={"params": False},
-            in_axes=1,
-            out_axes=1,
+          nn.LSTMCell,
+          variable_broadcast='params',
+          split_rngs={'params': False},
+          in_axes=1,
+          out_axes=1,
         )
         return ScanLSTM(self.features)(carry, x)
 
@@ -496,24 +495,23 @@ class SummaryTest(absltest.TestCase):
 
     with jax.check_tracer_leaks(True):
       module_repr = lstm.tabulate(
-          random.key(0),
-          x=jnp.ones((32, 128, 64)),
-          console_kwargs=CONSOLE_TEST_KWARGS,
-          compute_flops=True,
-          compute_vjp_flops=True,
+        random.key(0),
+        x=jnp.ones((32, 128, 64)),
+        console_kwargs=CONSOLE_TEST_KWARGS,
+        compute_flops=True,
+        compute_vjp_flops=True,
       )
 
     lines = module_repr.splitlines()
 
-    self.assertIn("LSTM", lines[5])
-    self.assertIn("ScanLSTMCell_0", lines[9])
-    self.assertIn("LSTMCell", lines[9])
-    self.assertIn("ScanLSTMCell_0/ii", lines[13])
-    self.assertIn("Dense", lines[13])
+    self.assertIn('LSTM', lines[5])
+    self.assertIn('ScanLSTMCell_0', lines[9])
+    self.assertIn('LSTMCell', lines[9])
+    self.assertIn('ScanLSTMCell_0/ii', lines[13])
+    self.assertIn('Dense', lines[13])
 
   def test_module_reuse(self):
     class ConvBlock(nn.Module):
-
       @nn.compact
       def __call__(self, x):
         x = nn.Conv(32, [3, 3])(x)
@@ -523,7 +521,6 @@ class SummaryTest(absltest.TestCase):
         return x
 
     class CNN(nn.Module):
-
       @nn.compact
       def __call__(self, x):
         block = ConvBlock()
@@ -534,55 +531,55 @@ class SummaryTest(absltest.TestCase):
 
     x = jnp.ones((4, 28, 28, 32))
     module_repr = CNN().tabulate(
-        jax.random.key(0),
-        x=x,
-        show_repeated=True,
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      jax.random.key(0),
+      x=x,
+      show_repeated=True,
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )
     lines = module_repr.splitlines()
 
     # first call
-    self.assertIn("ConvBlock_0/Conv_0", lines[9])
-    self.assertIn("bias", lines[9])
-    self.assertIn("ConvBlock_0/BatchNorm_0", lines[14])
-    self.assertIn("mean", lines[14])
-    self.assertIn("bias", lines[14])
-    self.assertIn("ConvBlock_0/Dropout_0", lines[19])
+    self.assertIn('ConvBlock_0/Conv_0', lines[9])
+    self.assertIn('bias', lines[9])
+    self.assertIn('ConvBlock_0/BatchNorm_0', lines[14])
+    self.assertIn('mean', lines[14])
+    self.assertIn('bias', lines[14])
+    self.assertIn('ConvBlock_0/Dropout_0', lines[19])
 
     # second call
-    self.assertIn("ConvBlock_0/Conv_0", lines[23])
-    self.assertNotIn("bias", lines[23])
-    self.assertIn("ConvBlock_0/BatchNorm_0", lines[25])
-    self.assertNotIn("mean", lines[25])
-    self.assertNotIn("bias", lines[25])
-    self.assertIn("ConvBlock_0/Dropout_0", lines[27])
+    self.assertIn('ConvBlock_0/Conv_0', lines[23])
+    self.assertNotIn('bias', lines[23])
+    self.assertIn('ConvBlock_0/BatchNorm_0', lines[25])
+    self.assertNotIn('mean', lines[25])
+    self.assertNotIn('bias', lines[25])
+    self.assertIn('ConvBlock_0/Dropout_0', lines[27])
 
     # third call
-    self.assertIn("ConvBlock_0/Conv_0", lines[31])
-    self.assertNotIn("bias", lines[31])
-    self.assertIn("ConvBlock_0/BatchNorm_0", lines[33])
-    self.assertNotIn("mean", lines[33])
-    self.assertNotIn("bias", lines[33])
-    self.assertIn("ConvBlock_0/Dropout_0", lines[35])
+    self.assertIn('ConvBlock_0/Conv_0', lines[31])
+    self.assertNotIn('bias', lines[31])
+    self.assertIn('ConvBlock_0/BatchNorm_0', lines[33])
+    self.assertNotIn('mean', lines[33])
+    self.assertNotIn('bias', lines[33])
+    self.assertIn('ConvBlock_0/Dropout_0', lines[35])
 
     # Test that CNN FLOPs are 3x ConvBlock FLOPs.
-    args = ({"dropout": random.key(0), "params": random.key(1)}, x)
+    args = ({'dropout': random.key(0), 'params': random.key(1)}, x)
     cnn = summary._get_module_table(
-        CNN(),
-        depth=1,
-        show_repeated=True,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      CNN(),
+      depth=1,
+      show_repeated=True,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )(*args, mutable=True)
 
     block = summary._get_module_table(
-        ConvBlock(),
-        depth=1,
-        show_repeated=True,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      ConvBlock(),
+      depth=1,
+      show_repeated=True,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )(*args, mutable=True)
 
     # Total forward/backward FLOPs equal to their sums of sub blocks.
@@ -596,135 +593,129 @@ class SummaryTest(absltest.TestCase):
 
   def test_empty_input(self):
     class EmptyInput(nn.Module):
-
       @nn.compact
       def __call__(self):
         return 1
 
     module = EmptyInput()
     module_repr = module.tabulate(
-        {},
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      {},
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )
     lines = module_repr.splitlines()
 
     # 1 output and 0 forward / backward FLOPs.
     self.assertRegex(
-        lines[5], r"│\s*│\s*EmptyInput\s*│\s*│\s*1\s*│\s*0\s*│\s*0\s*│"
+      lines[5], r'│\s*│\s*EmptyInput\s*│\s*│\s*1\s*│\s*0\s*│\s*0\s*│'
     )
 
   def test_numpy_scalar(self):
     class Submodule(nn.Module):
-
       def __call__(self, x):
         return x + 1
 
     class EmptyInput(nn.Module):
-
       @nn.compact
       def __call__(self):
         return Submodule()(x=np.pi)
 
     module = EmptyInput()
     module_repr = module.tabulate(
-        {},
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      {},
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )
     lines = module_repr.splitlines()
 
-    self.assertIn("4.141592", lines[5])
-    self.assertIn("x: 3.141592", lines[7])
-    self.assertIn("4.141592", lines[7])
+    self.assertIn('4.141592', lines[5])
+    self.assertIn('x: 3.141592', lines[7])
+    self.assertIn('4.141592', lines[7])
 
     # 0 forward / backward FLOPs due to precomputed output values.
-    self.assertIn("│ 0     │ 0", lines[5])
-    self.assertIn("│ 0     │ 0", lines[7])
+    self.assertIn('│ 0     │ 0', lines[5])
+    self.assertIn('│ 0     │ 0', lines[7])
 
   def test_partitioned_params(self):
     class Classifier(nn.Module):
-
       @nn.compact
       def __call__(self, x):
         hidden = nn.Dense(
-            features=1024,
-            kernel_init=nn.with_partitioning(
-                nn.initializers.lecun_normal(), (None, "data")
-            ),
-            bias_init=nn.with_partitioning(nn.initializers.zeros, (None,)),
-            name="hidden",
+          features=1024,
+          kernel_init=nn.with_partitioning(
+            nn.initializers.lecun_normal(), (None, 'data')
+          ),
+          bias_init=nn.with_partitioning(nn.initializers.zeros, (None,)),
+          name='hidden',
         )
         x = x / 255.0
         x = x.reshape((x.shape[0], -1))  # flatten
         x = nn.relu(hidden(x))
-        x = nn.Dense(features=10, name="head")(x)
+        x = nn.Dense(features=10, name='head')(x)
         return x
 
     module = Classifier()
     lines = module.tabulate(
-        jax.random.key(0),
-        jnp.empty((1, 28, 28, 1)),
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      jax.random.key(0),
+      jnp.empty((1, 28, 28, 1)),
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     ).splitlines()
-    self.assertIn("P(None,)", lines[7])
-    self.assertIn("P(None, data)", lines[8])
+    self.assertIn('P(None,)', lines[7])
+    self.assertIn('P(None, data)', lines[8])
 
     # Per-layer forward FLOPs:
-    self.assertIn("1606656", lines[7])  # 1 * (28 * 28 * 1) * 1024 * 2 + 1024
-    self.assertIn("20490", lines[12])  #  1 * (1024       ) * 10   * 2 + 10
+    self.assertIn('1606656', lines[7])  # 1 * (28 * 28 * 1) * 1024 * 2 + 1024
+    self.assertIn('20490', lines[12])  #  1 * (1024       ) * 10   * 2 + 10
 
     # Total forward FLOPs: input division + ReLU + two dense layers above.
     # (1 * 28 * 28 * 1) + (1 * 1024) + 1606656 + 20490.
-    self.assertIn("1628954", lines[5])
+    self.assertIn('1628954', lines[5])
 
     # Per-layer backward FLOPs:
 
     # [3x MMs: forward, input cotangent, weight cotangent] 1024 * 784 * 2 * 3
     # + [forward bias addition] 1024
     # + [`mutable=True`: weight and bias sizes] 1024 * 784 + 1024
-    self.assertIn("5621760", lines[7])
+    self.assertIn('5621760', lines[7])
 
     # [3x matmuls: forward, input cotangent, weight cotangent] 1024 * 10 * 2 * 3
     # + [forward bias addition] 10
     # + [`mutable=True`: weight and bias sizes] 1024 * 10 + 10
-    self.assertIn("71700", lines[12])
+    self.assertIn('71700', lines[12])
 
     # Total backward FLOPs: input division + ReLU + two dense layers above.
     # 2 * (1 * 28 * 28 * 1) + 3 * (1 * 1024) + 5621760 + 71700.
-    self.assertIn("5698100", lines[5])
+    self.assertIn('5698100', lines[5])
 
   def test_non_array_variables(self):
     class Metadata(struct.PyTreeNode):
       names: tuple = struct.field(pytree_node=False)
 
     class Foo(nn.Module):
-
       @nn.compact
       def __call__(self):
-        self.sow("foo", "bar", Metadata(("baz", "qux")))
+        self.sow('foo', 'bar', Metadata(('baz', 'qux')))
 
     module = Foo()
     lines = module.tabulate(
-        {},
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      {},
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     ).splitlines()
-    self.assertIn("names", lines[6])
-    self.assertIn("baz", lines[7])
-    self.assertIn("qux", lines[8])
+    self.assertIn('names', lines[6])
+    self.assertIn('baz', lines[7])
+    self.assertIn('qux', lines[8])
 
     # 0 forward and backward FLOPs.
-    self.assertIn("│ 0     │ 0", lines[5])
+    self.assertIn('│ 0     │ 0', lines[5])
 
   def test_tabulate_param_count_and_flops(self):
     class Foo(nn.Module):
-
       @nn.compact
       def __call__(self, x):
         h = nn.Dense(4)(x)
@@ -735,16 +726,15 @@ class SummaryTest(absltest.TestCase):
     x = jnp.ones((16, 9))
 
     rep = module.tabulate(
-        rng,
-        x,
-        console_kwargs=CONSOLE_TEST_KWARGS,
-        compute_flops=True,
-        compute_vjp_flops=True,
+      rng,
+      x,
+      console_kwargs=CONSOLE_TEST_KWARGS,
+      compute_flops=True,
+      compute_vjp_flops=True,
     )
     lines = rep.splitlines()
-    self.assertIn("Total Parameters: 50", lines[-2])
+    self.assertIn('Total Parameters: 50', lines[-2])
 
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
   absltest.main()

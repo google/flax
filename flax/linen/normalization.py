@@ -18,14 +18,12 @@ import dataclasses
 import functools
 from typing import Any, Callable, Iterable, Optional, Sequence, Tuple, Union
 
-from flax.linen import dtypes
-from flax.linen import module
-from flax.linen import transforms
 import jax
+import jax.numpy as jnp
 from jax import lax
 from jax.nn import initializers
-import jax.numpy as jnp
 
+from flax.linen import dtypes, module, transforms
 
 PRNGKey = Any
 Array = Any
@@ -57,14 +55,14 @@ def _abs_sq(x):
 
 
 def _compute_stats(
-    x: Array,
-    axes: Axes,
-    dtype: Optional[Dtype],
-    axis_name: Optional[str] = None,
-    axis_index_groups: Any = None,
-    use_mean: bool = True,
-    use_fast_variance: bool = True,
-    mask: Optional[Array] = None,
+  x: Array,
+  axes: Axes,
+  dtype: Optional[Dtype],
+  axis_name: Optional[str] = None,
+  axis_index_groups: Any = None,
+  use_mean: bool = True,
+  use_fast_variance: bool = True,
+  mask: Optional[Array] = None,
 ):
   """Computes mean and variance statistics.
 
@@ -115,9 +113,9 @@ def _compute_stats(
       # In the distributed case we stack multiple arrays to speed comms.
       if len(xs) > 1:
         reduced_mus = lax.pmean(
-            jnp.stack(mus, axis=0),
-            axis_name,
-            axis_index_groups=axis_index_groups,
+          jnp.stack(mus, axis=0),
+          axis_name,
+          axis_index_groups=axis_index_groups,
         )
         return tuple(reduced_mus[i] for i in range(len(xs)))
       else:
@@ -132,7 +130,7 @@ def _compute_stats(
     else:
       mu = maybe_distributed_mean(x, mask=mask)
       var = maybe_distributed_mean(
-          _abs_sq(x - jnp.expand_dims(mu, axes)), mask=mask
+        _abs_sq(x - jnp.expand_dims(mu, axes)), mask=mask
       )
   else:
     var = maybe_distributed_mean(_abs_sq(x), mask=mask)
@@ -141,19 +139,19 @@ def _compute_stats(
 
 
 def _normalize(
-    mdl: Module,
-    x: Array,
-    mean: Array,
-    var: Array,
-    reduction_axes: Axes,
-    feature_axes: Axes,
-    dtype: Dtype,
-    param_dtype: Dtype,
-    epsilon: float,
-    use_bias: bool,
-    use_scale: bool,
-    bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
-    scale_init: Callable[[PRNGKey, Shape, Dtype], Array],
+  mdl: Module,
+  x: Array,
+  mean: Array,
+  var: Array,
+  reduction_axes: Axes,
+  feature_axes: Axes,
+  dtype: Dtype,
+  param_dtype: Dtype,
+  epsilon: float,
+  use_bias: bool,
+  use_scale: bool,
+  bias_init: Callable[[PRNGKey, Shape, Dtype], Array],
+  scale_init: Callable[[PRNGKey, Shape, Dtype], Array],
 ):
   """Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
@@ -192,14 +190,14 @@ def _normalize(
   args = [x]
   if use_scale:
     scale = mdl.param(
-        'scale', scale_init, reduced_feature_shape, param_dtype
+      'scale', scale_init, reduced_feature_shape, param_dtype
     ).reshape(feature_shape)
     mul *= scale
     args.append(scale)
   y *= mul
   if use_bias:
     bias = mdl.param(
-        'bias', bias_init, reduced_feature_shape, param_dtype
+      'bias', bias_init, reduced_feature_shape, param_dtype
     ).reshape(feature_shape)
     y += bias
     args.append(bias)
@@ -321,55 +319,55 @@ class BatchNorm(Module):
     """
 
     use_running_average = module.merge_param(
-        'use_running_average', self.use_running_average, use_running_average
+      'use_running_average', self.use_running_average, use_running_average
     )
     feature_axes = _canonicalize_axes(x.ndim, self.axis)
     reduction_axes = tuple(i for i in range(x.ndim) if i not in feature_axes)
     feature_shape = [x.shape[ax] for ax in feature_axes]
 
     ra_mean = self.variable(
-        'batch_stats',
-        'mean',
-        lambda s: jnp.zeros(s, jnp.float32),
-        feature_shape,
+      'batch_stats',
+      'mean',
+      lambda s: jnp.zeros(s, jnp.float32),
+      feature_shape,
     )
     ra_var = self.variable(
-        'batch_stats', 'var', lambda s: jnp.ones(s, jnp.float32), feature_shape
+      'batch_stats', 'var', lambda s: jnp.ones(s, jnp.float32), feature_shape
     )
 
     if use_running_average:
       mean, var = ra_mean.value, ra_var.value
     else:
       mean, var = _compute_stats(
-          x,
-          reduction_axes,
-          dtype=self.dtype,
-          axis_name=self.axis_name if not self.is_initializing() else None,
-          axis_index_groups=self.axis_index_groups,
-          use_fast_variance=self.use_fast_variance,
-          mask=mask,
+        x,
+        reduction_axes,
+        dtype=self.dtype,
+        axis_name=self.axis_name if not self.is_initializing() else None,
+        axis_index_groups=self.axis_index_groups,
+        use_fast_variance=self.use_fast_variance,
+        mask=mask,
       )
 
       if not self.is_initializing():
         ra_mean.value = (
-            self.momentum * ra_mean.value + (1 - self.momentum) * mean
+          self.momentum * ra_mean.value + (1 - self.momentum) * mean
         )
         ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
     return _normalize(
-        self,
-        x,
-        mean,
-        var,
-        reduction_axes,
-        feature_axes,
-        self.dtype,
-        self.param_dtype,
-        self.epsilon,
-        self.use_bias,
-        self.use_scale,
-        self.bias_init,
-        self.scale_init,
+      self,
+      x,
+      mean,
+      var,
+      reduction_axes,
+      feature_axes,
+      self.dtype,
+      self.param_dtype,
+      self.epsilon,
+      self.use_bias,
+      self.use_scale,
+      self.bias_init,
+      self.scale_init,
     )
 
 
@@ -433,28 +431,28 @@ class LayerNorm(Module):
       Normalized inputs (the same shape as inputs).
     """
     mean, var = _compute_stats(
-        x,
-        self.reduction_axes,
-        self.dtype,
-        self.axis_name,
-        self.axis_index_groups,
-        use_fast_variance=self.use_fast_variance,
+      x,
+      self.reduction_axes,
+      self.dtype,
+      self.axis_name,
+      self.axis_index_groups,
+      use_fast_variance=self.use_fast_variance,
     )
 
     return _normalize(
-        self,
-        x,
-        mean,
-        var,
-        self.reduction_axes,
-        self.feature_axes,
-        self.dtype,
-        self.param_dtype,
-        self.epsilon,
-        self.use_bias,
-        self.use_scale,
-        self.bias_init,
-        self.scale_init,
+      self,
+      x,
+      mean,
+      var,
+      self.reduction_axes,
+      self.feature_axes,
+      self.dtype,
+      self.param_dtype,
+      self.epsilon,
+      self.use_bias,
+      self.use_scale,
+      self.bias_init,
+      self.scale_init,
     )
 
 
@@ -522,28 +520,28 @@ class RMSNorm(Module):
       Normalized inputs (the same shape as inputs).
     """
     mean, var = _compute_stats(
-        x,
-        self.reduction_axes,
-        self.dtype,
-        self.axis_name,
-        self.axis_index_groups,
-        use_mean=False,
+      x,
+      self.reduction_axes,
+      self.dtype,
+      self.axis_name,
+      self.axis_index_groups,
+      use_mean=False,
     )
 
     return _normalize(
-        self,
-        x,
-        mean,
-        var,
-        self.reduction_axes,
-        self.feature_axes,
-        self.dtype,
-        self.param_dtype,
-        self.epsilon,
-        False,
-        self.use_scale,
-        initializers.zeros,
-        self.scale_init,
+      self,
+      x,
+      mean,
+      var,
+      self.reduction_axes,
+      self.feature_axes,
+      self.dtype,
+      self.param_dtype,
+      self.epsilon,
+      False,
+      self.use_scale,
+      initializers.zeros,
+      self.scale_init,
     )
 
 
@@ -615,21 +613,21 @@ class GroupNorm(Module):
     feature_axes = (-1,)
 
     if (self.num_groups is None and self.group_size is None) or (
-        self.num_groups is not None and self.group_size is not None
+      self.num_groups is not None and self.group_size is not None
     ):
       raise ValueError(
-          'Either `num_groups` or `group_size` should be '
-          'specified. If `group_size` is to be specified, '
-          'pass `num_groups=None` as argument to override '
-          'the default `num_groups` value of 32.'
+        'Either `num_groups` or `group_size` should be '
+        'specified. If `group_size` is to be specified, '
+        'pass `num_groups=None` as argument to override '
+        'the default `num_groups` value of 32.'
       )
 
     channels = x.shape[-1]
     if self.group_size is not None:
       if channels % self.group_size != 0:
         raise ValueError(
-            'Number of channels ({}) is not multiple of the '
-            'group size ({}).'.format(channels, self.group_size)
+          'Number of channels ({}) is not multiple of the '
+          'group size ({}).'.format(channels, self.group_size)
         )
       num_groups = channels // self.group_size
     else:
@@ -638,38 +636,38 @@ class GroupNorm(Module):
 
     if num_groups <= 0 or channels % num_groups != 0:
       raise ValueError(
-          'Number of groups ({}) does not divide the number'
-          ' of channels ({}).'.format(num_groups, channels)
+        'Number of groups ({}) does not divide the number'
+        ' of channels ({}).'.format(num_groups, channels)
       )
 
     group_size = x.shape[-1] // num_groups
     group_shape = x.shape[:-1] + (num_groups, group_size)
 
     mean, var = _compute_stats(
-        x.reshape(group_shape),
-        reduction_axes,
-        self.dtype,
-        self.axis_name,
-        self.axis_index_groups,
-        use_fast_variance=self.use_fast_variance,
+      x.reshape(group_shape),
+      reduction_axes,
+      self.dtype,
+      self.axis_name,
+      self.axis_index_groups,
+      use_fast_variance=self.use_fast_variance,
     )
     mean = jnp.repeat(mean, group_size, axis=-1)
     var = jnp.repeat(var, group_size, axis=-1)
 
     return _normalize(
-        self,
-        x,
-        mean,
-        var,
-        reduction_axes[:-1],
-        feature_axes,
-        self.dtype,
-        self.param_dtype,
-        self.epsilon,
-        self.use_bias,
-        self.use_scale,
-        self.bias_init,
-        self.scale_init,
+      self,
+      x,
+      mean,
+      var,
+      reduction_axes[:-1],
+      feature_axes,
+      self.dtype,
+      self.param_dtype,
+      self.epsilon,
+      self.use_bias,
+      self.use_scale,
+      self.bias_init,
+      self.scale_init,
     )
 
 
@@ -788,16 +786,16 @@ class SpectralNorm(Module):
       return layer_instance(*args, **kwargs)
 
     return transforms.map_variables(
-        layer_forward,
-        trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
-            functools.partial(
-                self._spectral_normalize,
-                update_stats=update_stats,
-            ),
-            vs,
+      layer_forward,
+      trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
+        functools.partial(
+          self._spectral_normalize,
+          update_stats=update_stats,
         ),
-        init=self.is_initializing(),
-        mutable=True,
+        vs,
+      ),
+      init=self.is_initializing(),
+      mutable=True,
     )(self.layer_instance)
 
   def _spectral_normalize(self, path, vs, update_stats):
@@ -825,42 +823,42 @@ class SpectralNorm(Module):
     elif value.ndim > 2:
       if self.error_on_non_matrix:
         raise ValueError(
-            f'Input is {value.ndim}D but error_on_non_matrix is True'
+          f'Input is {value.ndim}D but error_on_non_matrix is True'
         )
       else:
         value = jnp.reshape(value, (-1, value.shape[-1]))
 
     u_var_name = (
-        self.layer_instance.name
-        + '/'
-        + '/'.join((dict_key.key for dict_key in path[1:]))
-        + '/u'
+      self.layer_instance.name
+      + '/'
+      + '/'.join((dict_key.key for dict_key in path[1:]))
+      + '/u'
     )
     u_var = self.variable(
-        self.collection_name,
-        u_var_name,
-        jax.random.normal,
-        self.make_rng('params')
-        if not self.has_variable(self.collection_name, u_var_name)
-        else None,
-        (1, value.shape[-1]),
-        self.param_dtype,
+      self.collection_name,
+      u_var_name,
+      jax.random.normal,
+      self.make_rng('params')
+      if not self.has_variable(self.collection_name, u_var_name)
+      else None,
+      (1, value.shape[-1]),
+      self.param_dtype,
     )
     u0 = u_var.value
     sigma_var_name = (
-        self.layer_instance.name
-        + '/'
-        + '/'.join((dict_key.key for dict_key in path[1:]))
-        + '/sigma'
+      self.layer_instance.name
+      + '/'
+      + '/'.join((dict_key.key for dict_key in path[1:]))
+      + '/sigma'
     )
     sigma_var = self.variable(
-        self.collection_name, sigma_var_name, jnp.ones, (), self.param_dtype
+      self.collection_name, sigma_var_name, jnp.ones, (), self.param_dtype
     )
 
     # Power iteration for the weight's singular value.
     for _ in range(self.n_steps):
       v0 = _l2_normalize(
-          jnp.matmul(u0, value.transpose([1, 0])), eps=self.epsilon
+        jnp.matmul(u0, value.transpose([1, 0])), eps=self.epsilon
       )
       u0 = _l2_normalize(jnp.matmul(v0, value), eps=self.epsilon)
 
@@ -971,7 +969,7 @@ class WeightNorm(Module):
   scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
   feature_axes: Optional[Axes] = -1
   variable_filter: Optional[Iterable] = dataclasses.field(
-      default_factory=lambda: {'kernel'}
+    default_factory=lambda: {'kernel'}
   )
 
   @compact
@@ -994,12 +992,12 @@ class WeightNorm(Module):
       return layer_instance(*args, **kwargs)
 
     return transforms.map_variables(
-        layer_forward,
-        trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
-            self._l2_normalize,
-            vs,
-        ),
-        init=self.is_initializing(),
+      layer_forward,
+      trans_in_fn=lambda vs: jax.tree_util.tree_map_with_path(
+        self._l2_normalize,
+        vs,
+      ),
+      init=self.is_initializing(),
     )(self.layer_instance)
 
   def _l2_normalize(self, path, vs):
@@ -1014,9 +1012,9 @@ class WeightNorm(Module):
     """
     value = jnp.asarray(vs)
     str_path = (
-        self.layer_instance.name
-        + '/'
-        + '/'.join((dict_key.key for dict_key in path[1:]))
+      self.layer_instance.name
+      + '/'
+      + '/'.join((dict_key.key for dict_key in path[1:]))
     )
     if self.variable_filter:
       for variable_name in self.variable_filter:
@@ -1031,7 +1029,7 @@ class WeightNorm(Module):
     else:
       feature_axes = _canonicalize_axes(value.ndim, self.feature_axes)
       reduction_axes = tuple(
-          i for i in range(value.ndim) if i not in feature_axes
+        i for i in range(value.ndim) if i not in feature_axes
       )
 
     feature_shape = [1] * value.ndim
@@ -1045,10 +1043,10 @@ class WeightNorm(Module):
     args = [vs]
     if self.use_scale:
       scale = self.param(
-          str_path + '/scale',
-          self.scale_init,
-          reduced_feature_shape,
-          self.param_dtype,
+        str_path + '/scale',
+        self.scale_init,
+        reduced_feature_shape,
+        self.param_dtype,
       ).reshape(feature_shape)
       value_bar *= scale
       args.append(scale)

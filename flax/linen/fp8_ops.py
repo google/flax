@@ -14,13 +14,10 @@
 
 from functools import partial
 
-from flax.linen import initializers
-from flax.linen import module
-from jax import custom_vjp
-from jax import lax
+from jax import custom_vjp, lax, random
 from jax import numpy as jnp
-from jax import random
 
+from flax.linen import initializers, module
 
 OVERWRITE_WITH_GRADIENT = '_overwrite_with_gradient'
 
@@ -74,7 +71,7 @@ def compute_scale_and_amax_history(x, q_dtype, scale, amax_history):
 def qdq_and_return(x, q_dtype, scale, amax_history, compute_dtype):
   qx = quantize_dequantize(x, q_dtype, scale, compute_dtype)
   new_scale, new_history = compute_scale_and_amax_history(
-      x, q_dtype, scale, amax_history
+    x, q_dtype, scale, amax_history
   )
   return qx, new_scale, new_history
 
@@ -82,14 +79,14 @@ def qdq_and_return(x, q_dtype, scale, amax_history, compute_dtype):
 @partial(custom_vjp, nondiff_argnums=(0,))
 def in_qdq(compute_dtype, inp, scale, amax_history):
   qin, _, _ = qdq_and_return(
-      inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
+    inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
   )
   return qin
 
 
 def in_qdq_fwd(compute_dtype, inp, scale, amax_history):
   qin, new_scale, new_history = qdq_and_return(
-      inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
+    inp, jnp.float8_e4m3fn, scale, amax_history, compute_dtype
   )
   return qin, (new_scale, new_history)
 
@@ -115,7 +112,7 @@ def out_qdq_fwd(compute_dtype, out, scale, amax_history):
 def out_qdq_bwd(compute_dtype, res, g):
   scale, amax_history = res
   q_g, new_scale, new_history = qdq_and_return(
-      g, jnp.float8_e5m2, scale, amax_history, compute_dtype
+    g, jnp.float8_e5m2, scale, amax_history, compute_dtype
   )
   return q_g, new_scale, new_history
 
@@ -128,35 +125,39 @@ class Fp8DotGeneralOp(module.Module):
 
   def setup(self) -> None:
     scale_args = (
-        initializers.ones_init(),
-        random.PRNGKey(0),
-        (1,),
-        jnp.float32,
+      initializers.ones_init(),
+      random.PRNGKey(0),
+      (1,),
+      jnp.float32,
     )
     amax_history_args = (
-        initializers.zeros_init(),
-        random.PRNGKey(0),
-        (self.amax_history_length,),
-        jnp.float32,
+      initializers.zeros_init(),
+      random.PRNGKey(0),
+      (self.amax_history_length,),
+      jnp.float32,
     )
 
     self.input_amax_history = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'input_amax_history', *amax_history_args)
+      OVERWRITE_WITH_GRADIENT, 'input_amax_history', *amax_history_args
+    )
     self.kernel_amax_history = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'kernel_amax_history', *amax_history_args)
+      OVERWRITE_WITH_GRADIENT, 'kernel_amax_history', *amax_history_args
+    )
     self.output_grad_amax_history = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'output_grad_amax_history', *amax_history_args)
+      OVERWRITE_WITH_GRADIENT, 'output_grad_amax_history', *amax_history_args
+    )
 
     self.input_scale = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'input_scale', *scale_args)
+      OVERWRITE_WITH_GRADIENT, 'input_scale', *scale_args
+    )
     self.kernel_scale = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'kernel_scale', *scale_args)
+      OVERWRITE_WITH_GRADIENT, 'kernel_scale', *scale_args
+    )
     self.output_grad_scale = self.variable(
-        OVERWRITE_WITH_GRADIENT, 'output_grad_scale', *scale_args)
-
+      OVERWRITE_WITH_GRADIENT, 'output_grad_scale', *scale_args
+    )
 
   def __call__(self, *args, **kwargs):
-
     assert len(args) == 3
     x = args[0]
     k = args[1]
@@ -169,18 +170,17 @@ class Fp8DotGeneralOp(module.Module):
     x = jnp.asarray(x, comp_dtype)
 
     x_qdq = in_qdq(
-        comp_dtype, x, self.input_scale.value, self.input_amax_history.value
+      comp_dtype, x, self.input_scale.value, self.input_amax_history.value
     )
     k_qdq = in_qdq(
-        comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
+      comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
-    y_qdq = lax.dot_general(x_qdq, k_qdq, dimension_numbers, precision) # type: ignore
+    y_qdq = lax.dot_general(x_qdq, k_qdq, dimension_numbers, precision)  # type: ignore
     y = out_qdq(
-        comp_dtype,
-        y_qdq,
-        self.output_grad_scale.value,
-        self.output_grad_amax_history.value
+      comp_dtype,
+      y_qdq,
+      self.output_grad_scale.value,
+      self.output_grad_amax_history.value,
     )
 
-    return y # type: ignore
-
+    return y  # type: ignore

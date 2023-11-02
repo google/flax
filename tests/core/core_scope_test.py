@@ -12,30 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from flax import errors
-from flax.core import Scope, scope, freeze, lazy_init, init, apply, nn
-from flax.core.scope import LazyRng
-from flax.configurations import temp_flip_flag
-
 import jax
-from jax import random
-from jax import numpy as jnp
-
 import numpy as np
-
-
 from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax import errors
+from flax.configurations import temp_flip_flag
+from flax.core import Scope, apply, freeze, init, lazy_init, nn, scope
+from flax.core.scope import LazyRng
 
 
 class ScopeTest(absltest.TestCase):
-
   def test_rng(self):
     def f(scope):
       self.assertTrue(scope.has_rng('params'))
       self.assertFalse(scope.has_rng('dropout'))
       rng = scope.make_rng('params')
       self.assertTrue(
-          np.all(rng == LazyRng.create(random.key(0), 1).as_jax_rng())
+        np.all(rng == LazyRng.create(random.key(0), 1).as_jax_rng())
       )
 
     init(f)(random.key(0))
@@ -63,12 +59,12 @@ class ScopeTest(absltest.TestCase):
     union_check(False, False, set())
     union_check(True, True, True)
     union_check(
-        scope.DenyList(['a', 'b']),
-        scope.DenyList(['b', 'c']),
-        scope.DenyList(set(['b'])),
+      scope.DenyList(['a', 'b']),
+      scope.DenyList(['b', 'c']),
+      scope.DenyList(set(['b'])),
     )
     union_check(
-        scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a']))
+      scope.DenyList(['a', 'b']), ['b', 'c'], scope.DenyList(set(['a']))
     )
 
   def test_intersect_filter(self):
@@ -81,9 +77,9 @@ class ScopeTest(absltest.TestCase):
     intersect_check(False, False, set())
     intersect_check(True, True, True)
     intersect_check(
-        scope.DenyList(['a', 'b']),
-        scope.DenyList(['b', 'c']),
-        scope.DenyList(set(['a', 'b', 'c'])),
+      scope.DenyList(['a', 'b']),
+      scope.DenyList(['b', 'c']),
+      scope.DenyList(set(['a', 'b', 'c'])),
     )
     intersect_check(scope.DenyList(['a', 'b']), ['b', 'c'], set(['c']))
 
@@ -97,12 +93,12 @@ class ScopeTest(absltest.TestCase):
     subtract_check(True, True, False)
     subtract_check(True, 'a', scope.DenyList('a'))
     subtract_check(
-        scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c'])
+      scope.DenyList(['a', 'b']), scope.DenyList(['b', 'c']), set(['c'])
     )
     subtract_check(
-        scope.DenyList(['a', 'b']),
-        ['b', 'c'],
-        scope.DenyList(set(['a', 'b', 'c'])),
+      scope.DenyList(['a', 'b']),
+      ['b', 'c'],
+      scope.DenyList(set(['a', 'b', 'c'])),
     )
 
   def test_group_collections(self):
@@ -119,7 +115,7 @@ class ScopeTest(absltest.TestCase):
 
     # False gets nothing and True retrieves all keys once.
     self.assertEqual(
-        scope.group_collections(xs, [False, True, True]), ({}, xs, {})
+      scope.group_collections(xs, [False, True, True]), ({}, xs, {})
     )
 
   def test_inconsistent_param_shapes(self):
@@ -127,8 +123,8 @@ class ScopeTest(absltest.TestCase):
       scope.param('test', nn.initializers.ones_init(), (4,))
 
     msg = (
-        r'Initializer expected to generate shape \(2,\) but got shape \(4,\)'
-        r' instead for parameter "test" in "/"'
+      r'Initializer expected to generate shape \(2,\) but got shape \(4,\)'
+      r' instead for parameter "test" in "/"'
     )
     with self.assertRaisesRegex(errors.ScopeParamShapeError, msg):
       apply(f)(freeze({'params': {'test': np.ones((2,))}}))
@@ -137,15 +133,17 @@ class ScopeTest(absltest.TestCase):
     def f(scope):
       scope.param('kernel', nn.initializers.ones_init(), (4,))
 
-    params = freeze({
+    params = freeze(
+      {
         'params': {
-            'kernel': np.ones((4,)),
+          'kernel': np.ones((4,)),
         },
-    })
+      }
+    )
     apply(f)(params)  # Valid.
     msg = 'but got a dict with an extra params layer'
     with self.assertRaisesRegex(
-        errors.ApplyScopeInvalidVariablesStructureError, msg
+      errors.ApplyScopeInvalidVariablesStructureError, msg
     ):
       apply(f)({'params': params})
 
@@ -154,8 +152,8 @@ class ScopeTest(absltest.TestCase):
       scope.put_variable('state', 'test', 123)
 
     msg = (
-        r'Cannot update variable "test" in "/" because collection "state" is'
-        r' immutable.'
+      r'Cannot update variable "test" in "/" because collection "state" is'
+      r' immutable.'
     )
     with self.assertRaisesRegex(errors.ModifyScopeVariableError, msg):
       init(f, mutable='params')(random.key(0))
@@ -252,21 +250,21 @@ class ScopeTest(absltest.TestCase):
     subscope.put_variable('state', 'x', 0.0)
     scope.put_variable('state', 'a', {'x': jnp.array(1.0, jnp.float32)})
     self.assertEqual(
-        scope.variables()['state']['a']['x'], subscope.variables()['state']['x']
+      scope.variables()['state']['a']['x'], subscope.variables()['state']['x']
     )
 
   def test_lazy_init(self):
     def f(scope, x):
       k = scope.param(
-          'kernel', nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1])
+        'kernel', nn.initializers.lecun_normal(), (x.shape[-1], x.shape[-1])
       )
       return x @ k
 
     init_fn = lazy_init(f)
     # provide a massive input message which would OOM if any compute ops were actually executed
     variables = init_fn(
-        random.key(0),
-        jax.ShapeDtypeStruct((1024 * 1024 * 1024, 128), jnp.float32),
+      random.key(0),
+      jax.ShapeDtypeStruct((1024 * 1024 * 1024, 128), jnp.float32),
     )
     self.assertEqual(variables['params']['kernel'].shape, (128, 128))
 

@@ -12,18 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl.testing import absltest
-
-
-from flax.core import Scope, Array, init, nn, unfreeze
-
-import jax
-from jax import numpy as jnp, random
-
-
-
 from dataclasses import dataclass
 from typing import Callable
+
+import jax
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
+
+from flax.core import Array, Scope, init, nn, unfreeze
 
 
 def mlp(scope: Scope, x: Array, hidden: int, out: int):
@@ -98,77 +95,76 @@ class AutoEncoder3:
 
 
 class AutoEncoderTest(absltest.TestCase):
-
   def test_auto_encoder_hp_struct(self):
     ae = AutoEncoder(latents=2, features=4, hidden=3)
     x = jnp.ones((1, 4))
     x_r, variables = init(ae)(random.key(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params'])
+      jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
     self.assertEqual(
-        variable_shapes,
-        {
-            'encoder': {
-                'hidden': {'kernel': (4, 3), 'bias': (3,)},
-                'out': {'kernel': (3, 2), 'bias': (2,)},
-            },
-            'decoder': {
-                'hidden': {'kernel': (2, 3), 'bias': (3,)},
-                'out': {'kernel': (3, 4), 'bias': (4,)},
-            },
+      variable_shapes,
+      {
+        'encoder': {
+          'hidden': {'kernel': (4, 3), 'bias': (3,)},
+          'out': {'kernel': (3, 2), 'bias': (2,)},
         },
+        'decoder': {
+          'hidden': {'kernel': (2, 3), 'bias': (3,)},
+          'out': {'kernel': (3, 4), 'bias': (4,)},
+        },
+      },
     )
 
   def test_auto_encoder_with_scope(self):
     ae = lambda scope, x: AutoEncoder2(scope, latents=2, features=4, hidden=3)(
-        x
+      x
     )
     x = jnp.ones((1, 4))
 
     x_r, variables = init(ae)(random.key(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params'])
+      jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
     self.assertEqual(
-        variable_shapes,
-        {
-            'encode': {
-                'hidden': {'kernel': (4, 3), 'bias': (3,)},
-                'out': {'kernel': (3, 2), 'bias': (2,)},
-            },
-            'decode': {
-                'hidden': {'kernel': (2, 3), 'bias': (3,)},
-                'out': {'kernel': (3, 4), 'bias': (4,)},
-            },
+      variable_shapes,
+      {
+        'encode': {
+          'hidden': {'kernel': (4, 3), 'bias': (3,)},
+          'out': {'kernel': (3, 2), 'bias': (2,)},
         },
+        'decode': {
+          'hidden': {'kernel': (2, 3), 'bias': (3,)},
+          'out': {'kernel': (3, 4), 'bias': (4,)},
+        },
+      },
     )
 
   def test_auto_encoder_bind_method(self):
     ae = lambda scope, x: AutoEncoder3.create(
-        scope, latents=2, features=4, hidden=3
+      scope, latents=2, features=4, hidden=3
     )(x)
     x = jnp.ones((1, 4))
 
     x_r, variables = init(ae)(random.key(0), x)
     self.assertEqual(x.shape, x_r.shape)
     variable_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params'])
+      jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
     self.assertEqual(
-        variable_shapes,
-        {
-            'encode': {
-                'hidden': {'kernel': (4, 3), 'bias': (3,)},
-                'out': {'kernel': (3, 2), 'bias': (2,)},
-            },
-            'decode': {
-                'hidden': {'kernel': (2, 3), 'bias': (3,)},
-                'out': {'kernel': (3, 4), 'bias': (4,)},
-            },
+      variable_shapes,
+      {
+        'encode': {
+          'hidden': {'kernel': (4, 3), 'bias': (3,)},
+          'out': {'kernel': (3, 2), 'bias': (2,)},
         },
+        'decode': {
+          'hidden': {'kernel': (2, 3), 'bias': (3,)},
+          'out': {'kernel': (3, 4), 'bias': (4,)},
+        },
+      },
     )
 
 

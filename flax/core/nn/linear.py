@@ -15,14 +15,14 @@
 """Linear modules."""
 
 from collections.abc import Iterable  # pylint: disable=g-importing-member
-from flax import struct
-from flax.core import Scope
-from flax.linen import initializers
-from jax import lax
 
 import jax.numpy as jnp
 import numpy as np
+from jax import lax
 
+from flax import struct
+from flax.core import Scope
+from flax.linen import initializers
 
 default_kernel_init = initializers.lecun_normal()
 
@@ -33,16 +33,16 @@ def _normalize_axes(axes, ndim):
 
 
 def dense_general(
-    scope,
-    inputs,
-    features,
-    axis=-1,
-    batch_dims=(),
-    bias=True,
-    dtype=jnp.float32,
-    kernel_init=default_kernel_init,
-    bias_init=initializers.zeros_init(),
-    precision=None,
+  scope,
+  inputs,
+  features,
+  axis=-1,
+  batch_dims=(),
+  bias=True,
+  dtype=jnp.float32,
+  kernel_init=default_kernel_init,
+  bias_init=initializers.zeros_init(),
+  precision=None,
 ):
   """Applies a linear transformation to the inputs along multiple dimensions.
 
@@ -74,9 +74,8 @@ def dense_general(
     max_dim = np.max(batch_dims)
     if set(batch_dims) != set(range(max_dim + 1)):
       raise ValueError(
-          'batch_dims %s must be consecutive leading '
-          'dimensions starting from 0.'
-          % str(batch_dims)
+        'batch_dims %s must be consecutive leading '
+        'dimensions starting from 0.' % str(batch_dims)
       )
 
   ndim = inputs.ndim
@@ -88,12 +87,12 @@ def dense_general(
   def kernel_init_wrap(rng, shape, dtype=jnp.float32):
     size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
     flat_shape = (
-        np.prod(shape[n_batch_dims : n_axis + n_batch_dims]),
-        np.prod(shape[-n_features:]),
+      np.prod(shape[n_batch_dims : n_axis + n_batch_dims]),
+      np.prod(shape[-n_features:]),
     )
     kernel = jnp.concatenate(
-        [kernel_init(rng, flat_shape, dtype) for _ in range(size_batch_dims)],
-        axis=0,
+      [kernel_init(rng, flat_shape, dtype) for _ in range(size_batch_dims)],
+      axis=0,
     )
     return jnp.reshape(kernel, shape)
 
@@ -105,10 +104,10 @@ def dense_general(
   batch_ind = tuple(range(n_batch_dims))
   contract_ind = tuple(range(n_batch_dims, n_axis + n_batch_dims))
   out = lax.dot_general(
-      inputs,
-      kernel,
-      ((axis, contract_ind), (batch_dims, batch_ind)),
-      precision=precision,
+    inputs,
+    kernel,
+    ((axis, contract_ind), (batch_dims, batch_ind)),
+    precision=precision,
   )
   if bias:
 
@@ -116,8 +115,8 @@ def dense_general(
       size_batch_dims = np.prod(shape[:n_batch_dims], dtype=np.int32)
       flat_shape = (np.prod(shape[-n_features:]),)
       bias = jnp.concatenate(
-          [bias_init(rng, flat_shape, dtype) for _ in range(size_batch_dims)],
-          axis=0,
+        [bias_init(rng, flat_shape, dtype) for _ in range(size_batch_dims)],
+        axis=0,
       )
       return jnp.reshape(bias, shape)
 
@@ -133,14 +132,14 @@ def dense_general(
 
 
 def dense(
-    scope,
-    inputs,
-    features,
-    bias=True,
-    dtype=jnp.float32,
-    precision=None,
-    kernel_init=default_kernel_init,
-    bias_init=initializers.zeros_init(),
+  scope,
+  inputs,
+  features,
+  bias=True,
+  dtype=jnp.float32,
+  precision=None,
+  kernel_init=default_kernel_init,
+  bias_init=initializers.zeros_init(),
 ):
   """Applies a linear transformation to the inputs along the last dimension.
 
@@ -160,10 +159,10 @@ def dense(
   kernel = scope.param('kernel', kernel_init, (inputs.shape[-1], features))
   kernel = jnp.asarray(kernel, dtype)
   y = lax.dot_general(
-      inputs,
-      kernel,
-      (((inputs.ndim - 1,), (0,)), ((), ())),
-      precision=precision,
+    inputs,
+    kernel,
+    (((inputs.ndim - 1,), (0,)), ((), ())),
+    precision=precision,
   )
   if bias:
     bias = scope.param('bias', bias_init, (features,))
@@ -182,20 +181,20 @@ def _conv_dimension_numbers(input_shape):
 
 
 def conv(
-    scope,
-    inputs,
-    features,
-    kernel_size,
-    strides=None,
-    padding='SAME',
-    input_dilation=None,
-    kernel_dilation=None,
-    feature_group_count=1,
-    bias=True,
-    dtype=jnp.float32,
-    precision=None,
-    kernel_init=default_kernel_init,
-    bias_init=initializers.zeros_init(),
+  scope,
+  inputs,
+  features,
+  kernel_size,
+  strides=None,
+  padding='SAME',
+  input_dilation=None,
+  kernel_dilation=None,
+  feature_group_count=1,
+  bias=True,
+  dtype=jnp.float32,
+  precision=None,
+  kernel_init=default_kernel_init,
+  bias_init=initializers.zeros_init(),
 ):
   """Applies a convolution to the inputs.
 
@@ -241,15 +240,15 @@ def conv(
 
   dimension_numbers = _conv_dimension_numbers(inputs.shape)
   y = lax.conv_general_dilated(
-      inputs,
-      kernel,
-      strides,
-      padding,
-      lhs_dilation=input_dilation,
-      rhs_dilation=kernel_dilation,
-      dimension_numbers=dimension_numbers,
-      feature_group_count=feature_group_count,
-      precision=precision,
+    inputs,
+    kernel,
+    strides,
+    padding,
+    lhs_dilation=input_dilation,
+    rhs_dilation=kernel_dilation,
+    dimension_numbers=dimension_numbers,
+    feature_group_count=feature_group_count,
+    precision=precision,
   )
 
   if bias:
@@ -260,18 +259,18 @@ def conv(
 
 
 def conv_transpose(
-    scope,
-    inputs,
-    features,
-    kernel_size,
-    strides=None,
-    padding='SAME',
-    kernel_dilation=None,
-    bias=True,
-    dtype=jnp.float32,
-    precision=None,
-    kernel_init=default_kernel_init,
-    bias_init=initializers.zeros_init(),
+  scope,
+  inputs,
+  features,
+  kernel_size,
+  strides=None,
+  padding='SAME',
+  kernel_dilation=None,
+  bias=True,
+  dtype=jnp.float32,
+  precision=None,
+  kernel_init=default_kernel_init,
+  bias_init=initializers.zeros_init(),
 ):
   """Applies a transposed convolution to the inputs. Behaviour mirrors that of
   `jax.lax.conv_transpose`.
@@ -308,12 +307,12 @@ def conv_transpose(
   kernel = jnp.asarray(kernel, dtype)
 
   y = lax.conv_transpose(
-      inputs,
-      kernel,
-      strides,
-      padding,
-      rhs_dilation=kernel_dilation,
-      precision=precision,
+    inputs,
+    kernel,
+    strides,
+    padding,
+    rhs_dilation=kernel_dilation,
+    precision=precision,
   )
 
   if bias:
@@ -324,7 +323,7 @@ def conv_transpose(
 
 
 default_embed_init = initializers.variance_scaling(
-    1.0, 'fan_in', 'normal', out_axis=0
+  1.0, 'fan_in', 'normal', out_axis=0
 )
 
 
@@ -363,7 +362,7 @@ class Embedding:
 
 
 def embedding(
-    scope: Scope, num_embeddings: int, features: int, init_fn=default_embed_init
+  scope: Scope, num_embeddings: int, features: int, init_fn=default_embed_init
 ) -> Embedding:
   """Creates embedding dataclass.
 

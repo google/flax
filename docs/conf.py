@@ -50,18 +50,18 @@ author = 'The Flax authors'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.autosectionlabel',
-    'sphinx.ext.doctest',
-    'sphinx.ext.intersphinx',
-    'sphinx.ext.mathjax',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
-    'myst_nb',
-    'codediff',
-    'flax_module',
-    'sphinx_design',
+  'sphinx.ext.autodoc',
+  'sphinx.ext.autosummary',
+  'sphinx.ext.autosectionlabel',
+  'sphinx.ext.doctest',
+  'sphinx.ext.intersphinx',
+  'sphinx.ext.mathjax',
+  'sphinx.ext.napoleon',
+  'sphinx.ext.viewcode',
+  'myst_nb',
+  'codediff',
+  'flax_module',
+  'sphinx_design',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -109,17 +109,17 @@ html_title = ''
 html_static_path = ['_static']
 
 html_theme_options = {
-    'repository_url': 'https://github.com/google/flax',
-    'use_repository_button': True,  # add a 'link to repository' button
-    'use_issues_button': False,  # add an 'Open an Issue' button
-    'path_to_docs': (
-        'docs'
-    ),  # used to compute the path to launch notebooks in colab
-    'launch_buttons': {
-        'colab_url': 'https://colab.research.google.com/',
-    },
-    'prev_next_buttons_location': None,
-    'show_navbar_depth': 1,
+  'repository_url': 'https://github.com/google/flax',
+  'use_repository_button': True,  # add a 'link to repository' button
+  'use_issues_button': False,  # add an 'Open an Issue' button
+  'path_to_docs': (
+    'docs'
+  ),  # used to compute the path to launch notebooks in colab
+  'launch_buttons': {
+    'colab_url': 'https://colab.research.google.com/',
+  },
+  'prev_next_buttons_location': None,
+  'show_navbar_depth': 1,
 }
 
 # -- Options for myst ----------------------------------------------
@@ -131,9 +131,9 @@ nb_execution_timeout = 100
 # files that will not be executed.
 myst_enable_extensions = ['dollarmath']
 nb_execution_excludepatterns = [
-    'getting_started.ipynb',  # <-- times out
-    'optax_update_guide.ipynb',  # <-- requires flax<=0.5.3
-    'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
+  'getting_started.ipynb',  # <-- times out
+  'optax_update_guide.ipynb',  # <-- requires flax<=0.5.3
+  'transfer_learning.ipynb',  # <-- transformers requires flax<=0.7.0
 ]
 # raise exceptions on execution so CI can catch errors
 nb_execution_allow_errors = False

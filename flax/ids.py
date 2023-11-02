@@ -55,7 +55,7 @@ class FlaxId:
     return hash(self.id)
 
   def __repr__(self):
-    return f"FlaxId({self.id})"
+    return f'FlaxId({self.id})'
 
   def __deepcopy__(self, memo):
     del memo

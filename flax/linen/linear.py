@@ -16,39 +16,37 @@
 
 import dataclasses
 from typing import (
-    Any,
-    Callable,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
+  Any,
+  Callable,
+  Iterable,
+  List,
+  Optional,
+  Sequence,
+  Tuple,
+  Union,
 )
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax import eval_shape, lax
+from jax.core import ShapedArray
 
 from flax.core import meta
 from flax.linen import initializers
 from flax.linen.dtypes import promote_dtype
-from flax.linen.module import compact
-from flax.linen.module import Module
-import jax
-from jax import eval_shape
-from jax import lax
-from jax.core import ShapedArray
-import jax.numpy as jnp
-import numpy as np
-
+from flax.linen.module import Module, compact
 
 PRNGKey = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
 Array = Any
 PrecisionLike = Union[
-    None,
-    str,
-    lax.Precision,
-    Tuple[str, str],
-    Tuple[lax.Precision, lax.Precision],
+  None,
+  str,
+  lax.Precision,
+  Tuple[str, str],
+  Tuple[lax.Precision, lax.Precision],
 ]
 DotGeneralT = Callable[..., Array]
 ConvGeneralDilatedT = Callable[..., Array]
@@ -92,9 +90,9 @@ class DenseGeneral(Module):
   dtype: Optional[Dtype] = None
   param_dtype: Dtype = jnp.float32
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      initializers.zeros_init()
-  )
+  bias_init: Callable[
+    [PRNGKey, Shape, Dtype], Array
+  ] = initializers.zeros_init()
   precision: PrecisionLike = None
   # Deprecated. Will be removed.
   dot_general: Optional[DotGeneralT] = None
@@ -117,9 +115,8 @@ class DenseGeneral(Module):
       max_dim = np.max(batch_dims)
       if set(batch_dims) != set(range(max_dim + 1)):
         raise ValueError(
-            'batch_dims %s must be consecutive leading '
-            'dimensions starting from 0.'
-            % str(batch_dims)
+          'batch_dims %s must be consecutive leading '
+          'dimensions starting from 0.' % str(batch_dims)
         )
 
     ndim = inputs.ndim
@@ -130,9 +127,9 @@ class DenseGeneral(Module):
 
     def kernel_init_wrap(rng, shape, dtype=jnp.float32):
       flat_shape = (
-          np.prod(shape[:n_batch_dims])
-          * np.prod(shape[n_batch_dims : n_axis + n_batch_dims]),
-          np.prod(shape[-n_features:]),
+        np.prod(shape[:n_batch_dims])
+        * np.prod(shape[n_batch_dims : n_axis + n_batch_dims]),
+        np.prod(shape[-n_features:]),
       )
       flat_shape = jax.tree_map(int, flat_shape)
       kernel = self.kernel_init(rng, flat_shape, dtype)
@@ -143,13 +140,13 @@ class DenseGeneral(Module):
     batch_shape = tuple(inputs.shape[ax] for ax in batch_dims)
     # batch and non-contracting dims of input with 1s for batch dims.
     expanded_batch_shape = tuple(
-        inputs.shape[ax] if ax in batch_dims else 1
-        for ax in range(inputs.ndim)
-        if ax not in axis
+      inputs.shape[ax] if ax in batch_dims else 1
+      for ax in range(inputs.ndim)
+      if ax not in axis
     )
     kernel_shape = tuple(inputs.shape[ax] for ax in axis) + features
     kernel = self.param(
-        'kernel', kernel_init_wrap, batch_shape + kernel_shape, self.param_dtype
+      'kernel', kernel_init_wrap, batch_shape + kernel_shape, self.param_dtype
     )
 
     batch_ind = tuple(range(n_batch_dims))
@@ -159,7 +156,7 @@ class DenseGeneral(Module):
 
       def bias_init_wrap(rng, shape, dtype=jnp.float32):
         flat_shape = (
-            np.prod(shape[:n_batch_dims]) * np.prod(shape[-n_features:]),
+          np.prod(shape[:n_batch_dims]) * np.prod(shape[-n_features:]),
         )
         flat_shape = jax.tree_map(int, flat_shape)
         bias = self.bias_init(rng, flat_shape, dtype)
@@ -168,7 +165,7 @@ class DenseGeneral(Module):
         return jnp.reshape(bias, shape)
 
       bias = self.param(
-          'bias', bias_init_wrap, batch_shape + features, self.param_dtype
+        'bias', bias_init_wrap, batch_shape + features, self.param_dtype
       )
     else:
       bias = None
@@ -182,10 +179,10 @@ class DenseGeneral(Module):
     else:
       dot_general = lax.dot_general
     out = dot_general(
-        inputs,
-        kernel,
-        ((axis, contract_ind), (batch_dims, batch_ind)),
-        precision=self.precision,
+      inputs,
+      kernel,
+      ((axis, contract_ind), (batch_dims, batch_ind)),
+      precision=self.precision,
     )
     # dot_general output has shape [batch_dims/group_dims] + [feature_dims]
     if self.use_bias:
@@ -215,9 +212,9 @@ class Dense(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      initializers.zeros_init()
-  )
+  bias_init: Callable[
+    [PRNGKey, Shape, Dtype], Array
+  ] = initializers.zeros_init()
   # Deprecated. Will be removed.
   dot_general: Optional[DotGeneralT] = None
   dot_general_cls: Any = None
@@ -233,14 +230,14 @@ class Dense(Module):
       The transformed input.
     """
     kernel = self.param(
-        'kernel',
-        self.kernel_init,
-        (jnp.shape(inputs)[-1], self.features),
-        self.param_dtype,
+      'kernel',
+      self.kernel_init,
+      (jnp.shape(inputs)[-1], self.features),
+      self.param_dtype,
     )
     if self.use_bias:
       bias = self.param(
-          'bias', self.bias_init, (self.features,), self.param_dtype
+        'bias', self.bias_init, (self.features,), self.param_dtype
       )
     else:
       bias = None
@@ -253,10 +250,10 @@ class Dense(Module):
     else:
       dot_general = lax.dot_general
     y = dot_general(
-        inputs,
-        kernel,
-        (((inputs.ndim - 1,), (0,)), ((), ())),
-        precision=self.precision,
+      inputs,
+      kernel,
+      (((inputs.ndim - 1,), (0,)), ((), ())),
+      precision=self.precision,
     )
     if bias is not None:
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
@@ -294,9 +291,9 @@ def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
     if len(new_pad) == rank:
       return new_pad
   raise ValueError(
-      f'Invalid padding format: {padding}, should be str, int,'
-      f' or a sequence of len {rank} where each element is an'
-      ' int or pair of ints.'
+    f'Invalid padding format: {padding}, should be str, int,'
+    f' or a sequence of len {rank} where each element is an'
+    ' int or pair of ints.'
   )
 
 
@@ -349,9 +346,9 @@ class _Conv(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      initializers.zeros_init()
-  )
+  bias_init: Callable[
+    [PRNGKey, Shape, Dtype], Array
+  ] = initializers.zeros_init()
   # Deprecated. Will be removed.
   conv_general_dilated: Optional[ConvGeneralDilatedT] = None
   conv_general_dilated_cls: Any = None
@@ -391,15 +388,15 @@ class _Conv(Module):
 
     if isinstance(self.kernel_size, int):
       raise TypeError(
-          'Expected Conv kernel_size to be a'
-          ' tuple/list of integers (eg.: [3, 3]) but got'
-          f' {self.kernel_size}.'
+        'Expected Conv kernel_size to be a'
+        ' tuple/list of integers (eg.: [3, 3]) but got'
+        f' {self.kernel_size}.'
       )
     else:
       kernel_size = tuple(self.kernel_size)
 
     def maybe_broadcast(
-        x: Optional[Union[int, Sequence[int]]]
+      x: Optional[Union[int, Sequence[int]]]
     ) -> Tuple[int, ...]:
       if x is None:
         # backward compatibility with using None as sentinel for
@@ -415,7 +412,7 @@ class _Conv(Module):
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       total_batch_size = int(np.prod(input_batch_shape))
       flat_input_shape = (total_batch_size,) + inputs.shape[
-          num_batch_dimensions:
+        num_batch_dimensions:
       ]
       inputs = jnp.reshape(inputs, flat_input_shape)
 
@@ -427,20 +424,20 @@ class _Conv(Module):
     padding_lax = canonicalize_padding(self.padding, len(kernel_size))
     if padding_lax == 'CIRCULAR':
       kernel_size_dilated = [
-          (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
+        (k - 1) * d + 1 for k, d in zip(kernel_size, kernel_dilation)
       ]
       zero_pad: List[Tuple[int, int]] = [(0, 0)]
       pads = (
-          zero_pad
-          + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]
-          + [(0, 0)]
+        zero_pad
+        + [((k - 1) // 2, k // 2) for k in kernel_size_dilated]
+        + [(0, 0)]
       )
       inputs = jnp.pad(inputs, pads, mode='wrap')
       padding_lax = 'VALID'
     elif padding_lax == 'CAUSAL':
       if len(kernel_size) != 1:
         raise ValueError(
-            'Causal padding is only implemented for 1D convolutions.'
+          'Causal padding is only implemented for 1D convolutions.'
         )
       left_pad = kernel_dilation[0] * (kernel_size[0] - 1)
       pads = [(0, 0), (left_pad, 0), (0, 0)]
@@ -454,15 +451,15 @@ class _Conv(Module):
       # One shared convolutional kernel for all pixels in the output.
       assert in_features % self.feature_group_count == 0
       kernel_shape = kernel_size + (
-          in_features // self.feature_group_count,
-          self.features,
+        in_features // self.feature_group_count,
+        self.features,
       )
 
     else:
       if self.feature_group_count != 1:
         raise NotImplementedError(
-            '`lax.conv_general_dilated_local` does not support '
-            f'`feature_group_count != 1`, got `{self.feature_group_count}`.'
+          '`lax.conv_general_dilated_local` does not support '
+          f'`feature_group_count != 1`, got `{self.feature_group_count}`.'
         )
 
       # Need to know the spatial output shape of a standard convolution to
@@ -474,33 +471,33 @@ class _Conv(Module):
       else:
         conv_general_dilated = lax.conv_general_dilated
       conv_output_shape = eval_shape(
-          lambda lhs, rhs: conv_general_dilated(  # pylint: disable=g-long-lambda
-              lhs=lhs,
-              rhs=rhs,
-              window_strides=strides,
-              padding=padding_lax,
-              dimension_numbers=dimension_numbers,
-              lhs_dilation=input_dilation,
-              rhs_dilation=kernel_dilation,
-          ),
-          inputs,
-          ShapedArray(kernel_size + (in_features, self.features), inputs.dtype),
+        lambda lhs, rhs: conv_general_dilated(  # pylint: disable=g-long-lambda
+          lhs=lhs,
+          rhs=rhs,
+          window_strides=strides,
+          padding=padding_lax,
+          dimension_numbers=dimension_numbers,
+          lhs_dilation=input_dilation,
+          rhs_dilation=kernel_dilation,
+        ),
+        inputs,
+        ShapedArray(kernel_size + (in_features, self.features), inputs.dtype),
       ).shape
 
       # One (unshared) convolutional kernel per each pixel in the output.
       kernel_shape = conv_output_shape[1:-1] + (
-          np.prod(kernel_size) * in_features,
-          self.features,
+        np.prod(kernel_size) * in_features,
+        self.features,
       )
 
     if self.mask is not None and self.mask.shape != kernel_shape:
       raise ValueError(
-          'Mask needs to have the same shape as weights. '
-          f'Shapes are: {self.mask.shape}, {kernel_shape}'
+        'Mask needs to have the same shape as weights. '
+        f'Shapes are: {self.mask.shape}, {kernel_shape}'
       )
 
     kernel = self.param(
-        'kernel', self.kernel_init, kernel_shape, self.param_dtype
+      'kernel', self.kernel_init, kernel_shape, self.param_dtype
     )
 
     if self.mask is not None:
@@ -527,27 +524,27 @@ class _Conv(Module):
       else:
         conv_general_dilated = lax.conv_general_dilated
       y = conv_general_dilated(
-          inputs,
-          kernel,
-          strides,
-          padding_lax,
-          lhs_dilation=input_dilation,
-          rhs_dilation=kernel_dilation,
-          dimension_numbers=dimension_numbers,
-          feature_group_count=self.feature_group_count,
-          precision=self.precision,
+        inputs,
+        kernel,
+        strides,
+        padding_lax,
+        lhs_dilation=input_dilation,
+        rhs_dilation=kernel_dilation,
+        dimension_numbers=dimension_numbers,
+        feature_group_count=self.feature_group_count,
+        precision=self.precision,
       )
     else:
       y = lax.conv_general_dilated_local(
-          lhs=inputs,
-          rhs=kernel,
-          window_strides=strides,
-          padding=padding_lax,
-          filter_shape=kernel_size,
-          lhs_dilation=input_dilation,
-          rhs_dilation=kernel_dilation,
-          dimension_numbers=dimension_numbers,
-          precision=self.precision,
+        lhs=inputs,
+        rhs=kernel,
+        window_strides=strides,
+        padding=padding_lax,
+        filter_shape=kernel_size,
+        lhs_dilation=input_dilation,
+        rhs_dilation=kernel_dilation,
+        dimension_numbers=dimension_numbers,
+        precision=self.precision,
       )
 
     if self.use_bias:
@@ -685,9 +682,9 @@ class ConvTranspose(Module):
   param_dtype: Dtype = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = (
-      initializers.zeros_init()
-  )
+  bias_init: Callable[
+    [PRNGKey, Shape, Dtype], Array
+  ] = initializers.zeros_init()
   transpose_kernel: bool = False
 
   @compact
@@ -724,7 +721,7 @@ class ConvTranspose(Module):
       input_batch_shape = inputs.shape[:num_batch_dimensions]
       total_batch_size = int(np.prod(input_batch_shape))
       flat_input_shape = (total_batch_size,) + inputs.shape[
-          num_batch_dimensions:
+        num_batch_dimensions:
       ]
       inputs = jnp.reshape(inputs, flat_input_shape)
 
@@ -742,12 +739,12 @@ class ConvTranspose(Module):
 
     if self.mask is not None and self.mask.shape != kernel_shape:
       raise ValueError(
-          'Mask needs to have the same shape as weights. '
-          f'Shapes are: {self.mask.shape}, {kernel_shape}'
+        'Mask needs to have the same shape as weights. '
+        f'Shapes are: {self.mask.shape}, {kernel_shape}'
       )
 
     kernel = self.param(
-        'kernel', self.kernel_init, kernel_shape, self.param_dtype
+      'kernel', self.kernel_init, kernel_shape, self.param_dtype
     )
 
     if self.mask is not None:
@@ -759,7 +756,7 @@ class ConvTranspose(Module):
 
     if self.use_bias:
       bias = self.param(
-          'bias', self.bias_init, (self.features,), self.param_dtype
+        'bias', self.bias_init, (self.features,), self.param_dtype
       )
     else:
       bias = None
@@ -767,13 +764,13 @@ class ConvTranspose(Module):
     inputs, kernel, bias = promote_dtype(inputs, kernel, bias, dtype=self.dtype)
 
     y = lax.conv_transpose(
-        inputs,
-        kernel,
-        strides,
-        padding_lax,
-        rhs_dilation=self.kernel_dilation,
-        transpose_kernel=self.transpose_kernel,
-        precision=self.precision,
+      inputs,
+      kernel,
+      strides,
+      padding_lax,
+      rhs_dilation=self.kernel_dilation,
+      transpose_kernel=self.transpose_kernel,
+      precision=self.precision,
     )
 
     if self.padding == 'CIRCULAR':
@@ -787,36 +784,36 @@ class ConvTranspose(Module):
       # Compute period along each spatial dimension - it's input size scaled
       # by the stride.
       scaled_x_dims = [
-          x_dim * stride
-          for x_dim, stride in zip(jnp.shape(inputs)[1:-1], strides)
+        x_dim * stride
+        for x_dim, stride in zip(jnp.shape(inputs)[1:-1], strides)
       ]
       # Compute difference between the current size of y and the final output
       # size, and complement this difference to 2 * period - that gives how
       # much we need to pad.
       size_diffs = [
-          -(y_dim - x_dim) % (2 * x_dim)
-          for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
+        -(y_dim - x_dim) % (2 * x_dim)
+        for y_dim, x_dim in zip(y.shape[1:-1], scaled_x_dims)
       ]
       if self.transpose_kernel:
         # If the kernel is transposed, the "+1" is put on the right to
         # mirror the regular convolution. If the same kernel parameters are used
         # as for Conv, this layer then computes the proper transpose convolution.
         total_pad = [
-            (size_diff // 2, (size_diff + 1) // 2) for size_diff in size_diffs
+          (size_diff // 2, (size_diff + 1) // 2) for size_diff in size_diffs
         ]
       else:
         # Divide the padding equally between left and right. The choice to put
         # "+1" on the left (and not on the right) represents a convention for
         # aligning even-sized kernels.
         total_pad = [
-            ((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs
+          ((size_diff + 1) // 2, size_diff // 2) for size_diff in size_diffs
         ]
       y = jnp.pad(y, [(0, 0)] + total_pad + [(0, 0)])
       # Wrap the result periodically around each spatial dimension,
       # one by one.
       for i in range(1, y.ndim - 1):
         y = y.reshape(
-            y.shape[:i] + (-1, scaled_x_dims[i - 1]) + y.shape[i + 1 :]
+          y.shape[:i] + (-1, scaled_x_dims[i - 1]) + y.shape[i + 1 :]
         )
         y = y.sum(axis=i)
 
@@ -831,7 +828,7 @@ class ConvTranspose(Module):
 
 
 default_embed_init = initializers.variance_scaling(
-    1.0, 'fan_in', 'normal', out_axis=0
+  1.0, 'fan_in', 'normal', out_axis=0
 )
 
 
@@ -858,10 +855,10 @@ class Embed(Module):
 
   def setup(self):
     self.embedding = self.param(
-        'embedding',
-        self.embedding_init,
-        (self.num_embeddings, self.features),
-        self.param_dtype,
+      'embedding',
+      self.embedding_init,
+      (self.num_embeddings, self.features),
+      self.param_dtype,
     )
 
   def __call__(self, inputs: Array) -> Array:
@@ -879,7 +876,7 @@ class Embed(Module):
     # Use take because fancy indexing numpy arrays with JAX indices does not
     # work correctly.
     (embedding,) = promote_dtype(
-        self.embedding, dtype=self.dtype, inexact=False
+      self.embedding, dtype=self.dtype, inexact=False
     )
     return jnp.take(embedding, inputs, axis=0)
 

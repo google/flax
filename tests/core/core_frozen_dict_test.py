@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl.testing import absltest, parameterized
-from flax.core import FrozenDict, copy, freeze, pop, unfreeze, pretty_repr
 import jax
+from absl.testing import absltest, parameterized
+
+from flax.core import FrozenDict, copy, freeze, pop, pretty_repr, unfreeze
 
 
 class FrozenDictTest(parameterized.TestCase):
-
   def test_frozen_dict_copies(self):
     xs = {'a': 1, 'b': {'c': 2}}
     frozen = freeze(xs)
@@ -40,7 +40,7 @@ class FrozenDictTest(parameterized.TestCase):
 
   def test_frozen_dict_partially_maps(self):
     x = jax.tree_util.tree_map(
-        lambda a, b: (a, b), freeze({'a': 2}), freeze({'a': {'b': 1}})
+      lambda a, b: (a, b), freeze({'a': 2}), freeze({'a': {'b': 1}})
     )
     self.assertEqual(unfreeze(x), {'a': (2, {'b': 1})})
 
@@ -81,73 +81,73 @@ class FrozenDictTest(parameterized.TestCase):
     self.assertEqual(result, {'a': 1, 'cls': 2})
 
   @parameterized.parameters(
-      {
-          'x': {'a': 1, 'b': {'c': 2}},
-          'key': 'b',
-          'actual_new_x': {'a': 1},
-          'actual_value': {'c': 2},
-      },
-      {
-          'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
-          'key': 'b',
-          'actual_new_x': FrozenDict({'a': 1}),
-          'actual_value': FrozenDict({'c': 2}),
-      },
+    {
+      'x': {'a': 1, 'b': {'c': 2}},
+      'key': 'b',
+      'actual_new_x': {'a': 1},
+      'actual_value': {'c': 2},
+    },
+    {
+      'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
+      'key': 'b',
+      'actual_new_x': FrozenDict({'a': 1}),
+      'actual_value': FrozenDict({'c': 2}),
+    },
   )
   def test_utility_pop(self, x, key, actual_new_x, actual_value):
     new_x, value = pop(x, key)
     self.assertTrue(
-        new_x == actual_new_x and isinstance(new_x, type(actual_new_x))
+      new_x == actual_new_x and isinstance(new_x, type(actual_new_x))
     )
     self.assertTrue(
-        value == actual_value and isinstance(value, type(actual_value))
+      value == actual_value and isinstance(value, type(actual_value))
     )
 
   @parameterized.parameters(
-      {
-          'x': {'a': 1, 'b': {'c': 2}},
-          'add_or_replace': {'b': {'c': -1, 'd': 3}},
-          'actual_new_x': {'a': 1, 'b': {'c': -1, 'd': 3}},
-      },
-      {
-          'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
-          'add_or_replace': FrozenDict({'b': {'c': -1, 'd': 3}}),
-          'actual_new_x': FrozenDict({'a': 1, 'b': {'c': -1, 'd': 3}}),
-      },
+    {
+      'x': {'a': 1, 'b': {'c': 2}},
+      'add_or_replace': {'b': {'c': -1, 'd': 3}},
+      'actual_new_x': {'a': 1, 'b': {'c': -1, 'd': 3}},
+    },
+    {
+      'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
+      'add_or_replace': FrozenDict({'b': {'c': -1, 'd': 3}}),
+      'actual_new_x': FrozenDict({'a': 1, 'b': {'c': -1, 'd': 3}}),
+    },
   )
   def test_utility_copy(self, x, add_or_replace, actual_new_x):
     new_x = copy(x, add_or_replace=add_or_replace)
     self.assertTrue(
-        new_x == actual_new_x and isinstance(new_x, type(actual_new_x))
+      new_x == actual_new_x and isinstance(new_x, type(actual_new_x))
     )
 
   @parameterized.parameters(
-      {
-          'x': {'a': 1, 'b': {'c': 2}},
-      },
-      {
-          'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
-      },
+    {
+      'x': {'a': 1, 'b': {'c': 2}},
+    },
+    {
+      'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
+    },
   )
   def test_utility_copy_singlearg(self, x):
     new_x = copy(x)
     self.assertTrue(new_x == x and isinstance(new_x, type(x)))
 
   @parameterized.parameters(
-      {
-          'x': {'a': 1, 'b': {'c': 2}},
-          'pretty_str': '{\n    a: 1,\n    b: {\n        c: 2,\n    },\n}',
-      },
-      {
-          'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
-          'pretty_str': (
-              'FrozenDict({\n    a: 1,\n    b: {\n        c: 2,\n    },\n})'
-          ),
-      },
-      {
-          'x': 345,
-          'pretty_str': '345',
-      },
+    {
+      'x': {'a': 1, 'b': {'c': 2}},
+      'pretty_str': '{\n    a: 1,\n    b: {\n        c: 2,\n    },\n}',
+    },
+    {
+      'x': FrozenDict({'a': 1, 'b': {'c': 2}}),
+      'pretty_str': (
+        'FrozenDict({\n    a: 1,\n    b: {\n        c: 2,\n    },\n})'
+      ),
+    },
+    {
+      'x': 345,
+      'pretty_str': '345',
+    },
   )
   def test_utility_pretty_repr(self, x, pretty_str):
     self.assertEqual(pretty_repr(x), pretty_str)
@@ -157,20 +157,20 @@ class FrozenDictTest(parameterized.TestCase):
     flat_leaves, tdef = jax.tree_util.tree_flatten(frozen)
     self.assertEqual(flat_leaves, [2, 1])
     self.assertEqual(
-        jax.tree_util.tree_unflatten(tdef, flat_leaves),
-        frozen,
+      jax.tree_util.tree_unflatten(tdef, flat_leaves),
+      frozen,
     )
     flat_path_leaves, tdef = jax.tree_util.tree_flatten_with_path(frozen)
     self.assertEqual(
-        flat_path_leaves,
-        [
-            ((jax.tree_util.DictKey('b'), jax.tree_util.DictKey('a')), 2),
-            ((jax.tree_util.DictKey('c'),), 1),
-        ],
+      flat_path_leaves,
+      [
+        ((jax.tree_util.DictKey('b'), jax.tree_util.DictKey('a')), 2),
+        ((jax.tree_util.DictKey('c'),), 1),
+      ],
     )
     self.assertEqual(
-        jax.tree_util.tree_unflatten(tdef, [l for _, l in flat_path_leaves]),
-        frozen,
+      jax.tree_util.tree_unflatten(tdef, [l for _, l in flat_path_leaves]),
+      frozen,
     )
 
 

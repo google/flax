@@ -28,32 +28,30 @@ In order to highlight a line of code, append "#!" to it.
 """
 from typing import List, Tuple
 
+import sphinx
 from docutils import nodes
 from docutils.parsers.rst import directives
 from docutils.statemachine import ViewList
-
-import sphinx
 from sphinx.util.docutils import SphinxDirective
 
 MISSING = object()
 
 
 class CodeDiffParser:
-
   def parse(
-      self,
-      lines,
-      title_left='Base',
-      title_right='Diff',
-      code_sep='---',
-      sync=MISSING,
+    self,
+    lines,
+    title_left='Base',
+    title_right='Diff',
+    code_sep='---',
+    sync=MISSING,
   ):
     sync = sync is not MISSING
 
     if code_sep not in lines:
       raise ValueError(
-          'Code separator not found! Code snippets should be '
-          f'separated by {code_sep}.'
+        'Code separator not found! Code snippets should be '
+        f'separated by {code_sep}.'
       )
     idx = lines.index(code_sep)
     code_left = self._code_block(lines[0:idx])
@@ -61,7 +59,7 @@ class CodeDiffParser:
     code_right = self._code_block(test_code)
 
     output = self._tabs(
-        (title_left, code_left), (title_right, code_right), sync=sync
+      (title_left, code_left), (title_right, code_right), sync=sync
     )
 
     return output, test_code
@@ -101,15 +99,15 @@ class CodeDiffParser:
 class CodeDiffDirective(SphinxDirective):
   has_content = True
   option_spec = {
-      'title_left': directives.unchanged,
-      'title_right': directives.unchanged,
-      'code_sep': directives.unchanged,
-      'sync': directives.flag,
+    'title_left': directives.unchanged,
+    'title_right': directives.unchanged,
+    'code_sep': directives.unchanged,
+    'sync': directives.flag,
   }
 
   def run(self):
     table_code, test_code = CodeDiffParser().parse(
-        list(self.content), **self.options
+      list(self.content), **self.options
     )
 
     # Create a test node as a comment node so it won't show up in the docs.
@@ -137,7 +135,7 @@ def setup(app):
   app.add_directive('codediff', CodeDiffDirective)
 
   return {
-      'version': sphinx.__display_version__,
-      'parallel_read_safe': True,
-      'parallel_write_safe': True,
+    'version': sphinx.__display_version__,
+    'parallel_read_safe': True,
+    'parallel_write_safe': True,
   }

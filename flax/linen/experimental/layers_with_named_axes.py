@@ -16,15 +16,13 @@
 import dataclasses
 from typing import Any, Callable, Iterable, Optional, Tuple, Union
 
+import jax.numpy as jnp
+from jax import lax
+
 from flax import linen as nn
 from flax.linen import initializers
-from flax.linen.linear import DotGeneralT
-from flax.linen.linear import PrecisionLike
-from flax.linen.partitioning import param_with_axes
-from flax.linen.partitioning import with_sharding_constraint
-from jax import lax
-import jax.numpy as jnp
-
+from flax.linen.linear import DotGeneralT, PrecisionLike
+from flax.linen.partitioning import param_with_axes, with_sharding_constraint
 
 # Type annotations
 IntSequence = Any
@@ -40,7 +38,7 @@ Initializer = Callable[[PRNGKey, Shape, DType], Array]
 
 default_kernel_init = initializers.lecun_normal()
 default_embed_init = initializers.variance_scaling(
-    1.0, 'fan_in', 'normal', out_axis=0
+  1.0, 'fan_in', 'normal', out_axis=0
 )
 
 
@@ -68,9 +66,9 @@ class Dense(nn.Module):
   param_dtype: DType = jnp.float32
   precision: PrecisionLike = None
   kernel_init: Callable[[PRNGKey, Shape, DType], Array] = default_kernel_init
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = (
-      initializers.zeros_init()
-  )
+  bias_init: Callable[
+    [PRNGKey, Shape, DType], Array
+  ] = initializers.zeros_init()
   kernel_axes: Tuple[str, ...] = ()
   # Deprecated. Will be removed.
   dot_general: Optional[DotGeneralT] = None
@@ -88,11 +86,11 @@ class Dense(nn.Module):
     """
     inputs = jnp.asarray(inputs, self.dtype)
     kernel = param_with_axes(
-        'kernel',
-        self.kernel_init,
-        (inputs.shape[-1], self.features),
-        self.param_dtype,
-        axes=self.kernel_axes,
+      'kernel',
+      self.kernel_init,
+      (inputs.shape[-1], self.features),
+      self.param_dtype,
+      axes=self.kernel_axes,
     )
     kernel = jnp.asarray(kernel, self.dtype)
 
@@ -103,18 +101,18 @@ class Dense(nn.Module):
     else:
       dot_general = lax.dot_general
     y = dot_general(
-        inputs,
-        kernel,
-        (((inputs.ndim - 1,), (0,)), ((), ())),
-        precision=self.precision,
+      inputs,
+      kernel,
+      (((inputs.ndim - 1,), (0,)), ((), ())),
+      precision=self.precision,
     )
     if self.use_bias:
       bias = param_with_axes(
-          'bias',
-          self.bias_init,
-          (self.features,),
-          self.param_dtype,
-          axes=(self.kernel_axes[-1],),
+        'bias',
+        self.bias_init,
+        (self.features,),
+        self.param_dtype,
+        axes=(self.kernel_axes[-1],),
       )
       bias = jnp.asarray(bias, self.dtype)
       y += jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
@@ -150,11 +148,11 @@ class Embed(nn.Module):
 
   def setup(self):
     self.embedding = param_with_axes(
-        'embedding',
-        self.embedding_init,
-        (self.num_embeddings, self.features),
-        self.param_dtype,
-        axes=('vocab', 'embed'),
+      'embedding',
+      self.embedding_init,
+      (self.num_embeddings, self.features),
+      self.param_dtype,
+      axes=('vocab', 'embed'),
     )
 
   def __call__(self, inputs: Array) -> Array:
@@ -236,19 +234,19 @@ def _compute_stats(x: Array, axes: Axes):
 
 
 def _normalize(
-    mdl: nn.Module,
-    x: Array,
-    mean: Array,
-    var: Array,
-    reduction_axes: Axes,
-    feature_axes: Axes,
-    dtype: DType,
-    param_dtype: DType,
-    epsilon: float,
-    use_bias: bool,
-    use_scale: bool,
-    bias_init: Callable[[PRNGKey, Shape, DType], Array],
-    scale_init: Callable[[PRNGKey, Shape, DType], Array],
+  mdl: nn.Module,
+  x: Array,
+  mean: Array,
+  var: Array,
+  reduction_axes: Axes,
+  feature_axes: Axes,
+  dtype: DType,
+  param_dtype: DType,
+  epsilon: float,
+  use_bias: bool,
+  use_scale: bool,
+  bias_init: Callable[[PRNGKey, Shape, DType], Array],
+  scale_init: Callable[[PRNGKey, Shape, DType], Array],
 ):
   """ "Normalizes the input of a normalization layer and optionally applies a learned scale and bias.
 
@@ -271,13 +269,13 @@ def _normalize(
   mul = lax.rsqrt(var + epsilon)
   if use_scale:
     scale = mdl.param_with_axes(
-        'scale', scale_init, reduced_feature_shape, param_dtype, axes=('embed',)
+      'scale', scale_init, reduced_feature_shape, param_dtype, axes=('embed',)
     ).reshape(feature_shape)
     mul *= scale
   y *= mul
   if use_bias:
     bias = mdl.param_with_axes(
-        'bias', bias_init, reduced_feature_shape, param_dtype, axes=('embed',)
+      'bias', bias_init, reduced_feature_shape, param_dtype, axes=('embed',)
     ).reshape(feature_shape)
     y += bias
   return jnp.asarray(y, dtype)
@@ -314,12 +312,12 @@ class LayerNorm(nn.Module):
   param_dtype: DType = jnp.float32
   use_bias: bool = True
   use_scale: bool = True
-  bias_init: Callable[[PRNGKey, Shape, DType], Array] = (
-      initializers.zeros_init()
-  )
-  scale_init: Callable[[PRNGKey, Shape, DType], Array] = (
-      initializers.ones_init()
-  )
+  bias_init: Callable[
+    [PRNGKey, Shape, DType], Array
+  ] = initializers.zeros_init()
+  scale_init: Callable[
+    [PRNGKey, Shape, DType], Array
+  ] = initializers.ones_init()
 
   @nn.compact
   def __call__(self, x):
@@ -337,17 +335,17 @@ class LayerNorm(nn.Module):
     mean, var = _compute_stats(x, reduction_axes)
 
     return _normalize(
-        self,
-        x,
-        mean,
-        var,
-        reduction_axes,
-        feature_axes,
-        self.dtype,
-        self.param_dtype,
-        self.epsilon,
-        self.use_bias,
-        self.use_scale,
-        self.bias_init,
-        self.scale_init,
+      self,
+      x,
+      mean,
+      var,
+      reduction_axes,
+      feature_axes,
+      self.dtype,
+      self.param_dtype,
+      self.epsilon,
+      self.use_bias,
+      self.use_scale,
+      self.bias_init,
+      self.scale_init,
     )

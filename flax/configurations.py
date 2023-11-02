@@ -21,9 +21,9 @@ To modify a config value on run time, call:
 """
 
 import os
-from jax import config as jax_config
-
 from contextlib import contextmanager
+
+from jax import config as jax_config
 
 # Keep a wrapper at the flax namespace, in case we make our implementation
 # in the future.
@@ -65,7 +65,7 @@ def static_bool_env(varname: str, default: bool) -> bool:
     return False
   else:
     raise ValueError(
-        'invalid truth value {!r} for environment {!r}'.format(val, varname)
+      'invalid truth value {!r} for environment {!r}'.format(val, varname)
     )
 
 
@@ -91,41 +91,41 @@ def temp_flip_flag(var_name: str, var_value: bool):
 flax_lazy_rng = static_bool_env('FLAX_LAZY_RNG', True)
 
 flax_filter_frames = define_bool_state(
-    name='filter_frames',
-    default=True,
-    help='Whether to hide flax-internal stack frames from tracebacks.',
+  name='filter_frames',
+  default=True,
+  help='Whether to hide flax-internal stack frames from tracebacks.',
 )
 
 flax_profile = define_bool_state(
-    name='profile',
-    default=True,
-    help='Whether to run Module methods under jax.named_scope for profiles.',
+  name='profile',
+  default=True,
+  help='Whether to run Module methods under jax.named_scope for profiles.',
 )
 
 flax_use_orbax_checkpointing = define_bool_state(
-    name='use_orbax_checkpointing',
-    default=True,
-    help='Whether to use Orbax to save checkpoints.',
+  name='use_orbax_checkpointing',
+  default=True,
+  help='Whether to use Orbax to save checkpoints.',
 )
 
 flax_preserve_adopted_names = define_bool_state(
-    name='preserve_adopted_names',
-    default=False,
-    help="When adopting outside modules, don't clobber existing names.",
+  name='preserve_adopted_names',
+  default=False,
+  help="When adopting outside modules, don't clobber existing names.",
 )
 
 # TODO(marcuschiam): remove this feature flag once regular dict migration is complete
 flax_return_frozendict = define_bool_state(
-    name='return_frozendict',
-    default=False,
-    help='Whether to return FrozenDicts when calling init or apply.',
+  name='return_frozendict',
+  default=False,
+  help='Whether to return FrozenDicts when calling init or apply.',
 )
 
 flax_fix_rng = define_bool_state(
-    name='fix_rng_separator',
-    default=False,
-    help=(
-        'Whether to add separator characters when folding in static data into'
-        ' PRNG keys.'
-    ),
+  name='fix_rng_separator',
+  default=False,
+  help=(
+    'Whether to add separator characters when folding in static data into'
+    ' PRNG keys.'
+  ),
 )

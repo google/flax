@@ -50,10 +50,9 @@ class Template(FlaxError):
 
 
 class FlaxError(Exception):
-
   def __init__(self, message):
     error_page = (
-        'https://flax.readthedocs.io/en/latest/api_reference/flax.errors.html'
+      'https://flax.readthedocs.io/en/latest/api_reference/flax.errors.html'
     )
     module_name = self.__class__.__module__
     class_name = self.__class__.__name__
@@ -88,8 +87,8 @@ class LazyInitError(FlaxError):
 
   def __init__(self, partial_val):
     super().__init__(
-        'Lazy init encountered a value that could with '
-        f'the given inputs (shape: {partial_val}).'
+      'Lazy init encountered a value that could with '
+      f'the given inputs (shape: {partial_val}).'
     )
 
 
@@ -168,9 +167,9 @@ class ApplyScopeInvalidVariablesTypeError(FlaxError):
 
   def __init__(self):
     super().__init__(
-        'The first argument passed to an apply function should be '
-        'a dictionary of collections. Each collection should be a '
-        'dictionary with string keys.'
+      'The first argument passed to an apply function should be '
+      'a dictionary of collections. Each collection should be a '
+      'dictionary with string keys.'
     )
 
 
@@ -183,10 +182,10 @@ class ApplyScopeInvalidVariablesStructureError(FlaxError):
 
   def __init__(self, variables):
     super().__init__(
-        f'Expect the `variables` (first argument) passed to apply() '
-        f'to be a dict with the structure {{"params": ...}}, but got a dict '
-        f'with an extra params layer, i.e.  {{"params": {{"params": ... }} }}. '
-        f'You should instead pass in your dict\'s ["params"].'
+      f'Expect the `variables` (first argument) passed to apply() '
+      f'to be a dict with the structure {{"params": ...}}, but got a dict '
+      f'with an extra params layer, i.e.  {{"params": {{"params": ... }} }}. '
+      f'You should instead pass in your dict\'s ["params"].'
     )
 
 
@@ -215,8 +214,8 @@ class ScopeParamNotFoundError(FlaxError):
 
   def __init__(self, param_name, scope_path):
     super().__init__(
-        f'Could not find parameter named "{param_name}" in scope '
-        f'"{scope_path}".'
+      f'Could not find parameter named "{param_name}" in scope '
+      f'"{scope_path}".'
     )
 
 
@@ -235,8 +234,8 @@ class ScopeCollectionNotFound(FlaxError):
 
   def __init__(self, col_name, var_name, scope_path):
     super().__init__(
-        f'Tried to access "{var_name}" from collection "{col_name}" in '
-        f'"{scope_path}" but the collection is empty.'
+      f'Tried to access "{var_name}" from collection "{col_name}" in '
+      f'"{scope_path}" but the collection is empty.'
     )
 
 
@@ -270,9 +269,9 @@ class ScopeParamShapeError(FlaxError):
 
   def __init__(self, param_name, scope_path, value_shape, init_shape):
     super().__init__(
-        f'Initializer expected to generate shape {init_shape} '
-        f'but got shape {value_shape} instead for parameter '
-        f'"{param_name}" in "{scope_path}".'
+      f'Initializer expected to generate shape {init_shape} '
+      f'but got shape {value_shape} instead for parameter '
+      f'"{param_name}" in "{scope_path}".'
     )
 
 
@@ -286,8 +285,8 @@ class ScopeVariableNotFoundError(FlaxError):
 
   def __init__(self, name, col, scope_path):
     super().__init__(
-        f'No Variable named "{name}" for collection "{col}" '
-        f'exists in "{scope_path}".'
+      f'No Variable named "{name}" for collection "{col}" '
+      f'exists in "{scope_path}".'
     )
 
 
@@ -333,8 +332,8 @@ class ModifyScopeVariableError(FlaxError):
 
   def __init__(self, col, variable_name, scope_path):
     super().__init__(
-        f'Cannot update variable "{variable_name}" in '
-        f'"{scope_path}" because collection "{col}" is immutable.'
+      f'Cannot update variable "{variable_name}" in '
+      f'"{scope_path}" because collection "{col}" is immutable.'
     )
 
 
@@ -365,8 +364,8 @@ class PartitioningUnspecifiedError(FlaxError):
 
   def __init__(self, target):
     super().__init__(
-        'Trying to transform a Partitioned variable but "partition_name"'
-        f' is not specified in metadata_params: {target}'
+      'Trying to transform a Partitioned variable but "partition_name"'
+      f' is not specified in metadata_params: {target}'
     )
 
 
@@ -427,8 +426,8 @@ class NameInUseError(FlaxError):
   def __init__(self, key_type, value, module_name):
     # key_type is in {param, variable, submodule}.
     super().__init__(
-        f'Could not create {key_type} "{value}" in Module '
-        f'{module_name}: Name in use.'
+      f'Could not create {key_type} "{value}" in Module '
+      f'{module_name}: Name in use.'
     )
 
 
@@ -472,8 +471,8 @@ class AssignSubModuleError(FlaxError):
 
   def __init__(self, cls):
     super().__init__(
-        f'Submodule {cls} must be defined in `setup()` or in a '
-        'method wrapped in `@compact`'
+      f'Submodule {cls} must be defined in `setup()` or in a '
+      'method wrapped in `@compact`'
     )
 
 
@@ -546,9 +545,9 @@ class SetAttributeFrozenModuleError(FlaxError):
 
   def __init__(self, module_cls, attr_name, attr_val):
     super().__init__(
-        f"Can't set {attr_name}={attr_val} for Module of type "
-        f'{module_cls}: Module instance is frozen outside of '
-        'setup method.'
+      f"Can't set {attr_name}={attr_val} for Module of type "
+      f'{module_cls}: Module instance is frozen outside of '
+      'setup method.'
     )
 
 
@@ -581,7 +580,7 @@ class ReservedModuleAttributeError(FlaxError):
 
   def __init__(self, annotations):
     super().__init__(
-        f'properties `parent` and `name` are reserved: {annotations}'
+      f'properties `parent` and `name` are reserved: {annotations}'
     )
 
 
@@ -598,7 +597,7 @@ class ApplyModuleInvalidMethodError(FlaxError):
 
   def __init__(self, method):
     super().__init__(
-        f'Cannot call apply(): {method} is not a valid function for apply().'
+      f'Cannot call apply(): {method} is not a valid function for apply().'
     )
 
 
@@ -708,8 +707,8 @@ class InvalidInstanceModuleError(FlaxError):
 
   def __init__(self):
     super().__init__(
-        'Can only call init, init_with_output or apply methods on an instance'
-        ' of the Module class, not the Module class itself'
+      'Can only call init, init_with_output or apply methods on an instance'
+      ' of the Module class, not the Module class itself'
     )
 
 
@@ -736,7 +735,7 @@ class IncorrectPostInitOverrideError(FlaxError):
 
   def __init__(self):
     super().__init__(
-        'Overrode `.__post_init__()` without calling `super().__post_init__()`'
+      'Overrode `.__post_init__()` without calling `super().__post_init__()`'
     )
 
 
@@ -758,8 +757,8 @@ class DescriptorAttributeError(FlaxError):
 
   def __init__(self):
     super().__init__(
-        'Trying to access a property that is accessing a non-existent'
-        ' attribute.'
+      'Trying to access a property that is accessing a non-existent'
+      ' attribute.'
     )
 
 
@@ -774,8 +773,8 @@ class InvalidCheckpointError(FlaxError):
 
   def __init__(self, path, step):
     super().__init__(
-        f'Trying to save an outdated checkpoint at step: "{step}" and path:'
-        f' "{path}".'
+      f'Trying to save an outdated checkpoint at step: "{step}" and path:'
+      f' "{path}".'
     )
 
 
@@ -792,9 +791,9 @@ class MPACheckpointingRequiredError(FlaxError):
 
   def __init__(self, path, step):
     super().__init__(
-        f'Checkpoint failed at step: "{step}" and path: "{path}": Target '
-        'contains a multiprocess array should be saved/restored with a '
-        'GlobalAsyncCheckpointManager.'
+      f'Checkpoint failed at step: "{step}" and path: "{path}": Target '
+      'contains a multiprocess array should be saved/restored with a '
+      'GlobalAsyncCheckpointManager.'
     )
 
 
@@ -810,10 +809,10 @@ class MPARestoreTargetRequiredError(FlaxError):
 
   def __init__(self, path, step, key=None):
     error_msg = (
-        f'Restore checkpoint failed at step: "{step}" and path: "{path}": '
-        'Checkpoints containing a multiprocess array need to be restored with '
-        'a target with pre-created arrays. If you cannot provide a full valid '
-        'target, consider ``allow_partial_mpa_restoration=True``. '
+      f'Restore checkpoint failed at step: "{step}" and path: "{path}": '
+      'Checkpoints containing a multiprocess array need to be restored with '
+      'a target with pre-created arrays. If you cannot provide a full valid '
+      'target, consider ``allow_partial_mpa_restoration=True``. '
     )
     if key:
       error_msg += f'This error fired when trying to restore array at {key}.'
@@ -828,9 +827,9 @@ class MPARestoreDataCorruptedError(FlaxError):
 
   def __init__(self, step, path):
     super().__init__(
-        f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
-        f' "{path}": No "commit_success.txt" found on this "_gda" directory. '
-        'Was its save halted before completion?'
+      f'Restore checkpoint failed at step: "{step}" on multiprocess array at '
+      f' "{path}": No "commit_success.txt" found on this "_gda" directory. '
+      'Was its save halted before completion?'
     )
 
 
@@ -844,7 +843,7 @@ class TransformedMethodReturnValueError(FlaxError):
 
   def __init__(self, name):
     super().__init__(
-        f'Transformed module method {name} cannot return Modules or Variables.'
+      f'Transformed module method {name} cannot return Modules or Variables.'
     )
 
 
@@ -875,9 +874,9 @@ class TransformTargetError(FlaxError):
 
   def __init__(self, target):
     super().__init__(
-        'Linen transformations must be applied to Modules classes or'
-        ' functions taking a Module instance as the first argument.'
-        f' The provided target is not a Module class or callable: {target}'
+      'Linen transformations must be applied to Modules classes or'
+      ' functions taking a Module instance as the first argument.'
+      f' The provided target is not a Module class or callable: {target}'
     )
 
 
@@ -912,9 +911,9 @@ class CursorFindError(FlaxError):
   def __init__(self, cursor=None, cursor2=None):
     if cursor and cursor2:
       super().__init__(
-          'More than one object found given the conditions of the cond_fn. '
-          'The first two objects found have the following paths: '
-          f'{cursor._path} and {cursor2._path}'
+        'More than one object found given the conditions of the cond_fn. '
+        'The first two objects found have the following paths: '
+        f'{cursor._path} and {cursor2._path}'
       )
     else:
       super().__init__('No object found given the conditions of the cond_fn.')
@@ -937,11 +936,11 @@ class TraverseTreeError(FlaxError):
   def __init__(self, update_fn, cond_fn):
     if update_fn is None and cond_fn is None:
       super().__init__(
-          'Both update_fn and cond_fn are None. Exactly one of them must be'
-          ' None.'
+        'Both update_fn and cond_fn are None. Exactly one of them must be'
+        ' None.'
       )
     else:
       super().__init__(
-          'Both update_fn and cond_fn are not None. Exactly one of them must be'
-          ' not None.'
+        'Both update_fn and cond_fn are not None. Exactly one of them must be'
+        ' not None.'
       )

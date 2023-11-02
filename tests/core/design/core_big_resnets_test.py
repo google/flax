@@ -14,15 +14,13 @@
 
 from functools import partial
 
-from absl.testing import absltest
-
-import numpy as np
-
-from flax.core import Scope, Array, init, unfreeze, lift, nn
-
 import jax
-from jax import random, numpy as jnp
+import numpy as np
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
 
+from flax.core import Array, Scope, init, lift, nn, unfreeze
 
 default_norm = partial(nn.batch_norm)
 
@@ -38,12 +36,12 @@ def residual_block(scope: Scope, x: Array, conv, norm, act, features: int):
 
 
 def big_resnet(
-    scope: Scope,
-    x,
-    blocks=(10, 5),
-    dtype=jnp.float32,
-    norm=default_norm,
-    act=nn.relu,
+  scope: Scope,
+  x,
+  blocks=(10, 5),
+  dtype=jnp.float32,
+  norm=default_norm,
+  act=nn.relu,
 ):
   conv = partial(nn.conv, bias=False, dtype=dtype)
   norm = partial(norm, dtype=dtype)
@@ -57,41 +55,40 @@ def big_resnet(
     return residual_block(scope, x, conv, norm, act, features=x.shape[-1])
 
   return lift.remat_scan(
-      body_fn,
-      lengths=blocks,
-      variable_axes={'params': 0, 'batch_stats': 0},
-      split_rngs={'params': True},
-      policy=None,
+    body_fn,
+    lengths=blocks,
+    variable_axes={'params': 0, 'batch_stats': 0},
+    split_rngs={'params': True},
+    policy=None,
   )(scope, x)
 
 
 class BigResnetTest(absltest.TestCase):
-
   def test_big_resnet(self):
     x = random.normal(random.key(0), (1, 8, 8, 8))
     y, variables = init(big_resnet)(random.key(1), x)
     self.assertEqual(y.shape, (1, 8, 8, 8))
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params'])
+      jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
     batch_stats_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['batch_stats'])
+      jax.tree_util.tree_map(jnp.shape, variables['batch_stats'])
     )
     self.assertEqual(
-        param_shapes,
-        {
-            'conv_1': {'kernel': (10, 5, 3, 3, 8, 8)},
-            'conv_2': {'kernel': (10, 5, 3, 3, 8, 8)},
-            'bn_1': {'scale': (10, 5, 8), 'bias': (10, 5, 8)},
-            'bn_2': {'scale': (10, 5, 8), 'bias': (10, 5, 8)},
-        },
+      param_shapes,
+      {
+        'conv_1': {'kernel': (10, 5, 3, 3, 8, 8)},
+        'conv_2': {'kernel': (10, 5, 3, 3, 8, 8)},
+        'bn_1': {'scale': (10, 5, 8), 'bias': (10, 5, 8)},
+        'bn_2': {'scale': (10, 5, 8), 'bias': (10, 5, 8)},
+      },
     )
     self.assertEqual(
-        batch_stats_shapes,
-        {
-            'bn_1': {'var': (10, 5, 8), 'mean': (10, 5, 8)},
-            'bn_2': {'var': (10, 5, 8), 'mean': (10, 5, 8)},
-        },
+      batch_stats_shapes,
+      {
+        'bn_1': {'var': (10, 5, 8), 'mean': (10, 5, 8)},
+        'bn_2': {'var': (10, 5, 8), 'mean': (10, 5, 8)},
+      },
     )
 
 

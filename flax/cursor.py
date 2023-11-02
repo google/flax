@@ -12,12 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import dataclasses
 import enum
-from typing import Any, Callable, Dict, Generator, Generic, Mapping, Optional, Protocol, TypeVar, runtime_checkable
+from typing import (
+  Any,
+  Callable,
+  Dict,
+  Generator,
+  Generic,
+  Mapping,
+  Optional,
+  Protocol,
+  TypeVar,
+  runtime_checkable,
+)
+
 from flax.core import FrozenDict
 from flax.errors import CursorFindError, TraverseTreeError
-import dataclasses
-
 
 A = TypeVar('A')
 Key = Any
@@ -25,7 +36,6 @@ Key = Any
 
 @runtime_checkable
 class Indexable(Protocol):
-
   def __getitem__(self, key) -> Any:
     ...
 
@@ -44,10 +54,10 @@ class ParentKey(Generic[A]):
 
 def is_named_tuple(obj):
   return (
-      isinstance(obj, tuple)
-      and hasattr(obj, '_fields')
-      and hasattr(obj, '_asdict')
-      and hasattr(obj, '_replace')
+    isinstance(obj, tuple)
+    and hasattr(obj, '_fields')
+    and hasattr(obj, '_asdict')
+    and hasattr(obj, '_replace')
   )
 
 
@@ -93,9 +103,7 @@ def _traverse_tree(path, obj, *, update_fn=None, cond_fn=None):
     access_type = AccessType.ITEM
   elif dataclasses.is_dataclass(obj):
     items = (
-        (f.name, getattr(obj, f.name))
-        for f in dataclasses.fields(obj)
-        if f.init
+      (f.name, getattr(obj, f.name)) for f in dataclasses.fields(obj) if f.init
     )
     access_type = AccessType.ATTR
   else:
@@ -104,12 +112,12 @@ def _traverse_tree(path, obj, *, update_fn=None, cond_fn=None):
   if update_fn:
     for key, value in items:
       yield from _traverse_tree(
-          path + ((key, access_type),), value, update_fn=update_fn
+        path + ((key, access_type),), value, update_fn=update_fn
       )
   else:
     for key, value in items:
       yield from _traverse_tree(
-          path + ((key, access_type),), value, cond_fn=cond_fn
+        path + ((key, access_type),), value, cond_fn=cond_fn
       )
 
 
@@ -170,7 +178,7 @@ class Cursor(Generic[A]):
       raise AttributeError(f'Attribute {name} not found in {self._obj}')
 
     child = Cursor(
-        getattr(self._obj, name), ParentKey(self, name, AccessType.ATTR)
+      getattr(self._obj, name), ParentKey(self, name, AccessType.ATTR)
     )
     self._changes[name] = child
     return child
@@ -254,8 +262,8 @@ class Cursor(Generic[A]):
       A copy of the original object with the accumulated changes.
     """
     changes = {
-        key: child.build() if isinstance(child, Cursor) else child
-        for key, child in self._changes.items()
+      key: child.build() if isinstance(child, Cursor) else child
+      for key, child in self._changes.items()
     }
     if isinstance(self._obj, FrozenDict):
       obj = self._obj.copy(changes)  # type: ignore
@@ -277,8 +285,8 @@ class Cursor(Generic[A]):
     return obj  # type: ignore
 
   def apply_update(
-      self,
-      update_fn: Callable[[str, Any], Any],
+    self,
+    update_fn: Callable[[str, Any], Any],
   ) -> 'Cursor[A]':
     """Traverse the Cursor object and record conditional changes recursively via an ``update_fn``.
     The changes are recorded in the Cursor object's ``._changes`` dictionary. To generate a copy
@@ -470,7 +478,7 @@ class Cursor(Generic[A]):
       return cursor
 
   def find_all(
-      self, cond_fn: Callable[[str, Any], bool]
+    self, cond_fn: Callable[[str, Any], bool]
   ) -> Generator['Cursor[A]', None, None]:
     """Traverse the Cursor object and return a generator of child Cursor objects that fulfill the
     conditions in the ``cond_fn``. The ``cond_fn`` has a function signature of ``(str, Any) -> bool``:
@@ -552,7 +560,7 @@ class Cursor(Generic[A]):
   def _pretty_repr(self, indent=2, _prefix_indent=0):
     s = 'Cursor(\n'
     obj_str = repr(self._obj).replace(
-        '\n', '\n' + ' ' * (_prefix_indent + indent)
+      '\n', '\n' + ' ' * (_prefix_indent + indent)
     )
     s += ' ' * (_prefix_indent + indent) + f'_obj={obj_str},\n'
     s += ' ' * (_prefix_indent + indent) + '_changes={'
@@ -562,14 +570,14 @@ class Cursor(Generic[A]):
         str_key = repr(key)
         prefix = ' ' * (_prefix_indent + 2 * indent) + str_key + ': '
         s += (
-            prefix
-            + self._changes[key]._pretty_repr(
-                indent=indent, _prefix_indent=len(prefix)
-            )
-            + ',\n'
+          prefix
+          + self._changes[key]._pretty_repr(
+            indent=indent, _prefix_indent=len(prefix)
+          )
+          + ',\n'
         )
       s = s[
-          :-2
+        :-2
       ]  # remove comma and newline character for last element in self._changes
       s += '\n' + ' ' * (_prefix_indent + indent) + '}\n'
     else:
@@ -585,8 +593,8 @@ class Cursor(Generic[A]):
       return (self[i] for i in range(len(self._obj)))
     else:
       raise NotImplementedError(
-          '__iter__ method only implemented for tuples and lists, not type'
-          f' {type(self._obj)}'
+        '__iter__ method only implemented for tuples and lists, not type'
+        f' {type(self._obj)}'
       )
 
   def __reversed__(self):
@@ -594,8 +602,8 @@ class Cursor(Generic[A]):
       return (self[i] for i in range(len(self._obj) - 1, -1, -1))
     else:
       raise NotImplementedError(
-          '__reversed__ method only implemented for tuples and lists, not type'
-          f' {type(self._obj)}'
+        '__reversed__ method only implemented for tuples and lists, not type'
+        f' {type(self._obj)}'
       )
 
   def __add__(self, other):

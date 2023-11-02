@@ -15,17 +15,16 @@
 """Utilities we could consider upstreaming to Jax."""
 
 import collections
-from collections.abc import Iterable  # pylint: disable=g-importing-member
 import itertools
 import warnings
+from collections.abc import Iterable  # pylint: disable=g-importing-member
 
 import jax
-from jax import core
-from jax import lax
-from jax.extend import linear_util as lu
-from jax.interpreters import partial_eval as pe
 import jax.numpy as jnp
 import numpy as np
+from jax import core, lax
+from jax.extend import linear_util as lu
+from jax.interpreters import partial_eval as pe
 
 
 def _pmap_device_order():
@@ -52,7 +51,7 @@ def unreplicate(tree):
 
 
 def pmean(xs, axis_name):
-  warnings.warn("use jax.lax.pmean instead", DeprecationWarning)
+  warnings.warn('use jax.lax.pmean instead', DeprecationWarning)
   return lax.pmean(xs, axis_name)
 
 
@@ -82,13 +81,13 @@ def partial_eval_by_shape(fn, input_spec, *args, **kwargs):
   inputs_flat, in_tree = jax.tree_util.tree_flatten(input_structs)
   f_flat, out_tree = jax.api_util.flatten_fun_nokwargs(lu.wrap_init(f), in_tree)
   in_pvals = [
-      pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
-      for x in inputs_flat
+    pe.PartialVal.unknown(core.ShapedArray(x.shape, x.dtype))
+    for x in inputs_flat
   ]
   _, out_pvals, _ = pe.trace_to_jaxpr_nounits(f_flat, in_pvals)
   out_flat = [
-      const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
-      for pv, const in out_pvals
+    const if pv is None else jax.ShapeDtypeStruct(pv.shape, pv.dtype)
+    for pv, const in out_pvals
   ]
   return jax.tree_util.tree_unflatten(out_tree(), out_flat)
 
@@ -219,7 +218,7 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
   def body_wrapper(c, xs):
     if keepdims:
       xs = jax.tree_util.tree_map(
-          lambda x: x.reshape((1,) * len(axis) + x.shape), xs
+        lambda x: x.reshape((1,) * len(axis) + x.shape), xs
       )
       xs = jax.tree_util.tree_map(transpose_out, xs)
     c, ys = body_fn(c, xs)
@@ -236,7 +235,7 @@ def scan_in_dim(body_fn, init, xs, axis=(0,), unroll=(1,), keepdims=False):
 
 # Copied from https://github.com/google-research/big_vision
 def pad_shard_unpad(
-    wrapped, static_argnums=(0,), static_argnames=(), static_return=False
+  wrapped, static_argnums=(0,), static_argnames=(), static_return=False
 ):
   """Wraps a function with code that pads, shards, then un-shards, un-pads.
 
@@ -281,7 +280,7 @@ def pad_shard_unpad(
     for k, v in kw.items():
       if k not in static_argnames:
         batch_sizes |= {t.shape[0] for t in jax.tree_util.tree_leaves(v)}
-    assert len(batch_sizes) == 1, f"Inconsistent batch-sizes: {batch_sizes}"
+    assert len(batch_sizes) == 1, f'Inconsistent batch-sizes: {batch_sizes}'
     b = batch_sizes.pop()
 
     def pad(x):
@@ -292,7 +291,7 @@ def pad_shard_unpad(
         db += 1
       if min_device_batch and db < min_device_batch:
         x = np.concatenate(
-            [x, np.zeros((d * (min_device_batch - db), *shape), x.dtype)]
+          [x, np.zeros((d * (min_device_batch - db), *shape), x.dtype)]
         )
         db = min_device_batch
       return x.reshape(d, db, *shape)

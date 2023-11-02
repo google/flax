@@ -13,16 +13,15 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Any, Sequence, Any
+from typing import Any, Sequence
 
-from absl.testing import absltest
-
-from flax.core import Scope, Array, init, apply, unfreeze, nn
 import jax
-from jax import numpy as jnp, random
-
+from absl.testing import absltest
+from jax import numpy as jnp
+from jax import random
 from jax.scipy.linalg import expm
 
+from flax.core import Array, Scope, apply, init, nn, unfreeze
 
 Initializer = Any
 Flow = Any
@@ -63,22 +62,21 @@ class StackFlow:
 
 
 class FlowTest(absltest.TestCase):
-
   def test_flow(self):
     x = jnp.ones((1, 3))
     flow = StackFlow((DenseFlow(),) * 3)
     y, variables = init(flow.forward)(random.key(0), x)
     param_shapes = unfreeze(
-        jax.tree_util.tree_map(jnp.shape, variables['params'])
+      jax.tree_util.tree_map(jnp.shape, variables['params'])
     )
     self.assertEqual(y.shape, (1, 3))
     self.assertEqual(
-        param_shapes,
-        {
-            '0': {'kernel': (3, 3), 'bias': (3,)},
-            '1': {'kernel': (3, 3), 'bias': (3,)},
-            '2': {'kernel': (3, 3), 'bias': (3,)},
-        },
+      param_shapes,
+      {
+        '0': {'kernel': (3, 3), 'bias': (3,)},
+        '1': {'kernel': (3, 3), 'bias': (3,)},
+        '2': {'kernel': (3, 3), 'bias': (3,)},
+      },
     )
     x_restored = apply(flow.backward)(variables, y)
     self.assertTrue(jnp.allclose(x, x_restored))

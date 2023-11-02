@@ -18,14 +18,13 @@ All Flax classes that carry state (e.g., Optimizer) can be turned into a
 state dict of numpy arrays for easy serialization.
 """
 import enum
-from typing import Any, Dict, List
 import threading
 from contextlib import contextmanager
+from typing import Any, Dict, List
 
 import jax
 import msgpack
 import numpy as np
-
 
 _STATE_DICT_REGISTRY: Dict[Any, Any] = {}
 
@@ -112,7 +111,7 @@ def to_state_dict(target) -> Dict[str, Any]:
 
 
 def register_serialization_state(
-    ty, ty_to_state_dict, ty_from_state_dict, override=False
+  ty, ty_to_state_dict, ty_from_state_dict, override=False
 ):
   """Register a type for serialization.
 
@@ -127,7 +126,7 @@ def register_serialization_state(
   """
   if ty in _STATE_DICT_REGISTRY and not override:
     raise ValueError(
-        f'a serialization handler for "{ty.__name__}" is already registered'
+      f'a serialization handler for "{ty.__name__}" is already registered'
     )
   _STATE_DICT_REGISTRY[ty] = (ty_to_state_dict, ty_from_state_dict)
 
@@ -139,9 +138,9 @@ def _list_state_dict(xs: List[Any]) -> Dict[str, Any]:
 def _restore_list(xs, state_dict: Dict[str, Any]) -> List[Any]:
   if len(state_dict) != len(xs):
     raise ValueError(
-        'The size of the list and the state dict do not match,'
-        f' got {len(xs)} and {len(state_dict)} '
-        f'at path {current_path()}'
+      'The size of the list and the state dict do not match,'
+      f' got {len(xs)} and {len(state_dict)} '
+      f'at path {current_path()}'
     )
   ys = []
   for i in range(len(state_dict)):
@@ -154,8 +153,8 @@ def _dict_state_dict(xs: Dict[str, Any]) -> Dict[str, Any]:
   str_keys = set(str(k) for k in xs.keys())
   if len(str_keys) != len(xs):
     raise ValueError(
-        'Dict keys do not have a unique string representation: '
-        f'{str_keys} vs given: {xs}'
+      'Dict keys do not have a unique string representation: '
+      f'{str_keys} vs given: {xs}'
     )
   return {str(key): to_state_dict(value) for key, value in xs.items()}
 
@@ -164,14 +163,14 @@ def _restore_dict(xs, states: Dict[str, Any]) -> Dict[str, Any]:
   diff = set(map(str, xs.keys())).difference(states.keys())
   if diff:
     raise ValueError(
-        'The target dict keys and state dict keys do not match, target dict'
-        f' contains keys {diff} which are not present in state dict at path'
-        f' {current_path()}'
+      'The target dict keys and state dict keys do not match, target dict'
+      f' contains keys {diff} which are not present in state dict at path'
+      f' {current_path()}'
     )
 
   return {
-      key: from_state_dict(value, states[str(key)], name=str(key))
-      for key, value in xs.items()
+    key: from_state_dict(value, states[str(key)], name=str(key))
+    for key, value in xs.items()
   }
 
 
@@ -184,8 +183,8 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
   if set(state_dict.keys()) == {'name', 'fields', 'values'}:
     # TODO(jheek): remove backward compatible named tuple restoration early 2022
     state_dict = {
-        state_dict['fields'][str(i)]: state_dict['values'][str(i)]
-        for i in range(len(state_dict['fields']))
+      state_dict['fields'][str(i)]: state_dict['values'][str(i)]
+      for i in range(len(state_dict['fields']))
     }
 
   sd_keys = set(state_dict.keys())
@@ -193,12 +192,11 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
 
   if sd_keys != nt_keys:
     raise ValueError(
-        'The field names of the state dict and the named tuple do not match,'
-        f' got {sd_keys} and {nt_keys} at path {current_path()}'
+      'The field names of the state dict and the named tuple do not match,'
+      f' got {sd_keys} and {nt_keys} at path {current_path()}'
     )
   fields = {
-      k: from_state_dict(getattr(xs, k), v, name=k)
-      for k, v in state_dict.items()
+    k: from_state_dict(getattr(xs, k), v, name=k) for k, v in state_dict.items()
   }
   return type(xs)(**fields)
 
@@ -206,25 +204,27 @@ def _restore_namedtuple(xs, state_dict: Dict[str, Any]):
 register_serialization_state(dict, _dict_state_dict, _restore_dict)
 register_serialization_state(list, _list_state_dict, _restore_list)
 register_serialization_state(
-    tuple,
-    _list_state_dict,
-    lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)),
+  tuple,
+  _list_state_dict,
+  lambda xs, state_dict: tuple(_restore_list(list(xs), state_dict)),
 )
 register_serialization_state(
-    _NamedTuple, _namedtuple_state_dict, _restore_namedtuple
+  _NamedTuple, _namedtuple_state_dict, _restore_namedtuple
 )
 
 register_serialization_state(
-    jax.tree_util.Partial,
-    lambda x: ({
-        'args': to_state_dict(x.args),
-        'keywords': to_state_dict(x.keywords),
-    }),
-    lambda x, sd: jax.tree_util.Partial(
-        x.func,
-        *from_state_dict(x.args, sd['args']),
-        **from_state_dict(x.keywords, sd['keywords']),
-    ),
+  jax.tree_util.Partial,
+  lambda x: (
+    {
+      'args': to_state_dict(x.args),
+      'keywords': to_state_dict(x.keywords),
+    }
+  ),
+  lambda x, sd: jax.tree_util.Partial(
+    x.func,
+    *from_state_dict(x.args, sd['args']),
+    **from_state_dict(x.keywords, sd['keywords']),
+  ),
 )
 
 # On-the-wire / disk serialization format
@@ -246,8 +246,8 @@ def _ndarray_to_bytes(arr) -> bytes:
     arr = np.array(arr)
   if arr.dtype.hasobject or arr.dtype.isalignedstruct:
     raise ValueError(
-        'Object and structured dtypes not supported '
-        'for serialization of ndarrays.'
+      'Object and structured dtypes not supported '
+      'for serialization of ndarrays.'
     )
   tpl = (arr.shape, arr.dtype.name, arr.tobytes('C'))
   return msgpack.packb(tpl, use_bin_type=True)
@@ -265,7 +265,7 @@ def _ndarray_from_bytes(data: bytes) -> np.ndarray:
   """Load ndarray from simple msgpack encoding."""
   shape, dtype_name, buffer = msgpack.unpackb(data, raw=True)
   return np.frombuffer(
-      buffer, dtype=_dtype_from_name(dtype_name), count=-1, offset=0
+    buffer, dtype=_dtype_from_name(dtype_name), count=-1, offset=0
   ).reshape(shape, order='C')
 
 
@@ -286,11 +286,11 @@ def _msgpack_ext_pack(x):
   if np.issctype(type(x)):
     # pack scalar as ndarray
     return msgpack.ExtType(
-        _MsgpackExtType.npscalar, _ndarray_to_bytes(np.asarray(x))
+      _MsgpackExtType.npscalar, _ndarray_to_bytes(np.asarray(x))
     )
   elif isinstance(x, complex):
     return msgpack.ExtType(
-        _MsgpackExtType.native_complex, msgpack.packb((x.real, x.imag))
+      _MsgpackExtType.native_complex, msgpack.packb((x.real, x.imag))
     )
   return x
 
@@ -341,7 +341,7 @@ def _chunk(arr) -> Dict[str, Any]:
   data = {'__msgpack_chunked_array__': True, 'shape': _tuple_to_dict(arr.shape)}
   flatarr = arr.reshape(-1)
   chunks = [
-      flatarr[i : i + chunksize] for i in range(0, flatarr.size, chunksize)
+    flatarr[i : i + chunksize] for i in range(0, flatarr.size, chunksize)
   ]
   data['chunks'] = _tuple_to_dict(chunks)
   return data
@@ -423,7 +423,7 @@ def msgpack_restore(encoded_pytree: bytes):
     and array leaves.
   """
   state_dict = msgpack.unpackb(
-      encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False
+    encoded_pytree, ext_hook=_msgpack_ext_unpack, raw=False
   )
   return _unchunk_array_leaves_in_place(state_dict)
 

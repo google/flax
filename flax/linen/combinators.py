@@ -75,13 +75,13 @@ class Sequential(Module):
   def __post_init__(self):
     if not isinstance(self.layers, Sequence):
       raise ValueError(
-          f"'layers' must be a sequence, got '{type(self.layers).__name__}'."
+        f"'layers' must be a sequence, got '{type(self.layers).__name__}'."
       )
     super().__post_init__()
 
   def __call__(self, *args, **kwargs):
     if not self.layers:
-      raise ValueError(f"Empty Sequential module {self.name}.")
+      raise ValueError(f'Empty Sequential module {self.name}.')
 
     outputs = self.layers[0](*args, **kwargs)
     for layer in self.layers[1:]:
