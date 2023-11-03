@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import warnings
-
 from functools import partial
 
 from jax import custom_jvp, custom_vjp, lax, random
@@ -123,28 +122,36 @@ out_qdq.defvjp(out_qdq_fwd, out_qdq_bwd)
 
 
 @partial(custom_jvp, nondiff_argnums=(2, 3, 4))
-def dot_general_with_precision(lhs, rhs, dimension_numbers, precision=None,
-                               preferred_element_type=None):
+def dot_general_with_precision(
+  lhs, rhs, dimension_numbers, precision=None, preferred_element_type=None
+):
   if precision != None or preferred_element_type != None:
-    warnings.warn("The function dot_general_with_precision will set the "
-                  "precision/preferred_element_type and disregard any provided "
-                  "values.")
-  return lax.dot_general(lhs, rhs, dimension_numbers,
-                         precision=lax.Precision.DEFAULT)
+    warnings.warn(
+      'The function dot_general_with_precision will set the '
+      'precision/preferred_element_type and disregard any provided '
+      'values.'
+    )
+  return lax.dot_general(
+    lhs, rhs, dimension_numbers, precision=lax.Precision.DEFAULT
+  )
 
-@dot_general_with_precision.defjvp
-def dot_general_with_precision_jvp(dimension_numbers, precision,
-                                   preferred_element_type, primals, tangents):
- lhs, rhs = primals
- lhs_dot, rhs_dot = tangents
 
- out = lax.dot_general(lhs, rhs, dimension_numbers,
-                       precision=lax.Precision.DEFAULT)
- grad_out = (lax.dot_general(lhs_dot, rhs, dimension_numbers,
-                             precision=lax.Precision.HIGHEST) +
-             lax.dot_general(lhs, rhs_dot, dimension_numbers,
-                             precision=lax.Precision.HIGHEST))
- return out, grad_out
+def dot_general_with_precision_jvp(
+  dimension_numbers, precision, preferred_element_type, primals, tangents
+):
+  lhs, rhs = primals
+  lhs_dot, rhs_dot = tangents
+
+  out = lax.dot_general(
+    lhs, rhs, dimension_numbers, precision=lax.Precision.DEFAULT
+  )
+  grad_out = lax.dot_general(
+    lhs_dot, rhs, dimension_numbers, precision=lax.Precision.HIGHEST
+  ) + lax.dot_general(
+    lhs, rhs_dot, dimension_numbers, precision=lax.Precision.HIGHEST
+  )
+  return out, grad_out
+
 
 class Fp8DotGeneralOp(module.Module):
   amax_history_length: int = 1024
@@ -200,7 +207,7 @@ class Fp8DotGeneralOp(module.Module):
     k_qdq = in_qdq(
       comp_dtype, k, self.kernel_scale.value, self.kernel_amax_history.value
     )
-    y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers) # type: ignore
+    y_qdq = dot_general_with_precision(x_qdq, k_qdq, dimension_numbers)  # type: ignore
     y = out_qdq(
       comp_dtype,
       y_qdq,
