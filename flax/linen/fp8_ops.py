@@ -12,9 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
+
 from functools import partial
 
-from jax import custom_vjp, custom_jvp, lax, random
+from jax import custom_jvp, custom_vjp, lax, random
 from jax import numpy as jnp
 
 from flax.linen import initializers, module
@@ -120,13 +122,19 @@ def out_qdq_bwd(compute_dtype, res, g):
 out_qdq.defvjp(out_qdq_fwd, out_qdq_bwd)
 
 
-@partial(custom_jvp, nondiff_argnums=(2,))
-def dot_general_with_precision(lhs, rhs, dimension_numbers):
+@partial(custom_jvp, nondiff_argnums=(2, 3, 4))
+def dot_general_with_precision(lhs, rhs, dimension_numbers, precision=None,
+                               preferred_element_type=None):
+  if precision != None or preferred_element_type != None:
+    warnings.warn("The function dot_general_with_precision will set the "
+                  "precision/preferred_element_type and disregard any provided "
+                  "values.")
   return lax.dot_general(lhs, rhs, dimension_numbers,
                          precision=lax.Precision.DEFAULT)
 
 @dot_general_with_precision.defjvp
-def dot_general_with_precision_jvp(dimension_numbers, primals, tangents):
+def dot_general_with_precision_jvp(dimension_numbers, precision,
+                                   preferred_element_type, primals, tangents):
  lhs, rhs = primals
  lhs_dot, rhs_dot = tangents
 
