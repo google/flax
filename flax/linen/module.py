@@ -1434,12 +1434,16 @@ class Module(ModuleBase):
   def clone(
     self: M,
     *,
-    parent: Optional[Union[Scope, 'Module']] = None,
+    parent: Optional[Union[Scope, 'Module', _Sentinel]] = None,
     _deep_clone: Union[bool, weakref.WeakValueDictionary] = False,
     _reset_names: bool = False,
     **updates,
   ) -> M:
     """Creates a clone of this Module, with optionally updated arguments.
+
+    NOTE: end users are encouraged to use the `copy` method.  `clone` is used
+      primarily for internal routines, and `copy` offers simpler arguments and
+      better defaults.
 
     Args:
       parent: The parent of the clone. The clone will have no parent if no
@@ -1502,6 +1506,29 @@ class Module(ModuleBase):
     module = self.__class__(**attrs)
 
     return module
+
+  def copy(
+    self: M,
+    *,
+    parent: Optional[Union[Scope, 'Module', _Sentinel]] = _unspecified_parent,
+    name: Optional[str] = None,
+    **updates,
+  ) -> M:
+    """Creates a copy of this Module, with optionally updated arguments.
+
+    Args:
+      parent: The parent of the copy.  By default the current module is taken
+        as parent if not explicitly specified.
+      name: A new name for the copied Module, by default a new automatic name
+        will be given.
+      **updates: Attribute updates.
+
+    Returns:
+      A copy of the this Module with the updated name, parent, and attributes.
+    """
+    return self.clone(
+      parent=parent, name=name, _deep_clone=True, _reset_names=False, **updates
+    )
 
   @overload
   def variable(
