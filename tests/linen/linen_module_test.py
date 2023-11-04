@@ -2712,6 +2712,36 @@ class RelaxedNamingTests(absltest.TestCase):
     with self.assertRaises(errors.NameInUseError):
       vs = foo.init(k, x)
 
+  def test_internal_deep_clone(self):
+    class Child(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        w = self.param('w', nn.initializers.zeros, (5, x.shape[1]))
+        return x @ w
+
+    class Parent(nn.Module):
+      num_layers: int
+      child_template: Child
+
+      @nn.compact
+      def __call__(self, x):
+        for i in range(self.num_layers):
+          x = self.child_template.clone(
+            parent=self, _deep_clone=True, name=None
+          )(x)
+        return x
+
+    model = Parent(num_layers=2, child_template=Child())
+    x = jnp.ones((32, 5))
+    variables = model.init(jax.random.key(0), x)
+    output = model.apply(variables, x)
+    self.assertTrue(
+      jnp.all(
+        variables['params']['Child_0']['w']
+        == variables['params']['Child_1']['w']
+      )
+    )
+
 
 class FrozenDictTests(absltest.TestCase):
   def test_frozendict_flag(self):

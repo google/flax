@@ -1495,6 +1495,8 @@ class Module(ModuleBase):
       # _map_submodules will map over all submodules inside attrs
       # value here can be any pytree, non-module values are ignored
       for field_name, value in attrs.items():
+        if field_name == 'parent':
+          continue
         attrs[field_name] = _map_submodules(clone_fn, value)
 
     module = self.__class__(**attrs)
