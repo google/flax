@@ -2007,6 +2007,135 @@ class TransformTest(absltest.TestCase):
     )
     self.assertEqual(jax.tree_map(jnp.shape, vs), outer_expect)
 
+  def test_grad_simple(self):
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        p = self.param('scale', nn.initializers.ones_init(), ())
+        return jnp.sum(p * x * y)
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        x_grad, y_grad = nn.grad(
+          lambda mdl, x, y: mdl(x, y), LearnScale(), x, y
+        )
+        return x_grad, y_grad
+
+    x = random.uniform(random.key(1), (4,))
+    y = random.uniform(random.key(2), (4,))
+    vs = Foo().init(random.key(0), x, y)
+
+    x_grad, y_grad = Foo().apply(vs, x, y)
+    self.assertTrue(tree_allclose(x_grad, y))
+    self.assertTrue(tree_allclose(y_grad, x))
+
+  def test_grad_simple_with_aux(self):
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        p = self.param('scale', nn.initializers.ones_init(), ())
+        return jnp.sum(p * x * y), p
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        (x_grad, y_grad), aux = nn.grad(
+          lambda mdl, x, y: mdl(x, y), LearnScale(), x, y, has_aux=True
+        )
+        return aux, x_grad, y_grad
+
+    x = random.uniform(random.key(1), (4,))
+    y = random.uniform(random.key(2), (4,))
+    vs = Foo().init(random.key(0), x, y)
+
+    aux, x_grad, y_grad = Foo().apply(vs, x, y)
+    self.assertTrue(tree_allclose(x_grad, y))
+    self.assertTrue(tree_allclose(y_grad, x))
+    self.assertTrue(tree_allclose(aux, vs['params']['LearnScale_0']['scale']))
+
+  def test_value_and_grad_simple(self):
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        p = self.param('scale', nn.initializers.ones_init(), ())
+        return jnp.sum(p * x * y)
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        z, (x_grad, y_grad) = nn.value_and_grad(
+          lambda mdl, x, y: mdl(x, y), LearnScale(), x, y
+        )
+        return z, x_grad, y_grad
+
+    x = random.uniform(random.key(1), (4,))
+    y = random.uniform(random.key(2), (4,))
+    vs = Foo().init(random.key(0), x, y)
+
+    z, x_grad, y_grad = Foo().apply(vs, x, y)
+    self.assertTrue(tree_allclose(x_grad, y))
+    self.assertTrue(tree_allclose(y_grad, x))
+
+  def test_value_and_grad_simple_with_aux(self):
+    class LearnScale(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        p = self.param('scale', nn.initializers.ones_init(), ())
+        return jnp.sum(p * x * y), p
+
+    class Foo(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        (z, aux), (x_grad, y_grad) = nn.value_and_grad(
+          lambda mdl, x, y: mdl(x, y), LearnScale(), x, y, has_aux=True
+        )
+        return z, aux, x_grad, y_grad
+
+    x = random.uniform(random.key(1), (4,))
+    y = random.uniform(random.key(2), (4,))
+    vs = Foo().init(random.key(0), x, y)
+
+    z, aux, x_grad, y_grad = Foo().apply(vs, x, y)
+    self.assertTrue(tree_allclose(x_grad, y))
+    self.assertTrue(tree_allclose(y_grad, x))
+    self.assertTrue(tree_allclose(aux, vs['params']['LearnScale_0']['scale']))
+
+  def test_value_and_grad_multiscope(self):
+    class Foo(nn.Module):
+      bar: nn.Module
+
+      @nn.compact
+      def __call__(self, x, y):
+        def fn(self, x, y):
+          qup = nn.Dense(y.shape[-1])
+          delta = y - self.bar(qup(x))
+          return jnp.sum(delta**2)
+
+        z, (x_grad, y_grad) = nn.value_and_grad(fn, self, x, y)
+        return z, x_grad, y_grad
+
+    class Baz(nn.Module):
+      @nn.compact
+      def __call__(self, x, y):
+        bar = nn.Dense(y.shape[-1])
+        return Foo(bar=bar)(x, y)
+
+    x = random.uniform(random.key(1), (4,))
+    y = random.uniform(random.key(2), (4,))
+    vs = Baz().init(random.key(0), x, y)
+    z, x_grad, y_grad = Baz().apply(vs, x, y)
+
+    def comparison_fn(x, y):
+      w1 = vs['params']['Foo_0']['Dense_0']['kernel']
+      w2 = vs['params']['Dense_0']['kernel']
+      delta = y - jnp.dot(jnp.dot(x, w1), w2)
+      return jnp.sum(delta**2)
+
+    self.assertTrue(tree_allclose(comparison_fn(x, y), z))
+    self.assertTrue(tree_allclose(jax.grad(comparison_fn, 0)(x, y), x_grad))
+    self.assertTrue(tree_allclose(jax.grad(comparison_fn, 1)(x, y), y_grad))
+
 
 if __name__ == '__main__':
   absltest.main()

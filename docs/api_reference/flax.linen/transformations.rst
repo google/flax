@@ -28,6 +28,8 @@ Transformations
   map_variables
   jvp
   vjp
+  grad
+  value_and_grad
   custom_vjp
   while_loop
   cond
