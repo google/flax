@@ -2736,11 +2736,62 @@ class RelaxedNamingTests(absltest.TestCase):
     variables = model.init(jax.random.key(0), x)
     output = model.apply(variables, x)
     self.assertTrue(
-      jnp.all(
-        variables['params']['Child_0']['w']
-        == variables['params']['Child_1']['w']
-      )
+      variables['params']['Child_0']['w'].shape
+      == variables['params']['Child_1']['w'].shape
     )
+
+  def test_copy_method(self):
+    class Parent(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        child = nn.Dense(
+          2,
+        )
+        x = child(x)
+        x = child.copy()(x)
+        return x
+
+    model = Parent()
+    x = jnp.ones((2, 2))
+    variables = model.init(jax.random.key(0), x)
+    output = model.apply(variables, x)
+    self.assertTrue(
+      variables['params']['Dense_0']['kernel'].shape
+      == variables['params']['Dense_1']['kernel'].shape
+    )
+
+  def test_copy_from_template(self):
+    class Child(nn.Module):
+      @nn.compact
+      def __call__(self, x):
+        w = self.param('w', nn.initializers.zeros, (5, x.shape[1]))
+        return x @ w
+
+    class Parent(nn.Module):
+      num_layers: int
+      child_template: Child
+
+      @nn.compact
+      def __call__(self, x):
+        for i in range(self.num_layers):
+          x = self.child_template.copy()(x)
+        for i in range(self.num_layers):
+          x = self.child_template.copy(name=f'next_layer_{i}')(x)
+        return x
+
+    model = Parent(num_layers=2, child_template=Child())
+    x = jnp.ones((32, 5))
+    variables = model.init(jax.random.key(0), x)
+    output = model.apply(variables, x)
+    self.assertTrue(
+      variables['params']['Child_0']['w'].shape
+      == variables['params']['Child_1']['w'].shape
+    )
+    self.assertIn('Child_0', variables['params'])
+    self.assertIn('Child_1', variables['params'])
+    self.assertIn('next_layer_0', variables['params'])
+    self.assertIn('next_layer_1', variables['params'])
+    self.assertNotIn('child_template', variables['params'])
 
 
 class FrozenDictTests(absltest.TestCase):

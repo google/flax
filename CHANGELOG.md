@@ -18,8 +18,8 @@ vNext
 -
 -
 -
--
--
+- Add copy() method to Module.  This is a user-friendly version of the internal clone() method with better
+  defaults for common use cases.
 -
 -
 -
