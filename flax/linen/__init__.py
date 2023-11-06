@@ -144,6 +144,8 @@ from .transforms import (
     scan as scan,
     switch as switch,
     vjp as vjp,
+    grad as grad,
+    value_and_grad as value_and_grad,
     vmap as vmap,
     while_loop as while_loop,
 )
