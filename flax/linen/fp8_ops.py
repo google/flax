@@ -135,6 +135,7 @@ def dot_general_with_precision(
     lhs, rhs, dimension_numbers, precision=lax.Precision.DEFAULT
   )
 
+
 @dot_general_with_precision.defjvp
 def dot_general_with_precision_jvp(
   dimension_numbers, precision, preferred_element_type, primals, tangents
