@@ -40,7 +40,6 @@ all = [
     "matplotlib",  # only needed for tensorboard export
 ]
 testing = [
-    # Last version does not have the ROMs we test on pre-packaged
     "clu",  # All examples.
     "clu<=0.0.9; python_version<'3.10'",
     "einops",
@@ -53,7 +52,7 @@ testing = [
     "pytest",
     "pytest-cov",
     "pytest-custom_exit_code",
-    "pytest-xdist==1.34.0",  # upgrading to 2.0 broke tests, need to investigate
+    "pytest-xdist",
     "pytype",
     "sentencepiece",  # WMT/LM1B examples
     "tensorflow_text>=2.11.0",  # WMT/LM1B examples
@@ -119,46 +118,20 @@ filterwarnings = [
     "error",
     # Jax warning when no gpu/tpu found.
 	"ignore:No GPU/TPU found, falling back to CPU.*:UserWarning",
-    # We should remove our dependence on jtu.
-    "ignore:jax.test_util.check_eq is deprecated and will soon be removed.*:FutureWarning",
-    # ImportWarning: can't resolve package from __spec__ or __package__, falling back on __name__ and __path__
-    "ignore:can't resolve package from.*:ImportWarning",
     # traverse_util.Traversal will be removed soon.
     "ignore:`flax.traverse_util.Traversal` will be deprecated.*:DeprecationWarning",
-    # distutils DeprecationWarning
-    "ignore:distutils Version classes are deprecated.*:DeprecationWarning",
-    # Deprecated numpy for Python 3.9
-    "ignore:`np.bool.*` is a deprecated alias:DeprecationWarning",
-    "ignore:NumPy will stop allowing conversion of out-of-bound Python integers to integer arrays:DeprecationWarning",
-    # Deprecated sharding symbol
-    "ignore:jax.experimental.maps.Mesh is deprecated. Use jax.sharding.Mesh.*:DeprecationWarning",
     # Deprecated legacy checkpoint - just want to keep the tests running for a while
     "ignore:Flax Checkpointing will soon be deprecated in favor of Orbax.*:DeprecationWarning",
-    # Some Tensorflow IO error on 3/27/2023
-    "ignore:file system plugins are not loaded.*:UserWarning",
-    "ignore:unable to load libtensorflow_io_plugins.so.*:UserWarning",
-    # Remove this after next Optax release after 3/27/2023
-    "ignore:jax.numpy.DeviceArray is deprecated. Use jax.Array.*:DeprecationWarning",
-    # DeprecationWarnings for pkg_resources
-    "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
-    # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
-    "ignore:.*Deprecated call to `pkg_resources.declare_namespace.*:DeprecationWarning",
-    # DeprecationWarning: module 'sre_constants' is deprecated
-    "ignore:.*module 'sre_constants' is deprecated.*:DeprecationWarning",
-    # DeprecationWarning: jax.random.KeyArray is deprecated.
-    "ignore:.*jax.random.KeyArray is deprecated.*:DeprecationWarning",
-    # DeprecationWarning: SelfAttention will be deprecated soon.
-    "ignore:.*SelfAttention will be deprecated soon.*:DeprecationWarning",
     # DeprecationWarning: The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.
     "ignore:.*The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.*:DeprecationWarning",
     # DeprecationWarning: the function signature of MultiHeadDotProductAttention's `__call__` method has changed
     "ignore:.*the function signature of MultiHeadDotProductAttention's `__call__` method has changed.*:DeprecationWarning",
     # DeprecationWarning: ml_dtypes.float8_e4m3b11 is deprecated.
     "ignore:.*ml_dtypes.float8_e4m3b11 is deprecated.*:DeprecationWarning",
-    # DeprecationWarning: jax.core.Shape is deprecated. Use Shape = Sequence[int | Any].  (chex, recheck by Nov 2023)
-    "ignore:.*jax.core.Shape is deprecated.*:DeprecationWarning",
     # DeprecationWarning: jax.config.define_bool_state is deprecated. Please use other libraries for configuration instead.
     "ignore:.*jax.config.define_bool_state is deprecated.:DeprecationWarning",
+    # pytest-cov uses a deprecated feature of pytest-xdist. (2023-11-06)
+    "ignore:The --rsyncdir command line argument and rsyncdirs config variable are deprecated.:DeprecationWarning",
 ]
 
 [tool.coverage.report]
