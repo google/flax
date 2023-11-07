@@ -243,7 +243,7 @@ class EncoderDecoder1DBlock(nn.Module):
             nn.initializers.ones, ('embed',)
         ),
     )(inputs)
-    x = nn.SelfAttention(
+    x = nn.MultiHeadDotProductAttention(
         num_heads=config.num_heads,
         dtype=config.dtype,
         qkv_features=config.qkv_dim,
@@ -256,7 +256,7 @@ class EncoderDecoder1DBlock(nn.Module):
         dropout_rate=config.attention_dropout_rate,
         deterministic=config.deterministic,
         decode=config.decode,
-    )(x, decoder_mask)
+    )(x, mask=decoder_mask)
     x = nn.Dropout(rate=config.dropout_rate)(
         x, deterministic=config.deterministic
     )
