@@ -314,7 +314,7 @@ Notable examples in Flax include:
    :hidden:
    :maxdepth: 2
 
-   Quick start <getting_started>
+   Quick start <quick_start>
    guides/flax_fundamentals/flax_basics
    guides/index
    examples/index
