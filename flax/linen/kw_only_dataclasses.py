@@ -56,7 +56,7 @@ import inspect
 from types import MappingProxyType
 from typing import Any, TypeVar
 
-from typing_extensions import dataclass_transform
+import typing_extensions as tpe
 
 import flax
 
@@ -101,7 +101,7 @@ def field(*, metadata=None, kw_only=dataclasses.MISSING, **kwargs):
   return dataclasses.field(metadata=metadata, **kwargs)
 
 
-@dataclass_transform(field_specifiers=(field,))  # type: ignore[literal-required]
+@tpe.dataclass_transform(field_specifiers=(field,))  # type: ignore[literal-required]
 def dataclass(cls=None, extra_fields=None, **kwargs):
   """Wrapper for dataclasses.dataclass that adds support for kw_only fields.
 

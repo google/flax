@@ -43,7 +43,7 @@ from typing import (
 
 import jax
 import jax.numpy as jnp
-from typing_extensions import Protocol, dataclass_transform
+import typing_extensions as tpe
 
 import flax
 import flax.linen as nn
@@ -785,7 +785,7 @@ class ParentDescriptor:
     object.__setattr__(obj, '_parent_ref', maybe_weak)
 
 
-class Descriptor(Protocol):
+class Descriptor(tpe.Protocol):
   __isabstractmethod__: bool
 
   def __get__(self, obj, objtype=None) -> Any:
@@ -873,7 +873,7 @@ def module_field(*, kw_only: bool = False, default: Optional[Any] = ...) -> Any:
 # * Other attributes are annotated for completeness. Because we are using
 #   the `if typing.TYPE_CHECKING` pattern, these annotations are not present
 #   at runtime so they don't affect the dataclass behavior.
-@dataclass_transform(field_specifiers=(module_field,))  # type: ignore[literal-required]
+@tpe.dataclass_transform(field_specifiers=(module_field,))  # type: ignore[literal-required]
 class ModuleBase:
   if typing.TYPE_CHECKING:
     scope: Optional[Scope]
@@ -997,9 +997,9 @@ class Module(ModuleBase):
       if tuple(sys.version_info)[:3] >= (3, 10, 0):
         for (
           name,
-          annotation,
+          annotation,  # pytype: disable=invalid-annotation
           default,
-        ) in extra_fields:  # pytype: disable=invalid-annotation
+        ) in extra_fields:
           setattr(cls, name, default)
           cls.__annotations__[name] = annotation
         dataclasses.dataclass(  # type: ignore[call-overload]

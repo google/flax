@@ -111,6 +111,10 @@ module = [
     "yaml",
 ]
 ignore_missing_imports = true
+# exclude nnx
+[[tool.mypy.overrides]]
+module = "flax.experimental.nnx.*"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 filterwarnings = [
@@ -134,6 +138,10 @@ filterwarnings = [
     "ignore:.*jax.config.define_bool_state is deprecated.:DeprecationWarning",
     # pytest-cov uses a deprecated feature of pytest-xdist. (2023-11-06)
     "ignore:The --rsyncdir command line argument and rsyncdirs config variable are deprecated.:DeprecationWarning",
+    # DeprecationWarning: jax.random.KeyArray is deprecated.
+    "ignore:.*jax.random.KeyArray is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: jax.core.Shape is deprecated.
+    "ignore:.*jax.core.Shape is deprecated.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]
