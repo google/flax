@@ -82,7 +82,10 @@ if $RUN_DOCTEST; then
   # test build html
   sphinx-build -M html docs docs/_build -T
   # test docstrings
-  pytest -n auto flax --doctest-modules --suppress-no-test-exit-code
+  pytest -n auto flax \
+    --doctest-modules \
+    --suppress-no-test-exit-code \
+    --ignore=flax/experimental/nnx
 fi
 
 # check that flax is running on editable mode
@@ -117,19 +120,22 @@ if $RUN_PYTEST; then
   for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
       pytest $egd
   done
+
+  # Run nnx tests
+  pytest -n auto flax/experimental/nnx/tests $PYTEST_OPTS $PYTEST_IGNORE
 fi
 
 if $RUN_PYTYPE; then
   echo "=== RUNNING PYTYPE ==="
   # Validate types in library code.
-  pytype --jobs auto --config pyproject.toml flax/
+  pytype --jobs auto --config pyproject.toml flax/ --exclude flax/experimental/nnx
 
   # Validate types in examples.
   for egd in $(find examples -maxdepth 1 -mindepth 1 -type d); do
       # use cd to make sure pytype cache lives in example dir and doesn't name clash
       # use *.py to avoid importing configs as a top-level import which leads to import errors
       # because config files use relative imports (e.g. from config import ...).
-      (cd $egd ; pytype --jobs auto --config ../../pyproject.toml "*.py")
+      (cd $egd ; pytype --jobs auto --exclude flax/experimental/nnx --config ../../pyproject.toml "*.py")
   done
 fi
 

@@ -16,3 +16,6 @@ docs/**/tmp
 
 # used by direnv
 .envrc
+
+# custom
+/tmp-files
