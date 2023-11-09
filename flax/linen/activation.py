@@ -33,7 +33,6 @@ from jax.nn import leaky_relu
 from jax.nn import log_sigmoid
 from jax.nn import log_softmax
 from jax.nn import logsumexp
-from jax.nn import normalize
 from jax.nn import one_hot
 from jax.nn import relu
 from jax.nn import relu6
@@ -47,6 +46,9 @@ from jax.nn import standardize
 from jax.nn import swish
 import jax.numpy as jnp
 from jax.numpy import tanh
+
+# Normalize is a deprecated alias of standardize
+normalize = standardize
 
 # pylint: enable=unused-import
 
