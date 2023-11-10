@@ -133,17 +133,6 @@ NNX takes the best features that allow Flax to scale to large projects and integ
 
 One place in which NNX strongly deviates from Flax is that (currently) it avoids shape inference in favor of static initialization. It is not a technical limitation but rather a design choice. This design both simplifies the internal implementation and makes it easier to reason about the code for the user, at the cost of being more verbose at times. On the other hand, Pytorch users will feel right at home.
 
-### How is it different from Equinox?
-While they might look similar at a surface-level, NNX's Module system is more powerful and flexible than Equinox's, it contains the following additional features:
-
-* Uses regular python classes (no mandatory dataclass behavior).
-* Modules are mutable
-* Reference sharing between Modules is allowed
-* Mutable state lives inside the Module (no need for a separate [State container](https://docs.kidger.site/equinox/examples/stateful/)).
-* Supports node metadata and semantic partitioning.
-
-One major difference between the two frameworks is that, by design, NNX Modules are not Pytrees. This adds a safety layer as it prevents state updates from being lost by accident due to referential transparency. It also removes the need of threading a separate [State container](https://docs.kidger.site/equinox/examples/stateful/) throughout the code in order to propagate state. In NNX state updates are either always preserved or explicitly discarded by the user.
-
 ## User Guide
 
 ### Modules
