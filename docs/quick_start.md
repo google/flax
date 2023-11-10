@@ -9,8 +9,6 @@ jupytext:
     jupytext_version: 1.13.8
 ---
 
-+++ {"id": "6eea21b3"}
-
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google/flax/blob/main/docs/getting_started.ipynb)
 [![Open On GitHub](https://img.shields.io/badge/Open-on%20GitHub-blue?logo=GitHub)](https://github.com/google/flax/blob/main/docs/getting_started.ipynb)
 
@@ -22,18 +20,15 @@ Flax is an open source Python neural network library built on top of [JAX](https
 network (CNN) using the [Flax](https://flax.readthedocs.io) Linen API and train
 the network for image classification on the MNIST dataset.
 
-+++ {"id": "nwJWKIhdwxDo"}
++++
 
 ## 1. Install Flax
 
 ```{code-cell}
-:id: bb81587e
 :tags: [skip-execution]
 
 !pip install -q flax>=0.7.5
 ```
-
-+++ {"id": "b529fbef"}
 
 ## 2. Loading data
 
@@ -42,13 +37,6 @@ data-loading pipeline and this example demonstrates how to utilize TFDS. Define 
 samples to floating-point numbers.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 54
-  status: ok
-  timestamp: 1673483483044
-id: bRlrHqZVXZvk
----
 import tensorflow_datasets as tfds  # TFDS for MNIST
 import tensorflow as tf             # TensorFlow operations
 
@@ -72,8 +60,6 @@ def get_datasets(num_epochs, batch_size):
   return train_ds, test_ds
 ```
 
-+++ {"id": "7057395a"}
-
 ## 3. Define network
 
 Create a convolutional neural network with the Linen API by subclassing
@@ -85,13 +71,6 @@ stacking layers—you can define the inlined submodules directly within the
 decorator. To learn more about the Flax Linen `@compact` decorator, refer to the [`setup` vs `compact`](https://flax.readthedocs.io/en/latest/guides/setup_or_nncompact.html) guide.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 53
-  status: ok
-  timestamp: 1673483483208
-id: cbc079cd
----
 from flax import linen as nn  # Linen API
 
 class CNN(nn.Module):
@@ -112,21 +91,13 @@ class CNN(nn.Module):
     return x
 ```
 
-+++ {"id": "hy7iRu7_zlx-"}
-
 ### View model layers
 
 Create an instance of the Flax Module and use the [`Module.tabulate`](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html#flax.linen.Module.tabulate) method to visualize a table of the model layers by passing an RNG key and template image input.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 103
-  status: ok
-  timestamp: 1673483483427
-id: lDHfog81zLQa
-outputId: 2c580f41-bf5d-40ec-f1cf-ab7f319a84da
----
+:outputId: 2c580f41-bf5d-40ec-f1cf-ab7f319a84da
+
 import jax
 import jax.numpy as jnp  # JAX NumPy
 
@@ -134,8 +105,6 @@ cnn = CNN()
 print(cnn.tabulate(jax.random.key(0), jnp.ones((1, 28, 28, 1)),
                    compute_flops=True, compute_vjp_flops=True))
 ```
-
-+++ {"id": "4b5ac16e"}
 
 ## 4. Create a `TrainState`
 
@@ -147,62 +116,31 @@ Because this is such a common pattern, Flax provides the class
 that serves most basic usecases.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 52
-  status: ok
-  timestamp: 1673483483631
-id: qXr7JDpIxGNZ
-outputId: 1249b7fb-6787-41eb-b34c-61d736300844
----
+:outputId: 1249b7fb-6787-41eb-b34c-61d736300844
+
 !pip install -q clu
 ```
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 1
-  status: ok
-  timestamp: 1673483483754
-id: CJDaJNijyOji
----
 from clu import metrics
 from flax.training import train_state  # Useful dataclass to keep train state
 from flax import struct                # Flax dataclasses
 import optax                           # Common loss functions and optimizers
 ```
 
-+++ {"id": "8b86b5f1"}
-
 We will be using the `clu` library for computing metrics. For more information on `clu`, refer to the [repo](https://github.com/google/CommonLoopUtils) and [notebook](https://colab.research.google.com/github/google/CommonLoopUtils/blob/master/clu_synopsis.ipynb#scrollTo=ueom-uBWLbeQ).
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 55
-  status: ok
-  timestamp: 1673483483958
-id: 7W0qf7FC9uG5
----
 @struct.dataclass
 class Metrics(metrics.Collection):
   accuracy: metrics.Accuracy
   loss: metrics.Average.from_output('loss')
 ```
 
-+++ {"id": "f3ce5e4c"}
-
 You can then subclass `train_state.TrainState` so that it also contains metrics. This has the advantage that we only need
 to pass around a single argument to functions like `train_step()` (see below) to calculate the loss, update the parameters and compute the metrics all at once.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 54
-  status: ok
-  timestamp: 1673483484125
-id: e0102447
----
 class TrainState(train_state.TrainState):
   metrics: Metrics
 
@@ -214,8 +152,6 @@ def create_train_state(module, rng, learning_rate, momentum):
       apply_fn=module.apply, params=params, tx=tx,
       metrics=Metrics.empty())
 ```
-
-+++ {"id": "a15de484"}
 
 ## 5. Training step
 
@@ -237,13 +173,6 @@ it with [XLA](https://www.tensorflow.org/xla) into fused device operations
 that run faster and more efficiently on hardware accelerators.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 52
-  status: ok
-  timestamp: 1673483484293
-id: 9b0af486
----
 @jax.jit
 def train_step(state, batch):
   """Train for a single step."""
@@ -258,20 +187,11 @@ def train_step(state, batch):
   return state
 ```
 
-+++ {"id": "0ff5145f"}
-
 ## 6. Metric computation
 
 Create a separate function for loss and accuracy metrics. Loss is calculated using the `optax.softmax_cross_entropy_with_integer_labels` function, while accuracy is calculated using `clu.metrics`.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 53
-  status: ok
-  timestamp: 1673483484460
-id: 961bf70b
----
 @jax.jit
 def compute_metrics(*, state, batch):
   logits = state.apply_fn({'params': state.params}, batch['image'])
@@ -284,25 +204,14 @@ def compute_metrics(*, state, batch):
   return state
 ```
 
-+++ {"id": "497241c3"}
-
 ## 7. Download data
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 515
-  status: ok
-  timestamp: 1673483485090
-id: bff5393e
----
 num_epochs = 10
 batch_size = 32
 
 train_ds, test_ds = get_datasets(num_epochs, batch_size)
 ```
-
-+++ {"id": "809ae1a0"}
 
 ## 8. Seed randomness
 
@@ -315,28 +224,12 @@ train_ds, test_ds = get_datasets(num_epochs, batch_size)
   and [PRNG chains](https://flax.readthedocs.io/en/latest/philosophy.html#how-are-parameters-represented-and-how-do-we-handle-general-differentiable-algorithms-that-update-stateful-variables).)
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 59
-  status: ok
-  timestamp: 1673483485268
-id: xC4MFyBsfT-U
----
 tf.random.set_seed(0)
 ```
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 52
-  status: ok
-  timestamp: 1673483485436
-id: e4f6f4d3
----
 init_rng = jax.random.key(0)
 ```
-
-+++ {"id": "80fbb60b"}
 
 ## 9. Initialize the `TrainState`
 
@@ -344,30 +237,14 @@ Remember that the function `create_train_state` initializes the model parameters
 and puts them into the training state dataclass that is returned.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 56
-  status: ok
-  timestamp: 1673483485606
-id: 445fcab0
----
 learning_rate = 0.01
 momentum = 0.9
 ```
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 52
-  status: ok
-  timestamp: 1673483485777
-id: 5221eafd
----
 state = create_train_state(cnn, init_rng, learning_rate, momentum)
 del init_rng  # Must not be used anymore.
 ```
-
-+++ {"id": "b1c00230"}
 
 ## 10. Train and evaluate
 
@@ -386,25 +263,11 @@ Define a training loop that:
 Once the training and testing is done after 10 epochs, the output should show that your model was able to achieve approximately 99% accuracy.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 55
-  status: ok
-  timestamp: 1673483485947
-id: '74295360'
----
 # since train_ds is replicated num_epochs times in get_datasets(), we divide by num_epochs
 num_steps_per_epoch = train_ds.cardinality().numpy() // num_epochs
 ```
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 1
-  status: ok
-  timestamp: 1673483486076
-id: cRtnMZuQFlKl
----
 metrics_history = {'train_loss': [],
                    'train_accuracy': [],
                    'test_loss': [],
@@ -412,14 +275,8 @@ metrics_history = {'train_loss': [],
 ```
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 17908
-  status: ok
-  timestamp: 1673483504133
-id: 2c40ce90
-outputId: 258a2c76-2c8f-4a9e-d48b-dde57c342a87
----
+:outputId: 258a2c76-2c8f-4a9e-d48b-dde57c342a87
+
 for step,batch in enumerate(train_ds.as_numpy_iterator()):
 
   # Run optimization steps over training batches and compute batch metrics
@@ -447,19 +304,11 @@ for step,batch in enumerate(train_ds.as_numpy_iterator()):
           f"accuracy: {metrics_history['test_accuracy'][-1] * 100}")
 ```
 
-+++ {"id": "gfsecJzvzgCT"}
-
 ## 11. Visualize metrics
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 358
-  status: ok
-  timestamp: 1673483504621
-id: Zs5atiqIG9Kz
-outputId: 431a2fcd-44fa-4202-f55a-906555f060ac
----
+:outputId: 431a2fcd-44fa-4202-f55a-906555f060ac
+
 import matplotlib.pyplot as plt  # Visualization
 
 # Plot loss and accuracy in subplots
@@ -475,20 +324,11 @@ plt.show()
 plt.clf()
 ```
 
-+++ {"id": "qQbKS0tV3sZ1"}
-
 ## 12. Perform inference on test set
 
 Define a jitted inference function `pred_step`. Use the learned parameters to do model inference on the test set and visualize the images and their corresponding predicted labels.
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 580
-  status: ok
-  timestamp: 1673483505350
-id: DFwxgBQf44ks
----
 @jax.jit
 def pred_step(state, batch):
   logits = state.apply_fn({'params': state.params}, test_batch['image'])
@@ -499,22 +339,14 @@ pred = pred_step(state, test_batch)
 ```
 
 ```{code-cell}
----
-executionInfo:
-  elapsed: 1250
-  status: ok
-  timestamp: 1673483506723
-id: 5d5nF3u44JFI
-outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
----
+:outputId: 1db5a01c-9d70-4f7d-8c0d-0a3ad8252d3e
+
 fig, axs = plt.subplots(5, 5, figsize=(12, 12))
 for i, ax in enumerate(axs.flatten()):
     ax.imshow(test_batch['image'][i, ..., 0], cmap='gray')
     ax.set_title(f"label={pred[i]}")
     ax.axis('off')
 ```
-
-+++ {"id": "edb528b6"}
 
 Congratulations! You made it to the end of the annotated MNIST example. You can revisit
 the same example, but structured differently as a couple of Python modules, test
