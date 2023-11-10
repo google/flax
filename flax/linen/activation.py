@@ -64,7 +64,14 @@ class PReLU(Module):
   it needs to be initialized before being called.
 
   Example usage::
-    x = nn.PReLU()(x)
+    >>> import flax.linen as nn
+
+    >>> class MLP(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     x = nn.Dense(2)(x)
+    ...     x = nn.PReLU()(x) # initialized
+    ...     return x
 
   Attributes:
     param_dtype: the dtype passed to parameter initializers (default: float32).

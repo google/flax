@@ -207,22 +207,20 @@ def tabulate(
 
   Example::
 
-    import jax
-    import jax.numpy as jnp
-    import flax.linen as nn
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
 
-    class Foo(nn.Module):
-      @nn.compact
-      def __call__(self, x):
-        h = nn.Dense(4)(x)
-        return nn.Dense(2)(h)
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     h = nn.Dense(4)(x)
+    ...     return nn.Dense(2)(h)
 
-    x = jnp.ones((16, 9))
-    tabulate_fn = nn.tabulate(
-        Foo(), jax.random.key(0), compute_flops=True, compute_vjp_flops=True)
+    >>> x = jnp.ones((16, 9))
+    >>> tabulate_fn = nn.tabulate(
+    ...     Foo(), jax.random.key(0), compute_flops=True, compute_vjp_flops=True)
 
-    print(tabulate_fn(x))
-
+    >>> # print(tabulate_fn(x))
 
   This gives the following output::
 

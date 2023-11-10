@@ -33,14 +33,15 @@ class Sequential(Module):
 
   Example usage::
 
-    class Foo(nn.Module):
+    >>> import flax.linen as nn
 
-      @nn.compact
-      def __call__(self, x):
-        return nn.Sequential([nn.Dense(4),
-                              nn.relu,
-                              nn.Dense(2),
-                              nn.log_softmax])(x)
+    >>> class Foo(nn.Module):
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     return nn.Sequential([nn.Dense(4),
+    ...                           nn.relu,
+    ...                           nn.Dense(2),
+    ...                           nn.log_softmax])(x)
 
   This combinator supports also layers that return multiple outputs if returned
   as a tuple or a dictionary. If the output of a layer is a ``tuple`` it will be
@@ -49,25 +50,26 @@ class Sequential(Module):
 
   Example usage::
 
-    class CrossAttentionBlock(nn.Module):
-      num_heads: int = 2
-      qkv_features: int = 16
+    >>> class CrossAttentionBlock(nn.Module):
+    ...   num_heads: int = 2
+    ...   qkv_features: int = 16
+    ...
+    ...   @nn.compact
+    ...   def __call__(self, query, key_value):
+    ...     output = nn.MultiHeadDotProductAttention(
+    ...       num_heads=self.num_heads, qkv_features=self.qkv_features)(query,
+    ...                                                                 key_value)
+    ...     output = nn.Dense(self.qkv_features)(output)
+    ...     return dict(query=output, key_value=key_value)  # also works for tuples
 
-      @nn.compact
-      def __call__(self, query, key_value):
-        output = nn.MultiHeadDotProductAttention(
-          num_heads=self.num_heads, qkv_features=self.qkv_features)(query,
-                                                                  key_value)
-        output = nn.Dense(self.qkv_features)(output)
-        return dict(query=output, key_value=key_value)  # also works for tuples
-
-    class CrossAttentionNetwork(nn.Module):
-      num_layers: Sequence[int]
-
-      @nn.compact
-      def __call__(self, x):
-        return nn.Sequential([CrossAttentionBlock() for _ in
-                              range(self.num_layers)])(query, key_value)
+    >>> from typing import Sequence
+    >>> class CrossAttentionNetwork(nn.Module):
+    ...   num_layers: Sequence[int]
+    ...
+    ...   @nn.compact
+    ...   def __call__(self, x):
+    ...     return nn.Sequential([CrossAttentionBlock() for _ in
+    ...                           range(self.num_layers)])(query, key_value)
   """
 
   layers: Sequence[Callable[..., Any]]

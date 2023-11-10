@@ -98,6 +98,17 @@ class LSTMCell(RNNCellBase):
   where x is the input, h is the output of the previous time step, and c is
   the memory.
 
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (2, 3))
+    >>> layer = nn.LSTMCell(features=4)
+    >>> carry = layer.initialize_carry(jax.random.key(1), x.shape)
+    >>> variables = layer.init(jax.random.key(2), carry, x)
+    >>> new_carry, out = layer.apply(variables, carry, x)
+
   Attributes:
     features: number of output features.
     gate_fn: activation function used for gates (default: sigmoid).
@@ -236,6 +247,17 @@ class OptimizedLSTMCell(RNNCellBase):
 
   where x is the input, h is the output of the previous time step, and c is
   the memory.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (2, 3))
+    >>> layer = nn.OptimizedLSTMCell(features=4)
+    >>> carry = layer.initialize_carry(jax.random.key(1), x.shape)
+    >>> variables = layer.init(jax.random.key(2), carry, x)
+    >>> new_carry, out = layer.apply(variables, carry, x)
 
   Attributes:
     gate_fn: activation function used for gates (default: sigmoid).
@@ -384,6 +406,17 @@ class GRUCell(RNNCellBase):
 
   where x is the input and h, is the output of the previous time step.
 
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (2, 3))
+    >>> layer = nn.GRUCell(features=4)
+    >>> carry = layer.initialize_carry(jax.random.key(1), x.shape)
+    >>> variables = layer.init(jax.random.key(2), carry, x)
+    >>> new_carry, out = layer.apply(variables, carry, x)
+
   Attributes:
     features: number of output features.
     gate_fn: activation function used for gates (default: sigmoid).
@@ -485,6 +518,17 @@ class MGUCell(RNNCellBase):
       \end{array}
 
   where x is the input and h, is the output of the previous time step.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (2, 3))
+    >>> layer = nn.MGUCell(features=4)
+    >>> carry = layer.initialize_carry(jax.random.key(1), x.shape)
+    >>> variables = layer.init(jax.random.key(2), carry, x)
+    >>> new_carry, out = layer.apply(variables, carry, x)
 
   Attributes:
     features: number of output features.
@@ -609,6 +653,17 @@ class ConvLSTMCell(RNNCellBase):
       after initialization in order to reduce the scale of forgetting in
       the beginning of the training.
 
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> x = jax.random.normal(jax.random.key(0), (3, 5, 5))
+    >>> layer = nn.ConvLSTMCell(features=4, kernel_size=(2, 2))
+    >>> carry = layer.initialize_carry(jax.random.key(1), x.shape)
+    >>> variables = layer.init(jax.random.key(2), carry, x)
+    >>> new_carry, out = layer.apply(variables, carry, x)
+
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
@@ -709,7 +764,7 @@ class RNN(Module):
     >>> import jax.numpy as jnp
     >>> import jax
     >>> import flax.linen as nn
-    ...
+
     >>> x = jnp.ones((10, 50, 32)) # (batch, time, features)
     >>> lstm = nn.RNN(nn.LSTMCell(64))
     >>> variables = lstm.init(jax.random.key(0), x)
@@ -1063,7 +1118,18 @@ class RNNBase(Protocol):
 
 
 class Bidirectional(Module):
-  """Processes the input in both directions and merges the results."""
+  """Processes the input in both directions and merges the results.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nn.Bidirectional(nn.RNN(nn.GRUCell(4)), nn.RNN(nn.GRUCell(4)))
+    >>> x = jnp.ones((2, 3))
+    >>> variables = layer.init(jax.random.key(0), x)
+    >>> out = layer.apply(variables, x)
+  """
 
   forward_rnn: RNNBase
   backward_rnn: RNNBase

@@ -69,6 +69,24 @@ def _canonicalize_tuple(x: Union[Sequence[int], int]) -> Tuple[int, ...]:
 class DenseGeneral(Module):
   """A linear transformation with flexible axes.
 
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> # equivalent to `nn.Dense(features=4)`
+    >>> layer = nn.DenseGeneral(features=4)
+    >>> # output features (4, 5)
+    >>> layer = nn.DenseGeneral(features=(4, 5))
+    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
+    >>> jax.tree_map(jnp.shape, params)
+    {'params': {'bias': (4, 5), 'kernel': (3, 4, 5)}}
+    >>> # apply transformation on the the second and last axes
+    >>> layer = nn.DenseGeneral(features=(4, 5), axis=(1, -1))
+    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3, 6, 7)))
+    >>> jax.tree_map(jnp.shape, params)
+    {'params': {'bias': (4, 5), 'kernel': (3, 7, 4, 5)}}
+
   Attributes:
     features: int or tuple with number of output features.
     axis: int or tuple with axes to apply the transformation on. For instance,
@@ -194,6 +212,16 @@ class DenseGeneral(Module):
 
 class Dense(Module):
   """A linear transformation applied over the last dimension of the input.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nn.Dense(features=4)
+    >>> params = layer.init(jax.random.key(0), jnp.ones((1, 3)))
+    >>> jax.tree_map(jnp.shape, params)
+    {'params': {'bias': (4,), 'kernel': (3, 4)}}
 
   Attributes:
     features: the number of output features.
@@ -560,6 +588,30 @@ class _Conv(Module):
 class Conv(_Conv):
   """Convolution Module wrapping `lax.conv_general_dilated`.
 
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> # valid padding
+    >>> layer = nn.Conv(features=4, kernel_size=(3,), padding='VALID')
+    >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
+    >>> jax.tree_map(jnp.shape, variables)
+    {'params': {'bias': (4,), 'kernel': (3, 3, 4)}}
+    >>> out.shape
+    (1, 6, 4)
+    >>> # circular padding with stride 2
+    >>> layer = nn.Conv(features=4, kernel_size=(3, 3), strides=2, padding='CIRCULAR')
+    >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
+    >>> jax.tree_map(jnp.shape, variables)
+    {'params': {'bias': (4,), 'kernel': (3, 3, 3, 4)}}
+    >>> out.shape
+    (1, 4, 4)
+    >>> # apply lower triangle mask
+    >>> mask = jnp.tril(jnp.ones((3, 3, 4)))
+    >>> layer = nn.Conv(features=4, kernel_size=(3,), mask=mask, padding='VALID')
+    >>> variables = layer.init(jax.random.key(0), jnp.ones((1, 8, 3)))
+
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
@@ -601,6 +653,30 @@ class Conv(_Conv):
 class ConvLocal(_Conv):
   """Local convolution Module wrapping `lax.conv_general_dilated_local`.
 
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> # valid padding
+    >>> layer = nn.ConvLocal(features=4, kernel_size=(3,), padding='VALID')
+    >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
+    >>> jax.tree_map(jnp.shape, variables)
+    {'params': {'bias': (6, 4), 'kernel': (6, 9, 4)}}
+    >>> out.shape
+    (1, 6, 4)
+    >>> # circular padding with stride 2
+    >>> layer = nn.ConvLocal(features=4, kernel_size=(3, 3), strides=2, padding='CIRCULAR')
+    >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
+    >>> jax.tree_map(jnp.shape, variables)
+    {'params': {'bias': (1, 4, 4), 'kernel': (1, 4, 27, 4)}}
+    >>> out.shape
+    (1, 4, 4)
+    >>> # apply lower triangle mask
+    >>> mask = jnp.tril(jnp.ones((6, 9, 4)))
+    >>> layer = nn.ConvLocal(features=4, kernel_size=(3,), mask=mask, padding='VALID')
+    >>> variables = layer.init(jax.random.key(0), jnp.ones((1, 8, 3)))
+
   Attributes:
     features: number of convolution filters.
     kernel_size: shape of the convolutional kernel.
@@ -641,6 +717,30 @@ class ConvLocal(_Conv):
 
 class ConvTranspose(Module):
   """Convolution Module wrapping lax.conv_transpose.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> # valid padding
+    >>> layer = nn.ConvTranspose(features=4, kernel_size=(3,), padding='VALID')
+    >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 8, 3)))
+    >>> jax.tree_map(jnp.shape, variables)
+    {'params': {'bias': (4,), 'kernel': (3, 3, 4)}}
+    >>> out.shape
+    (1, 10, 4)
+    >>> # circular padding with stride 2
+    >>> layer = nn.ConvTranspose(features=4, kernel_size=(6, 6), strides=(2, 2), padding='CIRCULAR', transpose_kernel=True)
+    >>> out, variables = layer.init_with_output(jax.random.key(0), jnp.ones((1, 15, 15, 3)))
+    >>> jax.tree_map(jnp.shape, variables)
+    {'params': {'bias': (4,), 'kernel': (6, 6, 4, 3)}}
+    >>> out.shape
+    (1, 30, 30, 4)
+    >>> # apply lower triangle mask
+    >>> mask = jnp.tril(jnp.ones((3, 3, 4)))
+    >>> layer = nn.ConvTranspose(features=4, kernel_size=(3,), mask=mask, padding='VALID')
+    >>> variables = layer.init(jax.random.key(0), jnp.ones((1, 8, 3)))
 
   Attributes:
     features: number of convolution filters.
@@ -836,6 +936,20 @@ class Embed(Module):
   """Embedding Module.
 
   A parameterized function from integers [0, n) to d-dimensional vectors.
+
+  Example usage::
+
+    >>> import flax.linen as nn
+    >>> import jax, jax.numpy as jnp
+
+    >>> layer = nn.Embed(num_embeddings=4, features=3)
+    >>> variables = layer.init(jax.random.key(0), jnp.ones((1, 5), dtype=int))
+    >>> jax.tree_map(jnp.shape, variables)
+    {'params': {'embedding': (4, 3)}}
+    >>> layer.apply(variables, jnp.ones((5,), dtype=int)).shape
+    (5, 3)
+    >>> layer.apply(variables, jnp.ones((5, 6), dtype=int)).shape
+    (5, 6, 3)
 
   Attributes:
     num_embeddings: number of embeddings.

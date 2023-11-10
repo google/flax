@@ -43,27 +43,33 @@ def dataclass(clz: _T) -> _T:
   The `dataclass` decorator makes it easy to define custom classes that can be
   passed safely to Jax. For example::
 
-    from flax import struct
+    >>> from flax import struct
+    >>> import jax
+    >>> from typing import Any, Callable
 
-    @struct.dataclass
-    class Model:
-      params: Any
-      # use pytree_node=False to indicate an attribute should not be touched
-      # by Jax transformations.
-      apply_fn: FunctionType = struct.field(pytree_node=False)
+    >>> @struct.dataclass
+    ... class Model:
+    ...   params: Any
+    ...   # use pytree_node=False to indicate an attribute should not be touched
+    ...   # by Jax transformations.
+    ...   apply_fn: Callable = struct.field(pytree_node=False)
 
-      def __apply__(self, *args):
-        return self.apply_fn(*args)
+    ...   def __apply__(self, *args):
+    ...     return self.apply_fn(*args)
 
-    model = Model(params, apply_fn)
+    >>> params = {}
+    >>> params_b = {}
+    >>> apply_fn = lambda v, x: x
+    >>> model = Model(params, apply_fn)
 
-    model.params = params_b  # Model is immutable. This will raise an error.
-    model_b = model.replace(params=params_b)  # Use the replace method instead.
+    >>> # model.params = params_b  # Model is immutable. This will raise an error.
+    >>> model_b = model.replace(params=params_b)  # Use the replace method instead.
 
-    # This class can now be used safely in Jax to compute gradients w.r.t. the
-    # parameters.
-    model = Model(params, apply_fn)
-    model_grad = jax.grad(some_loss_fn)(model)
+    >>> # This class can now be used safely in Jax to compute gradients w.r.t. the
+    >>> # parameters.
+    >>> model = Model(params, apply_fn)
+    >>> loss_fn = lambda model: 3.
+    >>> model_grad = jax.grad(loss_fn)(model)
 
   Note that dataclasses have an auto-generated ``__init__`` where
   the arguments of the constructor and the attributes of the created
@@ -78,16 +84,16 @@ def dataclass(clz: _T) -> _T:
   This way the simple constructor used by `jax.tree_util` is
   preserved. Consider the following example::
 
-    @struct.dataclass
-    class DirectionAndScaleKernel:
-      direction: Array
-      scale: Array
+    >>> @struct.dataclass
+    ... class DirectionAndScaleKernel:
+    ...   direction: jax.Array
+    ...   scale: jax.Array
 
-      @classmethod
-      def create(cls, kernel):
-        scale = jax.numpy.linalg.norm(kernel, axis=0, keepdims=True)
-        direction = direction / scale
-        return cls(direction, scale)
+    ...   @classmethod
+    ...   def create(cls, kernel):
+    ...     scale = jax.numpy.linalg.norm(kernel, axis=0, keepdims=True)
+    ...     direction = direction / scale
+    ...     return cls(direction, scale)
 
   Args:
     clz: the class that will be transformed by the decorator.
@@ -190,27 +196,32 @@ class PyTreeNode:
 
   Example::
 
-    from flax import struct
+    >>> from flax import struct
+    >>> import jax
+    >>> from typing import Any, Callable
 
-    class Model(struct.PyTreeNode):
-      params: Any
-      # use pytree_node=False to indicate an attribute should not be touched
-      # by Jax transformations.
-      apply_fn: FunctionType = struct.field(pytree_node=False)
+    >>> class Model(struct.PyTreeNode):
+    ...   params: Any
+    ...   # use pytree_node=False to indicate an attribute should not be touched
+    ...   # by Jax transformations.
+    ...   apply_fn: Callable = struct.field(pytree_node=False)
 
-      def __apply__(self, *args):
-        return self.apply_fn(*args)
+    ...   def __apply__(self, *args):
+    ...     return self.apply_fn(*args)
 
-    model = Model(params, apply_fn)
+    >>> params = {}
+    >>> params_b = {}
+    >>> apply_fn = lambda v, x: x
+    >>> model = Model(params, apply_fn)
 
-    model.params = params_b  # Model is immutable. This will raise an error.
-    model_b = model.replace(params=params_b)  # Use the replace method instead.
+    >>> # model.params = params_b  # Model is immutable. This will raise an error.
+    >>> model_b = model.replace(params=params_b)  # Use the replace method instead.
 
-    # This class can now be used safely in Jax to compute gradients w.r.t. the
-    # parameters.
-    model = Model(params, apply_fn)
-    model_grad = jax.grad(some_loss_fn)(model)
-
+    >>> # This class can now be used safely in Jax to compute gradients w.r.t. the
+    >>> # parameters.
+    >>> model = Model(params, apply_fn)
+    >>> loss_fn = lambda model: 3.
+    >>> model_grad = jax.grad(loss_fn)(model)
   """
 
   def __init_subclass__(cls):

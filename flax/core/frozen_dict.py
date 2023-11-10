@@ -134,7 +134,9 @@ class FrozenDict(Mapping[K, V]):
 
     Example::
 
-      state, params = variables.pop('params')
+      >>> from flax.core import FrozenDict
+      >>> variables = FrozenDict({'params': {...}, 'batch_stats': {...}})
+      >>> new_variables, params = variables.pop('params')
 
     Args:
       key: the key to remove from the dict
@@ -235,7 +237,9 @@ def copy(
 
   Example::
 
-  new_variables = copy(variables, {'additional_entries': 1})
+    >>> from flax.core import FrozenDict, copy
+    >>> variables = FrozenDict({'params': {...}, 'batch_stats': {...}})
+    >>> new_variables = copy(variables, {'additional_entries': 1})
 
   Args:
     x: the dictionary to be copied and updated
@@ -262,7 +266,9 @@ def pop(
 
   Example::
 
-    state, params = pop(variables, 'params')
+    >>> from flax.core import FrozenDict, pop
+    >>> variables = FrozenDict({'params': {...}, 'batch_stats': {...}})
+    >>> new_variables, params = pop(variables, 'params')
 
   Args:
     x: the dictionary to remove the entry from

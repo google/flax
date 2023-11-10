@@ -23,16 +23,35 @@ from flax.linen.fp8_ops import OVERWRITE_WITH_GRADIENT
 class TrainState(struct.PyTreeNode):
   """Simple train state for the common case with a single Optax optimizer.
 
-  Synopsis::
+  Example usage::
 
-      state = TrainState.create(
-          apply_fn=model.apply,
-          params=variables['params'],
-          tx=tx)
-      grad_fn = jax.grad(make_loss_fn(state.apply_fn))
-      for batch in data:
-        grads = grad_fn(state.params, batch)
-        state = state.apply_gradients(grads=grads)
+    >>> import flax.linen as nn
+    >>> from flax.training.train_state import TrainState
+    >>> import jax, jax.numpy as jnp
+    >>> import optax
+
+    >>> x = jnp.ones((1, 2))
+    >>> y = jnp.ones((1, 2))
+    >>> model = nn.Dense(2)
+    >>> variables = model.init(jax.random.key(0), x)
+    >>> tx = optax.adam(1e-3)
+
+    >>> state = TrainState.create(
+    ...     apply_fn=model.apply,
+    ...     params=variables['params'],
+    ...     tx=tx)
+
+    >>> def loss_fn(params, x, y):
+    ...   predictions = state.apply_fn({'params': params}, x)
+    ...   loss = optax.l2_loss(predictions=predictions, targets=y).mean()
+    ...   return loss
+    >>> loss_fn(state.params, x, y)
+    Array(3.3514676, dtype=float32)
+
+    >>> grads = jax.grad(loss_fn)(state.params, x, y)
+    >>> state = state.apply_gradients(grads=grads)
+    >>> loss_fn(state.params, x, y)
+    Array(3.343844, dtype=float32)
 
   Note that you can easily extend this dataclass by subclassing it for storing
   additional data (e.g. additional variable collections).
