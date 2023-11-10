@@ -88,7 +88,7 @@ To install some additional dependencies (like `matplotlib`) that are required bu
 by some dependencies, you can use:
 
 ```bash
-pip install flax[all]
+pip install "flax[all]"
 ```
 
 ## What does Flax look like?
