@@ -49,12 +49,12 @@ class TestRngs:
     key1 = rngs.params()
     assert rngs._rngs['params'].counts[-1] == 1
     assert rngs._rngs['params'].key is key0
-    assert not np.equal(key0, key1).all()
+    assert not jnp.allclose(key0, key1)
 
     key2 = rngs.params()
     assert rngs._rngs['params'].counts[-1] == 2
     assert rngs._rngs['params'].key is key0
-    assert not np.equal(key1, key2).all()
+    assert not jnp.allclose(key1, key2)
 
   def test_rng_fork(self):
     key0 = jax.random.key(0)
