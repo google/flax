@@ -24,6 +24,7 @@ from . import core
 from . import jax_utils
 from . import linen
 from . import serialization
+from . import struct
 from . import traverse_util
 
 # DO NOT REMOVE - Marker for internal deprecated API.
