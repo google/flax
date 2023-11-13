@@ -503,6 +503,99 @@ def vjp(
   )(scope, *primals)
 
 
+def value_and_grad(
+  fn: Callable[..., Any],
+  scope: Scope,
+  *primals,
+  has_aux: bool = False,
+  reduce_axes=(),
+  variables: CollectionFilter = True,
+  rngs: PRNGSequenceFilter = True,
+) -> Union[Tuple[Any, Callable[..., Any]], Tuple[Any, Callable[..., Any], Any]]:
+  """A limited lifted version of ``jax.value_and_grad``.
+
+  See ``jax.value_and_grad`` for the unlifted reverse mode gradient.
+
+  Note that for this convenience function, gradients are only calculated for
+  the function inputs (all function inputs), and not with respect to any scope
+  variables. The target function must return a scalar-valued output.
+
+  Example::
+
+    def learn_scale(scope, x, y):
+      p = scope.param('scale', nn.initializers.zeros_init(), ())
+      return p * x * y
+    def f(scope, x, y):
+      z, x_grad, y_grad = lift.value_and_grad(learn_scale, scope, x, y)
+      return z, x_grad, y_grad
+
+  Args:
+    fn: Function to be differentiated. Its arguments should be arrays, scalars,
+      or standard Python containers of arrays or scalars. It should return an
+      array, scalar, or standard Python container of arrays or scalars. It will
+      receive the scope and primals as arguments.
+    scope: The scope of which the variables will be differentiated.
+    *primals: A sequence of primal values at which the Jacobian of ``fn``
+      should be evaluated. The length of ``primals`` should be equal to the
+      number of positional parameters to ``fn``. Each primal value should be a
+      tuple of arrays, scalar, or standard Python containers thereof.
+    has_aux: Optional, bool. Indicates whether ``fn`` returns a pair where the
+     first element is considered the output of the mathematical function to be
+     differentiated and the second element is auxiliary data. Default False.
+    reduce_axes: Optional, tuple of axis names. If an axis is listed here, and
+      ``fn`` implicitly broadcasts a value over that axis, the backward pass
+      will perform a ``psum`` of the corresponding gradient. Otherwise, the
+      VJP will be per-example over named axes. For example, if ``'batch'``
+      is a named batch axis, ``vjp(f, *args, reduce_axes=('batch',))`` will
+      create a VJP function that sums over the batch while ``vjp(f, *args)``
+      will create a per-example VJP.
+    variables: other variables collections that are available inside `fn` but
+      do not receive a cotangent.
+    rngs: the prngs that are available inside `fn`.
+
+  Returns:
+    If ``has_aux`` is ``False``, returns a ``(primals_out, grads)`` pair, where
+    ``primals_out`` is ``fn(*primals)``.
+    If ``has_aux`` is ``True``, returns a
+    ``(primals_out, aux, grads)`` tuple where ``aux`` is the auxiliary data
+    returned by ``fn``.
+  """
+
+  def inner(scope_fn, repack_fn, variable_groups, rng_groups, *args):
+    @functools.wraps(fn)
+    def wrapper(*args):
+      scope = scope_fn(variable_groups, rng_groups)
+      if has_aux:
+        y, aux = fn(scope, *args)
+      else:
+        y = fn(scope, *args)
+        aux = ()
+      return y, (aux, repack_fn(scope))
+
+    y, bwd, (aux, out_vars) = jax.vjp(
+      wrapper,
+      *args,
+      has_aux=True,
+      reduce_axes=reduce_axes,
+    )
+
+    inputs_grad = bwd(jax.numpy.ones_like(y))
+
+    if has_aux:
+      return (y, aux, inputs_grad), out_vars
+    else:
+      return (y, inputs_grad), out_vars
+
+  return pack(
+    inner,
+    (variables,),
+    (variables,),
+    (rngs,),
+    name='value_and_grad',
+    enable_kwargs=False,
+  )(scope, *primals)
+
+
 def jvp(
   fn: Callable[..., Any],
   scope: Scope,
