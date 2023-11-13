@@ -6,38 +6,6 @@ The Cursor API allows for mutability of pytrees. This API provides a more
 ergonomic solution to making partial-updates of deeply nested immutable
 data structures, compared to making many nested ``dataclasses.replace`` calls.
 
-Regular::
-  >>> a = 3
-  >>> b = 4
-  >>> a + b
-  >>> a + c
-
-.. doctest::
-  :pyversion: > 3.10
-  >>> a = 3
-  >>> b = 4
-  >>> a + b
-  >>> a + c
-
-.. doctest::
-  >>> a = 3
-  >>> b = 4
-  >>> a + b
-  >>> a + c
-
-.. doctest::
-  :pyversion: > 3.10
-  a = 3
-  b = 4
-  a + b
-  a + c
-
-.. doctest::
-  a = 3
-  b = 4
-  a + b
-  a + c
-
 To illustrate, consider the example below::
 
   from flax.cursor import cursor
