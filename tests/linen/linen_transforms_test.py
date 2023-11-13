@@ -2136,6 +2136,35 @@ class TransformTest(absltest.TestCase):
     self.assertTrue(tree_allclose(jax.grad(comparison_fn, 0)(x, y), x_grad))
     self.assertTrue(tree_allclose(jax.grad(comparison_fn, 1)(x, y), y_grad))
 
+  def test_value_and_grad_multiscope_adopted(self):
+    class Foo(nn.Module):
+      bar: nn.Module
+      qup: nn.Module
+
+      @nn.compact
+      def __call__(self, x, y):
+        def fn(self, x, y):
+          delta = y - self.bar(self.qup(x))
+          return jnp.sum(delta**2)
+
+        z, (x_grad, y_grad) = nn.value_and_grad(fn, self, x, y)
+        return z, x_grad, y_grad
+
+    x = random.uniform(random.key(1), (4,))
+    y = random.uniform(random.key(2), (4,))
+    vs = Foo(bar=nn.Dense(4), qup=nn.Dense(4)).init(random.key(0), x, y)
+    z, x_grad, y_grad = Foo(bar=nn.Dense(4), qup=nn.Dense(4)).apply(vs, x, y)
+
+    def comparison_fn(x, y):
+      w1 = vs['params']['qup']['kernel']
+      w2 = vs['params']['bar']['kernel']
+      delta = y - jnp.dot(jnp.dot(x, w1), w2)
+      return jnp.sum(delta**2)
+
+    self.assertTrue(tree_allclose(comparison_fn(x, y), z))
+    self.assertTrue(tree_allclose(jax.grad(comparison_fn, 0)(x, y), x_grad))
+    self.assertTrue(tree_allclose(jax.grad(comparison_fn, 1)(x, y), y_grad))
+
 
 if __name__ == '__main__':
   absltest.main()

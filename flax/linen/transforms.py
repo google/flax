@@ -1203,36 +1203,33 @@ def value_and_grad(
     returned by ``fn``.
   """
 
-  vjp_partial = functools.partial(
-    vjp,
-    fn,
+  grad_partial = functools.partial(
+    lift_direct_transform,
+    lift.value_and_grad,
+    (fn,),
     mdl,
     *primals,
     has_aux=has_aux,
     reduce_axes=reduce_axes,
-    vjp_variables=False,
     variables=variables,
     rngs=rngs,
-    multi_scope=True,
   )
 
   if has_aux:
-    out, vjp_fun, aux = vjp_partial()
+    out, aux, argument_grads = grad_partial()
     if out.shape != ():
       raise ValueError(
         'grad can only work on functions with '
         f'scalar-valued outputs. out shape={out.shape}'
       )
-    _, *argument_grads = vjp_fun(jax.numpy.ones_like(out))
     return (out, aux), argument_grads
   else:
-    out, vjp_fun = vjp_partial()
+    out, argument_grads = grad_partial()
     if out.shape != ():
       raise ValueError(
         'grad can only work on functions with '
         f'scalar-valued outputs. out shape={out.shape}'
       )
-    _, *argument_grads = vjp_fun(jax.numpy.ones_like(out))
     return out, argument_grads
 
 
