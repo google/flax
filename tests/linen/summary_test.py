@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import enum
 from typing import List
 
 import jax
@@ -734,6 +735,26 @@ class SummaryTest(absltest.TestCase):
     )
     lines = rep.splitlines()
     self.assertIn('Total Parameters: 50', lines[-2])
+
+  def test_tabulate_enum(self):
+    class Net(nn.Module):
+      @nn.compact
+      def __call__(self, inputs):
+        x = inputs['x']
+        x = nn.Dense(features=2)(x)
+        return jnp.sum(x)
+
+    class InputEnum(str, enum.Enum):
+      x = 'x'
+
+    inputs = {InputEnum.x: jnp.ones((1, 1))}
+    # test args
+    lines = Net().tabulate(jax.random.key(0), inputs).split('\n')
+    self.assertIn('x: \x1b[2mfloat32\x1b[0m[1,1]', lines[5])
+    # test kwargs
+    lines = Net().tabulate(jax.random.key(0), inputs=inputs).split('\n')
+    self.assertIn('inputs:', lines[5])
+    self.assertIn('x: \x1b[2mfloat32\x1b[0m[1,1]', lines[6])
 
 
 if __name__ == '__main__':
