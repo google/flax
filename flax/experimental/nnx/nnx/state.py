@@ -39,7 +39,7 @@ A = tp.TypeVar('A')
 
 Leaf = tp.Any
 Path = str
-StateDict = tp.Dict[Path, tp.Any]
+StateDict = dict[Path, tp.Any]
 StateMapping = tp.Mapping[Path, tp.Any]
 
 

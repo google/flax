@@ -19,7 +19,7 @@ from typing import Any
 from flax import linen
 from flax.experimental.nnx.nnx import helpers
 from flax.experimental.nnx.nnx import variables as variableslib
-from flax.experimental.nnx.nnx.module import Module, ModuleDef
+from flax.experimental.nnx.nnx.module import GraphDef, Module
 from flax.experimental.nnx.nnx.rnglib import Rngs
 from flax.experimental.nnx.nnx.state import State
 
@@ -30,7 +30,7 @@ M = tp.TypeVar('M', bound=Module)
 @dataclasses.dataclass
 class Functional(tp.Generic[M]):
   module_type: tp.Type[M]
-  moduledef: tp.Optional[ModuleDef[M]]
+  graphdef: tp.Optional[GraphDef[M]]
   args: tuple[tp.Any, ...]
   kwargs: dict[str, tp.Any]
 
@@ -39,13 +39,13 @@ class Functional(tp.Generic[M]):
     if rngs is not None:
       kwargs['rngs'] = rngs
     module = self.module_type(*self.args, **self.kwargs, **kwargs)
-    state, moduledef = module.split()
-    self.moduledef = moduledef
+    state, graphdef = module.split()
+    self.graphdef = graphdef
     return state
 
   def apply(self, *states: tp.Any):
-    assert self.moduledef is not None
-    return self.moduledef.apply(*states)
+    assert self.graphdef is not None
+    return self.graphdef.apply(*states)
 
 
 def functional(cls: tp.Type[M]) -> tp.Callable[..., Functional[M]]:

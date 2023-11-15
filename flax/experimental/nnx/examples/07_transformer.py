@@ -389,14 +389,14 @@ class Decoder(nnx.Module):
     if cfg.scanned:
       assert isinstance(self.layers, DecoderBlock)
 
-      state, moduledef = self.layers.split()
+      state, static = self.layers.split()
       rngs, rngsdef = rngs.fork()
       dropout_key = jax.random.split(rngs['dropout'], cfg.layers)
 
       def scan_fn(x, s: tp.Tuple[jax.Array, nnx.State]):
         dropout_key, state = s
         rngs = rngsdef.merge({'dropout': dropout_key})
-        y, (state, _) = moduledef.apply(state)(cfg, x, rngs=rngs)
+        y, (state, _) = static.apply(state)(cfg, x, rngs=rngs)
         return y, state
 
       x, state = jax.lax.scan(

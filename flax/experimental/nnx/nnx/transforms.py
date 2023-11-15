@@ -45,12 +45,10 @@ from flax.experimental.nnx.nnx import (
   tracers,
   variables,
 )
-from flax.experimental.nnx.nnx.module import (
+from flax.experimental.nnx.nnx.module import GraphDef, Module, ModuleMeta
+from flax.experimental.nnx.nnx.proxy_caller import (
   CallableProxy,
   DelayedAccessor,
-  Module,
-  ModuleDef,
-  ModuleMeta,
 )
 from flax.experimental.nnx.nnx.state import State
 
@@ -178,8 +176,8 @@ class JITMeta(ModuleMeta):
 
 class JittedFn(tp.Protocol, tp.Generic[M]):
   def __call__(
-    self, state_and_def: tuple[State | tuple[State, ...], ModuleDef[M]]
-  ) -> tuple[tuple[State | tuple[State, ...], ModuleDef[M]], tp.Any]:
+    self, state_and_def: tuple[State | tuple[State, ...], GraphDef[M]]
+  ) -> tuple[tuple[State | tuple[State, ...], GraphDef[M]], tp.Any]:
     ...
 
 
@@ -188,12 +186,12 @@ def get_jitted_fn(_module_type: type[M], f, options: JITOptions) -> JittedFn[M]:
 
   @functools.partial(jax.jit, **jit_kwargs)
   def jitted_fn(
-    state_and_def: tuple[State | tuple[State, ...], ModuleDef[M]],
+    state_and_def: tuple[State | tuple[State, ...], GraphDef[M]],
     *args,
     **kwargs,
   ):
     _check_args(args)
-    states, moduledef = state_and_def
+    states, graphdef = state_and_def
 
     if isinstance(states, State):
       states = (states,)
@@ -202,7 +200,7 @@ def get_jitted_fn(_module_type: type[M], f, options: JITOptions) -> JittedFn[M]:
     with tracers.nnx_trace(nnx_trace):
       if 'rngs' in kwargs:
         kwargs['rngs'] = rnglib.Rngs(kwargs['rngs'])
-      module = moduledef.merge(*states)
+      module = graphdef.merge(*states)
       out = f(module, *args, **kwargs)
 
     updates = module.split()
@@ -467,7 +465,7 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
 
   predicate = filterlib.to_predicate(options.wrt)
 
-  diff, nondiff, moduledef = module.split(predicate, ...)
+  diff, nondiff, graphdef = module.split(predicate, ...)
   transform = jax.value_and_grad if options.return_value else jax.grad
 
   @functools.partial(
@@ -479,13 +477,13 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
     reduce_axes=options.reduce_axes,
   )
   def grad_fn(diff: State):
-    nonlocal moduledef
+    nonlocal graphdef
 
     with tracers.nnx_trace(tracers.get_top_trace(diff)):
-      module = moduledef.merge(diff, nondiff)
+      module = graphdef.merge(diff, nondiff)
       out = f(module, *args, **kwargs)
 
-    updates, moduledef = module.split()
+    updates, graphdef = module.split()
     if options.has_aux:
       loss, aux = out
       out = (loss, (updates, aux))
@@ -511,7 +509,7 @@ def grad_apply(options: GradOptions, f, module: Module, *args, **kwargs):
     else:
       out, updates = out
 
-  module.update((updates, moduledef))
+  module.update((updates, graphdef))
   return out
 
 
@@ -791,10 +789,10 @@ def scan_init(
     split_keys = None
     broadcast_keys = None
 
-  moduledef: tp.Optional[ModuleDef[M]] = None
+  graphdef: tp.Optional[GraphDef[M]] = None
 
   def _init_state(split_keys, broadcast_keys):
-    nonlocal moduledef
+    nonlocal graphdef
 
     if split_keys is not None:
       assert broadcast_keys is not None
@@ -805,7 +803,7 @@ def scan_init(
     # lift module
     filters = (*options.variable_axes.keys(), ...)
 
-    *states, moduledef = module.split(*filters)
+    *states, graphdef = module.split(*filters)
 
     return tuple(states)
 
@@ -819,7 +817,7 @@ def scan_init(
     )
 
   *axes_states, carry_state = _init_state(split_keys, broadcast_keys)
-  moduledef = tp.cast(ModuleDef[M], moduledef)
+  graphdef = tp.cast(GraphDef[M], graphdef)
 
   # add additional axis name to Variable.sharding
   if spmd.PARTITION_NAME in options.scan_metadata:
@@ -828,7 +826,7 @@ def scan_init(
       for state, index in zip(axes_states, options.variable_axes.values())
     ]
 
-  module = moduledef.merge(*axes_states, carry_state)
+  module = graphdef.merge(*axes_states, carry_state)
 
   return module
 
@@ -845,7 +843,7 @@ def scan_apply(
 
   # split module state
   filters = (*options.variable_axes.keys(), ...)
-  *scan_states, carry_state, moduledef = module.split(*filters)
+  *scan_states, carry_state, graphdef = module.split(*filters)
 
   # transpose axes state
   scan_states = tuple(
@@ -919,7 +917,7 @@ def scan_apply(
     split_keys = None
     broadcast_keys = None
 
-  moduledef_out: tp.Optional[ModuleDef[Module]] = None
+  moduledef_out: tp.Optional[GraphDef[Module]] = None
 
   def scan_fn(
     carry: tuple[State, tp.Any],
@@ -963,7 +961,7 @@ def scan_apply(
       ]
 
     # merge module state
-    module = moduledef.merge(*scan_states, carry_state)
+    module = graphdef.merge(*scan_states, carry_state)
 
     output = f(module, carry_arg, *args, **kwargs)
 
@@ -1208,26 +1206,26 @@ def remat_apply(
 ):
   _check_args(args)
 
-  state, moduledef = module.split()
+  state, graphdef = module.split()
   keys = rngs.fork() if rngs is not None else None
 
   def _remat_fn(
     state: State,
     keys: tp.Optional[dict[str, jax.Array]],
     *args,
-  ) -> tuple[tuple[State, ModuleDef[Module]], tp.Any]:
+  ) -> tuple[tuple[State, GraphDef[Module]], tp.Any]:
     kwargs = {}
     if keys is not None:
       kwargs['rngs'] = rnglib.Rngs(keys)
 
-    module = moduledef.merge(state)
+    module = graphdef.merge(state)
     out = f(module, *args, **kwargs)
 
     state_and_def = module.split()
 
     return state_and_def, out
 
-  state_and_def: tuple[State, ModuleDef[Module]]
+  state_and_def: tuple[State, GraphDef[Module]]
   state_and_def, out = jax.checkpoint(
     _remat_fn,
     prevent_cse=options.prevent_cse,
@@ -1422,10 +1420,10 @@ def vmap_init(
     split_keys = None
     broadcast_keys = None
 
-  moduledef: tp.Optional[ModuleDef[M]] = None
+  graphdef: tp.Optional[GraphDef[M]] = None
 
   def _init_state(split_keys, broadcast_keys):
-    nonlocal moduledef
+    nonlocal graphdef
 
     if split_keys is not None:
       assert broadcast_keys is not None
@@ -1436,7 +1434,7 @@ def vmap_init(
     # lift module
     filters = (*options.variable_axes.keys(), ...)
 
-    *states, moduledef = module.split(*filters)
+    *states, graphdef = module.split(*filters)
 
     return tuple(states)
 
@@ -1450,7 +1448,7 @@ def vmap_init(
     )
 
   *axes_states, carry_state = _init_state(split_keys, broadcast_keys)
-  moduledef = tp.cast(ModuleDef[M], moduledef)
+  graphdef = tp.cast(GraphDef[M], graphdef)
 
   # add additional axis name to Variable.sharding
   if spmd.PARTITION_NAME in options.vmap_metadata:
@@ -1459,7 +1457,7 @@ def vmap_init(
       for state, index in zip(axes_states, options.variable_axes.values())
     ]
 
-  module = moduledef.merge(*axes_states, carry_state)
+  module = graphdef.merge(*axes_states, carry_state)
   return module
 
 
@@ -1474,7 +1472,7 @@ def vmap_apply(
 
   # split module state
   filters = (*options.variable_axes.keys(), ...)
-  *vectorized_states, broadcast_state, moduledef = module.split(*filters)
+  *vectorized_states, broadcast_state, graphdef = module.split(*filters)
 
   # infer length
   axis_sizes: tp.Set[int] = set()
@@ -1529,7 +1527,7 @@ def vmap_apply(
     split_keys = None
     broadcast_keys = None
 
-  moduledef_out: tp.Optional[ModuleDef[Module]] = None
+  moduledef_out: tp.Optional[GraphDef[Module]] = None
 
   keys_axes = 0
   states_axes = list(options.variable_axes.values())
@@ -1568,7 +1566,7 @@ def vmap_apply(
       ]
 
     # merge module state
-    module = moduledef.merge(*vectorized_states, broadcast_state)
+    module = graphdef.merge(*vectorized_states, broadcast_state)
 
     output = f(module, *args, **kwargs)
 

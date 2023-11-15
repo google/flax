@@ -36,7 +36,8 @@ import numpy as np
 import optax
 
 from flax.experimental.nnx.nnx import pytreelib
-from flax.experimental.nnx.nnx.module import ApplyCaller, Module, ModuleDef
+from flax.experimental.nnx.nnx.module import GraphDef, Module
+from flax.experimental.nnx.nnx.proxy_caller import ApplyCaller
 from flax.experimental.nnx.nnx.rnglib import Rngs
 from flax.experimental.nnx.nnx.state import State
 
@@ -112,7 +113,7 @@ class Sequence(Module, tp.Generic[A]):
         if isinstance(output, tp.Tuple):
           args = output
           kwargs = {}
-        elif isinstance(output, tp.Dict):
+        elif isinstance(output, dict):
           args = ()
           kwargs = output
         else:
@@ -129,21 +130,21 @@ class Sequence(Module, tp.Generic[A]):
 class ModuleDefApply(tp.Protocol, tp.Generic[M]):
   def __call__(
     self, state: State, *states: State
-  ) -> ApplyCaller[tuple[State, ModuleDef[M]]]:
+  ) -> ApplyCaller[tuple[State, GraphDef[M]]]:
     ...
 
 
 class TrainState(pytreelib.Pytree, tp.Generic[M]):
   def __init__(
     self,
-    moduledef: ModuleDef[M],
+    graphdef: GraphDef[M],
     *,
     params: State,
     tx: optax.GradientTransformation,
     step: int = 0,
     **kwargs,
   ):
-    self.moduledef = moduledef
+    self.graphdef = graphdef
     self.params: State = pytreelib.TreeNode(params)
     self.tx = tx
     self.opt_state = pytreelib.TreeNode(tx.init(self.params))
@@ -160,7 +161,7 @@ class TrainState(pytreelib.Pytree, tp.Generic[M]):
 
   def apply(
     self, state: tp.Union[State, str], *states: tp.Union[State, str]
-  ) -> ApplyCaller[tuple[State, ModuleDef[M]]]:
+  ) -> ApplyCaller[tuple[State, GraphDef[M]]]:
     states = (state, *states)
 
     _states = (
@@ -168,7 +169,7 @@ class TrainState(pytreelib.Pytree, tp.Generic[M]):
       for state in states
     )
 
-    return self.moduledef.apply(*_states)
+    return self.graphdef.apply(*_states)
 
   def apply_gradients(self, grads: State, **kwargs) -> 'TrainState[M]':
     updates, opt_state = self.tx.update(grads, self.opt_state, self.params)

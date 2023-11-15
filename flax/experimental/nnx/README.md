@@ -65,12 +65,12 @@ In this example `nnx.Rngs(0)` create a `random.key` for `params` with seed `0`, 
 The [Functional API](#functional-api) converts an NNX Module python semantics into pure pytree object with functional semantics. It is the recommended way to use NNX as it provides tight control over the state, allows you to use regular JAX transformations, and it minimizes overhead. In this example the model will be trained using Stochastic Gradient Descent (SGD).
 
 ```python
-params, counts, moduledef = model.split(nnx.Param, Count)
+params, counts, static = model.split(nnx.Param, Count)
 
 @jax.jit
 def train_step(params, counts, x, y):
   def loss_fn(params):
-    model = moduledef.merge(params, counts)
+    model = static.merge(params, counts)
     y_pred = model(x)
     loss = jax.numpy.mean((y_pred - y) ** 2)
     return loss, updates.extract(Count)
@@ -84,7 +84,7 @@ def train_step(params, counts, x, y):
 
 # execute the training step
 params, counts = train_step(params, counts, x, y)
-model = moduledef.merge(params, counts)
+model = static.merge(params, counts)
 assert model.count == 2
 ```
 
@@ -141,51 +141,52 @@ NNX Modules are normal python classes, they obey regular python semantics such a
 
 ```python
 class Foo(nnx.Module):
-    def __init__(self, rngs: nnx.Rngs):
-        # node attributes
-        self.variable = nnx.Param(jnp.array(1))
-        self.implicit_param = jnp.array(3)
-        self.submodule = nnx.Linear(2, 4, rngs=rngs)
-        # static attributes
-        self.int = 1
-        self.float = 2.0
-        self.str = "hello"
-        self.list = [1, 2, 3]
+  def __init__(self, rngs: nnx.Rngs):
+    # node attributes
+    self.variable = nnx.Param(jnp.array(1))
+    self.submodule = nnx.Linear(2, 3, rngs=rngs)
+    self.container = [4, nnx.Linear(5, 6, rngs=rngs), 7]
+    # static attributes
+    self.int = 8
+    self.float = 9.0
+    self.str = 'hello'
 
 model = Foo(din=12, dout=2, rngs=nnx.Rngs(0))
 ```
-As shown above, python container types such as `list`, `tuple`, and `dict` are treated as static attributes, if similar functionality is needed, NNX provides the `Sequence` and `Dict` Modules.
+As shown above, python container types such as `list`, `tuple`, and `dict` are treated as node attributes,
+this means you can naturally have e.g. `list`s or `dict`s of Modules.
 
 ### Functional API
 
-NNX Modules are not pytrees so they cannot be passed to JAX transformations. In order to interact with JAX, a Module must be partitioned into a `State` and `ModuleDef` objects. The `State` object is a flat dictionary-like pytree structure that contains all the deduplicated node attributes, and the `ModuleDef` contains the static attributes and structural information needed to reconstruct the Module.
+NNX Modules are not pytrees so they cannot be passed to JAX transformations. In order to interact with JAX, a Module must be partitioned into a `State` and `GraphDef` objects. The `State` object is a flat dictionary-like pytree structure that contains all the deduplicated node attributes, and the `GraphDef` contains the static attributes and structural information needed to reconstruct the Module.
 
 ```python
-state, moduledef = model.split()
+state, static = model.split()
 ```
 ```
-State({
-  'implicit_param',: Param(value=Array(3)),
-  'submodule/bias': Param(value=Array(...)),
-  'submodule/kernel': Param(value=Array(...)),
-  'variable': Param(value=Array(1))
+state = State({
+  'variable': Array(1, dtype=int32, weak_type=True),
+  'submodule/kernel': Array(..., dtype=float32),
+  'submodule/bias': Array(..., dtype=float32),
+  'container/1/kernel': Array(..., dtype=float32),
+  'container/1/bias': Array(..., dtype=float32)
 })
 ```
 
-`State` and `ModuleDef` are pytrees so they can be passed to JAX transformations. More over, `ModuleDef` provides 2 very important methods: `merge` and `apply`. The `merge` method can be used to create a new `Module` from a `State` object:
+`State` and `GraphDef` are pytrees so they can be passed to JAX transformations. More over, `GraphDef` provides 2 very important methods: `merge` and `apply`. The `merge` method can be used to create a new `Module` from a `State` object:
 
 ```python
-model = moduledef.merge(state)
+model = static.merge(state)
 ```
 This can be use to e.g. recreate a module inside a JAX transformation. The `apply` provides a functional interface to the module, it can be used call any method or submodule and get the output and the updated state:
 
 ```python
 # run __call__
-y, (state, moduledef) = moduledef.apply(state)(x)
+y, (state, static) = static.apply(state)(x)
 # run some_method
-y, (state, moduledef) = moduledef.apply(state).some_method(x)
+y, (state, static) = static.apply(state).some_method(x)
 # run submodule
-y, (state, moduledef) = moduledef.apply(state).submodule(x)
+y, (state, static) = static.apply(state).submodule(x)
 ```
 
 `apply` can call any nested method or submodule as long as it can be accessed via the `.` or `[]` operators.
@@ -196,14 +197,14 @@ In NNX you can filter based on any node type, most commonly you will want to fil
 Here are various examples of how you can use the `split` method to split a module into multiple substates:
 
 ```python
-# split the module into the state with all the nodes and the moduledef
-state, moduledef = model.split()
+# split the module into the state with all the nodes and the static information
+state, static = model.split()
 # verify that the state contains only params, else raise an error
-params, moduledef = model.split(nnx.Param)
+params, static = model.split(nnx.Param)
 # split the state into params and batch_stats, verify no nodes are left
-params, batch_stats, moduledef = model.split(nnx.Param, nnx.BatchStat)
+params, batch_stats, static = model.split(nnx.Param, nnx.BatchStat)
 # if there are any nodes left, use the `...` filter to capture them
-params, batch_stats, rest, moduledef = model.split(nnx.Param, nnx.BatchStat, ...)
+params, batch_stats, rest, static = model.split(nnx.Param, nnx.BatchStat, ...)
 # using `...` as the only filter is equivalent to not passing any filters
 model.split(...) = model.split()
 ```
@@ -215,13 +216,13 @@ model.split(...) = model.split()
 To reconstruct the module from a set of substates, you can use `merge` as usual but passing the substates as additional arguments:
 
 ```python
-model = moduledef.merge(params, batch_stats, rest)
+model = static.merge(params, batch_stats, rest)
 ```
 
 The same is true for `apply`.
 
 ```python
-y, (state, moduledef) = moduledef.apply(params, batch_stats, rest)(x)
+y, (state, static) = static.apply(params, batch_stats, rest)(x)
 ```
 
  Note that `apply` will return a single `state` object, if you need to `split` the state you can use `State`'s own `split` method:
@@ -295,8 +296,8 @@ State({
 If you use the functional API to call the module instead, the `Intermediate` nodes will be present in the output `state`. To retrieve the `Intermediate` nodes and optionally separate them from the output `state` you can use `State.split`:
 
 ```python
-state, moduledef = model.split()
-y, (state, moduledef) = moduledef.apply(state)(jnp.ones((8, 12)))
+state, static = model.split()
+y, (state, static) = static.apply(state)(jnp.ones((8, 12)))
 # "pop" the intermediates from the state
 intermediates, state = state.split(nnx.Intermediate, ...)
 ```
@@ -344,10 +345,10 @@ class ScanMLP(nnx.Module):
     def __init__(self, dim: int, *, n_layers: int, rngs: nnx.Rngs):
         params_key = jax.random.split(rngs.params(), n_layers)
         self.n_layers = n_layers
-        state, moduledef = jax.vmap(
+        state, static = jax.vmap(
             lambda key: Block(dim, rngs=nnx.Rngs(params=key)).split()
         )(params_key)
-        self.layers = moduledef.merge(state)
+        self.layers = static.merge(state)
 
 ```
 Note that we split the `params` key into `n_layers` keys so each layer has different parameters.
@@ -359,11 +360,11 @@ apply it to the input `x`, passing the sliced `dropout_key` as part of the `Rngs
 ```python
     def __call__(self, x: jax.Array, *, train: bool, rngs: nnx.Rngs) -> jax.Array:
         dropout_key = jax.random.split(rngs.dropout(), self.n_layers)
-        params, moduledef = self.layers.split(nnx.Param)
+        params, static = self.layers.split(nnx.Param)
 
         def scan_fn(x: inputs):
             params, dropout_key = inputs
-            module = moduledef.merge(params)
+            module = static.merge(params)
             x = module(x, train=train, rngs=nnx.Rngs(dropout=dropout_key))
             return x, module.extract(nnx.Param)
 

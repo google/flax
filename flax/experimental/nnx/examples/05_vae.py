@@ -113,7 +113,7 @@ class VAE(nnx.Module):
     return nnx.sigmoid(logits)
 
 
-params, moduledef = VAE(
+params, static = VAE(
   din=int(np.prod(image_shape)),
   hidden_size=256,
   latent_size=latent_size,
@@ -122,7 +122,7 @@ params, moduledef = VAE(
 ).split(nnx.Param)
 
 state = nnx.TrainState(
-  moduledef,
+  static,
   params=params,
   tx=optax.adam(1e-3),
 )

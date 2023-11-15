@@ -23,10 +23,10 @@ class TestHelpers:
   def test_train_state(self):
     m = nnx.Dict(a=nnx.Param(1), b=nnx.BatchStat(2))
 
-    params, batch_stats, moduledef = m.split(nnx.Param, nnx.BatchStat)
+    params, batch_stats, graphdef = m.split(nnx.Param, nnx.BatchStat)
 
     state = nnx.TrainState(
-      moduledef,
+      graphdef,
       params=params,
       tx=optax.sgd(1.0),
       batch_stats=nnx.TreeNode(batch_stats),
@@ -53,10 +53,10 @@ class TestHelpers:
         return x
 
     module = Foo(rngs=nnx.Rngs(0))
-    params, batch_stats, moduledef = module.split(nnx.Param, nnx.BatchStat)
+    params, batch_stats, graphdef = module.split(nnx.Param, nnx.BatchStat)
 
     state = nnx.TrainState(
-      moduledef,
+      graphdef,
       params=params,
       tx=optax.sgd(1.0),
       batch_stats=batch_stats,

@@ -140,7 +140,7 @@ While NNX Modules inherently follow reference semantics, they can be easily conv
 
 NNX has two very simple APIs to interact with JAX: `split` and `merge`.
 
-The `Module.split` method allows you to convert into a `State` dict-like object that contains the dynamic state of the Module, and a `ModuleDef` object that contains the static structure of the Module.
+The `Module.split` method allows you to convert into a `State` dict-like object that contains the dynamic state of the Module, and a `GraphDef` object that contains the static structure of the Module.
 
 ```{code-cell}
 :outputId: 9a3f378b-739e-4f45-9968-574651200ede
@@ -156,7 +156,7 @@ print(f'{state = }')
 print(f'\n{static = }')
 ```
 
-The `ModuleDef.merge` method allows you to take a `ModuleDef` and one or more `State` objects and merge them back into a `Module` object.
+The `GraphDef.merge` method allows you to take a `GraphDef` and one or more `State` objects and merge them back into a `Module` object.
 
 Using `split` and `merge` in conjunction allows you to carry your Module in and out of any JAX transformation. Here is a simple jitted `forward` function as an example:
 
@@ -164,7 +164,7 @@ Using `split` and `merge` in conjunction allows you to carry your Module in and 
 :outputId: 0007d357-152a-449e-bcb9-b1b5a91d2d8d
 
 @jax.jit
-def forward(static: nnx.ModuleDef, state: nnx.State, x: jax.Array):
+def forward(static: nnx.GraphDef, state: nnx.State, x: jax.Array):
   model = static.merge(state)
   y = model(x)
   state, _ = model.split()

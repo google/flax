@@ -106,12 +106,12 @@ class MLP(nnx.Module):
     return x
 
 
-params, moduledef = MLP(
+params, static = MLP(
   din=np.prod(image_shape), dmid=256, dout=10, rngs=nnx.Rngs(0)
 ).split(nnx.Param)
 
 state = nnx.TrainState(
-  moduledef,
+  static,
   params=params,
   tx=optax.adam(1e-3),
 )
@@ -188,7 +188,7 @@ for i in range(10):
 
 plt.show()
 
-model = state.moduledef.merge(state.params)
+model = state.static.merge(state.params)
 # %%
 # Quantization
 
@@ -234,7 +234,7 @@ class QLinear(nnx.Module):
     num_steps: int = 100,
     debug: bool = False,
   ):
-    q_hparams, rest, moduledef = self.split(QHParam, ...)
+    q_hparams, rest, static = self.split(QHParam, ...)
     tx = optax.adam(1e-3)
     opt_state = tx.init(q_hparams)
 
@@ -250,7 +250,7 @@ class QLinear(nnx.Module):
       print('JITTING')
 
       def loss_fn(q_hparams: nnx.State):
-        model = moduledef.merge(q_hparams, rest)
+        model = static.merge(q_hparams, rest)
         model.qkernel = model.quantize(pretrained.kernel, 8, jnp.uint8)
         assert pretrained.bias is not None
         model.qbias = model.quantize(pretrained.bias, 16, jnp.uint16)

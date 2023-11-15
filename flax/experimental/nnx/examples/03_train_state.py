@@ -58,12 +58,12 @@ class MLP(nnx.Module):
     return x
 
 
-params, counts, moduledef = MLP(
-  din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)
-).split(nnx.Param, ...)
+params, counts, static = MLP(din=1, dhidden=32, dout=1, rngs=nnx.Rngs(0)).split(
+  nnx.Param, ...
+)
 
 state = nnx.TrainState(
-  moduledef,
+  static,
   params=params,
   tx=optax.sgd(0.1),
   counts=counts,
@@ -107,7 +107,7 @@ for step, batch in enumerate(dataset(32)):
   if step >= total_steps - 1:
     break
 
-model = moduledef.merge(state.params, state.counts)
+model = static.merge(state.params, state.counts)
 print('times called:', model.count)
 
 y_pred = model(X)
