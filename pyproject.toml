@@ -126,8 +126,6 @@ filterwarnings = [
     "ignore:`flax.traverse_util.Traversal` will be deprecated.*:DeprecationWarning",
     # Deprecated legacy checkpoint - just want to keep the tests running for a while
     "ignore:Flax Checkpointing will soon be deprecated in favor of Orbax.*:DeprecationWarning",
-    # DeprecationWarning: SelfAttention will be deprecated soon.
-    "ignore:.*SelfAttention will be deprecated soon.*:DeprecationWarning",
     # DeprecationWarning: The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.
     "ignore:.*The inputs_kv arg will be deprecated soon. Use inputs_k and inputs_v instead.*:DeprecationWarning",
     # DeprecationWarning: the function signature of MultiHeadDotProductAttention's `__call__` method has changed

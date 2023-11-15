@@ -173,7 +173,7 @@ class Encoder1DBlock(nn.Module):
     # Attention block.
     assert inputs.ndim == 3
     x = nn.LayerNorm(dtype=config.dtype)(inputs)
-    x = nn.SelfAttention(
+    x = nn.MultiHeadDotProductAttention(
         num_heads=config.num_heads,
         dtype=config.dtype,
         qkv_features=config.qkv_dim,
