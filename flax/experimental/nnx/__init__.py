@@ -18,19 +18,23 @@ from flax.linen.pooling import min_pool as min_pool
 from flax.linen.pooling import pool as pool
 
 from .nnx import compatibility as compatibility
+from .nnx import graph_utils
 from .nnx.dataclasses import dataclass as dataclass
 from .nnx.dataclasses import field as field
 from .nnx.dataclasses import param_field as param_field
 from .nnx.dataclasses import treenode_field as treenode_field
 from .nnx.dataclasses import variable_field as variable_field
 from .nnx.errors import TraceContextError as TraceContextError
+from .nnx.filterlib import All as All
+from .nnx.filterlib import Not as Not
 from .nnx.flaglib import flags as flags
+from .nnx.graph_utils import GraphDef as GraphDef
 from .nnx.helpers import Dict as Dict
 from .nnx.helpers import Sequence as Sequence
 from .nnx.helpers import TrainState as TrainState
+from .nnx.module import GraphDef as GraphDef
 from .nnx.module import M as M
 from .nnx.module import Module as Module
-from .nnx.module import ModuleDef as ModuleDef
 from .nnx.module import merge as merge
 from .nnx.nn import initializers as initializers
 from .nnx.nn.activations import celu as celu
@@ -64,8 +68,6 @@ from .nnx.nn.linear import Linear as Linear
 from .nnx.nn.normalization import BatchNorm as BatchNorm
 from .nnx.nn.normalization import LayerNorm as LayerNorm
 from .nnx.nn.stochastic import Dropout as Dropout
-from .nnx.filterlib import All as All
-from .nnx.filterlib import Not as Not
 from .nnx.pytreelib import Pytree as Pytree
 from .nnx.pytreelib import TreeNode as TreeNode
 from .nnx.rnglib import Rngs as Rngs

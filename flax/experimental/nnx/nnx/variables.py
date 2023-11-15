@@ -51,7 +51,7 @@ AxisIndex = int
 AddAxisHook = tp.Callable[[V, AxisName, AxisIndex], V]
 RemoveAxisHook = tp.Callable[[V, AxisName, AxisIndex], V]
 
-VariableTypeCache: tp.Dict[str, tp.Type['Variable[tp.Any]']] = {}
+VariableTypeCache: dict[str, tp.Type['Variable[tp.Any]']] = {}
 
 
 class Empty:

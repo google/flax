@@ -62,9 +62,9 @@ class TestSPMD:
       def __call__(self, x):
         return x @ self.w
 
-    params, moduledef = Foo().split()
+    params, graphdef = Foo().split()
     state = nnx.TrainState(
-      moduledef,
+      graphdef,
       params=params,
       tx=optax.adam(1e-3),
     )

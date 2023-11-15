@@ -27,7 +27,7 @@ class TestPartitioning:
       c=100,
     )
 
-    params, rest, moduledef = m.split(nnx.Param, ...)
+    params, rest, graphdef = m.split(nnx.Param, ...)
 
     assert len(params) == 2
     assert len(rest) == 1
@@ -39,7 +39,7 @@ class TestPartitioning:
     # check rest
     assert rest['a/1'] == m.a[1]
 
-    m2 = moduledef.merge(params, rest)
+    m2 = graphdef.merge(params, rest)
 
     assert m2.a[0] == m.a[0]
     assert m2.a[1] == m.a[1]
@@ -110,7 +110,7 @@ class TestPartitioning:
       c=nnx.Variable(jax.numpy.array(100)),
     )
 
-    state, moduledef = m.split()
+    state, graphdef = m.split()
     state = jax.tree_map(lambda x: x * 2, state)
 
     m.update(state)

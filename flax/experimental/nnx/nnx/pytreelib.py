@@ -218,7 +218,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
     return pytree
 
   @classmethod
-  def _to_flax_state_dict(cls, pytree: 'Pytree') -> tp.Dict[str, tp.Any]:
+  def _to_flax_state_dict(cls, pytree: 'Pytree') -> dict[str, tp.Any]:
     from flax import serialization
 
     state_dict = {
@@ -232,7 +232,7 @@ class Pytree(reprlib.Representable, metaclass=PytreeMeta):
   def _from_flax_state_dict(
     cls,
     pytree: P,
-    state: tp.Dict[str, tp.Any],
+    state: dict[str, tp.Any],
   ) -> P:
     """Restore the state of a data class."""
     from flax import serialization

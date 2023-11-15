@@ -16,7 +16,6 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from flax.experimental import nnx
@@ -66,7 +65,7 @@ class TestRngs:
     key1 = rngs1.params()
     key2 = rngs2.params()
 
-    assert not np.equal(key1, key2).all()
+    assert not jnp.allclose(key1, key2)
 
   def test_rng_trace_level_constraints(self):
     rngs = nnx.Rngs(0)
@@ -119,11 +118,11 @@ class TestRngs:
 
     key1 = rngs.dropout()
     key2 = rngs2.dropout()
-    assert not np.equal(key1, key2).all()
+    assert not jnp.allclose(key1, key2)
 
     rngs3 = nnx.Rngs(keys)
     key3 = rngs3.dropout()
-    assert np.equal(key2, key3).all()
+    assert jnp.allclose(key2, key3)
 
   def test_fork_broadcast(self):
     rngs = nnx.Rngs(params=0, dropout=1)

@@ -94,8 +94,8 @@ class TestIntegration:
         return x
 
     @jax.jit
-    def train_step(state: nnx.State, moduledef: nnx.ModuleDef[Model], x, y):
-      model = moduledef.merge(state)
+    def train_step(state: nnx.State, graphdef: nnx.GraphDef[Model], x, y):
+      model = graphdef.merge(state)
 
       @nnx.grad
       def loss_fn(model: Model):
@@ -110,16 +110,16 @@ class TestIntegration:
 
       return model.split()
 
-    moduledef: nnx.ModuleDef[Model]
-    state, moduledef = Model(rngs=nnx.Rngs(0)).split()
+    graphdef: nnx.GraphDef[Model]
+    state, graphdef = Model(rngs=nnx.Rngs(0)).split()
 
     x = np.random.uniform(size=(4, 2))
     y = np.random.uniform(size=(4, 2))
 
     for _i in range(3):
-      state, moduledef = train_step(state, moduledef, x, y)
+      state, graphdef = train_step(state, graphdef, x, y)
 
-    model = moduledef.merge(state)
+    model = graphdef.merge(state)
 
     assert model.block1.linear.bias is not None
     assert model.block2.linear.bias is not None
@@ -186,12 +186,12 @@ class TestIntegration:
     y = model(x)
     assert model.count == 1
 
-    params, counts, moduledef = model.split(nnx.Param, Count)
+    params, counts, graphdef = model.split(nnx.Param, Count)
 
     @jax.jit
     def train_step(params, counts, x, y):
       def loss_fn(params):
-        y_pred, (updates, _) = moduledef.apply(params, counts)(x)
+        y_pred, (updates, _) = graphdef.apply(params, counts)(x)
         loss = jax.numpy.mean((y_pred - y) ** 2)
         return loss, updates.extract(Count)
 
@@ -204,7 +204,7 @@ class TestIntegration:
 
     # execute the training step
     params, counts = train_step(params, counts, x, y)
-    model = moduledef.merge(params, counts)
+    model = graphdef.merge(params, counts)
     assert model.count == 2
 
   def test_intermediates_example(self):
@@ -241,9 +241,9 @@ class TestIntegration:
 
     model = Linear(12, 2, rngs=nnx.Rngs(0))
 
-    state, moduledef = model.split()
+    state, graphdef = model.split()
 
-    y, (state, _) = moduledef.apply(state)(jnp.ones((8, 12)))
+    y, (state, _) = graphdef.apply(state)(jnp.ones((8, 12)))
 
     intermediates, state = state.split(nnx.Intermediate, ...)
 
