@@ -41,5 +41,6 @@ repos:
     # Run the Ruff linter.
     - id: ruff
       args: [--fix, --exit-non-zero-on-fix]
-    # Run the Ruff formatter.
-    - id: ruff-format
+    # Disable Ruff formatter for now
+    # # Run the Ruff formatter.
+    # - id: ruff-format
