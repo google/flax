@@ -537,11 +537,12 @@ class MultiHeadDotProductAttention(Module):
 
 class SelfAttention(MultiHeadDotProductAttention):
   """Self-attention special case of multi-head dot-product attention.
+  This layer is deprecated in favor of `MultiHeadDotProductAttention`.
 
   Example usage::
     >>> import flax.linen as nn
     >>> import jax, jax.numpy as jnp
-    >>> layer = nn.SelfAttention(num_heads=8, qkv_features=16)
+    >>> layer = nn.MultiHeadDotProductAttention(num_heads=8, qkv_features=16)
     >>> variables = layer.init(jax.random.key(0), jnp.ones((4, 3, 2, 5)))
   """
 
