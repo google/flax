@@ -16,43 +16,43 @@
 
 # pylint: disable=g-multiple-import
 # re-export commonly used modules and functions
-from flax.linen import activation as activation
-from flax.linen import initializers as initializers
+from flax.core.nn.attention import (
+    dot_product_attention,
+    multi_head_dot_product_attention,
+)
+from flax.core.nn.linear import (
+    Embedding,
+    conv,
+    conv_transpose,
+    dense,
+    dense_general,
+    embedding,
+)
+from flax.core.nn.normalization import (
+    batch_norm,
+    group_norm,
+    layer_norm,
+)
+from flax.core.nn.stochastic import dropout
+from flax.linen import activation
+from flax.linen import initializers
 from flax.linen.activation import (
-    celu as celu,
-    elu as elu,
-    gelu as gelu,
-    glu as glu,
-    leaky_relu as leaky_relu,
-    log_sigmoid as log_sigmoid,
-    log_softmax as log_softmax,
-    relu as relu,
-    sigmoid as sigmoid,
-    silu as silu,
-    soft_sign as soft_sign,
-    softmax as softmax,
-    softplus as softplus,
-    swish as swish,
-    tanh as tanh,
+    celu,
+    elu,
+    gelu,
+    glu,
+    leaky_relu,
+    log_sigmoid,
+    log_softmax,
+    relu,
+    sigmoid,
+    silu,
+    soft_sign,
+    softmax,
+    softplus,
+    swish,
+    tanh,
 )
-from flax.linen.pooling import (avg_pool as avg_pool, max_pool as max_pool)
-from .attention import (
-    dot_product_attention as dot_product_attention,
-    multi_head_dot_product_attention as multi_head_dot_product_attention,
-)
-from .linear import (
-    Embedding as Embedding,
-    conv_transpose as conv_transpose,
-    conv as conv,
-    dense_general as dense_general,
-    dense as dense,
-    embedding as embedding,
-)
-from .normalization import (
-    batch_norm as batch_norm,
-    group_norm as group_norm,
-    layer_norm as layer_norm,
-)
-from .stochastic import dropout as dropout
+from flax.linen.pooling import (avg_pool, max_pool)
 
 # pylint: enable=g-multiple-import

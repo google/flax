@@ -12,42 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .axes_scan import broadcast as broadcast
-from .frozen_dict import (
-    FrozenDict as FrozenDict,
-    copy as copy,
-    freeze as freeze,
-    pop as pop,
-    pretty_repr as pretty_repr,
-    unfreeze as unfreeze,
+from flax.core.axes_scan import broadcast
+from flax.core.frozen_dict import (
+    FrozenDict,
+    copy,
+    freeze,
+    pop,
+    pretty_repr,
+    unfreeze,
 )
-from .lift import (
-    custom_vjp as custom_vjp,
-    jit as jit,
-    jvp as jvp,
-    remat_scan as remat_scan,
-    remat as remat,
-    scan as scan,
-    vjp as vjp,
-    vmap as vmap,
-    while_loop as while_loop,
+from flax.core.lift import (
+    custom_vjp,
+    jit,
+    jvp,
+    remat,
+    remat_scan,
+    scan,
+    vjp,
+    vmap,
+    while_loop,
 )
-from .meta import (
-    AxisMetadata as AxisMetadata,
-    map_axis_meta as map_axis_meta,
-    unbox as unbox,
+from flax.core.meta import (
+    AxisMetadata,
+    map_axis_meta,
+    unbox,
 )
-from .scope import (
-    Array as Array,
-    DenyList as DenyList,
-    Scope as Scope,
-    apply as apply,
-    bind as bind,
-    init as init,
-    lazy_init as lazy_init,
+from flax.core.scope import (
+    Array,
+    DenyList,
+    Scope,
+    apply,
+    bind,
+    init,
+    lazy_init,
 )
-from .tracers import (
-    check_trace_level as check_trace_level,
-    current_trace as current_trace,
-    trace_level as trace_level,
+from flax.core.tracers import (
+    check_trace_level,
+    current_trace,
+    trace_level,
 )

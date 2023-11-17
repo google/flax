@@ -17,15 +17,14 @@ The sole purpose of this abstraction layer is to avoid requiring tensorflow
 as an open-source dependency solely for its tensorflow.io.gfile functions.
 """
 import contextlib
+from enum import Enum
 import glob as glob_module
 import importlib
 import os
 import shutil
-from enum import Enum
 
 from absl import logging
-
-from . import errors
+from flax import errors
 
 # Global Modes and selective import of tensorflow.io gfile.
 

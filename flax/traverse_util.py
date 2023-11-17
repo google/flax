@@ -56,15 +56,13 @@ returns a copy of the data including the provided updates.
 import abc
 import copy
 import dataclasses
-import warnings
 from typing import Any, Callable, Tuple
-
-import jax
+import warnings
 
 import flax
+from flax import struct
 from flax.core.scope import VariableDict
-
-from . import struct
+import jax
 
 Path = Tuple[str, ...]
 

@@ -17,12 +17,11 @@
 import dataclasses
 from typing import TypeVar
 
+from flax import serialization
 import jax
 from typing_extensions import (
-  dataclass_transform,  # pytype: disable=not-supported-yet
+    dataclass_transform,  # pytype: disable=not-supported-yet
 )
-
-from . import serialization
 
 _T = TypeVar('_T')
 

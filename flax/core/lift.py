@@ -17,7 +17,6 @@
 import collections
 import dataclasses
 import functools
-import warnings
 from typing import (
   Any,
   Callable,
@@ -32,27 +31,26 @@ from typing import (
   TypeVar,
   Union,
 )
-
-import jax
-from jax import random
+import warnings
 
 from flax import traceback_util
-
-from . import axes_scan, meta
-from .frozen_dict import freeze, unfreeze
-from .scope import (
-  CollectionFilter,
-  DenyList,  # pylint: disable=g-multiple-import
-  Filter,
-  PRNGSequenceFilter,
-  Scope,
-  group_collections,
-  in_filter,
-  intersect_filters,
-  is_filter_empty,
-  subtract_filters,
-  union_filters,
+from flax.core import axes_scan, meta
+from flax.core.frozen_dict import freeze, unfreeze
+from flax.core.scope import (
+    CollectionFilter,
+    DenyList,  # pylint: disable=g-multiple-import
+    Filter,
+    PRNGSequenceFilter,
+    Scope,
+    group_collections,
+    in_filter,
+    intersect_filters,
+    is_filter_empty,
+    subtract_filters,
+    union_filters,
 )
+import jax
+from jax import random
 
 traceback_util.register_exclusion(__file__)
 
