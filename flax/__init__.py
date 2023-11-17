@@ -14,18 +14,26 @@
 
 """Flax API."""
 
+# pylint: disable=g-import-not-at-top
 # pyformat: disable
 
-from .configurations import (
-    config as config,
-)
+from flax import configurations
+config: configurations.Config = configurations.config
+del configurations
 
-from . import core
-from . import jax_utils
-from . import linen
-from . import serialization
-from . import traverse_util
+from flax import core
+from flax import jax_utils
+from flax import linen
+from flax import serialization
+from flax import traverse_util
+
+from flax import version
+__version__: str = version.__version__
+del version
 
 # DO NOT REMOVE - Marker for internal deprecated API.
+
 # DO NOT REMOVE - Marker for internal logging.
-from .version import __version__
+
+# pyformat: enable
+# pylint: enable=g-import-not-at-top
