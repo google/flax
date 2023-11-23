@@ -33,6 +33,7 @@ We'd love to hear from any of our users about their thoughts on these ideas.
 from functools import partial
 import jax
 from jax import random, numpy as jnp
+from flax.experimental import nnx
 ```
 
 ### NNX is Pythonic
