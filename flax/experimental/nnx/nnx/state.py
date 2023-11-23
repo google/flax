@@ -72,7 +72,7 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
       super().__setattr__('_mapping', dict(mapping))
 
   @property
-  def variables(self) -> dict[Key, Variable[Leaf] | dict[str, tp.Any]]:
+  def variables(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
   def __getitem__(self, key: Key) -> Leaf | State:
