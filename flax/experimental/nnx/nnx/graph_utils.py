@@ -17,7 +17,6 @@ from __future__ import annotations
 import dataclasses
 import enum
 import typing as tp
-from itertools import groupby
 
 import jax
 
@@ -276,30 +275,28 @@ jax.tree_util.register_pytree_node(
 )
 
 
-@dataclasses.dataclass
-class FlattenState:
-  id_to_index: dict[int, Index]
-  state: dict[Path, Variable[tp.Any]]
-
-
 def graph_flatten(x: Node) -> tuple[State, GraphDef[Node]]:
-  flatten_state = FlattenState({}, {})
-  dagdef = _graph_flatten((), flatten_state, x)
+  id_to_index: dict[int, Index] = {}
+  flat_state: dict[Path, Variable[tp.Any]] = {}
+  dagdef = _graph_flatten((), id_to_index, flat_state, x)
   assert not isinstance(dagdef, int)
-  return State(flatten_state.state), dagdef
+  return State.from_flat_path(flat_state), dagdef
 
 
 def _graph_flatten(
-  path: PathParts, flatten_state: FlattenState, node: Node
+  path: PathParts,
+  id_to_index: dict[int, Index],
+  flat_state: dict[Path, Variable[tp.Any]],
+  node: Node,
 ) -> GraphDef[Node] | int:
   if not is_node(node):
     raise RuntimeError(f'Unsupported type: {type(node)}, this is a bug.')
 
-  if (index := id(node)) in flatten_state.id_to_index:
-    return flatten_state.id_to_index[index]
+  if (index := id(node)) in id_to_index:
+    return id_to_index[index]
 
-  index = len(flatten_state.id_to_index)
-  flatten_state.id_to_index[id(node)] = index
+  index = len(id_to_index)
+  id_to_index[id(node)] = index
 
   subgraphs: list[tuple[str, tp.Union[GraphDef[Node], int]]] = []
   static_fields: list[tuple[str, tp.Any]] = []
@@ -309,11 +306,11 @@ def _graph_flatten(
   values, metadata = node_impl.flatten(node)
   for key, value in values:
     if is_node(value):
-      graphdef = _graph_flatten((*path, key), flatten_state, value)
+      graphdef = _graph_flatten((*path, key), id_to_index, flat_state, value)
       subgraphs.append((key, graphdef))
     elif isinstance(value, Variable):
       str_path = '/'.join((*path, key))
-      flatten_state.state[str_path] = value
+      flat_state[str_path] = value
       variables.append((key, value.as_empty()))
     else:
       static_fields.append((key, value))
@@ -329,51 +326,23 @@ def _graph_flatten(
   return graphdef
 
 
-@dataclasses.dataclass
-class UnflattenState:
-  index_to_node: dict[Index, tp.Any]
-
-
-def _group_state_recursive(state: dict[PathParts, Variable[Empty]]):
-  groups = groupby(state.items(), lambda item: item[0][0])
-  nested_state: dict[str, Variable[tp.Any] | dict[str, tp.Any]] = {}
-
-  for key, group in groups:
-    group = list(group)
-    if len(group[0][0]) == 1:
-      nested_state[key] = group[0][1]
-    else:
-      nested_state[key] = _group_state_recursive(
-        {path_parts[1:]: value for path_parts, value in group}
-      )
-
-  return nested_state
-
-
 def graph_unflatten(graphdef: GraphDef[Node], state: State) -> Node:
-  unfalatten_state = UnflattenState({})
-  sorted_elements = sorted(state.variables.items(), key=lambda item: item[0])
-  nested_state = _group_state_recursive(
-    {tuple(path.split('/')): value for path, value in sorted_elements}
-  )
-  return _graph_unflatten(graphdef, nested_state, unfalatten_state)
-
-
-_sentinel = object()
+  index_to_node: dict[Index, tp.Any] = {}
+  return _graph_unflatten(graphdef, state.variables, index_to_node)
 
 
 def _graph_unflatten(
   graphdef: tp.Union[GraphDef[Node], int],
   state: dict[str, Variable[Empty] | dict[str, tp.Any]],
-  unflatten_state: UnflattenState,
+  index_to_node: dict[Index, tp.Any],
 ) -> Node:
   if isinstance(graphdef, int):
-    return unflatten_state.index_to_node[graphdef]
+    return index_to_node[graphdef]
 
   if not is_node_type(graphdef.type):
     raise RuntimeError(f'Unsupported type: {graphdef.type}, this is a bug.')
 
-  if graphdef.index in unflatten_state.index_to_node:
+  if graphdef.index in index_to_node:
     raise RuntimeError(f'GraphDef index {graphdef.index} already used.')
 
   node_impl = get_node_impl(graphdef.type)
@@ -388,7 +357,7 @@ def _graph_unflatten(
           f'Expected a subgraph for {key!r}, but got a variable.'
         )
       subgraph_nodes[key] = _graph_unflatten(
-        subgraphdef, substate, unflatten_state
+        subgraphdef, substate, index_to_node
       )
 
     return {**subgraph_nodes, **state, **dict(graphdef.static_fields)}
@@ -398,7 +367,7 @@ def _graph_unflatten(
     # we create an empty node first and add it to the index
     # this avoids infinite recursion when there is a reference cycle
     node = node_impl.create_empty(graphdef.metadata)
-    unflatten_state.index_to_node[graphdef.index] = node
+    index_to_node[graphdef.index] = node
     children = _get_children()
     node_impl.init(node, tuple(children.items()))
   else:
@@ -407,24 +376,9 @@ def _graph_unflatten(
     assert node_impl.unflatten is not None
     children = _get_children()
     node = node_impl.unflatten(tuple(children.items()), graphdef.metadata)
-    unflatten_state.index_to_node[graphdef.index] = node
+    index_to_node[graphdef.index] = node
 
   return node
-
-
-def _set_value_at_path(
-  node: tp.Any, path_parts: PathParts | tp.List[str], value: tp.Any
-):
-  if not is_node(node):
-    raise RuntimeError(f'Unsupported type: {type(node)}')
-
-  node_impl = get_node_impl(node)
-  if len(path_parts) == 1:
-    node_impl.set_key(node, path_parts[0], value)
-  else:
-    _set_value_at_path(
-      node_impl.get_key(node, path_parts[0]), path_parts[1:], value
-    )
 
 
 def graph_pop(
@@ -489,13 +443,26 @@ def graph_update_dynamic(
   else:
     new_states = updates
 
-  state: dict[Path, tp.Any] = {}
-  for new_state in new_states:
-    state.update(new_state.variables)
+  for state in new_states:
+    _graph_update_dynamic(node, state.variables)
 
-  for path, value in state.items():
-    path_parts = path.split('/')
-    _set_value_at_path(node, path_parts, value)
+
+def _graph_update_dynamic(
+  node: tp.Any, state: dict[str, Variable[tp.Any] | dict[str, tp.Any]]
+):
+  if not is_node(node):
+    raise RuntimeError(f'Unsupported type: {type(node)}')
+
+  node_impl = get_node_impl(node)
+  for key, value in state.items():
+    if is_node(value):
+      if isinstance(value, Variable):
+        raise ValueError(
+          f'Expected a subgraph for {key!r}, but got a Variable.'
+        )
+      _graph_update_dynamic(node_impl.get_key(node, key), value)
+    else:
+      node_impl.set_key(node, key, value)
 
 
 class _StaticModuleStatus(enum.Enum):
