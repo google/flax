@@ -75,7 +75,9 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
   def variables(self) -> dict[Key, dict[str, tp.Any] | tp.Any]:
     return self._mapping
 
-  def __getitem__(self, key: Key) -> Leaf | State:
+  def __getitem__(self, key: Key | int) -> Leaf | State:
+    if isinstance(key, int):
+      key = str(key)
     value = self._mapping[key]
     if isinstance(value, Variable):
       return value.value
@@ -87,7 +89,9 @@ class State(tp.MutableMapping[Key, tp.Any], reprlib.Representable):
 
     return self[key]
 
-  def __setitem__(self, key: Key, value: Leaf | State) -> None:
+  def __setitem__(self, key: Key | int, value: Leaf | State) -> None:
+    if isinstance(key, int):
+      key = str(key)
     if isinstance(value, State):
       self._mapping[key] = value._mapping
     else:

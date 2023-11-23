@@ -35,3 +35,16 @@ class StateTest(TestCase):
     assert state.variables['a'].value == 3
     assert isinstance(state.variables['b']['c'], nnx.Param)
     assert state.variables['b']['c'].value == 4
+
+  def test_integer_access(self):
+    class Foo(nnx.Module):
+      def __init__(self, *, rngs: nnx.Rngs):
+        self.layers = [nnx.Linear(1, 2, rngs=rngs), nnx.Linear(2, 3, rngs=rngs)]
+
+    module = Foo(rngs=nnx.Rngs(0))
+    state = module.get_state()
+
+    assert module.layers[0].kernel.shape == (1, 2)
+    assert state.layers[0].kernel.shape == (1, 2)
+    assert module.layers[1].kernel.shape == (2, 3)
+    assert state.layers[1].kernel.shape == (2, 3)
