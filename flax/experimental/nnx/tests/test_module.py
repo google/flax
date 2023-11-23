@@ -227,7 +227,7 @@ class TestModule:
     )
 
     p, graphdef = m.split()
-    assert len(p) == 4
+    assert len(p.flat_state()) == 4
     assert len(jax.tree_util.tree_leaves(p)) == 4
 
   def test_deref_array_attributes_not_allowed(self):

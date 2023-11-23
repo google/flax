@@ -137,13 +137,13 @@ class TestGrad:
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a/0'] == 1.0
-    assert isinstance(grads.variables['a/0'], nnx.Variable)
-    assert grads['a/1'] == 1.0
-    assert isinstance(grads.variables['a/1'], nnx.Variable)
+    assert grads['a']['0'] == 1.0
+    assert isinstance(grads.variables['a']['0'], nnx.Variable)
+    assert grads['a']['1'] == 1.0
+    assert isinstance(grads.variables['a']['1'], nnx.Variable)
     assert grads['b'] == 1.0
     assert isinstance(grads.variables['b'], nnx.Variable)
-    assert len(grads) == 3
+    assert len(grads.flat_state()) == 3
 
     m.update(grads)
 
@@ -169,8 +169,8 @@ class TestGrad:
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a/0'] == 1.0
-    assert isinstance(grads.variables['a/0'], nnx.Param)
+    assert grads['a']['0'] == 1.0
+    assert isinstance(grads.variables['a']['0'], nnx.Param)
     assert len(grads) == 2
 
     m.update(grads)
@@ -197,8 +197,8 @@ class TestGrad:
     grads = f(m)
 
     assert isinstance(grads, nnx.State)
-    assert grads['a/1'] == 1.0
-    assert isinstance(grads.variables['a/1'], nnx.BatchStat)
+    assert grads['a']['1'] == 1.0
+    assert isinstance(grads.variables['a']['1'], nnx.BatchStat)
     assert len(grads) == 1
 
     m.update(grads)
@@ -482,28 +482,34 @@ class TestScan:
 
     # test sharding layers axes is set
     variables = m.get_state().variables
-    assert variables['scan_module/linear/kernel'].value.shape == (5, 3, 3)
-    assert variables['scan_module/linear/kernel'].sharding == (
+    assert variables['scan_module']['linear']['kernel'].value.shape == (5, 3, 3)
+    assert variables['scan_module']['linear']['kernel'].sharding == (
       'layers',
       'din',
       'dout',
     )
-    assert variables['scan_module/linear/bias'].value.shape == (5, 3)
-    assert variables['scan_module/linear/bias'].sharding == ('layers', 'dout')
+    assert variables['scan_module']['linear']['bias'].value.shape == (5, 3)
+    assert variables['scan_module']['linear']['bias'].sharding == (
+      'layers',
+      'dout',
+    )
 
     x = jnp.ones((1, 3))
     y, out = m(x, None)
 
     # test sharding axes is preserved
     variables = m.get_state().variables
-    assert variables['scan_module/linear/kernel'].value.shape == (5, 3, 3)
-    assert variables['scan_module/linear/kernel'].sharding == (
+    assert variables['scan_module']['linear']['kernel'].value.shape == (5, 3, 3)
+    assert variables['scan_module']['linear']['kernel'].sharding == (
       'layers',
       'din',
       'dout',
     )
-    assert variables['scan_module/linear/bias'].value.shape == (5, 3)
-    assert variables['scan_module/linear/bias'].sharding == ('layers', 'dout')
+    assert variables['scan_module']['linear']['bias'].value.shape == (5, 3)
+    assert variables['scan_module']['linear']['bias'].sharding == (
+      'layers',
+      'dout',
+    )
 
   def test_type_error_less_than_one_args(self):
     class Block(nnx.Module):
