@@ -140,6 +140,10 @@ filterwarnings = [
     "ignore:.*jax.random.KeyArray is deprecated.*:DeprecationWarning",
     # DeprecationWarning: jax.core.Shape is deprecated.
     "ignore:.*jax.core.Shape is deprecated.*:DeprecationWarning",
+    # DeprecationWarning: pkg_resources is deprecated as an API.
+    "ignore:.*pkg_resources is deprecated as an API.*:DeprecationWarning",
+    # DeprecationWarning: Deprecated call to `pkg_resources.declare_namespace('google')`.
+    "ignore:.*Deprecated call to.*pkg_resources.declare_namespace.*:DeprecationWarning",
 ]
 
 [tool.coverage.report]

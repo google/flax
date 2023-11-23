@@ -519,15 +519,12 @@ def _module_graph_init(node: Module, items: tuple[tuple[str, tp.Any], ...]):
   vars(node).update(items)
 
 
-# -------------------------
-# utils
-# -------------------------
-def first_from(*args: tp.Optional[A]) -> A:
+def first_from(arg_name: str, *args: tp.Optional[A]) -> A:
   """Return the first non-None argument."""
   for arg in args:
     if arg is not None:
       return arg
-  raise ValueError('No non-None arguments found.')
+  raise ValueError(f'No non-None arguments found for {arg_name!r}')
 
 
 def merge(

@@ -258,6 +258,7 @@ class BatchNorm(Module):
     """
 
     use_running_average = first_from(
+      'use_running_average',
       use_running_average,
       self.use_running_average,
       flaglib.flags.get('use_running_average'),

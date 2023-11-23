@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from jax import numpy as jnp
+from typing_extensions import TypeVarTuple, Unpack
 
+T = TypeVarTuple('T')
 Dtype = Any
 Array = Any
 
@@ -52,7 +54,9 @@ def canonicalize_dtype(
   return dtype
 
 
-def promote_dtype(*args, dtype=None, inexact=True) -> List[Array]:
+def promote_dtype(
+  *args: Unpack[T], dtype=None, inexact=True
+) -> tuple[Unpack[T]]:
   """ "Promotes input arguments to a specified or inferred dtype.
 
   All args are cast to the same dtype. See ``canonicalize_dtype`` for how
@@ -77,4 +81,4 @@ def promote_dtype(*args, dtype=None, inexact=True) -> List[Array]:
     The arguments cast to arrays of the same dtype.
   """
   dtype = canonicalize_dtype(*args, dtype=dtype, inexact=inexact)
-  return [jnp.asarray(x, dtype) if x is not None else None for x in args]
+  return tuple(jnp.asarray(x, dtype) if x is not None else None for x in args)
