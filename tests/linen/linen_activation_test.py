@@ -18,7 +18,7 @@ import jax
 import jax.numpy as jnp
 from absl.testing import absltest
 from jax import random
-from jax._src.test_util import JaxTestCase
+from numpy.testing import assert_array_almost_equal, assert_array_equal
 
 from flax import linen as nn
 
@@ -26,7 +26,7 @@ from flax import linen as nn
 jax.config.parse_flags_with_absl()
 
 
-class ActivationTest(JaxTestCase):
+class ActivationTest(absltest.TestCase):
   def test_prelu(self):
     rng = random.key(0)
     key, skey_1, skey_2 = jax.random.split(rng, 3)
@@ -38,8 +38,8 @@ class ActivationTest(JaxTestCase):
     expected_negative_slope = jnp.array(act.negative_slope_init, dtype=jnp.float32)
 
     self.assertEqual(y.shape, x.shape)
-    self.assertArraysAllClose(expected_y, y)
-    self.assertArraysEqual(init_negative_slope, expected_negative_slope)
+    assert_array_almost_equal(expected_y, y)
+    assert_array_equal(init_negative_slope, expected_negative_slope)
 
 
 if __name__ == '__main__':
