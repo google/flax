@@ -17,7 +17,6 @@
 from __future__ import annotations
 
 import functools
-import warnings
 from typing import Any, Callable, Optional, Tuple, overload
 
 import jax
@@ -408,10 +407,8 @@ class MultiHeadAttention(Module):
     inputs_k: Array | None = None,
     inputs_v: Array | None = None,
     *,
-    inputs_kv: Array | None = None,
     mask: Array | None = None,
     deterministic: bool | None = None,
-    dropout_rng: Array | None = None,
     rngs: rnglib.Rngs | None = None,
   ):
     """Applies multi-head dot product attention on the input data.
@@ -429,63 +426,29 @@ class MultiHeadAttention(Module):
         inputs_k will copy the value of inputs_q.
       inputs_v: values of shape `[batch_sizes..., length, features]`. If None,
         inputs_v will copy the value of inputs_k.
-      inputs_kv: key/values of shape `[batch_sizes..., length, features]`. If
-        None, inputs_kv will copy the value of inputs_q. This arg will be
-        deprecated soon. Use inputs_k and inputs_v instead.
       mask: attention mask of shape `[batch_sizes..., num_heads, query_length,
         key/value_length]`. Attention weights are masked out if their
         corresponding mask value is `False`.
       deterministic: if false, the attention weight is masked randomly using
         dropout, whereas if true, the attention weights are deterministic.
-      dropout_rng: optional rng key to pass to the attention layer's dropout
-        mask. Otherwise, self.make_rng('dropout') is used instead.
+      rngs: container for random number generators to generate the dropout
+        mask when `deterministic` is False. The `rngs` container should have a
+        `dropout` key.
 
     Returns:
       output of shape `[batch_sizes..., length, features]`.
     """
-    if inputs_kv is not None:
-      if inputs_k is not None or inputs_v is not None:
+
+    if inputs_k is None:
+      if inputs_v is not None:
         raise ValueError(
-          'If either `inputs_k` or `inputs_v` is not None, '
-          '`inputs_kv` must be None. If `inputs_kv` is not None, both `inputs_k` '
-          'and `inputs_v` must be None. We recommend using `inputs_k` and '
-          '`inputs_v` args, since `inputs_kv` will be deprecated soon. See '
-          'https://github.com/google/flax/discussions/3389 for more '
-          'information.'
+          '`inputs_k` cannot be None if `inputs_v` is not None. '
+          'To have both `inputs_k` and `inputs_v` be the same value, pass in the '
+          'value to `inputs_k` and leave `inputs_v` as None.'
         )
-      inputs_k = inputs_v = inputs_kv
-      warnings.warn(
-        'The inputs_kv arg will be deprecated soon. '
-        'Use inputs_k and inputs_v instead. See '
-        'https://github.com/google/flax/discussions/3389 '
-        'for more information.',
-        DeprecationWarning,
-      )
-    else:
-      if inputs_k is None:
-        if inputs_v is not None:
-          raise ValueError(
-            '`inputs_k` cannot be None if `inputs_v` is not None. '
-            'To have both `inputs_k` and `inputs_v` be the same value, pass in the '
-            'value to `inputs_k` and leave `inputs_v` as None.'
-          )
-        inputs_k = inputs_q
-      if inputs_v is None:
-        inputs_v = inputs_k
-      elif inputs_v.shape[-1] == inputs_v.shape[-2]:
-        warnings.warn(
-          f'You are passing an array of shape {inputs_v.shape} '
-          'to the `inputs_v` arg, when you may have intended '
-          'to pass it to the `mask` arg. As of Flax version '
-          '0.7.4, the function signature of '
-          "MultiHeadAttention's `__call__` method "
-          'has changed to `__call__(inputs_q, inputs_k=None, '
-          'inputs_v=None, *, inputs_kv=None, mask=None, '
-          'deterministic=None)`. Use the kwarg `mask` instead. '
-          'See https://github.com/google/flax/discussions/3389 '
-          'and read the docstring for more information.',
-          DeprecationWarning,
-        )
+      inputs_k = inputs_q
+    if inputs_v is None:
+      inputs_v = inputs_k
 
     if inputs_q.shape[-1] != self.features_in:
       raise ValueError(
@@ -544,20 +507,23 @@ class MultiHeadAttention(Module):
     if (
       self.dropout_rate > 0.0
     ):  # Require `deterministic` only if using dropout.
-      m_deterministic = first_from(
+      deterministic = first_from(
         'deterministic',
         deterministic,
         self.deterministic,
         flags.get('deterministic'),
       )
-      if not m_deterministic and dropout_rng is None:
+      if not deterministic:
         if rngs is None:
           raise ValueError(
             "'rngs' must be provided if 'dropout_rng' is not given."
           )
         dropout_rng = rngs.dropout()
+      else:
+        dropout_rng = None
     else:
-      m_deterministic = True
+      deterministic = True
+      dropout_rng = None
 
     # apply attention
     x = self.attention_fn(
@@ -568,7 +534,7 @@ class MultiHeadAttention(Module):
       dropout_rng=dropout_rng,
       dropout_rate=self.dropout_rate,
       broadcast_dropout=self.broadcast_dropout,
-      deterministic=m_deterministic,
+      deterministic=deterministic,
       dtype=self.dtype,
       precision=self.precision,
     )
