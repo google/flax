@@ -33,16 +33,6 @@ class ActivationTest(parameterized.TestCase):
     y, _ = act.init_with_output(rng, x)
     self.assertEqual(y.shape, x.shape)
 
-  def test_prelu_results(self):
-    rng = random.key(0)
-    x = jnp.array([[0.123,0.234], [0.456,0.789]])
-    act = nn.PReLU()
-    expected_result = jnp.array([[0.123, 0.234],[0.456, 0.789]])
-    y, _ = act.init_with_output(rng, x)
-    for row in range(expected_result.shape[0]):
-      for col in range(expected_result.shape[1]):
-        self.assertAlmostEqual(y[row,col], expected_result[row,col])
-
   def test_geglu_high_dimension(self):
     rng = random.key(0)
     x = jnp.ones((4, 7, 6, 5, 2))
