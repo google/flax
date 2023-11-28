@@ -14,24 +14,34 @@
 
 """Tests for flax.linen.activation."""
 
-import jax
-import jax.numpy as jnp
-from absl.testing import absltest, parameterized
-from jax import random
-
+from absl.testing import absltest
 from flax import linen as nn
+import jax
+from jax import random
+import jax.numpy as jnp
+import numpy as np
 
 # Parse absl flags test_srcdir and test_tmpdir.
 jax.config.parse_flags_with_absl()
 
 
-class ActivationTest(parameterized.TestCase):
+class ActivationTest(absltest.TestCase):
+
   def test_prelu(self):
     rng = random.key(0)
-    x = jnp.ones((4, 6, 5))
+    key, skey_1, skey_2 = jax.random.split(rng, 3)
+    x = jax.random.uniform(skey_1, (4, 6, 5)) - 0.5
     act = nn.PReLU()
-    y, _ = act.init_with_output(rng, x)
+    y, params = act.init_with_output(skey_2, x)
+    expected_y = jnp.where(x < 0, x * act.negative_slope_init, x)
+    init_negative_slope = params['params']['negative_slope']
+    expected_negative_slope = jnp.array(
+        act.negative_slope_init, dtype=jnp.float32
+    )
+
     self.assertEqual(y.shape, x.shape)
+    np.testing.assert_array_almost_equal(expected_y, y)
+    np.testing.assert_array_equal(init_negative_slope, expected_negative_slope)
 
 
 if __name__ == '__main__':
