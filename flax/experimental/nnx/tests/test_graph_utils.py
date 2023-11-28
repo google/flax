@@ -24,7 +24,7 @@ class TestGraphUtils:
 
     state, static = nnx.graph_utils.graph_flatten(g)
 
-    state['0/b'] = 2
+    state['0']['b'] = 2
     state['3'] = 4
 
   def test_unflatten(self):
@@ -53,7 +53,7 @@ class TestGraphUtils:
 
     state, static = nnx.graph_utils.graph_flatten(g)
 
-    state['0/b'] = 3
+    state['0']['b'] = 3
     nnx.graph_utils.graph_update_dynamic(g, state)
 
     assert g[0]['b'].value == 3
@@ -109,9 +109,9 @@ class TestGraphUtils:
 
     state, static = nnx.graph_utils.graph_flatten(ls)
 
-    assert state['0/kernel'].shape == (2, 2)
-    assert state['0/bias'].shape == (2,)
-    assert state['1/scale'].shape == (2,)
-    assert state['1/bias'].shape == (2,)
-    assert state['1/mean'].shape == (2,)
-    assert state['1/var'].shape == (2,)
+    assert state['0']['kernel'].shape == (2, 2)
+    assert state['0']['bias'].shape == (2,)
+    assert state['1']['scale'].shape == (2,)
+    assert state['1']['bias'].shape == (2,)
+    assert state['1']['mean'].shape == (2,)
+    assert state['1']['var'].shape == (2,)
